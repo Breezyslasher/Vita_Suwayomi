@@ -1,11 +1,12 @@
 /**
  * VitaSuwayomi - Home Tab implementation
+ * Shows Continue Reading and Recent Chapter Updates
  */
 
 #include "view/home_tab.hpp"
-#include "view/media_detail_view.hpp"
-#include "view/media_item_cell.hpp"
+#include "view/manga_item_cell.hpp"
 #include "app/application.hpp"
+#include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
 
 namespace vitasuwayomi {
@@ -36,49 +37,47 @@ HomeTab::HomeTab() {
     m_contentBox->setJustifyContent(brls::JustifyContent::FLEX_START);
     m_contentBox->setAlignItems(brls::AlignItems::STRETCH);
 
-    // Continue Listening section
+    // Continue Reading section
     m_continueLabel = new brls::Label();
-    m_continueLabel->setText("Continue Listening");
+    m_continueLabel->setText("Continue Reading");
     m_continueLabel->setFontSize(22);
     m_continueLabel->setMarginBottom(10);
-    m_continueLabel->setVisibility(brls::Visibility::GONE);  // Hidden until loaded
+    m_continueLabel->setVisibility(brls::Visibility::GONE);
     m_contentBox->addView(m_continueLabel);
 
-    // Horizontal box for Continue Listening (no ScrollingFrame - use focus-based scrolling)
+    // Horizontal box for Continue Reading
     m_continueBox = new brls::Box();
-    m_continueBox->setAxis(brls::Axis::ROW);  // Horizontal layout
+    m_continueBox->setAxis(brls::Axis::ROW);
     m_continueBox->setJustifyContent(brls::JustifyContent::FLEX_START);
     m_continueBox->setHeight(200);
     m_continueBox->setVisibility(brls::Visibility::GONE);
     m_contentBox->addView(m_continueBox);
 
-    // Recently Added Episodes section
-    m_recentEpisodesLabel = new brls::Label();
-    m_recentEpisodesLabel->setText("Recently Added Episodes");
-    m_recentEpisodesLabel->setFontSize(22);
-    m_recentEpisodesLabel->setMarginTop(20);
-    m_recentEpisodesLabel->setMarginBottom(10);
-    m_recentEpisodesLabel->setVisibility(brls::Visibility::GONE);  // Hidden until loaded
-    m_contentBox->addView(m_recentEpisodesLabel);
+    // Recent Updates section
+    m_recentUpdatesLabel = new brls::Label();
+    m_recentUpdatesLabel->setText("Recent Updates");
+    m_recentUpdatesLabel->setFontSize(22);
+    m_recentUpdatesLabel->setMarginTop(20);
+    m_recentUpdatesLabel->setMarginBottom(10);
+    m_recentUpdatesLabel->setVisibility(brls::Visibility::GONE);
+    m_contentBox->addView(m_recentUpdatesLabel);
 
-    // Horizontal box for Recently Added Episodes (no ScrollingFrame - use focus-based scrolling)
-    m_recentEpisodesBox = new brls::Box();
-    m_recentEpisodesBox->setAxis(brls::Axis::ROW);  // Horizontal layout
-    m_recentEpisodesBox->setJustifyContent(brls::JustifyContent::FLEX_START);
-    m_recentEpisodesBox->setHeight(200);
-    m_recentEpisodesBox->setVisibility(brls::Visibility::GONE);
-    m_contentBox->addView(m_recentEpisodesBox);
+    // Horizontal box for Recent Updates
+    m_recentUpdatesBox = new brls::Box();
+    m_recentUpdatesBox->setAxis(brls::Axis::ROW);
+    m_recentUpdatesBox->setJustifyContent(brls::JustifyContent::FLEX_START);
+    m_recentUpdatesBox->setHeight(200);
+    m_recentUpdatesBox->setVisibility(brls::Visibility::GONE);
+    m_contentBox->addView(m_recentUpdatesBox);
 
     m_scrollView->setContentView(m_contentBox);
     this->addView(m_scrollView);
 
-    // Load content immediately (since Home is the first tab)
     brls::Logger::debug("HomeTab: Created, loading content...");
     loadContent();
 }
 
 HomeTab::~HomeTab() {
-    // Mark as no longer alive to prevent async callbacks
     if (m_alive) {
         *m_alive = false;
     }
@@ -93,6 +92,11 @@ void HomeTab::onFocusGained() {
     }
 }
 
+void HomeTab::refresh() {
+    m_loaded = false;
+    loadContent();
+}
+
 void HomeTab::loadContent() {
     if (m_loaded) return;
 
@@ -101,87 +105,77 @@ void HomeTab::loadContent() {
     std::weak_ptr<bool> aliveWeak = m_alive;
 
     asyncRun([this, aliveWeak]() {
-        AudiobookshelfClient& client = AudiobookshelfClient::getInstance();
+        SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        std::vector<MediaItem> continueItems;
-        std::vector<MediaItem> recentEpisodes;
+        std::vector<Manga> continueReading;
+        std::vector<RecentUpdate> recentUpdates;
 
-        // Get Continue Listening items using the direct API endpoint
-        brls::Logger::info("HomeTab: Fetching items in progress...");
-        if (client.fetchItemsInProgress(continueItems)) {
-            brls::Logger::info("HomeTab: Got {} items in progress", continueItems.size());
-        } else {
-            brls::Logger::error("HomeTab: Failed to fetch items in progress");
-        }
+        // Get library manga with reading progress
+        std::vector<Manga> libraryManga;
+        if (client.fetchLibraryManga(libraryManga)) {
+            brls::Logger::info("HomeTab: Got {} library manga", libraryManga.size());
 
-        // Get all libraries to fetch recent episodes from podcast libraries
-        std::vector<Library> libraries;
-        if (!client.fetchLibraries(libraries)) {
-            brls::Logger::error("HomeTab: Failed to fetch libraries");
-        } else {
-            // Fetch recently added from podcast libraries for Recent Episodes
-            for (const auto& lib : libraries) {
-                if (lib.mediaType == "podcast") {
-                    brls::Logger::debug("HomeTab: Fetching recent episodes from podcast library '{}'", lib.name);
-                    std::vector<PersonalizedShelf> shelves;
-                    if (client.fetchLibraryPersonalized(lib.id, shelves)) {
-                        brls::Logger::debug("HomeTab: Got {} shelves from library '{}'", shelves.size(), lib.name);
-                        for (const auto& shelf : shelves) {
-                            std::string shelfId = shelf.id;
-                            std::string label = shelf.label;
-
-                            brls::Logger::debug("HomeTab: Checking shelf id='{}' label='{}' entities={}",
-                                               shelfId, label, shelf.entities.size());
-
-                            // Check for Recently Added Episodes - use shelf.id
-                            if (shelfId == "recent-episodes" ||
-                                shelfId == "newest-episodes" ||
-                                shelfId == "episodes-recently-added" ||
-                                shelfId == "recently-added" ||
-                                label.find("Recent") != std::string::npos) {
-                                brls::Logger::info("HomeTab: Found Recent Episodes shelf '{}' with {} items",
-                                                  label, shelf.entities.size());
-                                for (const auto& item : shelf.entities) {
-                                    recentEpisodes.push_back(item);
-                                }
-                            }
-                        }
-                    } else {
-                        brls::Logger::error("HomeTab: Failed to fetch personalized content for library '{}'", lib.name);
-                    }
+            // Filter to manga with reading progress (some chapters read but not all)
+            for (const auto& manga : libraryManga) {
+                if (manga.lastChapterRead > 0 && manga.unreadCount > 0) {
+                    continueReading.push_back(manga);
                 }
             }
+
+            // Sort by last read time (most recent first) - approximate by chapter count read
+            std::sort(continueReading.begin(), continueReading.end(),
+                      [](const Manga& a, const Manga& b) {
+                          return a.lastChapterRead > b.lastChapterRead;
+                      });
+
+            // Limit to 10 items
+            if (continueReading.size() > 10) {
+                continueReading.resize(10);
+            }
+
+            brls::Logger::info("HomeTab: Found {} continue reading items", continueReading.size());
+        } else {
+            brls::Logger::error("HomeTab: Failed to fetch library manga");
         }
 
-        brls::Logger::info("HomeTab: Found {} continue items, {} recent episodes",
-                          continueItems.size(), recentEpisodes.size());
+        // Get recent chapter updates
+        if (client.fetchRecentUpdates(1, recentUpdates)) {
+            brls::Logger::info("HomeTab: Got {} recent updates", recentUpdates.size());
+
+            // Limit to 10 items
+            if (recentUpdates.size() > 10) {
+                recentUpdates.resize(10);
+            }
+        } else {
+            brls::Logger::error("HomeTab: Failed to fetch recent updates");
+        }
 
         // Update UI on main thread
-        brls::sync([this, continueItems, recentEpisodes, aliveWeak]() {
+        brls::sync([this, continueReading, recentUpdates, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
-            m_continueItems = continueItems;
-            m_recentEpisodes = recentEpisodes;
+            m_continueReading = continueReading;
+            m_recentUpdates = recentUpdates;
             m_loaded = true;
 
-            // Show Continue Listening section if we have items
-            if (!m_continueItems.empty()) {
+            // Show Continue Reading section if we have items
+            if (!m_continueReading.empty()) {
                 m_continueLabel->setVisibility(brls::Visibility::VISIBLE);
                 m_continueBox->setVisibility(brls::Visibility::VISIBLE);
-                populateHorizontalRow(m_continueBox, m_continueItems);
+                populateHorizontalRow(m_continueBox, m_continueReading);
             }
 
-            // Show Recently Added Episodes section if we have items
-            if (!m_recentEpisodes.empty()) {
-                m_recentEpisodesLabel->setVisibility(brls::Visibility::VISIBLE);
-                m_recentEpisodesBox->setVisibility(brls::Visibility::VISIBLE);
-                populateHorizontalRow(m_recentEpisodesBox, m_recentEpisodes);
+            // Show Recent Updates section if we have items
+            if (!m_recentUpdates.empty()) {
+                m_recentUpdatesLabel->setVisibility(brls::Visibility::VISIBLE);
+                m_recentUpdatesBox->setVisibility(brls::Visibility::VISIBLE);
+                populateUpdatesRow(m_recentUpdatesBox, m_recentUpdates);
             }
 
             // Show message if nothing to display
-            if (m_continueItems.empty() && m_recentEpisodes.empty()) {
-                m_titleLabel->setText("Home - No items in progress");
+            if (m_continueReading.empty() && m_recentUpdates.empty()) {
+                m_titleLabel->setText("Home - No recent activity");
             }
 
             brls::Logger::debug("HomeTab: Content loaded and displayed");
@@ -189,28 +183,24 @@ void HomeTab::loadContent() {
     });
 }
 
-void HomeTab::populateHorizontalRow(brls::Box* container, const std::vector<MediaItem>& items) {
+void HomeTab::populateHorizontalRow(brls::Box* container, const std::vector<Manga>& items) {
     if (!container) return;
 
-    // Clear existing items
     container->clearViews();
 
-    // Set container width to fit all items (160px per item: 150 width + 10 margin)
     float totalWidth = items.size() * 160.0f;
     container->setWidth(totalWidth);
 
-    // Add cells for each item
     for (size_t i = 0; i < items.size(); i++) {
-        auto* cell = new MediaItemCell();
-        cell->setItem(items[i]);
+        auto* cell = new MangaItemCell();
+        cell->setManga(items[i]);
         cell->setWidth(150);
-        cell->setHeight(185);  // Square cover (140) + labels (~45)
+        cell->setHeight(185);
         cell->setMarginRight(10);
 
-        // Store the item for click handler
-        MediaItem itemCopy = items[i];
-        cell->registerClickAction([this, itemCopy](brls::View* view) {
-            onItemSelected(itemCopy);
+        Manga mangaCopy = items[i];
+        cell->registerClickAction([this, mangaCopy](brls::View* view) {
+            onMangaSelected(mangaCopy);
             return true;
         });
         cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
@@ -218,21 +208,54 @@ void HomeTab::populateHorizontalRow(brls::Box* container, const std::vector<Medi
         container->addView(cell);
     }
 
-    brls::Logger::debug("HomeTab: Populated horizontal row with {} items, width={}", items.size(), totalWidth);
+    brls::Logger::debug("HomeTab: Populated horizontal row with {} items", items.size());
 }
 
-void HomeTab::onItemSelected(const MediaItem& item) {
-    brls::Logger::debug("HomeTab: Selected item: {} (type={})", item.title, item.type);
+void HomeTab::populateUpdatesRow(brls::Box* container, const std::vector<RecentUpdate>& updates) {
+    if (!container) return;
 
-    // For podcast episodes, start playback directly
-    if (item.mediaType == MediaType::PODCAST_EPISODE) {
-        Application::getInstance().pushPlayerActivity(item.podcastId, item.episodeId);
-        return;
+    container->clearViews();
+
+    float totalWidth = updates.size() * 160.0f;
+    container->setWidth(totalWidth);
+
+    for (size_t i = 0; i < updates.size(); i++) {
+        auto* cell = new MangaItemCell();
+        cell->setManga(updates[i].manga);
+        cell->setWidth(150);
+        cell->setHeight(185);
+        cell->setMarginRight(10);
+
+        RecentUpdate updateCopy = updates[i];
+        cell->registerClickAction([this, updateCopy](brls::View* view) {
+            onUpdateSelected(updateCopy);
+            return true;
+        });
+        cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+
+        container->addView(cell);
     }
 
-    // For books and other items, show detail view
-    auto* detailView = new MediaDetailView(item);
-    brls::Application::pushActivity(new brls::Activity(detailView));
+    brls::Logger::debug("HomeTab: Populated updates row with {} items", updates.size());
+}
+
+void HomeTab::onMangaSelected(const Manga& manga) {
+    brls::Logger::debug("HomeTab: Selected manga: {}", manga.title);
+
+    // Open reader at last read position
+    if (manga.lastChapterRead > 0) {
+        Application::getInstance().pushReaderActivity(manga.id, manga.lastChapterRead, manga.title);
+    } else {
+        // Start from first chapter
+        Application::getInstance().pushReaderActivity(manga.id, 1, manga.title);
+    }
+}
+
+void HomeTab::onUpdateSelected(const RecentUpdate& update) {
+    brls::Logger::debug("HomeTab: Selected update: {} - {}", update.manga.title, update.chapter.name);
+
+    // Open reader at the updated chapter
+    Application::getInstance().pushReaderActivity(update.manga.id, update.chapter.index, update.manga.title);
 }
 
 } // namespace vitasuwayomi
