@@ -605,18 +605,25 @@ bool SuwayomiClient::fetchPopularManga(int64_t sourceId, int page,
                                         std::vector<Manga>& manga, bool& hasNextPage) {
     vitasuwayomi::HttpClient http = createHttpClient();
 
-    std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/popular/" + std::to_string(page));
+    // Use query parameter format like Kodi addon: /source/{id}/popular?pageNum={page}
+    std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/popular?pageNum=" + std::to_string(page));
+    brls::Logger::debug("Fetching popular manga from: {}", url);
     vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
-        brls::Logger::error("Failed to fetch popular manga: {}", response.error);
+        brls::Logger::error("Failed to fetch popular manga: {} ({})", response.error, response.statusCode);
         return false;
     }
 
     manga.clear();
     hasNextPage = extractJsonBool(response.body, "hasNextPage");
 
+    // Try "mangaList" first (older API), then "mangas" (newer API)
     std::string mangaListJson = extractJsonArray(response.body, "mangaList");
+    if (mangaListJson.empty()) {
+        mangaListJson = extractJsonArray(response.body, "mangas");
+    }
+
     std::vector<std::string> items = splitJsonArray(mangaListJson);
     for (const auto& item : items) {
         manga.push_back(parseManga(item));
@@ -630,23 +637,31 @@ bool SuwayomiClient::fetchLatestManga(int64_t sourceId, int page,
                                        std::vector<Manga>& manga, bool& hasNextPage) {
     vitasuwayomi::HttpClient http = createHttpClient();
 
-    std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/latest/" + std::to_string(page));
+    // Use query parameter format like Kodi addon: /source/{id}/latest?pageNum={page}
+    std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/latest?pageNum=" + std::to_string(page));
+    brls::Logger::debug("Fetching latest manga from: {}", url);
     vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
-        brls::Logger::error("Failed to fetch latest manga: {}", response.error);
+        brls::Logger::error("Failed to fetch latest manga: {} ({})", response.error, response.statusCode);
         return false;
     }
 
     manga.clear();
     hasNextPage = extractJsonBool(response.body, "hasNextPage");
 
+    // Try "mangaList" first (older API), then "mangas" (newer API)
     std::string mangaListJson = extractJsonArray(response.body, "mangaList");
+    if (mangaListJson.empty()) {
+        mangaListJson = extractJsonArray(response.body, "mangas");
+    }
+
     std::vector<std::string> items = splitJsonArray(mangaListJson);
     for (const auto& item : items) {
         manga.push_back(parseManga(item));
     }
 
+    brls::Logger::debug("Fetched {} latest manga (hasNext: {})", manga.size(), hasNextPage);
     return true;
 }
 
@@ -657,22 +672,29 @@ bool SuwayomiClient::searchManga(int64_t sourceId, const std::string& query, int
     std::string encodedQuery = vitasuwayomi::HttpClient::urlEncode(query);
     std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/search?searchTerm=" +
                                    encodedQuery + "&pageNum=" + std::to_string(page));
+    brls::Logger::debug("Searching manga from: {}", url);
     vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
-        brls::Logger::error("Failed to search manga: {}", response.error);
+        brls::Logger::error("Failed to search manga: {} ({})", response.error, response.statusCode);
         return false;
     }
 
     manga.clear();
     hasNextPage = extractJsonBool(response.body, "hasNextPage");
 
+    // Try "mangaList" first (older API), then "mangas" (newer API)
     std::string mangaListJson = extractJsonArray(response.body, "mangaList");
+    if (mangaListJson.empty()) {
+        mangaListJson = extractJsonArray(response.body, "mangas");
+    }
+
     std::vector<std::string> items = splitJsonArray(mangaListJson);
     for (const auto& item : items) {
         manga.push_back(parseManga(item));
     }
 
+    brls::Logger::debug("Searched {} manga (hasNext: {})", manga.size(), hasNextPage);
     return true;
 }
 
