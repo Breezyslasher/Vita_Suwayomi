@@ -1,0 +1,28 @@
+
+
+
+
+cd /home/breezy/Downloads
+rm -rf Vita_Suwayomi
+git clone --recursive https://github.com/Breezyslasher/Vita_Suwayomi.git
+cd Vita_Suwayomi
+mkdir -p build && cd build
+cmake ..
+make
+
+
+cd /home/breezy/Downloads
+rm -rf Vita_Suwayomi
+git clone --recursive \
+  -b claude/suwayomi-client-conversion-AjqSQ \
+  https://github.com/Breezyslasher/Vita_Suwayomi.git Vita_Suwayomi
+cd Vita_Suwayomi
+mkdir -p build && cd build
+cmake ..
+make
+
+
+
+
+sudo cp -r include/* $VITASDK/arm-vita-eabi/include/
+sudo cp -r lib/*     $VITASDK/arm-vita-eabi/lib/
