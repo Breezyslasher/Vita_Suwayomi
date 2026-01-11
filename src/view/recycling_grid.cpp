@@ -21,15 +21,22 @@ RecyclingGrid::RecyclingGrid() {
     m_visibleRows = 3;
 }
 
-void RecyclingGrid::setDataSource(const std::vector<MediaItem>& items) {
+void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
     brls::Logger::debug("RecyclingGrid: setDataSource with {} items", items.size());
     m_items = items;
     rebuildGrid();
     brls::Logger::debug("RecyclingGrid: rebuildGrid completed");
 }
 
-void RecyclingGrid::setOnItemSelected(std::function<void(const MediaItem&)> callback) {
+void RecyclingGrid::setOnItemSelected(std::function<void(const Manga&)> callback) {
     m_onItemSelected = callback;
+}
+
+void RecyclingGrid::clearViews() {
+    m_items.clear();
+    if (m_contentBox) {
+        m_contentBox->clearViews();
+    }
 }
 
 void RecyclingGrid::rebuildGrid() {
@@ -50,8 +57,8 @@ void RecyclingGrid::rebuildGrid() {
             m_contentBox->addView(currentRow);
         }
 
-        auto* cell = new MediaItemCell();
-        cell->setItem(m_items[i]);
+        auto* cell = new MangaItemCell();
+        cell->setManga(m_items[i]);
         cell->setWidth(150);
         cell->setHeight(185);  // Square cover (140) + labels (~45)
         cell->setMarginRight(10);
