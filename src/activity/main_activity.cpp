@@ -6,7 +6,7 @@
 #include "activity/main_activity.hpp"
 #include "view/library_section_tab.hpp"
 #include "view/extensions_tab.hpp"
-#include "view/source_browse_tab.hpp"
+#include "view/search_tab.hpp"
 #include "view/downloads_tab.hpp"
 #include "view/settings_tab.hpp"
 #include "app/downloads_manager.hpp"
@@ -51,7 +51,7 @@ void MainActivity::onContentAvailable() {
 
         // Add Browse tab (browse manga sources)
         tabFrame->addTab("Browse", []() {
-            return new SourceBrowseTab();
+            return new SearchTab();
         });
 
         // Add Extensions tab (manage extensions)
