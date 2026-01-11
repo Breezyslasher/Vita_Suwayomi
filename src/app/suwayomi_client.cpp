@@ -31,6 +31,69 @@ std::string SuwayomiClient::buildApiUrl(const std::string& endpoint) {
     return url;
 }
 
+std::string SuwayomiClient::buildGraphQLUrl() {
+    std::string url = m_serverUrl;
+
+    // Remove trailing slash
+    while (!url.empty() && url.back() == '/') {
+        url.pop_back();
+    }
+
+    // GraphQL endpoint
+    url += "/api/graphql";
+
+    return url;
+}
+
+std::string SuwayomiClient::executeGraphQL(const std::string& query, const std::string& variables) {
+    vitasuwayomi::HttpClient http = createHttpClient();
+    http.setDefaultHeader("Content-Type", "application/json");
+
+    std::string url = buildGraphQLUrl();
+
+    // Build GraphQL request body
+    std::string body = "{\"query\":\"";
+
+    // Escape query string (newlines, quotes, etc.)
+    for (char c : query) {
+        switch (c) {
+            case '"': body += "\\\""; break;
+            case '\\': body += "\\\\"; break;
+            case '\n': body += "\\n"; break;
+            case '\r': body += "\\r"; break;
+            case '\t': body += "\\t"; break;
+            default: body += c; break;
+        }
+    }
+    body += "\"";
+
+    // Add variables if provided
+    if (!variables.empty()) {
+        body += ",\"variables\":" + variables;
+    }
+
+    body += "}";
+
+    brls::Logger::debug("GraphQL request to {}: {}", url, body.substr(0, 200));
+
+    vitasuwayomi::HttpResponse response = http.post(url, body);
+
+    if (!response.success || response.statusCode != 200) {
+        brls::Logger::warning("GraphQL request failed: {} ({})", response.error, response.statusCode);
+        return "";
+    }
+
+    // Check for GraphQL errors
+    if (response.body.find("\"errors\"") != std::string::npos) {
+        std::string errors = extractJsonArray(response.body, "errors");
+        brls::Logger::warning("GraphQL errors: {}", errors.substr(0, 200));
+        return "";
+    }
+
+    brls::Logger::debug("GraphQL response: {}", response.body.substr(0, 300));
+    return response.body;
+}
+
 // Helper to create an HTTP client with authentication headers
 vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
     vitasuwayomi::HttpClient http;
@@ -394,6 +457,588 @@ TrackRecord SuwayomiClient::parseTrackRecord(const std::string& json) {
 }
 
 // ============================================================================
+// GraphQL-specific parsers (field names differ from REST API)
+// ============================================================================
+
+Manga SuwayomiClient::parseMangaFromGraphQL(const std::string& json) {
+    Manga manga;
+
+    manga.id = extractJsonInt(json, "id");
+    manga.title = extractJsonValue(json, "title");
+    manga.thumbnailUrl = extractJsonValue(json, "thumbnailUrl");
+    manga.artist = extractJsonValue(json, "artist");
+    manga.author = extractJsonValue(json, "author");
+    manga.description = extractJsonValue(json, "description");
+    manga.inLibrary = extractJsonBool(json, "inLibrary");
+    manga.initialized = extractJsonBool(json, "initialized");
+    manga.url = extractJsonValue(json, "url");
+
+    // Parse status (GraphQL uses enum string)
+    std::string statusStr = extractJsonValue(json, "status");
+    if (statusStr == "ONGOING") manga.status = MangaStatus::ONGOING;
+    else if (statusStr == "COMPLETED") manga.status = MangaStatus::COMPLETED;
+    else if (statusStr == "LICENSED") manga.status = MangaStatus::LICENSED;
+    else if (statusStr == "PUBLISHING_FINISHED") manga.status = MangaStatus::PUBLISHING_FINISHED;
+    else if (statusStr == "CANCELLED") manga.status = MangaStatus::CANCELLED;
+    else if (statusStr == "ON_HIATUS") manga.status = MangaStatus::ON_HIATUS;
+    else manga.status = MangaStatus::UNKNOWN;
+
+    // Parse genre array
+    manga.genre = extractJsonStringArray(json, "genre");
+
+    // GraphQL might have unreadCount directly
+    manga.unreadCount = extractJsonInt(json, "unreadCount");
+
+    return manga;
+}
+
+Chapter SuwayomiClient::parseChapterFromGraphQL(const std::string& json) {
+    Chapter ch;
+
+    ch.id = extractJsonInt(json, "id");
+    ch.name = extractJsonValue(json, "name");
+    ch.scanlator = extractJsonValue(json, "scanlator");
+    ch.chapterNumber = extractJsonFloat(json, "chapterNumber");
+    ch.uploadDate = extractJsonInt64(json, "uploadDate");
+    ch.pageCount = extractJsonInt(json, "pageCount");
+    ch.lastPageRead = extractJsonInt(json, "lastPageRead");
+    ch.index = extractJsonInt(json, "sourceOrder");
+
+    // GraphQL uses isRead, isDownloaded, isBookmarked
+    ch.read = extractJsonBool(json, "isRead");
+    ch.downloaded = extractJsonBool(json, "isDownloaded");
+    ch.bookmarked = extractJsonBool(json, "isBookmarked");
+
+    return ch;
+}
+
+Source SuwayomiClient::parseSourceFromGraphQL(const std::string& json) {
+    Source src;
+
+    // GraphQL returns id as string (LongString)
+    std::string idStr = extractJsonValue(json, "id");
+    if (!idStr.empty()) {
+        try {
+            src.id = std::stoll(idStr);
+        } catch (...) {
+            src.id = 0;
+        }
+    }
+
+    // GraphQL has displayName as well as name
+    src.name = extractJsonValue(json, "displayName");
+    if (src.name.empty()) {
+        src.name = extractJsonValue(json, "name");
+    }
+    src.lang = extractJsonValue(json, "lang");
+    src.iconUrl = extractJsonValue(json, "iconUrl");
+    src.supportsLatest = extractJsonBool(json, "supportsLatest");
+    src.isNsfw = extractJsonBool(json, "isNsfw");
+
+    return src;
+}
+
+Category SuwayomiClient::parseCategoryFromGraphQL(const std::string& json) {
+    Category cat;
+
+    cat.id = extractJsonInt(json, "id");
+    cat.name = extractJsonValue(json, "name");
+    cat.order = extractJsonInt(json, "order");
+
+    // Parse manga count from nested mangas object
+    std::string mangasJson = extractJsonObject(json, "mangas");
+    if (!mangasJson.empty()) {
+        cat.mangaCount = extractJsonInt(mangasJson, "totalCount");
+    }
+
+    return cat;
+}
+
+// ============================================================================
+// GraphQL implementations (primary API)
+// ============================================================================
+
+bool SuwayomiClient::fetchServerInfoGraphQL(ServerInfo& info) {
+    const char* query = R"(
+        query {
+            aboutServer {
+                name
+                version
+                revision
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string aboutServer = extractJsonObject(data, "aboutServer");
+    if (aboutServer.empty()) return false;
+
+    info.name = extractJsonValue(aboutServer, "name");
+    info.version = extractJsonValue(aboutServer, "version");
+    info.revision = extractJsonValue(aboutServer, "revision");
+    if (info.name.empty()) info.name = "Suwayomi";
+
+    return true;
+}
+
+bool SuwayomiClient::fetchSourceListGraphQL(std::vector<Source>& sources) {
+    const char* query = R"(
+        query {
+            sources {
+                nodes {
+                    id
+                    name
+                    displayName
+                    lang
+                    iconUrl
+                    isNsfw
+                    supportsLatest
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string sourcesObj = extractJsonObject(data, "sources");
+    if (sourcesObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(sourcesObj, "nodes");
+    if (nodesJson.empty()) return false;
+
+    sources.clear();
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        sources.push_back(parseSourceFromGraphQL(item));
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} sources", sources.size());
+    return true;
+}
+
+bool SuwayomiClient::fetchPopularMangaGraphQL(int64_t sourceId, int page,
+                                               std::vector<Manga>& manga, bool& hasNextPage) {
+    const char* query = R"(
+        mutation GetPopular($sourceId: LongString!, $page: Int!) {
+            fetchSourceManga(input: { source: $sourceId, type: POPULAR, page: $page }) {
+                mangas {
+                    id
+                    title
+                    thumbnailUrl
+                    author
+                    artist
+                    description
+                    inLibrary
+                }
+                hasNextPage
+            }
+        }
+    )";
+
+    std::string variables = "{\"sourceId\":\"" + std::to_string(sourceId) + "\",\"page\":" + std::to_string(page) + "}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string fetchResult = extractJsonObject(data, "fetchSourceManga");
+    if (fetchResult.empty()) return false;
+
+    hasNextPage = extractJsonBool(fetchResult, "hasNextPage");
+
+    std::string mangasJson = extractJsonArray(fetchResult, "mangas");
+    manga.clear();
+    std::vector<std::string> items = splitJsonArray(mangasJson);
+    for (const auto& item : items) {
+        manga.push_back(parseMangaFromGraphQL(item));
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} popular manga (hasNext: {})", manga.size(), hasNextPage);
+    return true;
+}
+
+bool SuwayomiClient::fetchLatestMangaGraphQL(int64_t sourceId, int page,
+                                              std::vector<Manga>& manga, bool& hasNextPage) {
+    const char* query = R"(
+        mutation GetLatest($sourceId: LongString!, $page: Int!) {
+            fetchSourceManga(input: { source: $sourceId, type: LATEST, page: $page }) {
+                mangas {
+                    id
+                    title
+                    thumbnailUrl
+                    author
+                    artist
+                    description
+                    inLibrary
+                }
+                hasNextPage
+            }
+        }
+    )";
+
+    std::string variables = "{\"sourceId\":\"" + std::to_string(sourceId) + "\",\"page\":" + std::to_string(page) + "}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string fetchResult = extractJsonObject(data, "fetchSourceManga");
+    if (fetchResult.empty()) return false;
+
+    hasNextPage = extractJsonBool(fetchResult, "hasNextPage");
+
+    std::string mangasJson = extractJsonArray(fetchResult, "mangas");
+    manga.clear();
+    std::vector<std::string> items = splitJsonArray(mangasJson);
+    for (const auto& item : items) {
+        manga.push_back(parseMangaFromGraphQL(item));
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} latest manga (hasNext: {})", manga.size(), hasNextPage);
+    return true;
+}
+
+bool SuwayomiClient::searchMangaGraphQL(int64_t sourceId, const std::string& searchQuery, int page,
+                                         std::vector<Manga>& manga, bool& hasNextPage) {
+    const char* query = R"(
+        mutation SearchSource($sourceId: LongString!, $searchTerm: String!, $page: Int!) {
+            fetchSourceManga(input: { source: $sourceId, type: SEARCH, query: $searchTerm, page: $page }) {
+                mangas {
+                    id
+                    title
+                    thumbnailUrl
+                    author
+                    artist
+                    description
+                    inLibrary
+                }
+                hasNextPage
+            }
+        }
+    )";
+
+    // Escape the search query for JSON
+    std::string escapedQuery;
+    for (char c : searchQuery) {
+        switch (c) {
+            case '"': escapedQuery += "\\\""; break;
+            case '\\': escapedQuery += "\\\\"; break;
+            default: escapedQuery += c; break;
+        }
+    }
+
+    std::string variables = "{\"sourceId\":\"" + std::to_string(sourceId) +
+                            "\",\"searchTerm\":\"" + escapedQuery +
+                            "\",\"page\":" + std::to_string(page) + "}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string fetchResult = extractJsonObject(data, "fetchSourceManga");
+    if (fetchResult.empty()) return false;
+
+    hasNextPage = extractJsonBool(fetchResult, "hasNextPage");
+
+    std::string mangasJson = extractJsonArray(fetchResult, "mangas");
+    manga.clear();
+    std::vector<std::string> items = splitJsonArray(mangasJson);
+    for (const auto& item : items) {
+        manga.push_back(parseMangaFromGraphQL(item));
+    }
+
+    brls::Logger::debug("GraphQL: Searched {} manga (hasNext: {})", manga.size(), hasNextPage);
+    return true;
+}
+
+bool SuwayomiClient::fetchLibraryMangaGraphQL(std::vector<Manga>& manga) {
+    const char* query = R"(
+        query GetLibraryManga {
+            mangas(
+                condition: { inLibrary: true }
+                first: 500
+                orderBy: TITLE
+            ) {
+                nodes {
+                    id
+                    title
+                    thumbnailUrl
+                    author
+                    artist
+                    description
+                    genre
+                    status
+                    inLibrary
+                    unreadCount
+                }
+                totalCount
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string mangasObj = extractJsonObject(data, "mangas");
+    if (mangasObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(mangasObj, "nodes");
+    manga.clear();
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        manga.push_back(parseMangaFromGraphQL(item));
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} library manga", manga.size());
+    return true;
+}
+
+bool SuwayomiClient::fetchCategoriesGraphQL(std::vector<Category>& categories) {
+    const char* query = R"(
+        query {
+            categories {
+                nodes {
+                    id
+                    name
+                    order
+                    mangas {
+                        totalCount
+                    }
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string categoriesObj = extractJsonObject(data, "categories");
+    if (categoriesObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(categoriesObj, "nodes");
+    categories.clear();
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        categories.push_back(parseCategoryFromGraphQL(item));
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} categories", categories.size());
+    return true;
+}
+
+bool SuwayomiClient::fetchChaptersGraphQL(int mangaId, std::vector<Chapter>& chapters) {
+    const char* query = R"(
+        query GetChapters($mangaId: Int!) {
+            chapters(
+                condition: { mangaId: $mangaId }
+                first: 1000
+                orderBy: SOURCE_ORDER
+                orderByType: DESC
+            ) {
+                nodes {
+                    id
+                    name
+                    chapterNumber
+                    scanlator
+                    uploadDate
+                    isRead
+                    isDownloaded
+                    isBookmarked
+                    pageCount
+                    lastPageRead
+                    sourceOrder
+                }
+                totalCount
+            }
+        }
+    )";
+
+    std::string variables = "{\"mangaId\":" + std::to_string(mangaId) + "}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string chaptersObj = extractJsonObject(data, "chapters");
+    if (chaptersObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(chaptersObj, "nodes");
+    chapters.clear();
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        Chapter ch = parseChapterFromGraphQL(item);
+        ch.mangaId = mangaId;
+        chapters.push_back(ch);
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} chapters for manga {}", chapters.size(), mangaId);
+    return true;
+}
+
+bool SuwayomiClient::fetchMangaGraphQL(int mangaId, Manga& manga) {
+    const char* query = R"(
+        query GetManga($id: Int!) {
+            manga(id: $id) {
+                id
+                title
+                thumbnailUrl
+                author
+                artist
+                description
+                genre
+                status
+                url
+                inLibrary
+                initialized
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) + "}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string mangaJson = extractJsonObject(data, "manga");
+    if (mangaJson.empty()) return false;
+
+    manga = parseMangaFromGraphQL(mangaJson);
+    return true;
+}
+
+bool SuwayomiClient::addMangaToLibraryGraphQL(int mangaId) {
+    const char* query = R"(
+        mutation AddToLibrary($id: Int!) {
+            updateManga(input: { id: $id, patch: { inLibrary: true } }) {
+                manga {
+                    id
+                    inLibrary
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) + "}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::removeMangaFromLibraryGraphQL(int mangaId) {
+    const char* query = R"(
+        mutation RemoveFromLibrary($id: Int!) {
+            updateManga(input: { id: $id, patch: { inLibrary: false } }) {
+                manga {
+                    id
+                    inLibrary
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) + "}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::markChapterReadGraphQL(int chapterId, bool read) {
+    const char* query = R"(
+        mutation UpdateChapter($id: Int!, $isRead: Boolean!) {
+            updateChapter(input: { id: $id, patch: { isRead: $isRead } }) {
+                chapter {
+                    id
+                    isRead
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(chapterId) +
+                            ",\"isRead\":" + (read ? "true" : "false") + "}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::updateChapterProgressGraphQL(int chapterId, int lastPageRead) {
+    const char* query = R"(
+        mutation UpdateProgress($id: Int!, $lastPageRead: Int!) {
+            updateChapter(input: { id: $id, patch: { lastPageRead: $lastPageRead } }) {
+                chapter {
+                    id
+                    lastPageRead
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(chapterId) +
+                            ",\"lastPageRead\":" + std::to_string(lastPageRead) + "}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& pages) {
+    const char* query = R"(
+        mutation FetchChapterPages($id: Int!) {
+            fetchChapterPages(input: { chapterId: $id }) {
+                pages
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(chapterId) + "}";
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string fetchResult = extractJsonObject(data, "fetchChapterPages");
+    if (fetchResult.empty()) return false;
+
+    // The pages field contains an array of page URLs
+    std::string pagesJson = extractJsonArray(fetchResult, "pages");
+    pages.clear();
+
+    // Parse pages array (array of strings)
+    std::vector<std::string> pageUrls = extractJsonStringArray(fetchResult, "pages");
+    for (size_t i = 0; i < pageUrls.size(); i++) {
+        Page page;
+        page.index = static_cast<int>(i);
+        page.imageUrl = pageUrls[i];
+        pages.push_back(page);
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} pages for chapter {}", pages.size(), chapterId);
+    return true;
+}
+
+// ============================================================================
 // Connection & Server Info
 // ============================================================================
 
@@ -421,6 +1066,15 @@ bool SuwayomiClient::connectToServer(const std::string& url) {
 }
 
 bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
+    // Try GraphQL first (primary API)
+    brls::Logger::info("Fetching server info via GraphQL...");
+    if (fetchServerInfoGraphQL(info)) {
+        brls::Logger::info("Server (GraphQL): {} v{}", info.name, info.version);
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed, falling back to REST API...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     // Try /api/v1/settings/about endpoint (standard Suwayomi endpoint)
@@ -429,7 +1083,7 @@ bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
     vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
-        brls::Logger::warning("Primary endpoint failed ({}), trying fallback...", response.statusCode);
+        brls::Logger::warning("REST about endpoint failed ({}), trying source list...", response.statusCode);
 
         // Fallback: Try to fetch source list as connection test
         url = m_serverUrl + "/api/v1/source/list";
@@ -463,7 +1117,7 @@ bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
     // Fallback name if not set
     if (info.name.empty()) info.name = "Suwayomi";
 
-    brls::Logger::info("Server: {} v{} ({})", info.name, info.version, info.buildType);
+    brls::Logger::info("Server (REST): {} v{} ({})", info.name, info.version, info.buildType);
     return true;
 }
 
@@ -543,6 +1197,13 @@ std::string SuwayomiClient::getExtensionIconUrl(const std::string& apkName) {
 // ============================================================================
 
 bool SuwayomiClient::fetchSourceList(std::vector<Source>& sources) {
+    // Try GraphQL first (primary API)
+    if (fetchSourceListGraphQL(sources)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for sources, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/source/list");
@@ -559,7 +1220,7 @@ bool SuwayomiClient::fetchSourceList(std::vector<Source>& sources) {
         sources.push_back(parseSource(item));
     }
 
-    brls::Logger::debug("Fetched {} sources", sources.size());
+    brls::Logger::debug("REST: Fetched {} sources", sources.size());
     return true;
 }
 
@@ -603,6 +1264,13 @@ bool SuwayomiClient::setSourceFilters(int64_t sourceId, const std::vector<Source
 
 bool SuwayomiClient::fetchPopularManga(int64_t sourceId, int page,
                                         std::vector<Manga>& manga, bool& hasNextPage) {
+    // Try GraphQL first (primary API)
+    if (fetchPopularMangaGraphQL(sourceId, page, manga, hasNextPage)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for popular manga, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     // Use query parameter format like Kodi addon: /source/{id}/popular?pageNum={page}
@@ -629,12 +1297,19 @@ bool SuwayomiClient::fetchPopularManga(int64_t sourceId, int page,
         manga.push_back(parseManga(item));
     }
 
-    brls::Logger::debug("Fetched {} popular manga (hasNext: {})", manga.size(), hasNextPage);
+    brls::Logger::debug("REST: Fetched {} popular manga (hasNext: {})", manga.size(), hasNextPage);
     return true;
 }
 
 bool SuwayomiClient::fetchLatestManga(int64_t sourceId, int page,
                                        std::vector<Manga>& manga, bool& hasNextPage) {
+    // Try GraphQL first (primary API)
+    if (fetchLatestMangaGraphQL(sourceId, page, manga, hasNextPage)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for latest manga, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     // Use query parameter format like Kodi addon: /source/{id}/latest?pageNum={page}
@@ -661,12 +1336,19 @@ bool SuwayomiClient::fetchLatestManga(int64_t sourceId, int page,
         manga.push_back(parseManga(item));
     }
 
-    brls::Logger::debug("Fetched {} latest manga (hasNext: {})", manga.size(), hasNextPage);
+    brls::Logger::debug("REST: Fetched {} latest manga (hasNext: {})", manga.size(), hasNextPage);
     return true;
 }
 
 bool SuwayomiClient::searchManga(int64_t sourceId, const std::string& query, int page,
                                   std::vector<Manga>& manga, bool& hasNextPage) {
+    // Try GraphQL first (primary API)
+    if (searchMangaGraphQL(sourceId, query, page, manga, hasNextPage)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for search, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string encodedQuery = vitasuwayomi::HttpClient::urlEncode(query);
@@ -694,7 +1376,7 @@ bool SuwayomiClient::searchManga(int64_t sourceId, const std::string& query, int
         manga.push_back(parseManga(item));
     }
 
-    brls::Logger::debug("Searched {} manga (hasNext: {})", manga.size(), hasNextPage);
+    brls::Logger::debug("REST: Searched {} manga (hasNext: {})", manga.size(), hasNextPage);
     return true;
 }
 
@@ -724,6 +1406,13 @@ bool SuwayomiClient::quickSearchManga(int64_t sourceId, const std::string& query
 // ============================================================================
 
 bool SuwayomiClient::fetchManga(int mangaId, Manga& manga) {
+    // Try GraphQL first (primary API)
+    if (fetchMangaGraphQL(mangaId, manga)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for manga, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId));
@@ -767,6 +1456,13 @@ bool SuwayomiClient::refreshManga(int mangaId, Manga& manga) {
 }
 
 bool SuwayomiClient::addMangaToLibrary(int mangaId) {
+    // Try GraphQL first (primary API)
+    if (addMangaToLibraryGraphQL(mangaId)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for add to library, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/library");
@@ -776,6 +1472,13 @@ bool SuwayomiClient::addMangaToLibrary(int mangaId) {
 }
 
 bool SuwayomiClient::removeMangaFromLibrary(int mangaId) {
+    // Try GraphQL first (primary API)
+    if (removeMangaFromLibraryGraphQL(mangaId)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for remove from library, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/library");
@@ -793,6 +1496,13 @@ std::string SuwayomiClient::getMangaThumbnailUrl(int mangaId) {
 // ============================================================================
 
 bool SuwayomiClient::fetchChapters(int mangaId, std::vector<Chapter>& chapters) {
+    // Try GraphQL first (primary API)
+    if (fetchChaptersGraphQL(mangaId, chapters)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for chapters, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/chapters");
@@ -809,7 +1519,7 @@ bool SuwayomiClient::fetchChapters(int mangaId, std::vector<Chapter>& chapters) 
         chapters.push_back(parseChapter(item));
     }
 
-    brls::Logger::debug("Fetched {} chapters for manga {}", chapters.size(), mangaId);
+    brls::Logger::debug("REST: Fetched {} chapters for manga {}", chapters.size(), mangaId);
     return true;
 }
 
@@ -952,6 +1662,13 @@ std::string SuwayomiClient::getPageImageUrl(int mangaId, int chapterIndex, int p
 // ============================================================================
 
 bool SuwayomiClient::fetchCategories(std::vector<Category>& categories) {
+    // Try GraphQL first (primary API)
+    if (fetchCategoriesGraphQL(categories)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for categories, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/category");
@@ -968,6 +1685,7 @@ bool SuwayomiClient::fetchCategories(std::vector<Category>& categories) {
         categories.push_back(parseCategory(item));
     }
 
+    brls::Logger::debug("REST: Fetched {} categories", categories.size());
     return true;
 }
 
@@ -1082,7 +1800,13 @@ bool SuwayomiClient::fetchCategoryManga(int categoryId, std::vector<Manga>& mang
 // ============================================================================
 
 bool SuwayomiClient::fetchLibraryManga(std::vector<Manga>& manga) {
-    // Default category (0) contains all library manga
+    // Try GraphQL first (primary API)
+    if (fetchLibraryMangaGraphQL(manga)) {
+        return true;
+    }
+
+    // REST fallback - Default category (0) contains all library manga
+    brls::Logger::info("GraphQL failed for library, falling back to REST...");
     return fetchCategoryManga(0, manga);
 }
 

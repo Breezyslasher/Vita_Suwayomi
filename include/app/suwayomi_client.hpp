@@ -329,9 +329,35 @@ private:
     ~SuwayomiClient() = default;
 
     std::string buildApiUrl(const std::string& endpoint);
+    std::string buildGraphQLUrl();
 
     // Create HTTP client with authentication
     HttpClient createHttpClient();
+
+    // GraphQL query executor - returns response body or empty string on failure
+    std::string executeGraphQL(const std::string& query, const std::string& variables = "");
+
+    // GraphQL-based implementations (primary API)
+    bool fetchSourceListGraphQL(std::vector<Source>& sources);
+    bool fetchPopularMangaGraphQL(int64_t sourceId, int page, std::vector<Manga>& manga, bool& hasNextPage);
+    bool fetchLatestMangaGraphQL(int64_t sourceId, int page, std::vector<Manga>& manga, bool& hasNextPage);
+    bool searchMangaGraphQL(int64_t sourceId, const std::string& query, int page, std::vector<Manga>& manga, bool& hasNextPage);
+    bool fetchLibraryMangaGraphQL(std::vector<Manga>& manga);
+    bool fetchCategoriesGraphQL(std::vector<Category>& categories);
+    bool fetchChaptersGraphQL(int mangaId, std::vector<Chapter>& chapters);
+    bool fetchMangaGraphQL(int mangaId, Manga& manga);
+    bool fetchServerInfoGraphQL(ServerInfo& info);
+    bool addMangaToLibraryGraphQL(int mangaId);
+    bool removeMangaFromLibraryGraphQL(int mangaId);
+    bool markChapterReadGraphQL(int chapterId, bool read);
+    bool updateChapterProgressGraphQL(int chapterId, int lastPageRead);
+    bool fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& pages);
+
+    // Parse GraphQL response data
+    Manga parseMangaFromGraphQL(const std::string& json);
+    Chapter parseChapterFromGraphQL(const std::string& json);
+    Source parseSourceFromGraphQL(const std::string& json);
+    Category parseCategoryFromGraphQL(const std::string& json);
 
     // JSON parsing helpers
     std::string extractJsonValue(const std::string& json, const std::string& key);
