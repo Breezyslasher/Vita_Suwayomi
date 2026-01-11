@@ -53,7 +53,8 @@ private:
 
     // UI components
     BRLS_BIND(brls::Image, pageImage, "reader/page_image");
-    BRLS_BIND(brls::Box, controlsOverlay, "reader/controls");
+    BRLS_BIND(brls::Box, topBar, "reader/top_bar");
+    BRLS_BIND(brls::Box, bottomBar, "reader/bottom_bar");
     BRLS_BIND(brls::Label, pageLabel, "reader/page_label");
     BRLS_BIND(brls::Label, chapterLabel, "reader/chapter_label");
     BRLS_BIND(brls::Slider, pageSlider, "reader/page_slider");

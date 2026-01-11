@@ -309,15 +309,21 @@ void ReaderActivity::toggleControls() {
 }
 
 void ReaderActivity::showControls() {
-    if (controlsOverlay) {
-        controlsOverlay->setVisibility(brls::Visibility::VISIBLE);
+    if (topBar) {
+        topBar->setVisibility(brls::Visibility::VISIBLE);
+    }
+    if (bottomBar) {
+        bottomBar->setVisibility(brls::Visibility::VISIBLE);
     }
     m_controlsVisible = true;
 }
 
 void ReaderActivity::hideControls() {
-    if (controlsOverlay) {
-        controlsOverlay->setVisibility(brls::Visibility::GONE);
+    if (topBar) {
+        topBar->setVisibility(brls::Visibility::GONE);
+    }
+    if (bottomBar) {
+        bottomBar->setVisibility(brls::Visibility::GONE);
     }
     m_controlsVisible = false;
 }

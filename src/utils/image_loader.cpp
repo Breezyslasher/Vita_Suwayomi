@@ -4,11 +4,19 @@
 
 #include "utils/image_loader.hpp"
 #include "utils/http_client.hpp"
+#include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
 
 std::map<std::string, std::vector<uint8_t>> ImageLoader::s_cache;
 std::mutex ImageLoader::s_cacheMutex;
+std::string ImageLoader::s_authUsername;
+std::string ImageLoader::s_authPassword;
+
+void ImageLoader::setAuthCredentials(const std::string& username, const std::string& password) {
+    s_authUsername = username;
+    s_authPassword = password;
+}
 
 void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target) {
     if (url.empty() || !target) return;
@@ -25,9 +33,34 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
         }
     }
 
+    // Capture auth credentials for async use
+    std::string authUser = s_authUsername;
+    std::string authPass = s_authPassword;
+
     // Load asynchronously
-    brls::async([url, callback, target]() {
+    brls::async([url, callback, target, authUser, authPass]() {
         HttpClient client;
+
+        // Add authentication if credentials are set
+        if (!authUser.empty() && !authPass.empty()) {
+            // Base64 encode username:password for Basic Auth
+            std::string credentials = authUser + ":" + authPass;
+            static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            std::string encoded;
+            int val = 0, valb = -6;
+            for (unsigned char c : credentials) {
+                val = (val << 8) + c;
+                valb += 8;
+                while (valb >= 0) {
+                    encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                    valb -= 6;
+                }
+            }
+            if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+            while (encoded.size() % 4) encoded.push_back('=');
+            client.setDefaultHeader("Authorization", "Basic " + encoded);
+        }
+
         HttpResponse resp = client.get(url);
 
         if (resp.success && !resp.body.empty()) {

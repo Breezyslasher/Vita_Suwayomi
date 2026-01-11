@@ -148,6 +148,27 @@ struct RecentUpdate {
     Chapter chapter;
 };
 
+// Reading history item (for continue reading)
+struct ReadingHistoryItem {
+    int chapterId = 0;
+    int mangaId = 0;
+    std::string mangaTitle;
+    std::string mangaThumbnail;
+    std::string chapterName;
+    float chapterNumber = 0.0f;
+    int lastPageRead = 0;
+    int pageCount = 0;
+    int64_t lastReadAt = 0;  // Unix timestamp
+    std::string sourceName;
+};
+
+// Global search result
+struct GlobalSearchResult {
+    Source source;
+    std::vector<Manga> manga;
+    bool hasNextPage = false;
+};
+
 // Download queue item
 struct DownloadQueueItem {
     int chapterId = 0;
@@ -312,6 +333,18 @@ public:
     bool updateTracking(int mangaId, int trackerId, const TrackRecord& record);
     bool fetchMangaTracking(int mangaId, std::vector<TrackRecord>& records);
 
+    // Reading History (Continue Reading)
+    bool fetchReadingHistory(int offset, int limit, std::vector<ReadingHistoryItem>& history);
+    bool fetchReadingHistory(std::vector<ReadingHistoryItem>& history);
+
+    // Global Search (search across all sources)
+    bool globalSearch(const std::string& query, std::vector<GlobalSearchResult>& results);
+    bool globalSearch(const std::string& query, const std::vector<int64_t>& sourceIds,
+                      std::vector<GlobalSearchResult>& results);
+
+    // Set manga categories (replaces all categories)
+    bool setMangaCategories(int mangaId, const std::vector<int>& categoryIds);
+
     // Configuration
     void setServerUrl(const std::string& url) { m_serverUrl = url; }
     const std::string& getServerUrl() const { return m_serverUrl; }
@@ -352,6 +385,9 @@ private:
     bool markChapterReadGraphQL(int chapterId, bool read);
     bool updateChapterProgressGraphQL(int chapterId, int lastPageRead);
     bool fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& pages);
+    bool fetchReadingHistoryGraphQL(int offset, int limit, std::vector<ReadingHistoryItem>& history);
+    bool globalSearchGraphQL(const std::string& query, std::vector<GlobalSearchResult>& results);
+    bool setMangaCategoriesGraphQL(int mangaId, const std::vector<int>& categoryIds);
 
     // Parse GraphQL response data
     Manga parseMangaFromGraphQL(const std::string& json);

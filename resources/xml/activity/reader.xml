@@ -8,105 +8,94 @@
     alignItems="center"
     backgroundColor="#000000">
 
+    <!-- Top bar (always visible, compact) -->
+    <brls:Box
+        id="reader/top_bar"
+        width="100%"
+        height="40"
+        axis="row"
+        justifyContent="spaceBetween"
+        alignItems="center"
+        paddingLeft="16"
+        paddingRight="16"
+        backgroundColor="#000000CC">
+
+        <!-- Chapter name -->
+        <brls:Label
+            id="reader/chapter_label"
+            text="Chapter 1"
+            fontSize="14"
+            textColor="#ffffff"
+            grow="1"/>
+
+        <!-- Page indicator -->
+        <brls:Label
+            id="reader/page_label"
+            text="1 / 20"
+            fontSize="14"
+            textColor="#a0a0a0"/>
+
+    </brls:Box>
+
     <!-- Main page display area -->
     <brls:Image
         id="reader/page_image"
         width="100%"
-        height="100%"
+        height="auto"
         scalingType="fit"
         grow="1"/>
 
-    <!-- Controls overlay (hidden by default, shown on button press) -->
+    <!-- Bottom bar with controls -->
     <brls:Box
-        id="reader/controls"
+        id="reader/bottom_bar"
         width="100%"
-        height="100%"
+        height="70"
         axis="column"
-        justifyContent="spaceBetween"
+        justifyContent="center"
         alignItems="stretch"
-        position="absolute"
-        visibility="gone"
-        backgroundColor="#00000080">
+        paddingLeft="16"
+        paddingRight="16"
+        paddingTop="8"
+        paddingBottom="8"
+        backgroundColor="#000000CC">
 
-        <!-- Top bar -->
+        <!-- Page slider -->
+        <brls:Slider
+            id="reader/page_slider"
+            width="100%"
+            height="24"
+            marginBottom="8"/>
+
+        <!-- Chapter navigation buttons -->
         <brls:Box
             width="100%"
-            height="60"
             axis="row"
             justifyContent="spaceBetween"
-            alignItems="center"
-            paddingLeft="20"
-            paddingRight="20"
-            backgroundColor="#000000CC">
+            alignItems="center">
 
-            <!-- Chapter name -->
-            <brls:Label
-                id="reader/chapter_label"
-                text="Chapter 1"
-                fontSize="18"
-                textColor="#ffffff"
-                grow="1"/>
+            <brls:Button
+                id="reader/prev_chapter"
+                style="borderless"
+                width="140"
+                height="32">
+                <brls:Label
+                    text="< Prev Chapter"
+                    fontSize="12"
+                    textColor="#ffffff"
+                    horizontalAlign="center"/>
+            </brls:Button>
 
-            <!-- Page indicator -->
-            <brls:Label
-                id="reader/page_label"
-                text="1 / 20"
-                fontSize="16"
-                textColor="#a0a0a0"/>
-
-        </brls:Box>
-
-        <!-- Bottom bar -->
-        <brls:Box
-            width="100%"
-            height="80"
-            axis="column"
-            justifyContent="center"
-            alignItems="stretch"
-            paddingLeft="20"
-            paddingRight="20"
-            paddingBottom="10"
-            backgroundColor="#000000CC">
-
-            <!-- Page slider -->
-            <brls:Slider
-                id="reader/page_slider"
-                width="100%"
-                height="30"
-                marginBottom="10"/>
-
-            <!-- Chapter navigation buttons -->
-            <brls:Box
-                width="100%"
-                axis="row"
-                justifyContent="spaceBetween"
-                alignItems="center">
-
-                <brls:Button
-                    id="reader/prev_chapter"
-                    style="borderless"
-                    width="150"
-                    height="40">
-                    <brls:Label
-                        text="Prev Chapter"
-                        fontSize="14"
-                        textColor="#ffffff"
-                        horizontalAlign="center"/>
-                </brls:Button>
-
-                <brls:Button
-                    id="reader/next_chapter"
-                    style="borderless"
-                    width="150"
-                    height="40">
-                    <brls:Label
-                        text="Next Chapter"
-                        fontSize="14"
-                        textColor="#ffffff"
-                        horizontalAlign="center"/>
-                </brls:Button>
-
-            </brls:Box>
+            <brls:Button
+                id="reader/next_chapter"
+                style="borderless"
+                width="140"
+                height="32">
+                <brls:Label
+                    text="Next Chapter >"
+                    fontSize="12"
+                    textColor="#ffffff"
+                    horizontalAlign="center"/>
+            </brls:Button>
 
         </brls:Box>
 
