@@ -10,6 +10,7 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include "utils/http_client.hpp"
 
 namespace vitasuwayomi {
 
@@ -328,6 +329,9 @@ private:
     ~SuwayomiClient() = default;
 
     std::string buildApiUrl(const std::string& endpoint);
+
+    // Create HTTP client with authentication
+    HttpClient createHttpClient();
 
     // JSON parsing helpers
     std::string extractJsonValue(const std::string& json, const std::string& key);
