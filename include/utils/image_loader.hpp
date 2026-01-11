@@ -1,5 +1,5 @@
 /**
- * VitaABS - Asynchronous Image Loader
+ * VitaSuwayomi - Asynchronous Image Loader
  */
 
 #pragma once
@@ -10,7 +10,7 @@
 #include <map>
 #include <mutex>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class ImageLoader {
 public:
@@ -30,4 +30,4 @@ private:
     static std::mutex s_cacheMutex;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

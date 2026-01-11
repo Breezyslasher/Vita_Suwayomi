@@ -1,5 +1,5 @@
 /**
- * VitaABS - Audiobookshelf Client for PlayStation Vita
+ * VitaSuwayomi - Suwayomi Client for PlayStation Vita
  * Main entry point with Borealis UI framework
  *
  * Based on switchfin architecture (https://github.com/dragonflylee/switchfin)
@@ -8,11 +8,10 @@
 
 #include <borealis.hpp>
 #include "app/application.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "view/media_item_cell.hpp"
 #include "view/recycling_grid.hpp"
 #include "view/media_detail_view.hpp"
-#include "view/video_view.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/http_client.hpp"
 
@@ -128,7 +127,7 @@ static bool initVitaNetwork() {
     }
 
     // Initialize curl
-    vitaabs::HttpClient::globalInit();
+    vitasuwayomi::HttpClient::globalInit();
 
     brls::Logger::info("Networking initialized");
     return true;
@@ -138,7 +137,7 @@ static bool initVitaNetwork() {
  * Cleanup networking
  */
 static void cleanupVitaNetwork() {
-    vitaabs::HttpClient::globalCleanup();
+    vitasuwayomi::HttpClient::globalCleanup();
     sceHttpTerm();
     sceSslTerm();
     sceNetCtlTerm();
@@ -150,9 +149,8 @@ static void cleanupVitaNetwork() {
  * Register custom views
  */
 static void registerCustomViews() {
-    brls::Application::registerXMLView("MediaItemCell", vitaabs::MediaItemCell::create);
-    brls::Application::registerXMLView("RecyclingGrid", vitaabs::RecyclingGrid::create);
-    brls::Application::registerXMLView("vitaabs:VideoView", vitaabs::VideoView::create);
+    brls::Application::registerXMLView("MangaItemCell", vitasuwayomi::MangaItemCell::create);
+    brls::Application::registerXMLView("RecyclingGrid", vitasuwayomi::RecyclingGrid::create);
 }
 
 /**
@@ -175,8 +173,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Create log directory and file on Vita
-    sceIoMkdir("ux0:data/VitaABS", 0777);
-    static FILE* logFile = std::fopen("ux0:data/VitaABS/vitaabs.log", "w");
+    sceIoMkdir("ux0:data/VitaSuwayomi", 0777);
+    static FILE* logFile = std::fopen("ux0:data/VitaSuwayomi/vitasuwayomi.log", "w");
     if (logFile) {
         // Use line buffering so logs are written immediately
         setvbuf(logFile, NULL, _IOLBF, 0);
@@ -222,7 +220,7 @@ int main(int argc, char* argv[]) {
                     time_tm.tm_hour, time_tm.tm_min, time_tm.tm_sec,
                     (int)ms, levelStr, log.c_str());
         });
-        brls::Logger::info("Log file initialized: ux0:data/VitaABS/vitaabs.log");
+        brls::Logger::info("Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log");
     }
 #endif
 
@@ -232,7 +230,7 @@ int main(int argc, char* argv[]) {
     style.addMetric("brls/sidebar/padding_right", 20.0f);
 
     // Create window
-    brls::Application::createWindow("VitaABS");
+    brls::Application::createWindow("VitaSuwayomi");
 
     // Set theme colors
     brls::Application::getPlatform()->getThemeVariant();
@@ -241,13 +239,13 @@ int main(int argc, char* argv[]) {
     registerCustomViews();
 
     // Initialize downloads manager
-    vitaabs::DownloadsManager::getInstance().init();
+    vitasuwayomi::DownloadsManager::getInstance().init();
 
     // Initialize application
-    vitaabs::Application& app = vitaabs::Application::getInstance();
+    vitasuwayomi::Application& app = vitasuwayomi::Application::getInstance();
 
     if (!app.init()) {
-        brls::Logger::error("Failed to initialize VitaABS");
+        brls::Logger::error("Failed to initialize VitaSuwayomi");
 #ifdef __vita__
         cleanupVitaNetwork();
         sceKernelExitProcess(1);

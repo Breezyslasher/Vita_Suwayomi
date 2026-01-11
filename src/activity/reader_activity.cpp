@@ -106,7 +106,7 @@ void ReaderActivity::onContentAvailable() {
 void ReaderActivity::loadPages() {
     brls::Logger::debug("Loading pages for chapter {}", m_chapterIndex);
 
-    vitaabs::asyncTask<bool>([this]() {
+    vitasuwayomi::asyncTask<bool>([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         // Fetch chapter info and pages
@@ -172,13 +172,13 @@ void ReaderActivity::loadPage(int index) {
 
     // Load image
     if (pageImage) {
-        vitaabs::ImageLoader::loadAsync(imageUrl, [this, index](const std::string& imagePath) {
-            if (index == m_currentPage && pageImage) {
-                brls::sync([this, imagePath]() {
-                    pageImage->setImageFromFile(imagePath);
-                });
+        int currentPageAtLoad = m_currentPage;
+        ImageLoader::loadAsync(imageUrl, [this, index, currentPageAtLoad](brls::Image* img) {
+            // Only log if this is still the current page
+            if (index == currentPageAtLoad) {
+                brls::Logger::debug("ReaderActivity: Page {} loaded", index);
             }
-        });
+        }, pageImage);
     }
 
     // Preload adjacent pages
@@ -186,27 +186,9 @@ void ReaderActivity::loadPage(int index) {
 }
 
 void ReaderActivity::preloadAdjacentPages() {
-    // Preload next 2 pages and previous 1 page
-    std::vector<int> toPreload;
-
-    if (m_currentPage + 1 < static_cast<int>(m_pages.size())) {
-        toPreload.push_back(m_currentPage + 1);
-    }
-    if (m_currentPage + 2 < static_cast<int>(m_pages.size())) {
-        toPreload.push_back(m_currentPage + 2);
-    }
-    if (m_currentPage - 1 >= 0) {
-        toPreload.push_back(m_currentPage - 1);
-    }
-
-    for (int idx : toPreload) {
-        if (m_cachedImages.find(idx) == m_cachedImages.end()) {
-            std::string url = m_pages[idx].imageUrl;
-            vitaabs::ImageLoader::loadAsync(url, [this, idx](const std::string& path) {
-                m_cachedImages[idx] = path;
-            });
-        }
-    }
+    // TODO: Implement proper preloading with ImageLoader cache
+    // The current ImageLoader caches by URL automatically
+    // Future improvement: preload images into ImageLoader's cache
 }
 
 void ReaderActivity::updatePageDisplay() {
@@ -223,7 +205,7 @@ void ReaderActivity::updatePageDisplay() {
 
 void ReaderActivity::updateProgress() {
     // Save reading progress to server
-    vitaabs::asyncRun([this]() {
+    vitasuwayomi::asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         client.updateChapterProgress(m_mangaId, m_chapterIndex, m_currentPage);
     });
@@ -310,7 +292,7 @@ void ReaderActivity::previousChapter() {
 }
 
 void ReaderActivity::markChapterAsRead() {
-    vitaabs::asyncRun([this]() {
+    vitasuwayomi::asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         client.markChapterRead(m_mangaId, m_chapterIndex);
     });

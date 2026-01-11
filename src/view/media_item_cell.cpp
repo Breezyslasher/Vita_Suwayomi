@@ -1,9 +1,9 @@
 /**
- * VitaABS - Media Item Cell implementation
+ * VitaSuwayomi - Manga Item Cell implementation
  */
 
 #include "view/media_item_cell.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "utils/image_loader.hpp"
 #include <fstream>
 
@@ -11,7 +11,7 @@
 #include <psp2/io/fcntl.h>
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Helper to load local cover image on Vita
 static void loadLocalCoverToImage(brls::Image* image, const std::string& localPath) {
@@ -48,7 +48,7 @@ static void loadLocalCoverToImage(brls::Image* image, const std::string& localPa
 #endif
 }
 
-MediaItemCell::MediaItemCell() {
+MangaItemCell::MangaItemCell() {
     this->setAxis(brls::Axis::COLUMN);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::CENTER);
@@ -57,9 +57,9 @@ MediaItemCell::MediaItemCell() {
     this->setCornerRadius(8);
     this->setBackgroundColor(nvgRGBA(50, 50, 50, 255));
 
-    // Thumbnail image - square for audiobook/podcast covers
+    // Thumbnail image - manga covers are typically taller than wide
     m_thumbnailImage = new brls::Image();
-    m_thumbnailImage->setWidth(140);
+    m_thumbnailImage->setWidth(100);
     m_thumbnailImage->setHeight(140);
     m_thumbnailImage->setScalingType(brls::ImageScalingType::FIT);
     m_thumbnailImage->setCornerRadius(4);
@@ -72,11 +72,11 @@ MediaItemCell::MediaItemCell() {
     m_titleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     this->addView(m_titleLabel);
 
-    // Subtitle label (for episodes: Episode N)
+    // Subtitle label (author or chapter count)
     m_subtitleLabel = new brls::Label();
     m_subtitleLabel->setFontSize(10);
     m_subtitleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    m_subtitleLabel->setVisibility(brls::Visibility::GONE);
+    m_subtitleLabel->setTextColor(nvgRGB(160, 160, 160));
     this->addView(m_subtitleLabel);
 
     // Description label (shows on focus)
@@ -86,25 +86,20 @@ MediaItemCell::MediaItemCell() {
     m_descriptionLabel->setVisibility(brls::Visibility::GONE);
     this->addView(m_descriptionLabel);
 
-    // Progress bar (for continue listening)
-    m_progressBar = new brls::Rectangle();
-    m_progressBar->setHeight(3);
-    m_progressBar->setWidth(0);
-    m_progressBar->setColor(nvgRGBA(229, 160, 13, 255)); // Progress color
-    m_progressBar->setVisibility(brls::Visibility::GONE);
-    this->addView(m_progressBar);
+    // Unread badge
+    m_unreadBadge = new brls::Label();
+    m_unreadBadge->setFontSize(10);
+    m_unreadBadge->setTextColor(nvgRGB(255, 255, 255));
+    m_unreadBadge->setVisibility(brls::Visibility::GONE);
+    this->addView(m_unreadBadge);
 }
 
-void MediaItemCell::setItem(const MediaItem& item) {
-    m_item = item;
-
-    // Audiobookshelf uses square covers
-    m_thumbnailImage->setWidth(140);
-    m_thumbnailImage->setHeight(140);
+void MangaItemCell::setManga(const Manga& manga) {
+    m_manga = manga;
 
     // Set title
     if (m_titleLabel) {
-        std::string title = item.title;
+        std::string title = manga.title;
         // Truncate long titles
         if (title.length() > 18) {
             title = title.substr(0, 16) + "...";
@@ -113,154 +108,107 @@ void MediaItemCell::setItem(const MediaItem& item) {
         m_titleLabel->setText(title);
     }
 
-    // Set subtitle for podcast episodes
+    // Set subtitle (author or chapter count)
     if (m_subtitleLabel) {
-        if (item.mediaType == MediaType::PODCAST_EPISODE) {
-            // Show subtitle or episode title
-            if (!item.subtitle.empty()) {
-                m_subtitleLabel->setText(item.subtitle);
-                m_subtitleLabel->setVisibility(brls::Visibility::VISIBLE);
-            } else {
-                m_subtitleLabel->setVisibility(brls::Visibility::GONE);
+        if (!manga.author.empty()) {
+            std::string author = manga.author;
+            if (author.length() > 20) {
+                author = author.substr(0, 18) + "...";
             }
+            m_subtitleLabel->setText(author);
+        } else if (manga.chapterCount > 0) {
+            m_subtitleLabel->setText(std::to_string(manga.chapterCount) + " chapters");
         } else {
-            m_subtitleLabel->setVisibility(brls::Visibility::GONE);
+            m_subtitleLabel->setText("");
         }
     }
 
-    // Show progress bar for items with listening progress
-    if (m_progressBar && item.currentTime > 0 && item.duration > 0) {
-        float progress = item.currentTime / item.duration;
-        m_progressBar->setWidth(140 * progress);
-        m_progressBar->setVisibility(brls::Visibility::VISIBLE);
+    // Show unread badge if there are unread chapters
+    if (m_unreadBadge && manga.unreadCount > 0) {
+        m_unreadBadge->setText(std::to_string(manga.unreadCount));
+        m_unreadBadge->setVisibility(brls::Visibility::VISIBLE);
     }
 
     // Load thumbnail
     loadThumbnail();
 }
 
-void MediaItemCell::loadThumbnail() {
+void MangaItemCell::loadThumbnail() {
     if (!m_thumbnailImage) return;
 
-    brls::Logger::debug("MediaItemCell::loadThumbnail for '{}' id='{}' coverPath='{}'",
-                       m_item.title, m_item.id, m_item.coverPath);
+    brls::Logger::debug("MangaItemCell::loadThumbnail for '{}' id={} thumbnailUrl='{}'",
+                       m_manga.title, m_manga.id, m_manga.thumbnailUrl);
 
     // Check if we have a Vita local cover path (for downloaded items)
     // Vita local paths start with "ux0:"
-    if (!m_item.coverPath.empty() && m_item.coverPath.find("ux0:") == 0) {
+    if (!m_manga.thumbnailUrl.empty() && m_manga.thumbnailUrl.find("ux0:") == 0) {
         // Local Vita path - load directly from file
-        brls::Logger::debug("MediaItemCell: Loading local cover from {}", m_item.coverPath);
-        loadLocalCoverToImage(m_thumbnailImage, m_item.coverPath);
+        brls::Logger::debug("MangaItemCell: Loading local cover from {}", m_manga.thumbnailUrl);
+        loadLocalCoverToImage(m_thumbnailImage, m_manga.thumbnailUrl);
         return;
     }
 
     // Load from server URL
-    AudiobookshelfClient& client = AudiobookshelfClient::getInstance();
-
-    // Use square dimensions for audiobook/podcast covers (request larger size for quality)
-    int size = 280;
-
-    // Use item ID for cover URL
-    if (m_item.id.empty()) {
-        brls::Logger::warning("MediaItemCell: No item ID for cover of '{}'", m_item.title);
+    if (m_manga.thumbnailUrl.empty()) {
+        brls::Logger::warning("MangaItemCell: No thumbnail URL for '{}'", m_manga.title);
         return;
     }
 
-    std::string url = client.getCoverUrl(m_item.id, size, size);
-    brls::Logger::debug("MediaItemCell: Loading cover from URL: {}", url);
+    // Build full URL with server base
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::string url = client.getMangaThumbnailUrl(m_manga.id);
 
-    ImageLoader::loadAsync(url, [this](brls::Image* image) {
-        brls::Logger::debug("MediaItemCell: Cover loaded for '{}'", m_item.title);
+    brls::Logger::debug("MangaItemCell: Loading cover from URL: {}", url);
+
+    ImageLoader::loadAsync(url, [](brls::Image* img) {
+        brls::Logger::debug("MangaItemCell: Cover loaded successfully");
     }, m_thumbnailImage);
 }
 
-brls::View* MediaItemCell::create() {
-    return new MediaItemCell();
+brls::View* MangaItemCell::create() {
+    return new MangaItemCell();
 }
 
-void MediaItemCell::onFocusGained() {
+void MangaItemCell::onFocusGained() {
     brls::Box::onFocusGained();
     updateFocusInfo(true);
 }
 
-void MediaItemCell::onFocusLost() {
+void MangaItemCell::onFocusLost() {
     brls::Box::onFocusLost();
     updateFocusInfo(false);
 }
 
-void MediaItemCell::updateFocusInfo(bool focused) {
+void MangaItemCell::updateFocusInfo(bool focused) {
     if (!m_titleLabel || !m_descriptionLabel) return;
 
-    // For podcast episodes, show extended info on focus
-    if (m_item.mediaType == MediaType::PODCAST_EPISODE) {
-        if (focused) {
-            // Show full title
-            m_titleLabel->setText(m_item.title);
+    if (focused) {
+        // Show full title
+        m_titleLabel->setText(m_manga.title);
 
-            // Show duration and other info
-            std::string info;
-            if (m_item.duration > 0) {
-                int minutes = (int)(m_item.duration / 60.0f);
-                info = std::to_string(minutes) + " min";
-            }
-            if (!m_item.description.empty()) {
-                // Show first 50 chars of description
-                std::string desc = m_item.description;
-                if (desc.length() > 50) {
-                    desc = desc.substr(0, 47) + "...";
-                }
-                if (!info.empty()) info += " - ";
-                info += desc;
-            }
-            if (!info.empty()) {
-                m_descriptionLabel->setText(info);
-                m_descriptionLabel->setVisibility(brls::Visibility::VISIBLE);
-            }
-        } else {
-            // Restore truncated title
-            m_titleLabel->setText(m_originalTitle);
-            m_descriptionLabel->setVisibility(brls::Visibility::GONE);
+        // Show additional info
+        std::string info;
+        if (!m_manga.author.empty()) {
+            info = m_manga.author;
         }
-    } else if (m_item.mediaType == MediaType::BOOK) {
-        // Show author and duration for books on focus
-        if (focused) {
-            std::string info;
-            if (!m_item.authorName.empty()) {
-                info = m_item.authorName;
-            }
-            if (m_item.duration > 0) {
-                int hours = (int)(m_item.duration / 3600.0f);
-                int mins = (int)((m_item.duration - hours * 3600) / 60.0f);
-                if (!info.empty()) info += " - ";
-                info += std::to_string(hours) + "h " + std::to_string(mins) + "m";
-            }
-            if (!info.empty()) {
-                m_descriptionLabel->setText(info);
-                m_descriptionLabel->setVisibility(brls::Visibility::VISIBLE);
-            }
-            // Show full title
-            m_titleLabel->setText(m_item.title);
-        } else {
-            m_titleLabel->setText(m_originalTitle);
-            m_descriptionLabel->setVisibility(brls::Visibility::GONE);
+        if (m_manga.chapterCount > 0) {
+            if (!info.empty()) info += " - ";
+            info += std::to_string(m_manga.chapterCount) + " chapters";
         }
-    } else if (m_item.mediaType == MediaType::PODCAST) {
-        // Show podcast info on focus
-        if (focused) {
-            std::string info;
-            if (!m_item.authorName.empty()) {
-                info = m_item.authorName;
-            }
-            if (!info.empty()) {
-                m_descriptionLabel->setText(info);
-                m_descriptionLabel->setVisibility(brls::Visibility::VISIBLE);
-            }
-            m_titleLabel->setText(m_item.title);
-        } else {
-            m_titleLabel->setText(m_originalTitle);
-            m_descriptionLabel->setVisibility(brls::Visibility::GONE);
+        std::string statusStr = m_manga.getStatusString();
+        if (!statusStr.empty() && statusStr != "Unknown") {
+            if (!info.empty()) info += " - ";
+            info += statusStr;
         }
+        if (!info.empty()) {
+            m_descriptionLabel->setText(info);
+            m_descriptionLabel->setVisibility(brls::Visibility::VISIBLE);
+        }
+    } else {
+        // Restore truncated title
+        m_titleLabel->setText(m_originalTitle);
+        m_descriptionLabel->setVisibility(brls::Visibility::GONE);
     }
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

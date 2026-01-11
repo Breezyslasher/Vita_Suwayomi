@@ -1,9 +1,9 @@
 /**
- * VitaABS - Media Detail View implementation
+ * VitaSuwayomi - Media Detail View implementation
  */
 
 #include "view/media_detail_view.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "view/media_item_cell.hpp"
 #include "view/progress_dialog.hpp"
 #include "app/application.hpp"
@@ -23,7 +23,7 @@
 #include <psp2/io/stat.h>
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 MediaDetailView::MediaDetailView(const MediaItem& item)
     : m_item(item) {
@@ -2529,4 +2529,4 @@ void MediaDetailView::downloadNewEpisodesToServer(const std::string& podcastId,
     });
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

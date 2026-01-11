@@ -1,5 +1,5 @@
 /**
- * VitaABS - Main Activity implementation
+ * VitaSuwayomi - Main Activity implementation
  */
 
 #include "activity/main_activity.hpp"
@@ -9,12 +9,12 @@
 #include "view/settings_tab.hpp"
 #include "app/downloads_manager.hpp"
 #include "app/application.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
 
 #include <algorithm>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Cached library sections
 static std::vector<Library> s_cachedSections;
@@ -185,4 +185,4 @@ void MainActivity::onContentAvailable() {
     }
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

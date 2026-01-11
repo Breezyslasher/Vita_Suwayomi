@@ -1,22 +1,23 @@
 /**
- * VitaABS - Recycling Grid
- * Efficient grid view for displaying media items
+ * VitaSuwayomi - Recycling Grid
+ * Efficient grid view for displaying manga items
  */
 
 #pragma once
 
 #include <borealis.hpp>
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include <functional>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class RecyclingGrid : public brls::ScrollingFrame {
 public:
     RecyclingGrid();
 
-    void setDataSource(const std::vector<MediaItem>& items);
-    void setOnItemSelected(std::function<void(const MediaItem&)> callback);
+    void setDataSource(const std::vector<Manga>& items);
+    void setOnItemSelected(std::function<void(const Manga&)> callback);
+    void clearViews();
 
     static brls::View* create();
 
@@ -24,12 +25,12 @@ private:
     void rebuildGrid();
     void onItemClicked(int index);
 
-    std::vector<MediaItem> m_items;
-    std::function<void(const MediaItem&)> m_onItemSelected;
+    std::vector<Manga> m_items;
+    std::function<void(const Manga&)> m_onItemSelected;
 
     brls::Box* m_contentBox = nullptr;
     int m_columns = 4;
     int m_visibleRows = 3;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

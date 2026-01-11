@@ -1,10 +1,10 @@
 /**
- * VitaABS - Settings Tab implementation
+ * VitaSuwayomi - Settings Tab implementation
  */
 
 #include "view/settings_tab.hpp"
 #include "app/application.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "app/temp_file_manager.hpp"
 #include "player/mpv_player.hpp"
@@ -16,7 +16,7 @@
 #define VITA_ABS_VERSION "2.0.0"
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 SettingsTab::SettingsTab() {
     this->setAxis(brls::Axis::COLUMN);
@@ -540,7 +540,7 @@ void SettingsTab::createDebugSection() {
     // Test local playback button
     auto* testLocalCell = new brls::DetailCell();
     testLocalCell->setText("Test Local Playback");
-    testLocalCell->setDetailText("ux0:data/VitaABS/test.mp3");
+    testLocalCell->setDetailText("ux0:data/VitaSuwayomi/test.mp3");
     testLocalCell->registerClickAction([this](brls::View* view) {
         onTestLocalPlayback();
         return true;
@@ -549,7 +549,7 @@ void SettingsTab::createDebugSection() {
 
     // Info label
     auto* infoLabel = new brls::Label();
-    infoLabel->setText("Place test.mp3 or test.mp4 in ux0:data/VitaABS/");
+    infoLabel->setText("Place test.mp3 or test.mp4 in ux0:data/VitaSuwayomi/");
     infoLabel->setFontSize(14);
     infoLabel->setMarginLeft(16);
     infoLabel->setMarginTop(8);
@@ -571,7 +571,7 @@ void SettingsTab::createAboutSection() {
 
     // App description
     auto* descLabel = new brls::Label();
-    descLabel->setText("VitaABS - Audiobookshelf Client for PlayStation Vita");
+    descLabel->setText("VitaSuwayomi - Audiobookshelf Client for PlayStation Vita");
     descLabel->setFontSize(16);
     descLabel->setMarginLeft(16);
     descLabel->setMarginTop(8);
@@ -640,7 +640,7 @@ void SettingsTab::onTestLocalPlayback() {
     brls::Logger::info("SettingsTab: Testing local playback...");
 
     // Check for test files
-    const std::string basePath = "ux0:data/VitaABS/";
+    const std::string basePath = "ux0:data/VitaSuwayomi/";
     std::string testFile;
 
     std::vector<std::string> testFiles = {
@@ -661,7 +661,7 @@ void SettingsTab::onTestLocalPlayback() {
     }
 
     if (testFile.empty()) {
-        brls::Application::notify("No test file found in ux0:data/VitaABS/");
+        brls::Application::notify("No test file found in ux0:data/VitaSuwayomi/");
         brls::Logger::error("SettingsTab: No test file found");
         return;
     }
@@ -688,4 +688,4 @@ void SettingsTab::onManageSidebarOrder() {
     // Removed - Simplified for Audiobookshelf
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

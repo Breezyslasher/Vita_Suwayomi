@@ -1,5 +1,5 @@
 /**
- * VitaABS - Downloads Tab Implementation
+ * VitaSuwayomi - Downloads Tab Implementation
  */
 
 #include "view/downloads_tab.hpp"
@@ -12,7 +12,7 @@
 #include <psp2/io/fcntl.h>
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Helper to load local cover image on Vita
 static void loadLocalCoverImage(brls::Image* image, const std::string& localPath) {
@@ -252,4 +252,4 @@ void DownloadsTab::showDownloadOptions(const std::string& ratingKey, const std::
     // Not implemented - download options would be shown from media detail view
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

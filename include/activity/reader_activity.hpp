@@ -7,24 +7,9 @@
 
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
+#include "app/application.hpp"
 
 namespace vitasuwayomi {
-
-// Reading direction modes
-enum class ReadingMode {
-    LEFT_TO_RIGHT,      // Western style
-    RIGHT_TO_LEFT,      // Manga style (default)
-    VERTICAL,           // Webtoon style
-    CONTINUOUS_VERTICAL // Infinite scroll (webtoon)
-};
-
-// Page scale modes
-enum class PageScaleMode {
-    FIT_SCREEN,         // Fit entire page to screen
-    FIT_WIDTH,          // Fit width, scroll vertically
-    FIT_HEIGHT,         // Fit height, scroll horizontally
-    ORIGINAL            // Original size (1:1)
-};
 
 class ReaderActivity : public brls::Activity {
 public:

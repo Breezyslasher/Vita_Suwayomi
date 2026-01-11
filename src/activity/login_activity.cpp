@@ -1,17 +1,17 @@
 /**
- * VitaABS - Login Activity implementation
+ * VitaSuwayomi - Login Activity implementation
  * Handles user authentication for Audiobookshelf server
  */
 
 #include "activity/login_activity.hpp"
 #include "app/application.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "view/progress_dialog.hpp"
 #include "utils/async.hpp"
 
 #include <memory>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 LoginActivity::LoginActivity() {
     brls::Logger::debug("LoginActivity created");
@@ -26,7 +26,7 @@ void LoginActivity::onContentAvailable() {
 
     // Set initial values
     if (titleLabel) {
-        titleLabel->setText("VitaABS");
+        titleLabel->setText("VitaSuwayomi");
     }
 
     if (statusLabel) {
@@ -175,4 +175,4 @@ void LoginActivity::onOfflinePressed() {
     });
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

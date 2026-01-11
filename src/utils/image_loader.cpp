@@ -1,11 +1,11 @@
 /**
- * VitaABS - Asynchronous Image Loader implementation
+ * VitaSuwayomi - Asynchronous Image Loader implementation
  */
 
 #include "utils/image_loader.hpp"
 #include "utils/http_client.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 std::map<std::string, std::vector<uint8_t>> ImageLoader::s_cache;
 std::mutex ImageLoader::s_cacheMutex;
@@ -65,4 +65,4 @@ void ImageLoader::cancelAll() {
     // Borealis handles thread cancellation
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi
