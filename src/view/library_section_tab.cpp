@@ -1,6 +1,7 @@
 /**
  * VitaSuwayomi - Library Section Tab implementation
  * Shows manga library content organized by categories
+ * Displays user's categories as tabs at the top for easy navigation
  */
 
 #include "view/library_section_tab.hpp"
@@ -13,9 +14,7 @@
 
 namespace vitasuwayomi {
 
-LibrarySectionTab::LibrarySectionTab(int categoryId, const std::string& categoryName)
-    : m_categoryId(categoryId), m_categoryName(categoryName) {
-
+LibrarySectionTab::LibrarySectionTab() {
     // Create alive flag for async callback safety
     m_alive = std::make_shared<bool>(true);
 
@@ -27,82 +26,43 @@ LibrarySectionTab::LibrarySectionTab(int categoryId, const std::string& category
 
     // Title
     m_titleLabel = new brls::Label();
-    m_titleLabel->setText(categoryName);
+    m_titleLabel->setText("Library");
     m_titleLabel->setFontSize(28);
-    m_titleLabel->setMarginBottom(15);
+    m_titleLabel->setMarginBottom(10);
     this->addView(m_titleLabel);
 
-    // View mode selector buttons
-    m_viewModeBox = new brls::Box();
-    m_viewModeBox->setAxis(brls::Axis::ROW);
-    m_viewModeBox->setJustifyContent(brls::JustifyContent::FLEX_START);
-    m_viewModeBox->setAlignItems(brls::AlignItems::CENTER);
-    m_viewModeBox->setMarginBottom(15);
+    // Top row with category tabs and update button
+    auto* topRow = new brls::Box();
+    topRow->setAxis(brls::Axis::ROW);
+    topRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    topRow->setAlignItems(brls::AlignItems::CENTER);
+    topRow->setMarginBottom(15);
 
-    // All Manga button
-    m_allBtn = new brls::Button();
-    m_allBtn->setText("All");
-    m_allBtn->setMarginRight(10);
-    m_allBtn->registerClickAction([this](brls::View* view) {
-        showAllManga();
-        return true;
-    });
-    m_viewModeBox->addView(m_allBtn);
+    // Scrollable category tabs container
+    m_categoryScroller = new brls::ScrollingFrame();
+    m_categoryScroller->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
+    m_categoryScroller->setGrow(1.0f);
+    m_categoryScroller->setHeight(45);
 
-    // Categories button
-    m_categoriesBtn = new brls::Button();
-    m_categoriesBtn->setText("Categories");
-    m_categoriesBtn->setMarginRight(10);
-    m_categoriesBtn->registerClickAction([this](brls::View* view) {
-        // Load categories if not loaded
-        if (!m_categoriesLoaded) {
-            loadCategories();
-        }
-        return true;
-    });
-    m_viewModeBox->addView(m_categoriesBtn);
+    m_categoryTabsBox = new brls::Box();
+    m_categoryTabsBox->setAxis(brls::Axis::ROW);
+    m_categoryTabsBox->setJustifyContent(brls::JustifyContent::FLEX_START);
+    m_categoryTabsBox->setAlignItems(brls::AlignItems::CENTER);
 
-    // Downloaded button
-    m_downloadedBtn = new brls::Button();
-    m_downloadedBtn->setText("Downloaded");
-    m_downloadedBtn->setMarginRight(10);
-    m_downloadedBtn->registerClickAction([this](brls::View* view) {
-        showDownloaded();
-        return true;
-    });
-    m_viewModeBox->addView(m_downloadedBtn);
+    m_categoryScroller->setContentView(m_categoryTabsBox);
+    topRow->addView(m_categoryScroller);
 
-    // Unread button
-    m_unreadBtn = new brls::Button();
-    m_unreadBtn->setText("Unread");
-    m_unreadBtn->setMarginRight(10);
-    m_unreadBtn->registerClickAction([this](brls::View* view) {
-        showUnread();
-        return true;
-    });
-    m_viewModeBox->addView(m_unreadBtn);
-
-    // Update Library button
+    // Update button
     m_updateBtn = new brls::Button();
     m_updateBtn->setText("Update");
-    m_updateBtn->setMarginRight(10);
+    m_updateBtn->setMarginLeft(15);
     m_updateBtn->registerClickAction([this](brls::View* view) {
         triggerLibraryUpdate();
         return true;
     });
-    m_viewModeBox->addView(m_updateBtn);
+    topRow->addView(m_updateBtn);
 
-    // Back button (hidden by default)
-    m_backBtn = new brls::Button();
-    m_backBtn->setText("< Back");
-    m_backBtn->setVisibility(brls::Visibility::GONE);
-    m_backBtn->registerClickAction([this](brls::View* view) {
-        showAllManga();
-        return true;
-    });
-    m_viewModeBox->addView(m_backBtn);
-
-    this->addView(m_viewModeBox);
+    this->addView(topRow);
 
     // Content grid
     m_contentGrid = new RecyclingGrid();
@@ -112,89 +72,45 @@ LibrarySectionTab::LibrarySectionTab(int categoryId, const std::string& category
     });
     this->addView(m_contentGrid);
 
-    brls::Logger::debug("LibrarySectionTab: Created for category {} ({})", m_categoryId, m_categoryName);
-    loadContent();
+    brls::Logger::debug("LibrarySectionTab: Created");
+
+    // Load categories first, then create tabs
+    loadCategories();
 }
 
 LibrarySectionTab::~LibrarySectionTab() {
     if (m_alive) {
         *m_alive = false;
     }
-    brls::Logger::debug("LibrarySectionTab: Destroyed for category {}", m_categoryId);
+    brls::Logger::debug("LibrarySectionTab: Destroyed");
 }
 
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
 
-    if (!m_loaded) {
-        loadContent();
+    if (!m_loaded && m_categoriesLoaded) {
+        loadCategoryManga(m_currentCategoryId);
     }
 }
 
 void LibrarySectionTab::refresh() {
     m_loaded = false;
-    loadContent();
-}
+    m_categoriesLoaded = false;
+    m_categories.clear();
+    m_categoryButtons.clear();
 
-void LibrarySectionTab::loadContent() {
-    brls::Logger::debug("LibrarySectionTab::loadContent - category: {}", m_categoryId);
+    // Clear category tabs
+    if (m_categoryTabsBox) {
+        m_categoryTabsBox->clearViews();
+    }
 
-    std::weak_ptr<bool> aliveWeak = m_alive;
-    int categoryId = m_categoryId;
-
-    asyncRun([this, categoryId, aliveWeak]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
-        std::vector<Manga> manga;
-
-        bool success = false;
-        if (categoryId == 0) {
-            // Fetch all library manga
-            success = client.fetchLibraryManga(manga);
-        } else {
-            // Fetch manga for specific category
-            success = client.fetchCategoryManga(categoryId, manga);
-        }
-
-        if (success) {
-            brls::Logger::info("LibrarySectionTab: Got {} manga for category {}", manga.size(), categoryId);
-
-            brls::sync([this, manga, aliveWeak]() {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) {
-                    brls::Logger::debug("LibrarySectionTab: Tab destroyed, skipping UI update");
-                    return;
-                }
-
-                m_mangaList = manga;
-
-                if (m_viewMode == LibraryViewMode::ALL_MANGA) {
-                    m_contentGrid->setDataSource(m_mangaList);
-                }
-
-                m_loaded = true;
-            });
-        } else {
-            brls::Logger::error("LibrarySectionTab: Failed to load manga for category {}", categoryId);
-
-            brls::sync([this, aliveWeak]() {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-
-                // Show offline mode with downloaded items
-                m_titleLabel->setText(m_categoryName + " (Offline)");
-                showDownloaded();
-                m_loaded = true;
-            });
-        }
-    });
-
-    // Preload categories
     loadCategories();
 }
 
 void LibrarySectionTab::loadCategories() {
     if (m_categoriesLoaded) return;
 
+    brls::Logger::debug("LibrarySectionTab: Loading categories...");
     std::weak_ptr<bool> aliveWeak = m_alive;
 
     asyncRun([this, aliveWeak]() {
@@ -204,55 +120,140 @@ void LibrarySectionTab::loadCategories() {
         if (client.fetchCategories(categories)) {
             brls::Logger::info("LibrarySectionTab: Got {} categories", categories.size());
 
+            // Sort categories by order
+            std::sort(categories.begin(), categories.end(),
+                      [](const Category& a, const Category& b) {
+                          return a.order < b.order;
+                      });
+
             brls::sync([this, categories, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
                 m_categories = categories;
                 m_categoriesLoaded = true;
+                createCategoryTabs();
 
-                // Hide categories button if no categories
-                if (m_categories.empty() && m_categoriesBtn) {
-                    m_categoriesBtn->setVisibility(brls::Visibility::GONE);
+                // Load the first category (or default if none)
+                if (!m_categories.empty()) {
+                    selectCategory(m_categories[0].id);
+                } else {
+                    // No categories - load all library manga
+                    selectCategory(0);
                 }
             });
         } else {
-            brls::Logger::debug("LibrarySectionTab: No categories or failed to fetch");
+            brls::Logger::warning("LibrarySectionTab: Failed to fetch categories, loading all library");
 
             brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
                 m_categoriesLoaded = true;
-                if (m_categoriesBtn) {
-                    m_categoriesBtn->setVisibility(brls::Visibility::GONE);
-                }
+                createCategoryTabs();
+                selectCategory(0);
             });
         }
     });
 }
 
-void LibrarySectionTab::showAllManga() {
-    m_viewMode = LibraryViewMode::ALL_MANGA;
-    m_titleLabel->setText(m_categoryName);
-    m_contentGrid->setDataSource(m_mangaList);
-    updateViewModeButtons();
+void LibrarySectionTab::createCategoryTabs() {
+    if (!m_categoryTabsBox) return;
+
+    // Clear existing buttons
+    m_categoryTabsBox->clearViews();
+    m_categoryButtons.clear();
+
+    // If no user categories, add a default "Library" tab
+    if (m_categories.empty()) {
+        auto* btn = new brls::Button();
+        btn->setText("Library");
+        btn->setMarginRight(10);
+        btn->registerClickAction([this](brls::View* view) {
+            selectCategory(0);
+            return true;
+        });
+        m_categoryTabsBox->addView(btn);
+        m_categoryButtons.push_back(btn);
+        return;
+    }
+
+    // Create a button for each category
+    for (const auto& category : m_categories) {
+        auto* btn = new brls::Button();
+
+        // Use category name, show manga count if available
+        std::string label = category.name;
+        if (category.mangaCount > 0) {
+            label += " (" + std::to_string(category.mangaCount) + ")";
+        }
+        btn->setText(label);
+        btn->setMarginRight(10);
+
+        int catId = category.id;
+        btn->registerClickAction([this, catId](brls::View* view) {
+            selectCategory(catId);
+            return true;
+        });
+
+        m_categoryTabsBox->addView(btn);
+        m_categoryButtons.push_back(btn);
+    }
+
+    updateCategoryButtonStyles();
 }
 
-void LibrarySectionTab::showByCategory(int categoryId) {
-    m_viewMode = LibraryViewMode::BY_CATEGORY;
+void LibrarySectionTab::selectCategory(int categoryId) {
+    m_currentCategoryId = categoryId;
 
     // Find category name
-    std::string categoryName = "Category";
+    m_currentCategoryName = "Library";
     for (const auto& cat : m_categories) {
         if (cat.id == categoryId) {
-            categoryName = cat.name;
+            m_currentCategoryName = cat.name;
             break;
         }
     }
 
-    m_titleLabel->setText(m_categoryName + " - " + categoryName);
-    m_filterTitle = categoryName;
+    brls::Logger::debug("LibrarySectionTab: Selected category {} ({})",
+                       categoryId, m_currentCategoryName);
+
+    updateCategoryButtonStyles();
+    loadCategoryManga(categoryId);
+}
+
+void LibrarySectionTab::updateCategoryButtonStyles() {
+    // Update button styles to show selected state
+    for (size_t i = 0; i < m_categoryButtons.size(); i++) {
+        brls::Button* btn = m_categoryButtons[i];
+
+        // Determine if this button is selected
+        bool isSelected = false;
+        if (m_categories.empty()) {
+            // Only one "Library" button
+            isSelected = (m_currentCategoryId == 0);
+        } else if (i < m_categories.size()) {
+            isSelected = (m_categories[i].id == m_currentCategoryId);
+        }
+
+        // Style the button based on selection state
+        if (isSelected) {
+            // Highlight selected category
+            btn->setBackgroundColor(nvgRGBA(80, 150, 200, 255));
+        } else {
+            // Normal style
+            btn->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+        }
+    }
+}
+
+void LibrarySectionTab::loadCategoryManga(int categoryId) {
+    brls::Logger::debug("LibrarySectionTab::loadCategoryManga - category: {}", categoryId);
+
+    // Update title
+    if (m_titleLabel) {
+        m_titleLabel->setText(m_currentCategoryName);
+    }
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
@@ -260,110 +261,43 @@ void LibrarySectionTab::showByCategory(int categoryId) {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
 
-        if (client.fetchCategoryManga(categoryId, manga)) {
-            brls::Logger::info("LibrarySectionTab: Got {} manga for category {}", manga.size(), categoryId);
+        bool success = false;
+        if (categoryId == 0) {
+            // Fetch all library manga (default category)
+            success = client.fetchLibraryManga(manga);
+        } else {
+            // Fetch manga for specific category
+            success = client.fetchCategoryManga(categoryId, manga);
+        }
+
+        if (success) {
+            brls::Logger::info("LibrarySectionTab: Got {} manga for category {}",
+                              manga.size(), categoryId);
 
             brls::sync([this, manga, aliveWeak]() {
                 auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
+                if (!alive || !*alive) {
+                    brls::Logger::debug("LibrarySectionTab: Tab destroyed, skipping UI update");
+                    return;
+                }
 
-                m_contentGrid->setDataSource(manga);
-                updateViewModeButtons();
+                m_mangaList = manga;
+                m_contentGrid->setDataSource(m_mangaList);
+                m_loaded = true;
             });
         } else {
-            brls::Logger::error("LibrarySectionTab: Failed to fetch category manga");
-            brls::sync([aliveWeak]() {
+            brls::Logger::error("LibrarySectionTab: Failed to load manga for category {}",
+                               categoryId);
+
+            brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
-                brls::Application::notify("Failed to load category");
+
+                brls::Application::notify("Failed to load manga");
+                m_loaded = true;
             });
         }
     });
-}
-
-void LibrarySectionTab::showDownloaded() {
-    m_viewMode = LibraryViewMode::DOWNLOADED;
-    m_titleLabel->setText(m_categoryName + " - Downloaded");
-
-    // Filter manga that have downloaded chapters
-    std::vector<Manga> downloadedManga;
-    DownloadsManager& mgr = DownloadsManager::getInstance();
-
-    for (const auto& manga : m_mangaList) {
-        if (mgr.isMangaDownloaded(manga.id)) {
-            Manga copy = manga;
-            copy.isDownloaded = true;
-            downloadedManga.push_back(copy);
-        }
-    }
-
-    // Also include manga from DownloadsManager that might not be in library
-    auto downloads = mgr.getDownloads();
-    for (const auto& dl : downloads) {
-        bool found = false;
-        for (const auto& m : downloadedManga) {
-            if (m.id == dl.mangaId) {
-                found = true;
-                break;
-            }
-        }
-        if (!found && dl.completedChapters > 0) {
-            Manga manga;
-            manga.id = dl.mangaId;
-            manga.title = dl.title;
-            manga.author = dl.author;
-            manga.isDownloaded = true;
-            manga.downloadedCount = dl.completedChapters;
-            downloadedManga.push_back(manga);
-        }
-    }
-
-    m_contentGrid->setDataSource(downloadedManga);
-    updateViewModeButtons();
-}
-
-void LibrarySectionTab::showUnread() {
-    m_viewMode = LibraryViewMode::UNREAD;
-    m_titleLabel->setText(m_categoryName + " - Unread");
-
-    // Filter manga with unread chapters
-    std::vector<Manga> unreadManga;
-    for (const auto& manga : m_mangaList) {
-        if (manga.unreadCount > 0) {
-            unreadManga.push_back(manga);
-        }
-    }
-
-    // Sort by unread count descending
-    std::sort(unreadManga.begin(), unreadManga.end(),
-              [](const Manga& a, const Manga& b) {
-                  return a.unreadCount > b.unreadCount;
-              });
-
-    m_contentGrid->setDataSource(unreadManga);
-    updateViewModeButtons();
-}
-
-void LibrarySectionTab::showReading() {
-    m_viewMode = LibraryViewMode::READING;
-    m_titleLabel->setText(m_categoryName + " - Reading");
-
-    // Filter manga that are being read (have progress but not completed)
-    std::vector<Manga> readingManga;
-    for (const auto& manga : m_mangaList) {
-        if (manga.lastChapterRead > 0 && manga.unreadCount > 0) {
-            readingManga.push_back(manga);
-        }
-    }
-
-    // Sort by last chapter read descending
-    std::sort(readingManga.begin(), readingManga.end(),
-              [](const Manga& a, const Manga& b) {
-                  return a.lastChapterRead > b.lastChapterRead;
-              });
-
-    m_contentGrid->setDataSource(readingManga);
-    updateViewModeButtons();
 }
 
 void LibrarySectionTab::onMangaSelected(const Manga& manga) {
@@ -374,48 +308,26 @@ void LibrarySectionTab::onMangaSelected(const Manga& manga) {
     brls::Application::pushActivity(new brls::Activity(detailView));
 }
 
-void LibrarySectionTab::onCategorySelected(const Category& category) {
-    brls::Logger::debug("LibrarySectionTab: Selected category '{}' id={}", category.name, category.id);
-    showByCategory(category.id);
-}
-
-void LibrarySectionTab::updateViewModeButtons() {
-    bool inFilteredView = (m_viewMode != LibraryViewMode::ALL_MANGA);
-    m_backBtn->setVisibility(inFilteredView ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-
-    // Show/hide mode buttons based on view
-    bool showModeButtons = !inFilteredView;
-    if (m_allBtn) {
-        m_allBtn->setVisibility(showModeButtons ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    }
-    if (m_categoriesBtn && !m_categories.empty()) {
-        m_categoriesBtn->setVisibility(showModeButtons ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    }
-    if (m_downloadedBtn) {
-        m_downloadedBtn->setVisibility(showModeButtons ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    }
-    if (m_unreadBtn) {
-        m_unreadBtn->setVisibility(showModeButtons ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    }
-    if (m_updateBtn) {
-        m_updateBtn->setVisibility(showModeButtons ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    }
-}
-
 void LibrarySectionTab::triggerLibraryUpdate() {
-    brls::Logger::info("LibrarySectionTab: Triggering library update");
-    brls::Application::notify("Updating library...");
+    brls::Logger::info("LibrarySectionTab: Triggering update for category {} ({})",
+                      m_currentCategoryId, m_currentCategoryName);
+
+    std::string message = "Updating " + m_currentCategoryName + "...";
+    brls::Application::notify(message);
 
     std::weak_ptr<bool> aliveWeak = m_alive;
+    int categoryId = m_currentCategoryId;
 
-    asyncRun([this, aliveWeak]() {
+    asyncRun([categoryId, aliveWeak]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         bool success = false;
-        if (m_categoryId == 0) {
+        if (categoryId == 0) {
+            // Update all library
             success = client.triggerLibraryUpdate();
         } else {
-            success = client.triggerLibraryUpdate(m_categoryId);
+            // Update specific category
+            success = client.triggerLibraryUpdate(categoryId);
         }
 
         brls::sync([success, aliveWeak]() {
@@ -423,9 +335,9 @@ void LibrarySectionTab::triggerLibraryUpdate() {
             if (!alive || !*alive) return;
 
             if (success) {
-                brls::Application::notify("Library update started");
+                brls::Application::notify("Update started");
             } else {
-                brls::Application::notify("Failed to start library update");
+                brls::Application::notify("Failed to start update");
             }
         });
     });
