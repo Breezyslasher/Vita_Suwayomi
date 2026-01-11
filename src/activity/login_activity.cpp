@@ -32,10 +32,6 @@ void LoginActivity::onContentAvailable() {
         statusLabel->setText("Enter your Suwayomi server URL");
     }
 
-    if (pinCodeLabel) {
-        pinCodeLabel->setVisibility(brls::Visibility::GONE);
-    }
-
     // Server URL input
     if (serverLabel) {
         serverLabel->setText(std::string("Server: ") + (m_serverUrl.empty() ? "Not set" : m_serverUrl));
@@ -85,19 +81,10 @@ void LoginActivity::onContentAvailable() {
     }
 
     // Test connection button
-    if (pinButton) {
-        pinButton->setText("Test");
-        pinButton->registerClickAction([this](brls::View* view) {
+    if (testButton) {
+        testButton->setText("Test");
+        testButton->registerClickAction([this](brls::View* view) {
             onTestConnectionPressed();
-            return true;
-        });
-    }
-
-    // Offline mode button
-    if (offlineButton) {
-        offlineButton->setText("Offline");
-        offlineButton->registerClickAction([this](brls::View* view) {
-            onOfflinePressed();
             return true;
         });
     }
@@ -157,17 +144,6 @@ void LoginActivity::onConnectPressed() {
     } else {
         if (statusLabel) statusLabel->setText("Connection failed - check URL and server");
     }
-}
-
-void LoginActivity::onOfflinePressed() {
-    // Go to main activity in offline mode
-    brls::Logger::info("User selected offline mode");
-
-    if (statusLabel) statusLabel->setText("Entering offline mode...");
-
-    brls::sync([this]() {
-        Application::getInstance().pushMainActivity();
-    });
 }
 
 } // namespace vitasuwayomi
