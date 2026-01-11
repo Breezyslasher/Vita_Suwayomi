@@ -6,7 +6,7 @@
 #pragma once
 
 #include <borealis.hpp>
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include <functional>
 
 namespace vitasuwayomi {

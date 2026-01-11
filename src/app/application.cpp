@@ -3,7 +3,7 @@
  */
 
 #include "app/application.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "activity/login_activity.hpp"
 #include "activity/main_activity.hpp"

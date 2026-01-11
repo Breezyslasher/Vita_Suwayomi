@@ -4,7 +4,7 @@
  */
 
 #include "app/downloads_manager.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "utils/http_client.hpp"
 #include <borealis.hpp>

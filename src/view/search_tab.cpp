@@ -3,7 +3,7 @@
  */
 
 #include "view/search_tab.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "view/media_detail_view.hpp"
 #include "view/media_item_cell.hpp"
 #include "app/application.hpp"

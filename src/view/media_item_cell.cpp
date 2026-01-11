@@ -3,7 +3,7 @@
  */
 
 #include "view/media_item_cell.hpp"
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "utils/image_loader.hpp"
 #include <fstream>
 
