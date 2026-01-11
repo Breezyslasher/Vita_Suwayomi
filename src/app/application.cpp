@@ -7,7 +7,7 @@
 #include "app/downloads_manager.hpp"
 #include "activity/login_activity.hpp"
 #include "activity/main_activity.hpp"
-#include "activity/player_activity.hpp"
+#include "activity/reader_activity.hpp"
 
 #include <borealis.hpp>
 #include <fstream>
@@ -30,7 +30,7 @@ Application& Application::getInstance() {
 
 bool Application::init() {
     brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
-    brls::Logger::info("VitaSuwayomi {} initializing...", VITA_ABS_VERSION);
+    brls::Logger::info("VitaSuwayomi {} initializing...", VITA_SUWAYOMI_VERSION);
 
 #ifdef __vita__
     // Create data directory
@@ -52,32 +52,31 @@ bool Application::init() {
 }
 
 void Application::run() {
-    brls::Logger::info("Application::run - isLoggedIn={}, serverUrl={}",
-                       isLoggedIn(), m_serverUrl.empty() ? "(empty)" : m_serverUrl);
+    brls::Logger::info("Application::run - isConnected={}, serverUrl={}",
+                       isConnected(), m_serverUrl.empty() ? "(empty)" : m_serverUrl);
 
-    // Initialize downloads manager to check for offline content
+    // Initialize downloads manager
     DownloadsManager::getInstance().init();
 
-    // Check if we have saved login credentials
-    if (isLoggedIn() && !m_serverUrl.empty()) {
-        brls::Logger::info("Restoring saved session...");
-        // Verify connection and go to main
-        AudiobookshelfClient::getInstance().setAuthToken(m_authToken);
-        AudiobookshelfClient::getInstance().setServerUrl(m_serverUrl);
+    // Check if we have saved server connection
+    if (!m_serverUrl.empty()) {
+        brls::Logger::info("Restoring saved connection...");
+        SuwayomiClient::getInstance().setServerUrl(m_serverUrl);
 
-        // Validate token before proceeding
-        if (AudiobookshelfClient::getInstance().validateToken()) {
-            brls::Logger::info("Restored session, token valid");
+        // Test connection before proceeding
+        if (SuwayomiClient::getInstance().testConnection()) {
+            brls::Logger::info("Connection restored successfully");
+            m_isConnected = true;
             pushMainActivity();
         } else {
-            // Token validation failed - could be offline
+            // Connection failed - could be offline
             // Check if we have downloads, if so go to main activity (offline mode)
             auto downloads = DownloadsManager::getInstance().getDownloads();
             if (!downloads.empty()) {
                 brls::Logger::info("Offline with {} downloads, going to main activity", downloads.size());
                 pushMainActivity();
             } else {
-                brls::Logger::error("Saved token invalid and no downloads, showing login");
+                brls::Logger::error("Connection failed and no downloads, showing login");
                 pushLoginActivity();
             }
         }
@@ -113,14 +112,18 @@ void Application::pushMainActivity() {
     brls::Application::pushActivity(new MainActivity());
 }
 
-void Application::pushPlayerActivity(const std::string& itemId, const std::string& episodeId,
-                                      float startTime) {
-    brls::Application::pushActivity(new PlayerActivity(itemId, episodeId, startTime));
+void Application::pushReaderActivity(int mangaId, int chapterIndex, const std::string& mangaTitle) {
+    brls::Application::pushActivity(new ReaderActivity(mangaId, chapterIndex, mangaTitle));
 }
 
-void Application::pushPlayerActivityWithFile(const std::string& itemId, const std::string& episodeId,
-                                              const std::string& preDownloadedPath, float startTime) {
-    brls::Application::pushActivity(new PlayerActivity(itemId, episodeId, preDownloadedPath, startTime));
+void Application::pushReaderActivityAtPage(int mangaId, int chapterIndex, int startPage,
+                                            const std::string& mangaTitle) {
+    brls::Application::pushActivity(new ReaderActivity(mangaId, chapterIndex, startPage, mangaTitle));
+}
+
+void Application::pushMangaDetailView(int mangaId) {
+    // TODO: Push manga detail view
+    brls::Logger::info("Push manga detail view for manga {}", mangaId);
 }
 
 void Application::applyTheme() {
@@ -154,17 +157,6 @@ void Application::applyLogLevel() {
     }
 }
 
-std::string Application::getAudioQualityString(AudioQuality quality) {
-    switch (quality) {
-        case AudioQuality::ORIGINAL: return "Original (Direct Play)";
-        case AudioQuality::HIGH: return "High (320 kbps)";
-        case AudioQuality::MEDIUM: return "Medium (192 kbps)";
-        case AudioQuality::LOW: return "Low (128 kbps)";
-        case AudioQuality::VERY_LOW: return "Very Low (64 kbps)";
-        default: return "Unknown";
-    }
-}
-
 std::string Application::getThemeString(AppTheme theme) {
     switch (theme) {
         case AppTheme::SYSTEM: return "System";
@@ -174,77 +166,24 @@ std::string Application::getThemeString(AppTheme theme) {
     }
 }
 
-std::string Application::getPlaybackSpeedString(PlaybackSpeed speed) {
-    switch (speed) {
-        case PlaybackSpeed::SPEED_0_5X: return "0.5x";
-        case PlaybackSpeed::SPEED_0_75X: return "0.75x";
-        case PlaybackSpeed::SPEED_1X: return "1x (Normal)";
-        case PlaybackSpeed::SPEED_1_25X: return "1.25x";
-        case PlaybackSpeed::SPEED_1_5X: return "1.5x";
-        case PlaybackSpeed::SPEED_1_75X: return "1.75x";
-        case PlaybackSpeed::SPEED_2X: return "2x";
+std::string Application::getReadingModeString(ReadingMode mode) {
+    switch (mode) {
+        case ReadingMode::LEFT_TO_RIGHT: return "Left to Right";
+        case ReadingMode::RIGHT_TO_LEFT: return "Right to Left (Manga)";
+        case ReadingMode::VERTICAL: return "Vertical";
+        case ReadingMode::WEBTOON: return "Webtoon";
         default: return "Unknown";
     }
 }
 
-std::string Application::getSleepTimerString(SleepTimer timer) {
-    switch (timer) {
-        case SleepTimer::OFF: return "Off";
-        case SleepTimer::MINUTES_5: return "5 minutes";
-        case SleepTimer::MINUTES_10: return "10 minutes";
-        case SleepTimer::MINUTES_15: return "15 minutes";
-        case SleepTimer::MINUTES_30: return "30 minutes";
-        case SleepTimer::MINUTES_45: return "45 minutes";
-        case SleepTimer::MINUTES_60: return "60 minutes";
-        case SleepTimer::END_OF_CHAPTER: return "End of Chapter";
+std::string Application::getPageScaleModeString(PageScaleMode mode) {
+    switch (mode) {
+        case PageScaleMode::FIT_SCREEN: return "Fit Screen";
+        case PageScaleMode::FIT_WIDTH: return "Fit Width";
+        case PageScaleMode::FIT_HEIGHT: return "Fit Height";
+        case PageScaleMode::ORIGINAL: return "Original";
         default: return "Unknown";
     }
-}
-
-float Application::getPlaybackSpeedValue(PlaybackSpeed speed) {
-    switch (speed) {
-        case PlaybackSpeed::SPEED_0_5X: return 0.5f;
-        case PlaybackSpeed::SPEED_0_75X: return 0.75f;
-        case PlaybackSpeed::SPEED_1X: return 1.0f;
-        case PlaybackSpeed::SPEED_1_25X: return 1.25f;
-        case PlaybackSpeed::SPEED_1_5X: return 1.5f;
-        case PlaybackSpeed::SPEED_1_75X: return 1.75f;
-        case PlaybackSpeed::SPEED_2X: return 2.0f;
-        default: return 1.0f;
-    }
-}
-
-std::string Application::formatTime(float seconds) {
-    if (seconds < 0) seconds = 0;
-
-    int totalSeconds = (int)seconds;
-    int hours = totalSeconds / 3600;
-    int minutes = (totalSeconds % 3600) / 60;
-    int secs = totalSeconds % 60;
-
-    char buffer[32];
-    if (hours > 0) {
-        snprintf(buffer, sizeof(buffer), "%d:%02d:%02d", hours, minutes, secs);
-    } else {
-        snprintf(buffer, sizeof(buffer), "%d:%02d", minutes, secs);
-    }
-    return buffer;
-}
-
-std::string Application::formatDuration(float seconds) {
-    if (seconds < 0) seconds = 0;
-
-    int totalSeconds = (int)seconds;
-    int hours = totalSeconds / 3600;
-    int minutes = (totalSeconds % 3600) / 60;
-
-    char buffer[64];
-    if (hours > 0) {
-        snprintf(buffer, sizeof(buffer), "%dh %dm", hours, minutes);
-    } else {
-        snprintf(buffer, sizeof(buffer), "%d min", minutes);
-    }
-    return buffer;
 }
 
 bool Application::loadSettings() {
@@ -312,83 +251,50 @@ bool Application::loadSettings() {
         return (content.substr(pos, 4) == "true");
     };
 
-    // Load authentication
-    m_authToken = extractString("authToken");
+    // Load connection info
     m_serverUrl = extractString("serverUrl");
-    m_username = extractString("username");
-    m_currentLibraryId = extractString("currentLibraryId");
+    m_currentCategoryId = extractInt("currentCategoryId");
 
-    brls::Logger::info("loadSettings: authToken={}, serverUrl={}, username={}",
-                       m_authToken.empty() ? "(empty)" : "(set)",
-                       m_serverUrl.empty() ? "(empty)" : m_serverUrl,
-                       m_username.empty() ? "(empty)" : m_username);
+    brls::Logger::info("loadSettings: serverUrl={}",
+                       m_serverUrl.empty() ? "(empty)" : m_serverUrl);
 
     // Load UI settings
     m_settings.theme = static_cast<AppTheme>(extractInt("theme"));
     m_settings.showClock = extractBool("showClock", true);
     m_settings.animationsEnabled = extractBool("animationsEnabled", true);
-    m_settings.debugLogging = extractBool("debugLogging", true);
+    m_settings.debugLogging = extractBool("debugLogging", false);
 
-    // Load content display settings
-    m_settings.showCollections = extractBool("showCollections", true);
-    m_settings.showSeries = extractBool("showSeries", true);
-    m_settings.showAuthors = extractBool("showAuthors", true);
-    m_settings.showProgress = extractBool("showProgress", true);
-    m_settings.showOnlyDownloaded = extractBool("showOnlyDownloaded", false);
+    // Load reader settings
+    m_settings.readingMode = static_cast<ReadingMode>(extractInt("readingMode"));
+    m_settings.pageScaleMode = static_cast<PageScaleMode>(extractInt("pageScaleMode"));
+    m_settings.readerBackground = static_cast<ReaderBackground>(extractInt("readerBackground"));
+    m_settings.keepScreenOn = extractBool("keepScreenOn", true);
+    m_settings.showPageNumber = extractBool("showPageNumber", true);
+    m_settings.tapToNavigate = extractBool("tapToNavigate", true);
 
-    // Load playback settings
-    m_settings.autoPlayNext = extractBool("autoPlayNext", false);
-    m_settings.resumePlayback = extractBool("resumePlayback", true);
-    m_settings.playbackSpeed = static_cast<PlaybackSpeed>(extractInt("playbackSpeed"));
-    m_settings.sleepTimer = static_cast<SleepTimer>(extractInt("sleepTimer"));
-    m_settings.seekInterval = extractInt("seekInterval");
-    if (m_settings.seekInterval <= 0) m_settings.seekInterval = 30;
-    m_settings.longSeekInterval = extractInt("longSeekInterval");
-    if (m_settings.longSeekInterval <= 0) m_settings.longSeekInterval = 300;
+    // Load library settings
+    m_settings.updateOnStart = extractBool("updateOnStart", false);
+    m_settings.updateOnlyWifi = extractBool("updateOnlyWifi", true);
+    m_settings.defaultCategoryId = extractInt("defaultCategoryId");
 
-    // Load podcast settings
-    m_settings.podcastAutoComplete = static_cast<AutoCompleteThreshold>(extractInt("podcastAutoComplete"));
-
-    // Load audio settings
-    m_settings.audioQuality = static_cast<AudioQuality>(extractInt("audioQuality"));
-    m_settings.boostVolume = extractBool("boostVolume", false);
-    m_settings.volumeBoostDb = extractInt("volumeBoostDb");
-
-    // Load chapter settings
-    m_settings.showChapterList = extractBool("showChapterList", true);
-    m_settings.skipChapterTransitions = extractBool("skipChapterTransitions", false);
-
-    // Load bookmark settings
-    m_settings.autoBookmark = extractBool("autoBookmark", true);
+    // Load download settings
+    m_settings.downloadToServer = extractBool("downloadToServer", true);
+    m_settings.autoDownloadChapters = extractBool("autoDownloadChapters", false);
+    m_settings.downloadOverWifiOnly = extractBool("downloadOverWifiOnly", true);
+    m_settings.maxConcurrentDownloads = extractInt("maxConcurrentDownloads");
+    if (m_settings.maxConcurrentDownloads <= 0) m_settings.maxConcurrentDownloads = 2;
+    m_settings.deleteAfterRead = extractBool("deleteAfterRead", false);
 
     // Load network settings
     m_settings.connectionTimeout = extractInt("connectionTimeout");
-    if (m_settings.connectionTimeout <= 0) m_settings.connectionTimeout = 180;
-    m_settings.downloadOverWifiOnly = extractBool("downloadOverWifiOnly", false);
+    if (m_settings.connectionTimeout <= 0) m_settings.connectionTimeout = 30;
 
-    // Load download settings
-    m_settings.autoStartDownloads = extractBool("autoStartDownloads", true);
-    m_settings.maxConcurrentDownloads = extractInt("maxConcurrentDownloads");
-    if (m_settings.maxConcurrentDownloads <= 0) m_settings.maxConcurrentDownloads = 1;
-    m_settings.deleteAfterFinish = extractBool("deleteAfterFinish", false);
-    m_settings.syncProgressOnConnect = extractBool("syncProgressOnConnect", true);
-
-    // Load streaming/temp file settings
-    m_settings.saveToDownloads = extractBool("saveToDownloads", false);
-    m_settings.maxTempFiles = extractInt("maxTempFiles");
-    if (m_settings.maxTempFiles <= 0) m_settings.maxTempFiles = 5;
-    m_settings.maxTempSizeMB = extractInt("maxTempSizeMB");
-    if (m_settings.maxTempSizeMB <= 0) m_settings.maxTempSizeMB = 500;
-
-    // Load player UI settings
-    m_settings.showDownloadProgress = extractBool("showDownloadProgress", true);
-
-    // Load sleep/power settings
-    m_settings.preventSleep = extractBool("preventSleep", true);
-    m_settings.pauseOnHeadphoneDisconnect = extractBool("pauseOnHeadphoneDisconnect", true);
+    // Load display settings
+    m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
+    m_settings.showDownloadedBadge = extractBool("showDownloadedBadge", true);
 
     brls::Logger::info("Settings loaded successfully");
-    return !m_authToken.empty();
+    return !m_serverUrl.empty();
 #else
     return false;
 #endif
@@ -397,19 +303,15 @@ bool Application::loadSettings() {
 bool Application::saveSettings() {
 #ifdef __vita__
     brls::Logger::info("saveSettings: Saving to {}", SETTINGS_PATH);
-    brls::Logger::debug("saveSettings: authToken={}, serverUrl={}, username={}",
-                        m_authToken.empty() ? "(empty)" : "(set)",
-                        m_serverUrl.empty() ? "(empty)" : m_serverUrl,
-                        m_username.empty() ? "(empty)" : m_username);
+    brls::Logger::debug("saveSettings: serverUrl={}",
+                        m_serverUrl.empty() ? "(empty)" : m_serverUrl);
 
     // Create JSON content
     std::string json = "{\n";
 
-    // Authentication
-    json += "  \"authToken\": \"" + m_authToken + "\",\n";
+    // Connection info
     json += "  \"serverUrl\": \"" + m_serverUrl + "\",\n";
-    json += "  \"username\": \"" + m_username + "\",\n";
-    json += "  \"currentLibraryId\": \"" + m_currentLibraryId + "\",\n";
+    json += "  \"currentCategoryId\": " + std::to_string(m_currentCategoryId) + ",\n";
 
     // UI settings
     json += "  \"theme\": " + std::to_string(static_cast<int>(m_settings.theme)) + ",\n";
@@ -417,57 +319,32 @@ bool Application::saveSettings() {
     json += "  \"animationsEnabled\": " + std::string(m_settings.animationsEnabled ? "true" : "false") + ",\n";
     json += "  \"debugLogging\": " + std::string(m_settings.debugLogging ? "true" : "false") + ",\n";
 
-    // Content display settings
-    json += "  \"showCollections\": " + std::string(m_settings.showCollections ? "true" : "false") + ",\n";
-    json += "  \"showSeries\": " + std::string(m_settings.showSeries ? "true" : "false") + ",\n";
-    json += "  \"showAuthors\": " + std::string(m_settings.showAuthors ? "true" : "false") + ",\n";
-    json += "  \"showProgress\": " + std::string(m_settings.showProgress ? "true" : "false") + ",\n";
-    json += "  \"showOnlyDownloaded\": " + std::string(m_settings.showOnlyDownloaded ? "true" : "false") + ",\n";
+    // Reader settings
+    json += "  \"readingMode\": " + std::to_string(static_cast<int>(m_settings.readingMode)) + ",\n";
+    json += "  \"pageScaleMode\": " + std::to_string(static_cast<int>(m_settings.pageScaleMode)) + ",\n";
+    json += "  \"readerBackground\": " + std::to_string(static_cast<int>(m_settings.readerBackground)) + ",\n";
+    json += "  \"keepScreenOn\": " + std::string(m_settings.keepScreenOn ? "true" : "false") + ",\n";
+    json += "  \"showPageNumber\": " + std::string(m_settings.showPageNumber ? "true" : "false") + ",\n";
+    json += "  \"tapToNavigate\": " + std::string(m_settings.tapToNavigate ? "true" : "false") + ",\n";
 
-    // Playback settings
-    json += "  \"autoPlayNext\": " + std::string(m_settings.autoPlayNext ? "true" : "false") + ",\n";
-    json += "  \"resumePlayback\": " + std::string(m_settings.resumePlayback ? "true" : "false") + ",\n";
-    json += "  \"playbackSpeed\": " + std::to_string(static_cast<int>(m_settings.playbackSpeed)) + ",\n";
-    json += "  \"sleepTimer\": " + std::to_string(static_cast<int>(m_settings.sleepTimer)) + ",\n";
-    json += "  \"seekInterval\": " + std::to_string(m_settings.seekInterval) + ",\n";
-    json += "  \"longSeekInterval\": " + std::to_string(m_settings.longSeekInterval) + ",\n";
+    // Library settings
+    json += "  \"updateOnStart\": " + std::string(m_settings.updateOnStart ? "true" : "false") + ",\n";
+    json += "  \"updateOnlyWifi\": " + std::string(m_settings.updateOnlyWifi ? "true" : "false") + ",\n";
+    json += "  \"defaultCategoryId\": " + std::to_string(m_settings.defaultCategoryId) + ",\n";
 
-    // Podcast settings
-    json += "  \"podcastAutoComplete\": " + std::to_string(static_cast<int>(m_settings.podcastAutoComplete)) + ",\n";
-
-    // Audio settings
-    json += "  \"audioQuality\": " + std::to_string(static_cast<int>(m_settings.audioQuality)) + ",\n";
-    json += "  \"boostVolume\": " + std::string(m_settings.boostVolume ? "true" : "false") + ",\n";
-    json += "  \"volumeBoostDb\": " + std::to_string(m_settings.volumeBoostDb) + ",\n";
-
-    // Chapter settings
-    json += "  \"showChapterList\": " + std::string(m_settings.showChapterList ? "true" : "false") + ",\n";
-    json += "  \"skipChapterTransitions\": " + std::string(m_settings.skipChapterTransitions ? "true" : "false") + ",\n";
-
-    // Bookmark settings
-    json += "  \"autoBookmark\": " + std::string(m_settings.autoBookmark ? "true" : "false") + ",\n";
+    // Download settings
+    json += "  \"downloadToServer\": " + std::string(m_settings.downloadToServer ? "true" : "false") + ",\n";
+    json += "  \"autoDownloadChapters\": " + std::string(m_settings.autoDownloadChapters ? "true" : "false") + ",\n";
+    json += "  \"downloadOverWifiOnly\": " + std::string(m_settings.downloadOverWifiOnly ? "true" : "false") + ",\n";
+    json += "  \"maxConcurrentDownloads\": " + std::to_string(m_settings.maxConcurrentDownloads) + ",\n";
+    json += "  \"deleteAfterRead\": " + std::string(m_settings.deleteAfterRead ? "true" : "false") + ",\n";
 
     // Network settings
     json += "  \"connectionTimeout\": " + std::to_string(m_settings.connectionTimeout) + ",\n";
-    json += "  \"downloadOverWifiOnly\": " + std::string(m_settings.downloadOverWifiOnly ? "true" : "false") + ",\n";
 
-    // Download settings
-    json += "  \"autoStartDownloads\": " + std::string(m_settings.autoStartDownloads ? "true" : "false") + ",\n";
-    json += "  \"maxConcurrentDownloads\": " + std::to_string(m_settings.maxConcurrentDownloads) + ",\n";
-    json += "  \"deleteAfterFinish\": " + std::string(m_settings.deleteAfterFinish ? "true" : "false") + ",\n";
-    json += "  \"syncProgressOnConnect\": " + std::string(m_settings.syncProgressOnConnect ? "true" : "false") + ",\n";
-
-    // Streaming/temp file settings
-    json += "  \"saveToDownloads\": " + std::string(m_settings.saveToDownloads ? "true" : "false") + ",\n";
-    json += "  \"maxTempFiles\": " + std::to_string(m_settings.maxTempFiles) + ",\n";
-    json += "  \"maxTempSizeMB\": " + std::to_string(m_settings.maxTempSizeMB) + ",\n";
-
-    // Player UI settings
-    json += "  \"showDownloadProgress\": " + std::string(m_settings.showDownloadProgress ? "true" : "false") + ",\n";
-
-    // Sleep/power settings
-    json += "  \"preventSleep\": " + std::string(m_settings.preventSleep ? "true" : "false") + ",\n";
-    json += "  \"pauseOnHeadphoneDisconnect\": " + std::string(m_settings.pauseOnHeadphoneDisconnect ? "true" : "false") + "\n";
+    // Display settings
+    json += "  \"showUnreadBadge\": " + std::string(m_settings.showUnreadBadge ? "true" : "false") + ",\n";
+    json += "  \"showDownloadedBadge\": " + std::string(m_settings.showDownloadedBadge ? "true" : "false") + "\n";
 
     json += "}\n";
 
@@ -490,21 +367,6 @@ bool Application::saveSettings() {
 #else
     return false;
 #endif
-}
-
-void Application::setBackgroundDownloadProgress(const BackgroundDownloadProgress& progress) {
-    std::lock_guard<std::mutex> lock(m_bgDownloadMutex);
-    m_bgDownloadProgress = progress;
-}
-
-BackgroundDownloadProgress Application::getBackgroundDownloadProgress() const {
-    std::lock_guard<std::mutex> lock(m_bgDownloadMutex);
-    return m_bgDownloadProgress;
-}
-
-void Application::clearBackgroundDownloadProgress() {
-    std::lock_guard<std::mutex> lock(m_bgDownloadMutex);
-    m_bgDownloadProgress = BackgroundDownloadProgress();
 }
 
 } // namespace vitasuwayomi
