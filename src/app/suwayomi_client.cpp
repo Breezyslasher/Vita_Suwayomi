@@ -396,23 +396,68 @@ bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
     vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
-    if (!m_authUsername.empty()) {
-        // TODO: Add basic auth header
+    // Add basic auth if credentials are set
+    if (!m_authUsername.empty() && !m_authPassword.empty()) {
+        // Base64 encode username:password for Basic Auth
+        std::string credentials = m_authUsername + ":" + m_authPassword;
+        // Simple base64 encoding for ASCII
+        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string encoded;
+        int val = 0, valb = -6;
+        for (unsigned char c : credentials) {
+            val = (val << 8) + c;
+            valb += 8;
+            while (valb >= 0) {
+                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                valb -= 6;
+            }
+        }
+        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+        while (encoded.size() % 4) encoded.push_back('=');
+        http.setDefaultHeader("Authorization", "Basic " + encoded);
     }
 
+    // Try /api/v1/settings/about endpoint (standard Suwayomi endpoint)
     std::string url = m_serverUrl + "/api/v1/settings/about";
+    brls::Logger::info("Fetching server info from: {}", url);
     vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
-        brls::Logger::error("Failed to fetch server info: {} ({})",
-                           response.error, response.statusCode);
-        return false;
+        brls::Logger::warning("Primary endpoint failed ({}), trying fallback...", response.statusCode);
+
+        // Fallback: Try to fetch source list as connection test
+        url = m_serverUrl + "/api/v1/source/list";
+        response = http.get(url);
+
+        if (!response.success || response.statusCode != 200) {
+            brls::Logger::error("Failed to connect to server: {} ({})",
+                               response.error, response.statusCode);
+            return false;
+        }
+
+        // If source list works, server is reachable but about endpoint might not exist
+        info.name = "Suwayomi";
+        info.version = "Unknown";
+        info.buildType = "Unknown";
+        brls::Logger::info("Connected via fallback (source list endpoint)");
+        return true;
     }
 
-    info.version = extractJsonValue(response.body, "version");
-    info.buildType = extractJsonValue(response.body, "buildType");
-    info.debug = extractJsonBool(response.body, "debug");
+    brls::Logger::debug("Server response: {}", response.body.substr(0, 200));
 
+    // Parse About response (name, version, revision, buildType, buildTime, github, discord)
+    info.name = extractJsonValue(response.body, "name");
+    info.version = extractJsonValue(response.body, "version");
+    info.revision = extractJsonValue(response.body, "revision");
+    info.buildType = extractJsonValue(response.body, "buildType");
+    info.buildTime = extractJsonInt64(response.body, "buildTime");
+    info.github = extractJsonValue(response.body, "github");
+    info.discord = extractJsonValue(response.body, "discord");
+
+    // Fallback name if not set
+    if (info.name.empty()) info.name = "Suwayomi";
+
+    brls::Logger::info("Server: {} v{} ({})", info.name, info.version, info.buildType);
     return true;
 }
 

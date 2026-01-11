@@ -158,25 +158,15 @@ struct DownloadQueueItem {
     std::string error;
 };
 
-// Server settings/info
+// Server settings/info (matches Suwayomi AboutDataClass)
 struct ServerInfo {
+    std::string name;
     std::string version;
+    std::string revision;
     std::string buildType;
-    bool debug = false;
-    std::string webUIChannel;
-    std::string webUIFlavor;
-    int webUIUpdateCheckInterval = 0;
-    bool socksProxyEnabled = false;
-    std::string socksProxyHost;
-    std::string socksProxyPort;
-    bool downloadAsCbz = false;
-    std::string downloadsPath;
-    bool autoDownloadNewChapters = false;
-    int maxSourcesInParallel = 6;
-    bool excludeEntryWithUnreadChapters = false;
-    bool autoDownloadIgnoreReUploads = false;
-    int autoDownloadNewChaptersLimit = 0;
-    int extensionRepos = 0;
+    int64_t buildTime = 0;
+    std::string github;
+    std::string discord;
 };
 
 // Source filter types
