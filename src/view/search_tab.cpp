@@ -1,12 +1,14 @@
 /**
- * VitaSuwayomi - Search Tab implementation
+ * VitaSuwayomi - Search/Browse Tab implementation
+ * Search manga across sources and browse source catalogs
  */
 
 #include "view/search_tab.hpp"
-#include "app/suwayomi_client.hpp"
-#include "view/media_detail_view.hpp"
-#include "view/media_item_cell.hpp"
+#include "view/manga_item_cell.hpp"
+#include "view/manga_detail_view.hpp"
 #include "app/application.hpp"
+#include "app/suwayomi_client.hpp"
+#include "utils/async.hpp"
 
 namespace vitasuwayomi {
 
@@ -19,7 +21,7 @@ SearchTab::SearchTab() {
 
     // Title
     m_titleLabel = new brls::Label();
-    m_titleLabel->setText("Search");
+    m_titleLabel->setText("Browse");
     m_titleLabel->setFontSize(28);
     m_titleLabel->setMarginBottom(20);
     this->addView(m_titleLabel);
@@ -36,12 +38,66 @@ SearchTab::SearchTab() {
             m_searchQuery = text;
             m_searchLabel->setText(std::string("Search: ") + text);
             performSearch(text);
-        }, "Search", "Enter search query", 256, m_searchQuery);
+        }, "Search", "Enter manga title", 256, m_searchQuery);
         return true;
     });
     m_searchLabel->addGestureRecognizer(new brls::TapGestureRecognizer(m_searchLabel));
-
     this->addView(m_searchLabel);
+
+    // Mode selector buttons
+    m_modeBox = new brls::Box();
+    m_modeBox->setAxis(brls::Axis::ROW);
+    m_modeBox->setJustifyContent(brls::JustifyContent::FLEX_START);
+    m_modeBox->setAlignItems(brls::AlignItems::CENTER);
+    m_modeBox->setMarginBottom(10);
+
+    // Sources button
+    m_sourcesBtn = new brls::Button();
+    m_sourcesBtn->setText("Sources");
+    m_sourcesBtn->setMarginRight(10);
+    m_sourcesBtn->registerClickAction([this](brls::View* view) {
+        showSources();
+        return true;
+    });
+    m_modeBox->addView(m_sourcesBtn);
+
+    // Popular button
+    m_popularBtn = new brls::Button();
+    m_popularBtn->setText("Popular");
+    m_popularBtn->setMarginRight(10);
+    m_popularBtn->setVisibility(brls::Visibility::GONE);
+    m_popularBtn->registerClickAction([this](brls::View* view) {
+        m_browseMode = BrowseMode::POPULAR;
+        loadPopularManga(m_currentSourceId);
+        updateModeButtons();
+        return true;
+    });
+    m_modeBox->addView(m_popularBtn);
+
+    // Latest button
+    m_latestBtn = new brls::Button();
+    m_latestBtn->setText("Latest");
+    m_latestBtn->setMarginRight(10);
+    m_latestBtn->setVisibility(brls::Visibility::GONE);
+    m_latestBtn->registerClickAction([this](brls::View* view) {
+        m_browseMode = BrowseMode::LATEST;
+        loadLatestManga(m_currentSourceId);
+        updateModeButtons();
+        return true;
+    });
+    m_modeBox->addView(m_latestBtn);
+
+    // Back button
+    m_backBtn = new brls::Button();
+    m_backBtn->setText("< Back");
+    m_backBtn->setVisibility(brls::Visibility::GONE);
+    m_backBtn->registerClickAction([this](brls::View* view) {
+        showSources();
+        return true;
+    });
+    m_modeBox->addView(m_backBtn);
+
+    this->addView(m_modeBox);
 
     // Results label
     m_resultsLabel = new brls::Label();
@@ -50,221 +106,316 @@ SearchTab::SearchTab() {
     m_resultsLabel->setMarginBottom(10);
     this->addView(m_resultsLabel);
 
-    // Scrollable content for results
-    m_scrollView = new brls::ScrollingFrame();
-    m_scrollView->setGrow(1.0f);
+    // Content grid
+    m_contentGrid = new RecyclingGrid();
+    m_contentGrid->setGrow(1.0f);
+    m_contentGrid->setOnMangaSelected([this](const Manga& manga) {
+        onMangaSelected(manga);
+    });
+    this->addView(m_contentGrid);
 
-    m_scrollContent = new brls::Box();
-    m_scrollContent->setAxis(brls::Axis::COLUMN);
-    m_scrollContent->setJustifyContent(brls::JustifyContent::FLEX_START);
-    m_scrollContent->setAlignItems(brls::AlignItems::STRETCH);
-
-    // Books row (replaces Movies for Audiobookshelf)
-    auto* booksLabel = new brls::Label();
-    booksLabel->setText("Books");
-    booksLabel->setFontSize(20);
-    booksLabel->setMarginBottom(10);
-    booksLabel->setVisibility(brls::Visibility::GONE);
-    m_scrollContent->addView(booksLabel);
-
-    m_moviesRow = new brls::HScrollingFrame();
-    m_moviesRow->setHeight(180);
-    m_moviesRow->setMarginBottom(15);
-    m_moviesRow->setVisibility(brls::Visibility::GONE);
-
-    m_moviesContent = new brls::Box();
-    m_moviesContent->setAxis(brls::Axis::ROW);
-    m_moviesContent->setJustifyContent(brls::JustifyContent::FLEX_START);
-    m_moviesRow->setContentView(m_moviesContent);
-    m_scrollContent->addView(m_moviesRow);
-
-    // Podcasts row (replaces TV Shows for Audiobookshelf)
-    auto* podcastsLabel = new brls::Label();
-    podcastsLabel->setText("Podcasts");
-    podcastsLabel->setFontSize(20);
-    podcastsLabel->setMarginBottom(10);
-    podcastsLabel->setVisibility(brls::Visibility::GONE);
-    m_scrollContent->addView(podcastsLabel);
-
-    m_showsRow = new brls::HScrollingFrame();
-    m_showsRow->setHeight(180);
-    m_showsRow->setMarginBottom(15);
-    m_showsRow->setVisibility(brls::Visibility::GONE);
-
-    m_showsContent = new brls::Box();
-    m_showsContent->setAxis(brls::Axis::ROW);
-    m_showsContent->setJustifyContent(brls::JustifyContent::FLEX_START);
-    m_showsRow->setContentView(m_showsContent);
-    m_scrollContent->addView(m_showsRow);
-
-    // Episodes row (podcast episodes)
-    auto* episodesLabel = new brls::Label();
-    episodesLabel->setText("Episodes");
-    episodesLabel->setFontSize(20);
-    episodesLabel->setMarginBottom(10);
-    episodesLabel->setVisibility(brls::Visibility::GONE);
-    m_scrollContent->addView(episodesLabel);
-
-    m_episodesRow = new brls::HScrollingFrame();
-    m_episodesRow->setHeight(180);
-    m_episodesRow->setMarginBottom(15);
-    m_episodesRow->setVisibility(brls::Visibility::GONE);
-
-    m_episodesContent = new brls::Box();
-    m_episodesContent->setAxis(brls::Axis::ROW);
-    m_episodesContent->setJustifyContent(brls::JustifyContent::FLEX_START);
-    m_episodesRow->setContentView(m_episodesContent);
-    m_scrollContent->addView(m_episodesRow);
-
-    // Hide music row - not applicable for Audiobookshelf
-    m_musicRow = nullptr;
-    m_musicContent = nullptr;
-
-    m_scrollView->setContentView(m_scrollContent);
-    this->addView(m_scrollView);
+    // Load sources initially
+    loadSources();
 }
 
 void SearchTab::onFocusGained() {
     brls::Box::onFocusGained();
 
-    // Focus search label
-    if (m_searchLabel) {
-        brls::Application::giveFocus(m_searchLabel);
+    if (m_sources.empty()) {
+        loadSources();
     }
 }
 
-void SearchTab::populateRow(brls::Box* rowContent, const std::vector<MediaItem>& items) {
-    if (!rowContent) return;
+void SearchTab::loadSources() {
+    brls::Logger::debug("SearchTab: Loading sources");
+    m_browseMode = BrowseMode::SOURCES;
 
-    rowContent->clearViews();
+    asyncRun([this]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Source> sources;
 
-    for (const auto& item : items) {
-        auto* cell = new MediaItemCell();
-        cell->setItem(item);
-        cell->setWidth(120);
-        cell->setHeight(170);
-        cell->setMarginRight(10);
+        if (client.fetchSourceList(sources)) {
+            brls::Logger::info("SearchTab: Got {} sources", sources.size());
 
-        MediaItem capturedItem = item;
-        cell->registerClickAction([this, capturedItem](brls::View* view) {
-            onItemSelected(capturedItem);
+            brls::sync([this, sources]() {
+                m_sources = sources;
+                showSources();
+            });
+        } else {
+            brls::Logger::error("SearchTab: Failed to fetch sources");
+            brls::sync([this]() {
+                m_resultsLabel->setText("Failed to load sources");
+            });
+        }
+    });
+}
+
+void SearchTab::showSources() {
+    m_browseMode = BrowseMode::SOURCES;
+    m_titleLabel->setText("Browse - Sources");
+    m_resultsLabel->setText(std::to_string(m_sources.size()) + " sources available");
+
+    // Hide source-specific buttons
+    m_popularBtn->setVisibility(brls::Visibility::GONE);
+    m_latestBtn->setVisibility(brls::Visibility::GONE);
+    m_backBtn->setVisibility(brls::Visibility::GONE);
+    m_sourcesBtn->setVisibility(brls::Visibility::VISIBLE);
+
+    // Create source list - we need to display sources as a list
+    // For now, convert to Manga items to use the grid
+    // In a real app, you'd have a source list view
+    m_mangaList.clear();
+    m_contentGrid->clearViews();
+
+    // Add source items as buttons in the source list box
+    // For simplicity, we'll create a simple list
+    if (!m_sourceListBox) {
+        m_sourceListBox = new brls::Box();
+        m_sourceListBox->setAxis(brls::Axis::COLUMN);
+        m_sourceListBox->setJustifyContent(brls::JustifyContent::FLEX_START);
+    }
+    m_sourceListBox->clearViews();
+
+    for (const auto& source : m_sources) {
+        auto* sourceBtn = new brls::Button();
+        std::string label = source.name;
+        if (!source.lang.empty()) {
+            label += " (" + source.lang + ")";
+        }
+        sourceBtn->setText(label);
+        sourceBtn->setMarginBottom(5);
+
+        Source sourceCopy = source;
+        sourceBtn->registerClickAction([this, sourceCopy](brls::View* view) {
+            onSourceSelected(sourceCopy);
             return true;
         });
 
-        rowContent->addView(cell);
+        m_sourceListBox->addView(sourceBtn);
     }
+
+    // Replace grid content with source list
+    // For now just clear the grid since we're showing sources as buttons
+    m_contentGrid->setMangaDataSource(m_mangaList);  // Empty list
+}
+
+void SearchTab::showSourceBrowser(const Source& source) {
+    m_currentSourceId = source.id;
+    m_currentSourceName = source.name;
+
+    m_titleLabel->setText("Browse - " + source.name);
+
+    // Show source-specific buttons
+    m_sourcesBtn->setVisibility(brls::Visibility::GONE);
+    m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
+    m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+
+    // Load popular manga by default
+    m_browseMode = BrowseMode::POPULAR;
+    loadPopularManga(source.id);
+    updateModeButtons();
+}
+
+void SearchTab::loadPopularManga(int64_t sourceId) {
+    brls::Logger::debug("SearchTab: Loading popular manga from source {}", sourceId);
+    m_resultsLabel->setText("Loading popular manga...");
+    m_currentPage = 1;
+
+    asyncRun([this, sourceId]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Manga> manga;
+        bool hasNextPage = false;
+
+        if (client.fetchPopularManga(sourceId, 1, manga, hasNextPage)) {
+            brls::Logger::info("SearchTab: Got {} popular manga", manga.size());
+
+            brls::sync([this, manga, hasNextPage]() {
+                m_mangaList = manga;
+                m_hasNextPage = hasNextPage;
+                m_contentGrid->setMangaDataSource(m_mangaList);
+                m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
+            });
+        } else {
+            brls::Logger::error("SearchTab: Failed to fetch popular manga");
+            brls::sync([this]() {
+                m_resultsLabel->setText("Failed to load popular manga");
+            });
+        }
+    });
+}
+
+void SearchTab::loadLatestManga(int64_t sourceId) {
+    brls::Logger::debug("SearchTab: Loading latest manga from source {}", sourceId);
+    m_resultsLabel->setText("Loading latest manga...");
+    m_currentPage = 1;
+
+    asyncRun([this, sourceId]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Manga> manga;
+        bool hasNextPage = false;
+
+        if (client.fetchLatestManga(sourceId, 1, manga, hasNextPage)) {
+            brls::Logger::info("SearchTab: Got {} latest manga", manga.size());
+
+            brls::sync([this, manga, hasNextPage]() {
+                m_mangaList = manga;
+                m_hasNextPage = hasNextPage;
+                m_contentGrid->setMangaDataSource(m_mangaList);
+                m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
+            });
+        } else {
+            brls::Logger::error("SearchTab: Failed to fetch latest manga");
+            brls::sync([this]() {
+                m_resultsLabel->setText("Failed to load latest manga");
+            });
+        }
+    });
 }
 
 void SearchTab::performSearch(const std::string& query) {
     if (query.empty()) {
         m_resultsLabel->setText("");
-        m_results.clear();
-        m_movies.clear();  // books
-        m_shows.clear();   // podcasts
-        m_episodes.clear();
-        m_music.clear();
-
-        // Hide all rows
-        m_moviesRow->setVisibility(brls::Visibility::GONE);
-        m_showsRow->setVisibility(brls::Visibility::GONE);
-        m_episodesRow->setVisibility(brls::Visibility::GONE);
-
-        // Hide labels
-        auto& views = m_scrollContent->getChildren();
-        for (size_t i = 0; i < views.size(); i++) {
-            views[i]->setVisibility(brls::Visibility::GONE);
-        }
+        m_mangaList.clear();
+        m_contentGrid->setMangaDataSource(m_mangaList);
         return;
     }
 
-    AudiobookshelfClient& client = AudiobookshelfClient::getInstance();
-
-    // Audiobookshelf search requires a library ID
-    // Search across all libraries
-    std::vector<Library> libraries;
-    if (!client.fetchLibraries(libraries) || libraries.empty()) {
-        m_resultsLabel->setText("No libraries available");
+    // If we have a current source, search within that source
+    if (m_currentSourceId != 0) {
+        performSourceSearch(m_currentSourceId, query);
         return;
     }
 
-    m_results.clear();
-    m_movies.clear();  // books
-    m_shows.clear();   // podcasts
-    m_episodes.clear();
+    // Otherwise, search across all sources
+    m_resultsLabel->setText("Searching...");
+    m_browseMode = BrowseMode::SEARCH_RESULTS;
 
-    // Search each library
-    for (const auto& lib : libraries) {
-        std::vector<MediaItem> libResults;
-        if (client.search(lib.id, query, libResults)) {
-            for (auto& item : libResults) {
-                m_results.push_back(item);
+    asyncRun([this, query]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Manga> allResults;
+
+        // Search each source
+        for (const auto& source : m_sources) {
+            std::vector<Manga> results;
+            if (client.quickSearchManga(source.id, query, results)) {
+                for (auto& manga : results) {
+                    manga.sourceName = source.name;
+                    allResults.push_back(manga);
+                }
             }
-        }
-    }
 
-    if (!m_results.empty()) {
-        m_resultsLabel->setText("Found " + std::to_string(m_results.size()) + " results");
-
-        // Organize results by type for Audiobookshelf
-        for (const auto& item : m_results) {
-            if (item.mediaType == MediaType::BOOK) {
-                m_movies.push_back(item);  // Using movies vector for books
-            } else if (item.mediaType == MediaType::PODCAST) {
-                m_shows.push_back(item);   // Using shows vector for podcasts
-            } else if (item.mediaType == MediaType::PODCAST_EPISODE) {
-                m_episodes.push_back(item);
-            }
+            // Limit total results
+            if (allResults.size() >= 50) break;
         }
 
-        // Update rows visibility and content
-        // Order: Books(0,1), Podcasts(2,3), Episodes(4,5)
-        auto& views = m_scrollContent->getChildren();
+        brls::Logger::info("SearchTab: Found {} total results for '{}'", allResults.size(), query);
 
-        // Books (label at index 0, row at index 1)
-        if (!m_movies.empty()) {
-            views[0]->setVisibility(brls::Visibility::VISIBLE);
-            m_moviesRow->setVisibility(brls::Visibility::VISIBLE);
-            populateRow(m_moviesContent, m_movies);
-        } else {
-            views[0]->setVisibility(brls::Visibility::GONE);
-            m_moviesRow->setVisibility(brls::Visibility::GONE);
-        }
-
-        // Podcasts (label at index 2, row at index 3)
-        if (!m_shows.empty()) {
-            views[2]->setVisibility(brls::Visibility::VISIBLE);
-            m_showsRow->setVisibility(brls::Visibility::VISIBLE);
-            populateRow(m_showsContent, m_shows);
-        } else {
-            views[2]->setVisibility(brls::Visibility::GONE);
-            m_showsRow->setVisibility(brls::Visibility::GONE);
-        }
-
-        // Episodes (label at index 4, row at index 5)
-        if (!m_episodes.empty()) {
-            views[4]->setVisibility(brls::Visibility::VISIBLE);
-            m_episodesRow->setVisibility(brls::Visibility::VISIBLE);
-            populateRow(m_episodesContent, m_episodes);
-        } else {
-            views[4]->setVisibility(brls::Visibility::GONE);
-            m_episodesRow->setVisibility(brls::Visibility::GONE);
-        }
-
-    } else {
-        m_resultsLabel->setText("No results found");
-    }
+        brls::sync([this, allResults]() {
+            m_mangaList = allResults;
+            m_contentGrid->setMangaDataSource(m_mangaList);
+            m_resultsLabel->setText(std::to_string(allResults.size()) + " results");
+        });
+    });
 }
 
-void SearchTab::onItemSelected(const MediaItem& item) {
-    // For podcast episodes, play directly instead of showing detail view
-    if (item.mediaType == MediaType::PODCAST_EPISODE) {
-        Application::getInstance().pushPlayerActivity(item.podcastId, item.episodeId);
-        return;
-    }
+void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) {
+    brls::Logger::debug("SearchTab: Searching '{}' in source {}", query, sourceId);
+    m_resultsLabel->setText("Searching...");
+    m_browseMode = BrowseMode::SEARCH_RESULTS;
+    m_currentPage = 1;
 
-    // Show media detail view for books and podcasts
-    auto* detailView = new MediaDetailView(item);
+    asyncRun([this, sourceId, query]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Manga> manga;
+        bool hasNextPage = false;
+
+        if (client.searchManga(sourceId, query, 1, manga, hasNextPage)) {
+            brls::Logger::info("SearchTab: Found {} results for '{}'", manga.size(), query);
+
+            brls::sync([this, manga, hasNextPage]() {
+                m_mangaList = manga;
+                m_hasNextPage = hasNextPage;
+                m_contentGrid->setMangaDataSource(m_mangaList);
+                m_resultsLabel->setText(std::to_string(manga.size()) + " results");
+            });
+        } else {
+            brls::Logger::error("SearchTab: Failed to search manga");
+            brls::sync([this]() {
+                m_resultsLabel->setText("Search failed");
+            });
+        }
+    });
+}
+
+void SearchTab::onSourceSelected(const Source& source) {
+    brls::Logger::debug("SearchTab: Selected source '{}' ({})", source.name, source.id);
+    showSourceBrowser(source);
+}
+
+void SearchTab::onMangaSelected(const Manga& manga) {
+    brls::Logger::debug("SearchTab: Selected manga '{}' id={}", manga.title, manga.id);
+
+    // Push manga detail view
+    auto* detailView = new MangaDetailView(manga);
     brls::Application::pushActivity(new brls::Activity(detailView));
+}
+
+void SearchTab::loadNextPage() {
+    if (!m_hasNextPage) return;
+
+    m_currentPage++;
+    brls::Logger::debug("SearchTab: Loading page {}", m_currentPage);
+
+    asyncRun([this]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Manga> manga;
+        bool hasNextPage = false;
+
+        bool success = false;
+        if (m_browseMode == BrowseMode::POPULAR) {
+            success = client.fetchPopularManga(m_currentSourceId, m_currentPage, manga, hasNextPage);
+        } else if (m_browseMode == BrowseMode::LATEST) {
+            success = client.fetchLatestManga(m_currentSourceId, m_currentPage, manga, hasNextPage);
+        } else if (m_browseMode == BrowseMode::SEARCH_RESULTS && !m_searchQuery.empty()) {
+            success = client.searchManga(m_currentSourceId, m_searchQuery, m_currentPage, manga, hasNextPage);
+        }
+
+        if (success) {
+            brls::sync([this, manga, hasNextPage]() {
+                // Append to existing list
+                for (const auto& m : manga) {
+                    m_mangaList.push_back(m);
+                }
+                m_hasNextPage = hasNextPage;
+                m_contentGrid->setMangaDataSource(m_mangaList);
+                m_resultsLabel->setText(std::to_string(m_mangaList.size()) + " manga");
+            });
+        }
+    });
+}
+
+void SearchTab::updateModeButtons() {
+    // Highlight active mode button (in a real app, you'd change button style)
+    // For now, just ensure visibility is correct
+    if (m_browseMode == BrowseMode::SOURCES) {
+        m_sourcesBtn->setVisibility(brls::Visibility::VISIBLE);
+        m_popularBtn->setVisibility(brls::Visibility::GONE);
+        m_latestBtn->setVisibility(brls::Visibility::GONE);
+        m_backBtn->setVisibility(brls::Visibility::GONE);
+    } else {
+        m_sourcesBtn->setVisibility(brls::Visibility::GONE);
+        m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
+        m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+
+        // Show latest button if source supports it
+        for (const auto& source : m_sources) {
+            if (source.id == m_currentSourceId && source.supportsLatest) {
+                m_latestBtn->setVisibility(brls::Visibility::VISIBLE);
+                break;
+            }
+        }
+    }
 }
 
 } // namespace vitasuwayomi
