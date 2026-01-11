@@ -192,11 +192,11 @@ void SourceBrowseTab::updateLoadMoreButton() {
 }
 
 void SourceBrowseTab::showSearchDialog() {
-    brls::Swkbd::openForText([this](std::string query) {
+    brls::Application::getImeManager()->openForText([this](std::string query) {
         if (!query.empty()) {
             loadSearch(query);
         }
-    }, "Search manga...", "", 100, "", 0, "Search", "");
+    }, "Search manga...", "", 100, "");
 }
 
 void SourceBrowseTab::onMangaSelected(const Manga& manga) {
