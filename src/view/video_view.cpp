@@ -1,12 +1,12 @@
 /**
- * VitaABS - Video View Implementation
+ * VitaSuwayomi - Video View Implementation
  * Renders video frames from MPV player
  */
 
 #include "view/video_view.hpp"
 #include "player/mpv_player.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 VideoView::VideoView() {
     // Set up as full-screen by default
@@ -78,4 +78,4 @@ brls::View* VideoView::create() {
     return new VideoView();
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

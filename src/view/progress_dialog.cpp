@@ -1,10 +1,10 @@
 /**
- * VitaABS - Progress Dialog implementation
+ * VitaSuwayomi - Progress Dialog implementation
  */
 
 #include "view/progress_dialog.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 ProgressDialog::ProgressDialog(const std::string& title) {
     this->setAxis(brls::Axis::COLUMN);
@@ -245,4 +245,4 @@ ProgressDialog* ProgressDialog::showDownloading(const std::string& title) {
     return dialog;
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

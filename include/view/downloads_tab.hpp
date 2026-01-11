@@ -1,5 +1,5 @@
 /**
- * VitaABS - Downloads Tab
+ * VitaSuwayomi - Downloads Tab
  * View for managing offline downloads
  */
 
@@ -7,7 +7,7 @@
 
 #include <borealis.hpp>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class DownloadsTab : public brls::Box {
 public:
@@ -24,4 +24,4 @@ private:
     brls::Label* m_emptyLabel = nullptr;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

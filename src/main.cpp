@@ -174,7 +174,7 @@ int main(int argc, char* argv[]) {
 
     // Create log directory and file on Vita
     sceIoMkdir("ux0:data/VitaSuwayomi", 0777);
-    static FILE* logFile = std::fopen("ux0:data/VitaSuwayomi/vitaabs.log", "w");
+    static FILE* logFile = std::fopen("ux0:data/VitaSuwayomi/vitasuwayomi.log", "w");
     if (logFile) {
         // Use line buffering so logs are written immediately
         setvbuf(logFile, NULL, _IOLBF, 0);
@@ -220,7 +220,7 @@ int main(int argc, char* argv[]) {
                     time_tm.tm_hour, time_tm.tm_min, time_tm.tm_sec,
                     (int)ms, levelStr, log.c_str());
         });
-        brls::Logger::info("Log file initialized: ux0:data/VitaSuwayomi/vitaabs.log");
+        brls::Logger::info("Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log");
     }
 #endif
 

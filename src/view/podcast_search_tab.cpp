@@ -1,5 +1,5 @@
 /**
- * VitaABS - Podcast Search Tab Implementation
+ * VitaSuwayomi - Podcast Search Tab Implementation
  * Search iTunes for podcasts and add them to the server
  */
 
@@ -9,7 +9,7 @@
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class PodcastResultCell : public brls::Box {
 public:
@@ -242,4 +242,4 @@ void PodcastSearchTab::addPodcast(const PodcastSearchResult& podcast) {
     });
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

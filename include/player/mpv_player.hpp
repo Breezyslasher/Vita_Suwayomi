@@ -1,5 +1,5 @@
 /**
- * VitaABS - MPV Video Player
+ * VitaSuwayomi - MPV Video Player
  * Hardware-accelerated video playback using libmpv with GXM rendering on Vita
  */
 
@@ -19,7 +19,7 @@ typedef struct mpv_event_property mpv_event_property;
 typedef struct mpv_render_context mpv_render_context;
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Player states
 enum class MpvPlayerState {
@@ -180,4 +180,4 @@ private:
 #endif
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

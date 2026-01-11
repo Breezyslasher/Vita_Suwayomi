@@ -1,5 +1,5 @@
 /**
- * VitaABS - Async utilities
+ * VitaSuwayomi - Async utilities
  * Simple async task execution with UI thread callbacks
  */
 
@@ -13,7 +13,7 @@
 #include <psp2/kernel/threadmgr.h>
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 #ifdef __vita__
 // Vita-specific thread wrapper with configurable stack size
@@ -99,4 +99,4 @@ inline void asyncRun(std::function<void()> task) {
     }).detach();
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

@@ -1,5 +1,5 @@
 /**
- * VitaABS - Player Activity implementation
+ * VitaSuwayomi - Player Activity implementation
  */
 
 #include "activity/player_activity.hpp"
@@ -25,7 +25,7 @@
 #include <psp2/io/stat.h>
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Helper function to check if content should be marked as finished based on settings
 static bool shouldMarkAsFinished(float currentTime, float totalDuration, bool isPodcast) {
@@ -1341,4 +1341,4 @@ void PlayerActivity::syncProgressToServer() {
     m_lastSyncedTime = currentTime;
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

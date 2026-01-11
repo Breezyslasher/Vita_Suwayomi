@@ -1,5 +1,5 @@
 /**
- * VitaABS - JWT Authentication utilities
+ * VitaSuwayomi - JWT Authentication utilities
  * Implements ED25519 signing for Plex JWT authentication
  */
 
@@ -8,7 +8,7 @@
 #include <string>
 #include <cstdint>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // ED25519 key sizes
 constexpr size_t ED25519_PUBLIC_KEY_SIZE = 32;
@@ -37,7 +37,7 @@ public:
 
     /**
      * Initialize or load existing key pair
-     * Keys are stored in ux0:data/VitaABS/keys/
+     * Keys are stored in ux0:data/VitaSuwayomi/keys/
      */
     bool initialize();
 
@@ -107,4 +107,4 @@ private:
     int64_t getCurrentTimestamp() const;
 };
 
-}  // namespace vitaabs
+}  // namespace vitasuwayomi

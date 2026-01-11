@@ -1,5 +1,5 @@
 /**
- * VitaABS - Audiobookshelf API Client
+ * VitaSuwayomi - Audiobookshelf API Client
  * Handles all communication with Audiobookshelf servers
  */
 
@@ -10,7 +10,7 @@
 #include <functional>
 #include <memory>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Media types for Audiobookshelf
 enum class MediaType {
@@ -340,4 +340,4 @@ private:
     ServerInfo m_serverInfo;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

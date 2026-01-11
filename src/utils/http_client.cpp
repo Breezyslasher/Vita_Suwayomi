@@ -1,5 +1,5 @@
 /**
- * VitaABS - HTTP Client implementation using libcurl
+ * VitaSuwayomi - HTTP Client implementation using libcurl
  */
 
 #include "utils/http_client.hpp"
@@ -10,10 +10,10 @@
 #include <cstdio>
 #include <cctype>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // User agent string
-static const char* USER_AGENT = "VitaABS/1.0.0 (PlayStation Vita)";
+static const char* USER_AGENT = "VitaSuwayomi/1.0.0 (PlayStation Vita)";
 
 // Curl write callback data
 struct WriteCallbackData {
@@ -440,4 +440,4 @@ bool HttpClient::downloadFile(const std::string& url, WriteCallback writeCallbac
     }
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

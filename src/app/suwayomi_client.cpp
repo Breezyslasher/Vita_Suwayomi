@@ -393,7 +393,7 @@ bool SuwayomiClient::connectToServer(const std::string& url) {
 }
 
 bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     if (!m_authUsername.empty()) {
@@ -401,7 +401,7 @@ bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
     }
 
     std::string url = m_serverUrl + "/api/v1/settings/about";
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch server info: {} ({})",
@@ -436,11 +436,11 @@ void SuwayomiClient::clearAuth() {
 // ============================================================================
 
 bool SuwayomiClient::fetchExtensionList(std::vector<Extension>& extensions) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/extension/list");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch extensions: {}", response.error);
@@ -458,28 +458,28 @@ bool SuwayomiClient::fetchExtensionList(std::vector<Extension>& extensions) {
 }
 
 bool SuwayomiClient::installExtension(const std::string& pkgName) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/extension/install/" + pkgName);
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::updateExtension(const std::string& pkgName) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/extension/update/" + pkgName);
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::uninstallExtension(const std::string& pkgName) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/extension/uninstall/" + pkgName);
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     return response.success && response.statusCode == 200;
 }
@@ -493,11 +493,11 @@ std::string SuwayomiClient::getExtensionIconUrl(const std::string& apkName) {
 // ============================================================================
 
 bool SuwayomiClient::fetchSourceList(std::vector<Source>& sources) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/source/list");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch sources: {}", response.error);
@@ -515,11 +515,11 @@ bool SuwayomiClient::fetchSourceList(std::vector<Source>& sources) {
 }
 
 bool SuwayomiClient::fetchSource(int64_t sourceId, Source& source) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/source/" + std::to_string(sourceId));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -530,11 +530,11 @@ bool SuwayomiClient::fetchSource(int64_t sourceId, Source& source) {
 }
 
 bool SuwayomiClient::fetchSourceFilters(int64_t sourceId, std::vector<SourceFilter>& filters) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/filters");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -556,11 +556,11 @@ bool SuwayomiClient::setSourceFilters(int64_t sourceId, const std::vector<Source
 
 bool SuwayomiClient::fetchPopularManga(int64_t sourceId, int page,
                                         std::vector<Manga>& manga, bool& hasNextPage) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/popular/" + std::to_string(page));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch popular manga: {}", response.error);
@@ -582,11 +582,11 @@ bool SuwayomiClient::fetchPopularManga(int64_t sourceId, int page,
 
 bool SuwayomiClient::fetchLatestManga(int64_t sourceId, int page,
                                        std::vector<Manga>& manga, bool& hasNextPage) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/latest/" + std::to_string(page));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch latest manga: {}", response.error);
@@ -607,13 +607,13 @@ bool SuwayomiClient::fetchLatestManga(int64_t sourceId, int page,
 
 bool SuwayomiClient::searchManga(int64_t sourceId, const std::string& query, int page,
                                   std::vector<Manga>& manga, bool& hasNextPage) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
-    std::string encodedQuery = vitaabs::HttpClient::urlEncode(query);
+    std::string encodedQuery = vitasuwayomi::HttpClient::urlEncode(query);
     std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/search?searchTerm=" +
                                    encodedQuery + "&pageNum=" + std::to_string(page));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to search manga: {}", response.error);
@@ -633,13 +633,13 @@ bool SuwayomiClient::searchManga(int64_t sourceId, const std::string& query, int
 }
 
 bool SuwayomiClient::quickSearchManga(int64_t sourceId, const std::string& query, std::vector<Manga>& manga) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/quick-search");
     std::string body = "{\"searchTerm\":\"" + query + "\"}";
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -659,11 +659,11 @@ bool SuwayomiClient::quickSearchManga(int64_t sourceId, const std::string& query
 // ============================================================================
 
 bool SuwayomiClient::fetchManga(int mangaId, Manga& manga) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch manga {}: {}", mangaId, response.error);
@@ -675,11 +675,11 @@ bool SuwayomiClient::fetchManga(int mangaId, Manga& manga) {
 }
 
 bool SuwayomiClient::fetchMangaFull(int mangaId, Manga& manga) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/full");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -690,11 +690,11 @@ bool SuwayomiClient::fetchMangaFull(int mangaId, Manga& manga) {
 }
 
 bool SuwayomiClient::refreshManga(int mangaId, Manga& manga) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "?onlineFetch=true");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -705,19 +705,19 @@ bool SuwayomiClient::refreshManga(int mangaId, Manga& manga) {
 }
 
 bool SuwayomiClient::addMangaToLibrary(int mangaId) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/library");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::removeMangaFromLibrary(int mangaId) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/library");
-    vitaabs::HttpResponse response = http.del(url);
+    vitasuwayomi::HttpResponse response = http.del(url);
 
     return response.success && response.statusCode == 200;
 }
@@ -731,11 +731,11 @@ std::string SuwayomiClient::getMangaThumbnailUrl(int mangaId) {
 // ============================================================================
 
 bool SuwayomiClient::fetchChapters(int mangaId, std::vector<Chapter>& chapters) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/chapters");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch chapters: {}", response.error);
@@ -753,12 +753,12 @@ bool SuwayomiClient::fetchChapters(int mangaId, std::vector<Chapter>& chapters) 
 }
 
 bool SuwayomiClient::fetchChapter(int mangaId, int chapterIndex, Chapter& chapter) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) +
                                    "/chapter/" + std::to_string(chapterIndex));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -769,7 +769,7 @@ bool SuwayomiClient::fetchChapter(int mangaId, int chapterIndex, Chapter& chapte
 }
 
 bool SuwayomiClient::updateChapter(int mangaId, int chapterIndex, bool read, bool bookmarked) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) +
@@ -778,13 +778,13 @@ bool SuwayomiClient::updateChapter(int mangaId, int chapterIndex, bool read, boo
     std::string body = "{\"read\":" + std::string(read ? "true" : "false") +
                        ",\"bookmarked\":" + std::string(bookmarked ? "true" : "false") + "}";
 
-    vitaabs::HttpRequest req;
+    vitasuwayomi::HttpRequest req;
     req.url = url;
     req.method = "PATCH";
     req.body = body;
     req.headers["Content-Type"] = "application/json";
 
-    vitaabs::HttpResponse response = http.request(req);
+    vitasuwayomi::HttpResponse response = http.request(req);
     return response.success && response.statusCode == 200;
 }
 
@@ -797,7 +797,7 @@ bool SuwayomiClient::markChapterUnread(int mangaId, int chapterIndex) {
 }
 
 bool SuwayomiClient::markChaptersRead(int mangaId, const std::vector<int>& chapterIndexes) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/chapter/batch");
@@ -810,12 +810,12 @@ bool SuwayomiClient::markChaptersRead(int mangaId, const std::vector<int>& chapt
 
     std::string body = "{\"chapterIndexes\":[" + indexList + "],\"change\":{\"read\":true}}";
 
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::markChaptersUnread(int mangaId, const std::vector<int>& chapterIndexes) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/chapter/batch");
@@ -828,12 +828,12 @@ bool SuwayomiClient::markChaptersUnread(int mangaId, const std::vector<int>& cha
 
     std::string body = "{\"chapterIndexes\":[" + indexList + "],\"change\":{\"read\":false}}";
 
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::updateChapterProgress(int mangaId, int chapterIndex, int lastPageRead) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) +
@@ -841,13 +841,13 @@ bool SuwayomiClient::updateChapterProgress(int mangaId, int chapterIndex, int la
 
     std::string body = "{\"lastPageRead\":" + std::to_string(lastPageRead) + "}";
 
-    vitaabs::HttpRequest req;
+    vitasuwayomi::HttpRequest req;
     req.url = url;
     req.method = "PATCH";
     req.body = body;
     req.headers["Content-Type"] = "application/json";
 
-    vitaabs::HttpResponse response = http.request(req);
+    vitasuwayomi::HttpResponse response = http.request(req);
     return response.success && response.statusCode == 200;
 }
 
@@ -856,12 +856,12 @@ bool SuwayomiClient::updateChapterProgress(int mangaId, int chapterIndex, int la
 // ============================================================================
 
 bool SuwayomiClient::fetchChapterPages(int mangaId, int chapterIndex, std::vector<Page>& pages) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) +
                                    "/chapter/" + std::to_string(chapterIndex));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch chapter pages: {}", response.error);
@@ -893,11 +893,11 @@ std::string SuwayomiClient::getPageImageUrl(int mangaId, int chapterIndex, int p
 // ============================================================================
 
 bool SuwayomiClient::fetchCategories(std::vector<Category>& categories) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/category");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch categories: {}", response.error);
@@ -914,45 +914,45 @@ bool SuwayomiClient::fetchCategories(std::vector<Category>& categories) {
 }
 
 bool SuwayomiClient::createCategory(const std::string& name) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/category");
     std::string body = "{\"name\":\"" + name + "\"}";
 
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::deleteCategory(int categoryId) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/category/" + std::to_string(categoryId));
-    vitaabs::HttpResponse response = http.del(url);
+    vitasuwayomi::HttpResponse response = http.del(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::updateCategory(int categoryId, const std::string& name, bool isDefault) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/category/" + std::to_string(categoryId));
     std::string body = "{\"name\":\"" + name + "\",\"default\":" +
                        std::string(isDefault ? "true" : "false") + "}";
 
-    vitaabs::HttpRequest req;
+    vitasuwayomi::HttpRequest req;
     req.url = url;
     req.method = "PATCH";
     req.body = body;
     req.headers["Content-Type"] = "application/json";
 
-    vitaabs::HttpResponse response = http.request(req);
+    vitasuwayomi::HttpResponse response = http.request(req);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::reorderCategories(const std::vector<int>& categoryIds) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/category/reorder");
@@ -965,42 +965,42 @@ bool SuwayomiClient::reorderCategories(const std::vector<int>& categoryIds) {
 
     std::string body = "{\"categoryIds\":[" + idList + "]}";
 
-    vitaabs::HttpRequest req;
+    vitasuwayomi::HttpRequest req;
     req.url = url;
     req.method = "PATCH";
     req.body = body;
     req.headers["Content-Type"] = "application/json";
 
-    vitaabs::HttpResponse response = http.request(req);
+    vitasuwayomi::HttpResponse response = http.request(req);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::addMangaToCategory(int mangaId, int categoryId) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) +
                                    "/category/" + std::to_string(categoryId));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::removeMangaFromCategory(int mangaId, int categoryId) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) +
                                    "/category/" + std::to_string(categoryId));
-    vitaabs::HttpResponse response = http.del(url);
+    vitasuwayomi::HttpResponse response = http.del(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::fetchCategoryManga(int categoryId, std::vector<Manga>& manga) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/category/" + std::to_string(categoryId));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -1029,32 +1029,32 @@ bool SuwayomiClient::fetchLibraryMangaByCategory(int categoryId, std::vector<Man
 }
 
 bool SuwayomiClient::triggerLibraryUpdate() {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/update/fetch");
-    vitaabs::HttpResponse response = http.post(url, "{}");
+    vitasuwayomi::HttpResponse response = http.post(url, "{}");
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::triggerLibraryUpdate(int categoryId) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/update/fetch");
     std::string body = "{\"categoryId\":" + std::to_string(categoryId) + "}";
 
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::fetchRecentUpdates(int page, std::vector<RecentUpdate>& updates) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/update/recentChapters/" + std::to_string(page));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::error("Failed to fetch recent updates: {}", response.error);
@@ -1091,27 +1091,27 @@ bool SuwayomiClient::fetchRecentUpdates(int page, std::vector<RecentUpdate>& upd
 // ============================================================================
 
 bool SuwayomiClient::queueChapterDownload(int mangaId, int chapterIndex) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/download/" + std::to_string(mangaId) +
                                    "/chapter/" + std::to_string(chapterIndex));
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::deleteChapterDownload(int mangaId, int chapterIndex) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/download/" + std::to_string(mangaId) +
                                    "/chapter/" + std::to_string(chapterIndex));
-    vitaabs::HttpResponse response = http.del(url);
+    vitasuwayomi::HttpResponse response = http.del(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::queueChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/download/batch");
@@ -1124,13 +1124,13 @@ bool SuwayomiClient::queueChapterDownloads(int mangaId, const std::vector<int>& 
     }
 
     std::string body = "{\"chapterIds\":[" + chapterList + "]}";
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::deleteChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/download/batch");
@@ -1143,7 +1143,7 @@ bool SuwayomiClient::deleteChapterDownloads(int mangaId, const std::vector<int>&
     }
 
     std::string body = "{\"chapterIds\":[" + chapterList + "]}";
-    vitaabs::HttpResponse response = http.del(url);
+    vitasuwayomi::HttpResponse response = http.del(url);
 
     return response.success && response.statusCode == 200;
 }
@@ -1156,46 +1156,46 @@ bool SuwayomiClient::fetchDownloadQueue(std::vector<DownloadQueueItem>& queue) {
 }
 
 bool SuwayomiClient::startDownloads() {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/downloads/start");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::stopDownloads() {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/downloads/stop");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::clearDownloadQueue() {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/downloads/clear");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::reorderDownload(int mangaId, int chapterIndex, int newPosition) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/download/" + std::to_string(mangaId) +
                                    "/chapter/" + std::to_string(chapterIndex) +
                                    "/reorder/" + std::to_string(newPosition));
 
-    vitaabs::HttpRequest req;
+    vitasuwayomi::HttpRequest req;
     req.url = url;
     req.method = "PATCH";
     req.headers["Content-Type"] = "application/json";
 
-    vitaabs::HttpResponse response = http.request(req);
+    vitasuwayomi::HttpResponse response = http.request(req);
     return response.success && response.statusCode == 200;
 }
 
@@ -1204,10 +1204,10 @@ bool SuwayomiClient::reorderDownload(int mangaId, int chapterIndex, int newPosit
 // ============================================================================
 
 bool SuwayomiClient::exportBackup(const std::string& savePath) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
 
     std::string url = buildApiUrl("/backup/export/file");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -1233,11 +1233,11 @@ bool SuwayomiClient::validateBackup(const std::string& filePath) {
 // ============================================================================
 
 bool SuwayomiClient::fetchTrackers(std::vector<Tracker>& trackers) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/track/list");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -1253,7 +1253,7 @@ bool SuwayomiClient::fetchTrackers(std::vector<Tracker>& trackers) {
 }
 
 bool SuwayomiClient::loginTracker(int trackerId, const std::string& username, const std::string& password) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/track/login");
@@ -1261,30 +1261,30 @@ bool SuwayomiClient::loginTracker(int trackerId, const std::string& username, co
                        ",\"username\":\"" + username + "\"" +
                        ",\"password\":\"" + password + "\"}";
 
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::logoutTracker(int trackerId) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/track/logout");
     std::string body = "{\"trackerId\":" + std::to_string(trackerId) + "}";
 
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::searchTracker(int trackerId, const std::string& query, std::vector<TrackRecord>& results) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/track/search");
     std::string body = "{\"trackerId\":" + std::to_string(trackerId) +
                        ",\"query\":\"" + query + "\"}";
 
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
 
     if (!response.success || response.statusCode != 200) {
         return false;
@@ -1300,7 +1300,7 @@ bool SuwayomiClient::searchTracker(int trackerId, const std::string& query, std:
 }
 
 bool SuwayomiClient::bindTracker(int mangaId, int trackerId, int remoteId) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/track/bind");
@@ -1308,12 +1308,12 @@ bool SuwayomiClient::bindTracker(int mangaId, int trackerId, int remoteId) {
                        ",\"trackerId\":" + std::to_string(trackerId) +
                        ",\"remoteId\":" + std::to_string(remoteId) + "}";
 
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::updateTracking(int mangaId, int trackerId, const TrackRecord& record) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/track/update");
@@ -1323,7 +1323,7 @@ bool SuwayomiClient::updateTracking(int mangaId, int trackerId, const TrackRecor
                        ",\"score\":" + std::to_string(record.score) +
                        ",\"status\":" + std::to_string(record.status) + "}";
 
-    vitaabs::HttpResponse response = http.post(url, body);
+    vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
 }
 
@@ -1338,11 +1338,11 @@ bool SuwayomiClient::fetchMangaTracking(int mangaId, std::vector<TrackRecord>& r
 // ============================================================================
 
 bool SuwayomiClient::fetchUpdateSummary(int& pendingUpdates, int& runningJobs, bool& isUpdating) {
-    vitaabs::HttpClient http;
+    vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
     std::string url = buildApiUrl("/update/summary");
-    vitaabs::HttpResponse response = http.get(url);
+    vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
         return false;

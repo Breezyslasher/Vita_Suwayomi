@@ -1,5 +1,5 @@
 /**
- * VitaABS - Recycling Grid
+ * VitaSuwayomi - Recycling Grid
  * Efficient grid view for displaying media items
  */
 
@@ -9,7 +9,7 @@
 #include "app/audiobookshelf_client.hpp"
 #include <functional>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class RecyclingGrid : public brls::ScrollingFrame {
 public:
@@ -32,4 +32,4 @@ private:
     int m_visibleRows = 3;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

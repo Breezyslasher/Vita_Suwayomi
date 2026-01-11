@@ -1,5 +1,5 @@
 /**
- * VitaABS - HTTP Client
+ * VitaSuwayomi - HTTP Client
  * Using libcurl for network requests
  */
 
@@ -9,7 +9,7 @@
 #include <map>
 #include <functional>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // HTTP response
 struct HttpResponse {
@@ -87,4 +87,4 @@ private:
     static size_t headerCallback(void* contents, size_t size, size_t nmemb, void* userp);
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

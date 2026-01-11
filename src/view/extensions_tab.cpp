@@ -165,7 +165,7 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     icon->setSize(brls::Size(40, 40));
     icon->setMarginRight(15);
     if (!ext.iconUrl.empty()) {
-        vitaabs::ImageLoader::loadAsync(ext.iconUrl, [icon](const std::string& path) {
+        vitasuwayomi::ImageLoader::loadAsync(ext.iconUrl, [icon](const std::string& path) {
             brls::sync([icon, path]() {
                 icon->setImageFromFile(path);
             });

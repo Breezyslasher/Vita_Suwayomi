@@ -1,5 +1,5 @@
 /**
- * VitaABS - Main Activity implementation
+ * VitaSuwayomi - Main Activity implementation
  */
 
 #include "activity/main_activity.hpp"
@@ -14,7 +14,7 @@
 
 #include <algorithm>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Cached library sections
 static std::vector<Library> s_cachedSections;
@@ -185,4 +185,4 @@ void MainActivity::onContentAvailable() {
     }
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

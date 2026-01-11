@@ -1,5 +1,5 @@
 /**
- * VitaABS - Progress Dialog
+ * VitaSuwayomi - Progress Dialog
  * Shows progress for operations like connecting, downloading
  */
 
@@ -10,7 +10,7 @@
 #include <string>
 #include <chrono>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class ProgressDialog : public brls::Box {
 public:
@@ -62,4 +62,4 @@ private:
     std::chrono::steady_clock::time_point m_lastSpeedUpdate;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

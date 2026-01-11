@@ -1,5 +1,5 @@
 /**
- * VitaABS - Audiobookshelf API Client implementation
+ * VitaSuwayomi - Audiobookshelf API Client implementation
  */
 
 #include "app/audiobookshelf_client.hpp"
@@ -11,7 +11,7 @@
 #include <ctime>
 #include <algorithm>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 AudiobookshelfClient& AudiobookshelfClient::getInstance() {
     static AudiobookshelfClient instance;
@@ -1510,7 +1510,7 @@ bool AudiobookshelfClient::startPlaybackSession(const std::string& itemId, Playb
     req.headers["Authorization"] = "Bearer " + m_authToken;
 
     // Request body with device info - force direct play for Vita
-    req.body = "{\"deviceInfo\":{\"clientName\":\"VitaABS\",\"clientVersion\":\"1.0.0\",\"deviceId\":\"vita-abs-client\"},\"forceDirectPlay\":true,\"forceTranscode\":false,\"supportedMimeTypes\":[\"audio/mpeg\",\"audio/mp4\",\"audio/x-m4a\",\"audio/aac\",\"audio/ogg\",\"audio/flac\"]}";
+    req.body = "{\"deviceInfo\":{\"clientName\":\"VitaSuwayomi\",\"clientVersion\":\"1.0.0\",\"deviceId\":\"vita-abs-client\"},\"forceDirectPlay\":true,\"forceTranscode\":false,\"supportedMimeTypes\":[\"audio/mpeg\",\"audio/mp4\",\"audio/x-m4a\",\"audio/aac\",\"audio/ogg\",\"audio/flac\"]}";
 
     HttpResponse resp = client.request(req);
 
@@ -2837,4 +2837,4 @@ bool AudiobookshelfClient::downloadAllNewEpisodes(const std::string& podcastId) 
     return downloadNewEpisodesToServer(podcastId, newEpisodes);
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

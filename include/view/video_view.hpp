@@ -1,5 +1,5 @@
 /**
- * VitaABS - Video View
+ * VitaSuwayomi - Video View
  * Custom view for rendering video frames from MPV player
  */
 
@@ -7,7 +7,7 @@
 
 #include <borealis.hpp>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 /**
  * VideoView - renders video frames from MPV player using NanoVG
@@ -29,4 +29,4 @@ private:
     bool m_videoVisible = false;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

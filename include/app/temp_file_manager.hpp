@@ -1,5 +1,5 @@
 /**
- * VitaABS - Temp File Manager
+ * VitaSuwayomi - Temp File Manager
  * Manages cached audio files for streaming playback
  */
 
@@ -10,7 +10,7 @@
 #include <ctime>
 #include <mutex>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Temp file info
 struct TempFileInfo {
@@ -98,4 +98,4 @@ private:
     bool m_initialized = false;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

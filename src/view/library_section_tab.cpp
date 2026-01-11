@@ -1,5 +1,5 @@
 /**
- * VitaABS - Library Section Tab implementation
+ * VitaSuwayomi - Library Section Tab implementation
  */
 
 #include "view/library_section_tab.hpp"
@@ -13,7 +13,7 @@
 #include <map>
 #include <tuple>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 LibrarySectionTab::LibrarySectionTab(const std::string& sectionKey, const std::string& title, const std::string& sectionType)
     : m_sectionKey(sectionKey), m_title(title), m_sectionType(sectionType) {
@@ -690,4 +690,4 @@ void LibrarySectionTab::checkAllNewEpisodes() {
     });
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

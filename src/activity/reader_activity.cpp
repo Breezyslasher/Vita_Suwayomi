@@ -106,7 +106,7 @@ void ReaderActivity::onContentAvailable() {
 void ReaderActivity::loadPages() {
     brls::Logger::debug("Loading pages for chapter {}", m_chapterIndex);
 
-    vitaabs::asyncTask<bool>([this]() {
+    vitasuwayomi::asyncTask<bool>([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         // Fetch chapter info and pages
@@ -172,7 +172,7 @@ void ReaderActivity::loadPage(int index) {
 
     // Load image
     if (pageImage) {
-        vitaabs::ImageLoader::loadAsync(imageUrl, [this, index](const std::string& imagePath) {
+        vitasuwayomi::ImageLoader::loadAsync(imageUrl, [this, index](const std::string& imagePath) {
             if (index == m_currentPage && pageImage) {
                 brls::sync([this, imagePath]() {
                     pageImage->setImageFromFile(imagePath);
@@ -202,7 +202,7 @@ void ReaderActivity::preloadAdjacentPages() {
     for (int idx : toPreload) {
         if (m_cachedImages.find(idx) == m_cachedImages.end()) {
             std::string url = m_pages[idx].imageUrl;
-            vitaabs::ImageLoader::loadAsync(url, [this, idx](const std::string& path) {
+            vitasuwayomi::ImageLoader::loadAsync(url, [this, idx](const std::string& path) {
                 m_cachedImages[idx] = path;
             });
         }
@@ -223,7 +223,7 @@ void ReaderActivity::updatePageDisplay() {
 
 void ReaderActivity::updateProgress() {
     // Save reading progress to server
-    vitaabs::asyncRun([this]() {
+    vitasuwayomi::asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         client.updateChapterProgress(m_mangaId, m_chapterIndex, m_currentPage);
     });
@@ -310,7 +310,7 @@ void ReaderActivity::previousChapter() {
 }
 
 void ReaderActivity::markChapterAsRead() {
-    vitaabs::asyncRun([this]() {
+    vitasuwayomi::asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         client.markChapterRead(m_mangaId, m_chapterIndex);
     });

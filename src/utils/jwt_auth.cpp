@@ -1,5 +1,5 @@
 /**
- * VitaABS - JWT Authentication implementation
+ * VitaSuwayomi - JWT Authentication implementation
  * Uses lightweight ED25519 implementation for Plex JWT auth
  */
 
@@ -242,7 +242,7 @@ void fe_tobytes(uint8_t* s, const fe h) {
 
 }  // anonymous namespace
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 bool Ed25519KeyPair::isValid() const {
     // Check if key has been initialized (not all zeros)
@@ -327,7 +327,7 @@ bool JwtAuth::generateKeyPair() {
 
 bool JwtAuth::loadKeyPair() {
 #ifdef __vita__
-    const char* keyPath = "ux0:data/VitaABS/keys/ed25519.key";
+    const char* keyPath = "ux0:data/VitaSuwayomi/keys/ed25519.key";
 
     SceUID fd = sceIoOpen(keyPath, SCE_O_RDONLY, 0);
     if (fd < 0) return false;
@@ -350,7 +350,7 @@ bool JwtAuth::loadKeyPair() {
     }
 #else
     // Desktop fallback
-    std::ifstream file("vitaabs_ed25519.key", std::ios::binary);
+    std::ifstream file("vitasuwayomi_ed25519.key", std::ios::binary);
     if (!file) return false;
 
     file.read((char*)m_keyPair.privateKey, ED25519_PRIVATE_KEY_SIZE);
@@ -367,9 +367,9 @@ bool JwtAuth::loadKeyPair() {
 bool JwtAuth::saveKeyPair() {
 #ifdef __vita__
     // Create directory
-    sceIoMkdir("ux0:data/VitaABS/keys", 0777);
+    sceIoMkdir("ux0:data/VitaSuwayomi/keys", 0777);
 
-    const char* keyPath = "ux0:data/VitaABS/keys/ed25519.key";
+    const char* keyPath = "ux0:data/VitaSuwayomi/keys/ed25519.key";
     SceUID fd = sceIoOpen(keyPath, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0600);
     if (fd < 0) return false;
 
@@ -377,7 +377,7 @@ bool JwtAuth::saveKeyPair() {
     sceIoWrite(fd, m_keyPair.keyId.c_str(), m_keyPair.keyId.length());
     sceIoClose(fd);
 #else
-    std::ofstream file("vitaabs_ed25519.key", std::ios::binary);
+    std::ofstream file("vitasuwayomi_ed25519.key", std::ios::binary);
     if (!file) return false;
 
     file.write((char*)m_keyPair.privateKey, ED25519_PRIVATE_KEY_SIZE);
@@ -511,7 +511,7 @@ std::string JwtAuth::generateKeyId() const {
 
     uint64_t id = dist(gen);
     char buf[32];
-    snprintf(buf, sizeof(buf), "vitaabs-%016llx", (unsigned long long)id);
+    snprintf(buf, sizeof(buf), "vitasuwayomi-%016llx", (unsigned long long)id);
     return std::string(buf);
 }
 
@@ -535,4 +535,4 @@ int64_t JwtAuth::getCurrentTimestamp() const {
 #endif
 }
 
-}  // namespace vitaabs
+}  // namespace vitasuwayomi

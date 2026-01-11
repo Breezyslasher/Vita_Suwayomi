@@ -1,5 +1,5 @@
 /**
- * VitaABS - Media Item Cell implementation
+ * VitaSuwayomi - Media Item Cell implementation
  */
 
 #include "view/media_item_cell.hpp"
@@ -11,7 +11,7 @@
 #include <psp2/io/fcntl.h>
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Helper to load local cover image on Vita
 static void loadLocalCoverToImage(brls::Image* image, const std::string& localPath) {
@@ -263,4 +263,4 @@ void MediaItemCell::updateFocusInfo(bool focused) {
     }
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

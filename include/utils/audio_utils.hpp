@@ -1,5 +1,5 @@
 /**
- * VitaABS - Audio Utilities
+ * VitaSuwayomi - Audio Utilities
  * FFmpeg-based audio processing functions
  */
 
@@ -9,7 +9,7 @@
 #include <vector>
 #include <functional>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 /**
  * Concatenate multiple audio files into a single file using FFmpeg
@@ -24,4 +24,4 @@ bool concatenateAudioFiles(const std::vector<std::string>& inputFiles,
                            const std::string& outputPath,
                            std::function<void(int, int)> progressCallback = nullptr);
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

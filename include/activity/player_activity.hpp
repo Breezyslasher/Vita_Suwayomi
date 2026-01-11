@@ -1,5 +1,5 @@
 /**
- * VitaABS - Player Activity
+ * VitaSuwayomi - Player Activity
  * Audio playback screen with controls
  */
 
@@ -10,9 +10,9 @@
 #include <string>
 
 // Forward declaration
-namespace vitaabs { class VideoView; }
+namespace vitasuwayomi { class VideoView; }
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class PlayerActivity : public brls::Activity {
 public:
@@ -97,4 +97,4 @@ private:
     BRLS_BIND(VideoView, videoView, "player/video");
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

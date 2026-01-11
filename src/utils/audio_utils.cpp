@@ -1,5 +1,5 @@
 /**
- * VitaABS - Audio Utilities Implementation
+ * VitaSuwayomi - Audio Utilities Implementation
  */
 
 #include "utils/audio_utils.hpp"
@@ -19,7 +19,7 @@ extern "C" {
 #include <libavutil/timestamp.h>
 }
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 bool concatenateAudioFiles(const std::vector<std::string>& inputFiles,
                            const std::string& outputPath,
@@ -384,4 +384,4 @@ bool concatenateAudioFiles(const std::vector<std::string>& inputFiles,
     return filesProcessed > 0;
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

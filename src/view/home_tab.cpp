@@ -1,5 +1,5 @@
 /**
- * VitaABS - Home Tab implementation
+ * VitaSuwayomi - Home Tab implementation
  */
 
 #include "view/home_tab.hpp"
@@ -8,7 +8,7 @@
 #include "app/application.hpp"
 #include "utils/async.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 HomeTab::HomeTab() {
     // Create alive flag for async callback safety
@@ -235,4 +235,4 @@ void HomeTab::onItemSelected(const MediaItem& item) {
     brls::Application::pushActivity(new brls::Activity(detailView));
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

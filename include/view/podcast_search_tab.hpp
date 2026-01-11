@@ -1,5 +1,5 @@
 /**
- * VitaABS - Podcast Search Tab
+ * VitaSuwayomi - Podcast Search Tab
  * Search iTunes for podcasts and add them to the server
  */
 
@@ -9,7 +9,7 @@
 #include "app/audiobookshelf_client.hpp"
 #include "view/recycling_grid.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class PodcastSearchTab : public brls::Box {
 public:
@@ -33,4 +33,4 @@ private:
     std::vector<PodcastSearchResult> m_searchResults;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

@@ -1,5 +1,5 @@
 /**
- * VitaABS - Application implementation
+ * VitaSuwayomi - Application implementation
  */
 
 #include "app/application.hpp"
@@ -19,9 +19,9 @@
 #include <psp2/io/stat.h>
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
-static const char* SETTINGS_PATH = "ux0:data/VitaABS/settings.json";
+static const char* SETTINGS_PATH = "ux0:data/VitaSuwayomi/settings.json";
 
 Application& Application::getInstance() {
     static Application instance;
@@ -30,11 +30,11 @@ Application& Application::getInstance() {
 
 bool Application::init() {
     brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
-    brls::Logger::info("VitaABS {} initializing...", VITA_ABS_VERSION);
+    brls::Logger::info("VitaSuwayomi {} initializing...", VITA_ABS_VERSION);
 
 #ifdef __vita__
     // Create data directory
-    int ret = sceIoMkdir("ux0:data/VitaABS", 0777);
+    int ret = sceIoMkdir("ux0:data/VitaSuwayomi", 0777);
     brls::Logger::debug("sceIoMkdir result: {:#x}", ret);
 #endif
 
@@ -102,7 +102,7 @@ void Application::run() {
 void Application::shutdown() {
     saveSettings();
     m_initialized = false;
-    brls::Logger::info("VitaABS shutting down");
+    brls::Logger::info("VitaSuwayomi shutting down");
 }
 
 void Application::pushLoginActivity() {
@@ -507,4 +507,4 @@ void Application::clearBackgroundDownloadProgress() {
     m_bgDownloadProgress = BackgroundDownloadProgress();
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

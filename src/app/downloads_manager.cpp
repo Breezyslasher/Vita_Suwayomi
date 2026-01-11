@@ -1,5 +1,5 @@
 /**
- * VitaABS - Downloads Manager Implementation
+ * VitaSuwayomi - Downloads Manager Implementation
  * Handles offline media downloads and progress sync
  */
 
@@ -30,7 +30,7 @@ extern "C" {
 #include <libavutil/timestamp.h>
 }
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Helper function to concatenate audio files using FFmpeg
 // Uses stream copy for fast concatenation without re-encoding
@@ -351,8 +351,8 @@ static bool concatenateAudioFiles(const std::vector<std::string>& inputFiles,
 
 // Downloads directory on Vita
 #ifdef __vita__
-static const char* DOWNLOADS_DIR = "ux0:data/VitaABS/downloads";
-static const char* STATE_FILE = "ux0:data/VitaABS/downloads/state.json";
+static const char* DOWNLOADS_DIR = "ux0:data/VitaSuwayomi/downloads";
+static const char* STATE_FILE = "ux0:data/VitaSuwayomi/downloads/state.json";
 #else
 static const char* DOWNLOADS_DIR = "./downloads";
 static const char* STATE_FILE = "./downloads/state.json";
@@ -370,7 +370,7 @@ bool DownloadsManager::init() {
 
 #ifdef __vita__
     // Create downloads directory if it doesn't exist
-    sceIoMkdir("ux0:data/VitaABS", 0777);
+    sceIoMkdir("ux0:data/VitaSuwayomi", 0777);
     sceIoMkdir(DOWNLOADS_DIR, 0777);
 #else
     // Create directory on other platforms
@@ -1610,4 +1610,4 @@ bool DownloadsManager::registerCompletedDownload(const std::string& itemId, cons
     return true;
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

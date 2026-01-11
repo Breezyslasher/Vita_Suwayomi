@@ -1,5 +1,5 @@
 /**
- * VitaABS - Temp File Manager implementation
+ * VitaSuwayomi - Temp File Manager implementation
  */
 
 #include "app/temp_file_manager.hpp"
@@ -19,10 +19,10 @@
 #include <unistd.h>
 #endif
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
-static const char* TEMP_DIR = "ux0:data/VitaABS/temp";
-static const char* STATE_FILE = "ux0:data/VitaABS/temp_state.txt";
+static const char* TEMP_DIR = "ux0:data/VitaSuwayomi/temp";
+static const char* STATE_FILE = "ux0:data/VitaSuwayomi/temp_state.txt";
 
 TempFileManager& TempFileManager::getInstance() {
     static TempFileManager instance;
@@ -36,10 +36,10 @@ bool TempFileManager::init() {
 
 #ifdef __vita__
     // Create directories if needed
-    sceIoMkdir("ux0:data/VitaABS", 0777);
+    sceIoMkdir("ux0:data/VitaSuwayomi", 0777);
     sceIoMkdir(TEMP_DIR, 0777);
 #else
-    mkdir("ux0:data/VitaABS", 0777);
+    mkdir("ux0:data/VitaSuwayomi", 0777);
     mkdir(TEMP_DIR, 0777);
 #endif
 
@@ -375,4 +375,4 @@ void TempFileManager::loadState() {
     file.close();
 }
 
-} // namespace vitaabs
+} // namespace vitasuwayomi
