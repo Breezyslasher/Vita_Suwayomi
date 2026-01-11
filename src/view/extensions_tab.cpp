@@ -108,18 +108,18 @@ void ExtensionsTab::showUpdates() {
 }
 
 void ExtensionsTab::updateButtonStyles() {
-    // Update button styles based on current view
+    // Update button text to show active state
     if (m_installedBtn) {
-        m_installedBtn->setStyle(m_currentView == ViewMode::INSTALLED ?
-            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
+        std::string text = m_currentView == ViewMode::INSTALLED ? "> Installed" : "Installed";
+        m_installedBtn->setText(text);
     }
     if (m_availableBtn) {
-        m_availableBtn->setStyle(m_currentView == ViewMode::AVAILABLE ?
-            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
+        std::string text = m_currentView == ViewMode::AVAILABLE ? "> Available" : "Available";
+        m_availableBtn->setText(text);
     }
     if (m_updatesBtn) {
-        m_updatesBtn->setStyle(m_currentView == ViewMode::UPDATES ?
-            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
+        std::string text = m_currentView == ViewMode::UPDATES ? "> Updates" : "Updates";
+        m_updatesBtn->setText(text);
     }
 }
 
@@ -191,24 +191,23 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
 
     // Right side: action button
     auto* actionBtn = new brls::Button();
-    actionBtn->setStyle(brls::ButtonStyle::BORDERED);
 
     if (ext.installed) {
         if (ext.hasUpdate) {
-            actionBtn->addView(new brls::Label("Update"));
+            actionBtn->setText("Update");
             actionBtn->registerClickAction([this, ext](brls::View*) {
                 updateExtension(ext);
                 return true;
             });
         } else {
-            actionBtn->addView(new brls::Label("Uninstall"));
+            actionBtn->setText("Uninstall");
             actionBtn->registerClickAction([this, ext](brls::View*) {
                 uninstallExtension(ext);
                 return true;
             });
         }
     } else {
-        actionBtn->addView(new brls::Label("Install"));
+        actionBtn->setText("Install");
         actionBtn->registerClickAction([this, ext](brls::View*) {
             installExtension(ext);
             return true;
