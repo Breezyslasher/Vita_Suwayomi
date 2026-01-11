@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<brls:Box
+    id="player/container"
+    width="100%"
+    height="100%"
+    axis="column"
+    justifyContent="center"
+    alignItems="center"
+    paddingTop="30"
+    paddingBottom="20"
+    paddingLeft="40"
+    paddingRight="40"
+    backgroundColor="#1a1a2e">
+
+    <!-- Cover Art -->
+    <brls:Image
+        id="player/cover"
+        width="280"
+        height="280"
+        scalingType="fit"
+        cornerRadius="8"
+        marginBottom="20"
+        backgroundColor="#2d2d44"/>
+
+    <!-- Title -->
+    <brls:Label
+        id="player/title"
+        text="Now Playing"
+        fontSize="22"
+        textColor="#ffffff"
+        horizontalAlign="center"
+        marginBottom="5"/>
+
+    <!-- Author/Subtitle -->
+    <brls:Label
+        id="player/author"
+        text=""
+        fontSize="16"
+        textColor="#a0a0a0"
+        horizontalAlign="center"
+        marginBottom="25"/>
+
+    <!-- Progress Section -->
+    <brls:Box
+        width="100%"
+        axis="column"
+        alignItems="stretch"
+        marginBottom="15">
+
+        <!-- Progress slider -->
+        <brls:Slider
+            id="player/progress"
+            width="100%"
+            height="30"
+            marginBottom="8"/>
+
+        <!-- Time display row -->
+        <brls:Box
+            width="100%"
+            axis="row"
+            justifyContent="spaceBetween"
+            alignItems="center">
+
+            <!-- Elapsed time -->
+            <brls:Label
+                id="player/timeElapsed"
+                text="0:00"
+                fontSize="14"
+                textColor="#a0a0a0"/>
+
+            <!-- Remaining time -->
+            <brls:Label
+                id="player/timeRemaining"
+                text="-0:00"
+                fontSize="14"
+                textColor="#a0a0a0"/>
+
+        </brls:Box>
+
+    </brls:Box>
+
+    <!-- Playback Controls -->
+    <brls:Box
+        id="player/controlButtons"
+        width="100%"
+        axis="row"
+        justifyContent="center"
+        alignItems="center"
+        marginTop="10"
+        marginBottom="15">
+
+        <!-- Rewind button -->
+        <brls:Button
+            id="player/btnRewind"
+            style="borderless"
+            width="90"
+            height="70"
+            marginRight="25">
+            <brls:Label
+                id="player/rewindLabel"
+                text="-30"
+                fontSize="18"
+                textColor="#ffffff"
+                horizontalAlign="center"
+                width="90"/>
+        </brls:Button>
+
+        <!-- Play/Pause button -->
+        <brls:Button
+            id="player/btnPlayPause"
+            style="borderless"
+            width="80"
+            height="80"
+            cornerRadius="40"
+            backgroundColor="#4a4a6a">
+            <brls:Label
+                id="player/playPauseIcon"
+                text="||"
+                fontSize="24"
+                textColor="#ffffff"
+                horizontalAlign="center"/>
+        </brls:Button>
+
+        <!-- Forward button -->
+        <brls:Button
+            id="player/btnForward"
+            style="borderless"
+            width="100"
+            height="70"
+            marginLeft="20">
+            <brls:Label
+                id="player/forwardLabel"
+                text="+30"
+                fontSize="18"
+                textColor="#ffffff"
+                horizontalAlign="center"
+                width="100"
+                singleLine="true"/>
+        </brls:Button>
+
+    </brls:Box>
+
+    <!-- Playback Speed Control -->
+    <brls:Box
+        width="100%"
+        axis="row"
+        justifyContent="center"
+        alignItems="center"
+        marginTop="5"
+        marginBottom="10">
+
+        <brls:Button
+            id="player/btnSpeed"
+            style="borderless"
+            width="100"
+            height="40">
+            <brls:Label
+                id="player/speedLabel"
+                text="1.0x"
+                fontSize="16"
+                textColor="#a0a0a0"
+                horizontalAlign="center"/>
+        </brls:Button>
+
+    </brls:Box>
+
+    <!-- Chapter info (optional) -->
+    <brls:Label
+        id="player/chapterInfo"
+        text=""
+        fontSize="14"
+        textColor="#707070"
+        horizontalAlign="center"
+        marginTop="5"/>
+
+    <!-- Hidden elements for compatibility -->
+    <brls:Image
+        id="player/photo"
+        width="0"
+        height="0"
+        visibility="gone"/>
+    <vitaabs:VideoView
+        id="player/video"
+        width="0"
+        height="0"
+        visibility="gone"/>
+    <brls:Box
+        id="player/controls"
+        width="0"
+        height="0"
+        visibility="gone"/>
+    <brls:Label
+        id="player/time"
+        text=""
+        visibility="gone"/>
+
+</brls:Box>
