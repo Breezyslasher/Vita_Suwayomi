@@ -107,7 +107,7 @@ LibrarySectionTab::LibrarySectionTab(int categoryId, const std::string& category
     // Content grid
     m_contentGrid = new RecyclingGrid();
     m_contentGrid->setGrow(1.0f);
-    m_contentGrid->setOnMangaSelected([this](const Manga& manga) {
+    m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
     this->addView(m_contentGrid);
@@ -168,7 +168,7 @@ void LibrarySectionTab::loadContent() {
                 m_mangaList = manga;
 
                 if (m_viewMode == LibraryViewMode::ALL_MANGA) {
-                    m_contentGrid->setMangaDataSource(m_mangaList);
+                    m_contentGrid->setDataSource(m_mangaList);
                 }
 
                 m_loaded = true;
@@ -235,7 +235,7 @@ void LibrarySectionTab::loadCategories() {
 void LibrarySectionTab::showAllManga() {
     m_viewMode = LibraryViewMode::ALL_MANGA;
     m_titleLabel->setText(m_categoryName);
-    m_contentGrid->setMangaDataSource(m_mangaList);
+    m_contentGrid->setDataSource(m_mangaList);
     updateViewModeButtons();
 }
 
@@ -267,7 +267,7 @@ void LibrarySectionTab::showByCategory(int categoryId) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
-                m_contentGrid->setMangaDataSource(manga);
+                m_contentGrid->setDataSource(manga);
                 updateViewModeButtons();
             });
         } else {
@@ -318,7 +318,7 @@ void LibrarySectionTab::showDownloaded() {
         }
     }
 
-    m_contentGrid->setMangaDataSource(downloadedManga);
+    m_contentGrid->setDataSource(downloadedManga);
     updateViewModeButtons();
 }
 
@@ -340,7 +340,7 @@ void LibrarySectionTab::showUnread() {
                   return a.unreadCount > b.unreadCount;
               });
 
-    m_contentGrid->setMangaDataSource(unreadManga);
+    m_contentGrid->setDataSource(unreadManga);
     updateViewModeButtons();
 }
 
@@ -362,7 +362,7 @@ void LibrarySectionTab::showReading() {
                   return a.lastChapterRead > b.lastChapterRead;
               });
 
-    m_contentGrid->setMangaDataSource(readingManga);
+    m_contentGrid->setDataSource(readingManga);
     updateViewModeButtons();
 }
 

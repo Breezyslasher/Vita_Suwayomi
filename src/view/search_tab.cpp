@@ -109,7 +109,7 @@ SearchTab::SearchTab() {
     // Content grid
     m_contentGrid = new RecyclingGrid();
     m_contentGrid->setGrow(1.0f);
-    m_contentGrid->setOnMangaSelected([this](const Manga& manga) {
+    m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
     this->addView(m_contentGrid);
@@ -196,7 +196,7 @@ void SearchTab::showSources() {
 
     // Replace grid content with source list
     // For now just clear the grid since we're showing sources as buttons
-    m_contentGrid->setMangaDataSource(m_mangaList);  // Empty list
+    m_contentGrid->setDataSource(m_mangaList);  // Empty list
 }
 
 void SearchTab::showSourceBrowser(const Source& source) {
@@ -233,7 +233,7 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
             brls::sync([this, manga, hasNextPage]() {
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
-                m_contentGrid->setMangaDataSource(m_mangaList);
+                m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
             });
         } else {
@@ -261,7 +261,7 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
             brls::sync([this, manga, hasNextPage]() {
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
-                m_contentGrid->setMangaDataSource(m_mangaList);
+                m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
             });
         } else {
@@ -277,7 +277,7 @@ void SearchTab::performSearch(const std::string& query) {
     if (query.empty()) {
         m_resultsLabel->setText("");
         m_mangaList.clear();
-        m_contentGrid->setMangaDataSource(m_mangaList);
+        m_contentGrid->setDataSource(m_mangaList);
         return;
     }
 
@@ -313,7 +313,7 @@ void SearchTab::performSearch(const std::string& query) {
 
         brls::sync([this, allResults]() {
             m_mangaList = allResults;
-            m_contentGrid->setMangaDataSource(m_mangaList);
+            m_contentGrid->setDataSource(m_mangaList);
             m_resultsLabel->setText(std::to_string(allResults.size()) + " results");
         });
     });
@@ -336,7 +336,7 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
             brls::sync([this, manga, hasNextPage]() {
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
-                m_contentGrid->setMangaDataSource(m_mangaList);
+                m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " results");
             });
         } else {
@@ -388,7 +388,7 @@ void SearchTab::loadNextPage() {
                     m_mangaList.push_back(m);
                 }
                 m_hasNextPage = hasNextPage;
-                m_contentGrid->setMangaDataSource(m_mangaList);
+                m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(m_mangaList.size()) + " manga");
             });
         }
