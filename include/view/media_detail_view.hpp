@@ -1,86 +1,96 @@
 /**
- * VitaABS - Media Detail View
- * Shows detailed information about a media item
+ * VitaSuwayomi - Manga Detail View
+ * Shows detailed information about a manga including chapters list
  */
 
 #pragma once
 
 #include <borealis.hpp>
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
-class MediaDetailView : public brls::Box {
+class MangaDetailView : public brls::Box {
 public:
-    MediaDetailView(const MediaItem& item);
+    MangaDetailView(const Manga& manga);
 
     static brls::View* create();
 
+    void refresh();
+
 private:
     void loadDetails();
-    void loadChildren();
-    void loadMusicCategories();
-    void loadLocalCover(const std::string& localPath);
-    void onPlay(bool resume = false);
-    void startDownloadAndPlay(const std::string& itemId, const std::string& episodeId,
-                              float startTime = -1.0f, bool downloadOnly = false);
-    void startDownloadOnly(const std::string& itemId, const std::string& episodeId);
-    void batchDownloadEpisodes(const std::vector<MediaItem>& episodes);
-    void onDownload();
-    void onDeleteDownload();
+    void loadChapters();
+    void loadCover();
+    void onRead(int chapterIndex = -1);  // -1 means continue from last read
+    void onAddToLibrary();
+    void onRemoveFromLibrary();
+    void onDownloadChapters();
+    void onDeleteDownloads();
     void showDownloadOptions();
-    void downloadAll();
-    void downloadUnwatched(int maxCount = -1);
-    void deleteAllDownloadedEpisodes();
-    void showDeleteEpisodesDialog(const std::vector<std::pair<std::string, std::string>>& episodes,
-                                   const std::string& podcastId,
-                                   const std::string& podcastTitle);
-    bool areAllEpisodesDownloaded();
-    bool hasAnyDownloadedEpisodes();
+    void showCategoryDialog();
 
-    // Podcast episode management
-    void findNewEpisodes();
-    void showNewEpisodesDialog(const std::vector<MediaItem>& episodes,
-                               const std::string& podcastId,
-                               const std::string& podcastTitle);
-    void downloadNewEpisodesToServer(const std::string& podcastId,
-                                      const std::vector<MediaItem>& episodes);
+    // Chapter actions
+    void markAllRead();
+    void markAllUnread();
+    void downloadAllChapters();
+    void downloadUnreadChapters();
+    void deleteAllDownloads();
+    void showChapterMenu(const Chapter& chapter);
 
-    // Chapter display for audiobooks
-    void populateChapters();
+    // Chapter list display
+    void populateChaptersList();
+    void onChapterSelected(const Chapter& chapter);
+    void markChapterRead(const Chapter& chapter);
+    void downloadChapter(const Chapter& chapter);
+    void deleteChapterDownload(const Chapter& chapter);
 
-    brls::HScrollingFrame* createMediaRow(const std::string& title, brls::Box** contentOut);
+    // Tracking
+    void showTrackingDialog();
+    void updateTracking();
 
-    MediaItem m_item;
-    std::vector<MediaItem> m_children;
+    Manga m_manga;
+    std::vector<Chapter> m_chapters;
+    std::vector<Category> m_categories;
+    std::vector<TrackRecord> m_trackRecords;
 
     // Main layout
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_mainContent = nullptr;
 
+    // Header info
     brls::Label* m_titleLabel = nullptr;
-    brls::Label* m_yearLabel = nullptr;
-    brls::Label* m_ratingLabel = nullptr;
-    brls::Label* m_durationLabel = nullptr;
-    brls::Label* m_summaryLabel = nullptr;
-    brls::Image* m_posterImage = nullptr;
-    brls::Button* m_playButton = nullptr;
-    brls::Button* m_downloadButton = nullptr;
-    brls::Button* m_deleteButton = nullptr;        // Delete download button
-    brls::Button* m_findEpisodesButton = nullptr;  // Find New Episodes button for podcasts
-    brls::Box* m_childrenBox = nullptr;
+    brls::Label* m_authorLabel = nullptr;
+    brls::Label* m_artistLabel = nullptr;
+    brls::Label* m_statusLabel = nullptr;
+    brls::Label* m_sourceLabel = nullptr;
+    brls::Label* m_chapterCountLabel = nullptr;
+    brls::Label* m_descriptionLabel = nullptr;
+    brls::Image* m_coverImage = nullptr;
 
-    // Chapters list for audiobooks
+    // Genre tags
+    brls::Box* m_genreBox = nullptr;
+
+    // Action buttons
+    brls::Button* m_readButton = nullptr;
+    brls::Button* m_libraryButton = nullptr;
+    brls::Button* m_downloadButton = nullptr;
+    brls::Button* m_trackingButton = nullptr;
+
+    // Chapters list
     brls::ScrollingFrame* m_chaptersScroll = nullptr;
     brls::Box* m_chaptersBox = nullptr;
+    brls::Label* m_chaptersLabel = nullptr;
 
-    // Music category rows for artists
-    brls::Box* m_musicCategoriesBox = nullptr;
-    brls::Box* m_albumsContent = nullptr;
-    brls::Box* m_singlesContent = nullptr;
-    brls::Box* m_epsContent = nullptr;
-    brls::Box* m_compilationsContent = nullptr;
-    brls::Box* m_soundtracksContent = nullptr;
+    // Chapter sort/filter
+    brls::Button* m_sortBtn = nullptr;
+    brls::Button* m_filterBtn = nullptr;
+    bool m_sortDescending = true;  // Default: newest first
+    bool m_filterDownloaded = false;
+    bool m_filterUnread = false;
 };
 
-} // namespace vitaabs
+// Alias for backward compatibility
+using MediaDetailView = MangaDetailView;
+
+} // namespace vitasuwayomi

@@ -1,69 +1,174 @@
 {
     "app": {
-        "name": "VitaPlex",
-        "version": "2.0.0"
+        "name": "VitaSuwayomi",
+        "version": "1.0.0"
     },
     "login": {
-        "title": "VitaPlex",
-        "server": "Server URL",
-        "username": "Username",
-        "password": "Password",
-        "login": "Login",
-        "pin_login": "Login with PIN",
-        "enter_server": "Enter your Plex server URL",
-        "enter_credentials": "Enter your Plex credentials",
-        "go_to_plex": "Go to plex.tv/link and enter the PIN",
-        "logging_in": "Logging in...",
-        "success": "Login successful!",
-        "failed": "Login failed",
-        "pin_expired": "PIN expired - try again"
+        "title": "VitaSuwayomi",
+        "server": "Suwayomi Server URL",
+        "username": "Username (optional)",
+        "password": "Password (optional)",
+        "connect": "Connect",
+        "test_connection": "Test Connection",
+        "enter_server": "Enter your Suwayomi server URL (e.g., http://192.168.1.100:4567)",
+        "connecting": "Connecting...",
+        "success": "Connected successfully!",
+        "failed": "Connection failed",
+        "server_not_found": "Server not found"
     },
     "home": {
         "title": "Home",
-        "continue_watching": "Continue Watching",
-        "recently_added": "Recently Added",
-        "on_deck": "On Deck"
+        "continue_reading": "Continue Reading",
+        "recent_updates": "Recent Updates",
+        "library_updates": "Library Updates",
+        "no_updates": "No recent updates"
     },
     "library": {
         "title": "Library",
-        "movies": "Movies",
-        "shows": "TV Shows",
-        "music": "Music",
-        "photos": "Photos",
-        "empty": "No items found"
+        "all_manga": "All Manga",
+        "by_category": "Categories",
+        "unread": "Unread",
+        "downloaded": "Downloaded",
+        "reading": "Currently Reading",
+        "empty": "Your library is empty",
+        "add_manga": "Browse sources to add manga",
+        "update_library": "Update Library"
+    },
+    "browse": {
+        "title": "Browse",
+        "sources": "Sources",
+        "popular": "Popular",
+        "latest": "Latest Updates",
+        "search": "Search",
+        "no_sources": "No sources installed",
+        "install_extensions": "Install extensions in Settings"
     },
     "search": {
         "title": "Search",
-        "placeholder": "Tap to search...",
+        "placeholder": "Search manga...",
         "results": "Found {count} results",
-        "no_results": "No results found"
+        "no_results": "No results found",
+        "search_source": "Search in {source}"
+    },
+    "manga": {
+        "chapters": "Chapters",
+        "chapter": "Chapter {number}",
+        "author": "Author",
+        "artist": "Artist",
+        "status": "Status",
+        "source": "Source",
+        "genres": "Genres",
+        "description": "Description",
+        "add_to_library": "Add to Library",
+        "remove_from_library": "Remove from Library",
+        "in_library": "In Library",
+        "read": "Read",
+        "continue_reading": "Continue",
+        "start_reading": "Start Reading",
+        "download": "Download",
+        "download_all": "Download All",
+        "download_unread": "Download Unread",
+        "mark_read": "Mark as Read",
+        "mark_unread": "Mark as Unread",
+        "tracking": "Tracking"
+    },
+    "chapter": {
+        "chapter": "Chapter",
+        "read": "Read",
+        "unread": "Unread",
+        "downloaded": "Downloaded",
+        "download": "Download",
+        "delete_download": "Delete Download",
+        "pages": "{count} pages"
+    },
+    "reader": {
+        "page": "Page {current}/{total}",
+        "chapter_complete": "Chapter Complete",
+        "next_chapter": "Next Chapter",
+        "prev_chapter": "Previous Chapter",
+        "no_next": "No next chapter",
+        "no_prev": "No previous chapter",
+        "settings": "Reader Settings"
     },
     "settings": {
         "title": "Settings",
-        "account": "Account",
-        "user": "User",
         "server": "Server",
+        "server_url": "Server URL",
+        "server_version": "Server Version",
+        "disconnect": "Disconnect",
+        "disconnect_confirm": "Disconnect from server?",
+        "ui": "User Interface",
+        "theme": "Theme",
+        "reader": "Reader",
+        "reading_mode": "Reading Mode",
+        "ltr": "Left to Right",
+        "rtl": "Right to Left (Manga)",
+        "vertical": "Vertical",
+        "webtoon": "Webtoon (Continuous)",
+        "page_scale": "Page Scale",
+        "fit_screen": "Fit Screen",
+        "fit_width": "Fit Width",
+        "fit_height": "Fit Height",
+        "original": "Original Size",
+        "library": "Library",
+        "categories": "Manage Categories",
+        "update_on_start": "Update on App Start",
+        "downloads": "Downloads",
+        "download_to_server": "Download on Server",
+        "auto_download": "Auto-download New Chapters",
+        "wifi_only": "Download on WiFi Only",
+        "clear_downloads": "Clear Local Downloads",
+        "extensions": "Extensions",
+        "manage_extensions": "Manage Extensions",
+        "installed_count": "{count} installed",
+        "tracking": "Tracking",
         "about": "About",
         "version": "Version",
+        "credits": "A Suwayomi client for PS Vita"
+    },
+    "extensions": {
+        "title": "Extensions",
+        "installed": "Installed",
+        "available": "Available",
+        "updates": "Updates Available",
+        "install": "Install",
+        "update": "Update",
+        "uninstall": "Uninstall"
+    },
+    "categories": {
+        "title": "Categories",
+        "default": "Default",
+        "add": "Add Category",
+        "edit": "Edit",
+        "delete": "Delete",
+        "empty": "No categories"
+    },
+    "downloads": {
+        "title": "Downloads",
+        "queue": "Download Queue",
+        "completed": "Completed",
+        "start": "Start Downloads",
+        "pause": "Pause Downloads",
+        "clear": "Clear Queue",
+        "empty": "No downloads"
+    },
+    "tracking": {
+        "title": "Tracking",
+        "myanimelist": "MyAnimeList",
+        "anilist": "AniList",
+        "mangaupdates": "MangaUpdates",
+        "login": "Login",
         "logout": "Logout",
-        "logout_confirm": "Are you sure you want to logout?"
+        "not_logged_in": "Not logged in"
     },
-    "player": {
-        "now_playing": "Now Playing",
-        "play": "Play",
-        "pause": "Pause",
-        "stop": "Stop",
-        "rewind": "Rewind",
-        "forward": "Forward"
-    },
-    "detail": {
-        "play": "Play",
-        "resume": "Resume",
-        "seasons": "Seasons",
-        "episodes": "Episodes",
-        "tracks": "Tracks",
-        "mark_watched": "Mark as Watched",
-        "mark_unwatched": "Mark as Unwatched"
+    "status": {
+        "unknown": "Unknown",
+        "ongoing": "Ongoing",
+        "completed": "Completed",
+        "licensed": "Licensed",
+        "publishing_finished": "Publishing Finished",
+        "cancelled": "Cancelled",
+        "on_hiatus": "On Hiatus"
     },
     "common": {
         "ok": "OK",
@@ -72,6 +177,10 @@
         "no": "No",
         "loading": "Loading...",
         "error": "Error",
-        "retry": "Retry"
+        "retry": "Retry",
+        "refresh": "Refresh",
+        "back": "Back",
+        "save": "Save",
+        "delete": "Delete"
     }
 }

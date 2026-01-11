@@ -1,15 +1,15 @@
 /**
- * VitaABS - Login Activity
- * Handles user authentication for Audiobookshelf server
+ * VitaSuwayomi - Login Activity
+ * Handles connection to Suwayomi server
  */
 
 #pragma once
 
 #include <borealis.hpp>
 #include <borealis/core/timer.hpp>
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class LoginActivity : public brls::Activity {
 public:
@@ -20,9 +20,8 @@ public:
     void onContentAvailable() override;
 
 private:
-    void onLoginPressed();
+    void onConnectPressed();
     void onTestConnectionPressed();
-    void onOfflinePressed();
 
     BRLS_BIND(brls::Label, titleLabel, "login/title");
     BRLS_BIND(brls::Box, inputContainer, "login/input_container");
@@ -30,14 +29,12 @@ private:
     BRLS_BIND(brls::Label, usernameLabel, "login/username_label");
     BRLS_BIND(brls::Label, passwordLabel, "login/password_label");
     BRLS_BIND(brls::Button, loginButton, "login/login_button");
-    BRLS_BIND(brls::Button, pinButton, "login/pin_button");
-    BRLS_BIND(brls::Button, offlineButton, "login/offline_button");
+    BRLS_BIND(brls::Button, testButton, "login/pin_button");
     BRLS_BIND(brls::Label, statusLabel, "login/status");
-    BRLS_BIND(brls::Label, pinCodeLabel, "login/pin_code");
 
     std::string m_serverUrl;
     std::string m_username;
     std::string m_password;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

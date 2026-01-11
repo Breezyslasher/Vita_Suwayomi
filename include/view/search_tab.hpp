@@ -1,15 +1,23 @@
 /**
- * VitaABS - Search Tab
- * Search for media content
+ * VitaSuwayomi - Search/Browse Tab
+ * Search manga across sources and browse source catalogs
  */
 
 #pragma once
 
 #include <borealis.hpp>
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "view/recycling_grid.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
+
+// Browse mode
+enum class BrowseMode {
+    SOURCES,        // Show list of available sources
+    POPULAR,        // Browse popular manga from selected source
+    LATEST,         // Browse latest manga from selected source
+    SEARCH_RESULTS  // Show search results
+};
 
 class SearchTab : public brls::Box {
 public:
@@ -18,34 +26,46 @@ public:
     void onFocusGained() override;
 
 private:
+    void loadSources();
+    void loadPopularManga(int64_t sourceId);
+    void loadLatestManga(int64_t sourceId);
     void performSearch(const std::string& query);
-    void onItemSelected(const MediaItem& item);
-    void populateRow(brls::Box* rowContent, const std::vector<MediaItem>& items);
+    void performSourceSearch(int64_t sourceId, const std::string& query);
+    void onSourceSelected(const Source& source);
+    void onMangaSelected(const Manga& manga);
+    void showSources();
+    void showSourceBrowser(const Source& source);
+    void loadNextPage();
+    void updateModeButtons();
 
     brls::Label* m_titleLabel = nullptr;
     brls::Label* m_searchLabel = nullptr;
     brls::Label* m_resultsLabel = nullptr;
 
-    // Scrollable content for organized results
-    brls::ScrollingFrame* m_scrollView = nullptr;
-    brls::Box* m_scrollContent = nullptr;
+    // Mode selector buttons
+    brls::Box* m_modeBox = nullptr;
+    brls::Button* m_sourcesBtn = nullptr;
+    brls::Button* m_popularBtn = nullptr;
+    brls::Button* m_latestBtn = nullptr;
+    brls::Button* m_backBtn = nullptr;
 
-    // Category rows
-    brls::HScrollingFrame* m_moviesRow = nullptr;
-    brls::Box* m_moviesContent = nullptr;
-    brls::HScrollingFrame* m_showsRow = nullptr;
-    brls::Box* m_showsContent = nullptr;
-    brls::HScrollingFrame* m_episodesRow = nullptr;
-    brls::Box* m_episodesContent = nullptr;
-    brls::HScrollingFrame* m_musicRow = nullptr;
-    brls::Box* m_musicContent = nullptr;
+    // Source selector
+    brls::Box* m_sourceListBox = nullptr;
 
+    // Main content grid
+    RecyclingGrid* m_contentGrid = nullptr;
+
+    // State
+    BrowseMode m_browseMode = BrowseMode::SOURCES;
+    int64_t m_currentSourceId = 0;
+    std::string m_currentSourceName;
     std::string m_searchQuery;
-    std::vector<MediaItem> m_results;
-    std::vector<MediaItem> m_movies;
-    std::vector<MediaItem> m_shows;
-    std::vector<MediaItem> m_episodes;
-    std::vector<MediaItem> m_music;
+    int m_currentPage = 1;
+    bool m_hasNextPage = false;
+
+    // Data
+    std::vector<Source> m_sources;
+    std::vector<Manga> m_mangaList;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

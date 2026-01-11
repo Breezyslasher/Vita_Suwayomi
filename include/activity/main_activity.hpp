@@ -1,13 +1,13 @@
 /**
- * VitaABS - Main Activity
- * Main navigation with direct library tabs (Audiobooks, Podcasts), Search, Downloads, Settings
+ * VitaSuwayomi - Main Activity
+ * Main navigation with Library, Sources, Browse, Downloads, Settings tabs
  */
 
 #pragma once
 
 #include <borealis.hpp>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class MainActivity : public brls::Activity {
 public:
@@ -21,4 +21,4 @@ private:
     BRLS_BIND(brls::TabFrame, tabFrame, "main/tab_frame");
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

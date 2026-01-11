@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<brls:ScrollingFrame
+    id="manga_detail/scroll"
+    width="100%"
+    height="100%">
+
+    <brls:Box
+        id="manga_detail/content"
+        width="100%"
+        axis="column"
+        paddingTop="20"
+        paddingBottom="40"
+        paddingLeft="30"
+        paddingRight="30">
+
+        <!-- Header section with cover and info -->
+        <brls:Box
+            width="100%"
+            axis="row"
+            marginBottom="20">
+
+            <!-- Cover image -->
+            <brls:Image
+                id="manga_detail/cover"
+                width="150"
+                height="220"
+                scalingType="fit"
+                cornerRadius="8"
+                marginRight="20"
+                backgroundColor="#2d2d44"/>
+
+            <!-- Info column -->
+            <brls:Box
+                axis="column"
+                grow="1">
+
+                <!-- Title -->
+                <brls:Label
+                    id="manga_detail/title"
+                    text="Manga Title"
+                    fontSize="22"
+                    marginBottom="8"/>
+
+                <!-- Author -->
+                <brls:Label
+                    id="manga_detail/author"
+                    text="Author: Unknown"
+                    fontSize="14"
+                    textColor="#a0a0a0"
+                    marginBottom="4"/>
+
+                <!-- Artist -->
+                <brls:Label
+                    id="manga_detail/artist"
+                    text="Artist: Unknown"
+                    fontSize="14"
+                    textColor="#a0a0a0"
+                    marginBottom="4"/>
+
+                <!-- Status -->
+                <brls:Label
+                    id="manga_detail/status"
+                    text="Status: Unknown"
+                    fontSize="14"
+                    textColor="#a0a0a0"
+                    marginBottom="4"/>
+
+                <!-- Source -->
+                <brls:Label
+                    id="manga_detail/source"
+                    text="Source: Unknown"
+                    fontSize="14"
+                    textColor="#a0a0a0"
+                    marginBottom="4"/>
+
+                <!-- Chapter count -->
+                <brls:Label
+                    id="manga_detail/chapter_count"
+                    text="0 chapters"
+                    fontSize="14"
+                    textColor="#a0a0a0"/>
+
+            </brls:Box>
+
+        </brls:Box>
+
+        <!-- Action buttons -->
+        <brls:Box
+            width="100%"
+            axis="row"
+            justifyContent="flexStart"
+            marginBottom="20">
+
+            <brls:Button
+                id="manga_detail/read_btn"
+                style="primary"
+                width="120"
+                height="40"
+                marginRight="10">
+                <brls:Label
+                    text="Read"
+                    fontSize="14"
+                    horizontalAlign="center"/>
+            </brls:Button>
+
+            <brls:Button
+                id="manga_detail/library_btn"
+                style="bordered"
+                width="140"
+                height="40"
+                marginRight="10">
+                <brls:Label
+                    text="Add to Library"
+                    fontSize="14"
+                    horizontalAlign="center"/>
+            </brls:Button>
+
+            <brls:Button
+                id="manga_detail/download_btn"
+                style="bordered"
+                width="120"
+                height="40"
+                marginRight="10">
+                <brls:Label
+                    text="Download"
+                    fontSize="14"
+                    horizontalAlign="center"/>
+            </brls:Button>
+
+            <brls:Button
+                id="manga_detail/tracking_btn"
+                style="borderless"
+                width="100"
+                height="40">
+                <brls:Label
+                    text="Tracking"
+                    fontSize="14"
+                    horizontalAlign="center"/>
+            </brls:Button>
+
+        </brls:Box>
+
+        <!-- Genre tags -->
+        <brls:Box
+            id="manga_detail/genres"
+            width="100%"
+            axis="row"
+            wrap="wrap"
+            marginBottom="15"/>
+
+        <!-- Description -->
+        <brls:Label
+            id="manga_detail/description"
+            text="No description available."
+            fontSize="14"
+            textColor="#c0c0c0"
+            marginBottom="20"/>
+
+        <!-- Chapters section header -->
+        <brls:Box
+            width="100%"
+            axis="row"
+            justifyContent="spaceBetween"
+            alignItems="center"
+            marginBottom="10">
+
+            <brls:Label
+                id="manga_detail/chapters_label"
+                text="Chapters"
+                fontSize="18"/>
+
+            <brls:Box
+                axis="row">
+
+                <brls:Button
+                    id="manga_detail/sort_btn"
+                    style="borderless"
+                    width="80"
+                    height="35">
+                    <brls:Label
+                        text="Sort"
+                        fontSize="12"/>
+                </brls:Button>
+
+                <brls:Button
+                    id="manga_detail/filter_btn"
+                    style="borderless"
+                    width="80"
+                    height="35">
+                    <brls:Label
+                        text="Filter"
+                        fontSize="12"/>
+                </brls:Button>
+
+            </brls:Box>
+
+        </brls:Box>
+
+        <!-- Chapters list container -->
+        <brls:Box
+            id="manga_detail/chapters_list"
+            width="100%"
+            axis="column"/>
+
+    </brls:Box>
+
+</brls:ScrollingFrame>
