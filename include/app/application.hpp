@@ -114,6 +114,14 @@ public:
     void setServerUrl(const std::string& url) { m_serverUrl = url; }
     void setConnected(bool connected) { m_isConnected = connected; }
 
+    // Auth credentials
+    const std::string& getAuthUsername() const { return m_authUsername; }
+    const std::string& getAuthPassword() const { return m_authPassword; }
+    void setAuthCredentials(const std::string& username, const std::string& password) {
+        m_authUsername = username;
+        m_authPassword = password;
+    }
+
     // Settings persistence
     bool loadSettings();
     bool saveSettings();
@@ -146,6 +154,8 @@ private:
     bool m_initialized = false;
     bool m_isConnected = false;
     std::string m_serverUrl;
+    std::string m_authUsername;
+    std::string m_authPassword;
     int m_currentCategoryId = 0;
     AppSettings m_settings;
 };

@@ -33,7 +33,8 @@ std::string SuwayomiClient::buildApiUrl(const std::string& endpoint) {
 
 // Helper to create an HTTP client with authentication headers
 vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
-    vitasuwayomi::HttpClient http = createHttpClient();
+    vitasuwayomi::HttpClient http;
+    http.setDefaultHeader("Accept", "application/json");
 
     // Add basic auth if credentials are set
     if (!m_authUsername.empty() && !m_authPassword.empty()) {

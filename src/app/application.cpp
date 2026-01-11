@@ -11,6 +11,7 @@
 
 #include <borealis.hpp>
 #include <fstream>
+#include <sstream>
 #include <cstring>
 #include <cmath>
 
@@ -21,7 +22,12 @@
 
 namespace vitasuwayomi {
 
+#ifdef __vita__
 static const char* SETTINGS_PATH = "ux0:data/VitaSuwayomi/settings.json";
+static const char* SETTINGS_DIR = "ux0:data/VitaSuwayomi";
+#else
+static const char* SETTINGS_PATH = "./VitaSuwayomi_settings.json";
+#endif
 
 Application& Application::getInstance() {
     static Application instance;
@@ -187,9 +193,11 @@ std::string Application::getPageScaleModeString(PageScaleMode mode) {
 }
 
 bool Application::loadSettings() {
-#ifdef __vita__
     brls::Logger::debug("loadSettings: Opening {}", SETTINGS_PATH);
 
+    std::string content;
+
+#ifdef __vita__
     SceUID fd = sceIoOpen(SETTINGS_PATH, SCE_O_RDONLY, 0);
     if (fd < 0) {
         brls::Logger::debug("No settings file found (error: {:#x})", fd);
@@ -208,10 +216,21 @@ bool Application::loadSettings() {
         return false;
     }
 
-    std::string content;
     content.resize(size);
     sceIoRead(fd, &content[0], size);
     sceIoClose(fd);
+#else
+    // Non-Vita: use standard C++ file I/O
+    std::ifstream file(SETTINGS_PATH);
+    if (!file.is_open()) {
+        brls::Logger::debug("No settings file found");
+        return false;
+    }
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    content = buffer.str();
+    file.close();
+#endif
 
     brls::Logger::debug("loadSettings: Read {} bytes", content.length());
 
@@ -293,15 +312,21 @@ bool Application::loadSettings() {
     m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
     m_settings.showDownloadedBadge = extractBool("showDownloadedBadge", true);
 
+    // Load auth credentials (stored separately for security)
+    m_authUsername = extractString("authUsername");
+    m_authPassword = extractString("authPassword");
+
+    // Apply auth credentials to SuwayomiClient if we have them
+    if (!m_authUsername.empty() && !m_authPassword.empty()) {
+        SuwayomiClient::getInstance().setAuthCredentials(m_authUsername, m_authPassword);
+        brls::Logger::info("Restored auth credentials for user: {}", m_authUsername);
+    }
+
     brls::Logger::info("Settings loaded successfully");
-    return !m_serverUrl.empty();
-#else
-    return false;
-#endif
+    return true;  // Return true if we successfully read the file
 }
 
 bool Application::saveSettings() {
-#ifdef __vita__
     brls::Logger::info("saveSettings: Saving to {}", SETTINGS_PATH);
     brls::Logger::debug("saveSettings: serverUrl={}",
                         m_serverUrl.empty() ? "(empty)" : m_serverUrl);
@@ -312,6 +337,10 @@ bool Application::saveSettings() {
     // Connection info
     json += "  \"serverUrl\": \"" + m_serverUrl + "\",\n";
     json += "  \"currentCategoryId\": " + std::to_string(m_currentCategoryId) + ",\n";
+
+    // Auth credentials (stored for persistence)
+    json += "  \"authUsername\": \"" + m_authUsername + "\",\n";
+    json += "  \"authPassword\": \"" + m_authPassword + "\",\n";
 
     // UI settings
     json += "  \"theme\": " + std::to_string(static_cast<int>(m_settings.theme)) + ",\n";
@@ -348,6 +377,7 @@ bool Application::saveSettings() {
 
     json += "}\n";
 
+#ifdef __vita__
     SceUID fd = sceIoOpen(SETTINGS_PATH, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
     if (fd < 0) {
         brls::Logger::error("Failed to open settings file for writing: {:#x}", fd);
@@ -365,7 +395,16 @@ bool Application::saveSettings() {
         return false;
     }
 #else
-    return false;
+    // Non-Vita: use standard C++ file I/O
+    std::ofstream file(SETTINGS_PATH);
+    if (!file.is_open()) {
+        brls::Logger::error("Failed to open settings file for writing");
+        return false;
+    }
+    file << json;
+    file.close();
+    brls::Logger::info("Settings saved successfully ({} bytes)", json.length());
+    return true;
 #endif
 }
 

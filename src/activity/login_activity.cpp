@@ -131,8 +131,9 @@ void LoginActivity::onConnectPressed() {
 
     // Try to connect
     if (client.connectToServer(m_serverUrl)) {
-        // Save server URL
+        // Save server URL and auth credentials
         Application::getInstance().setServerUrl(m_serverUrl);
+        Application::getInstance().setAuthCredentials(m_username, m_password);
         Application::getInstance().setConnected(true);
         Application::getInstance().saveSettings();
 
