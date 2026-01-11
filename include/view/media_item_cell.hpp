@@ -1,21 +1,21 @@
 /**
- * VitaABS - Media Item Cell
- * A cell for displaying media items in a grid
+ * VitaSuwayomi - Manga Item Cell
+ * A cell for displaying manga items in a grid
  */
 
 #pragma once
 
 #include <borealis.hpp>
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
-class MediaItemCell : public brls::Box {
+class MangaItemCell : public brls::Box {
 public:
-    MediaItemCell();
+    MangaItemCell();
 
-    void setItem(const MediaItem& item);
-    const MediaItem& getItem() const { return m_item; }
+    void setManga(const Manga& manga);
+    const Manga& getManga() const { return m_manga; }
 
     void onFocusGained() override;
     void onFocusLost() override;
@@ -26,14 +26,18 @@ private:
     void loadThumbnail();
     void updateFocusInfo(bool focused);
 
-    MediaItem m_item;
+    Manga m_manga;
     std::string m_originalTitle;  // Store original truncated title
 
     brls::Image* m_thumbnailImage = nullptr;
     brls::Label* m_titleLabel = nullptr;
-    brls::Label* m_subtitleLabel = nullptr;
-    brls::Label* m_descriptionLabel = nullptr;  // Shows on focus for episodes
-    brls::Rectangle* m_progressBar = nullptr;
+    brls::Label* m_subtitleLabel = nullptr;     // Shows author or chapter count
+    brls::Label* m_descriptionLabel = nullptr;  // Shows on focus
+    brls::Rectangle* m_progressBar = nullptr;   // Unread chapter indicator
+    brls::Label* m_unreadBadge = nullptr;       // Unread count badge
 };
 
-} // namespace vitaabs
+// Alias for backward compatibility
+using MediaItemCell = MangaItemCell;
+
+} // namespace vitasuwayomi

@@ -27,7 +27,7 @@ include(${BOREALIS_LIBRARY}/cmake/commonOption.cmake)
 include(${BOREALIS_LIBRARY}/cmake/toolchain.cmake)
 
 # Project definition (AFTER toolchain include)
-project(VitaABS VERSION 2.0.0 LANGUAGES C CXX)
+project(VitaSuwayomi VERSION 1.0.0 LANGUAGES C CXX)
 
 # C++17 required for Borealis
 set(CMAKE_CXX_STANDARD 17)
@@ -37,9 +37,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -frtti -fexceptions")
 
 # App metadata
-set(VITA_APP_NAME "VitaABS")
-set(VITA_TITLEID "VABS00001")
-set(VITA_VERSION "02.00")
+set(VITA_APP_NAME "VitaSuwayomi")
+set(VITA_TITLEID "VSWY00001")
+set(VITA_VERSION "01.00")
 # ATTRIBUTE2=12 enables maximum heap size mode - CRITICAL for memory-intensive apps
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d PARENTAL_LEVEL=1 -d ATTRIBUTE2=12")
 
@@ -64,14 +64,13 @@ set(APP_SOURCES
 
     # Application
     src/app/application.cpp
-    src/app/audiobookshelf_client.cpp
+    src/app/suwayomi_client.cpp
     src/app/downloads_manager.cpp
-    src/app/temp_file_manager.cpp
 
     # Activities
     src/activity/main_activity.cpp
     src/activity/login_activity.cpp
-    src/activity/player_activity.cpp
+    src/activity/reader_activity.cpp
 
     # Views
     src/view/home_tab.cpp
@@ -81,19 +80,13 @@ set(APP_SOURCES
     src/view/media_detail_view.cpp
     src/view/media_item_cell.cpp
     src/view/recycling_grid.cpp
-    src/view/video_view.cpp
     src/view/downloads_tab.cpp
-    src/view/progress_dialog.cpp
-    src/view/podcast_search_tab.cpp
-
-    # Player
-    src/player/mpv_player.cpp
+    src/view/extensions_tab.cpp
+    src/view/source_browse_tab.cpp
 
     # Utils
     src/utils/http_client.cpp
     src/utils/image_loader.cpp
-    src/utils/jwt_auth.cpp
-    src/utils/audio_utils.cpp
     src/utils/vita_stubs.c
 )
 
@@ -186,13 +179,15 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     # App resources
     FILE resources/xml/activity/main.xml resources/xml/activity/main.xml
     FILE resources/xml/activity/login.xml resources/xml/activity/login.xml
-    FILE resources/xml/activity/player.xml resources/xml/activity/player.xml
+    FILE resources/xml/activity/reader.xml resources/xml/activity/reader.xml
     FILE resources/xml/tabs/home.xml resources/xml/tabs/home.xml
     FILE resources/xml/tabs/library.xml resources/xml/tabs/library.xml
     FILE resources/xml/tabs/search.xml resources/xml/tabs/search.xml
     FILE resources/xml/tabs/settings.xml resources/xml/tabs/settings.xml
-    FILE resources/xml/view/media_detail.xml resources/xml/view/media_detail.xml
-    FILE resources/xml/view/media_item.xml resources/xml/view/media_item.xml
+    FILE resources/xml/tabs/extensions.xml resources/xml/tabs/extensions.xml
+    FILE resources/xml/view/manga_detail.xml resources/xml/view/manga_detail.xml
+    FILE resources/xml/view/manga_item.xml resources/xml/view/manga_item.xml
+    FILE resources/xml/view/chapter_item.xml resources/xml/view/chapter_item.xml
 
     # Fonts (using simpler DejaVu fonts for Vita compatibility)
     FILE resources/font/font.ttf resources/font/font.ttf

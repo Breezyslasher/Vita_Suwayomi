@@ -1,17 +1,17 @@
 /**
- * VitaABS - Home Tab
- * Shows Continue Listening and Recently Added Episodes across all libraries
+ * VitaSuwayomi - Home Tab
+ * Shows Continue Reading and Recent Chapter Updates
  */
 
 #pragma once
 
 #include <borealis.hpp>
 #include <memory>
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
-class MediaItemCell;  // Forward declaration
+class MangaItemCell;  // Forward declaration
 
 class HomeTab : public brls::Box {
 public:
@@ -19,11 +19,16 @@ public:
     ~HomeTab() override;
 
     void onFocusGained() override;
+    void refresh();
 
 private:
     void loadContent();
-    void populateHorizontalRow(brls::Box* container, const std::vector<MediaItem>& items);
-    void onItemSelected(const MediaItem& item);
+    void loadContinueReading();
+    void loadRecentUpdates();
+    void populateHorizontalRow(brls::Box* container, const std::vector<Manga>& items);
+    void populateUpdatesRow(brls::Box* container, const std::vector<RecentUpdate>& updates);
+    void onMangaSelected(const Manga& manga);
+    void onUpdateSelected(const RecentUpdate& update);
 
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
@@ -32,15 +37,15 @@ private:
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;
 
-    // Continue Listening section (horizontal row)
+    // Continue Reading section (horizontal row of manga with reading progress)
     brls::Label* m_continueLabel = nullptr;
     brls::Box* m_continueBox = nullptr;
-    std::vector<MediaItem> m_continueItems;
+    std::vector<Manga> m_continueReading;
 
-    // Recently Added Episodes section (horizontal row)
-    brls::Label* m_recentEpisodesLabel = nullptr;
-    brls::Box* m_recentEpisodesBox = nullptr;
-    std::vector<MediaItem> m_recentEpisodes;
+    // Recent Updates section (horizontal row of recent chapter updates)
+    brls::Label* m_recentUpdatesLabel = nullptr;
+    brls::Box* m_recentUpdatesBox = nullptr;
+    std::vector<RecentUpdate> m_recentUpdates;
 
     bool m_loaded = false;
 
@@ -48,4 +53,4 @@ private:
     std::shared_ptr<bool> m_alive;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

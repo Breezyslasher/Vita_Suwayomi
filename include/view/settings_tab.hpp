@@ -1,45 +1,44 @@
 /**
- * VitaABS - Settings Tab
- * Application settings and user info
+ * VitaSuwayomi - Settings Tab
+ * Application settings and server info
  */
 
 #pragma once
 
 #include <borealis.hpp>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 class SettingsTab : public brls::Box {
 public:
     SettingsTab();
 
 private:
-    void createAccountSection();
+    void createServerSection();
     void createUISection();
-    void createLayoutSection();
-    void createContentDisplaySection();
-    void createPlaybackSection();
-    void createAudioSection();
-    void createTranscodeSection();
-    void createStreamingSection();
+    void createReaderSection();
+    void createLibrarySection();
     void createDownloadsSection();
+    void createExtensionsSection();
+    void createTrackingSection();
     void createAboutSection();
     void createDebugSection();
 
-    void onLogout();
-    void onTestLocalPlayback();
+    void onDisconnect();
     void onThemeChanged(int index);
-    void onQualityChanged(int index);
-    void onSubtitleSizeChanged(int index);
-    void onSeekIntervalChanged(int index);
-    void onManageSidebarOrder();
+    void onReadingModeChanged(int index);
+    void onPageScaleModeChanged(int index);
+    void onTriggerLibraryUpdate();
+    void onManageCategories();
+    void onManageExtensions();
 
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;
 
-    // Account section
-    brls::Label* m_userLabel = nullptr;
-    brls::Label* m_serverLabel = nullptr;
+    // Server section
+    brls::Label* m_serverUrlLabel = nullptr;
+    brls::Label* m_serverVersionLabel = nullptr;
+    brls::DetailCell* m_disconnectCell = nullptr;
 
     // UI section
     brls::SelectorCell* m_themeSelector = nullptr;
@@ -47,34 +46,38 @@ private:
     brls::BooleanCell* m_animationsToggle = nullptr;
     brls::BooleanCell* m_debugLogToggle = nullptr;
 
-    // Layout section
-    brls::DetailCell* m_sidebarOrderCell = nullptr;
+    // Reader section
+    brls::SelectorCell* m_readingModeSelector = nullptr;  // LTR, RTL, Vertical, Webtoon
+    brls::SelectorCell* m_pageScaleSelector = nullptr;    // Fit, Width, Height, Original
+    brls::BooleanCell* m_keepScreenOnToggle = nullptr;
+    brls::BooleanCell* m_showPageNumberToggle = nullptr;
+    brls::BooleanCell* m_tapToNavigateToggle = nullptr;
+    brls::SelectorCell* m_backgroundColorSelector = nullptr;  // Black, White, Gray
 
-    // Content display section
-    brls::BooleanCell* m_collectionsToggle = nullptr;
-    brls::BooleanCell* m_playlistsToggle = nullptr;
-    brls::BooleanCell* m_genresToggle = nullptr;
-
-    // Playback section
-    brls::BooleanCell* m_autoPlayToggle = nullptr;
-    brls::BooleanCell* m_resumeToggle = nullptr;
-    brls::BooleanCell* m_subtitlesToggle = nullptr;
-    brls::SelectorCell* m_subtitleSizeSelector = nullptr;
-    brls::SelectorCell* m_seekIntervalSelector = nullptr;
-
-    // Transcode section
-    brls::SelectorCell* m_qualitySelector = nullptr;
-    brls::BooleanCell* m_forceTranscodeToggle = nullptr;
-    brls::BooleanCell* m_burnSubtitlesToggle = nullptr;
-    brls::BooleanCell* m_directPlayToggle = nullptr;
+    // Library section
+    brls::DetailCell* m_updateLibraryCell = nullptr;
+    brls::DetailCell* m_manageCategoriesCell = nullptr;
+    brls::BooleanCell* m_updateOnStartToggle = nullptr;
+    brls::BooleanCell* m_updateOnlyWifiToggle = nullptr;
+    brls::SelectorCell* m_defaultCategorySelector = nullptr;
 
     // Downloads section
-    brls::BooleanCell* m_autoStartDownloadsToggle = nullptr;
-    brls::BooleanCell* m_wifiOnlyToggle = nullptr;
+    brls::BooleanCell* m_downloadToServerToggle = nullptr;  // Download to server vs local
+    brls::BooleanCell* m_autoDownloadToggle = nullptr;
+    brls::BooleanCell* m_wifiOnlyDownloadToggle = nullptr;
     brls::SelectorCell* m_concurrentDownloadsSelector = nullptr;
-    brls::BooleanCell* m_deleteAfterWatchToggle = nullptr;
-    brls::BooleanCell* m_syncProgressToggle = nullptr;
+    brls::BooleanCell* m_deleteAfterReadToggle = nullptr;
     brls::DetailCell* m_clearDownloadsCell = nullptr;
+    brls::Label* m_downloadStatsLabel = nullptr;
+
+    // Extensions section
+    brls::DetailCell* m_manageExtensionsCell = nullptr;
+    brls::Label* m_installedExtensionsLabel = nullptr;
+
+    // Tracking section
+    brls::DetailCell* m_myAnimeListCell = nullptr;
+    brls::DetailCell* m_aniListCell = nullptr;
+    brls::DetailCell* m_mangaUpdatesCell = nullptr;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

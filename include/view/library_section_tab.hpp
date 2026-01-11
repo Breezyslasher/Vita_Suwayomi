@@ -1,94 +1,81 @@
 /**
- * VitaABS - Library Section Tab
- * Shows content for a single library section (for sidebar mode)
- * Collections, categories (genres) appear as browsable content within the tab
+ * VitaSuwayomi - Library Section Tab
+ * Shows manga library content organized by categories
+ * Supports filtering by category, viewing all manga, and downloaded only
  */
 
 #pragma once
 
 #include <borealis.hpp>
 #include <memory>
-#include "app/audiobookshelf_client.hpp"
+#include "app/suwayomi_client.hpp"
 #include "view/recycling_grid.hpp"
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // View mode for the library section
 enum class LibraryViewMode {
-    ALL_ITEMS,      // Show all items in the library
-    COLLECTIONS,    // Show collections as browsable items
-    CATEGORIES,     // Show categories/genres as browsable items
-    FILTERED,       // Showing items filtered by collection or category
-    DOWNLOADED      // Show only downloaded items
+    ALL_MANGA,      // Show all manga in the library
+    BY_CATEGORY,    // Show manga filtered by category
+    DOWNLOADED,     // Show only downloaded manga
+    UNREAD,         // Show manga with unread chapters
+    READING         // Show manga currently being read
 };
 
 class LibrarySectionTab : public brls::Box {
 public:
-    LibrarySectionTab(const std::string& sectionKey, const std::string& title, const std::string& sectionType = "");
+    // For library view (show all library manga or by category)
+    LibrarySectionTab(int categoryId = 0, const std::string& categoryName = "Library");
+
     ~LibrarySectionTab() override;
 
     void onFocusGained() override;
+    void refresh();
 
 private:
     void loadContent();
-    void loadCollections();
-    void loadGenres();
-    void loadDownloadedItems();
-    void showAllItems();
-    void showCollections();
-    void showCategories();
+    void loadCategories();
+    void showAllManga();
+    void showByCategory(int categoryId);
     void showDownloaded();
-    void onItemSelected(const MediaItem& item);
-    void onCollectionSelected(const MediaItem& collection);
-    void onGenreSelected(const GenreItem& genre);
+    void showUnread();
+    void showReading();
+    void onMangaSelected(const Manga& manga);
+    void onCategorySelected(const Category& category);
     void updateViewModeButtons();
-    void filterByDownloaded();
-    void hideNavigationButtons();  // Hide all nav buttons for offline/downloaded-only mode
-
-    // Podcast management
-    void openPodcastSearch();
-    void checkAllNewEpisodes();
+    void triggerLibraryUpdate();
 
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
 
-    std::string m_sectionKey;
-    std::string m_title;
-    std::string m_sectionType;  // "movie", "show", "artist"
+    int m_categoryId = 0;
+    std::string m_categoryName;
 
     brls::Label* m_titleLabel = nullptr;
 
     // View mode selector buttons
     brls::Box* m_viewModeBox = nullptr;
     brls::Button* m_allBtn = nullptr;
-    brls::Button* m_collectionsBtn = nullptr;
     brls::Button* m_categoriesBtn = nullptr;
-    brls::Button* m_downloadedBtn = nullptr;  // Downloaded items filter
-    brls::Button* m_backBtn = nullptr;  // Back button when in filtered view
-
-    // Podcast management buttons
-    brls::Button* m_findPodcastsBtn = nullptr;
-    brls::Button* m_checkEpisodesBtn = nullptr;
+    brls::Button* m_downloadedBtn = nullptr;
+    brls::Button* m_unreadBtn = nullptr;
+    brls::Button* m_updateBtn = nullptr;      // Trigger library update
+    brls::Button* m_backBtn = nullptr;        // Back button when in filtered view
 
     // Main content grid
     RecyclingGrid* m_contentGrid = nullptr;
 
     // Data
-    std::vector<MediaItem> m_items;
-    std::vector<MediaItem> m_collections;
-    std::vector<GenreItem> m_genres;
-    std::vector<MediaItem> m_downloadedItems;  // Locally downloaded items
+    std::vector<Manga> m_mangaList;
+    std::vector<Category> m_categories;
 
-    LibraryViewMode m_viewMode = LibraryViewMode::ALL_ITEMS;
-    std::string m_filterTitle;  // Title of current filter (collection/genre name)
+    LibraryViewMode m_viewMode = LibraryViewMode::ALL_MANGA;
+    std::string m_filterTitle;
     bool m_loaded = false;
-    bool m_collectionsLoaded = false;
-    bool m_genresLoaded = false;
-    bool m_downloadedLoaded = false;
+    bool m_categoriesLoaded = false;
 
     // Shared pointer to track if this object is still alive
-    // Used by async callbacks to check validity before updating UI
     std::shared_ptr<bool> m_alive;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

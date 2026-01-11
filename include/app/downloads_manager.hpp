@@ -1,6 +1,6 @@
 /**
- * VitaABS - Downloads Manager
- * Handles offline audiobook downloads and progress sync
+ * VitaSuwayomi - Downloads Manager
+ * Handles local manga chapter downloads for offline reading
  */
 
 #pragma once
@@ -10,10 +10,10 @@
 #include <functional>
 #include <mutex>
 
-namespace vitaabs {
+namespace vitasuwayomi {
 
 // Download state
-enum class DownloadState {
+enum class LocalDownloadState {
     QUEUED,
     DOWNLOADING,
     PAUSED,
@@ -21,51 +21,55 @@ enum class DownloadState {
     FAILED
 };
 
-// Download file info (for multi-file audiobooks)
-struct DownloadFileInfo {
-    std::string ino;            // File inode for download URL
-    std::string filename;       // Local filename
-    std::string localPath;      // Full local path
+// Downloaded page info
+struct DownloadedPage {
+    int index = 0;              // Page index
+    std::string localPath;      // Local image path
     int64_t size = 0;           // File size
     bool downloaded = false;    // Download complete
 };
 
-// Chapter info for offline playback
-struct DownloadChapter {
-    std::string title;
-    float start = 0.0f;   // Start time in seconds
-    float end = 0.0f;     // End time in seconds
+// Downloaded chapter info
+struct DownloadedChapter {
+    int chapterId = 0;          // Chapter ID from server
+    int chapterIndex = 0;       // Chapter index in manga
+    std::string name;           // Chapter name
+    float chapterNumber = 0.0f; // Chapter number (e.g., 1.5)
+    std::string localPath;      // Local folder path for pages
+    int pageCount = 0;          // Total pages
+    int downloadedPages = 0;    // Downloaded pages count
+    std::vector<DownloadedPage> pages;  // Page info
+    LocalDownloadState state = LocalDownloadState::QUEUED;
+    int lastPageRead = 0;       // Reading progress
+    time_t lastReadTime = 0;    // Last read timestamp
 };
 
-// Download item information
+// Download item information (manga)
 struct DownloadItem {
-    std::string itemId;         // Audiobookshelf item ID
-    std::string episodeId;      // Episode ID (for podcasts)
-    std::string title;          // Display title
-    std::string authorName;     // Author/narrator name
-    std::string parentTitle;    // Series name or parent title (for display)
-    std::string localPath;      // Local storage path (folder for multi-file)
+    int mangaId = 0;            // Manga ID from server
+    std::string title;          // Manga title
+    std::string author;         // Author name
+    std::string artist;         // Artist name
+    std::string localPath;      // Local storage path
     std::string coverUrl;       // Cover image URL (remote)
-    std::string localCoverPath; // Local cover image path (for offline)
-    std::string description;    // Book/podcast description (for offline)
-    int64_t totalBytes = 0;     // Total file size (all files combined)
-    int64_t downloadedBytes = 0; // Downloaded so far
-    float duration = 0.0f;      // Media duration in seconds
-    float currentTime = 0.0f;   // Watch progress in seconds
-    int64_t viewOffset = 0;     // Progress in milliseconds (for UI compatibility)
-    DownloadState state = DownloadState::QUEUED;
-    std::string mediaType;      // "book", "podcast"
-    std::string seriesName;     // Series name for audiobooks
-    int numChapters = 0;        // Number of chapters
-    std::vector<DownloadChapter> chapters;  // Chapter info for offline
-    int numFiles = 1;           // Number of audio files (1 = single file)
-    int currentFileIndex = 0;   // Current file being downloaded
-    std::vector<DownloadFileInfo> files;  // Multi-file info
-    time_t lastSynced = 0;      // Last time progress was synced to server
+    std::string localCoverPath; // Local cover image path
+    std::string description;    // Manga description
+    int64_t totalBytes = 0;     // Total downloaded size
+    LocalDownloadState state = LocalDownloadState::QUEUED;
+
+    // Downloaded chapters
+    std::vector<DownloadedChapter> chapters;
+    int totalChapters = 0;      // Total chapters downloaded
+    int completedChapters = 0;  // Fully downloaded chapters
+
+    // Reading progress
+    int lastChapterRead = 0;    // Last chapter index read
+    int lastPageRead = 0;       // Last page read in that chapter
+    time_t lastReadTime = 0;    // Last read timestamp
 };
 
-// Progress callback: (downloadedBytes, totalBytes)
-using DownloadProgressCallback = std::function<void(float, float)>;
+// Progress callback: (downloadedPages, totalPages)
+using DownloadProgressCallback = std::function<void(int, int)>;
 
 class DownloadsManager {
 public:
@@ -74,12 +78,10 @@ public:
     // Initialize downloads directory and load saved state
     bool init();
 
-    // Queue an audiobook for download
-    bool queueDownload(const std::string& itemId, const std::string& title,
-                       const std::string& authorName, float duration,
-                       const std::string& mediaType = "book",
-                       const std::string& seriesName = "",
-                       const std::string& episodeId = "");
+    // Queue manga chapter(s) for download
+    bool queueChapterDownload(int mangaId, int chapterIndex, const std::string& mangaTitle);
+    bool queueChaptersDownload(int mangaId, const std::vector<int>& chapterIndexes,
+                               const std::string& mangaTitle);
 
     // Start downloading queued items
     void startDownloads();
@@ -88,44 +90,38 @@ public:
     void pauseDownloads();
 
     // Cancel a specific download
-    bool cancelDownload(const std::string& itemId);
+    bool cancelDownload(int mangaId);
+    bool cancelChapterDownload(int mangaId, int chapterIndex);
 
-    // Delete a downloaded item
-    bool deleteDownload(const std::string& itemId);
-
-    // Delete a downloaded episode by episodeId (for podcasts where multiple episodes share same itemId)
-    bool deleteDownloadByEpisodeId(const std::string& itemId, const std::string& episodeId);
+    // Delete downloaded manga/chapters
+    bool deleteMangaDownload(int mangaId);
+    bool deleteChapterDownload(int mangaId, int chapterIndex);
 
     // Get all download items
     std::vector<DownloadItem> getDownloads() const;
 
-    // Get a specific download by item ID
-    DownloadItem* getDownload(const std::string& itemId);
+    // Get a specific manga download
+    DownloadItem* getMangaDownload(int mangaId);
 
-    // Get a specific download by item ID and episode ID (for podcasts)
-    DownloadItem* getDownload(const std::string& itemId, const std::string& episodeId);
+    // Get a specific chapter download
+    DownloadedChapter* getChapterDownload(int mangaId, int chapterIndex);
 
-    // Check if media is downloaded (checks both itemId and episodeId for episodes)
-    bool isDownloaded(const std::string& itemId, const std::string& episodeId = "") const;
+    // Check if manga/chapter is downloaded
+    bool isMangaDownloaded(int mangaId) const;
+    bool isChapterDownloaded(int mangaId, int chapterIndex) const;
 
-    // Get local playback path for downloaded media
-    std::string getLocalPath(const std::string& itemId) const;
+    // Get local page path for offline reading
+    std::string getPagePath(int mangaId, int chapterIndex, int pageIndex) const;
 
-    // Get playback path for multi-file audiobooks (returns first file or single file path)
-    std::string getPlaybackPath(const std::string& itemId) const;
+    // Get all page paths for a chapter
+    std::vector<std::string> getChapterPages(int mangaId, int chapterIndex) const;
 
-    // Update watch progress for downloaded media
-    void updateProgress(const std::string& itemId, float currentTime, const std::string& episodeId = "");
+    // Update reading progress
+    void updateReadingProgress(int mangaId, int chapterIndex, int lastPageRead);
 
-    // Sync all offline progress to server (call when online)
+    // Sync progress to/from server
     void syncProgressToServer();
-
-    // Sync progress from server for all downloaded items (call when online)
-    // Updates local progress with server progress if server is ahead
     void syncProgressFromServer();
-
-    // Get latest progress from server for a specific item
-    bool fetchProgressFromServer(const std::string& itemId, const std::string& episodeId = "");
 
     // Save/load state to persistent storage
     void saveState();
@@ -137,21 +133,15 @@ public:
     // Get downloads directory path
     std::string getDownloadsPath() const;
 
-    // Register an already-downloaded file as a completed download
-    // Used when streaming cache is saved to downloads folder
-    bool registerCompletedDownload(const std::string& itemId, const std::string& episodeId,
-                                   const std::string& title, const std::string& authorName,
-                                   const std::string& localPath, int64_t fileSize,
-                                   float duration, const std::string& mediaType = "book",
-                                   const std::string& coverUrl = "",
-                                   const std::string& description = "",
-                                   const std::vector<DownloadChapter>& chapters = {});
-
     // Download and save cover image to local storage
-    std::string downloadCoverImage(const std::string& itemId, const std::string& coverUrl);
+    std::string downloadCoverImage(int mangaId, const std::string& coverUrl);
 
-    // Get local cover path for a download (returns empty if not available)
-    std::string getLocalCoverPath(const std::string& itemId) const;
+    // Get local cover path for a manga
+    std::string getLocalCoverPath(int mangaId) const;
+
+    // Get total download statistics
+    int getTotalDownloadedChapters() const;
+    int64_t getTotalDownloadSize() const;
 
 private:
     DownloadsManager() = default;
@@ -159,11 +149,20 @@ private:
     DownloadsManager(const DownloadsManager&) = delete;
     DownloadsManager& operator=(const DownloadsManager&) = delete;
 
-    // Download a single item (runs in background)
-    void downloadItem(DownloadItem& item);
+    // Download a single chapter (runs in background)
+    void downloadChapter(int mangaId, DownloadedChapter& chapter);
+
+    // Download a single page
+    bool downloadPage(int mangaId, int chapterIndex, int pageIndex,
+                      const std::string& imageUrl, std::string& localPath);
 
     // Internal save without locking (caller must hold m_mutex)
     void saveStateUnlocked();
+
+    // Create directories for manga/chapter
+    std::string createMangaDir(int mangaId, const std::string& title);
+    std::string createChapterDir(const std::string& mangaDir, int chapterIndex,
+                                  const std::string& chapterName);
 
     std::vector<DownloadItem> m_downloads;
     mutable std::mutex m_mutex;
@@ -173,4 +172,4 @@ private:
     std::string m_downloadsPath;
 };
 
-} // namespace vitaabs
+} // namespace vitasuwayomi

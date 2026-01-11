@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<brls:Box
+    id="extensions/container"
+    width="100%"
+    height="100%"
+    axis="column"
+    paddingTop="20"
+    paddingLeft="30"
+    paddingRight="30">
+
+    <!-- Title -->
+    <brls:Label
+        id="extensions/title"
+        text="Extensions"
+        fontSize="24"
+        marginBottom="20"/>
+
+    <!-- Tab buttons -->
+    <brls:Box
+        id="extensions/tabs"
+        width="100%"
+        axis="row"
+        marginBottom="15">
+
+        <brls:Button
+            id="extensions/installed_btn"
+            style="primary"
+            width="120"
+            height="35"
+            marginRight="10">
+            <brls:Label
+                text="Installed"
+                fontSize="13"/>
+        </brls:Button>
+
+        <brls:Button
+            id="extensions/available_btn"
+            style="bordered"
+            width="120"
+            height="35"
+            marginRight="10">
+            <brls:Label
+                text="Available"
+                fontSize="13"/>
+        </brls:Button>
+
+        <brls:Button
+            id="extensions/updates_btn"
+            style="bordered"
+            width="120"
+            height="35">
+            <brls:Label
+                text="Updates"
+                fontSize="13"/>
+        </brls:Button>
+
+    </brls:Box>
+
+    <!-- Extensions list -->
+    <brls:ScrollingFrame
+        id="extensions/scroll"
+        width="100%"
+        grow="1">
+
+        <brls:Box
+            id="extensions/list"
+            width="100%"
+            axis="column"/>
+
+    </brls:ScrollingFrame>
+
+</brls:Box>
