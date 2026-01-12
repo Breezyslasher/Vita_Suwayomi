@@ -104,68 +104,120 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Touch gesture on the page image
-    // Tap anywhere = toggle controls (show/hide UI)
-    // Swipe = navigate pages (NOBORU style)
+    // NOBORU-style touch handling
+    // Uses PanGestureRecognizer to track touch movement
+    // - Swipe threshold: 10px to detect swipe start
+    // - Page turn threshold: 90px to trigger page change
     if (pageImage) {
         pageImage->setFocusable(true);
 
-        // Add pan/swipe gesture FIRST for NOBORU-style swipe navigation
-        // This must be added before tap to properly detect swipes
+        // Pan gesture for swipe detection (NOBORU style)
         pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::START) {
-                    m_isPanning = true;
+                    m_isPanning = false;  // Will be set to true if we move enough
                     m_touchStart = status.position;
-                    brls::Logger::debug("Pan START at ({}, {})", status.position.x, status.position.y);
+                    m_touchCurrent = status.position;
+                    brls::Logger::info("Touch START at ({}, {})", status.position.x, status.position.y);
                 } else if (status.state == brls::GestureState::END) {
-                    brls::Logger::debug("Pan END delta=({}, {})", status.delta.x, status.delta.y);
-                    handleSwipe(status.delta);
-                    // Keep m_isPanning true briefly to block the tap
-                    // It will be reset on next gesture start
-                }
-            }, brls::PanAxis::ANY));
+                    m_touchCurrent = status.position;
 
-        // Add tap gesture recognizer - only toggles controls if not panning
-        pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
-            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
-                if (status.state == brls::GestureState::END) {
-                    // Only trigger tap if we weren't panning
-                    if (!m_isPanning) {
-                        brls::Logger::debug("Tap detected - toggling controls");
+                    // Calculate distance moved (NOBORU style)
+                    float dx = m_touchCurrent.x - m_touchStart.x;
+                    float dy = m_touchCurrent.y - m_touchStart.y;
+                    float distance = std::sqrt(dx * dx + dy * dy);
+
+                    brls::Logger::info("Touch END: start=({},{}), end=({},{}), dx={}, dy={}, dist={}",
+                        m_touchStart.x, m_touchStart.y,
+                        m_touchCurrent.x, m_touchCurrent.y,
+                        dx, dy, distance);
+
+                    // NOBORU thresholds: 10px for swipe detection, 90px for page turn
+                    const float SWIPE_DETECT_THRESHOLD = 10.0f;
+                    const float PAGE_TURN_THRESHOLD = 90.0f;
+
+                    if (distance < SWIPE_DETECT_THRESHOLD) {
+                        // Too short - treat as tap
+                        brls::Logger::info("Tap detected (distance {} < {})", distance, SWIPE_DETECT_THRESHOLD);
                         toggleControls();
                     } else {
-                        brls::Logger::debug("Tap blocked - was panning");
-                        m_isPanning = false;  // Reset for next gesture
+                        // It's a swipe - check if long enough to turn page
+                        m_isPanning = true;
+
+                        float absX = std::abs(dx);
+                        float absY = std::abs(dy);
+
+                        if (absX > absY) {
+                            // Horizontal swipe
+                            if (absX >= PAGE_TURN_THRESHOLD) {
+                                brls::Logger::info("Horizontal page turn: dx={}", dx);
+                                if (dx > 0) {
+                                    // Swipe right
+                                    if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                        nextPage();
+                                    } else {
+                                        previousPage();
+                                    }
+                                } else {
+                                    // Swipe left
+                                    if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                        previousPage();
+                                    } else {
+                                        nextPage();
+                                    }
+                                }
+                            } else {
+                                brls::Logger::info("Horizontal swipe too short ({} < {})", absX, PAGE_TURN_THRESHOLD);
+                            }
+                        } else {
+                            // Vertical swipe
+                            if (absY >= PAGE_TURN_THRESHOLD) {
+                                brls::Logger::info("Vertical page turn: dy={}", dy);
+                                if (dy > 0) {
+                                    // Swipe down
+                                    previousPage();
+                                } else {
+                                    // Swipe up
+                                    nextPage();
+                                }
+                            } else {
+                                brls::Logger::info("Vertical swipe too short ({} < {})", absY, PAGE_TURN_THRESHOLD);
+                            }
+                        }
                     }
+
+                    m_isPanning = false;
                 }
-            }));
+            }, brls::PanAxis::ANY));
     }
 
-    // Touch on container as fallback
+    // Container fallback with same logic
     if (container) {
-        // Add pan/swipe gesture FIRST
         container->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::START) {
-                    m_isPanning = true;
                     m_touchStart = status.position;
                 } else if (status.state == brls::GestureState::END) {
-                    handleSwipe(status.delta);
-                }
-            }, brls::PanAxis::ANY));
+                    float dx = status.position.x - m_touchStart.x;
+                    float dy = status.position.y - m_touchStart.y;
+                    float distance = std::sqrt(dx * dx + dy * dy);
 
-        // Tap toggles controls (only if not panning)
-        container->addGestureRecognizer(new brls::TapGestureRecognizer(
-            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
-                if (status.state == brls::GestureState::END) {
-                    if (!m_isPanning) {
+                    const float SWIPE_DETECT_THRESHOLD = 10.0f;
+                    const float PAGE_TURN_THRESHOLD = 90.0f;
+
+                    if (distance < SWIPE_DETECT_THRESHOLD) {
                         toggleControls();
-                    } else {
-                        m_isPanning = false;
+                    } else if (std::abs(dx) > std::abs(dy) && std::abs(dx) >= PAGE_TURN_THRESHOLD) {
+                        if (dx > 0) {
+                            m_settings.direction == ReaderDirection::RIGHT_TO_LEFT ? nextPage() : previousPage();
+                        } else {
+                            m_settings.direction == ReaderDirection::RIGHT_TO_LEFT ? previousPage() : nextPage();
+                        }
+                    } else if (std::abs(dy) >= PAGE_TURN_THRESHOLD) {
+                        dy > 0 ? previousPage() : nextPage();
                     }
                 }
-            }));
+            }, brls::PanAxis::ANY));
     }
 
     // Back button in top bar
@@ -644,48 +696,8 @@ void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
 }
 
 void ReaderActivity::handleSwipe(brls::Point delta) {
-    // NOBORU-style swipe navigation
-    // Minimum swipe distance threshold (lower = more sensitive)
-    const float SWIPE_THRESHOLD = 5.0f;
-
-    float absX = std::abs(delta.x);
-    float absY = std::abs(delta.y);
-
-    brls::Logger::info("handleSwipe: delta=({}, {}), absX={}, absY={}",
-                       delta.x, delta.y, absX, absY);
-
-    // Determine if this is a horizontal or vertical swipe
-    if (absX > absY && absX > SWIPE_THRESHOLD) {
-        // Horizontal swipe
-        brls::Logger::info("Horizontal swipe detected: {}", delta.x > 0 ? "RIGHT" : "LEFT");
-        if (delta.x > 0) {
-            // Swipe right = go back (previous page in LTR, next in RTL)
-            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                nextPage();
-            } else {
-                previousPage();
-            }
-        } else {
-            // Swipe left = go forward (next page in LTR, previous in RTL)
-            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                previousPage();
-            } else {
-                nextPage();
-            }
-        }
-    } else if (absY > absX && absY > SWIPE_THRESHOLD) {
-        // Vertical swipe
-        brls::Logger::info("Vertical swipe detected: {}", delta.y > 0 ? "DOWN" : "UP");
-        if (delta.y > 0) {
-            // Swipe down = previous page
-            previousPage();
-        } else {
-            // Swipe up = next page
-            nextPage();
-        }
-    } else {
-        brls::Logger::debug("Swipe too small, ignoring (absX={}, absY={})", absX, absY);
-    }
+    // Legacy function - swipe handling is now inline in gesture recognizers
+    // Kept for compatibility with header declaration
 }
 
 } // namespace vitasuwayomi

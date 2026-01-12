@@ -99,12 +99,12 @@
         <brls:Button
             id="reader/settings_btn"
             style="borderless"
-            width="44"
+            width="60"
             height="44"
             marginLeft="15">
             <brls:Label
-                text="⚙"
-                fontSize="20"
+                text="[SET]"
+                fontSize="14"
                 textColor="#ffffff"
                 horizontalAlign="center"/>
         </brls:Button>

@@ -30,21 +30,13 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
     // Save NanoVG state
     nvgSave(vg);
 
-    // Move to center, rotate, then move back
+    // Move to center, rotate, then draw centered
     nvgTranslate(vg, centerX, centerY);
     nvgRotate(vg, m_rotationRadians);
+    nvgTranslate(vg, -centerX, -centerY);
 
-    // For 90 and 270 degree rotations, we need to swap width/height
-    float drawWidth = width;
-    float drawHeight = height;
-    if (m_rotationDegrees == 90.0f || m_rotationDegrees == 270.0f) {
-        // Swap dimensions for proper aspect ratio
-        drawWidth = height;
-        drawHeight = width;
-    }
-
-    // Draw the image centered at origin (which is now at the view's center after translation)
-    brls::Image::draw(vg, -drawWidth / 2.0f, -drawHeight / 2.0f, drawWidth, drawHeight, style, ctx);
+    // Draw the image at original position (transforms will apply)
+    brls::Image::draw(vg, x, y, width, height, style, ctx);
 
     // Restore NanoVG state
     nvgRestore(vg);
@@ -70,6 +62,9 @@ void RotatableImage::setRotation(float degrees) {
 
     // Convert to radians
     m_rotationRadians = m_rotationDegrees * NVG_PI / 180.0f;
+
+    brls::Logger::info("RotatableImage: setRotation({}) -> {} degrees, {} radians",
+                       degrees, m_rotationDegrees, m_rotationRadians);
 
     // Force redraw
     this->invalidate();
