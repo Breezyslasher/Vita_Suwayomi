@@ -182,6 +182,8 @@ void LibrarySectionTab::createCategoryTabs() {
         auto* btn = new brls::Button();
         btn->setText("Library");
         btn->setMarginRight(10);
+        btn->setPaddingLeft(15);
+        btn->setPaddingRight(15);
         btn->registerClickAction([this](brls::View* view) {
             selectCategory(0);
             return true;
@@ -195,9 +197,12 @@ void LibrarySectionTab::createCategoryTabs() {
     for (const auto& category : visibleCategories) {
         auto* btn = new brls::Button();
 
-        // Only show category name
+        // Only show category name - ensure full name is visible
         btn->setText(category.name);
         btn->setMarginRight(10);
+        // Add horizontal padding to prevent text cutoff
+        btn->setPaddingLeft(15);
+        btn->setPaddingRight(15);
 
         int catId = category.id;
         btn->registerClickAction([this, catId](brls::View* view) {
@@ -267,34 +272,38 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         m_titleLabel->setText(m_currentCategoryName);
     }
 
+    // Clear current display while loading
+    m_mangaList.clear();
+    if (m_contentGrid) {
+        m_contentGrid->setDataSource(m_mangaList);
+    }
+
     std::weak_ptr<bool> aliveWeak = m_alive;
 
     asyncRun([this, categoryId, aliveWeak]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
 
-        bool success = false;
-        if (categoryId == 0) {
-            // Fetch all library manga (default category)
-            success = client.fetchLibraryManga(manga);
-        } else {
-            // Fetch manga for specific category
-            success = client.fetchCategoryManga(categoryId, manga);
-        }
+        // Always fetch manga for the specific category only
+        // This ensures only books from the selected category are shown
+        bool success = client.fetchCategoryManga(categoryId, manga);
 
         if (success) {
             brls::Logger::info("LibrarySectionTab: Got {} manga for category {}",
                               manga.size(), categoryId);
 
-            brls::sync([this, manga, aliveWeak]() {
+            brls::sync([this, manga, categoryId, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) {
                     brls::Logger::debug("LibrarySectionTab: Tab destroyed, skipping UI update");
                     return;
                 }
 
-                m_mangaList = manga;
-                m_contentGrid->setDataSource(m_mangaList);
+                // Only update if we're still on the same category
+                if (m_currentCategoryId == categoryId) {
+                    m_mangaList = manga;
+                    m_contentGrid->setDataSource(m_mangaList);
+                }
                 m_loaded = true;
             });
         } else {
