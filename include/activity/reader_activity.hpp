@@ -84,6 +84,7 @@ private:
     // Touch handling
     void handleTouch(brls::Point point);
     void handleTouchNavigation(float x, float screenWidth);
+    void handleSwipe(brls::Point delta);
 
     // Page counter auto-hide
     void showPageCounter();

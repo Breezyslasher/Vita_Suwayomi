@@ -9,6 +9,7 @@
 #include "utils/async.hpp"
 
 #include <borealis.hpp>
+#include <cmath>
 
 namespace vitasuwayomi {
 
@@ -119,6 +120,14 @@ void ReaderActivity::onContentAvailable() {
                     handleTouchNavigation(x, screenWidth);
                 }
             }));
+
+        // Add pan/swipe gesture for NOBORU-style swipe navigation
+        pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
+            [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    handleSwipe(status.delta);
+                }
+            }, brls::PanAxis::ANY));
     }
 
     // Touch on container as fallback
@@ -131,6 +140,14 @@ void ReaderActivity::onContentAvailable() {
                     handleTouchNavigation(x, screenWidth);
                 }
             }));
+
+        // Add pan/swipe gesture to container as well
+        container->addGestureRecognizer(new brls::PanGestureRecognizer(
+            [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    handleSwipe(status.delta);
+                }
+            }, brls::PanAxis::ANY));
     }
 
     // Back button in top bar
@@ -605,6 +622,44 @@ void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
         }
     } else {
         toggleControls();
+    }
+}
+
+void ReaderActivity::handleSwipe(brls::Point delta) {
+    // NOBORU-style swipe navigation
+    // Minimum swipe distance threshold (10px like NOBORU)
+    const float SWIPE_THRESHOLD = 10.0f;
+
+    float absX = std::abs(delta.x);
+    float absY = std::abs(delta.y);
+
+    // Determine if this is a horizontal or vertical swipe
+    if (absX > absY && absX > SWIPE_THRESHOLD) {
+        // Horizontal swipe
+        if (delta.x > 0) {
+            // Swipe right
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                nextPage();
+            } else {
+                previousPage();
+            }
+        } else {
+            // Swipe left
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                previousPage();
+            } else {
+                nextPage();
+            }
+        }
+    } else if (absY > absX && absY > SWIPE_THRESHOLD) {
+        // Vertical swipe (for vertical reading mode or general navigation)
+        if (delta.y > 0) {
+            // Swipe down = previous page
+            previousPage();
+        } else {
+            // Swipe up = next page
+            nextPage();
+        }
     }
 }
 

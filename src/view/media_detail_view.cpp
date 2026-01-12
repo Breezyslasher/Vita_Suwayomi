@@ -68,23 +68,21 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_readButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_readButton));
     leftPanel->addView(m_readButton);
 
-    // Add/Remove Library button (blue)
-    m_libraryButton = new brls::Button();
-    m_libraryButton->setWidth(220);
-    m_libraryButton->setHeight(44);
-    m_libraryButton->setMarginBottom(8);
-    m_libraryButton->setCornerRadius(6);
-    m_libraryButton->setText(m_manga.inLibrary ? "In Library" : "Add to Library");
-    m_libraryButton->registerClickAction([this](brls::View* view) {
-        if (m_manga.inLibrary) {
-            onRemoveFromLibrary();
-        } else {
+    // Add to Library button (only shown if not already in library)
+    if (!m_manga.inLibrary) {
+        m_libraryButton = new brls::Button();
+        m_libraryButton->setWidth(220);
+        m_libraryButton->setHeight(44);
+        m_libraryButton->setMarginBottom(8);
+        m_libraryButton->setCornerRadius(6);
+        m_libraryButton->setText("Add to Library");
+        m_libraryButton->registerClickAction([this](brls::View* view) {
             onAddToLibrary();
-        }
-        return true;
-    });
-    m_libraryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_libraryButton));
-    leftPanel->addView(m_libraryButton);
+            return true;
+        });
+        m_libraryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_libraryButton));
+        leftPanel->addView(m_libraryButton);
+    }
 
     // Download button
     m_downloadButton = new brls::Button();
@@ -458,25 +456,33 @@ void MangaDetailView::showMangaMenu() {
 }
 
 void MangaDetailView::onChapterSelected(const Chapter& chapter) {
-    brls::Logger::debug("MangaDetailView: Selected chapter {} ({})", chapter.index, chapter.name);
+    brls::Logger::debug("MangaDetailView: Selected chapter id={} ({})", chapter.id, chapter.name);
 
-    // Open reader at this chapter
-    Application::getInstance().pushReaderActivity(m_manga.id, chapter.index, m_manga.title);
+    // Open reader at this chapter - use chapter.id not chapter.index
+    Application::getInstance().pushReaderActivity(m_manga.id, chapter.id, m_manga.title);
 }
 
-void MangaDetailView::onRead(int chapterIndex) {
-    if (chapterIndex == -1) {
-        // Continue from last read
-        if (m_manga.lastChapterRead > 0) {
-            chapterIndex = m_manga.lastChapterRead;
+void MangaDetailView::onRead(int chapterId) {
+    if (chapterId == -1) {
+        // Continue from last read or start from first chapter
+        if (m_manga.lastChapterRead > 0 && !m_chapters.empty()) {
+            // lastChapterRead is a chapter ID
+            chapterId = m_manga.lastChapterRead;
+        } else if (!m_chapters.empty()) {
+            // Start from first chapter (lowest chapter number)
+            auto firstChapter = std::min_element(m_chapters.begin(), m_chapters.end(),
+                [](const Chapter& a, const Chapter& b) {
+                    return a.chapterNumber < b.chapterNumber;
+                });
+            chapterId = firstChapter->id;
         } else {
-            // Start from first chapter
-            chapterIndex = 0;
+            brls::Application::notify("No chapters available");
+            return;
         }
     }
 
-    brls::Logger::info("MangaDetailView: Reading chapter {}", chapterIndex);
-    Application::getInstance().pushReaderActivity(m_manga.id, chapterIndex, m_manga.title);
+    brls::Logger::info("MangaDetailView: Reading chapter id={}", chapterId);
+    Application::getInstance().pushReaderActivity(m_manga.id, chapterId, m_manga.title);
 }
 
 void MangaDetailView::onAddToLibrary() {
@@ -488,8 +494,9 @@ void MangaDetailView::onAddToLibrary() {
         if (client.addMangaToLibrary(m_manga.id)) {
             brls::sync([this]() {
                 m_manga.inLibrary = true;
+                // Hide the button after adding to library
                 if (m_libraryButton) {
-                    m_libraryButton->setText("In Library");
+                    m_libraryButton->setVisibility(brls::Visibility::GONE);
                 }
                 brls::Application::notify("Added to library");
             });

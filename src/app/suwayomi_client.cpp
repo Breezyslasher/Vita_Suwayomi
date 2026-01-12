@@ -1839,11 +1839,23 @@ bool SuwayomiClient::updateChapterProgress(int mangaId, int chapterIndex, int la
 // Page Operations
 // ============================================================================
 
-bool SuwayomiClient::fetchChapterPages(int mangaId, int chapterIndex, std::vector<Page>& pages) {
+bool SuwayomiClient::fetchChapterPages(int mangaId, int chapterId, std::vector<Page>& pages) {
+    // Try GraphQL first (uses chapter ID)
+    if (fetchChapterPagesGraphQL(chapterId, pages)) {
+        // GraphQL returns relative URLs, convert to full URLs
+        for (auto& page : pages) {
+            if (!page.imageUrl.empty() && page.imageUrl[0] == '/') {
+                page.imageUrl = m_serverUrl + page.imageUrl;
+            }
+        }
+        return true;
+    }
+
+    // REST fallback - use chapter ID in URL
+    brls::Logger::info("GraphQL failed for chapter pages, trying REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
-    std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) +
-                                   "/chapter/" + std::to_string(chapterIndex));
+    std::string url = buildApiUrl("/chapter/" + std::to_string(chapterId));
     vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
@@ -1857,17 +1869,16 @@ bool SuwayomiClient::fetchChapterPages(int mangaId, int chapterIndex, std::vecto
     for (int i = 0; i < pageCount; i++) {
         Page page;
         page.index = i;
-        page.imageUrl = getPageImageUrl(mangaId, chapterIndex, i);
+        page.imageUrl = getPageImageUrl(chapterId, i);
         pages.push_back(page);
     }
 
-    brls::Logger::debug("Chapter has {} pages", pageCount);
+    brls::Logger::debug("Chapter {} has {} pages", chapterId, pageCount);
     return true;
 }
 
-std::string SuwayomiClient::getPageImageUrl(int mangaId, int chapterIndex, int pageIndex) {
-    return buildApiUrl("/manga/" + std::to_string(mangaId) +
-                       "/chapter/" + std::to_string(chapterIndex) +
+std::string SuwayomiClient::getPageImageUrl(int chapterId, int pageIndex) {
+    return buildApiUrl("/chapter/" + std::to_string(chapterId) +
                        "/page/" + std::to_string(pageIndex));
 }
 

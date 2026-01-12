@@ -288,8 +288,8 @@ public:
     bool updateChapterProgress(int mangaId, int chapterIndex, int lastPageRead);
 
     // Page Operations
-    bool fetchChapterPages(int mangaId, int chapterIndex, std::vector<Page>& pages);
-    std::string getPageImageUrl(int mangaId, int chapterIndex, int pageIndex);
+    bool fetchChapterPages(int mangaId, int chapterId, std::vector<Page>& pages);
+    std::string getPageImageUrl(int chapterId, int pageIndex);
 
     // Category Management
     bool fetchCategories(std::vector<Category>& categories);
