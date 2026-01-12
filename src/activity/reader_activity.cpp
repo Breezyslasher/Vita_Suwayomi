@@ -118,8 +118,6 @@ void ReaderActivity::onContentAvailable() {
                     m_isPanning = true;
                     m_touchStart = status.position;
                     brls::Logger::debug("Pan START at ({}, {})", status.position.x, status.position.y);
-                } else if (status.state == brls::GestureState::UPDATE) {
-                    m_touchCurrent = status.position;
                 } else if (status.state == brls::GestureState::END) {
                     brls::Logger::debug("Pan END delta=({}, {})", status.delta.x, status.delta.y);
                     handleSwipe(status.delta);
