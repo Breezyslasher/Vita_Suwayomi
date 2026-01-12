@@ -364,6 +364,9 @@ void MangaDetailView::populateChaptersList() {
             return true;
         });
 
+        // Add touch gesture support for touchscreen navigation
+        chapterCell->addGestureRecognizer(new brls::TapGestureRecognizer(chapterCell));
+
         m_chaptersBox->addView(chapterCell);
     }
 

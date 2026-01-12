@@ -216,6 +216,9 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
 
     container->addView(actionBtn);
 
+    // Add touch gesture support
+    container->addGestureRecognizer(new brls::TapGestureRecognizer(container));
+
     return container;
 }
 

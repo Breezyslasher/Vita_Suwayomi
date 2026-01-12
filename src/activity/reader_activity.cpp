@@ -39,6 +39,12 @@ void ReaderActivity::onContentAvailable() {
     // Start with controls hidden
     hideControls();
 
+    // Close reader with Circle button (back)
+    this->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    });
+
     // Set up controller input
     this->registerAction("Previous Page", brls::ControllerButton::BUTTON_LB, [this](brls::View*) {
         previousPage();
@@ -91,25 +97,37 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Touch/click handling on the main container
-    if (container) {
-        container->registerClickAction([this](brls::View* view) {
-            // Get touch position - center tap toggles controls
-            // Left/right tap navigates pages
-            brls::Application::giveFocus(view);
-            toggleControls();
-            return true;
-        });
-    }
-
-    // Touch on the page image for navigation
+    // Touch gesture on the page image for zone-based navigation
+    // Left 30% = previous/next page (depending on direction)
+    // Center 40% = toggle controls
+    // Right 30% = next/previous page (depending on direction)
     if (pageImage) {
         pageImage->setFocusable(true);
-        pageImage->registerClickAction([this](brls::View* view) {
-            // Toggle controls on tap
-            toggleControls();
-            return true;
-        });
+
+        // Add tap gesture recognizer for touch navigation
+        pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    // Get screen width and touch position
+                    float screenWidth = brls::Application::contentWidth;
+                    float x = status.position.x;
+
+                    // Use zone-based navigation
+                    handleTouchNavigation(x, screenWidth);
+                }
+            }));
+    }
+
+    // Touch on container as fallback
+    if (container) {
+        container->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    float screenWidth = brls::Application::contentWidth;
+                    float x = status.position.x;
+                    handleTouchNavigation(x, screenWidth);
+                }
+            }));
     }
 
     // Set up page slider
