@@ -110,40 +110,64 @@ void ReaderActivity::onContentAvailable() {
     if (pageImage) {
         pageImage->setFocusable(true);
 
-        // Add tap gesture recognizer - only toggles controls
+        // Add pan/swipe gesture FIRST for NOBORU-style swipe navigation
+        // This must be added before tap to properly detect swipes
+        pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
+            [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::START) {
+                    m_isPanning = true;
+                    m_touchStart = status.position;
+                    brls::Logger::debug("Pan START at ({}, {})", status.position.x, status.position.y);
+                } else if (status.state == brls::GestureState::UPDATE) {
+                    m_touchCurrent = status.position;
+                } else if (status.state == brls::GestureState::END) {
+                    brls::Logger::debug("Pan END delta=({}, {})", status.delta.x, status.delta.y);
+                    handleSwipe(status.delta);
+                    // Keep m_isPanning true briefly to block the tap
+                    // It will be reset on next gesture start
+                }
+            }, brls::PanAxis::ANY));
+
+        // Add tap gesture recognizer - only toggles controls if not panning
         pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::END) {
-                    toggleControls();
+                    // Only trigger tap if we weren't panning
+                    if (!m_isPanning) {
+                        brls::Logger::debug("Tap detected - toggling controls");
+                        toggleControls();
+                    } else {
+                        brls::Logger::debug("Tap blocked - was panning");
+                        m_isPanning = false;  // Reset for next gesture
+                    }
                 }
             }));
-
-        // Add pan/swipe gesture for NOBORU-style swipe navigation
-        pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
-            [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-                if (status.state == brls::GestureState::END) {
-                    handleSwipe(status.delta);
-                }
-            }, brls::PanAxis::ANY));
     }
 
     // Touch on container as fallback
     if (container) {
-        // Tap toggles controls
-        container->addGestureRecognizer(new brls::TapGestureRecognizer(
-            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
-                if (status.state == brls::GestureState::END) {
-                    toggleControls();
-                }
-            }));
-
-        // Add pan/swipe gesture to container as well
+        // Add pan/swipe gesture FIRST
         container->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-                if (status.state == brls::GestureState::END) {
+                if (status.state == brls::GestureState::START) {
+                    m_isPanning = true;
+                    m_touchStart = status.position;
+                } else if (status.state == brls::GestureState::END) {
                     handleSwipe(status.delta);
                 }
             }, brls::PanAxis::ANY));
+
+        // Tap toggles controls (only if not panning)
+        container->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    if (!m_isPanning) {
+                        toggleControls();
+                    } else {
+                        m_isPanning = false;
+                    }
+                }
+            }));
     }
 
     // Back button in top bar
@@ -480,33 +504,17 @@ void ReaderActivity::schedulePageCounterHide() {
 void ReaderActivity::showSettings() {
     auto* dialog = new brls::Dialog("Reader Settings");
 
-    // Page orientation option (Horizontal / Vertical)
-    std::string orientText = (m_settings.orientation == PageOrientation::HORIZONTAL) ?
-                             "Orientation: Horizontal" : "Orientation: Vertical";
-    dialog->addButton(orientText, [this, dialog]() {
-        dialog->dismiss();
-
-        // Toggle orientation
-        if (m_settings.orientation == PageOrientation::HORIZONTAL) {
-            m_settings.orientation = PageOrientation::VERTICAL;
-            brls::Application::notify("Orientation: Vertical (Up/Down)");
-        } else {
-            m_settings.orientation = PageOrientation::HORIZONTAL;
-            brls::Application::notify("Orientation: Horizontal (Left/Right)");
-        }
-    });
-
-    // Reading direction option (cycles through 3 options)
+    // Reading direction option (LTR for western, RTL for manga)
     std::string dirText;
     switch (m_settings.direction) {
         case ReaderDirection::LEFT_TO_RIGHT:
-            dirText = "Direction: Left to Right";
+            dirText = "Direction: Left to Right (Western)";
             break;
         case ReaderDirection::RIGHT_TO_LEFT:
-            dirText = "Direction: Right to Left";
+            dirText = "Direction: Right to Left (Manga)";
             break;
         case ReaderDirection::TOP_TO_BOTTOM:
-            dirText = "Direction: Top to Bottom";
+            dirText = "Direction: Top to Bottom (Webtoon)";
             break;
     }
     dialog->addButton(dirText, [this, dialog]() {
@@ -516,16 +524,15 @@ void ReaderActivity::showSettings() {
         switch (m_settings.direction) {
             case ReaderDirection::LEFT_TO_RIGHT:
                 m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
-                brls::Application::notify("Direction: Right to Left");
+                brls::Application::notify("Direction: Right to Left (Manga)");
                 break;
             case ReaderDirection::RIGHT_TO_LEFT:
                 m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
-                m_settings.orientation = PageOrientation::VERTICAL;
-                brls::Application::notify("Direction: Top to Bottom");
+                brls::Application::notify("Direction: Top to Bottom (Webtoon)");
                 break;
             case ReaderDirection::TOP_TO_BOTTOM:
                 m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
-                brls::Application::notify("Direction: Left to Right");
+                brls::Application::notify("Direction: Left to Right (Western)");
                 break;
         }
         updateDirectionLabel();
@@ -604,24 +611,28 @@ void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
 
 void ReaderActivity::handleSwipe(brls::Point delta) {
     // NOBORU-style swipe navigation
-    // Minimum swipe distance threshold (10px like NOBORU)
-    const float SWIPE_THRESHOLD = 10.0f;
+    // Minimum swipe distance threshold (lower = more sensitive)
+    const float SWIPE_THRESHOLD = 5.0f;
 
     float absX = std::abs(delta.x);
     float absY = std::abs(delta.y);
 
+    brls::Logger::info("handleSwipe: delta=({}, {}), absX={}, absY={}",
+                       delta.x, delta.y, absX, absY);
+
     // Determine if this is a horizontal or vertical swipe
     if (absX > absY && absX > SWIPE_THRESHOLD) {
         // Horizontal swipe
+        brls::Logger::info("Horizontal swipe detected: {}", delta.x > 0 ? "RIGHT" : "LEFT");
         if (delta.x > 0) {
-            // Swipe right
+            // Swipe right = go back (previous page in LTR, next in RTL)
             if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
                 nextPage();
             } else {
                 previousPage();
             }
         } else {
-            // Swipe left
+            // Swipe left = go forward (next page in LTR, previous in RTL)
             if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
                 previousPage();
             } else {
@@ -629,7 +640,8 @@ void ReaderActivity::handleSwipe(brls::Point delta) {
             }
         }
     } else if (absY > absX && absY > SWIPE_THRESHOLD) {
-        // Vertical swipe (for vertical reading mode or general navigation)
+        // Vertical swipe
+        brls::Logger::info("Vertical swipe detected: {}", delta.y > 0 ? "DOWN" : "UP");
         if (delta.y > 0) {
             // Swipe down = previous page
             previousPage();
@@ -637,6 +649,8 @@ void ReaderActivity::handleSwipe(brls::Point delta) {
             // Swipe up = next page
             nextPage();
         }
+    } else {
+        brls::Logger::debug("Swipe too small, ignoring (absX={}, absY={})", absX, absY);
     }
 }
 

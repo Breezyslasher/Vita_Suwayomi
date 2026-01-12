@@ -130,6 +130,11 @@ private:
 
     // Image caching (preloaded pages)
     std::map<int, std::string> m_cachedImages;
+
+    // Touch gesture tracking
+    bool m_isPanning = false;
+    brls::Point m_touchStart;
+    brls::Point m_touchCurrent;
 };
 
 } // namespace vitasuwayomi
