@@ -29,6 +29,7 @@ private:
     void onDeleteDownloads();
     void showDownloadOptions();
     void showCategoryDialog();
+    void showMangaMenu();
 
     // Chapter actions
     void markAllRead();

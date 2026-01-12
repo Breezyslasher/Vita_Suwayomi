@@ -73,6 +73,7 @@ private:
     void loadPages();
     void loadPage(int index);
     void updatePageDisplay();
+    void updateDirectionLabel();
     void updateProgress();
     void showControls();
     void hideControls();
@@ -84,14 +85,25 @@ private:
     void handleTouch(brls::Point point);
     void handleTouchNavigation(float x, float screenWidth);
 
-    // UI components
+    // Page counter auto-hide
+    void showPageCounter();
+    void hidePageCounter();
+    void schedulePageCounterHide();
+
+    // UI components - NOBORU style
     BRLS_BIND(brls::Box, container, "reader/container");
     BRLS_BIND(brls::Image, pageImage, "reader/page_image");
     BRLS_BIND(brls::Box, topBar, "reader/top_bar");
     BRLS_BIND(brls::Box, bottomBar, "reader/bottom_bar");
+    BRLS_BIND(brls::Box, pageCounter, "reader/page_counter");
     BRLS_BIND(brls::Label, pageLabel, "reader/page_label");
+    BRLS_BIND(brls::Label, mangaLabel, "reader/manga_label");
     BRLS_BIND(brls::Label, chapterLabel, "reader/chapter_label");
+    BRLS_BIND(brls::Label, chapterProgress, "reader/chapter_progress");
+    BRLS_BIND(brls::Label, sliderPageLabel, "reader/slider_page_label");
+    BRLS_BIND(brls::Label, directionLabel, "reader/direction_label");
     BRLS_BIND(brls::Slider, pageSlider, "reader/page_slider");
+    BRLS_BIND(brls::Button, backBtn, "reader/back_btn");
     BRLS_BIND(brls::Button, prevChapterBtn, "reader/prev_chapter");
     BRLS_BIND(brls::Button, nextChapterBtn, "reader/next_chapter");
     BRLS_BIND(brls::Button, settingsBtn, "reader/settings_btn");

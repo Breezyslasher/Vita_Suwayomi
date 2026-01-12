@@ -36,8 +36,14 @@ brls::View* ReaderActivity::createContentView() {
 void ReaderActivity::onContentAvailable() {
     brls::Logger::debug("ReaderActivity: content available");
 
-    // Start with controls hidden
+    // Set manga title in top bar
+    if (mangaLabel) {
+        mangaLabel->setText(m_mangaTitle);
+    }
+
+    // Start with controls hidden, page counter visible
     hideControls();
+    showPageCounter();
 
     // Close reader with Circle button (back)
     this->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
@@ -86,7 +92,7 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Toggle controls with Y or Start button
+    // Toggle controls with Y or Start button (NOBORU style)
     this->registerAction("Toggle Controls", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
         toggleControls();
         return true;
@@ -108,11 +114,8 @@ void ReaderActivity::onContentAvailable() {
         pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::END) {
-                    // Get screen width and touch position
                     float screenWidth = brls::Application::contentWidth;
                     float x = status.position.x;
-
-                    // Use zone-based navigation
                     handleTouchNavigation(x, screenWidth);
                 }
             }));
@@ -128,6 +131,15 @@ void ReaderActivity::onContentAvailable() {
                     handleTouchNavigation(x, screenWidth);
                 }
             }));
+    }
+
+    // Back button in top bar
+    if (backBtn) {
+        backBtn->registerClickAction([this](brls::View*) {
+            brls::Application::popActivity();
+            return true;
+        });
+        backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
     }
 
     // Set up page slider
@@ -147,6 +159,7 @@ void ReaderActivity::onContentAvailable() {
             previousChapter();
             return true;
         });
+        prevChapterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(prevChapterBtn));
     }
 
     if (nextChapterBtn) {
@@ -154,6 +167,7 @@ void ReaderActivity::onContentAvailable() {
             nextChapter();
             return true;
         });
+        nextChapterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(nextChapterBtn));
     }
 
     // Set up settings button
@@ -162,7 +176,11 @@ void ReaderActivity::onContentAvailable() {
             showSettings();
             return true;
         });
+        settingsBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsBtn));
     }
+
+    // Update direction label
+    updateDirectionLabel();
 
     // Load pages asynchronously
     loadPages();
@@ -203,11 +221,16 @@ void ReaderActivity::loadPages() {
 
         brls::Logger::info("Loaded {} pages", m_pages.size());
 
-        // Update UI
+        // Update UI labels
         if (chapterLabel) {
             std::string label = m_chapterName.empty() ?
                 "Chapter " + std::to_string(m_chapterIndex + 1) : m_chapterName;
             chapterLabel->setText(label);
+        }
+
+        if (chapterProgress) {
+            chapterProgress->setText("Ch. " + std::to_string(m_chapterIndex + 1) +
+                                     " of " + std::to_string(m_totalChapters));
         }
 
         // Start from saved position or beginning
@@ -226,6 +249,10 @@ void ReaderActivity::loadPage(int index) {
 
     std::string imageUrl = m_pages[index].imageUrl;
     brls::Logger::debug("Loading page {} from: {}", index, imageUrl);
+
+    // Show page counter when navigating
+    showPageCounter();
+    schedulePageCounterHide();
 
     // Load image
     if (pageImage) {
@@ -256,15 +283,39 @@ void ReaderActivity::preloadAdjacentPages() {
 }
 
 void ReaderActivity::updatePageDisplay() {
+    // Update page counter (top-right overlay)
     if (pageLabel) {
-        pageLabel->setText(std::to_string(m_currentPage + 1) + " / " +
+        pageLabel->setText(std::to_string(m_currentPage + 1) + "/" +
                           std::to_string(m_pages.size()));
     }
 
+    // Update slider page label (in bottom bar)
+    if (sliderPageLabel) {
+        sliderPageLabel->setText("Page " + std::to_string(m_currentPage + 1) +
+                                 " of " + std::to_string(m_pages.size()));
+    }
+
+    // Update slider position
     if (pageSlider && !m_pages.empty()) {
         float progress = static_cast<float>(m_currentPage) /
                         static_cast<float>(std::max(1, static_cast<int>(m_pages.size()) - 1));
         pageSlider->setProgress(progress);
+    }
+}
+
+void ReaderActivity::updateDirectionLabel() {
+    if (directionLabel) {
+        switch (m_settings.direction) {
+            case ReaderDirection::LEFT_TO_RIGHT:
+                directionLabel->setText("LTR");
+                break;
+            case ReaderDirection::RIGHT_TO_LEFT:
+                directionLabel->setText("RTL");
+                break;
+            case ReaderDirection::TOP_TO_BOTTOM:
+                directionLabel->setText("TTB");
+                break;
+        }
     }
 }
 
@@ -378,6 +429,8 @@ void ReaderActivity::showControls() {
     if (bottomBar) {
         bottomBar->setVisibility(brls::Visibility::VISIBLE);
     }
+    // Hide page counter when controls are visible (it's redundant)
+    hidePageCounter();
     m_controlsVisible = true;
 }
 
@@ -388,7 +441,27 @@ void ReaderActivity::hideControls() {
     if (bottomBar) {
         bottomBar->setVisibility(brls::Visibility::GONE);
     }
+    // Show page counter when controls are hidden
+    showPageCounter();
     m_controlsVisible = false;
+}
+
+void ReaderActivity::showPageCounter() {
+    if (pageCounter) {
+        pageCounter->setVisibility(brls::Visibility::VISIBLE);
+    }
+}
+
+void ReaderActivity::hidePageCounter() {
+    if (pageCounter) {
+        pageCounter->setVisibility(brls::Visibility::GONE);
+    }
+}
+
+void ReaderActivity::schedulePageCounterHide() {
+    // Auto-hide page counter after 1.5 seconds (like NOBORU)
+    // Note: In a real implementation, you'd use a timer/delayed callback
+    // For now, the page counter stays visible until controls are shown
 }
 
 void ReaderActivity::showSettings() {
@@ -434,7 +507,7 @@ void ReaderActivity::showSettings() {
                 break;
             case ReaderDirection::RIGHT_TO_LEFT:
                 m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
-                m_settings.orientation = PageOrientation::VERTICAL; // Auto-switch to vertical
+                m_settings.orientation = PageOrientation::VERTICAL;
                 brls::Application::notify("Direction: Top to Bottom");
                 break;
             case ReaderDirection::TOP_TO_BOTTOM:
@@ -442,6 +515,7 @@ void ReaderActivity::showSettings() {
                 brls::Application::notify("Direction: Left to Right");
                 break;
         }
+        updateDirectionLabel();
     });
 
     // Scaling mode option
@@ -498,7 +572,6 @@ void ReaderActivity::applySettings() {
                 pageImage->setScalingType(brls::ImageScalingType::FIT);
                 break;
             case ReaderScaleMode::ORIGINAL:
-                // Use FILL to show original size (centers and fills without scaling down)
                 pageImage->setScalingType(brls::ImageScalingType::FILL);
                 break;
         }
@@ -506,13 +579,13 @@ void ReaderActivity::applySettings() {
 }
 
 void ReaderActivity::handleTouch(brls::Point point) {
-    // This can be used for more advanced touch handling
-    // Currently handled by click actions on views
+    // Reserved for advanced touch handling (pinch-to-zoom, etc.)
 }
 
 void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
-    // Left 30% of screen = previous page
-    // Right 30% of screen = next page
+    // NOBORU-style touch zones:
+    // Left 30% of screen = previous page (or next in RTL)
+    // Right 30% of screen = next page (or previous in RTL)
     // Center 40% = toggle controls
 
     float leftThreshold = screenWidth * 0.3f;
