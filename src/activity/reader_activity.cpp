@@ -50,41 +50,33 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Horizontal navigation (left/right)
+    // Horizontal navigation (left/right) - works in all orientations
     this->registerAction("Previous Page", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
-        if (m_settings.orientation == PageOrientation::HORIZONTAL) {
-            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                nextPage();
-            } else {
-                previousPage();
-            }
-        }
-        return true;
-    });
-
-    this->registerAction("Next Page", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
-        if (m_settings.orientation == PageOrientation::HORIZONTAL) {
-            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                previousPage();
-            } else {
-                nextPage();
-            }
-        }
-        return true;
-    });
-
-    // Vertical navigation (up/down)
-    this->registerAction("Previous Page", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
-        if (m_settings.orientation == PageOrientation::VERTICAL) {
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+            nextPage();
+        } else {
             previousPage();
         }
         return true;
     });
 
-    this->registerAction("Next Page", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
-        if (m_settings.orientation == PageOrientation::VERTICAL) {
+    this->registerAction("Next Page", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+            previousPage();
+        } else {
             nextPage();
         }
+        return true;
+    });
+
+    // Vertical navigation (up/down) - works in all orientations
+    this->registerAction("Previous Page", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
+        previousPage();
+        return true;
+    });
+
+    this->registerAction("Next Page", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
+        nextPage();
         return true;
     });
 
@@ -488,7 +480,8 @@ void ReaderActivity::applySettings() {
                 pageImage->setScalingType(brls::ImageScalingType::FIT);
                 break;
             case ReaderScaleMode::ORIGINAL:
-                pageImage->setScalingType(brls::ImageScalingType::CROP);
+                // Use FILL to show original size (centers and fills without scaling down)
+                pageImage->setScalingType(brls::ImageScalingType::FILL);
                 break;
         }
     }
