@@ -557,31 +557,25 @@ void ReaderActivity::showSettings() {
     // Image rotation option (0, 90, 180, 270 degrees)
     std::string rotText;
     switch (m_settings.rotation) {
-        case ImageRotation::ROTATE_0: rotText = "Rotation: 0°"; break;
-        case ImageRotation::ROTATE_90: rotText = "Rotation: 90°"; break;
-        case ImageRotation::ROTATE_180: rotText = "Rotation: 180°"; break;
-        case ImageRotation::ROTATE_270: rotText = "Rotation: 270°"; break;
+        case ImageRotation::ROTATE_0: rotText = "Rotation: 0"; break;
+        case ImageRotation::ROTATE_90: rotText = "Rotation: 90"; break;
+        case ImageRotation::ROTATE_180: rotText = "Rotation: 180"; break;
+        case ImageRotation::ROTATE_270: rotText = "Rotation: 270"; break;
     }
-    dialog->addButton(rotText, [this, dialog]() {
-        dialog->dismiss();
-
-        // Cycle rotation
+    dialog->addButton(rotText, [this]() {
+        // Cycle rotation - apply first, then notify
         switch (m_settings.rotation) {
             case ImageRotation::ROTATE_0:
                 m_settings.rotation = ImageRotation::ROTATE_90;
-                brls::Application::notify("Rotation: 90°");
                 break;
             case ImageRotation::ROTATE_90:
                 m_settings.rotation = ImageRotation::ROTATE_180;
-                brls::Application::notify("Rotation: 180°");
                 break;
             case ImageRotation::ROTATE_180:
                 m_settings.rotation = ImageRotation::ROTATE_270;
-                brls::Application::notify("Rotation: 270°");
                 break;
             case ImageRotation::ROTATE_270:
                 m_settings.rotation = ImageRotation::ROTATE_0;
-                brls::Application::notify("Rotation: 0°");
                 break;
         }
         applySettings();
@@ -591,31 +585,26 @@ void ReaderActivity::showSettings() {
     std::string dirText;
     switch (m_settings.direction) {
         case ReaderDirection::LEFT_TO_RIGHT:
-            dirText = "Direction: Left to Right (Western)";
+            dirText = "Direction: LTR";
             break;
         case ReaderDirection::RIGHT_TO_LEFT:
-            dirText = "Direction: Right to Left (Manga)";
+            dirText = "Direction: RTL";
             break;
         case ReaderDirection::TOP_TO_BOTTOM:
-            dirText = "Direction: Top to Bottom (Webtoon)";
+            dirText = "Direction: TTB";
             break;
     }
-    dialog->addButton(dirText, [this, dialog]() {
-        dialog->dismiss();
-
+    dialog->addButton(dirText, [this]() {
         // Cycle reading direction
         switch (m_settings.direction) {
             case ReaderDirection::LEFT_TO_RIGHT:
                 m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
-                brls::Application::notify("Direction: Right to Left (Manga)");
                 break;
             case ReaderDirection::RIGHT_TO_LEFT:
                 m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
-                brls::Application::notify("Direction: Top to Bottom (Webtoon)");
                 break;
             case ReaderDirection::TOP_TO_BOTTOM:
                 m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
-                brls::Application::notify("Direction: Left to Right (Western)");
                 break;
         }
         updateDirectionLabel();
@@ -624,40 +613,31 @@ void ReaderActivity::showSettings() {
     // Scaling mode option
     std::string scaleText;
     switch (m_settings.scaleMode) {
-        case ReaderScaleMode::FIT_SCREEN: scaleText = "Scale: Fit Screen"; break;
-        case ReaderScaleMode::FIT_WIDTH: scaleText = "Scale: Fit Width"; break;
-        case ReaderScaleMode::FIT_HEIGHT: scaleText = "Scale: Fit Height"; break;
+        case ReaderScaleMode::FIT_SCREEN: scaleText = "Scale: Fit"; break;
+        case ReaderScaleMode::FIT_WIDTH: scaleText = "Scale: Width"; break;
+        case ReaderScaleMode::FIT_HEIGHT: scaleText = "Scale: Height"; break;
         case ReaderScaleMode::ORIGINAL: scaleText = "Scale: Original"; break;
     }
-    dialog->addButton(scaleText, [this, dialog]() {
-        dialog->dismiss();
-
+    dialog->addButton(scaleText, [this]() {
         // Cycle scale mode
         switch (m_settings.scaleMode) {
             case ReaderScaleMode::FIT_SCREEN:
                 m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
-                brls::Application::notify("Scale: Fit Width");
                 break;
             case ReaderScaleMode::FIT_WIDTH:
                 m_settings.scaleMode = ReaderScaleMode::FIT_HEIGHT;
-                brls::Application::notify("Scale: Fit Height");
                 break;
             case ReaderScaleMode::FIT_HEIGHT:
                 m_settings.scaleMode = ReaderScaleMode::ORIGINAL;
-                brls::Application::notify("Scale: Original");
                 break;
             case ReaderScaleMode::ORIGINAL:
                 m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
-                brls::Application::notify("Scale: Fit Screen");
                 break;
         }
         applySettings();
     });
 
-    dialog->addButton("Close", [dialog]() {
-        dialog->dismiss();
-    });
-
+    dialog->setCancelable(true);
     dialog->open();
 }
 
