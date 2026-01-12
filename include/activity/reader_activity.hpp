@@ -20,9 +20,23 @@ enum class ReaderScaleMode {
     ORIGINAL         // Original size
 };
 
+// Page orientation (scroll direction)
+enum class PageOrientation {
+    HORIZONTAL,      // Swipe left/right to change pages
+    VERTICAL         // Scroll up/down to change pages
+};
+
+// Reading direction
+enum class ReaderDirection {
+    LEFT_TO_RIGHT,   // Western comics style
+    RIGHT_TO_LEFT,   // Manga style (default)
+    TOP_TO_BOTTOM    // Webtoon/vertical style
+};
+
 // Reader settings
 struct ReaderSettings {
-    ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;
+    ReaderDirection direction = ReaderDirection::RIGHT_TO_LEFT;
+    PageOrientation orientation = PageOrientation::HORIZONTAL;
     ReaderScaleMode scaleMode = ReaderScaleMode::FIT_SCREEN;
     bool keepScreenOn = true;
 };

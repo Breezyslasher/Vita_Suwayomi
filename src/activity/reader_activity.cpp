@@ -50,19 +50,39 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
+    // Horizontal navigation (left/right)
     this->registerAction("Previous Page", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
-        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
-            nextPage();
-        } else {
-            previousPage();
+        if (m_settings.orientation == PageOrientation::HORIZONTAL) {
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                nextPage();
+            } else {
+                previousPage();
+            }
         }
         return true;
     });
 
     this->registerAction("Next Page", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
-        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
+        if (m_settings.orientation == PageOrientation::HORIZONTAL) {
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                previousPage();
+            } else {
+                nextPage();
+            }
+        }
+        return true;
+    });
+
+    // Vertical navigation (up/down)
+    this->registerAction("Previous Page", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
+        if (m_settings.orientation == PageOrientation::VERTICAL) {
             previousPage();
-        } else {
+        }
+        return true;
+    });
+
+    this->registerAction("Next Page", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
+        if (m_settings.orientation == PageOrientation::VERTICAL) {
             nextPage();
         }
         return true;
@@ -364,19 +384,53 @@ void ReaderActivity::hideControls() {
 void ReaderActivity::showSettings() {
     auto* dialog = new brls::Dialog("Reader Settings");
 
-    // Reading direction option
-    std::string dirText = (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) ?
-                          "Direction: Right to Left" : "Direction: Left to Right";
+    // Page orientation option (Horizontal / Vertical)
+    std::string orientText = (m_settings.orientation == PageOrientation::HORIZONTAL) ?
+                             "Orientation: Horizontal" : "Orientation: Vertical";
+    dialog->addButton(orientText, [this, dialog]() {
+        dialog->dismiss();
+
+        // Toggle orientation
+        if (m_settings.orientation == PageOrientation::HORIZONTAL) {
+            m_settings.orientation = PageOrientation::VERTICAL;
+            brls::Application::notify("Orientation: Vertical (Up/Down)");
+        } else {
+            m_settings.orientation = PageOrientation::HORIZONTAL;
+            brls::Application::notify("Orientation: Horizontal (Left/Right)");
+        }
+    });
+
+    // Reading direction option (cycles through 3 options)
+    std::string dirText;
+    switch (m_settings.direction) {
+        case ReaderDirection::LEFT_TO_RIGHT:
+            dirText = "Direction: Left to Right";
+            break;
+        case ReaderDirection::RIGHT_TO_LEFT:
+            dirText = "Direction: Right to Left";
+            break;
+        case ReaderDirection::TOP_TO_BOTTOM:
+            dirText = "Direction: Top to Bottom";
+            break;
+    }
     dialog->addButton(dirText, [this, dialog]() {
         dialog->dismiss();
 
-        // Toggle reading direction
-        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
-            m_settings.readingMode = ReadingMode::LEFT_TO_RIGHT;
-            brls::Application::notify("Reading: Left to Right");
-        } else {
-            m_settings.readingMode = ReadingMode::RIGHT_TO_LEFT;
-            brls::Application::notify("Reading: Right to Left");
+        // Cycle reading direction
+        switch (m_settings.direction) {
+            case ReaderDirection::LEFT_TO_RIGHT:
+                m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
+                brls::Application::notify("Direction: Right to Left");
+                break;
+            case ReaderDirection::RIGHT_TO_LEFT:
+                m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
+                m_settings.orientation = PageOrientation::VERTICAL; // Auto-switch to vertical
+                brls::Application::notify("Direction: Top to Bottom");
+                break;
+            case ReaderDirection::TOP_TO_BOTTOM:
+                m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
+                brls::Application::notify("Direction: Left to Right");
+                break;
         }
     });
 
@@ -454,13 +508,13 @@ void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
     float rightThreshold = screenWidth * 0.7f;
 
     if (x < leftThreshold) {
-        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
             nextPage();
         } else {
             previousPage();
         }
     } else if (x > rightThreshold) {
-        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
             previousPage();
         } else {
             nextPage();
