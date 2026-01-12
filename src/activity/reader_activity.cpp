@@ -504,6 +504,39 @@ void ReaderActivity::schedulePageCounterHide() {
 void ReaderActivity::showSettings() {
     auto* dialog = new brls::Dialog("Reader Settings");
 
+    // Image rotation option (0, 90, 180, 270 degrees)
+    std::string rotText;
+    switch (m_settings.rotation) {
+        case ImageRotation::ROTATE_0: rotText = "Rotation: 0°"; break;
+        case ImageRotation::ROTATE_90: rotText = "Rotation: 90°"; break;
+        case ImageRotation::ROTATE_180: rotText = "Rotation: 180°"; break;
+        case ImageRotation::ROTATE_270: rotText = "Rotation: 270°"; break;
+    }
+    dialog->addButton(rotText, [this, dialog]() {
+        dialog->dismiss();
+
+        // Cycle rotation
+        switch (m_settings.rotation) {
+            case ImageRotation::ROTATE_0:
+                m_settings.rotation = ImageRotation::ROTATE_90;
+                brls::Application::notify("Rotation: 90°");
+                break;
+            case ImageRotation::ROTATE_90:
+                m_settings.rotation = ImageRotation::ROTATE_180;
+                brls::Application::notify("Rotation: 180°");
+                break;
+            case ImageRotation::ROTATE_180:
+                m_settings.rotation = ImageRotation::ROTATE_270;
+                brls::Application::notify("Rotation: 270°");
+                break;
+            case ImageRotation::ROTATE_270:
+                m_settings.rotation = ImageRotation::ROTATE_0;
+                brls::Application::notify("Rotation: 0°");
+                break;
+        }
+        applySettings();
+    });
+
     // Reading direction option (LTR for western, RTL for manga)
     std::string dirText;
     switch (m_settings.direction) {
@@ -579,23 +612,26 @@ void ReaderActivity::showSettings() {
 }
 
 void ReaderActivity::applySettings() {
+    if (!pageImage) return;
+
     // Apply scaling mode
-    if (pageImage) {
-        switch (m_settings.scaleMode) {
-            case ReaderScaleMode::FIT_SCREEN:
-                pageImage->setScalingType(brls::ImageScalingType::FIT);
-                break;
-            case ReaderScaleMode::FIT_WIDTH:
-                pageImage->setScalingType(brls::ImageScalingType::STRETCH);
-                break;
-            case ReaderScaleMode::FIT_HEIGHT:
-                pageImage->setScalingType(brls::ImageScalingType::FIT);
-                break;
-            case ReaderScaleMode::ORIGINAL:
-                pageImage->setScalingType(brls::ImageScalingType::FILL);
-                break;
-        }
+    switch (m_settings.scaleMode) {
+        case ReaderScaleMode::FIT_SCREEN:
+            pageImage->setScalingType(brls::ImageScalingType::FIT);
+            break;
+        case ReaderScaleMode::FIT_WIDTH:
+            pageImage->setScalingType(brls::ImageScalingType::STRETCH);
+            break;
+        case ReaderScaleMode::FIT_HEIGHT:
+            pageImage->setScalingType(brls::ImageScalingType::FIT);
+            break;
+        case ReaderScaleMode::ORIGINAL:
+            pageImage->setScalingType(brls::ImageScalingType::FILL);
+            break;
     }
+
+    // Apply rotation
+    pageImage->setRotation(static_cast<float>(m_settings.rotation));
 }
 
 void ReaderActivity::handleTouch(brls::Point point) {

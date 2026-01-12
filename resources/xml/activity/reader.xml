@@ -10,7 +10,7 @@
     backgroundColor="#1a1a2e">
 
     <!-- Main page display area - fills entire screen (960x544) -->
-    <brls:Image
+    <RotatableImage
         id="reader/page_image"
         width="100%"
         height="100%"

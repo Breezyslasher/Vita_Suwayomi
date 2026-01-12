@@ -9,6 +9,7 @@
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
+#include "view/rotatable_image.hpp"
 
 namespace vitasuwayomi {
 
@@ -20,10 +21,12 @@ enum class ReaderScaleMode {
     ORIGINAL         // Original size
 };
 
-// Page orientation (scroll direction)
-enum class PageOrientation {
-    HORIZONTAL,      // Swipe left/right to change pages
-    VERTICAL         // Scroll up/down to change pages
+// Image rotation (in degrees)
+enum class ImageRotation {
+    ROTATE_0 = 0,      // No rotation (default)
+    ROTATE_90 = 90,    // 90 degrees clockwise
+    ROTATE_180 = 180,  // 180 degrees (upside down)
+    ROTATE_270 = 270   // 270 degrees clockwise (90 counter-clockwise)
 };
 
 // Reading direction
@@ -36,7 +39,7 @@ enum class ReaderDirection {
 // Reader settings
 struct ReaderSettings {
     ReaderDirection direction = ReaderDirection::RIGHT_TO_LEFT;
-    PageOrientation orientation = PageOrientation::HORIZONTAL;
+    ImageRotation rotation = ImageRotation::ROTATE_0;
     ReaderScaleMode scaleMode = ReaderScaleMode::FIT_SCREEN;
     bool keepScreenOn = true;
 };
@@ -93,7 +96,7 @@ private:
 
     // UI components - NOBORU style
     BRLS_BIND(brls::Box, container, "reader/container");
-    BRLS_BIND(brls::Image, pageImage, "reader/page_image");
+    BRLS_BIND(RotatableImage, pageImage, "reader/page_image");
     BRLS_BIND(brls::Box, topBar, "reader/top_bar");
     BRLS_BIND(brls::Box, bottomBar, "reader/bottom_bar");
     BRLS_BIND(brls::Box, pageCounter, "reader/page_counter");
