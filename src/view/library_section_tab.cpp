@@ -164,8 +164,21 @@ void LibrarySectionTab::createCategoryTabs() {
     m_categoryTabsBox->clearViews();
     m_categoryButtons.clear();
 
-    // If no user categories, add a default "Library" tab
-    if (m_categories.empty()) {
+    // Filter out empty categories (mangaCount == 0)
+    // Also filter the "Default" category (id 0) if it's empty
+    std::vector<Category> visibleCategories;
+    for (const auto& cat : m_categories) {
+        // Skip empty categories
+        if (cat.mangaCount <= 0) {
+            brls::Logger::debug("LibrarySectionTab: Hiding empty category '{}' (id={})",
+                              cat.name, cat.id);
+            continue;
+        }
+        visibleCategories.push_back(cat);
+    }
+
+    // If no visible categories, show a "Library" tab that loads all manga
+    if (visibleCategories.empty()) {
         auto* btn = new brls::Button();
         btn->setText("Library");
         btn->setMarginRight(10);
@@ -178,16 +191,12 @@ void LibrarySectionTab::createCategoryTabs() {
         return;
     }
 
-    // Create a button for each category
-    for (const auto& category : m_categories) {
+    // Create a button for each visible category (only show name, no count)
+    for (const auto& category : visibleCategories) {
         auto* btn = new brls::Button();
 
-        // Use category name, show manga count if available
-        std::string label = category.name;
-        if (category.mangaCount > 0) {
-            label += " (" + std::to_string(category.mangaCount) + ")";
-        }
-        btn->setText(label);
+        // Only show category name
+        btn->setText(category.name);
         btn->setMarginRight(10);
 
         int catId = category.id;
@@ -199,6 +208,9 @@ void LibrarySectionTab::createCategoryTabs() {
         m_categoryTabsBox->addView(btn);
         m_categoryButtons.push_back(btn);
     }
+
+    // Store visible categories for button style updates
+    m_categories = visibleCategories;
 
     updateCategoryButtonStyles();
 }
