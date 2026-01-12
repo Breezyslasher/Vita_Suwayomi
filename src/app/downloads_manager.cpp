@@ -734,7 +734,8 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
         DownloadedPage downloadedPage;
         downloadedPage.index = page.index;
 
-        std::string imageUrl = client.getPageImageUrl(mangaId, chapter.chapterIndex, page.index);
+        // Use the page's imageUrl that was already fetched
+        std::string imageUrl = page.imageUrl;
         if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, downloadedPage.localPath)) {
             downloadedPage.downloaded = true;
             chapter.downloadedPages++;

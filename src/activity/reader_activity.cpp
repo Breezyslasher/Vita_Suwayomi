@@ -104,20 +104,17 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Touch gesture on the page image for zone-based navigation
-    // Left 30% = previous/next page (depending on direction)
-    // Center 40% = toggle controls
-    // Right 30% = next/previous page (depending on direction)
+    // Touch gesture on the page image
+    // Tap anywhere = toggle controls (show/hide UI)
+    // Swipe = navigate pages (NOBORU style)
     if (pageImage) {
         pageImage->setFocusable(true);
 
-        // Add tap gesture recognizer for touch navigation
+        // Add tap gesture recognizer - only toggles controls
         pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::END) {
-                    float screenWidth = brls::Application::contentWidth;
-                    float x = status.position.x;
-                    handleTouchNavigation(x, screenWidth);
+                    toggleControls();
                 }
             }));
 
@@ -132,12 +129,11 @@ void ReaderActivity::onContentAvailable() {
 
     // Touch on container as fallback
     if (container) {
+        // Tap toggles controls
         container->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::END) {
-                    float screenWidth = brls::Application::contentWidth;
-                    float x = status.position.x;
-                    handleTouchNavigation(x, screenWidth);
+                    toggleControls();
                 }
             }));
 
@@ -600,29 +596,10 @@ void ReaderActivity::handleTouch(brls::Point point) {
 }
 
 void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
-    // NOBORU-style touch zones:
-    // Left 30% of screen = previous page (or next in RTL)
-    // Right 30% of screen = next page (or previous in RTL)
-    // Center 40% = toggle controls
-
-    float leftThreshold = screenWidth * 0.3f;
-    float rightThreshold = screenWidth * 0.7f;
-
-    if (x < leftThreshold) {
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-            nextPage();
-        } else {
-            previousPage();
-        }
-    } else if (x > rightThreshold) {
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-            previousPage();
-        } else {
-            nextPage();
-        }
-    } else {
-        toggleControls();
-    }
+    // Touch navigation via tap zones is disabled
+    // Tapping anywhere now only toggles controls
+    // Page navigation is done via swipe gestures or controller buttons
+    toggleControls();
 }
 
 void ReaderActivity::handleSwipe(brls::Point delta) {
