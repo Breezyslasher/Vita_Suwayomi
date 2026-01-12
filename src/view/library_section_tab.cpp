@@ -52,15 +52,36 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryScroller->setContentView(m_categoryTabsBox);
     topRow->addView(m_categoryScroller);
 
+    // Button container for Sort and Update
+    auto* buttonBox = new brls::Box();
+    buttonBox->setAxis(brls::Axis::ROW);
+    buttonBox->setAlignItems(brls::AlignItems::CENTER);
+
+    // Sort button
+    m_sortBtn = new brls::Button();
+    m_sortBtn->setText("A-Z");
+    m_sortBtn->setMarginLeft(10);
+    m_sortBtn->setWidth(70);
+    m_sortBtn->setHeight(35);
+    m_sortBtn->registerClickAction([this](brls::View* view) {
+        cycleSortMode();
+        return true;
+    });
+    buttonBox->addView(m_sortBtn);
+
     // Update button
     m_updateBtn = new brls::Button();
     m_updateBtn->setText("Update");
-    m_updateBtn->setMarginLeft(15);
+    m_updateBtn->setMarginLeft(10);
+    m_updateBtn->setWidth(80);
+    m_updateBtn->setHeight(35);
     m_updateBtn->registerClickAction([this](brls::View* view) {
         triggerLibraryUpdate();
         return true;
     });
-    topRow->addView(m_updateBtn);
+    buttonBox->addView(m_updateBtn);
+
+    topRow->addView(buttonBox);
 
     this->addView(topRow);
 
@@ -182,8 +203,9 @@ void LibrarySectionTab::createCategoryTabs() {
         auto* btn = new brls::Button();
         btn->setText("Library");
         btn->setMarginRight(10);
-        btn->setPaddingLeft(15);
-        btn->setPaddingRight(15);
+        // Set explicit width to fit text (approx 8 pixels per char + padding)
+        btn->setWidth(100);
+        btn->setHeight(35);
         btn->registerClickAction([this](brls::View* view) {
             selectCategory(0);
             return true;
@@ -197,12 +219,16 @@ void LibrarySectionTab::createCategoryTabs() {
     for (const auto& category : visibleCategories) {
         auto* btn = new brls::Button();
 
-        // Only show category name - ensure full name is visible
+        // Only show category name
         btn->setText(category.name);
-        btn->setMarginRight(10);
-        // Add horizontal padding to prevent text cutoff
-        btn->setPaddingLeft(15);
-        btn->setPaddingRight(15);
+        btn->setMarginRight(8);
+
+        // Calculate width based on text length (approx 9 pixels per char + 30 padding)
+        int textWidth = static_cast<int>(category.name.length()) * 9 + 30;
+        if (textWidth < 60) textWidth = 60;  // Minimum width
+        if (textWidth > 200) textWidth = 200; // Maximum width
+        btn->setWidth(textWidth);
+        btn->setHeight(35);
 
         int catId = category.id;
         btn->registerClickAction([this, catId](brls::View* view) {
@@ -302,7 +328,8 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
                 // Only update if we're still on the same category
                 if (m_currentCategoryId == categoryId) {
                     m_mangaList = manga;
-                    m_contentGrid->setDataSource(m_mangaList);
+                    // Apply current sort mode
+                    sortMangaList();
                 }
                 m_loaded = true;
             });
@@ -362,6 +389,82 @@ void LibrarySectionTab::triggerLibraryUpdate() {
             }
         });
     });
+}
+
+void LibrarySectionTab::sortMangaList() {
+    switch (m_sortMode) {
+        case LibrarySortMode::TITLE_ASC:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) { return a.title < b.title; });
+            break;
+        case LibrarySortMode::TITLE_DESC:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) { return a.title > b.title; });
+            break;
+        case LibrarySortMode::UNREAD_DESC:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) { return a.unreadCount > b.unreadCount; });
+            break;
+        case LibrarySortMode::UNREAD_ASC:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) { return a.unreadCount < b.unreadCount; });
+            break;
+        case LibrarySortMode::RECENTLY_ADDED:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) { return a.id > b.id; });
+            break;
+    }
+
+    // Update grid display
+    if (m_contentGrid) {
+        m_contentGrid->setDataSource(m_mangaList);
+    }
+}
+
+void LibrarySectionTab::cycleSortMode() {
+    // Cycle through sort modes
+    switch (m_sortMode) {
+        case LibrarySortMode::TITLE_ASC:
+            m_sortMode = LibrarySortMode::TITLE_DESC;
+            break;
+        case LibrarySortMode::TITLE_DESC:
+            m_sortMode = LibrarySortMode::UNREAD_DESC;
+            break;
+        case LibrarySortMode::UNREAD_DESC:
+            m_sortMode = LibrarySortMode::UNREAD_ASC;
+            break;
+        case LibrarySortMode::UNREAD_ASC:
+            m_sortMode = LibrarySortMode::RECENTLY_ADDED;
+            break;
+        case LibrarySortMode::RECENTLY_ADDED:
+            m_sortMode = LibrarySortMode::TITLE_ASC;
+            break;
+    }
+
+    updateSortButtonText();
+    sortMangaList();
+}
+
+void LibrarySectionTab::updateSortButtonText() {
+    if (!m_sortBtn) return;
+
+    switch (m_sortMode) {
+        case LibrarySortMode::TITLE_ASC:
+            m_sortBtn->setText("A-Z");
+            break;
+        case LibrarySortMode::TITLE_DESC:
+            m_sortBtn->setText("Z-A");
+            break;
+        case LibrarySortMode::UNREAD_DESC:
+            m_sortBtn->setText("Unread");
+            break;
+        case LibrarySortMode::UNREAD_ASC:
+            m_sortBtn->setText("Read");
+            break;
+        case LibrarySortMode::RECENTLY_ADDED:
+            m_sortBtn->setText("Recent");
+            break;
+    }
 }
 
 } // namespace vitasuwayomi

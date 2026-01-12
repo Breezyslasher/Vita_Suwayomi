@@ -1200,14 +1200,14 @@ bool SuwayomiClient::setMangaCategoriesGraphQL(int mangaId, const std::vector<in
 }
 
 bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga) {
-    // Query with pagination - fetch up to 500 manga per request for faster loading
-    // Only request essential fields for list view to reduce response size
+    // Query category with its manga list
+    // Note: Some Suwayomi versions don't support pagination args on category.mangas
     const char* query = R"(
         query GetCategoryManga($categoryId: Int!) {
             category(id: $categoryId) {
                 id
                 name
-                mangas(first: 500, orderBy: TITLE) {
+                mangas {
                     nodes {
                         id
                         title
@@ -1216,7 +1216,6 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
                         inLibrary
                         unreadCount
                     }
-                    totalCount
                 }
             }
         }

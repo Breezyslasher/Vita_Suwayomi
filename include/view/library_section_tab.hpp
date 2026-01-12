@@ -13,6 +13,15 @@
 
 namespace vitasuwayomi {
 
+// Sort modes for library manga
+enum class LibrarySortMode {
+    TITLE_ASC,       // A-Z
+    TITLE_DESC,      // Z-A
+    UNREAD_DESC,     // Most unread first
+    UNREAD_ASC,      // Least unread first
+    RECENTLY_ADDED,  // Recently added (by ID, higher = newer)
+};
+
 class LibrarySectionTab : public brls::Box {
 public:
     LibrarySectionTab();
@@ -30,6 +39,9 @@ private:
     void onMangaSelected(const Manga& manga);
     void triggerLibraryUpdate();
     void updateCategoryButtonStyles();
+    void sortMangaList();
+    void cycleSortMode();
+    void updateSortButtonText();
 
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
@@ -37,6 +49,9 @@ private:
     // Currently selected category
     int m_currentCategoryId = 0;
     std::string m_currentCategoryName = "Library";
+
+    // Sort mode
+    LibrarySortMode m_sortMode = LibrarySortMode::TITLE_ASC;
 
     // UI Components
     brls::Label* m_titleLabel = nullptr;
@@ -46,8 +61,9 @@ private:
     brls::ScrollingFrame* m_categoryScroller = nullptr;
     std::vector<brls::Button*> m_categoryButtons;
 
-    // Update button (separate from category tabs)
+    // Action buttons
     brls::Button* m_updateBtn = nullptr;
+    brls::Button* m_sortBtn = nullptr;
 
     // Main content grid
     RecyclingGrid* m_contentGrid = nullptr;
