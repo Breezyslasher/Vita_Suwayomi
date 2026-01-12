@@ -89,6 +89,59 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
     });
 }
 
+void ImageLoader::preload(const std::string& url) {
+    if (url.empty()) return;
+
+    // Check if already cached
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        if (s_cache.find(url) != s_cache.end()) {
+            return; // Already in cache
+        }
+    }
+
+    // Capture auth credentials for async use
+    std::string authUser = s_authUsername;
+    std::string authPass = s_authPassword;
+
+    // Preload asynchronously (no callback, just cache)
+    brls::async([url, authUser, authPass]() {
+        HttpClient client;
+
+        // Add authentication if credentials are set
+        if (!authUser.empty() && !authPass.empty()) {
+            std::string credentials = authUser + ":" + authPass;
+            static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            std::string encoded;
+            int val = 0, valb = -6;
+            for (unsigned char c : credentials) {
+                val = (val << 8) + c;
+                valb += 8;
+                while (valb >= 0) {
+                    encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                    valb -= 6;
+                }
+            }
+            if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+            while (encoded.size() % 4) encoded.push_back('=');
+            client.setDefaultHeader("Authorization", "Basic " + encoded);
+        }
+
+        HttpResponse resp = client.get(url);
+
+        if (resp.success && !resp.body.empty()) {
+            std::vector<uint8_t> imageData(resp.body.begin(), resp.body.end());
+
+            std::lock_guard<std::mutex> lock(s_cacheMutex);
+            if (s_cache.size() > 100) {
+                s_cache.clear();
+            }
+            s_cache[url] = imageData;
+            brls::Logger::debug("ImageLoader: Preloaded {} bytes from {}", imageData.size(), url);
+        }
+    });
+}
+
 void ImageLoader::clearCache() {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
     s_cache.clear();

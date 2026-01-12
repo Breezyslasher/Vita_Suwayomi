@@ -1,5 +1,6 @@
 /**
  * VitaSuwayomi - Manga Reader Activity implementation
+ * NOBORU-style UI with tap to show/hide controls and touch navigation
  */
 
 #include "activity/reader_activity.hpp"
@@ -35,7 +36,10 @@ brls::View* ReaderActivity::createContentView() {
 void ReaderActivity::onContentAvailable() {
     brls::Logger::debug("ReaderActivity: content available");
 
-    // Set up input handling
+    // Start with controls hidden
+    hideControls();
+
+    // Set up controller input
     this->registerAction("Previous Page", brls::ControllerButton::BUTTON_LB, [this](brls::View*) {
         previousPage();
         return true;
@@ -47,7 +51,7 @@ void ReaderActivity::onContentAvailable() {
     });
 
     this->registerAction("Previous Page", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
-        if (m_readingMode == ReadingMode::RIGHT_TO_LEFT) {
+        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
             nextPage();
         } else {
             previousPage();
@@ -56,7 +60,7 @@ void ReaderActivity::onContentAvailable() {
     });
 
     this->registerAction("Next Page", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
-        if (m_readingMode == ReadingMode::RIGHT_TO_LEFT) {
+        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
             previousPage();
         } else {
             nextPage();
@@ -64,6 +68,7 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
+    // Toggle controls with Y or Start button
     this->registerAction("Toggle Controls", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
         toggleControls();
         return true;
@@ -74,9 +79,31 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Set up page slider if available
+    // Touch/click handling on the main container
+    if (container) {
+        container->registerClickAction([this](brls::View* view) {
+            // Get touch position - center tap toggles controls
+            // Left/right tap navigates pages
+            brls::Application::giveFocus(view);
+            toggleControls();
+            return true;
+        });
+    }
+
+    // Touch on the page image for navigation
+    if (pageImage) {
+        pageImage->setFocusable(true);
+        pageImage->registerClickAction([this](brls::View* view) {
+            // Toggle controls on tap
+            toggleControls();
+            return true;
+        });
+    }
+
+    // Set up page slider
     if (pageSlider) {
         pageSlider->getProgressEvent()->subscribe([this](float progress) {
+            if (m_pages.empty()) return;
             int targetPage = static_cast<int>(progress * (m_pages.size() - 1));
             if (targetPage != m_currentPage) {
                 goToPage(targetPage);
@@ -95,6 +122,14 @@ void ReaderActivity::onContentAvailable() {
     if (nextChapterBtn) {
         nextChapterBtn->registerClickAction([this](brls::View*) {
             nextChapter();
+            return true;
+        });
+    }
+
+    // Set up settings button
+    if (settingsBtn) {
+        settingsBtn->registerClickAction([this](brls::View*) {
+            showSettings();
             return true;
         });
     }
@@ -140,8 +175,9 @@ void ReaderActivity::loadPages() {
 
         // Update UI
         if (chapterLabel) {
-            chapterLabel->setText(m_chapterName.empty() ?
-                "Chapter " + std::to_string(m_chapterIndex + 1) : m_chapterName);
+            std::string label = m_chapterName.empty() ?
+                "Chapter " + std::to_string(m_chapterIndex + 1) : m_chapterName;
+            chapterLabel->setText(label);
         }
 
         // Start from saved position or beginning
@@ -161,20 +197,10 @@ void ReaderActivity::loadPage(int index) {
     std::string imageUrl = m_pages[index].imageUrl;
     brls::Logger::debug("Loading page {} from: {}", index, imageUrl);
 
-    // Check cache first
-    auto cacheIt = m_cachedImages.find(index);
-    if (cacheIt != m_cachedImages.end()) {
-        if (pageImage) {
-            // Use cached image
-            // Note: This would require proper image caching implementation
-        }
-    }
-
     // Load image
     if (pageImage) {
         int currentPageAtLoad = m_currentPage;
         ImageLoader::loadAsync(imageUrl, [this, index, currentPageAtLoad](brls::Image* img) {
-            // Only log if this is still the current page
             if (index == currentPageAtLoad) {
                 brls::Logger::debug("ReaderActivity: Page {} loaded", index);
             }
@@ -186,9 +212,17 @@ void ReaderActivity::loadPage(int index) {
 }
 
 void ReaderActivity::preloadAdjacentPages() {
-    // TODO: Implement proper preloading with ImageLoader cache
-    // The current ImageLoader caches by URL automatically
-    // Future improvement: preload images into ImageLoader's cache
+    // Preload next page
+    if (m_currentPage + 1 < static_cast<int>(m_pages.size())) {
+        std::string nextUrl = m_pages[m_currentPage + 1].imageUrl;
+        ImageLoader::preload(nextUrl);
+    }
+
+    // Preload previous page
+    if (m_currentPage > 0) {
+        std::string prevUrl = m_pages[m_currentPage - 1].imageUrl;
+        ImageLoader::preload(prevUrl);
+    }
 }
 
 void ReaderActivity::updatePageDisplay() {
@@ -198,7 +232,8 @@ void ReaderActivity::updatePageDisplay() {
     }
 
     if (pageSlider && !m_pages.empty()) {
-        float progress = static_cast<float>(m_currentPage) / static_cast<float>(m_pages.size() - 1);
+        float progress = static_cast<float>(m_currentPage) /
+                        static_cast<float>(std::max(1, static_cast<int>(m_pages.size()) - 1));
         pageSlider->setProgress(progress);
     }
 }
@@ -218,12 +253,11 @@ void ReaderActivity::nextPage() {
         loadPage(m_currentPage);
         updateProgress();
     } else {
-        // End of chapter - mark as read and prompt for next chapter
+        // End of chapter - mark as read
         markChapterAsRead();
 
         if (m_chapterIndex < m_totalChapters - 1) {
-            // Show dialog to go to next chapter
-            auto* dialog = new brls::Dialog("End of Chapter\nGo to next chapter?");
+            auto* dialog = new brls::Dialog("End of chapter. Go to next?");
             dialog->addButton("Next Chapter", [this, dialog]() {
                 dialog->dismiss();
                 nextChapter();
@@ -232,6 +266,8 @@ void ReaderActivity::nextPage() {
                 dialog->dismiss();
             });
             dialog->open();
+        } else {
+            brls::Application::notify("End of manga");
         }
     }
 }
@@ -243,8 +279,7 @@ void ReaderActivity::previousPage() {
         loadPage(m_currentPage);
         updateProgress();
     } else if (m_chapterIndex > 0) {
-        // Beginning of chapter - offer previous chapter
-        auto* dialog = new brls::Dialog("Beginning of Chapter\nGo to previous chapter?");
+        auto* dialog = new brls::Dialog("Beginning of chapter. Go to previous?");
         dialog->addButton("Previous Chapter", [this, dialog]() {
             dialog->dismiss();
             previousChapter();
@@ -267,10 +302,8 @@ void ReaderActivity::goToPage(int pageIndex) {
 
 void ReaderActivity::nextChapter() {
     if (m_chapterIndex < m_totalChapters - 1) {
-        // Mark current chapter as read
         markChapterAsRead();
 
-        // Navigate to next chapter
         m_chapterIndex++;
         m_currentPage = 0;
         m_pages.clear();
@@ -328,19 +361,113 @@ void ReaderActivity::hideControls() {
     m_controlsVisible = false;
 }
 
-void ReaderActivity::toggleFullscreen() {
-    m_isFullscreen = !m_isFullscreen;
-    // Implementation depends on borealis fullscreen support
+void ReaderActivity::showSettings() {
+    auto* dialog = new brls::Dialog("Reader Settings");
+
+    // Reading direction option
+    std::string dirText = (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) ?
+                          "Direction: Right to Left" : "Direction: Left to Right";
+    dialog->addButton(dirText, [this, dialog]() {
+        dialog->dismiss();
+
+        // Toggle reading direction
+        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
+            m_settings.readingMode = ReadingMode::LEFT_TO_RIGHT;
+            brls::Application::notify("Reading: Left to Right");
+        } else {
+            m_settings.readingMode = ReadingMode::RIGHT_TO_LEFT;
+            brls::Application::notify("Reading: Right to Left");
+        }
+    });
+
+    // Scaling mode option
+    std::string scaleText;
+    switch (m_settings.scaleMode) {
+        case ReaderScaleMode::FIT_SCREEN: scaleText = "Scale: Fit Screen"; break;
+        case ReaderScaleMode::FIT_WIDTH: scaleText = "Scale: Fit Width"; break;
+        case ReaderScaleMode::FIT_HEIGHT: scaleText = "Scale: Fit Height"; break;
+        case ReaderScaleMode::ORIGINAL: scaleText = "Scale: Original"; break;
+    }
+    dialog->addButton(scaleText, [this, dialog]() {
+        dialog->dismiss();
+
+        // Cycle scale mode
+        switch (m_settings.scaleMode) {
+            case ReaderScaleMode::FIT_SCREEN:
+                m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
+                brls::Application::notify("Scale: Fit Width");
+                break;
+            case ReaderScaleMode::FIT_WIDTH:
+                m_settings.scaleMode = ReaderScaleMode::FIT_HEIGHT;
+                brls::Application::notify("Scale: Fit Height");
+                break;
+            case ReaderScaleMode::FIT_HEIGHT:
+                m_settings.scaleMode = ReaderScaleMode::ORIGINAL;
+                brls::Application::notify("Scale: Original");
+                break;
+            case ReaderScaleMode::ORIGINAL:
+                m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
+                brls::Application::notify("Scale: Fit Screen");
+                break;
+        }
+        applySettings();
+    });
+
+    dialog->addButton("Close", [dialog]() {
+        dialog->dismiss();
+    });
+
+    dialog->open();
 }
 
-void ReaderActivity::setReadingMode(ReadingMode mode) {
-    m_readingMode = mode;
-    // Update UI based on reading mode
+void ReaderActivity::applySettings() {
+    // Apply scaling mode
+    if (pageImage) {
+        switch (m_settings.scaleMode) {
+            case ReaderScaleMode::FIT_SCREEN:
+                pageImage->setScalingType(brls::ImageScalingType::FIT);
+                break;
+            case ReaderScaleMode::FIT_WIDTH:
+                pageImage->setScalingType(brls::ImageScalingType::STRETCH);
+                break;
+            case ReaderScaleMode::FIT_HEIGHT:
+                pageImage->setScalingType(brls::ImageScalingType::FIT);
+                break;
+            case ReaderScaleMode::ORIGINAL:
+                pageImage->setScalingType(brls::ImageScalingType::CROP);
+                break;
+        }
+    }
 }
 
-void ReaderActivity::setPageScaleMode(PageScaleMode mode) {
-    m_scaleMode = mode;
-    // Update image scaling
+void ReaderActivity::handleTouch(brls::Point point) {
+    // This can be used for more advanced touch handling
+    // Currently handled by click actions on views
+}
+
+void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
+    // Left 30% of screen = previous page
+    // Right 30% of screen = next page
+    // Center 40% = toggle controls
+
+    float leftThreshold = screenWidth * 0.3f;
+    float rightThreshold = screenWidth * 0.7f;
+
+    if (x < leftThreshold) {
+        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
+            nextPage();
+        } else {
+            previousPage();
+        }
+    } else if (x > rightThreshold) {
+        if (m_settings.readingMode == ReadingMode::RIGHT_TO_LEFT) {
+            previousPage();
+        } else {
+            nextPage();
+        }
+    } else {
+        toggleControls();
+    }
 }
 
 } // namespace vitasuwayomi

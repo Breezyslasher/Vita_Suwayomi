@@ -40,14 +40,17 @@ LibrarySectionTab::LibrarySectionTab() {
 
     // Scrollable category tabs container
     m_categoryScroller = new brls::ScrollingFrame();
-    m_categoryScroller->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
+    m_categoryScroller->setScrollingBehavior(brls::ScrollingBehavior::NATURAL);
     m_categoryScroller->setGrow(1.0f);
     m_categoryScroller->setHeight(45);
+    m_categoryScroller->setScrollingIndicatorVisible(true);
 
     m_categoryTabsBox = new brls::Box();
     m_categoryTabsBox->setAxis(brls::Axis::ROW);
     m_categoryTabsBox->setJustifyContent(brls::JustifyContent::FLEX_START);
     m_categoryTabsBox->setAlignItems(brls::AlignItems::CENTER);
+    m_categoryTabsBox->setPaddingLeft(5);  // Prevent first category cutoff
+    m_categoryTabsBox->setPaddingRight(10);
 
     m_categoryScroller->setContentView(m_categoryTabsBox);
     topRow->addView(m_categoryScroller);

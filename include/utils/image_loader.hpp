@@ -22,6 +22,9 @@ public:
     // Load image asynchronously from URL
     static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target);
 
+    // Preload image to cache without displaying
+    static void preload(const std::string& url);
+
     // Clear image cache
     static void clearCache();
 

@@ -1,6 +1,7 @@
 /**
  * VitaSuwayomi - Manga Reader Activity
  * Displays manga pages for reading with navigation controls
+ * NOBORU-style UI with tap to show/hide controls
  */
 
 #pragma once
@@ -10,6 +11,21 @@
 #include "app/application.hpp"
 
 namespace vitasuwayomi {
+
+// Reader scaling modes
+enum class ReaderScaleMode {
+    FIT_SCREEN,      // Fit entire page on screen
+    FIT_WIDTH,       // Fit width, may need vertical scroll
+    FIT_HEIGHT,      // Fit height, may need horizontal scroll
+    ORIGINAL         // Original size
+};
+
+// Reader settings
+struct ReaderSettings {
+    ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;
+    ReaderScaleMode scaleMode = ReaderScaleMode::FIT_SCREEN;
+    bool keepScreenOn = true;
+};
 
 class ReaderActivity : public brls::Activity {
 public:
@@ -31,9 +47,7 @@ public:
 
     // Controls
     void toggleControls();
-    void toggleFullscreen();
-    void setReadingMode(ReadingMode mode);
-    void setPageScaleMode(PageScaleMode mode);
+    void showSettings();
 
     // Get current state
     int getCurrentPage() const { return m_currentPage; }
@@ -50,8 +64,14 @@ private:
     void hideControls();
     void preloadAdjacentPages();
     void markChapterAsRead();
+    void applySettings();
+
+    // Touch handling
+    void handleTouch(brls::Point point);
+    void handleTouchNavigation(float x, float screenWidth);
 
     // UI components
+    BRLS_BIND(brls::Box, container, "reader/container");
     BRLS_BIND(brls::Image, pageImage, "reader/page_image");
     BRLS_BIND(brls::Box, topBar, "reader/top_bar");
     BRLS_BIND(brls::Box, bottomBar, "reader/bottom_bar");
@@ -60,6 +80,7 @@ private:
     BRLS_BIND(brls::Slider, pageSlider, "reader/page_slider");
     BRLS_BIND(brls::Button, prevChapterBtn, "reader/prev_chapter");
     BRLS_BIND(brls::Button, nextChapterBtn, "reader/next_chapter");
+    BRLS_BIND(brls::Button, settingsBtn, "reader/settings_btn");
 
     // Manga/Chapter info
     int m_mangaId = 0;
@@ -72,11 +93,9 @@ private:
     int m_currentPage = 0;
     int m_startPage = 0;
 
-    // Reading state
-    ReadingMode m_readingMode = ReadingMode::RIGHT_TO_LEFT;
-    PageScaleMode m_scaleMode = PageScaleMode::FIT_SCREEN;
+    // Reader settings
+    ReaderSettings m_settings;
     bool m_controlsVisible = false;
-    bool m_isFullscreen = false;
 
     // Chapter navigation
     std::vector<Chapter> m_chapters;
