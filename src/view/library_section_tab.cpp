@@ -238,6 +238,7 @@ void LibrarySectionTab::createCategoryTabs() {
     }
 
     // Create a button for each visible category (only show name, no count)
+    int buttonIndex = 0;
     for (const auto& category : visibleCategories) {
         auto* btn = new brls::Button();
 
@@ -258,8 +259,15 @@ void LibrarySectionTab::createCategoryTabs() {
             return true;
         });
 
+        // Scroll to this button when it gains focus (hover)
+        int idx = buttonIndex;
+        btn->getFocusEvent()->subscribe([this, idx](brls::View* view) {
+            scrollToCategoryIndex(idx);
+        });
+
         m_categoryScrollContainer->addView(btn);
         m_categoryButtons.push_back(btn);
+        buttonIndex++;
     }
 
     // Store visible categories for button style updates
