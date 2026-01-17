@@ -31,34 +31,32 @@ LibrarySectionTab::LibrarySectionTab() {
     m_titleLabel->setMarginBottom(10);
     this->addView(m_titleLabel);
 
-    // Top row with category tabs and update button
+    // Top row with category tabs and buttons
     auto* topRow = new brls::Box();
     topRow->setAxis(brls::Axis::ROW);
-    topRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    topRow->setJustifyContent(brls::JustifyContent::FLEX_START);
     topRow->setAlignItems(brls::AlignItems::CENTER);
     topRow->setMarginBottom(15);
+    topRow->setHeight(45);
 
-    // Scrollable category tabs container
-    m_categoryScroller = new brls::ScrollingFrame();
-    m_categoryScroller->setScrollingBehavior(brls::ScrollingBehavior::NATURAL);
-    m_categoryScroller->setGrow(1.0f);
-    m_categoryScroller->setHeight(45);
-    m_categoryScroller->setScrollingIndicatorVisible(true);
-
+    // Category tabs container - simple horizontal box with overflow clipping
+    // Using a Box instead of ScrollingFrame for better compatibility
     m_categoryTabsBox = new brls::Box();
     m_categoryTabsBox->setAxis(brls::Axis::ROW);
     m_categoryTabsBox->setJustifyContent(brls::JustifyContent::FLEX_START);
     m_categoryTabsBox->setAlignItems(brls::AlignItems::CENTER);
-    m_categoryTabsBox->setPaddingLeft(5);  // Prevent first category cutoff
-    m_categoryTabsBox->setPaddingRight(10);
+    m_categoryTabsBox->setGrow(1.0f);
+    m_categoryTabsBox->setMarginLeft(0);
+    m_categoryTabsBox->setMarginRight(10);
+    m_categoryTabsBox->setClipToBounds(true);
 
-    m_categoryScroller->setContentView(m_categoryTabsBox);
-    topRow->addView(m_categoryScroller);
+    topRow->addView(m_categoryTabsBox);
 
     // Button container for Sort and Update
     auto* buttonBox = new brls::Box();
     buttonBox->setAxis(brls::Axis::ROW);
     buttonBox->setAlignItems(brls::AlignItems::CENTER);
+    buttonBox->setShrink(0.0f);  // Don't shrink buttons
 
     // Sort button
     m_sortBtn = new brls::Button();
@@ -97,6 +95,17 @@ LibrarySectionTab::LibrarySectionTab() {
     this->addView(m_contentGrid);
 
     brls::Logger::debug("LibrarySectionTab: Created");
+
+    // Register L/R buttons to navigate between categories
+    this->registerAction("Previous Category", brls::ControllerButton::BUTTON_LB, [this](brls::View*) {
+        navigateToPreviousCategory();
+        return true;
+    });
+
+    this->registerAction("Next Category", brls::ControllerButton::BUTTON_RB, [this](brls::View*) {
+        navigateToNextCategory();
+        return true;
+    });
 
     // Load categories first, then create tabs
     loadCategories();
@@ -467,6 +476,48 @@ void LibrarySectionTab::updateSortButtonText() {
         case LibrarySortMode::RECENTLY_ADDED:
             m_sortBtn->setText("Recent");
             break;
+    }
+}
+
+void LibrarySectionTab::navigateToPreviousCategory() {
+    if (m_categories.empty()) return;
+
+    // Find current category index
+    int currentIndex = -1;
+    for (size_t i = 0; i < m_categories.size(); i++) {
+        if (m_categories[i].id == m_currentCategoryId) {
+            currentIndex = static_cast<int>(i);
+            break;
+        }
+    }
+
+    // Go to previous category (wrap around)
+    if (currentIndex > 0) {
+        selectCategory(m_categories[currentIndex - 1].id);
+    } else if (!m_categories.empty()) {
+        // Wrap to last category
+        selectCategory(m_categories.back().id);
+    }
+}
+
+void LibrarySectionTab::navigateToNextCategory() {
+    if (m_categories.empty()) return;
+
+    // Find current category index
+    int currentIndex = -1;
+    for (size_t i = 0; i < m_categories.size(); i++) {
+        if (m_categories[i].id == m_currentCategoryId) {
+            currentIndex = static_cast<int>(i);
+            break;
+        }
+    }
+
+    // Go to next category (wrap around)
+    if (currentIndex >= 0 && currentIndex < static_cast<int>(m_categories.size()) - 1) {
+        selectCategory(m_categories[currentIndex + 1].id);
+    } else if (!m_categories.empty()) {
+        // Wrap to first category
+        selectCategory(m_categories[0].id);
     }
 }
 

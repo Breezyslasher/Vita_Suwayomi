@@ -42,6 +42,8 @@ private:
     void sortMangaList();
     void cycleSortMode();
     void updateSortButtonText();
+    void navigateToPreviousCategory();
+    void navigateToNextCategory();
 
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
@@ -58,7 +60,6 @@ private:
 
     // Category tabs row
     brls::Box* m_categoryTabsBox = nullptr;
-    brls::ScrollingFrame* m_categoryScroller = nullptr;
     std::vector<brls::Button*> m_categoryButtons;
 
     // Action buttons
