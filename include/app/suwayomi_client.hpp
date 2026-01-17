@@ -389,6 +389,7 @@ private:
     bool globalSearchGraphQL(const std::string& query, std::vector<GlobalSearchResult>& results);
     bool setMangaCategoriesGraphQL(int mangaId, const std::vector<int>& categoryIds);
     bool fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga);
+    bool fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga);
 
     // Parse GraphQL response data
     Manga parseMangaFromGraphQL(const std::string& json);
