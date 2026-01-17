@@ -45,6 +45,7 @@ private:
     void navigateToPreviousCategory();
     void navigateToNextCategory();
     void scrollToCategoryIndex(int index);
+    void updateCategoryButtonTexts();
 
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
@@ -59,12 +60,12 @@ private:
     // UI Components
     brls::Label* m_titleLabel = nullptr;
 
-    // Category tabs row
+    // Category tabs row (windowed - only shows 5 buttons at a time)
     brls::Box* m_categoryTabsBox = nullptr;        // Outer container (clips)
-    brls::Box* m_categoryScrollContainer = nullptr; // Inner container (scrolls)
-    std::vector<brls::Button*> m_categoryButtons;
-    float m_categoryScrollOffset = 0.0f;           // Current scroll offset
-    int m_selectedCategoryIndex = 0;               // Index of selected category
+    brls::Box* m_categoryScrollContainer = nullptr; // Inner container
+    std::vector<brls::Button*> m_categoryButtons;  // Max 5 buttons
+    int m_selectedCategoryIndex = 0;               // Index in m_categories
+    int m_windowStartIndex = 0;                    // First category shown in window
 
     // Action buttons
     brls::Button* m_updateBtn = nullptr;

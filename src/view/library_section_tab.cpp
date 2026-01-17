@@ -49,12 +49,11 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryTabsBox->setMarginRight(10);
     m_categoryTabsBox->setClipsToBounds(true);
 
-    // Inner container that holds buttons and can be translated for scrolling
+    // Inner container that holds category buttons (windowed - max 5 at a time)
     m_categoryScrollContainer = new brls::Box();
     m_categoryScrollContainer->setAxis(brls::Axis::ROW);
     m_categoryScrollContainer->setJustifyContent(brls::JustifyContent::FLEX_START);
     m_categoryScrollContainer->setAlignItems(brls::AlignItems::CENTER);
-    m_categoryScrollContainer->setPaddingLeft(5);  // Prevent first button from being cut off
     m_categoryTabsBox->addView(m_categoryScrollContainer);
 
     topRow->addView(m_categoryTabsBox);
@@ -69,7 +68,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_sortBtn = new brls::Button();
     m_sortBtn->setText("A-Z");
     m_sortBtn->setMarginLeft(10);
-    m_sortBtn->setWidth(70);
+    m_sortBtn->setWidth(55);
     m_sortBtn->setHeight(35);
     m_sortBtn->registerClickAction([this](brls::View* view) {
         cycleSortMode();
@@ -77,11 +76,11 @@ LibrarySectionTab::LibrarySectionTab() {
     });
     buttonBox->addView(m_sortBtn);
 
-    // Update button
+    // Update button - use shorter text "Upd" to save space
     m_updateBtn = new brls::Button();
-    m_updateBtn->setText("Update");
-    m_updateBtn->setMarginLeft(10);
-    m_updateBtn->setWidth(80);
+    m_updateBtn->setText("Upd");
+    m_updateBtn->setMarginLeft(8);
+    m_updateBtn->setWidth(50);
     m_updateBtn->setHeight(35);
     m_updateBtn->registerClickAction([this](brls::View* view) {
         triggerLibraryUpdate();
@@ -143,8 +142,8 @@ void LibrarySectionTab::refresh() {
     if (m_categoryScrollContainer) {
         m_categoryScrollContainer->clearViews();
     }
-    m_categoryScrollOffset = 0.0f;
     m_selectedCategoryIndex = 0;
+    m_windowStartIndex = 0;
 
     loadCategories();
 }
@@ -205,8 +204,8 @@ void LibrarySectionTab::createCategoryTabs() {
     // Clear existing buttons
     m_categoryScrollContainer->clearViews();
     m_categoryButtons.clear();
-    m_categoryScrollOffset = 0.0f;
     m_selectedCategoryIndex = 0;
+    m_windowStartIndex = 0;
 
     // Filter out empty categories (mangaCount == 0)
     // Also filter the "Default" category (id 0) if it's empty
@@ -221,12 +220,14 @@ void LibrarySectionTab::createCategoryTabs() {
         visibleCategories.push_back(cat);
     }
 
+    // Store visible categories
+    m_categories = visibleCategories;
+
     // If no visible categories, show a "Library" tab that loads all manga
     if (visibleCategories.empty()) {
         auto* btn = new brls::Button();
         btn->setText("Library");
         btn->setMarginRight(10);
-        // Set explicit width to fit text (approx 8 pixels per char + padding)
         btn->setWidth(100);
         btn->setHeight(35);
         btn->registerClickAction([this](brls::View* view) {
@@ -238,59 +239,20 @@ void LibrarySectionTab::createCategoryTabs() {
         return;
     }
 
-    // Create a button for each visible category (only show name, no count)
-    int buttonIndex = 0;
-    float totalWidth = 5.0f;  // Start with left padding
+    // Limit to 5 buttons max to avoid Vita text rendering issues
+    const size_t MAX_BUTTONS = 5;
+    size_t numButtons = std::min(visibleCategories.size(), MAX_BUTTONS);
 
-    for (const auto& category : visibleCategories) {
+    for (size_t i = 0; i < numButtons; i++) {
         auto* btn = new brls::Button();
-
-        // Only show category name
-        std::string catName = category.name;
-        if (catName.empty()) {
-            catName = "Cat " + std::to_string(category.id);
-        }
-
-        brls::Logger::debug("LibrarySectionTab: Creating button {} for category '{}' (id={})",
-                           buttonIndex, catName, category.id);
-
-        btn->setText(catName);
         btn->setMarginRight(8);
-
-        // Calculate width based on text length (approx 9 pixels per char + 30 padding)
-        int textWidth = static_cast<int>(catName.length()) * 9 + 30;
-        if (textWidth < 60) textWidth = 60;  // Minimum width
-        if (textWidth > 200) textWidth = 200; // Maximum width
-        btn->setWidth(textWidth);
         btn->setHeight(35);
-
-        totalWidth += textWidth + 8.0f;  // Track total width
-
-        int catId = category.id;
-        btn->registerClickAction([this, catId](brls::View* view) {
-            selectCategory(catId);
-            return true;
-        });
-
-        // Scroll to this button when it gains focus (hover)
-        int idx = buttonIndex;
-        btn->getFocusEvent()->subscribe([this, idx](brls::View* view) {
-            scrollToCategoryIndex(idx);
-        });
-
         m_categoryScrollContainer->addView(btn);
         m_categoryButtons.push_back(btn);
-        buttonIndex++;
     }
 
-    // Set explicit width on scroll container to ensure all buttons render
-    m_categoryScrollContainer->setWidth(totalWidth);
-    brls::Logger::debug("LibrarySectionTab: Created {} category buttons, total width: {}",
-                       buttonIndex, totalWidth);
-
-    // Store visible categories for button style updates
-    m_categories = visibleCategories;
-
+    // Update button texts based on current selection
+    updateCategoryButtonTexts();
     updateCategoryButtonStyles();
 }
 
@@ -311,8 +273,25 @@ void LibrarySectionTab::selectCategory(int categoryId) {
     brls::Logger::debug("LibrarySectionTab: Selected category {} ({}) at index {}",
                        categoryId, m_currentCategoryName, m_selectedCategoryIndex);
 
+    // Update window position to keep selected category visible
+    const int MAX_BUTTONS = 5;
+    int numButtons = static_cast<int>(m_categoryButtons.size());
+
+    // Adjust window if selected is outside visible range
+    if (m_selectedCategoryIndex < m_windowStartIndex) {
+        m_windowStartIndex = m_selectedCategoryIndex;
+    } else if (m_selectedCategoryIndex >= m_windowStartIndex + numButtons) {
+        m_windowStartIndex = m_selectedCategoryIndex - numButtons + 1;
+    }
+
+    // Clamp window start
+    int maxStart = static_cast<int>(m_categories.size()) - numButtons;
+    if (maxStart < 0) maxStart = 0;
+    if (m_windowStartIndex > maxStart) m_windowStartIndex = maxStart;
+    if (m_windowStartIndex < 0) m_windowStartIndex = 0;
+
+    updateCategoryButtonTexts();
     updateCategoryButtonStyles();
-    scrollToCategoryIndex(m_selectedCategoryIndex);
     loadCategoryManga(categoryId);
 }
 
@@ -321,13 +300,16 @@ void LibrarySectionTab::updateCategoryButtonStyles() {
     for (size_t i = 0; i < m_categoryButtons.size(); i++) {
         brls::Button* btn = m_categoryButtons[i];
 
+        // Get the category index this button represents
+        int catIndex = m_windowStartIndex + static_cast<int>(i);
+
         // Determine if this button is selected
         bool isSelected = false;
         if (m_categories.empty()) {
             // Only one "Library" button
             isSelected = (m_currentCategoryId == 0);
-        } else if (i < m_categories.size()) {
-            isSelected = (m_categories[i].id == m_currentCategoryId);
+        } else if (catIndex < static_cast<int>(m_categories.size())) {
+            isSelected = (m_categories[catIndex].id == m_currentCategoryId);
         }
 
         // Style the button based on selection state
@@ -339,6 +321,49 @@ void LibrarySectionTab::updateCategoryButtonStyles() {
             btn->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
         }
     }
+}
+
+void LibrarySectionTab::updateCategoryButtonTexts() {
+    // Update button texts based on current window position
+    for (size_t i = 0; i < m_categoryButtons.size(); i++) {
+        brls::Button* btn = m_categoryButtons[i];
+        int catIndex = m_windowStartIndex + static_cast<int>(i);
+
+        if (catIndex < static_cast<int>(m_categories.size())) {
+            std::string catName = m_categories[catIndex].name;
+            if (catName.empty()) {
+                catName = "Cat " + std::to_string(m_categories[catIndex].id);
+            }
+
+            // Truncate long names
+            if (catName.length() > 12) {
+                catName = catName.substr(0, 10) + "..";
+            }
+
+            btn->setText(catName);
+            btn->setVisibility(brls::Visibility::VISIBLE);
+
+            // Calculate width based on text length
+            int textWidth = static_cast<int>(catName.length()) * 9 + 30;
+            if (textWidth < 60) textWidth = 60;
+            if (textWidth > 120) textWidth = 120;
+            btn->setWidth(textWidth);
+
+            // Set up click handler for this category
+            int catId = m_categories[catIndex].id;
+            btn->clearActions();
+            btn->registerClickAction([this, catId](brls::View* view) {
+                selectCategory(catId);
+                return true;
+            });
+        } else {
+            // Hide extra buttons
+            btn->setVisibility(brls::Visibility::GONE);
+        }
+    }
+
+    brls::Logger::debug("LibrarySectionTab: Updated button texts, window start: {}, selected: {}",
+                       m_windowStartIndex, m_selectedCategoryIndex);
 }
 
 void LibrarySectionTab::loadCategoryManga(int categoryId) {
@@ -561,51 +586,9 @@ void LibrarySectionTab::navigateToNextCategory() {
 }
 
 void LibrarySectionTab::scrollToCategoryIndex(int index) {
-    if (!m_categoryScrollContainer || !m_categoryTabsBox) return;
-    if (index < 0 || index >= static_cast<int>(m_categoryButtons.size())) return;
-
-    // Get the visible width of the tabs container
-    float visibleWidth = m_categoryTabsBox->getWidth();
-    if (visibleWidth <= 0) {
-        visibleWidth = 600.0f; // Fallback width (Vita screen is 960 minus margins/buttons)
-    }
-
-    // Calculate button positions (5px left padding + button widths + 8px margins)
-    float buttonX = 5.0f;  // Account for left padding
-    float buttonWidth = 0.0f;
-    for (int i = 0; i <= index; i++) {
-        if (i < static_cast<int>(m_categoryButtons.size())) {
-            buttonWidth = m_categoryButtons[i]->getWidth();
-            if (buttonWidth <= 0) {
-                // Estimate if width not set yet
-                buttonWidth = 80.0f;
-            }
-            if (i < index) {
-                buttonX += buttonWidth + 8.0f; // 8px margin between buttons
-            }
-        }
-    }
-
-    // Calculate if button is visible with current scroll offset
-    float buttonLeft = buttonX + m_categoryScrollOffset;
-    float buttonRight = buttonLeft + buttonWidth;
-
-    brls::Logger::debug("LibrarySectionTab: scrollToCategoryIndex {} - buttonX={}, buttonWidth={}, offset={}, visible={}",
-                       index, buttonX, buttonWidth, m_categoryScrollOffset, visibleWidth);
-
-    // Scroll if button is not fully visible
-    if (buttonLeft < 0) {
-        // Button is off the left side, scroll right (make offset less negative)
-        m_categoryScrollOffset = -buttonX;
-    } else if (buttonRight > visibleWidth) {
-        // Button is off the right side, scroll left (make offset more negative)
-        m_categoryScrollOffset = visibleWidth - buttonX - buttonWidth - 10.0f; // 10px padding
-    }
-
-    // Apply the scroll offset using setTranslationX
-    m_categoryScrollContainer->setTranslationX(m_categoryScrollOffset);
-
-    brls::Logger::debug("LibrarySectionTab: New scroll offset: {}", m_categoryScrollOffset);
+    // With the windowed approach, scrolling is handled by updateCategoryButtonTexts
+    // This function is kept for API compatibility
+    (void)index;
 }
 
 } // namespace vitasuwayomi
