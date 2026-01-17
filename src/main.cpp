@@ -12,6 +12,7 @@
 #include "view/media_item_cell.hpp"
 #include "view/recycling_grid.hpp"
 #include "view/media_detail_view.hpp"
+#include "view/rotatable_image.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/http_client.hpp"
 
@@ -151,6 +152,7 @@ static void cleanupVitaNetwork() {
 static void registerCustomViews() {
     brls::Application::registerXMLView("MangaItemCell", vitasuwayomi::MangaItemCell::create);
     brls::Application::registerXMLView("RecyclingGrid", vitasuwayomi::RecyclingGrid::create);
+    brls::Application::registerXMLView("RotatableImage", vitasuwayomi::RotatableImage::create);
 }
 
 /**

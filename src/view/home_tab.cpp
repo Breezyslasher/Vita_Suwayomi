@@ -254,8 +254,8 @@ void HomeTab::onMangaSelected(const Manga& manga) {
 void HomeTab::onUpdateSelected(const RecentUpdate& update) {
     brls::Logger::debug("HomeTab: Selected update: {} - {}", update.manga.title, update.chapter.name);
 
-    // Open reader at the updated chapter
-    Application::getInstance().pushReaderActivity(update.manga.id, update.chapter.index, update.manga.title);
+    // Open reader at the updated chapter - use chapter.id not index
+    Application::getInstance().pushReaderActivity(update.manga.id, update.chapter.id, update.manga.title);
 }
 
 } // namespace vitasuwayomi

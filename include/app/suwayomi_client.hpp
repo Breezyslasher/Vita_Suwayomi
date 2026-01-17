@@ -10,6 +10,7 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include "utils/http_client.hpp"
 
 namespace vitasuwayomi {
 
@@ -147,6 +148,27 @@ struct RecentUpdate {
     Chapter chapter;
 };
 
+// Reading history item (for continue reading)
+struct ReadingHistoryItem {
+    int chapterId = 0;
+    int mangaId = 0;
+    std::string mangaTitle;
+    std::string mangaThumbnail;
+    std::string chapterName;
+    float chapterNumber = 0.0f;
+    int lastPageRead = 0;
+    int pageCount = 0;
+    int64_t lastReadAt = 0;  // Unix timestamp
+    std::string sourceName;
+};
+
+// Global search result
+struct GlobalSearchResult {
+    Source source;
+    std::vector<Manga> manga;
+    bool hasNextPage = false;
+};
+
 // Download queue item
 struct DownloadQueueItem {
     int chapterId = 0;
@@ -158,25 +180,15 @@ struct DownloadQueueItem {
     std::string error;
 };
 
-// Server settings/info
+// Server settings/info (matches Suwayomi AboutDataClass)
 struct ServerInfo {
+    std::string name;
     std::string version;
+    std::string revision;
     std::string buildType;
-    bool debug = false;
-    std::string webUIChannel;
-    std::string webUIFlavor;
-    int webUIUpdateCheckInterval = 0;
-    bool socksProxyEnabled = false;
-    std::string socksProxyHost;
-    std::string socksProxyPort;
-    bool downloadAsCbz = false;
-    std::string downloadsPath;
-    bool autoDownloadNewChapters = false;
-    int maxSourcesInParallel = 6;
-    bool excludeEntryWithUnreadChapters = false;
-    bool autoDownloadIgnoreReUploads = false;
-    int autoDownloadNewChaptersLimit = 0;
-    int extensionRepos = 0;
+    int64_t buildTime = 0;
+    std::string github;
+    std::string discord;
 };
 
 // Source filter types
@@ -276,8 +288,8 @@ public:
     bool updateChapterProgress(int mangaId, int chapterIndex, int lastPageRead);
 
     // Page Operations
-    bool fetchChapterPages(int mangaId, int chapterIndex, std::vector<Page>& pages);
-    std::string getPageImageUrl(int mangaId, int chapterIndex, int pageIndex);
+    bool fetchChapterPages(int mangaId, int chapterId, std::vector<Page>& pages);
+    std::string getPageImageUrl(int chapterId, int pageIndex);
 
     // Category Management
     bool fetchCategories(std::vector<Category>& categories);
@@ -321,6 +333,18 @@ public:
     bool updateTracking(int mangaId, int trackerId, const TrackRecord& record);
     bool fetchMangaTracking(int mangaId, std::vector<TrackRecord>& records);
 
+    // Reading History (Continue Reading)
+    bool fetchReadingHistory(int offset, int limit, std::vector<ReadingHistoryItem>& history);
+    bool fetchReadingHistory(std::vector<ReadingHistoryItem>& history);
+
+    // Global Search (search across all sources)
+    bool globalSearch(const std::string& query, std::vector<GlobalSearchResult>& results);
+    bool globalSearch(const std::string& query, const std::vector<int64_t>& sourceIds,
+                      std::vector<GlobalSearchResult>& results);
+
+    // Set manga categories (replaces all categories)
+    bool setMangaCategories(int mangaId, const std::vector<int>& categoryIds);
+
     // Configuration
     void setServerUrl(const std::string& url) { m_serverUrl = url; }
     const std::string& getServerUrl() const { return m_serverUrl; }
@@ -338,6 +362,39 @@ private:
     ~SuwayomiClient() = default;
 
     std::string buildApiUrl(const std::string& endpoint);
+    std::string buildGraphQLUrl();
+
+    // Create HTTP client with authentication
+    HttpClient createHttpClient();
+
+    // GraphQL query executor - returns response body or empty string on failure
+    std::string executeGraphQL(const std::string& query, const std::string& variables = "");
+
+    // GraphQL-based implementations (primary API)
+    bool fetchSourceListGraphQL(std::vector<Source>& sources);
+    bool fetchPopularMangaGraphQL(int64_t sourceId, int page, std::vector<Manga>& manga, bool& hasNextPage);
+    bool fetchLatestMangaGraphQL(int64_t sourceId, int page, std::vector<Manga>& manga, bool& hasNextPage);
+    bool searchMangaGraphQL(int64_t sourceId, const std::string& query, int page, std::vector<Manga>& manga, bool& hasNextPage);
+    bool fetchLibraryMangaGraphQL(std::vector<Manga>& manga);
+    bool fetchCategoriesGraphQL(std::vector<Category>& categories);
+    bool fetchChaptersGraphQL(int mangaId, std::vector<Chapter>& chapters);
+    bool fetchMangaGraphQL(int mangaId, Manga& manga);
+    bool fetchServerInfoGraphQL(ServerInfo& info);
+    bool addMangaToLibraryGraphQL(int mangaId);
+    bool removeMangaFromLibraryGraphQL(int mangaId);
+    bool markChapterReadGraphQL(int chapterId, bool read);
+    bool updateChapterProgressGraphQL(int chapterId, int lastPageRead);
+    bool fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& pages);
+    bool fetchReadingHistoryGraphQL(int offset, int limit, std::vector<ReadingHistoryItem>& history);
+    bool globalSearchGraphQL(const std::string& query, std::vector<GlobalSearchResult>& results);
+    bool setMangaCategoriesGraphQL(int mangaId, const std::vector<int>& categoryIds);
+    bool fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga);
+
+    // Parse GraphQL response data
+    Manga parseMangaFromGraphQL(const std::string& json);
+    Chapter parseChapterFromGraphQL(const std::string& json);
+    Source parseSourceFromGraphQL(const std::string& json);
+    Category parseCategoryFromGraphQL(const std::string& json);
 
     // JSON parsing helpers
     std::string extractJsonValue(const std::string& json, const std::string& key);

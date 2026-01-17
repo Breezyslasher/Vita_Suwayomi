@@ -1,6 +1,6 @@
 /**
  * VitaSuwayomi - Manga Detail View implementation
- * Shows detailed information about a manga including chapters list
+ * NOBORU-style layout with cover on left, info and chapters on right
  */
 
 #include "view/media_detail_view.hpp"
@@ -16,10 +16,12 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     : m_manga(manga) {
     brls::Logger::info("MangaDetailView: Creating for '{}' id={}", manga.title, manga.id);
 
-    this->setAxis(brls::Axis::COLUMN);
+    // NOBORU-style: horizontal layout with left panel (cover) and right panel (info)
+    this->setAxis(brls::Axis::ROW);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
     this->setGrow(1.0f);
+    this->setBackgroundColor(nvgRGB(26, 26, 46)); // #1a1a2e
 
     // Register back button
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View* view) {
@@ -27,142 +29,159 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         return true;
     }, false, false, brls::Sound::SOUND_BACK);
 
-    // Create scrollable content
-    m_scrollView = new brls::ScrollingFrame();
-    m_scrollView->setGrow(1.0f);
+    // ========== LEFT PANEL: Cover + Action Buttons (260px) ==========
+    auto* leftPanel = new brls::Box();
+    leftPanel->setAxis(brls::Axis::COLUMN);
+    leftPanel->setWidth(260);
+    leftPanel->setPadding(20);
+    leftPanel->setBackgroundColor(nvgRGB(22, 33, 62)); // #16213e
 
-    m_mainContent = new brls::Box();
-    m_mainContent->setAxis(brls::Axis::COLUMN);
-    m_mainContent->setPadding(30);
-
-    // Top row - cover and info
-    auto* topRow = new brls::Box();
-    topRow->setAxis(brls::Axis::ROW);
-    topRow->setJustifyContent(brls::JustifyContent::FLEX_START);
-    topRow->setAlignItems(brls::AlignItems::FLEX_START);
-    topRow->setMarginBottom(20);
-
-    // Left side - cover image
-    auto* leftBox = new brls::Box();
-    leftBox->setAxis(brls::Axis::COLUMN);
-    leftBox->setWidth(200);
-    leftBox->setMarginRight(20);
+    // Cover image container (centered)
+    auto* coverContainer = new brls::Box();
+    coverContainer->setAxis(brls::Axis::ROW);
+    coverContainer->setJustifyContent(brls::JustifyContent::CENTER);
+    coverContainer->setMarginBottom(15);
 
     m_coverImage = new brls::Image();
-    m_coverImage->setWidth(180);
-    m_coverImage->setHeight(260);
+    m_coverImage->setSize(brls::Size(180, 260));
     m_coverImage->setScalingType(brls::ImageScalingType::FIT);
-    leftBox->addView(m_coverImage);
+    m_coverImage->setCornerRadius(4);
+    coverContainer->addView(m_coverImage);
+    leftPanel->addView(coverContainer);
 
-    // Action buttons
-    auto* buttonRow = new brls::Box();
-    buttonRow->setAxis(brls::Axis::ROW);
-    buttonRow->setMarginTop(15);
-    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_START);
-
+    // Continue Reading button (teal/primary)
     m_readButton = new brls::Button();
-    m_readButton->setText("Read");
-    m_readButton->setWidth(80);
-    m_readButton->setHeight(40);
-    m_readButton->setMarginRight(10);
+    m_readButton->setWidth(220);
+    m_readButton->setHeight(44);
+    m_readButton->setMarginBottom(8);
+    m_readButton->setCornerRadius(6);
+
+    std::string readText = "Start Reading";
+    if (m_manga.lastChapterRead > 0) {
+        readText = "Continue Ch. " + std::to_string(m_manga.lastChapterRead);
+    }
+    m_readButton->setText(readText);
     m_readButton->registerClickAction([this](brls::View* view) {
         onRead();
         return true;
     });
-    buttonRow->addView(m_readButton);
+    m_readButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_readButton));
+    leftPanel->addView(m_readButton);
 
-    m_libraryButton = new brls::Button();
-    m_libraryButton->setText(m_manga.inLibrary ? "Remove" : "Add");
-    m_libraryButton->setWidth(80);
-    m_libraryButton->setHeight(40);
-    m_libraryButton->setMarginRight(10);
-    m_libraryButton->registerClickAction([this](brls::View* view) {
-        if (m_manga.inLibrary) {
-            onRemoveFromLibrary();
-        } else {
+    // Add to Library button (only shown if not already in library)
+    if (!m_manga.inLibrary) {
+        m_libraryButton = new brls::Button();
+        m_libraryButton->setWidth(220);
+        m_libraryButton->setHeight(44);
+        m_libraryButton->setMarginBottom(8);
+        m_libraryButton->setCornerRadius(6);
+        m_libraryButton->setText("Add to Library");
+        m_libraryButton->registerClickAction([this](brls::View* view) {
             onAddToLibrary();
-        }
-        return true;
-    });
-    buttonRow->addView(m_libraryButton);
+            return true;
+        });
+        m_libraryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_libraryButton));
+        leftPanel->addView(m_libraryButton);
+    }
 
-    leftBox->addView(buttonRow);
-
-    // Download button row
-    auto* dlButtonRow = new brls::Box();
-    dlButtonRow->setAxis(brls::Axis::ROW);
-    dlButtonRow->setMarginTop(10);
-    dlButtonRow->setJustifyContent(brls::JustifyContent::FLEX_START);
-
+    // Download button
     m_downloadButton = new brls::Button();
+    m_downloadButton->setWidth(220);
+    m_downloadButton->setHeight(44);
+    m_downloadButton->setCornerRadius(6);
     m_downloadButton->setText("Download");
-    m_downloadButton->setWidth(100);
-    m_downloadButton->setHeight(40);
     m_downloadButton->registerClickAction([this](brls::View* view) {
         showDownloadOptions();
         return true;
     });
-    dlButtonRow->addView(m_downloadButton);
+    m_downloadButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_downloadButton));
+    leftPanel->addView(m_downloadButton);
 
-    leftBox->addView(dlButtonRow);
-    topRow->addView(leftBox);
+    this->addView(leftPanel);
 
-    // Right side - details
-    auto* rightBox = new brls::Box();
-    rightBox->setAxis(brls::Axis::COLUMN);
-    rightBox->setGrow(1.0f);
+    // ========== RIGHT PANEL: Info + Chapters (grows to fill) ==========
+    auto* rightPanel = new brls::Box();
+    rightPanel->setAxis(brls::Axis::COLUMN);
+    rightPanel->setGrow(1.0f);
+    rightPanel->setPadding(20, 20, 10, 0);
+
+    // Title row
+    auto* titleRow = new brls::Box();
+    titleRow->setAxis(brls::Axis::ROW);
+    titleRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    titleRow->setAlignItems(brls::AlignItems::FLEX_START);
+    titleRow->setMarginBottom(10);
+
+    auto* titleBox = new brls::Box();
+    titleBox->setAxis(brls::Axis::COLUMN);
+    titleBox->setGrow(1.0f);
+    titleBox->setMarginRight(20);
 
     // Title
     m_titleLabel = new brls::Label();
     m_titleLabel->setText(m_manga.title);
-    m_titleLabel->setFontSize(26);
-    m_titleLabel->setMarginBottom(10);
-    rightBox->addView(m_titleLabel);
-
-    // Author
-    if (!m_manga.author.empty()) {
-        m_authorLabel = new brls::Label();
-        m_authorLabel->setText("Author: " + m_manga.author);
-        m_authorLabel->setFontSize(18);
-        m_authorLabel->setMarginBottom(5);
-        rightBox->addView(m_authorLabel);
-    }
-
-    // Artist
-    if (!m_manga.artist.empty() && m_manga.artist != m_manga.author) {
-        m_artistLabel = new brls::Label();
-        m_artistLabel->setText("Artist: " + m_manga.artist);
-        m_artistLabel->setFontSize(18);
-        m_artistLabel->setMarginBottom(5);
-        rightBox->addView(m_artistLabel);
-    }
-
-    // Status
-    m_statusLabel = new brls::Label();
-    m_statusLabel->setText("Status: " + m_manga.getStatusString());
-    m_statusLabel->setFontSize(16);
-    m_statusLabel->setMarginBottom(5);
-    rightBox->addView(m_statusLabel);
+    m_titleLabel->setFontSize(22);
+    m_titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    m_titleLabel->setMarginBottom(4);
+    titleBox->addView(m_titleLabel);
 
     // Source
     if (!m_manga.sourceName.empty()) {
         m_sourceLabel = new brls::Label();
-        m_sourceLabel->setText("Source: " + m_manga.sourceName);
-        m_sourceLabel->setFontSize(16);
-        m_sourceLabel->setMarginBottom(10);
-        rightBox->addView(m_sourceLabel);
+        m_sourceLabel->setText(m_manga.sourceName);
+        m_sourceLabel->setFontSize(13);
+        m_sourceLabel->setTextColor(nvgRGB(128, 128, 128));
+        m_sourceLabel->setMarginBottom(8);
+        titleBox->addView(m_sourceLabel);
     }
 
-    // Chapter count and unread
+    // Stats row: Author | Status | Chapters
+    auto* statsRow = new brls::Box();
+    statsRow->setAxis(brls::Axis::ROW);
+    statsRow->setMarginBottom(8);
+
+    if (!m_manga.author.empty()) {
+        m_authorLabel = new brls::Label();
+        m_authorLabel->setText(m_manga.author);
+        m_authorLabel->setFontSize(12);
+        m_authorLabel->setTextColor(nvgRGB(160, 160, 160));
+        m_authorLabel->setMarginRight(15);
+        statsRow->addView(m_authorLabel);
+    }
+
+    m_statusLabel = new brls::Label();
+    m_statusLabel->setText(m_manga.getStatusString());
+    m_statusLabel->setFontSize(12);
+    m_statusLabel->setTextColor(nvgRGB(74, 159, 255)); // Blue accent
+    m_statusLabel->setMarginRight(15);
+    statsRow->addView(m_statusLabel);
+
     m_chapterCountLabel = new brls::Label();
     std::string chapterInfo = std::to_string(m_manga.chapterCount) + " chapters";
     if (m_manga.unreadCount > 0) {
         chapterInfo += " (" + std::to_string(m_manga.unreadCount) + " unread)";
     }
     m_chapterCountLabel->setText(chapterInfo);
-    m_chapterCountLabel->setFontSize(16);
-    m_chapterCountLabel->setMarginBottom(10);
-    rightBox->addView(m_chapterCountLabel);
+    m_chapterCountLabel->setFontSize(12);
+    m_chapterCountLabel->setTextColor(nvgRGB(160, 160, 160));
+    statsRow->addView(m_chapterCountLabel);
+
+    titleBox->addView(statsRow);
+    titleRow->addView(titleBox);
+
+    // Menu button
+    auto* menuBtn = new brls::Button();
+    menuBtn->setWidth(36);
+    menuBtn->setHeight(36);
+    menuBtn->setText("...");
+    menuBtn->registerClickAction([this](brls::View* view) {
+        showMangaMenu();
+        return true;
+    });
+    menuBtn->addGestureRecognizer(new brls::TapGestureRecognizer(menuBtn));
+    titleRow->addView(menuBtn);
+
+    rightPanel->addView(titleRow);
 
     // Genre tags
     if (!m_manga.genre.empty()) {
@@ -170,77 +189,74 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         m_genreBox->setAxis(brls::Axis::ROW);
         m_genreBox->setMarginBottom(10);
 
-        for (size_t i = 0; i < m_manga.genre.size() && i < 5; i++) {
+        for (size_t i = 0; i < m_manga.genre.size() && i < 6; i++) {
             auto* genreLabel = new brls::Label();
             genreLabel->setText(m_manga.genre[i]);
-            genreLabel->setFontSize(14);
-            genreLabel->setMarginRight(10);
+            genreLabel->setFontSize(11);
+            genreLabel->setTextColor(nvgRGB(74, 159, 255));
+            genreLabel->setMarginRight(12);
             m_genreBox->addView(genreLabel);
         }
-        rightBox->addView(m_genreBox);
+        rightPanel->addView(m_genreBox);
     }
 
-    // Description
+    // Description (truncated)
     if (!m_manga.description.empty()) {
         m_descriptionLabel = new brls::Label();
-        // Truncate long descriptions
         std::string desc = m_manga.description;
-        if (desc.length() > 500) {
-            desc = desc.substr(0, 497) + "...";
+        if (desc.length() > 300) {
+            desc = desc.substr(0, 297) + "...";
         }
         m_descriptionLabel->setText(desc);
-        m_descriptionLabel->setFontSize(14);
-        m_descriptionLabel->setMarginTop(10);
-        rightBox->addView(m_descriptionLabel);
+        m_descriptionLabel->setFontSize(12);
+        m_descriptionLabel->setTextColor(nvgRGB(192, 192, 192));
+        m_descriptionLabel->setMarginBottom(15);
+        rightPanel->addView(m_descriptionLabel);
     }
 
-    topRow->addView(rightBox);
-    m_mainContent->addView(topRow);
-
-    // Chapters section header
-    auto* chaptersHeaderRow = new brls::Box();
-    chaptersHeaderRow->setAxis(brls::Axis::ROW);
-    chaptersHeaderRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    chaptersHeaderRow->setAlignItems(brls::AlignItems::CENTER);
-    chaptersHeaderRow->setMarginBottom(10);
+    // Chapters header
+    auto* chaptersHeader = new brls::Box();
+    chaptersHeader->setAxis(brls::Axis::ROW);
+    chaptersHeader->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    chaptersHeader->setAlignItems(brls::AlignItems::CENTER);
+    chaptersHeader->setMarginBottom(8);
+    chaptersHeader->setPaddingBottom(8);
 
     m_chaptersLabel = new brls::Label();
     m_chaptersLabel->setText("Chapters");
-    m_chaptersLabel->setFontSize(20);
-    chaptersHeaderRow->addView(m_chaptersLabel);
+    m_chaptersLabel->setFontSize(16);
+    m_chaptersLabel->setTextColor(nvgRGB(255, 255, 255));
+    chaptersHeader->addView(m_chaptersLabel);
 
-    // Sort/filter buttons
-    auto* chapterActionsBox = new brls::Box();
-    chapterActionsBox->setAxis(brls::Axis::ROW);
+    auto* chaptersActions = new brls::Box();
+    chaptersActions->setAxis(brls::Axis::ROW);
 
     m_sortBtn = new brls::Button();
-    m_sortBtn->setText("Sort");
     m_sortBtn->setWidth(60);
     m_sortBtn->setHeight(30);
-    m_sortBtn->setMarginRight(10);
+    m_sortBtn->setText("Sort");
     m_sortBtn->registerClickAction([this](brls::View* view) {
         m_sortDescending = !m_sortDescending;
         populateChaptersList();
         return true;
     });
-    chapterActionsBox->addView(m_sortBtn);
+    m_sortBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_sortBtn));
+    chaptersActions->addView(m_sortBtn);
 
-    chaptersHeaderRow->addView(chapterActionsBox);
-    m_mainContent->addView(chaptersHeaderRow);
+    chaptersHeader->addView(chaptersActions);
+    rightPanel->addView(chaptersHeader);
 
-    // Chapters list
+    // Chapters list (scrollable)
     m_chaptersScroll = new brls::ScrollingFrame();
-    m_chaptersScroll->setHeight(300);
-    m_chaptersScroll->setMarginBottom(20);
+    m_chaptersScroll->setGrow(1.0f);
 
     m_chaptersBox = new brls::Box();
     m_chaptersBox->setAxis(brls::Axis::COLUMN);
 
     m_chaptersScroll->setContentView(m_chaptersBox);
-    m_mainContent->addView(m_chaptersScroll);
+    rightPanel->addView(m_chaptersScroll);
 
-    m_scrollView->setContentView(m_mainContent);
-    this->addView(m_scrollView);
+    this->addView(rightPanel);
 
     // Load full details
     loadDetails();
@@ -329,67 +345,144 @@ void MangaDetailView::populateChaptersList() {
                   });
     }
 
-    // Apply filters
+    // Create chapter cells (NOBORU style: 60px height each)
     for (const auto& chapter : sortedChapters) {
         if (m_filterDownloaded && !chapter.downloaded) continue;
         if (m_filterUnread && chapter.read) continue;
 
-        auto* chapterCell = new brls::DetailCell();
+        auto* chapterRow = new brls::Box();
+        chapterRow->setAxis(brls::Axis::ROW);
+        chapterRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+        chapterRow->setAlignItems(brls::AlignItems::CENTER);
+        chapterRow->setHeight(60);
+        chapterRow->setPadding(8, 12, 8, 12);
+        chapterRow->setMarginBottom(2);
+        chapterRow->setFocusable(true);
+
+        // Left side: chapter info
+        auto* infoBox = new brls::Box();
+        infoBox->setAxis(brls::Axis::COLUMN);
+        infoBox->setGrow(1.0f);
 
         std::string title = chapter.name;
         if (title.empty()) {
             title = "Chapter " + std::to_string(static_cast<int>(chapter.chapterNumber));
         }
 
-        // Add read indicator
-        if (chapter.read) {
-            title = "[Read] " + title;
-        }
+        auto* titleLabel = new brls::Label();
+        titleLabel->setText(title);
+        titleLabel->setFontSize(14);
+        titleLabel->setTextColor(chapter.read ? nvgRGB(128, 128, 128) : nvgRGB(255, 255, 255));
+        infoBox->addView(titleLabel);
 
-        // Add download indicator
-        if (chapter.downloaded) {
-            title = title + " [DL]";
-        }
-
-        chapterCell->setText(title);
-
-        // Show scanlator as detail if available
+        // Subtitle: scanlator + date
+        std::string subtitle;
         if (!chapter.scanlator.empty()) {
-            chapterCell->setDetailText(chapter.scanlator);
+            subtitle = chapter.scanlator;
+        }
+        if (!subtitle.empty()) {
+            auto* subtitleLabel = new brls::Label();
+            subtitleLabel->setText(subtitle);
+            subtitleLabel->setFontSize(11);
+            subtitleLabel->setTextColor(nvgRGB(128, 128, 128));
+            infoBox->addView(subtitleLabel);
         }
 
+        chapterRow->addView(infoBox);
+
+        // Right side: status indicators
+        auto* statusBox = new brls::Box();
+        statusBox->setAxis(brls::Axis::ROW);
+        statusBox->setAlignItems(brls::AlignItems::CENTER);
+
+        if (chapter.downloaded) {
+            auto* dlLabel = new brls::Label();
+            dlLabel->setText("[DL]");
+            dlLabel->setFontSize(11);
+            dlLabel->setTextColor(nvgRGB(74, 159, 255));
+            dlLabel->setMarginRight(8);
+            statusBox->addView(dlLabel);
+        }
+
+        if (chapter.read) {
+            auto* readLabel = new brls::Label();
+            readLabel->setText("[Read]");
+            readLabel->setFontSize(11);
+            readLabel->setTextColor(nvgRGB(100, 100, 100));
+            statusBox->addView(readLabel);
+        }
+
+        chapterRow->addView(statusBox);
+
+        // Click action
         Chapter capturedChapter = chapter;
-        chapterCell->registerClickAction([this, capturedChapter](brls::View* view) {
+        chapterRow->registerClickAction([this, capturedChapter](brls::View* view) {
             onChapterSelected(capturedChapter);
             return true;
         });
 
-        m_chaptersBox->addView(chapterCell);
+        // Touch support
+        chapterRow->addGestureRecognizer(new brls::TapGestureRecognizer(chapterRow));
+
+        m_chaptersBox->addView(chapterRow);
     }
 
     brls::Logger::debug("MangaDetailView: Populated {} chapters", sortedChapters.size());
 }
 
-void MangaDetailView::onChapterSelected(const Chapter& chapter) {
-    brls::Logger::debug("MangaDetailView: Selected chapter {} ({})", chapter.index, chapter.name);
+void MangaDetailView::showMangaMenu() {
+    brls::Dialog* dialog = new brls::Dialog("Manga Options");
 
-    // Open reader at this chapter
-    Application::getInstance().pushReaderActivity(m_manga.id, chapter.index, m_manga.title);
+    dialog->addButton("Mark All Read", [this, dialog]() {
+        dialog->close();
+        markAllRead();
+    });
+
+    dialog->addButton("Mark All Unread", [this, dialog]() {
+        dialog->close();
+        markAllUnread();
+    });
+
+    dialog->addButton("Delete Downloads", [this, dialog]() {
+        dialog->close();
+        onDeleteDownloads();
+    });
+
+    dialog->addButton("Close", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->open();
 }
 
-void MangaDetailView::onRead(int chapterIndex) {
-    if (chapterIndex == -1) {
-        // Continue from last read
-        if (m_manga.lastChapterRead > 0) {
-            chapterIndex = m_manga.lastChapterRead;
+void MangaDetailView::onChapterSelected(const Chapter& chapter) {
+    brls::Logger::debug("MangaDetailView: Selected chapter id={} ({})", chapter.id, chapter.name);
+
+    // Open reader at this chapter - use chapter.id not chapter.index
+    Application::getInstance().pushReaderActivity(m_manga.id, chapter.id, m_manga.title);
+}
+
+void MangaDetailView::onRead(int chapterId) {
+    if (chapterId == -1) {
+        // Continue from last read or start from first chapter
+        if (m_manga.lastChapterRead > 0 && !m_chapters.empty()) {
+            // lastChapterRead is a chapter ID
+            chapterId = m_manga.lastChapterRead;
+        } else if (!m_chapters.empty()) {
+            // Start from first chapter (lowest chapter number)
+            auto firstChapter = std::min_element(m_chapters.begin(), m_chapters.end(),
+                [](const Chapter& a, const Chapter& b) {
+                    return a.chapterNumber < b.chapterNumber;
+                });
+            chapterId = firstChapter->id;
         } else {
-            // Start from first chapter
-            chapterIndex = 1;
+            brls::Application::notify("No chapters available");
+            return;
         }
     }
 
-    brls::Logger::info("MangaDetailView: Reading chapter {}", chapterIndex);
-    Application::getInstance().pushReaderActivity(m_manga.id, chapterIndex, m_manga.title);
+    brls::Logger::info("MangaDetailView: Reading chapter id={}", chapterId);
+    Application::getInstance().pushReaderActivity(m_manga.id, chapterId, m_manga.title);
 }
 
 void MangaDetailView::onAddToLibrary() {
@@ -401,8 +494,9 @@ void MangaDetailView::onAddToLibrary() {
         if (client.addMangaToLibrary(m_manga.id)) {
             brls::sync([this]() {
                 m_manga.inLibrary = true;
+                // Hide the button after adding to library
                 if (m_libraryButton) {
-                    m_libraryButton->setText("Remove");
+                    m_libraryButton->setVisibility(brls::Visibility::GONE);
                 }
                 brls::Application::notify("Added to library");
             });
@@ -424,7 +518,7 @@ void MangaDetailView::onRemoveFromLibrary() {
             brls::sync([this]() {
                 m_manga.inLibrary = false;
                 if (m_libraryButton) {
-                    m_libraryButton->setText("Add");
+                    m_libraryButton->setText("Add to Library");
                 }
                 brls::Application::notify("Removed from library");
             });
@@ -682,12 +776,10 @@ void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
 }
 
 void MangaDetailView::showCategoryDialog() {
-    // TODO: Implement category selection
     brls::Application::notify("Category management not yet implemented");
 }
 
 void MangaDetailView::showTrackingDialog() {
-    // TODO: Implement tracking
     brls::Application::notify("Tracking not yet implemented");
 }
 

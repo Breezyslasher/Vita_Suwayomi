@@ -1,7 +1,7 @@
 /**
  * VitaSuwayomi - Library Section Tab
  * Shows manga library content organized by categories
- * Supports filtering by category, viewing all manga, and downloaded only
+ * Displays user's categories as tabs at the top for easy navigation
  */
 
 #pragma once
@@ -13,19 +13,18 @@
 
 namespace vitasuwayomi {
 
-// View mode for the library section
-enum class LibraryViewMode {
-    ALL_MANGA,      // Show all manga in the library
-    BY_CATEGORY,    // Show manga filtered by category
-    DOWNLOADED,     // Show only downloaded manga
-    UNREAD,         // Show manga with unread chapters
-    READING         // Show manga currently being read
+// Sort modes for library manga
+enum class LibrarySortMode {
+    TITLE_ASC,       // A-Z
+    TITLE_DESC,      // Z-A
+    UNREAD_DESC,     // Most unread first
+    UNREAD_ASC,      // Least unread first
+    RECENTLY_ADDED,  // Recently added (by ID, higher = newer)
 };
 
 class LibrarySectionTab : public brls::Box {
 public:
-    // For library view (show all library manga or by category)
-    LibrarySectionTab(int categoryId = 0, const std::string& categoryName = "Library");
+    LibrarySectionTab();
 
     ~LibrarySectionTab() override;
 
@@ -33,34 +32,38 @@ public:
     void refresh();
 
 private:
-    void loadContent();
     void loadCategories();
-    void showAllManga();
-    void showByCategory(int categoryId);
-    void showDownloaded();
-    void showUnread();
-    void showReading();
+    void createCategoryTabs();
+    void loadCategoryManga(int categoryId);
+    void selectCategory(int categoryId);
     void onMangaSelected(const Manga& manga);
-    void onCategorySelected(const Category& category);
-    void updateViewModeButtons();
     void triggerLibraryUpdate();
+    void updateCategoryButtonStyles();
+    void sortMangaList();
+    void cycleSortMode();
+    void updateSortButtonText();
 
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
 
-    int m_categoryId = 0;
-    std::string m_categoryName;
+    // Currently selected category
+    int m_currentCategoryId = 0;
+    std::string m_currentCategoryName = "Library";
 
+    // Sort mode
+    LibrarySortMode m_sortMode = LibrarySortMode::TITLE_ASC;
+
+    // UI Components
     brls::Label* m_titleLabel = nullptr;
 
-    // View mode selector buttons
-    brls::Box* m_viewModeBox = nullptr;
-    brls::Button* m_allBtn = nullptr;
-    brls::Button* m_categoriesBtn = nullptr;
-    brls::Button* m_downloadedBtn = nullptr;
-    brls::Button* m_unreadBtn = nullptr;
-    brls::Button* m_updateBtn = nullptr;      // Trigger library update
-    brls::Button* m_backBtn = nullptr;        // Back button when in filtered view
+    // Category tabs row
+    brls::Box* m_categoryTabsBox = nullptr;
+    brls::ScrollingFrame* m_categoryScroller = nullptr;
+    std::vector<brls::Button*> m_categoryButtons;
+
+    // Action buttons
+    brls::Button* m_updateBtn = nullptr;
+    brls::Button* m_sortBtn = nullptr;
 
     // Main content grid
     RecyclingGrid* m_contentGrid = nullptr;
@@ -69,8 +72,6 @@ private:
     std::vector<Manga> m_mangaList;
     std::vector<Category> m_categories;
 
-    LibraryViewMode m_viewMode = LibraryViewMode::ALL_MANGA;
-    std::string m_filterTitle;
     bool m_loaded = false;
     bool m_categoriesLoaded = false;
 

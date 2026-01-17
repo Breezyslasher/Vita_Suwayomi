@@ -34,8 +34,7 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     modeBox->setMarginBottom(15);
 
     m_popularBtn = new brls::Button();
-    m_popularBtn->setStyle(brls::ButtonStyle::PRIMARY);
-    m_popularBtn->addView(new brls::Label("Popular"));
+    m_popularBtn->setText("> Popular");
     m_popularBtn->setMarginRight(10);
     m_popularBtn->registerClickAction([this](brls::View*) {
         loadPopular();
@@ -45,8 +44,7 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
 
     if (source.supportsLatest) {
         m_latestBtn = new brls::Button();
-        m_latestBtn->setStyle(brls::ButtonStyle::BORDERED);
-        m_latestBtn->addView(new brls::Label("Latest"));
+        m_latestBtn->setText("Latest");
         m_latestBtn->setMarginRight(10);
         m_latestBtn->registerClickAction([this](brls::View*) {
             loadLatest();
@@ -56,8 +54,7 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     }
 
     m_searchBtn = new brls::Button();
-    m_searchBtn->setStyle(brls::ButtonStyle::BORDERED);
-    m_searchBtn->addView(new brls::Label("Search"));
+    m_searchBtn->setText("Search");
     m_searchBtn->registerClickAction([this](brls::View*) {
         showSearchDialog();
         return true;
@@ -73,8 +70,7 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
 
     // Load more button (hidden initially)
     m_loadMoreBtn = new brls::Button();
-    m_loadMoreBtn->setStyle(brls::ButtonStyle::BORDERED);
-    m_loadMoreBtn->addView(new brls::Label("Load More"));
+    m_loadMoreBtn->setText("Load More");
     m_loadMoreBtn->setMarginTop(15);
     m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
     m_loadMoreBtn->registerClickAction([this](brls::View*) {
@@ -176,17 +172,15 @@ void SourceBrowseTab::updateGrid() {
 }
 
 void SourceBrowseTab::updateModeButtons() {
+    // Use text prefix to indicate active state
     if (m_popularBtn) {
-        m_popularBtn->setStyle(m_browseMode == BrowseMode::POPULAR ?
-            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
+        m_popularBtn->setText(m_browseMode == BrowseMode::POPULAR ? "> Popular" : "Popular");
     }
     if (m_latestBtn) {
-        m_latestBtn->setStyle(m_browseMode == BrowseMode::LATEST ?
-            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
+        m_latestBtn->setText(m_browseMode == BrowseMode::LATEST ? "> Latest" : "Latest");
     }
     if (m_searchBtn) {
-        m_searchBtn->setStyle(m_browseMode == BrowseMode::SEARCH ?
-            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
+        m_searchBtn->setText(m_browseMode == BrowseMode::SEARCH ? "> Search" : "Search");
     }
 }
 
@@ -198,11 +192,11 @@ void SourceBrowseTab::updateLoadMoreButton() {
 }
 
 void SourceBrowseTab::showSearchDialog() {
-    brls::Swkbd::openForText([this](std::string query) {
+    brls::Application::getImeManager()->openForText([this](std::string query) {
         if (!query.empty()) {
             loadSearch(query);
         }
-    }, "Search manga...", "", 100, "", 0, "Search", "");
+    }, "Search manga...", "", 100, "");
 }
 
 void SourceBrowseTab::onMangaSelected(const Manga& manga) {

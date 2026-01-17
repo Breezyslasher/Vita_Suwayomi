@@ -148,13 +148,14 @@ void MangaItemCell::loadThumbnail() {
         return;
     }
 
-    // Load from server URL
-    if (m_manga.thumbnailUrl.empty()) {
-        brls::Logger::warning("MangaItemCell: No thumbnail URL for '{}'", m_manga.title);
+    // Need valid manga ID to fetch thumbnail
+    if (m_manga.id <= 0) {
+        brls::Logger::warning("MangaItemCell: Invalid manga ID for '{}'", m_manga.title);
         return;
     }
 
-    // Build full URL with server base
+    // Always use the server's thumbnail endpoint - this works even if thumbnailUrl is empty
+    // The Suwayomi API provides thumbnails at /api/v1/manga/{id}/thumbnail
     SuwayomiClient& client = SuwayomiClient::getInstance();
     std::string url = client.getMangaThumbnailUrl(m_manga.id);
 

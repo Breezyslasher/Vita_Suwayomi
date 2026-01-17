@@ -1,10 +1,11 @@
 /**
  * VitaSuwayomi - Downloads Tab Implementation
+ * Shows downloaded manga for offline reading
  */
 
 #include "view/downloads_tab.hpp"
 #include "app/downloads_manager.hpp"
-#include "activity/player_activity.hpp"
+#include "app/application.hpp"
 #include "utils/image_loader.hpp"
 #include <fstream>
 
@@ -80,7 +81,7 @@ DownloadsTab::DownloadsTab() {
 
     // Empty label
     m_emptyLabel = new brls::Label();
-    m_emptyLabel->setText("No downloads yet.\nUse the download button on media details to save for offline viewing.");
+    m_emptyLabel->setText("No downloads yet.\nUse the download button on manga details to save for offline reading.");
     m_emptyLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     m_emptyLabel->setVerticalAlign(brls::VerticalAlign::CENTER);
     m_emptyLabel->setGrow(1.0f);
@@ -126,26 +127,17 @@ void DownloadsTab::refresh() {
         // Cover image (try local first, then remote URL)
         auto coverImage = new brls::Image();
         coverImage->setWidth(60);
-        coverImage->setHeight(60);
+        coverImage->setHeight(80);
         coverImage->setCornerRadius(4);
         coverImage->setMargins(0, 15, 0, 0);
         row->addView(coverImage);
 
-        brls::Logger::debug("DownloadsTab: Item '{}' - localCoverPath='{}', coverUrl empty={}",
-                           item.title, item.localCoverPath, item.coverUrl.empty() ? "yes" : "no");
-
         if (!item.localCoverPath.empty()) {
-            // Load local cover using Vita-compatible method
-            brls::Logger::debug("DownloadsTab: Loading local cover for '{}'", item.title);
             loadLocalCoverImage(coverImage, item.localCoverPath);
         } else if (!item.coverUrl.empty()) {
-            // Load from remote URL
-            brls::Logger::debug("DownloadsTab: Loading remote cover for '{}'", item.title);
             ImageLoader::loadAsync(item.coverUrl, [](brls::Image* img) {
                 // Image loaded callback
             }, coverImage);
-        } else {
-            brls::Logger::debug("DownloadsTab: No cover available for '{}'", item.title);
         }
 
         // Title and info
@@ -154,18 +146,14 @@ void DownloadsTab::refresh() {
         infoBox->setGrow(1.0f);
 
         auto titleLabel = new brls::Label();
-        std::string displayTitle = item.title;
-        if (!item.parentTitle.empty()) {
-            displayTitle = item.parentTitle + " - " + item.title;
-        }
-        titleLabel->setText(displayTitle);
+        titleLabel->setText(item.title);
         titleLabel->setFontSize(18);
         infoBox->addView(titleLabel);
 
         // Author name (if available)
-        if (!item.authorName.empty()) {
+        if (!item.author.empty()) {
             auto authorLabel = new brls::Label();
-            authorLabel->setText(item.authorName);
+            authorLabel->setText(item.author);
             authorLabel->setFontSize(14);
             authorLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
             infoBox->addView(authorLabel);
@@ -177,28 +165,27 @@ void DownloadsTab::refresh() {
 
         std::string statusText;
         switch (item.state) {
-            case DownloadState::QUEUED:
+            case LocalDownloadState::QUEUED:
                 statusText = "Queued";
                 break;
-            case DownloadState::DOWNLOADING:
-                if (item.totalBytes > 0) {
-                    int percent = (int)((item.downloadedBytes * 100) / item.totalBytes);
-                    statusText = "Downloading... " + std::to_string(percent) + "%";
+            case LocalDownloadState::DOWNLOADING:
+                if (item.totalChapters > 0) {
+                    statusText = "Downloading... " + std::to_string(item.completedChapters) +
+                                 "/" + std::to_string(item.totalChapters) + " chapters";
                 } else {
                     statusText = "Downloading...";
                 }
                 break;
-            case DownloadState::PAUSED:
+            case LocalDownloadState::PAUSED:
                 statusText = "Paused";
                 break;
-            case DownloadState::COMPLETED:
-                statusText = "Ready to play";
-                if (item.currentTime > 0) {
-                    int minutes = (int)(item.currentTime / 60.0f);  // currentTime is in seconds
-                    statusText += " (" + std::to_string(minutes) + " min watched)";
+            case LocalDownloadState::COMPLETED:
+                statusText = std::to_string(item.completedChapters) + " chapters downloaded";
+                if (item.lastChapterRead > 0) {
+                    statusText += " (reading ch. " + std::to_string(item.lastChapterRead) + ")";
                 }
                 break;
-            case DownloadState::FAILED:
+            case LocalDownloadState::FAILED:
                 statusText = "Download failed";
                 break;
         }
@@ -208,35 +195,37 @@ void DownloadsTab::refresh() {
         row->addView(infoBox);
 
         // Actions based on state
-        if (item.state == DownloadState::COMPLETED) {
-            auto playBtn = new brls::Button();
-            playBtn->setText("Play");
-            playBtn->setMargins(0, 0, 0, 10);
+        if (item.state == LocalDownloadState::COMPLETED || item.completedChapters > 0) {
+            auto readBtn = new brls::Button();
+            readBtn->setText("Read");
+            readBtn->setMargins(0, 0, 0, 10);
 
-            std::string ratingKey = item.itemId;
-            std::string localPath = item.localPath;
-            playBtn->registerClickAction([ratingKey, localPath](brls::View*) {
-                // Play local file
-                brls::Application::pushActivity(new PlayerActivity(ratingKey, true));
+            int mangaId = item.mangaId;
+            int lastChapter = item.lastChapterRead > 0 ? item.lastChapterRead : 1;
+            std::string mangaTitle = item.title;
+            readBtn->registerClickAction([mangaId, lastChapter, mangaTitle](brls::View*) {
+                // Open reader at last read chapter
+                Application::getInstance().pushReaderActivity(mangaId, lastChapter, mangaTitle);
                 return true;
             });
-            row->addView(playBtn);
+            row->addView(readBtn);
 
             auto deleteBtn = new brls::Button();
             deleteBtn->setText("Delete");
-            std::string key = item.itemId;
-            deleteBtn->registerClickAction([key](brls::View*) {
-                DownloadsManager::getInstance().deleteDownload(key);
+            int deleteId = item.mangaId;
+            deleteBtn->registerClickAction([deleteId](brls::View*) {
+                DownloadsManager::getInstance().deleteMangaDownload(deleteId);
                 brls::Application::notify("Download deleted");
                 return true;
             });
             row->addView(deleteBtn);
-        } else if (item.state == DownloadState::DOWNLOADING || item.state == DownloadState::QUEUED) {
+        } else if (item.state == LocalDownloadState::DOWNLOADING ||
+                   item.state == LocalDownloadState::QUEUED) {
             auto cancelBtn = new brls::Button();
             cancelBtn->setText("Cancel");
-            std::string key = item.itemId;
-            cancelBtn->registerClickAction([key](brls::View*) {
-                DownloadsManager::getInstance().cancelDownload(key);
+            int cancelId = item.mangaId;
+            cancelBtn->registerClickAction([cancelId](brls::View*) {
+                DownloadsManager::getInstance().cancelDownload(cancelId);
                 brls::Application::notify("Download cancelled");
                 return true;
             });
@@ -249,7 +238,7 @@ void DownloadsTab::refresh() {
 }
 
 void DownloadsTab::showDownloadOptions(const std::string& ratingKey, const std::string& title) {
-    // Not implemented - download options would be shown from media detail view
+    // Not implemented - download options are shown from manga detail view
 }
 
 } // namespace vitasuwayomi
