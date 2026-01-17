@@ -335,9 +335,9 @@ void LibrarySectionTab::updateCategoryButtonTexts() {
                 catName = "Cat " + std::to_string(m_categories[catIndex].id);
             }
 
-            // Truncate long names
-            if (catName.length() > 12) {
-                catName = catName.substr(0, 10) + "..";
+            // Truncate long names (after 25 chars)
+            if (catName.length() > 25) {
+                catName = catName.substr(0, 23) + "..";
             }
 
             btn->setText(catName);
@@ -346,12 +346,11 @@ void LibrarySectionTab::updateCategoryButtonTexts() {
             // Calculate width based on text length
             int textWidth = static_cast<int>(catName.length()) * 9 + 30;
             if (textWidth < 60) textWidth = 60;
-            if (textWidth > 120) textWidth = 120;
+            if (textWidth > 250) textWidth = 250;
             btn->setWidth(textWidth);
 
             // Set up click handler for this category
             int catId = m_categories[catIndex].id;
-            btn->clearActions();
             btn->registerClickAction([this, catId](brls::View* view) {
                 selectCategory(catId);
                 return true;
