@@ -44,6 +44,7 @@ private:
     void updateSortButtonText();
     void navigateToPreviousCategory();
     void navigateToNextCategory();
+    void scrollToCategoryIndex(int index);
 
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
@@ -59,8 +60,11 @@ private:
     brls::Label* m_titleLabel = nullptr;
 
     // Category tabs row
-    brls::Box* m_categoryTabsBox = nullptr;
+    brls::Box* m_categoryTabsBox = nullptr;        // Outer container (clips)
+    brls::Box* m_categoryScrollContainer = nullptr; // Inner container (scrolls)
     std::vector<brls::Button*> m_categoryButtons;
+    float m_categoryScrollOffset = 0.0f;           // Current scroll offset
+    int m_selectedCategoryIndex = 0;               // Index of selected category
 
     // Action buttons
     brls::Button* m_updateBtn = nullptr;

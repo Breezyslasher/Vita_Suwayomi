@@ -39,8 +39,7 @@ LibrarySectionTab::LibrarySectionTab() {
     topRow->setMarginBottom(15);
     topRow->setHeight(45);
 
-    // Category tabs container - simple horizontal box with overflow clipping
-    // Using a Box instead of ScrollingFrame for better compatibility
+    // Category tabs container - outer box clips, inner box scrolls
     m_categoryTabsBox = new brls::Box();
     m_categoryTabsBox->setAxis(brls::Axis::ROW);
     m_categoryTabsBox->setJustifyContent(brls::JustifyContent::FLEX_START);
@@ -49,6 +48,13 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryTabsBox->setMarginLeft(0);
     m_categoryTabsBox->setMarginRight(10);
     m_categoryTabsBox->setClipsToBounds(true);
+
+    // Inner container that holds buttons and can be translated for scrolling
+    m_categoryScrollContainer = new brls::Box();
+    m_categoryScrollContainer->setAxis(brls::Axis::ROW);
+    m_categoryScrollContainer->setJustifyContent(brls::JustifyContent::FLEX_START);
+    m_categoryScrollContainer->setAlignItems(brls::AlignItems::CENTER);
+    m_categoryTabsBox->addView(m_categoryScrollContainer);
 
     topRow->addView(m_categoryTabsBox);
 
@@ -133,9 +139,11 @@ void LibrarySectionTab::refresh() {
     m_categoryButtons.clear();
 
     // Clear category tabs
-    if (m_categoryTabsBox) {
-        m_categoryTabsBox->clearViews();
+    if (m_categoryScrollContainer) {
+        m_categoryScrollContainer->clearViews();
     }
+    m_categoryScrollOffset = 0.0f;
+    m_selectedCategoryIndex = 0;
 
     loadCategories();
 }
@@ -191,11 +199,13 @@ void LibrarySectionTab::loadCategories() {
 }
 
 void LibrarySectionTab::createCategoryTabs() {
-    if (!m_categoryTabsBox) return;
+    if (!m_categoryScrollContainer) return;
 
     // Clear existing buttons
-    m_categoryTabsBox->clearViews();
+    m_categoryScrollContainer->clearViews();
     m_categoryButtons.clear();
+    m_categoryScrollOffset = 0.0f;
+    m_selectedCategoryIndex = 0;
 
     // Filter out empty categories (mangaCount == 0)
     // Also filter the "Default" category (id 0) if it's empty
@@ -222,7 +232,7 @@ void LibrarySectionTab::createCategoryTabs() {
             selectCategory(0);
             return true;
         });
-        m_categoryTabsBox->addView(btn);
+        m_categoryScrollContainer->addView(btn);
         m_categoryButtons.push_back(btn);
         return;
     }
@@ -248,7 +258,7 @@ void LibrarySectionTab::createCategoryTabs() {
             return true;
         });
 
-        m_categoryTabsBox->addView(btn);
+        m_categoryScrollContainer->addView(btn);
         m_categoryButtons.push_back(btn);
     }
 
@@ -261,19 +271,22 @@ void LibrarySectionTab::createCategoryTabs() {
 void LibrarySectionTab::selectCategory(int categoryId) {
     m_currentCategoryId = categoryId;
 
-    // Find category name
+    // Find category name and index
     m_currentCategoryName = "Library";
-    for (const auto& cat : m_categories) {
-        if (cat.id == categoryId) {
-            m_currentCategoryName = cat.name;
+    m_selectedCategoryIndex = 0;
+    for (size_t i = 0; i < m_categories.size(); i++) {
+        if (m_categories[i].id == categoryId) {
+            m_currentCategoryName = m_categories[i].name;
+            m_selectedCategoryIndex = static_cast<int>(i);
             break;
         }
     }
 
-    brls::Logger::debug("LibrarySectionTab: Selected category {} ({})",
-                       categoryId, m_currentCategoryName);
+    brls::Logger::debug("LibrarySectionTab: Selected category {} ({}) at index {}",
+                       categoryId, m_currentCategoryName, m_selectedCategoryIndex);
 
     updateCategoryButtonStyles();
+    scrollToCategoryIndex(m_selectedCategoryIndex);
     loadCategoryManga(categoryId);
 }
 
@@ -519,6 +532,54 @@ void LibrarySectionTab::navigateToNextCategory() {
         // Wrap to first category
         selectCategory(m_categories[0].id);
     }
+}
+
+void LibrarySectionTab::scrollToCategoryIndex(int index) {
+    if (!m_categoryScrollContainer || !m_categoryTabsBox) return;
+    if (index < 0 || index >= static_cast<int>(m_categoryButtons.size())) return;
+
+    // Get the visible width of the tabs container
+    float visibleWidth = m_categoryTabsBox->getWidth();
+    if (visibleWidth <= 0) {
+        visibleWidth = 600.0f; // Fallback width (Vita screen is 960 minus margins/buttons)
+    }
+
+    // Calculate button positions
+    float buttonX = 0.0f;
+    float buttonWidth = 0.0f;
+    for (int i = 0; i <= index; i++) {
+        if (i < static_cast<int>(m_categoryButtons.size())) {
+            buttonWidth = m_categoryButtons[i]->getWidth();
+            if (buttonWidth <= 0) {
+                // Estimate if width not set yet
+                buttonWidth = 80.0f;
+            }
+            if (i < index) {
+                buttonX += buttonWidth + 8.0f; // 8px margin between buttons
+            }
+        }
+    }
+
+    // Calculate if button is visible with current scroll offset
+    float buttonLeft = buttonX + m_categoryScrollOffset;
+    float buttonRight = buttonLeft + buttonWidth;
+
+    brls::Logger::debug("LibrarySectionTab: scrollToCategoryIndex {} - buttonX={}, buttonWidth={}, offset={}, visible={}",
+                       index, buttonX, buttonWidth, m_categoryScrollOffset, visibleWidth);
+
+    // Scroll if button is not fully visible
+    if (buttonLeft < 0) {
+        // Button is off the left side, scroll right (make offset less negative)
+        m_categoryScrollOffset = -buttonX;
+    } else if (buttonRight > visibleWidth) {
+        // Button is off the right side, scroll left (make offset more negative)
+        m_categoryScrollOffset = visibleWidth - buttonX - buttonWidth - 10.0f; // 10px padding
+    }
+
+    // Apply the scroll offset using setTranslationX
+    m_categoryScrollContainer->setTranslationX(m_categoryScrollOffset);
+
+    brls::Logger::debug("LibrarySectionTab: New scroll offset: {}", m_categoryScrollOffset);
 }
 
 } // namespace vitasuwayomi
