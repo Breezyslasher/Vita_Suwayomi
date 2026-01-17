@@ -60,12 +60,12 @@ private:
     // UI Components
     brls::Label* m_titleLabel = nullptr;
 
-    // Category tabs row (windowed - only shows 5 buttons at a time)
+    // Category tabs row
     brls::Box* m_categoryTabsBox = nullptr;        // Outer container (clips)
-    brls::Box* m_categoryScrollContainer = nullptr; // Inner container
-    std::vector<brls::Button*> m_categoryButtons;  // Max 5 buttons
+    brls::Box* m_categoryScrollContainer = nullptr; // Inner container (scrolls)
+    std::vector<brls::Button*> m_categoryButtons;
     int m_selectedCategoryIndex = 0;               // Index in m_categories
-    int m_windowStartIndex = 0;                    // First category shown in window
+    float m_categoryScrollOffset = 0.0f;           // Current scroll offset
 
     // Action buttons
     brls::Button* m_updateBtn = nullptr;
