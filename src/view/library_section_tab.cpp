@@ -54,6 +54,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryScrollContainer->setAxis(brls::Axis::ROW);
     m_categoryScrollContainer->setJustifyContent(brls::JustifyContent::FLEX_START);
     m_categoryScrollContainer->setAlignItems(brls::AlignItems::CENTER);
+    m_categoryScrollContainer->setPaddingLeft(5);  // Prevent first button from being cut off
     m_categoryTabsBox->addView(m_categoryScrollContainer);
 
     topRow->addView(m_categoryTabsBox);
@@ -239,19 +240,31 @@ void LibrarySectionTab::createCategoryTabs() {
 
     // Create a button for each visible category (only show name, no count)
     int buttonIndex = 0;
+    float totalWidth = 5.0f;  // Start with left padding
+
     for (const auto& category : visibleCategories) {
         auto* btn = new brls::Button();
 
         // Only show category name
-        btn->setText(category.name);
+        std::string catName = category.name;
+        if (catName.empty()) {
+            catName = "Cat " + std::to_string(category.id);
+        }
+
+        brls::Logger::debug("LibrarySectionTab: Creating button {} for category '{}' (id={})",
+                           buttonIndex, catName, category.id);
+
+        btn->setText(catName);
         btn->setMarginRight(8);
 
         // Calculate width based on text length (approx 9 pixels per char + 30 padding)
-        int textWidth = static_cast<int>(category.name.length()) * 9 + 30;
+        int textWidth = static_cast<int>(catName.length()) * 9 + 30;
         if (textWidth < 60) textWidth = 60;  // Minimum width
         if (textWidth > 200) textWidth = 200; // Maximum width
         btn->setWidth(textWidth);
         btn->setHeight(35);
+
+        totalWidth += textWidth + 8.0f;  // Track total width
 
         int catId = category.id;
         btn->registerClickAction([this, catId](brls::View* view) {
@@ -269,6 +282,11 @@ void LibrarySectionTab::createCategoryTabs() {
         m_categoryButtons.push_back(btn);
         buttonIndex++;
     }
+
+    // Set explicit width on scroll container to ensure all buttons render
+    m_categoryScrollContainer->setWidth(totalWidth);
+    brls::Logger::debug("LibrarySectionTab: Created {} category buttons, total width: {}",
+                       buttonIndex, totalWidth);
 
     // Store visible categories for button style updates
     m_categories = visibleCategories;
@@ -552,8 +570,8 @@ void LibrarySectionTab::scrollToCategoryIndex(int index) {
         visibleWidth = 600.0f; // Fallback width (Vita screen is 960 minus margins/buttons)
     }
 
-    // Calculate button positions
-    float buttonX = 0.0f;
+    // Calculate button positions (5px left padding + button widths + 8px margins)
+    float buttonX = 5.0f;  // Account for left padding
     float buttonWidth = 0.0f;
     for (int i = 0; i <= index; i++) {
         if (i < static_cast<int>(m_categoryButtons.size())) {
