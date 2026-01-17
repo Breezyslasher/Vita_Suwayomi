@@ -1200,8 +1200,63 @@ bool SuwayomiClient::setMangaCategoriesGraphQL(int mangaId, const std::vector<in
 }
 
 bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga) {
-    // Query category directly and get its manga list
-    // The category.mangas field should return ONLY manga assigned to this specific category
+    // Use the mangas query with categoryId filter - this is the correct Suwayomi API
+    // The filter ensures only manga assigned to this specific category are returned
+    const char* query = R"(
+        query GetMangasByCategory($categoryId: Int!) {
+            mangas(
+                filter: {
+                    inLibrary: { equalTo: true }
+                    categoryId: { equalTo: $categoryId }
+                }
+            ) {
+                nodes {
+                    id
+                    title
+                    thumbnailUrl
+                    author
+                    inLibrary
+                    unreadCount
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"categoryId\":" + std::to_string(categoryId) + "}";
+
+    brls::Logger::info("GraphQL: Fetching manga for category {} with filter", categoryId);
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::warning("GraphQL filter query failed, trying fallback...");
+        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        brls::Logger::warning("GraphQL: No data in response, trying fallback...");
+        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
+    }
+
+    std::string mangasObj = extractJsonObject(data, "mangas");
+    if (mangasObj.empty()) {
+        brls::Logger::warning("GraphQL: No mangas object, trying fallback...");
+        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
+    }
+
+    std::string nodesJson = extractJsonArray(mangasObj, "nodes");
+    manga.clear();
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        manga.push_back(parseMangaFromGraphQL(item));
+    }
+
+    brls::Logger::info("GraphQL: Fetched {} manga for category {} (filter method)", manga.size(), categoryId);
+    return true;
+}
+
+// Fallback method using category.mangas query (for older Suwayomi versions)
+bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga) {
     const char* query = R"(
         query GetCategoryManga($categoryId: Int!) {
             category(id: $categoryId) {
@@ -1215,11 +1270,6 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
                         author
                         inLibrary
                         unreadCount
-                        categories {
-                            nodes {
-                                id
-                            }
-                        }
                     }
                 }
             }
@@ -1243,38 +1293,11 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
     std::string nodesJson = extractJsonArray(mangasObj, "nodes");
     manga.clear();
     std::vector<std::string> items = splitJsonArray(nodesJson);
-
-    // Filter to ensure manga is actually in this category
-    // (some Suwayomi versions may return manga from multiple categories)
     for (const auto& item : items) {
-        Manga m = parseMangaFromGraphQL(item);
-
-        // Verify manga has this category in its categories list
-        std::string categoriesObj = extractJsonObject(item, "categories");
-        if (!categoriesObj.empty()) {
-            std::string catNodesJson = extractJsonArray(categoriesObj, "nodes");
-            std::vector<std::string> catItems = splitJsonArray(catNodesJson);
-
-            bool inCategory = false;
-            for (const auto& catItem : catItems) {
-                int catId = extractJsonInt(catItem, "id");
-                if (catId == categoryId) {
-                    inCategory = true;
-                    break;
-                }
-            }
-
-            // Only add manga that is actually in this category
-            if (inCategory) {
-                manga.push_back(m);
-            }
-        } else {
-            // No category info - include it (backward compatibility)
-            manga.push_back(m);
-        }
+        manga.push_back(parseMangaFromGraphQL(item));
     }
 
-    brls::Logger::info("GraphQL: Fetched {} manga for category {} (verified)", manga.size(), categoryId);
+    brls::Logger::info("GraphQL fallback: Fetched {} manga for category {}", manga.size(), categoryId);
     return true;
 }
 
