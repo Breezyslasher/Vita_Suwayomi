@@ -171,9 +171,9 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     // Menu button
     auto* menuBtn = new brls::Button();
-    menuBtn->setWidth(36);
-    menuBtn->setHeight(36);
-    menuBtn->setText("...");
+    menuBtn->setWidth(50);
+    menuBtn->setHeight(40);
+    menuBtn->setText("Menu");
     menuBtn->registerClickAction([this](brls::View* view) {
         showMangaMenu();
         return true;
@@ -232,8 +232,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     chaptersActions->setAxis(brls::Axis::ROW);
 
     m_sortBtn = new brls::Button();
-    m_sortBtn->setWidth(60);
-    m_sortBtn->setHeight(30);
+    m_sortBtn->setWidth(80);
+    m_sortBtn->setHeight(35);
     m_sortBtn->setText("Sort");
     m_sortBtn->registerClickAction([this](brls::View* view) {
         m_sortDescending = !m_sortDescending;
@@ -390,34 +390,61 @@ void MangaDetailView::populateChaptersList() {
 
         chapterRow->addView(infoBox);
 
-        // Right side: status indicators
+        // Right side: status indicators and download button
         auto* statusBox = new brls::Box();
         statusBox->setAxis(brls::Axis::ROW);
         statusBox->setAlignItems(brls::AlignItems::CENTER);
-
-        if (chapter.downloaded) {
-            auto* dlLabel = new brls::Label();
-            dlLabel->setText("[DL]");
-            dlLabel->setFontSize(11);
-            dlLabel->setTextColor(nvgRGB(74, 159, 255));
-            dlLabel->setMarginRight(8);
-            statusBox->addView(dlLabel);
-        }
 
         if (chapter.read) {
             auto* readLabel = new brls::Label();
             readLabel->setText("[Read]");
             readLabel->setFontSize(11);
             readLabel->setTextColor(nvgRGB(100, 100, 100));
+            readLabel->setMarginRight(8);
             statusBox->addView(readLabel);
         }
 
+        // Download button - shows icon based on download state
+        Chapter capturedChapter = chapter;
+        auto* dlBtn = new brls::Button();
+        dlBtn->setWidth(45);
+        dlBtn->setHeight(35);
+        dlBtn->setFocusable(true);
+
+        if (chapter.downloaded) {
+            dlBtn->setText("[v]");  // Checkmark for downloaded
+            dlBtn->setBackgroundColor(nvgRGBA(74, 159, 255, 180));
+            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                // Already downloaded - show delete option
+                deleteChapterDownload(capturedChapter);
+                return true;
+            });
+        } else {
+            dlBtn->setText("[DL]");  // Download icon
+            dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                downloadChapter(capturedChapter);
+                return true;
+            });
+        }
+        dlBtn->addGestureRecognizer(new brls::TapGestureRecognizer(dlBtn));
+        statusBox->addView(dlBtn);
+
         chapterRow->addView(statusBox);
 
-        // Click action
-        Chapter capturedChapter = chapter;
+        // Click action - open chapter
         chapterRow->registerClickAction([this, capturedChapter](brls::View* view) {
             onChapterSelected(capturedChapter);
+            return true;
+        });
+
+        // Square button to download chapter when row is focused
+        chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_Y, [this, capturedChapter](brls::View* view) {
+            if (capturedChapter.downloaded) {
+                deleteChapterDownload(capturedChapter);
+            } else {
+                downloadChapter(capturedChapter);
+            }
             return true;
         });
 
@@ -431,19 +458,19 @@ void MangaDetailView::populateChaptersList() {
 }
 
 void MangaDetailView::showMangaMenu() {
-    brls::Dialog* dialog = new brls::Dialog("Manga Options");
+    brls::Dialog* dialog = new brls::Dialog("Options");
 
-    dialog->addButton("Mark All Read", [this, dialog]() {
+    dialog->addButton("All Read", [this, dialog]() {
         dialog->close();
         markAllRead();
     });
 
-    dialog->addButton("Mark All Unread", [this, dialog]() {
+    dialog->addButton("All Unread", [this, dialog]() {
         dialog->close();
         markAllUnread();
     });
 
-    dialog->addButton("Delete Downloads", [this, dialog]() {
+    dialog->addButton("Del DL", [this, dialog]() {
         dialog->close();
         onDeleteDownloads();
     });
@@ -531,14 +558,14 @@ void MangaDetailView::onRemoveFromLibrary() {
 }
 
 void MangaDetailView::showDownloadOptions() {
-    brls::Dialog* dialog = new brls::Dialog("Download Options");
+    brls::Dialog* dialog = new brls::Dialog("Download");
 
-    dialog->addButton("Download All", [this, dialog]() {
+    dialog->addButton("All", [this, dialog]() {
         dialog->close();
         downloadAllChapters();
     });
 
-    dialog->addButton("Download Unread", [this, dialog]() {
+    dialog->addButton("Unread", [this, dialog]() {
         dialog->close();
         downloadUnreadChapters();
     });
