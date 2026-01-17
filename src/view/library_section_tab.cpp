@@ -48,7 +48,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryTabsBox->setGrow(1.0f);
     m_categoryTabsBox->setMarginLeft(0);
     m_categoryTabsBox->setMarginRight(10);
-    m_categoryTabsBox->setClipToBounds(true);
+    m_categoryTabsBox->setClipsToBounds(true);
 
     topRow->addView(m_categoryTabsBox);
 
