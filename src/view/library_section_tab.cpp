@@ -66,9 +66,9 @@ LibrarySectionTab::LibrarySectionTab() {
 
     // Sort button
     m_sortBtn = new brls::Button();
-    m_sortBtn->setText("A-Z");
+    m_sortBtn->setText("Sort");
     m_sortBtn->setMarginLeft(10);
-    m_sortBtn->setWidth(55);
+    m_sortBtn->setWidth(70);
     m_sortBtn->setHeight(35);
     m_sortBtn->registerClickAction([this](brls::View* view) {
         cycleSortMode();
@@ -76,11 +76,11 @@ LibrarySectionTab::LibrarySectionTab() {
     });
     buttonBox->addView(m_sortBtn);
 
-    // Update button - use shorter text "Upd" to save space
+    // Update button
     m_updateBtn = new brls::Button();
-    m_updateBtn->setText("Upd");
+    m_updateBtn->setText("Update");
     m_updateBtn->setMarginLeft(8);
-    m_updateBtn->setWidth(50);
+    m_updateBtn->setWidth(90);
     m_updateBtn->setHeight(35);
     m_updateBtn->registerClickAction([this](brls::View* view) {
         triggerLibraryUpdate();
