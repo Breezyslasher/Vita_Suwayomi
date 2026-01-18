@@ -404,48 +404,55 @@ void MangaDetailView::populateChaptersList() {
             statusBox->addView(readLabel);
         }
 
-        // Download button - shows state based on downloadState
+        // Download button - shows state based on local download state
         Chapter capturedChapter = chapter;
         auto* dlBtn = new brls::Button();
         dlBtn->setWidth(55);
         dlBtn->setHeight(40);
         dlBtn->setFocusable(true);
 
-        // Set button appearance based on download state
-        switch (chapter.downloadState) {
-            case DownloadState::DOWNLOADED:
-                dlBtn->setText("OK");  // Downloaded checkmark
-                dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
-                dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
-                    deleteChapterDownload(capturedChapter);
-                    return true;
-                });
-                break;
-            case DownloadState::DOWNLOADING:
-                dlBtn->setText("...");  // Downloading animation
-                dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
-                break;
-            case DownloadState::QUEUED:
-                dlBtn->setText("Q");  // Queued
-                dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
-                break;
-            case DownloadState::ERROR:
-                dlBtn->setText("ERR");  // Error
-                dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
-                dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
-                    downloadChapter(capturedChapter);  // Retry
-                    return true;
-                });
-                break;
-            case DownloadState::NOT_DOWNLOADED:
-            default:
-                dlBtn->setText("DL");  // Download icon
-                dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
-                dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
-                    downloadChapter(capturedChapter);
-                    return true;
-                });
-                break;
+        // Check local download state first
+        DownloadsManager& dm = DownloadsManager::getInstance();
+        DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, chapter.index);
+
+        bool isLocallyDownloaded = localCh && localCh->state == LocalDownloadState::COMPLETED;
+        bool isLocallyDownloading = localCh && localCh->state == LocalDownloadState::DOWNLOADING;
+        bool isLocallyQueued = localCh && localCh->state == LocalDownloadState::QUEUED;
+        bool isLocallyFailed = localCh && localCh->state == LocalDownloadState::FAILED;
+
+        // Show download progress if downloading
+        if (isLocallyDownloading && localCh) {
+            int percent = 0;
+            if (localCh->pageCount > 0) {
+                percent = (localCh->downloadedPages * 100) / localCh->pageCount;
+            }
+            dlBtn->setText(std::to_string(percent) + "%");
+            dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
+        } else if (isLocallyDownloaded) {
+            dlBtn->setText("OK");  // Downloaded checkmark
+            dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
+            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                deleteChapterDownload(capturedChapter);
+                return true;
+            });
+        } else if (isLocallyQueued) {
+            dlBtn->setText("Q");  // Queued
+            dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
+        } else if (isLocallyFailed) {
+            dlBtn->setText("ERR");  // Error
+            dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
+            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                downloadChapter(capturedChapter);  // Retry
+                return true;
+            });
+        } else {
+            // Not downloaded - show download button
+            dlBtn->setText("DL");
+            dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                downloadChapter(capturedChapter);
+                return true;
+            });
         }
         dlBtn->addGestureRecognizer(new brls::TapGestureRecognizer(dlBtn));
         statusBox->addView(dlBtn);
@@ -459,11 +466,11 @@ void MangaDetailView::populateChaptersList() {
         });
 
         // Square button to download/delete chapter when row is focused
-        chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_Y, [this, capturedChapter](brls::View* view) {
-            if (capturedChapter.downloadState == DownloadState::DOWNLOADED) {
+        bool localDownloaded = isLocallyDownloaded;
+        chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_Y, [this, capturedChapter, localDownloaded](brls::View* view) {
+            if (localDownloaded) {
                 deleteChapterDownload(capturedChapter);
-            } else if (capturedChapter.downloadState == DownloadState::NOT_DOWNLOADED ||
-                       capturedChapter.downloadState == DownloadState::ERROR) {
+            } else {
                 downloadChapter(capturedChapter);
             }
             return true;
@@ -794,19 +801,32 @@ void MangaDetailView::markChapterRead(const Chapter& chapter) {
 }
 
 void MangaDetailView::downloadChapter(const Chapter& chapter) {
-    brls::Application::notify("Downloading chapter...");
+    brls::Application::notify("Downloading to Vita...");
 
     asyncRun([this, chapter]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& dm = DownloadsManager::getInstance();
+        dm.init();
 
-        if (client.queueChapterDownload(m_manga.id, chapter.index)) {
-            client.startDownloads();
+        // Queue chapter for local download
+        if (dm.queueChapterDownload(m_manga.id, chapter.index, m_manga.title)) {
+            // Set progress callback for UI updates
+            dm.setProgressCallback([](int downloaded, int total) {
+                brls::sync([downloaded, total]() {
+                    std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
+                    brls::Application::notify(msg);
+                });
+            });
+
+            // Start downloading
+            dm.startDownloads();
+
             brls::sync([this]() {
                 brls::Application::notify("Download started");
+                loadChapters();  // Refresh to show progress
             });
         } else {
             brls::sync([]() {
-                brls::Application::notify("Failed to start download");
+                brls::Application::notify("Failed to queue download");
             });
         }
     });
@@ -814,10 +834,16 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
 
 void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
     asyncRun([this, chapter]() {
-        if (SuwayomiClient::getInstance().deleteChapterDownload(m_manga.id, chapter.index)) {
+        DownloadsManager& dm = DownloadsManager::getInstance();
+
+        if (dm.deleteChapterDownload(m_manga.id, chapter.index)) {
             brls::sync([this]() {
-                brls::Application::notify("Download deleted");
+                brls::Application::notify("Local download deleted");
                 loadChapters();
+            });
+        } else {
+            brls::sync([]() {
+                brls::Application::notify("Failed to delete download");
             });
         }
     });
