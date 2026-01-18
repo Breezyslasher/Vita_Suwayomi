@@ -342,13 +342,13 @@ void LibrarySectionTab::updateCategoryButtonStyles() {
             isSelected = (m_categories[i].id == m_currentCategoryId);
         }
 
-        // Style the button based on selection state
+        // Style the button based on selection state (Komikku-style)
         if (isSelected) {
-            // Highlight selected category
-            btn->setBackgroundColor(nvgRGBA(80, 150, 200, 255));
+            // Highlight selected category with teal accent
+            btn->setBackgroundColor(nvgRGBA(0, 150, 136, 255));
         } else {
-            // Normal style
-            btn->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+            // Normal style - dark gray
+            btn->setBackgroundColor(nvgRGBA(50, 50, 50, 255));
         }
     }
 }

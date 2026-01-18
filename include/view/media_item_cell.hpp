@@ -34,7 +34,8 @@ private:
     brls::Label* m_subtitleLabel = nullptr;     // Shows author or chapter count
     brls::Label* m_descriptionLabel = nullptr;  // Shows on focus
     brls::Rectangle* m_progressBar = nullptr;   // Unread chapter indicator
-    brls::Label* m_unreadBadge = nullptr;       // Unread count badge
+    brls::Label* m_unreadBadge = nullptr;       // Unread count badge (top-right)
+    brls::Label* m_downloadBadge = nullptr;     // Download indicator (top-left)
 };
 
 // Alias for backward compatibility

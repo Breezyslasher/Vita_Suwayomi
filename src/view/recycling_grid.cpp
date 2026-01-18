@@ -16,8 +16,8 @@ RecyclingGrid::RecyclingGrid() {
     m_contentBox->setPadding(10);
     this->setContentView(m_contentBox);
 
-    // PS Vita screen: 960x544, use 5 columns of 150px square items
-    m_columns = 5;
+    // PS Vita screen: 960x544, use 6 columns for Komikku-style layout
+    m_columns = 6;
     m_visibleRows = 3;
 }
 
@@ -59,9 +59,9 @@ void RecyclingGrid::rebuildGrid() {
 
         auto* cell = new MangaItemCell();
         cell->setManga(m_items[i]);
-        cell->setWidth(150);
-        cell->setHeight(185);  // Square cover (140) + labels (~45)
-        cell->setMarginRight(10);
+        cell->setWidth(140);
+        cell->setHeight(180);  // Komikku-style: cover with title overlay
+        cell->setMarginRight(12);
 
         int index = (int)i;
         cell->registerClickAction([this, index](brls::View* view) {

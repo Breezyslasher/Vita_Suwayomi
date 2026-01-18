@@ -1,9 +1,11 @@
 /**
  * VitaSuwayomi - Manga Item Cell implementation
+ * Komikku-style card with cover image, title overlay, and badges
  */
 
 #include "view/media_item_cell.hpp"
 #include "app/suwayomi_client.hpp"
+#include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
 #include <fstream>
 
@@ -49,62 +51,93 @@ static void loadLocalCoverToImage(brls::Image* image, const std::string& localPa
 }
 
 MangaItemCell::MangaItemCell() {
+    // Komikku-style: card with cover filling the space, title at bottom
     this->setAxis(brls::Axis::COLUMN);
-    this->setJustifyContent(brls::JustifyContent::FLEX_START);
-    this->setAlignItems(brls::AlignItems::CENTER);
-    this->setPadding(5);
+    this->setJustifyContent(brls::JustifyContent::FLEX_END);
+    this->setAlignItems(brls::AlignItems::STRETCH);
     this->setFocusable(true);
     this->setCornerRadius(8);
-    this->setBackgroundColor(nvgRGBA(50, 50, 50, 255));
+    this->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    this->setClipsToBounds(true);
 
-    // Thumbnail image - manga covers are typically taller than wide
+    // Cover image - fills the card
     m_thumbnailImage = new brls::Image();
-    m_thumbnailImage->setWidth(100);
-    m_thumbnailImage->setHeight(140);
-    m_thumbnailImage->setScalingType(brls::ImageScalingType::FIT);
-    m_thumbnailImage->setCornerRadius(4);
+    m_thumbnailImage->setSize(brls::Size(140, 180));
+    m_thumbnailImage->setScalingType(brls::ImageScalingType::CROP);
+    m_thumbnailImage->setCornerRadius(8);
     this->addView(m_thumbnailImage);
 
-    // Title label
+    // Bottom overlay for title (gradient effect simulated with solid color)
+    auto* titleOverlay = new brls::Box();
+    titleOverlay->setAxis(brls::Axis::COLUMN);
+    titleOverlay->setJustifyContent(brls::JustifyContent::FLEX_END);
+    titleOverlay->setAlignItems(brls::AlignItems::STRETCH);
+    titleOverlay->setBackgroundColor(nvgRGBA(0, 0, 0, 180));
+    titleOverlay->setPadding(6, 6, 4, 6);
+    titleOverlay->setPositionType(brls::PositionType::ABSOLUTE);
+    titleOverlay->setPositionBottom(0);
+    titleOverlay->setWidth(140);
+
+    // Title label - at bottom of card
     m_titleLabel = new brls::Label();
-    m_titleLabel->setFontSize(12);
-    m_titleLabel->setMarginTop(5);
-    m_titleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    this->addView(m_titleLabel);
+    m_titleLabel->setFontSize(11);
+    m_titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    m_titleLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
+    titleOverlay->addView(m_titleLabel);
 
-    // Subtitle label (author or chapter count)
+    // Subtitle (author) - smaller, below title
     m_subtitleLabel = new brls::Label();
-    m_subtitleLabel->setFontSize(10);
-    m_subtitleLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    m_subtitleLabel->setTextColor(nvgRGB(160, 160, 160));
-    this->addView(m_subtitleLabel);
+    m_subtitleLabel->setFontSize(9);
+    m_subtitleLabel->setTextColor(nvgRGB(180, 180, 180));
+    m_subtitleLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
+    titleOverlay->addView(m_subtitleLabel);
 
-    // Description label (shows on focus)
+    this->addView(titleOverlay);
+
+    // Unread badge - top right corner
+    m_unreadBadge = new brls::Label();
+    m_unreadBadge->setFontSize(10);
+    m_unreadBadge->setTextColor(nvgRGB(255, 255, 255));
+    m_unreadBadge->setBackgroundColor(nvgRGBA(0, 150, 136, 255)); // Teal badge
+    m_unreadBadge->setPadding(2, 6, 2, 6);
+    m_unreadBadge->setCornerRadius(10);
+    m_unreadBadge->setPositionType(brls::PositionType::ABSOLUTE);
+    m_unreadBadge->setPositionTop(6);
+    m_unreadBadge->setPositionRight(6);
+    m_unreadBadge->setVisibility(brls::Visibility::GONE);
+    this->addView(m_unreadBadge);
+
+    // Download badge - top left corner (shows checkmark if downloaded)
+    m_downloadBadge = new brls::Label();
+    m_downloadBadge->setFontSize(12);
+    m_downloadBadge->setTextColor(nvgRGB(255, 255, 255));
+    m_downloadBadge->setBackgroundColor(nvgRGBA(76, 175, 80, 255)); // Green badge
+    m_downloadBadge->setPadding(2, 4, 2, 4);
+    m_downloadBadge->setCornerRadius(4);
+    m_downloadBadge->setPositionType(brls::PositionType::ABSOLUTE);
+    m_downloadBadge->setPositionTop(6);
+    m_downloadBadge->setPositionLeft(6);
+    m_downloadBadge->setVisibility(brls::Visibility::GONE);
+    this->addView(m_downloadBadge);
+
+    // Description label (hidden, for focus state)
     m_descriptionLabel = new brls::Label();
     m_descriptionLabel->setFontSize(9);
     m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     m_descriptionLabel->setVisibility(brls::Visibility::GONE);
-    this->addView(m_descriptionLabel);
-
-    // Unread badge
-    m_unreadBadge = new brls::Label();
-    m_unreadBadge->setFontSize(10);
-    m_unreadBadge->setTextColor(nvgRGB(255, 255, 255));
-    m_unreadBadge->setVisibility(brls::Visibility::GONE);
-    this->addView(m_unreadBadge);
 }
 
 void MangaItemCell::setManga(const Manga& manga) {
     m_manga = manga;
 
-    // Set title
+    // Set title - Komikku style, left-aligned
     if (m_titleLabel) {
         std::string title = manga.title;
-        // Truncate long titles
-        if (title.length() > 18) {
-            title = title.substr(0, 16) + "...";
+        // Truncate long titles for card display
+        if (title.length() > 16) {
+            title = title.substr(0, 14) + "..";
         }
-        m_originalTitle = title;  // Store truncated title for focus restore
+        m_originalTitle = title;
         m_titleLabel->setText(title);
     }
 
@@ -112,21 +145,38 @@ void MangaItemCell::setManga(const Manga& manga) {
     if (m_subtitleLabel) {
         if (!manga.author.empty()) {
             std::string author = manga.author;
-            if (author.length() > 20) {
-                author = author.substr(0, 18) + "...";
+            if (author.length() > 18) {
+                author = author.substr(0, 16) + "..";
             }
             m_subtitleLabel->setText(author);
         } else if (manga.chapterCount > 0) {
-            m_subtitleLabel->setText(std::to_string(manga.chapterCount) + " chapters");
+            m_subtitleLabel->setText(std::to_string(manga.chapterCount) + " ch");
         } else {
             m_subtitleLabel->setText("");
         }
     }
 
-    // Show unread badge if there are unread chapters
-    if (m_unreadBadge && manga.unreadCount > 0) {
-        m_unreadBadge->setText(std::to_string(manga.unreadCount));
-        m_unreadBadge->setVisibility(brls::Visibility::VISIBLE);
+    // Show unread badge (teal, top-right)
+    if (m_unreadBadge) {
+        if (manga.unreadCount > 0) {
+            m_unreadBadge->setText(std::to_string(manga.unreadCount));
+            m_unreadBadge->setVisibility(brls::Visibility::VISIBLE);
+        } else {
+            m_unreadBadge->setVisibility(brls::Visibility::GONE);
+        }
+    }
+
+    // Show download badge if any chapters are downloaded locally
+    if (m_downloadBadge) {
+        static const std::string ICON_CHECK = "\xEE\xA1\xAC";  // check_circle
+        DownloadsManager& dm = DownloadsManager::getInstance();
+        auto downloads = dm.getMangaDownloads(manga.id);
+        if (!downloads.empty()) {
+            m_downloadBadge->setText(ICON_CHECK);
+            m_downloadBadge->setVisibility(brls::Visibility::VISIBLE);
+        } else {
+            m_downloadBadge->setVisibility(brls::Visibility::GONE);
+        }
     }
 
     // Load thumbnail

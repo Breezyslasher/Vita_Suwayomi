@@ -16,12 +16,12 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     : m_manga(manga) {
     brls::Logger::info("MangaDetailView: Creating for '{}' id={}", manga.title, manga.id);
 
-    // NOBORU-style: horizontal layout with left panel (cover) and right panel (info)
+    // Komikku-style: horizontal layout with left panel (cover) and right panel (info)
     this->setAxis(brls::Axis::ROW);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
     this->setGrow(1.0f);
-    this->setBackgroundColor(nvgRGB(26, 26, 46)); // #1a1a2e
+    this->setBackgroundColor(nvgRGB(18, 18, 18)); // Komikku dark background
 
     // Register back button
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View* view) {
@@ -34,7 +34,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     leftPanel->setAxis(brls::Axis::COLUMN);
     leftPanel->setWidth(260);
     leftPanel->setPadding(20);
-    leftPanel->setBackgroundColor(nvgRGB(22, 33, 62)); // #16213e
+    leftPanel->setBackgroundColor(nvgRGB(28, 28, 28)); // Komikku side panel
 
     // Cover image container (centered)
     auto* coverContainer = new brls::Box();
@@ -45,16 +45,17 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_coverImage = new brls::Image();
     m_coverImage->setSize(brls::Size(180, 260));
     m_coverImage->setScalingType(brls::ImageScalingType::FIT);
-    m_coverImage->setCornerRadius(4);
+    m_coverImage->setCornerRadius(12);  // Komikku-style rounded corners
     coverContainer->addView(m_coverImage);
     leftPanel->addView(coverContainer);
 
-    // Continue Reading button (teal/primary)
+    // Continue Reading button (Komikku teal accent)
     m_readButton = new brls::Button();
     m_readButton->setWidth(220);
     m_readButton->setHeight(44);
-    m_readButton->setMarginBottom(8);
-    m_readButton->setCornerRadius(6);
+    m_readButton->setMarginBottom(10);
+    m_readButton->setCornerRadius(22);  // Pill-shaped button
+    m_readButton->setBackgroundColor(nvgRGBA(0, 150, 136, 255)); // Teal
 
     std::string readText = "Start Reading";
     if (m_manga.lastChapterRead > 0) {
@@ -73,8 +74,9 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         m_libraryButton = new brls::Button();
         m_libraryButton->setWidth(220);
         m_libraryButton->setHeight(44);
-        m_libraryButton->setMarginBottom(8);
-        m_libraryButton->setCornerRadius(6);
+        m_libraryButton->setMarginBottom(10);
+        m_libraryButton->setCornerRadius(22);  // Pill-shaped
+        m_libraryButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
         m_libraryButton->setText("Add to Library");
         m_libraryButton->registerClickAction([this](brls::View* view) {
             onAddToLibrary();
@@ -88,7 +90,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_downloadButton = new brls::Button();
     m_downloadButton->setWidth(220);
     m_downloadButton->setHeight(44);
-    m_downloadButton->setCornerRadius(6);
+    m_downloadButton->setCornerRadius(22);  // Pill-shaped
+    m_downloadButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
     m_downloadButton->setText("Download");
     m_downloadButton->registerClickAction([this](brls::View* view) {
         showDownloadOptions();
@@ -345,7 +348,7 @@ void MangaDetailView::populateChaptersList() {
                   });
     }
 
-    // Create chapter cells (NOBORU style: 60px height each)
+    // Create chapter cells (Komikku-style: rounded, clean design)
     for (const auto& chapter : sortedChapters) {
         if (m_filterDownloaded && !chapter.downloaded) continue;
         if (m_filterUnread && chapter.read) continue;
@@ -354,9 +357,11 @@ void MangaDetailView::populateChaptersList() {
         chapterRow->setAxis(brls::Axis::ROW);
         chapterRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
         chapterRow->setAlignItems(brls::AlignItems::CENTER);
-        chapterRow->setHeight(60);
-        chapterRow->setPadding(8, 12, 8, 12);
-        chapterRow->setMarginBottom(2);
+        chapterRow->setHeight(56);
+        chapterRow->setPadding(10, 14, 10, 14);
+        chapterRow->setMarginBottom(4);
+        chapterRow->setCornerRadius(8);
+        chapterRow->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
         chapterRow->setFocusable(true);
 
         // Left side: chapter info
@@ -414,8 +419,9 @@ void MangaDetailView::populateChaptersList() {
 
         Chapter capturedChapter = chapter;
         auto* dlBtn = new brls::Button();
-        dlBtn->setWidth(45);
-        dlBtn->setHeight(40);
+        dlBtn->setWidth(40);
+        dlBtn->setHeight(36);
+        dlBtn->setCornerRadius(18);  // Circular button
         dlBtn->setFocusable(true);
 
         // Check local download state first
