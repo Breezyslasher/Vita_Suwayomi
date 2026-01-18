@@ -45,6 +45,8 @@ private:
     void navigateToPreviousCategory();
     void navigateToNextCategory();
     void scrollToCategoryIndex(int index);
+    void updateCategoryButtonTexts();
+    void showCategoryMenu();
 
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
@@ -63,19 +65,21 @@ private:
     brls::Box* m_categoryTabsBox = nullptr;        // Outer container (clips)
     brls::Box* m_categoryScrollContainer = nullptr; // Inner container (scrolls)
     std::vector<brls::Button*> m_categoryButtons;
+    int m_selectedCategoryIndex = 0;               // Index in m_categories
     float m_categoryScrollOffset = 0.0f;           // Current scroll offset
-    int m_selectedCategoryIndex = 0;               // Index of selected category
 
     // Action buttons
     brls::Button* m_updateBtn = nullptr;
     brls::Button* m_sortBtn = nullptr;
+    brls::Button* m_menuBtn = nullptr;
 
     // Main content grid
     RecyclingGrid* m_contentGrid = nullptr;
 
     // Data
     std::vector<Manga> m_mangaList;
-    std::vector<Category> m_categories;
+    std::vector<Category> m_categories;       // Visible categories
+    std::vector<Category> m_allCategories;    // All categories (including hidden)
 
     bool m_loaded = false;
     bool m_categoriesLoaded = false;

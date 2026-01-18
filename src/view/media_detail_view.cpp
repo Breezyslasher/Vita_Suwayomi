@@ -16,12 +16,12 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     : m_manga(manga) {
     brls::Logger::info("MangaDetailView: Creating for '{}' id={}", manga.title, manga.id);
 
-    // NOBORU-style: horizontal layout with left panel (cover) and right panel (info)
+    // Komikku-style: horizontal layout with left panel (cover) and right panel (info)
     this->setAxis(brls::Axis::ROW);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
     this->setGrow(1.0f);
-    this->setBackgroundColor(nvgRGB(26, 26, 46)); // #1a1a2e
+    this->setBackgroundColor(nvgRGB(18, 18, 18)); // Komikku dark background
 
     // Register back button
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View* view) {
@@ -34,7 +34,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     leftPanel->setAxis(brls::Axis::COLUMN);
     leftPanel->setWidth(260);
     leftPanel->setPadding(20);
-    leftPanel->setBackgroundColor(nvgRGB(22, 33, 62)); // #16213e
+    leftPanel->setBackgroundColor(nvgRGB(28, 28, 28)); // Komikku side panel
 
     // Cover image container (centered)
     auto* coverContainer = new brls::Box();
@@ -45,16 +45,17 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_coverImage = new brls::Image();
     m_coverImage->setSize(brls::Size(180, 260));
     m_coverImage->setScalingType(brls::ImageScalingType::FIT);
-    m_coverImage->setCornerRadius(4);
+    m_coverImage->setCornerRadius(12);  // Komikku-style rounded corners
     coverContainer->addView(m_coverImage);
     leftPanel->addView(coverContainer);
 
-    // Continue Reading button (teal/primary)
+    // Continue Reading button (Komikku teal accent)
     m_readButton = new brls::Button();
     m_readButton->setWidth(220);
     m_readButton->setHeight(44);
-    m_readButton->setMarginBottom(8);
-    m_readButton->setCornerRadius(6);
+    m_readButton->setMarginBottom(10);
+    m_readButton->setCornerRadius(22);  // Pill-shaped button
+    m_readButton->setBackgroundColor(nvgRGBA(0, 150, 136, 255)); // Teal
 
     std::string readText = "Start Reading";
     if (m_manga.lastChapterRead > 0) {
@@ -73,8 +74,9 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         m_libraryButton = new brls::Button();
         m_libraryButton->setWidth(220);
         m_libraryButton->setHeight(44);
-        m_libraryButton->setMarginBottom(8);
-        m_libraryButton->setCornerRadius(6);
+        m_libraryButton->setMarginBottom(10);
+        m_libraryButton->setCornerRadius(22);  // Pill-shaped
+        m_libraryButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
         m_libraryButton->setText("Add to Library");
         m_libraryButton->registerClickAction([this](brls::View* view) {
             onAddToLibrary();
@@ -88,7 +90,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_downloadButton = new brls::Button();
     m_downloadButton->setWidth(220);
     m_downloadButton->setHeight(44);
-    m_downloadButton->setCornerRadius(6);
+    m_downloadButton->setCornerRadius(22);  // Pill-shaped
+    m_downloadButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
     m_downloadButton->setText("Download");
     m_downloadButton->registerClickAction([this](brls::View* view) {
         showDownloadOptions();
@@ -171,9 +174,9 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     // Menu button
     auto* menuBtn = new brls::Button();
-    menuBtn->setWidth(36);
-    menuBtn->setHeight(36);
-    menuBtn->setText("...");
+    menuBtn->setWidth(70);
+    menuBtn->setHeight(40);
+    menuBtn->setText("Menu");
     menuBtn->registerClickAction([this](brls::View* view) {
         showMangaMenu();
         return true;
@@ -232,8 +235,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     chaptersActions->setAxis(brls::Axis::ROW);
 
     m_sortBtn = new brls::Button();
-    m_sortBtn->setWidth(60);
-    m_sortBtn->setHeight(30);
+    m_sortBtn->setWidth(100);
+    m_sortBtn->setHeight(40);
     m_sortBtn->setText("Sort");
     m_sortBtn->registerClickAction([this](brls::View* view) {
         m_sortDescending = !m_sortDescending;
@@ -345,7 +348,7 @@ void MangaDetailView::populateChaptersList() {
                   });
     }
 
-    // Create chapter cells (NOBORU style: 60px height each)
+    // Create chapter cells (Komikku-style: rounded, clean design)
     for (const auto& chapter : sortedChapters) {
         if (m_filterDownloaded && !chapter.downloaded) continue;
         if (m_filterUnread && chapter.read) continue;
@@ -354,9 +357,11 @@ void MangaDetailView::populateChaptersList() {
         chapterRow->setAxis(brls::Axis::ROW);
         chapterRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
         chapterRow->setAlignItems(brls::AlignItems::CENTER);
-        chapterRow->setHeight(60);
-        chapterRow->setPadding(8, 12, 8, 12);
-        chapterRow->setMarginBottom(2);
+        chapterRow->setHeight(56);
+        chapterRow->setPadding(10, 14, 10, 14);
+        chapterRow->setMarginBottom(4);
+        chapterRow->setCornerRadius(8);
+        chapterRow->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
         chapterRow->setFocusable(true);
 
         // Left side: chapter info
@@ -390,34 +395,97 @@ void MangaDetailView::populateChaptersList() {
 
         chapterRow->addView(infoBox);
 
-        // Right side: status indicators
+        // Right side: status indicators and download button
         auto* statusBox = new brls::Box();
         statusBox->setAxis(brls::Axis::ROW);
         statusBox->setAlignItems(brls::AlignItems::CENTER);
-
-        if (chapter.downloaded) {
-            auto* dlLabel = new brls::Label();
-            dlLabel->setText("[DL]");
-            dlLabel->setFontSize(11);
-            dlLabel->setTextColor(nvgRGB(74, 159, 255));
-            dlLabel->setMarginRight(8);
-            statusBox->addView(dlLabel);
-        }
 
         if (chapter.read) {
             auto* readLabel = new brls::Label();
             readLabel->setText("[Read]");
             readLabel->setFontSize(11);
             readLabel->setTextColor(nvgRGB(100, 100, 100));
+            readLabel->setMarginRight(8);
             statusBox->addView(readLabel);
         }
 
+        // Download button - shows state based on local download state
+        // Material Design icon codepoints (UTF-8):
+        // file_download: U+E2C4, check_circle: U+E86C, hourglass: U+E88B, error: U+E000
+        static const std::string ICON_DOWNLOAD = "\xEE\x8B\x84";      // file_download
+        static const std::string ICON_CHECK = "\xEE\xA1\xAC";         // check_circle
+        static const std::string ICON_HOURGLASS = "\xEE\xA2\x8B";     // hourglass_empty
+        static const std::string ICON_ERROR = "\xEE\x80\x80";         // error
+
+        Chapter capturedChapter = chapter;
+        auto* dlBtn = new brls::Button();
+        dlBtn->setWidth(40);
+        dlBtn->setHeight(36);
+        dlBtn->setCornerRadius(18);  // Circular button
+        dlBtn->setFocusable(true);
+
+        // Check local download state first
+        DownloadsManager& dm = DownloadsManager::getInstance();
+        DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, chapter.index);
+
+        bool isLocallyDownloaded = localCh && localCh->state == LocalDownloadState::COMPLETED;
+        bool isLocallyDownloading = localCh && localCh->state == LocalDownloadState::DOWNLOADING;
+        bool isLocallyQueued = localCh && localCh->state == LocalDownloadState::QUEUED;
+        bool isLocallyFailed = localCh && localCh->state == LocalDownloadState::FAILED;
+
+        // Show download progress if downloading
+        if (isLocallyDownloading && localCh) {
+            int percent = 0;
+            if (localCh->pageCount > 0) {
+                percent = (localCh->downloadedPages * 100) / localCh->pageCount;
+            }
+            dlBtn->setText(std::to_string(percent) + "%");
+            dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
+        } else if (isLocallyDownloaded) {
+            dlBtn->setText(ICON_CHECK);  // Checkmark icon
+            dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
+            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                deleteChapterDownload(capturedChapter);
+                return true;
+            });
+        } else if (isLocallyQueued) {
+            dlBtn->setText(ICON_HOURGLASS);  // Hourglass icon
+            dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
+        } else if (isLocallyFailed) {
+            dlBtn->setText(ICON_ERROR);  // Error icon
+            dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
+            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                downloadChapter(capturedChapter);  // Retry
+                return true;
+            });
+        } else {
+            // Not downloaded - show download icon
+            dlBtn->setText(ICON_DOWNLOAD);  // Download icon
+            dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                downloadChapter(capturedChapter);
+                return true;
+            });
+        }
+        dlBtn->addGestureRecognizer(new brls::TapGestureRecognizer(dlBtn));
+        statusBox->addView(dlBtn);
+
         chapterRow->addView(statusBox);
 
-        // Click action
-        Chapter capturedChapter = chapter;
+        // Click action - open chapter
         chapterRow->registerClickAction([this, capturedChapter](brls::View* view) {
             onChapterSelected(capturedChapter);
+            return true;
+        });
+
+        // Square button to download/delete chapter when row is focused
+        bool localDownloaded = isLocallyDownloaded;
+        chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_Y, [this, capturedChapter, localDownloaded](brls::View* view) {
+            if (localDownloaded) {
+                deleteChapterDownload(capturedChapter);
+            } else {
+                downloadChapter(capturedChapter);
+            }
             return true;
         });
 
@@ -431,19 +499,19 @@ void MangaDetailView::populateChaptersList() {
 }
 
 void MangaDetailView::showMangaMenu() {
-    brls::Dialog* dialog = new brls::Dialog("Manga Options");
+    brls::Dialog* dialog = new brls::Dialog("Options");
 
-    dialog->addButton("Mark All Read", [this, dialog]() {
+    dialog->addButton("All Read", [this, dialog]() {
         dialog->close();
         markAllRead();
     });
 
-    dialog->addButton("Mark All Unread", [this, dialog]() {
+    dialog->addButton("All Unread", [this, dialog]() {
         dialog->close();
         markAllUnread();
     });
 
-    dialog->addButton("Delete Downloads", [this, dialog]() {
+    dialog->addButton("Del DL", [this, dialog]() {
         dialog->close();
         onDeleteDownloads();
     });
@@ -531,14 +599,14 @@ void MangaDetailView::onRemoveFromLibrary() {
 }
 
 void MangaDetailView::showDownloadOptions() {
-    brls::Dialog* dialog = new brls::Dialog("Download Options");
+    brls::Dialog* dialog = new brls::Dialog("Download");
 
-    dialog->addButton("Download All", [this, dialog]() {
+    dialog->addButton("All", [this, dialog]() {
         dialog->close();
         downloadAllChapters();
     });
 
-    dialog->addButton("Download Unread", [this, dialog]() {
+    dialog->addButton("Unread", [this, dialog]() {
         dialog->close();
         downloadUnreadChapters();
     });
@@ -746,19 +814,32 @@ void MangaDetailView::markChapterRead(const Chapter& chapter) {
 }
 
 void MangaDetailView::downloadChapter(const Chapter& chapter) {
-    brls::Application::notify("Downloading chapter...");
+    brls::Application::notify("Downloading to Vita...");
 
     asyncRun([this, chapter]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& dm = DownloadsManager::getInstance();
+        dm.init();
 
-        if (client.queueChapterDownload(m_manga.id, chapter.index)) {
-            client.startDownloads();
+        // Queue chapter for local download
+        if (dm.queueChapterDownload(m_manga.id, chapter.index, m_manga.title)) {
+            // Set progress callback for UI updates
+            dm.setProgressCallback([](int downloaded, int total) {
+                brls::sync([downloaded, total]() {
+                    std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
+                    brls::Application::notify(msg);
+                });
+            });
+
+            // Start downloading
+            dm.startDownloads();
+
             brls::sync([this]() {
                 brls::Application::notify("Download started");
+                loadChapters();  // Refresh to show progress
             });
         } else {
             brls::sync([]() {
-                brls::Application::notify("Failed to start download");
+                brls::Application::notify("Failed to queue download");
             });
         }
     });
@@ -766,10 +847,16 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
 
 void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
     asyncRun([this, chapter]() {
-        if (SuwayomiClient::getInstance().deleteChapterDownload(m_manga.id, chapter.index)) {
+        DownloadsManager& dm = DownloadsManager::getInstance();
+
+        if (dm.deleteChapterDownload(m_manga.id, chapter.index)) {
             brls::sync([this]() {
-                brls::Application::notify("Download deleted");
+                brls::Application::notify("Local download deleted");
                 loadChapters();
+            });
+        } else {
+            brls::sync([]() {
+                brls::Application::notify("Failed to delete download");
             });
         }
     });

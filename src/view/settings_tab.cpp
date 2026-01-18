@@ -7,6 +7,7 @@
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
+#include <algorithm>
 
 // Version defined in CMakeLists.txt or here
 #ifndef VITA_SUWAYOMI_VERSION
@@ -33,6 +34,7 @@ SettingsTab::SettingsTab() {
     // Create all sections
     createAccountSection();
     createUISection();
+    createLibrarySection();
     createReaderSection();
     createDownloadsSection();
     createAboutSection();
@@ -109,6 +111,125 @@ void SettingsTab::createUISection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(m_debugLogToggle);
+}
+
+void SettingsTab::createLibrarySection() {
+    Application& app = Application::getInstance();
+    AppSettings& settings = app.getSettings();
+
+    // Section header
+    auto* header = new brls::Header();
+    header->setTitle("Library");
+    m_contentBox->addView(header);
+
+    // Hide categories cell
+    m_hideCategoriesCell = new brls::DetailCell();
+    m_hideCategoriesCell->setText("Hidden Categories");
+
+    // Show count of hidden categories
+    size_t hiddenCount = settings.hiddenCategoryIds.size();
+    m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
+
+    m_hideCategoriesCell->registerClickAction([this](brls::View* view) {
+        showCategoryVisibilityDialog();
+        return true;
+    });
+    m_contentBox->addView(m_hideCategoriesCell);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Select which categories to show in library");
+    infoLabel->setFontSize(14);
+    infoLabel->setMarginLeft(16);
+    infoLabel->setMarginTop(4);
+    infoLabel->setMarginBottom(8);
+    m_contentBox->addView(infoLabel);
+}
+
+void SettingsTab::showCategoryVisibilityDialog() {
+    // Fetch categories from server
+    brls::Application::notify("Loading categories...");
+
+    // Get categories synchronously (simple approach)
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::vector<Category> categories;
+
+    if (!client.fetchCategories(categories)) {
+        brls::Application::notify("Failed to load categories");
+        return;
+    }
+
+    // Sort by order
+    std::sort(categories.begin(), categories.end(),
+        [](const Category& a, const Category& b) {
+            return a.order < b.order;
+        });
+
+    // Create dialog
+    brls::Dialog* dialog = new brls::Dialog("Category Visibility");
+
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setWidth(450);
+    scrollView->setHeight(350);
+
+    auto* contentBox = new brls::Box();
+    contentBox->setAxis(brls::Axis::COLUMN);
+    contentBox->setPadding(10);
+
+    auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
+
+    // Add toggle for each category
+    for (const auto& cat : categories) {
+        // Skip empty categories
+        if (cat.mangaCount <= 0) continue;
+
+        auto* toggle = new brls::BooleanCell();
+        std::string catName = cat.name;
+        if (catName.length() > 18) {
+            catName = catName.substr(0, 16) + "..";
+        }
+
+        // Category is visible if NOT in hidden list
+        bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
+
+        int catId = cat.id;
+        toggle->init(catName + " (" + std::to_string(cat.mangaCount) + ")", isVisible,
+            [catId](bool value) {
+                auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
+                if (value) {
+                    // Show category (remove from hidden)
+                    hidden.erase(catId);
+                } else {
+                    // Hide category (add to hidden)
+                    hidden.insert(catId);
+                }
+                Application::getInstance().saveSettings();
+            });
+
+        contentBox->addView(toggle);
+    }
+
+    // If no categories with manga
+    if (categories.empty()) {
+        auto* label = new brls::Label();
+        label->setText("No categories found");
+        label->setFontSize(16);
+        contentBox->addView(label);
+    }
+
+    scrollView->setContentView(contentBox);
+    dialog->addView(scrollView);
+
+    dialog->addButton("Done", [dialog, this]() {
+        dialog->close();
+        // Update the cell detail text
+        if (m_hideCategoriesCell) {
+            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
+            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
+        }
+    });
+
+    dialog->open();
 }
 
 void SettingsTab::createReaderSection() {

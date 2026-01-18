@@ -1410,6 +1410,13 @@ void SuwayomiClient::clearAuth() {
 // ============================================================================
 
 bool SuwayomiClient::fetchExtensionList(std::vector<Extension>& extensions) {
+    // Try GraphQL first (primary API)
+    if (fetchExtensionListGraphQL(extensions)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for extensions, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/extension/list");
@@ -1426,11 +1433,18 @@ bool SuwayomiClient::fetchExtensionList(std::vector<Extension>& extensions) {
         extensions.push_back(parseExtension(item));
     }
 
-    brls::Logger::debug("Fetched {} extensions", extensions.size());
+    brls::Logger::debug("REST: Fetched {} extensions", extensions.size());
     return true;
 }
 
 bool SuwayomiClient::installExtension(const std::string& pkgName) {
+    // Try GraphQL first (primary API)
+    if (installExtensionGraphQL(pkgName)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for install extension, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/extension/install/" + pkgName);
@@ -1440,6 +1454,13 @@ bool SuwayomiClient::installExtension(const std::string& pkgName) {
 }
 
 bool SuwayomiClient::updateExtension(const std::string& pkgName) {
+    // Try GraphQL first (primary API)
+    if (updateExtensionGraphQL(pkgName)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for update extension, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/extension/update/" + pkgName);
@@ -1449,6 +1470,13 @@ bool SuwayomiClient::updateExtension(const std::string& pkgName) {
 }
 
 bool SuwayomiClient::uninstallExtension(const std::string& pkgName) {
+    // Try GraphQL first (primary API)
+    if (uninstallExtensionGraphQL(pkgName)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for uninstall extension, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/extension/uninstall/" + pkgName);
@@ -1494,6 +1522,13 @@ bool SuwayomiClient::fetchSourceList(std::vector<Source>& sources) {
 }
 
 bool SuwayomiClient::fetchSource(int64_t sourceId, Source& source) {
+    // Try GraphQL first (primary API)
+    if (fetchSourceGraphQL(sourceId, source)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for source, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/source/" + std::to_string(sourceId));
@@ -2302,6 +2337,13 @@ bool SuwayomiClient::fetchDownloadQueue(std::vector<DownloadQueueItem>& queue) {
 }
 
 bool SuwayomiClient::startDownloads() {
+    // Try GraphQL first (primary API)
+    if (startDownloadsGraphQL()) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for start downloads, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/downloads/start");
@@ -2311,6 +2353,13 @@ bool SuwayomiClient::startDownloads() {
 }
 
 bool SuwayomiClient::stopDownloads() {
+    // Try GraphQL first (primary API)
+    if (stopDownloadsGraphQL()) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for stop downloads, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/downloads/stop");
@@ -2320,6 +2369,13 @@ bool SuwayomiClient::stopDownloads() {
 }
 
 bool SuwayomiClient::clearDownloadQueue() {
+    // Try GraphQL first (primary API)
+    if (clearDownloadQueueGraphQL()) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for clear downloads, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/downloads/clear");
@@ -2496,6 +2552,286 @@ bool SuwayomiClient::fetchUpdateSummary(int& pendingUpdates, int& runningJobs, b
     runningJobs = extractJsonInt(response.body, "runningJobs");
     isUpdating = extractJsonBool(response.body, "isRunning");
 
+    return true;
+}
+
+// ============================================================================
+// GraphQL Extension Operations
+// ============================================================================
+
+Extension SuwayomiClient::parseExtensionFromGraphQL(const std::string& json) {
+    Extension ext;
+
+    ext.pkgName = extractJsonValue(json, "pkgName");
+    ext.name = extractJsonValue(json, "name");
+    ext.lang = extractJsonValue(json, "lang");
+    ext.versionName = extractJsonValue(json, "versionName");
+    ext.versionCode = extractJsonInt(json, "versionCode");
+    ext.iconUrl = extractJsonValue(json, "iconUrl");
+    ext.installed = extractJsonBool(json, "isInstalled");
+    ext.hasUpdate = extractJsonBool(json, "hasUpdate");
+    ext.obsolete = extractJsonBool(json, "isObsolete");
+    ext.isNsfw = extractJsonBool(json, "isNsfw");
+
+    return ext;
+}
+
+bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extensions) {
+    const char* query = R"(
+        query {
+            extensions {
+                nodes {
+                    pkgName
+                    name
+                    lang
+                    versionName
+                    versionCode
+                    iconUrl
+                    isInstalled
+                    hasUpdate
+                    isObsolete
+                    isNsfw
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string extensionsObj = extractJsonObject(data, "extensions");
+    if (extensionsObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(extensionsObj, "nodes");
+    if (nodesJson.empty()) return false;
+
+    extensions.clear();
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        extensions.push_back(parseExtensionFromGraphQL(item));
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} extensions", extensions.size());
+    return true;
+}
+
+bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
+    const char* query = R"(
+        mutation InstallExtension($pkgName: String!) {
+            installExternalExtension(input: { extensionPkgName: $pkgName }) {
+                extension {
+                    pkgName
+                    isInstalled
+                }
+            }
+        }
+    )";
+
+    // Escape pkgName for JSON
+    std::string escapedPkg;
+    for (char c : pkgName) {
+        switch (c) {
+            case '"': escapedPkg += "\\\""; break;
+            case '\\': escapedPkg += "\\\\"; break;
+            default: escapedPkg += c; break;
+        }
+    }
+
+    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
+    const char* query = R"(
+        mutation UpdateExtension($pkgName: String!) {
+            updateExtension(input: { pkgName: $pkgName }) {
+                extension {
+                    pkgName
+                    isInstalled
+                }
+            }
+        }
+    )";
+
+    std::string escapedPkg;
+    for (char c : pkgName) {
+        switch (c) {
+            case '"': escapedPkg += "\\\""; break;
+            case '\\': escapedPkg += "\\\\"; break;
+            default: escapedPkg += c; break;
+        }
+    }
+
+    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::uninstallExtensionGraphQL(const std::string& pkgName) {
+    const char* query = R"(
+        mutation UninstallExtension($pkgName: String!) {
+            uninstallExtension(input: { pkgName: $pkgName }) {
+                extension {
+                    pkgName
+                    isInstalled
+                }
+            }
+        }
+    )";
+
+    std::string escapedPkg;
+    for (char c : pkgName) {
+        switch (c) {
+            case '"': escapedPkg += "\\\""; break;
+            case '\\': escapedPkg += "\\\\"; break;
+            default: escapedPkg += c; break;
+        }
+    }
+
+    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+// ============================================================================
+// GraphQL Download Operations
+// ============================================================================
+
+bool SuwayomiClient::enqueueChapterDownloadGraphQL(int chapterId) {
+    const char* query = R"(
+        mutation EnqueueDownload($id: Int!) {
+            enqueueChapterDownload(input: { id: $id }) {
+                downloadStatus {
+                    state
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(chapterId) + "}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::dequeueChapterDownloadGraphQL(int chapterId) {
+    const char* query = R"(
+        mutation DequeueDownload($id: Int!) {
+            dequeueChapterDownload(input: { id: $id }) {
+                downloadStatus {
+                    state
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(chapterId) + "}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::enqueueChapterDownloadsGraphQL(const std::vector<int>& chapterIds) {
+    const char* query = R"(
+        mutation EnqueueDownloads($ids: [Int!]!) {
+            enqueueChapterDownloads(input: { ids: $ids }) {
+                downloadStatus {
+                    state
+                }
+            }
+        }
+    )";
+
+    std::string idList = "[";
+    for (size_t i = 0; i < chapterIds.size(); i++) {
+        if (i > 0) idList += ",";
+        idList += std::to_string(chapterIds[i]);
+    }
+    idList += "]";
+
+    std::string variables = "{\"ids\":" + idList + "}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::startDownloadsGraphQL() {
+    const char* query = R"(
+        mutation {
+            startDownloader(input: {}) {
+                downloadStatus {
+                    state
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    return !response.empty();
+}
+
+bool SuwayomiClient::stopDownloadsGraphQL() {
+    const char* query = R"(
+        mutation {
+            stopDownloader(input: {}) {
+                downloadStatus {
+                    state
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    return !response.empty();
+}
+
+bool SuwayomiClient::clearDownloadQueueGraphQL() {
+    const char* query = R"(
+        mutation {
+            clearDownloader(input: {}) {
+                downloadStatus {
+                    state
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    return !response.empty();
+}
+
+// ============================================================================
+// GraphQL Single Source
+// ============================================================================
+
+bool SuwayomiClient::fetchSourceGraphQL(int64_t sourceId, Source& source) {
+    const char* query = R"(
+        query GetSource($id: LongString!) {
+            source(id: $id) {
+                id
+                name
+                displayName
+                lang
+                iconUrl
+                isNsfw
+                supportsLatest
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":\"" + std::to_string(sourceId) + "\"}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string sourceJson = extractJsonObject(data, "source");
+    if (sourceJson.empty()) return false;
+
+    source = parseSourceFromGraphQL(sourceJson);
     return true;
 }
 
