@@ -15,6 +15,8 @@ public:
     MangaItemCell();
 
     void setManga(const Manga& manga);
+    void setMangaDeferred(const Manga& manga);  // Set data without loading image
+    void loadThumbnailIfNeeded();  // Load image if not already loaded
     const Manga& getManga() const { return m_manga; }
 
     void onFocusGained() override;
@@ -25,17 +27,19 @@ public:
 private:
     void loadThumbnail();
     void updateFocusInfo(bool focused);
+    void updateDisplay();
 
     Manga m_manga;
-    std::string m_originalTitle;  // Store original truncated title
+    std::string m_originalTitle;
+    bool m_thumbnailLoaded = false;
 
     brls::Image* m_thumbnailImage = nullptr;
     brls::Label* m_titleLabel = nullptr;
-    brls::Label* m_subtitleLabel = nullptr;     // Shows author or chapter count
-    brls::Label* m_descriptionLabel = nullptr;  // Shows on focus
-    brls::Rectangle* m_progressBar = nullptr;   // Unread chapter indicator
-    brls::Label* m_unreadBadge = nullptr;       // Unread count badge (top-right)
-    brls::Label* m_downloadBadge = nullptr;     // Download indicator (top-left)
+    brls::Label* m_subtitleLabel = nullptr;
+    brls::Label* m_descriptionLabel = nullptr;
+    brls::Rectangle* m_progressBar = nullptr;
+    brls::Label* m_unreadBadge = nullptr;
+    brls::Label* m_downloadBadge = nullptr;
 };
 
 // Alias for backward compatibility
