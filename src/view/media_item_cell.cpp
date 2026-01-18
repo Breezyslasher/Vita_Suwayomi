@@ -63,7 +63,7 @@ MangaItemCell::MangaItemCell() {
     // Cover image - fills the card
     m_thumbnailImage = new brls::Image();
     m_thumbnailImage->setSize(brls::Size(140, 180));
-    m_thumbnailImage->setScalingType(brls::ImageScalingType::CROP);
+    m_thumbnailImage->setScalingType(brls::ImageScalingType::FILL);
     m_thumbnailImage->setCornerRadius(8);
     this->addView(m_thumbnailImage);
 
@@ -99,11 +99,10 @@ MangaItemCell::MangaItemCell() {
     m_unreadBadge->setFontSize(10);
     m_unreadBadge->setTextColor(nvgRGB(255, 255, 255));
     m_unreadBadge->setBackgroundColor(nvgRGBA(0, 150, 136, 255)); // Teal badge
-    m_unreadBadge->setPadding(2, 6, 2, 6);
-    m_unreadBadge->setCornerRadius(10);
+    m_unreadBadge->setMargins(6, 6, 0, 0);
     m_unreadBadge->setPositionType(brls::PositionType::ABSOLUTE);
-    m_unreadBadge->setPositionTop(6);
-    m_unreadBadge->setPositionRight(6);
+    m_unreadBadge->setPositionTop(0);
+    m_unreadBadge->setPositionRight(0);
     m_unreadBadge->setVisibility(brls::Visibility::GONE);
     this->addView(m_unreadBadge);
 
@@ -112,11 +111,10 @@ MangaItemCell::MangaItemCell() {
     m_downloadBadge->setFontSize(12);
     m_downloadBadge->setTextColor(nvgRGB(255, 255, 255));
     m_downloadBadge->setBackgroundColor(nvgRGBA(76, 175, 80, 255)); // Green badge
-    m_downloadBadge->setPadding(2, 4, 2, 4);
-    m_downloadBadge->setCornerRadius(4);
+    m_downloadBadge->setMargins(6, 0, 0, 6);
     m_downloadBadge->setPositionType(brls::PositionType::ABSOLUTE);
-    m_downloadBadge->setPositionTop(6);
-    m_downloadBadge->setPositionLeft(6);
+    m_downloadBadge->setPositionTop(0);
+    m_downloadBadge->setPositionLeft(0);
     m_downloadBadge->setVisibility(brls::Visibility::GONE);
     this->addView(m_downloadBadge);
 
@@ -170,8 +168,8 @@ void MangaItemCell::setManga(const Manga& manga) {
     if (m_downloadBadge) {
         static const std::string ICON_CHECK = "\xEE\xA1\xAC";  // check_circle
         DownloadsManager& dm = DownloadsManager::getInstance();
-        auto downloads = dm.getMangaDownloads(manga.id);
-        if (!downloads.empty()) {
+        DownloadItem* download = dm.getMangaDownload(manga.id);
+        if (download != nullptr) {
             m_downloadBadge->setText(ICON_CHECK);
             m_downloadBadge->setVisibility(brls::Visibility::VISIBLE);
         } else {
