@@ -89,6 +89,18 @@ LibrarySectionTab::LibrarySectionTab() {
     });
     buttonBox->addView(m_updateBtn);
 
+    // Menu button for category settings
+    m_menuBtn = new brls::Button();
+    m_menuBtn->setText("Menu");
+    m_menuBtn->setMarginLeft(8);
+    m_menuBtn->setWidth(70);
+    m_menuBtn->setHeight(40);
+    m_menuBtn->registerClickAction([this](brls::View* view) {
+        showCategoryMenu();
+        return true;
+    });
+    buttonBox->addView(m_menuBtn);
+
     topRow->addView(buttonBox);
 
     this->addView(topRow);
@@ -173,6 +185,7 @@ void LibrarySectionTab::loadCategories() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
+                m_allCategories = categories;  // Store all categories (including hidden)
                 m_categories = categories;
                 m_categoriesLoaded = true;
                 createCategoryTabs();
@@ -210,13 +223,20 @@ void LibrarySectionTab::createCategoryTabs() {
     m_selectedCategoryIndex = 0;
     m_categoryScrollOffset = 0.0f;
 
-    // Filter out empty categories (mangaCount == 0)
+    // Filter out empty categories (mangaCount == 0) and hidden categories
     // Also filter the "Default" category (id 0) if it's empty
     std::vector<Category> visibleCategories;
+    const auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
     for (const auto& cat : m_categories) {
         // Skip empty categories
         if (cat.mangaCount <= 0) {
             brls::Logger::debug("LibrarySectionTab: Hiding empty category '{}' (id={})",
+                              cat.name, cat.id);
+            continue;
+        }
+        // Skip hidden categories
+        if (hiddenIds.find(cat.id) != hiddenIds.end()) {
+            brls::Logger::debug("LibrarySectionTab: Hiding user-hidden category '{}' (id={})",
                               cat.name, cat.id);
             continue;
         }
@@ -594,6 +614,78 @@ void LibrarySectionTab::scrollToCategoryIndex(int index) {
 
     // Apply the scroll offset
     m_categoryScrollContainer->setTranslationX(m_categoryScrollOffset);
+}
+
+void LibrarySectionTab::showCategoryMenu() {
+    // Show dialog with category visibility options
+    brls::Dialog* dialog = new brls::Dialog("Category Settings");
+
+    // Create a scrolling container for the category list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setWidth(400);
+    scrollView->setHeight(300);
+
+    auto* contentBox = new brls::Box();
+    contentBox->setAxis(brls::Axis::COLUMN);
+    contentBox->setPadding(10);
+
+    auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
+
+    // Add a toggle for each category
+    for (const auto& cat : m_allCategories) {
+        // Skip empty categories - they can't be shown anyway
+        if (cat.mangaCount <= 0) continue;
+
+        auto* toggle = new brls::BooleanCell();
+        std::string catName = cat.name;
+        if (catName.length() > 20) {
+            catName = catName.substr(0, 18) + "..";
+        }
+
+        // Category is visible if NOT in hidden list
+        bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
+
+        int catId = cat.id;
+        toggle->init(catName + " (" + std::to_string(cat.mangaCount) + ")", isVisible,
+            [this, catId](bool value) {
+                auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
+                if (value) {
+                    // Show category (remove from hidden)
+                    hidden.erase(catId);
+                } else {
+                    // Hide category (add to hidden)
+                    hidden.insert(catId);
+                }
+                Application::getInstance().saveSettings();
+            });
+
+        contentBox->addView(toggle);
+    }
+
+    // If no categories, show message
+    if (m_allCategories.empty()) {
+        auto* label = new brls::Label();
+        label->setText("No categories available");
+        label->setFontSize(16);
+        contentBox->addView(label);
+    }
+
+    scrollView->setContentView(contentBox);
+
+    // Add the scroll view to the dialog
+    dialog->addView(scrollView);
+
+    dialog->addButton("Apply", [dialog, this]() {
+        dialog->close();
+        // Refresh to apply visibility changes
+        refresh();
+    });
+
+    dialog->addButton("Cancel", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->open();
 }
 
 } // namespace vitasuwayomi

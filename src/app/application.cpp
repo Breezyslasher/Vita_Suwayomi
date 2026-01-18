@@ -296,6 +296,21 @@ bool Application::loadSettings() {
     m_settings.updateOnlyWifi = extractBool("updateOnlyWifi", true);
     m_settings.defaultCategoryId = extractInt("defaultCategoryId");
 
+    // Load hidden categories (comma-separated IDs)
+    m_settings.hiddenCategoryIds.clear();
+    std::string hiddenCatsStr = extractString("hiddenCategoryIds");
+    if (!hiddenCatsStr.empty()) {
+        std::stringstream ss(hiddenCatsStr);
+        std::string token;
+        while (std::getline(ss, token, ',')) {
+            if (!token.empty()) {
+                int catId = atoi(token.c_str());
+                m_settings.hiddenCategoryIds.insert(catId);
+            }
+        }
+        brls::Logger::debug("Loaded {} hidden categories", m_settings.hiddenCategoryIds.size());
+    }
+
     // Load download settings
     m_settings.downloadToServer = extractBool("downloadToServer", true);
     m_settings.autoDownloadChapters = extractBool("autoDownloadChapters", false);
@@ -360,6 +375,14 @@ bool Application::saveSettings() {
     json += "  \"updateOnStart\": " + std::string(m_settings.updateOnStart ? "true" : "false") + ",\n";
     json += "  \"updateOnlyWifi\": " + std::string(m_settings.updateOnlyWifi ? "true" : "false") + ",\n";
     json += "  \"defaultCategoryId\": " + std::to_string(m_settings.defaultCategoryId) + ",\n";
+
+    // Hidden categories (stored as comma-separated IDs)
+    std::string hiddenCatsStr;
+    for (int catId : m_settings.hiddenCategoryIds) {
+        if (!hiddenCatsStr.empty()) hiddenCatsStr += ",";
+        hiddenCatsStr += std::to_string(catId);
+    }
+    json += "  \"hiddenCategoryIds\": \"" + hiddenCatsStr + "\",\n";
 
     // Download settings
     json += "  \"downloadToServer\": " + std::string(m_settings.downloadToServer ? "true" : "false") + ",\n";

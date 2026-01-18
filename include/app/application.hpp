@@ -8,6 +8,7 @@
 #include <string>
 #include <functional>
 #include <mutex>
+#include <set>
 
 // Application version
 #define VITA_SUWAYOMI_VERSION "1.0.0"
@@ -72,6 +73,7 @@ struct AppSettings {
     bool updateOnStart = false;
     bool updateOnlyWifi = true;
     int defaultCategoryId = 0;
+    std::set<int> hiddenCategoryIds;  // Categories hidden from library view
 
     // Download Settings
     bool downloadToServer = true;      // Download on server side vs local
