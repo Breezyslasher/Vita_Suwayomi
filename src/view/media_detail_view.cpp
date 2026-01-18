@@ -405,9 +405,16 @@ void MangaDetailView::populateChaptersList() {
         }
 
         // Download button - shows state based on local download state
+        // Material Design icon codepoints (UTF-8):
+        // file_download: U+E2C4, check_circle: U+E86C, hourglass: U+E88B, error: U+E000
+        static const std::string ICON_DOWNLOAD = "\xEE\x8B\x84";      // file_download
+        static const std::string ICON_CHECK = "\xEE\xA1\xAC";         // check_circle
+        static const std::string ICON_HOURGLASS = "\xEE\xA2\x8B";     // hourglass_empty
+        static const std::string ICON_ERROR = "\xEE\x80\x80";         // error
+
         Chapter capturedChapter = chapter;
         auto* dlBtn = new brls::Button();
-        dlBtn->setWidth(55);
+        dlBtn->setWidth(45);
         dlBtn->setHeight(40);
         dlBtn->setFocusable(true);
 
@@ -429,25 +436,25 @@ void MangaDetailView::populateChaptersList() {
             dlBtn->setText(std::to_string(percent) + "%");
             dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
         } else if (isLocallyDownloaded) {
-            dlBtn->setText("OK");  // Downloaded checkmark
+            dlBtn->setText(ICON_CHECK);  // Checkmark icon
             dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 deleteChapterDownload(capturedChapter);
                 return true;
             });
         } else if (isLocallyQueued) {
-            dlBtn->setText("Q");  // Queued
+            dlBtn->setText(ICON_HOURGLASS);  // Hourglass icon
             dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
         } else if (isLocallyFailed) {
-            dlBtn->setText("ERR");  // Error
+            dlBtn->setText(ICON_ERROR);  // Error icon
             dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 downloadChapter(capturedChapter);  // Retry
                 return true;
             });
         } else {
-            // Not downloaded - show download button
-            dlBtn->setText("DL");
+            // Not downloaded - show download icon
+            dlBtn->setText(ICON_DOWNLOAD);  // Download icon
             dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 downloadChapter(capturedChapter);
