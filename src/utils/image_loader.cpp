@@ -1,6 +1,7 @@
 /**
  * VitaSuwayomi - Asynchronous Image Loader implementation
  * With concurrent load limiting and image downscaling for PS Vita memory constraints
+ * Non-blocking design to prevent UI freezes
  */
 
 #include "utils/image_loader.hpp"
@@ -10,6 +11,8 @@
 // WebP decoding support
 #include <webp/decode.h>
 #include <cstring>
+#include <thread>
+#include <chrono>
 
 namespace vitasuwayomi {
 
@@ -32,7 +35,6 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
 
     for (int y = 0; y < dstH; y++) {
         for (int x = 0; x < dstW; x++) {
-            // Simple point sampling for speed
             int srcX = (int)(x * scaleX);
             int srcY = (int)(y * scaleY);
             if (srcX >= srcW) srcX = srcW - 1;
@@ -53,23 +55,18 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
 static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t webpSize, int maxSize) {
     std::vector<uint8_t> tgaData;
 
-    // Get WebP image info
     int width, height;
     if (!WebPGetInfo(webpData, webpSize, &width, &height)) {
         brls::Logger::error("ImageLoader: Failed to get WebP info");
         return tgaData;
     }
 
-    brls::Logger::debug("ImageLoader: Decoding WebP {}x{}", width, height);
-
-    // Decode WebP to RGBA
     uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &width, &height);
     if (!rgba) {
         brls::Logger::error("ImageLoader: Failed to decode WebP");
         return tgaData;
     }
 
-    // Calculate target size with aspect ratio preservation
     int targetW = width;
     int targetH = height;
     bool needsDownscale = false;
@@ -81,10 +78,8 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
         if (targetW < 1) targetW = 1;
         if (targetH < 1) targetH = 1;
         needsDownscale = true;
-        brls::Logger::debug("ImageLoader: Downscaling from {}x{} to {}x{}", width, height, targetW, targetH);
     }
 
-    // Downscale if needed
     uint8_t* finalRgba = rgba;
     std::vector<uint8_t> scaledRgba;
 
@@ -94,38 +89,32 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
         finalRgba = scaledRgba.data();
     }
 
-    // Create TGA file in memory
     size_t imageSize = targetW * targetH * 4;
     tgaData.resize(18 + imageSize);
 
-    // TGA header
     uint8_t* header = tgaData.data();
     memset(header, 0, 18);
-    header[2] = 2;          // Uncompressed true-color image
+    header[2] = 2;
     header[12] = targetW & 0xFF;
     header[13] = (targetW >> 8) & 0xFF;
     header[14] = targetH & 0xFF;
     header[15] = (targetH >> 8) & 0xFF;
-    header[16] = 32;        // 32 bits per pixel (RGBA)
-    header[17] = 0x28;      // Image descriptor: top-left origin + 8 alpha bits
+    header[16] = 32;
+    header[17] = 0x28;
 
-    // Convert RGBA to BGRA for TGA
     uint8_t* pixels = tgaData.data() + 18;
     for (int y = 0; y < targetH; y++) {
         for (int x = 0; x < targetW; x++) {
             int srcIdx = (y * targetW + x) * 4;
             int dstIdx = (y * targetW + x) * 4;
-            pixels[dstIdx + 0] = finalRgba[srcIdx + 2];  // B
-            pixels[dstIdx + 1] = finalRgba[srcIdx + 1];  // G
-            pixels[dstIdx + 2] = finalRgba[srcIdx + 0];  // R
-            pixels[dstIdx + 3] = finalRgba[srcIdx + 3];  // A
+            pixels[dstIdx + 0] = finalRgba[srcIdx + 2];
+            pixels[dstIdx + 1] = finalRgba[srcIdx + 1];
+            pixels[dstIdx + 2] = finalRgba[srcIdx + 0];
+            pixels[dstIdx + 3] = finalRgba[srcIdx + 3];
         }
     }
 
-    // Free WebP decoded data
     WebPFree(rgba);
-
-    brls::Logger::debug("ImageLoader: Converted WebP to TGA {}x{} ({} bytes)", targetW, targetH, tgaData.size());
     return tgaData;
 }
 
@@ -143,21 +132,31 @@ void ImageLoader::setMaxThumbnailSize(int maxSize) {
 }
 
 void ImageLoader::processQueue() {
-    std::lock_guard<std::mutex> lock(s_queueMutex);
+    // Get one request from the queue without blocking
+    LoadRequest request;
+    bool hasRequest = false;
 
-    // Process queue while we have capacity
-    while (!s_loadQueue.empty() && s_activeLoads < s_maxConcurrentLoads) {
-        LoadRequest request = s_loadQueue.front();
-        s_loadQueue.pop();
-        s_activeLoads++;
+    {
+        std::lock_guard<std::mutex> lock(s_queueMutex);
+        if (!s_loadQueue.empty() && s_activeLoads < s_maxConcurrentLoads) {
+            request = s_loadQueue.front();
+            s_loadQueue.pop();
+            s_activeLoads++;
+            hasRequest = true;
+        }
+    }
 
-        // Execute load asynchronously
-        brls::async([request]() {
+    if (hasRequest) {
+        // Execute on background thread - don't use brls::async to avoid blocking
+        std::thread([request]() {
             executeLoad(request);
             s_activeLoads--;
-            // Try to process more from queue
-            processQueue();
-        });
+
+            // Schedule next load on main thread to avoid race conditions
+            brls::sync([]() {
+                processQueue();
+            });
+        }).detach();
     }
 }
 
@@ -168,7 +167,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
 
     HttpClient client;
 
-    // Add authentication if credentials are set
+    // Add authentication if needed
     if (!s_authUsername.empty() && !s_authPassword.empty()) {
         std::string credentials = s_authUsername + ":" + s_authPassword;
         static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -189,84 +188,77 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
 
     HttpResponse resp = client.get(url);
 
-    if (resp.success && !resp.body.empty()) {
-        brls::Logger::debug("ImageLoader: Loaded {} bytes from {}", resp.body.size(), url);
+    if (!resp.success || resp.body.empty()) {
+        brls::Logger::error("ImageLoader: Failed to load {}: {}", url, resp.error);
+        return;
+    }
 
-        // Check if it's WebP and convert to TGA
-        bool isWebP = false;
-        bool isValidImage = false;
+    // Check image format
+    bool isWebP = false;
+    bool isValidImage = false;
 
-        if (resp.body.size() > 12) {
-            unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
+    if (resp.body.size() > 12) {
+        unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
 
-            // JPEG: FF D8 FF
-            if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
-                isValidImage = true;
-            }
-            // PNG: 89 50 4E 47
-            else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
-                isValidImage = true;
-            }
-            // GIF: 47 49 46
-            else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
-                isValidImage = true;
-            }
-            // WebP: RIFF....WEBP
-            else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
-                     data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
-                isWebP = true;
-                isValidImage = true;
-            }
+        if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
+            isValidImage = true;  // JPEG
         }
+        else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+            isValidImage = true;  // PNG
+        }
+        else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
+            isValidImage = true;  // GIF
+        }
+        else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+                 data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
+            isWebP = true;
+            isValidImage = true;
+        }
+    }
 
-        if (!isValidImage) {
-            brls::Logger::warning("ImageLoader: Invalid image format for {}", url);
+    if (!isValidImage) {
+        brls::Logger::warning("ImageLoader: Invalid image format for {}", url);
+        return;
+    }
+
+    // Convert WebP if needed
+    std::vector<uint8_t> imageData;
+    if (isWebP) {
+        imageData = convertWebPtoTGA(
+            reinterpret_cast<const uint8_t*>(resp.body.data()),
+            resp.body.size(),
+            s_maxThumbnailSize
+        );
+        if (imageData.empty()) {
+            brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
             return;
         }
-
-        // Convert WebP to TGA if needed (with downscaling)
-        std::vector<uint8_t> imageData;
-        if (isWebP) {
-            imageData = convertWebPtoTGA(
-                reinterpret_cast<const uint8_t*>(resp.body.data()),
-                resp.body.size(),
-                s_maxThumbnailSize
-            );
-            if (imageData.empty()) {
-                brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
-                return;
-            }
-        } else {
-            imageData.assign(resp.body.begin(), resp.body.end());
-        }
-
-        // Cache the image (with size limit)
-        {
-            std::lock_guard<std::mutex> lock(s_cacheMutex);
-            // More aggressive cache eviction for Vita memory
-            if (s_cache.size() > 50) {
-                brls::Logger::debug("ImageLoader: Cache full, clearing {} entries", s_cache.size());
-                s_cache.clear();
-            }
-            s_cache[url] = imageData;
-        }
-
-        // Update UI on main thread
-        brls::sync([imageData, callback, target]() {
-            if (target) {
-                target->setImageFromMem(imageData.data(), imageData.size());
-                if (callback) callback(target);
-            }
-        });
     } else {
-        brls::Logger::error("ImageLoader: Failed to load {}: {}", url, resp.error);
+        imageData.assign(resp.body.begin(), resp.body.end());
+    }
+
+    // Cache the image
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        if (s_cache.size() > 50) {
+            s_cache.clear();
+        }
+        s_cache[url] = imageData;
+    }
+
+    // Update UI on main thread - only if target is valid
+    if (target) {
+        brls::sync([imageData, callback, target]() {
+            target->setImageFromMem(imageData.data(), imageData.size());
+            if (callback) callback(target);
+        });
     }
 }
 
 void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target) {
     if (url.empty() || !target) return;
 
-    // Check cache first
+    // Check cache first (on main thread, fast)
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
         auto it = s_cache.find(url);
@@ -283,14 +275,13 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
         s_loadQueue.push({url, callback, target});
     }
 
-    // Try to process queue
+    // Start processing (non-blocking)
     processQueue();
 }
 
 void ImageLoader::preload(const std::string& url) {
     if (url.empty()) return;
 
-    // Check if already cached
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
         if (s_cache.find(url) != s_cache.end()) {
@@ -298,7 +289,6 @@ void ImageLoader::preload(const std::string& url) {
         }
     }
 
-    // Add to queue with null target
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
         s_loadQueue.push({url, nullptr, nullptr});
@@ -310,16 +300,13 @@ void ImageLoader::preload(const std::string& url) {
 void ImageLoader::clearCache() {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
     s_cache.clear();
-    brls::Logger::info("ImageLoader: Cache cleared");
 }
 
 void ImageLoader::cancelAll() {
     std::lock_guard<std::mutex> lock(s_queueMutex);
-    // Clear the queue
     while (!s_loadQueue.empty()) {
         s_loadQueue.pop();
     }
-    brls::Logger::info("ImageLoader: Cancelled {} pending loads", s_loadQueue.size());
 }
 
 } // namespace vitasuwayomi
