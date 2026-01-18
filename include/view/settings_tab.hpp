@@ -16,12 +16,14 @@ public:
 private:
     void createAccountSection();
     void createUISection();
+    void createLibrarySection();
     void createReaderSection();
     void createDownloadsSection();
     void createAboutSection();
 
     void onDisconnect();
     void onThemeChanged(int index);
+    void showCategoryVisibilityDialog();
 
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;
@@ -34,6 +36,9 @@ private:
     brls::BooleanCell* m_clockToggle = nullptr;
     brls::BooleanCell* m_animationsToggle = nullptr;
     brls::BooleanCell* m_debugLogToggle = nullptr;
+
+    // Library section
+    brls::DetailCell* m_hideCategoriesCell = nullptr;
 
     // Reader section
     brls::SelectorCell* m_readingModeSelector = nullptr;
