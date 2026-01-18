@@ -97,7 +97,7 @@ std::string LibraryCache::serializeManga(const Manga& manga) {
        << (manga.inLibrary ? 1 : 0) << "|"
        << manga.chapterCount << "|"
        << manga.unreadCount << "|"
-       << manga.downloadCount;
+       << manga.downloadedCount;
     return ss.str();
 }
 
@@ -123,7 +123,7 @@ bool LibraryCache::deserializeManga(const std::string& line, Manga& manga) {
         manga.inLibrary = (parts[7] == "1");
         manga.chapterCount = std::stoi(parts[8]);
         manga.unreadCount = std::stoi(parts[9]);
-        manga.downloadCount = std::stoi(parts[10]);
+        manga.downloadedCount = std::stoi(parts[10]);
         return true;
     } catch (...) {
         return false;
