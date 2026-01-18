@@ -158,18 +158,52 @@ void LibrarySectionTab::loadCategories() {
     brls::Logger::debug("LibrarySectionTab: Loading categories...");
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak]() {
+    // Check if we have cached categories for instant loading
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+    LibraryCache& cache = LibraryCache::getInstance();
+
+    if (cacheEnabled && cache.hasCategoriesCache()) {
+        std::vector<Category> cachedCategories;
+        if (cache.loadCategories(cachedCategories)) {
+            brls::Logger::info("LibrarySectionTab: Loaded {} categories from cache", cachedCategories.size());
+
+            // Sort by order
+            std::sort(cachedCategories.begin(), cachedCategories.end(),
+                      [](const Category& a, const Category& b) {
+                          return a.order < b.order;
+                      });
+
+            m_categories = cachedCategories;
+            m_categoriesLoaded = true;
+            createCategoryTabs();
+
+            // Load first category from cache
+            if (!m_categories.empty()) {
+                selectCategory(m_categories[0].id);
+            } else {
+                selectCategory(0);
+            }
+            // Continue to try refreshing from server in background
+        }
+    }
+
+    asyncRun([this, aliveWeak, cacheEnabled]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Category> categories;
 
         if (client.fetchCategories(categories)) {
-            brls::Logger::info("LibrarySectionTab: Got {} categories", categories.size());
+            brls::Logger::info("LibrarySectionTab: Got {} categories from server", categories.size());
 
             // Sort categories by order
             std::sort(categories.begin(), categories.end(),
                       [](const Category& a, const Category& b) {
                           return a.order < b.order;
                       });
+
+            // Save to cache
+            if (cacheEnabled) {
+                LibraryCache::getInstance().saveCategories(categories);
+            }
 
             brls::sync([this, categories, aliveWeak]() {
                 auto alive = aliveWeak.lock();
@@ -188,15 +222,18 @@ void LibrarySectionTab::loadCategories() {
                 }
             });
         } else {
-            brls::Logger::warning("LibrarySectionTab: Failed to fetch categories, loading all library");
+            brls::Logger::warning("LibrarySectionTab: Failed to fetch categories from server");
 
             brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
-                m_categoriesLoaded = true;
-                createCategoryTabs();
-                selectCategory(0);
+                // Only show fallback if we don't have cached data already
+                if (!m_categoriesLoaded) {
+                    m_categoriesLoaded = true;
+                    createCategoryTabs();
+                    selectCategory(0);
+                }
             });
         }
     });

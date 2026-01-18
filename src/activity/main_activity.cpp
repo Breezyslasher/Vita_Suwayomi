@@ -7,9 +7,7 @@
 #include "view/library_section_tab.hpp"
 #include "view/extensions_tab.hpp"
 #include "view/search_tab.hpp"
-#include "view/downloads_tab.hpp"
 #include "view/settings_tab.hpp"
-#include "app/downloads_manager.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
@@ -57,11 +55,6 @@ void MainActivity::onContentAvailable() {
         // Add Extensions tab (manage extensions)
         tabFrame->addTab("Extensions", []() {
             return new ExtensionsTab();
-        });
-
-        // Add Downloads tab (manage downloads)
-        tabFrame->addTab("Downloads", []() {
-            return new DownloadsTab();
         });
 
         // Add Settings tab

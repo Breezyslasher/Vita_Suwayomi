@@ -20,6 +20,11 @@ public:
     // Initialize cache (creates directories if needed)
     bool init();
 
+    // Categories caching (the category list itself)
+    bool saveCategories(const std::vector<Category>& categories);
+    bool loadCategories(std::vector<Category>& categories);
+    bool hasCategoriesCache();
+
     // Category manga caching
     bool saveCategoryManga(int categoryId, const std::vector<Manga>& manga);
     bool loadCategoryManga(int categoryId, std::vector<Manga>& manga);
@@ -54,11 +59,16 @@ private:
     std::string getCacheDir();
     std::string getCoverCacheDir();
     std::string getCategoryFilePath(int categoryId);
+    std::string getCategoriesFilePath();
     bool ensureDirectoryExists(const std::string& path);
 
     // Serialize/deserialize manga
     std::string serializeManga(const Manga& manga);
     bool deserializeManga(const std::string& line, Manga& manga);
+
+    // Serialize/deserialize category
+    std::string serializeCategory(const Category& category);
+    bool deserializeCategory(const std::string& line, Category& category);
 
     bool m_enabled = true;
     bool m_coverCacheEnabled = true;

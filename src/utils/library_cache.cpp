@@ -61,6 +61,10 @@ std::string LibraryCache::getCategoryFilePath(int categoryId) {
     return getCacheDir() + "/category_" + std::to_string(categoryId) + ".txt";
 }
 
+std::string LibraryCache::getCategoriesFilePath() {
+    return getCacheDir() + "/categories.txt";
+}
+
 std::string LibraryCache::getCoverCachePath(int mangaId) {
     return getCoverCacheDir() + "/" + std::to_string(mangaId) + ".tga";
 }
@@ -128,6 +132,145 @@ bool LibraryCache::deserializeManga(const std::string& line, Manga& manga) {
     } catch (...) {
         return false;
     }
+}
+
+std::string LibraryCache::serializeCategory(const Category& category) {
+    std::ostringstream ss;
+    // Format: id|name|order|mangaCount
+    ss << category.id << "|"
+       << category.name << "|"
+       << category.order << "|"
+       << category.mangaCount;
+    return ss.str();
+}
+
+bool LibraryCache::deserializeCategory(const std::string& line, Category& category) {
+    std::istringstream ss(line);
+    std::string token;
+    std::vector<std::string> parts;
+
+    while (std::getline(ss, token, '|')) {
+        parts.push_back(token);
+    }
+
+    if (parts.size() < 4) return false;
+
+    try {
+        category.id = std::stoi(parts[0]);
+        category.name = parts[1];
+        category.order = std::stoi(parts[2]);
+        category.mangaCount = std::stoi(parts[3]);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool LibraryCache::saveCategories(const std::vector<Category>& categories) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::string path = getCategoriesFilePath();
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd < 0) {
+        brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
+        return false;
+    }
+
+    for (const auto& c : categories) {
+        std::string line = serializeCategory(c) + "\n";
+        sceIoWrite(fd, line.c_str(), line.size());
+    }
+
+    sceIoClose(fd);
+#else
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    for (const auto& c : categories) {
+        file << serializeCategory(c) << "\n";
+    }
+
+    file.close();
+#endif
+
+    brls::Logger::debug("LibraryCache: Saved {} categories", categories.size());
+    return true;
+}
+
+bool LibraryCache::loadCategories(std::vector<Category>& categories) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::string path = getCategoriesFilePath();
+    categories.clear();
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) {
+        return false;
+    }
+
+    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+    if (size <= 0 || size > 1024 * 1024) {
+        sceIoClose(fd);
+        return false;
+    }
+
+    std::vector<char> buffer(size + 1);
+    sceIoRead(fd, buffer.data(), size);
+    buffer[size] = '\0';
+    sceIoClose(fd);
+
+    std::istringstream stream(buffer.data());
+    std::string line;
+    while (std::getline(stream, line)) {
+        if (line.empty()) continue;
+        Category c;
+        if (deserializeCategory(line, c)) {
+            categories.push_back(c);
+        }
+    }
+#else
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        Category c;
+        if (deserializeCategory(line, c)) {
+            categories.push_back(c);
+        }
+    }
+
+    file.close();
+#endif
+
+    brls::Logger::debug("LibraryCache: Loaded {} categories from cache", categories.size());
+    return !categories.empty();
+}
+
+bool LibraryCache::hasCategoriesCache() {
+    std::string path = getCategoriesFilePath();
+
+#ifdef __vita__
+    SceIoStat stat;
+    return sceIoGetstat(path.c_str(), &stat) >= 0;
+#else
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+#endif
 }
 
 bool LibraryCache::saveCategoryManga(int categoryId, const std::vector<Manga>& manga) {
