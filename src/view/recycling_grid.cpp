@@ -19,6 +19,11 @@ RecyclingGrid::RecyclingGrid() {
 
     // PS Vita screen: 960x544, use 6 columns
     m_columns = 6;
+
+    // Subscribe to scroll events to load covers as they become visible
+    this->getScrollingEvent()->subscribe([this](brls::Point offset) {
+        updateVisibleCells();
+    });
 }
 
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
@@ -115,8 +120,26 @@ void RecyclingGrid::setupGrid() {
 }
 
 void RecyclingGrid::updateVisibleCells() {
-    // This can be called on scroll to load images for newly visible cells
-    // For now, cells load their images when setManga is called
+    // Calculate which rows are visible based on scroll position
+    float scrollY = this->getContentOffsetY();
+    float viewHeight = this->getHeight();
+    int rowHeight = m_cellHeight + m_rowMargin;
+
+    if (rowHeight <= 0 || viewHeight <= 0) return;
+
+    // Calculate visible row range (with some buffer for smooth loading)
+    int firstVisibleRow = std::max(0, (int)(scrollY / rowHeight) - 1);
+    int lastVisibleRow = (int)((scrollY + viewHeight) / rowHeight) + 2;
+
+    // Load thumbnails for visible cells
+    int startCell = firstVisibleRow * m_columns;
+    int endCell = std::min((lastVisibleRow + 1) * m_columns, (int)m_cells.size());
+
+    for (int i = startCell; i < endCell; i++) {
+        if (i >= 0 && i < (int)m_cells.size()) {
+            m_cells[i]->loadThumbnailIfNeeded();
+        }
+    }
 }
 
 void RecyclingGrid::onItemClicked(int index) {
