@@ -171,7 +171,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     // Menu button
     auto* menuBtn = new brls::Button();
-    menuBtn->setWidth(50);
+    menuBtn->setWidth(70);
     menuBtn->setHeight(40);
     menuBtn->setText("Menu");
     menuBtn->registerClickAction([this](brls::View* view) {
@@ -232,8 +232,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     chaptersActions->setAxis(brls::Axis::ROW);
 
     m_sortBtn = new brls::Button();
-    m_sortBtn->setWidth(80);
-    m_sortBtn->setHeight(35);
+    m_sortBtn->setWidth(100);
+    m_sortBtn->setHeight(40);
     m_sortBtn->setText("Sort");
     m_sortBtn->registerClickAction([this](brls::View* view) {
         m_sortDescending = !m_sortDescending;
@@ -404,28 +404,48 @@ void MangaDetailView::populateChaptersList() {
             statusBox->addView(readLabel);
         }
 
-        // Download button - shows icon based on download state
+        // Download button - shows state based on downloadState
         Chapter capturedChapter = chapter;
         auto* dlBtn = new brls::Button();
-        dlBtn->setWidth(45);
-        dlBtn->setHeight(35);
+        dlBtn->setWidth(55);
+        dlBtn->setHeight(40);
         dlBtn->setFocusable(true);
 
-        if (chapter.downloaded) {
-            dlBtn->setText("[v]");  // Checkmark for downloaded
-            dlBtn->setBackgroundColor(nvgRGBA(74, 159, 255, 180));
-            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
-                // Already downloaded - show delete option
-                deleteChapterDownload(capturedChapter);
-                return true;
-            });
-        } else {
-            dlBtn->setText("[DL]");  // Download icon
-            dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
-            dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
-                downloadChapter(capturedChapter);
-                return true;
-            });
+        // Set button appearance based on download state
+        switch (chapter.downloadState) {
+            case DownloadState::DOWNLOADED:
+                dlBtn->setText("OK");  // Downloaded checkmark
+                dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
+                dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                    deleteChapterDownload(capturedChapter);
+                    return true;
+                });
+                break;
+            case DownloadState::DOWNLOADING:
+                dlBtn->setText("...");  // Downloading animation
+                dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
+                break;
+            case DownloadState::QUEUED:
+                dlBtn->setText("Q");  // Queued
+                dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
+                break;
+            case DownloadState::ERROR:
+                dlBtn->setText("ERR");  // Error
+                dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
+                dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                    downloadChapter(capturedChapter);  // Retry
+                    return true;
+                });
+                break;
+            case DownloadState::NOT_DOWNLOADED:
+            default:
+                dlBtn->setText("DL");  // Download icon
+                dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+                dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
+                    downloadChapter(capturedChapter);
+                    return true;
+                });
+                break;
         }
         dlBtn->addGestureRecognizer(new brls::TapGestureRecognizer(dlBtn));
         statusBox->addView(dlBtn);
@@ -438,11 +458,12 @@ void MangaDetailView::populateChaptersList() {
             return true;
         });
 
-        // Square button to download chapter when row is focused
+        // Square button to download/delete chapter when row is focused
         chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_Y, [this, capturedChapter](brls::View* view) {
-            if (capturedChapter.downloaded) {
+            if (capturedChapter.downloadState == DownloadState::DOWNLOADED) {
                 deleteChapterDownload(capturedChapter);
-            } else {
+            } else if (capturedChapter.downloadState == DownloadState::NOT_DOWNLOADED ||
+                       capturedChapter.downloadState == DownloadState::ERROR) {
                 downloadChapter(capturedChapter);
             }
             return true;
