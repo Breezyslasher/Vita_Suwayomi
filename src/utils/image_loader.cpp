@@ -64,7 +64,40 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
         HttpResponse resp = client.get(url);
 
         if (resp.success && !resp.body.empty()) {
-            brls::Logger::debug("ImageLoader: Successfully loaded {} bytes from {}", resp.body.size(), url);
+            brls::Logger::debug("ImageLoader: Loaded {} bytes from {} (status={})",
+                resp.body.size(), url, resp.statusCode);
+
+            // Check if response looks like an image (basic header check)
+            bool isValidImage = false;
+            if (resp.body.size() > 8) {
+                // Check for common image headers
+                unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
+                // JPEG: FF D8 FF
+                if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
+                    isValidImage = true;
+                }
+                // PNG: 89 50 4E 47
+                else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+                    isValidImage = true;
+                }
+                // GIF: 47 49 46
+                else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
+                    isValidImage = true;
+                }
+                // WebP: RIFF....WEBP
+                else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46) {
+                    brls::Logger::warning("ImageLoader: WebP format not supported: {}", url);
+                }
+            }
+
+            if (!isValidImage) {
+                brls::Logger::warning("ImageLoader: Response may not be a valid image: {} (first bytes: {:02X} {:02X} {:02X})",
+                    url,
+                    resp.body.size() > 0 ? (unsigned char)resp.body[0] : 0,
+                    resp.body.size() > 1 ? (unsigned char)resp.body[1] : 0,
+                    resp.body.size() > 2 ? (unsigned char)resp.body[2] : 0);
+            }
+
             // Cache the image data
             std::vector<uint8_t> imageData(resp.body.begin(), resp.body.end());
 
@@ -78,13 +111,14 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
             }
 
             // Update UI on main thread
-            brls::sync([imageData, callback, target]() {
+            brls::sync([imageData, callback, target, url]() {
                 target->setImageFromMem(imageData.data(), imageData.size());
                 if (callback) callback(target);
             });
         } else {
-            brls::Logger::error("ImageLoader: Failed to load {}: status={} error={}",
-                url, resp.statusCode, resp.error.empty() ? "empty response" : resp.error);
+            brls::Logger::error("ImageLoader: Failed to load {}: status={} bodySize={} error={}",
+                url, resp.statusCode, resp.body.size(),
+                resp.error.empty() ? "no error message" : resp.error);
         }
     });
 }

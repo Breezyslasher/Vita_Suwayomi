@@ -202,10 +202,28 @@ void MangaItemCell::loadThumbnail() {
         return;
     }
 
-    // Always use the server's thumbnail endpoint - this works even if thumbnailUrl is empty
-    // The Suwayomi API provides thumbnails at /api/v1/manga/{id}/thumbnail
     SuwayomiClient& client = SuwayomiClient::getInstance();
-    std::string url = client.getMangaThumbnailUrl(m_manga.id);
+    std::string url;
+
+    // Use thumbnailUrl from GraphQL if available (prepend server URL if relative)
+    if (!m_manga.thumbnailUrl.empty()) {
+        if (m_manga.thumbnailUrl[0] == '/') {
+            // Relative URL - prepend server URL
+            url = client.getServerUrl();
+            // Remove trailing slash
+            while (!url.empty() && url.back() == '/') url.pop_back();
+            url += m_manga.thumbnailUrl;
+        } else if (m_manga.thumbnailUrl.find("http") == 0) {
+            // Absolute URL - use directly
+            url = m_manga.thumbnailUrl;
+        } else {
+            // Unknown format - use REST endpoint
+            url = client.getMangaThumbnailUrl(m_manga.id);
+        }
+    } else {
+        // No thumbnailUrl - use REST endpoint
+        url = client.getMangaThumbnailUrl(m_manga.id);
+    }
 
     brls::Logger::debug("MangaItemCell: Loading cover from URL: {}", url);
 
