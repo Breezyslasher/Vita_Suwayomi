@@ -136,6 +136,9 @@ target_link_libraries(${PROJECT_NAME}
     png
     bz2
 
+    # WebP decoding support for cover images
+    webp
+
     # Vita SDK stubs (provide symbols for above libraries)
     vita2d
     SceNet_stub

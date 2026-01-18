@@ -6,7 +6,70 @@
 #include "utils/http_client.hpp"
 #include "app/suwayomi_client.hpp"
 
+// WebP decoding support
+#include <webp/decode.h>
+#include <cstring>
+
 namespace vitasuwayomi {
+
+// Helper function to convert WebP to TGA format (which stb_image can load)
+// TGA is simple: header + raw RGBA data
+static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t webpSize) {
+    std::vector<uint8_t> tgaData;
+
+    // Get WebP image info
+    int width, height;
+    if (!WebPGetInfo(webpData, webpSize, &width, &height)) {
+        brls::Logger::error("ImageLoader: Failed to get WebP info");
+        return tgaData;
+    }
+
+    brls::Logger::debug("ImageLoader: Decoding WebP {}x{}", width, height);
+
+    // Decode WebP to RGBA
+    uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &width, &height);
+    if (!rgba) {
+        brls::Logger::error("ImageLoader: Failed to decode WebP");
+        return tgaData;
+    }
+
+    // Create TGA file in memory
+    // TGA header is 18 bytes
+    size_t imageSize = width * height * 4; // RGBA
+    tgaData.resize(18 + imageSize);
+
+    // TGA header
+    uint8_t* header = tgaData.data();
+    memset(header, 0, 18);
+    header[2] = 2;          // Uncompressed true-color image
+    header[12] = width & 0xFF;
+    header[13] = (width >> 8) & 0xFF;
+    header[14] = height & 0xFF;
+    header[15] = (height >> 8) & 0xFF;
+    header[16] = 32;        // 32 bits per pixel (RGBA)
+    header[17] = 0x28;      // Image descriptor: top-left origin + 8 alpha bits
+
+    // TGA stores pixels in BGRA order, bottom-to-top by default
+    // But with header[17] = 0x28, we have top-left origin
+    // Convert RGBA to BGRA
+    uint8_t* pixels = tgaData.data() + 18;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int srcIdx = (y * width + x) * 4;
+            int dstIdx = (y * width + x) * 4;
+            pixels[dstIdx + 0] = rgba[srcIdx + 2];  // B
+            pixels[dstIdx + 1] = rgba[srcIdx + 1];  // G
+            pixels[dstIdx + 2] = rgba[srcIdx + 0];  // R
+            pixels[dstIdx + 3] = rgba[srcIdx + 3];  // A
+        }
+    }
+
+    // Free WebP decoded data
+    WebPFree(rgba);
+
+    brls::Logger::info("ImageLoader: Converted WebP to TGA ({} bytes)", tgaData.size());
+    return tgaData;
+}
 
 std::map<std::string, std::vector<uint8_t>> ImageLoader::s_cache;
 std::mutex ImageLoader::s_cacheMutex;
@@ -84,9 +147,21 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
                 else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
                     isValidImage = true;
                 }
-                // WebP: RIFF....WEBP
+                // WebP: RIFF....WEBP (will be converted)
                 else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46) {
-                    brls::Logger::warning("ImageLoader: WebP format not supported: {}", url);
+                    brls::Logger::debug("ImageLoader: WebP detected, will convert: {}", url);
+                }
+            }
+
+            // Check if it's WebP and convert to TGA
+            bool isWebP = false;
+            if (resp.body.size() > 12) {
+                unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
+                // WebP: RIFF....WEBP
+                if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+                    data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
+                    isWebP = true;
+                    isValidImage = true; // We'll convert it
                 }
             }
 
@@ -98,8 +173,20 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
                     resp.body.size() > 2 ? (unsigned char)resp.body[2] : 0);
             }
 
-            // Cache the image data
-            std::vector<uint8_t> imageData(resp.body.begin(), resp.body.end());
+            // Convert WebP to TGA if needed
+            std::vector<uint8_t> imageData;
+            if (isWebP) {
+                imageData = convertWebPtoTGA(
+                    reinterpret_cast<const uint8_t*>(resp.body.data()),
+                    resp.body.size()
+                );
+                if (imageData.empty()) {
+                    brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
+                    return;
+                }
+            } else {
+                imageData.assign(resp.body.begin(), resp.body.end());
+            }
 
             {
                 std::lock_guard<std::mutex> lock(s_cacheMutex);
@@ -164,7 +251,30 @@ void ImageLoader::preload(const std::string& url) {
         HttpResponse resp = client.get(url);
 
         if (resp.success && !resp.body.empty()) {
-            std::vector<uint8_t> imageData(resp.body.begin(), resp.body.end());
+            std::vector<uint8_t> imageData;
+
+            // Check if it's WebP and convert
+            bool isWebP = false;
+            if (resp.body.size() > 12) {
+                unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
+                if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+                    data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
+                    isWebP = true;
+                }
+            }
+
+            if (isWebP) {
+                imageData = convertWebPtoTGA(
+                    reinterpret_cast<const uint8_t*>(resp.body.data()),
+                    resp.body.size()
+                );
+                if (imageData.empty()) {
+                    brls::Logger::error("ImageLoader: WebP conversion failed for preload: {}", url);
+                    return;
+                }
+            } else {
+                imageData.assign(resp.body.begin(), resp.body.end());
+            }
 
             std::lock_guard<std::mutex> lock(s_cacheMutex);
             if (s_cache.size() > 100) {
