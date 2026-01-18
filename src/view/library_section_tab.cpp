@@ -12,6 +12,7 @@
 #include "app/downloads_manager.hpp"
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
+#include "utils/library_cache.hpp"
 
 namespace vitasuwayomi {
 
@@ -366,41 +367,58 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         m_titleLabel->setText(m_currentCategoryName);
     }
 
-    // Cancel pending image loads and clear cache to free memory before loading new category
+    // Cancel pending image loads and clear memory cache to free memory
     ImageLoader::cancelAll();
     ImageLoader::clearCache();
 
-    // Clear current display while loading
-    m_mangaList.clear();
-    if (m_contentGrid) {
-        m_contentGrid->setDataSource(m_mangaList);
+    // Check if we have cached data (for instant loading)
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+    LibraryCache& cache = LibraryCache::getInstance();
+
+    if (cacheEnabled && cache.hasCategoryCache(categoryId)) {
+        std::vector<Manga> cachedManga;
+        if (cache.loadCategoryManga(categoryId, cachedManga)) {
+            brls::Logger::info("LibrarySectionTab: Loaded {} manga from cache for category {}",
+                              cachedManga.size(), categoryId);
+            m_mangaList = cachedManga;
+            sortMangaList();
+            m_loaded = true;
+            // Continue to refresh from server in background
+        }
+    } else {
+        // No cache - clear display while loading
+        m_mangaList.clear();
+        if (m_contentGrid) {
+            m_contentGrid->setDataSource(m_mangaList);
+        }
     }
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, categoryId, aliveWeak]() {
+    asyncRun([this, categoryId, aliveWeak, cacheEnabled]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
 
-        // Always fetch manga for the specific category only
-        // This ensures only books from the selected category are shown
         bool success = client.fetchCategoryManga(categoryId, manga);
 
         if (success) {
-            brls::Logger::info("LibrarySectionTab: Got {} manga for category {}",
+            brls::Logger::info("LibrarySectionTab: Got {} manga for category {} from server",
                               manga.size(), categoryId);
+
+            // Save to cache if enabled
+            if (cacheEnabled) {
+                LibraryCache::getInstance().saveCategoryManga(categoryId, manga);
+            }
 
             brls::sync([this, manga, categoryId, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) {
-                    brls::Logger::debug("LibrarySectionTab: Tab destroyed, skipping UI update");
                     return;
                 }
 
                 // Only update if we're still on the same category
                 if (m_currentCategoryId == categoryId) {
                     m_mangaList = manga;
-                    // Apply current sort mode
                     sortMangaList();
                 }
                 m_loaded = true;
@@ -413,7 +431,10 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
-                brls::Application::notify("Failed to load manga");
+                // Only notify if we didn't have cached data
+                if (m_mangaList.empty()) {
+                    brls::Application::notify("Failed to load manga");
+                }
                 m_loaded = true;
             });
         }

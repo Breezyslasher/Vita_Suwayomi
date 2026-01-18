@@ -7,6 +7,7 @@
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
+#include "utils/library_cache.hpp"
 #include <algorithm>
 
 // Version defined in CMakeLists.txt or here
@@ -144,6 +145,52 @@ void SettingsTab::createLibrarySection() {
     infoLabel->setMarginTop(4);
     infoLabel->setMarginBottom(8);
     m_contentBox->addView(infoLabel);
+
+    // Cache Library Data toggle
+    auto* cacheDataToggle = new brls::BooleanCell();
+    cacheDataToggle->init("Cache Library Data", settings.cacheLibraryData, [&settings](bool value) {
+        settings.cacheLibraryData = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(cacheDataToggle);
+
+    // Cache Cover Images toggle
+    auto* cacheCoverToggle = new brls::BooleanCell();
+    cacheCoverToggle->init("Cache Cover Images", settings.cacheCoverImages, [&settings](bool value) {
+        settings.cacheCoverImages = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(cacheCoverToggle);
+
+    // Cache info label
+    auto* cacheInfoLabel = new brls::Label();
+    cacheInfoLabel->setText("Caching speeds up library loading");
+    cacheInfoLabel->setFontSize(14);
+    cacheInfoLabel->setMarginLeft(16);
+    cacheInfoLabel->setMarginTop(4);
+    m_contentBox->addView(cacheInfoLabel);
+
+    // Clear Cache button
+    auto* clearCacheCell = new brls::DetailCell();
+    clearCacheCell->setText("Clear Cache");
+    clearCacheCell->setDetailText("Delete cached data and images");
+    clearCacheCell->registerClickAction([](brls::View* view) {
+        brls::Dialog* dialog = new brls::Dialog("Clear all cached data?");
+
+        dialog->addButton("Cancel", [dialog]() {
+            dialog->close();
+        });
+
+        dialog->addButton("Clear", [dialog]() {
+            LibraryCache::getInstance().clearAllCache();
+            dialog->close();
+            brls::Application::notify("Cache cleared");
+        });
+
+        dialog->open();
+        return true;
+    });
+    m_contentBox->addView(clearCacheCell);
 }
 
 void SettingsTab::showCategoryVisibilityDialog() {

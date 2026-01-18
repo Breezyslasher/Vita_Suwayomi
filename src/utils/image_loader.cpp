@@ -6,7 +6,9 @@
 
 #include "utils/image_loader.hpp"
 #include "utils/http_client.hpp"
+#include "utils/library_cache.hpp"
 #include "app/suwayomi_client.hpp"
+#include "app/application.hpp"
 
 // WebP decoding support
 #include <webp/decode.h>
@@ -29,6 +31,27 @@ int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
 // Flag to track if queue processor is running
 static std::atomic<bool> s_processorRunning{false};
+
+// Helper to extract manga ID from thumbnail URL
+// URLs look like: http://server/api/v1/manga/123/thumbnail or /api/v1/manga/123/thumbnail
+static int extractMangaIdFromUrl(const std::string& url) {
+    // Look for /manga/XXX/ pattern
+    size_t pos = url.find("/manga/");
+    if (pos != std::string::npos) {
+        pos += 7;  // Skip "/manga/"
+        size_t endPos = url.find('/', pos);
+        if (endPos == std::string::npos) {
+            endPos = url.length();
+        }
+        std::string idStr = url.substr(pos, endPos - pos);
+        try {
+            return std::stoi(idStr);
+        } catch (...) {
+            return 0;
+        }
+    }
+    return 0;
+}
 
 // Helper function to downscale RGBA image
 static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
@@ -198,13 +221,21 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         imageData.assign(resp.body.begin(), resp.body.end());
     }
 
-    // Cache the image
+    // Cache the image in memory
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
         if (s_cache.size() > 40) {
             s_cache.clear();
         }
         s_cache[url] = imageData;
+    }
+
+    // Save to disk cache if enabled
+    if (Application::getInstance().getSettings().cacheCoverImages) {
+        int mangaId = extractMangaIdFromUrl(url);
+        if (mangaId > 0) {
+            LibraryCache::getInstance().saveCoverImage(mangaId, imageData);
+        }
     }
 
     // Update UI on main thread
@@ -269,7 +300,7 @@ void ImageLoader::processQueue() {
 void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target) {
     if (url.empty() || !target) return;
 
-    // Check cache first
+    // Check memory cache first
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
         auto it = s_cache.find(url);
@@ -280,7 +311,28 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
         }
     }
 
-    // Add to queue
+    // Check disk cache if enabled
+    if (Application::getInstance().getSettings().cacheCoverImages) {
+        int mangaId = extractMangaIdFromUrl(url);
+        if (mangaId > 0) {
+            std::vector<uint8_t> diskData;
+            if (LibraryCache::getInstance().loadCoverImage(mangaId, diskData)) {
+                // Found in disk cache - add to memory cache and display
+                {
+                    std::lock_guard<std::mutex> lock(s_cacheMutex);
+                    if (s_cache.size() > 40) {
+                        s_cache.clear();
+                    }
+                    s_cache[url] = diskData;
+                }
+                target->setImageFromMem(diskData.data(), diskData.size());
+                if (callback) callback(target);
+                return;
+            }
+        }
+    }
+
+    // Add to queue for network download
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
         s_loadQueue.push({url, callback, target});
