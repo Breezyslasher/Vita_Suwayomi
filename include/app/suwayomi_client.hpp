@@ -391,6 +391,26 @@ private:
     bool fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga);
     bool fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga);
 
+    // Extension GraphQL methods
+    bool fetchExtensionListGraphQL(std::vector<Extension>& extensions);
+    bool installExtensionGraphQL(const std::string& pkgName);
+    bool updateExtensionGraphQL(const std::string& pkgName);
+    bool uninstallExtensionGraphQL(const std::string& pkgName);
+
+    // Download GraphQL methods
+    bool enqueueChapterDownloadGraphQL(int chapterId);
+    bool dequeueChapterDownloadGraphQL(int chapterId);
+    bool enqueueChapterDownloadsGraphQL(const std::vector<int>& chapterIds);
+    bool startDownloadsGraphQL();
+    bool stopDownloadsGraphQL();
+    bool clearDownloadQueueGraphQL();
+
+    // Single source GraphQL
+    bool fetchSourceGraphQL(int64_t sourceId, Source& source);
+
+    // Parse extension from GraphQL
+    Extension parseExtensionFromGraphQL(const std::string& json);
+
     // Parse GraphQL response data
     Manga parseMangaFromGraphQL(const std::string& json);
     Chapter parseChapterFromGraphQL(const std::string& json);
