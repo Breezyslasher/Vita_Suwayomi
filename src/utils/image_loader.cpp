@@ -1,7 +1,7 @@
 /**
  * VitaSuwayomi - Asynchronous Image Loader implementation
  * With concurrent load limiting and image downscaling for PS Vita memory constraints
- * Non-blocking design to prevent UI freezes
+ * Non-blocking design with staggered loading to prevent UI freezes
  */
 
 #include "utils/image_loader.hpp"
@@ -24,10 +24,13 @@ std::string ImageLoader::s_authPassword;
 std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::mutex ImageLoader::s_queueMutex;
 std::atomic<int> ImageLoader::s_activeLoads{0};
-int ImageLoader::s_maxConcurrentLoads = 4;  // Limit concurrent loads for Vita
-int ImageLoader::s_maxThumbnailSize = 200;  // Max dimension for thumbnails
+int ImageLoader::s_maxConcurrentLoads = 2;  // Reduced for Vita stability
+int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
-// Helper function to downscale RGBA image using simple box filter
+// Flag to track if queue processor is running
+static std::atomic<bool> s_processorRunning{false};
+
+// Helper function to downscale RGBA image
 static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
                           uint8_t* dst, int dstW, int dstH) {
     float scaleX = (float)srcW / dstW;
@@ -51,39 +54,33 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
     }
 }
 
-// Helper function to convert WebP to TGA format with optional downscaling
+// Helper function to convert WebP to TGA format with downscaling
 static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t webpSize, int maxSize) {
     std::vector<uint8_t> tgaData;
 
     int width, height;
     if (!WebPGetInfo(webpData, webpSize, &width, &height)) {
-        brls::Logger::error("ImageLoader: Failed to get WebP info");
         return tgaData;
     }
 
     uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &width, &height);
     if (!rgba) {
-        brls::Logger::error("ImageLoader: Failed to decode WebP");
         return tgaData;
     }
 
     int targetW = width;
     int targetH = height;
-    bool needsDownscale = false;
 
     if (maxSize > 0 && (width > maxSize || height > maxSize)) {
         float scale = (float)maxSize / std::max(width, height);
-        targetW = (int)(width * scale);
-        targetH = (int)(height * scale);
-        if (targetW < 1) targetW = 1;
-        if (targetH < 1) targetH = 1;
-        needsDownscale = true;
+        targetW = std::max(1, (int)(width * scale));
+        targetH = std::max(1, (int)(height * scale));
     }
 
     uint8_t* finalRgba = rgba;
     std::vector<uint8_t> scaledRgba;
 
-    if (needsDownscale) {
+    if (targetW != width || targetH != height) {
         scaledRgba.resize(targetW * targetH * 4);
         downscaleRGBA(rgba, width, height, scaledRgba.data(), targetW, targetH);
         finalRgba = scaledRgba.data();
@@ -103,15 +100,11 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
     header[17] = 0x28;
 
     uint8_t* pixels = tgaData.data() + 18;
-    for (int y = 0; y < targetH; y++) {
-        for (int x = 0; x < targetW; x++) {
-            int srcIdx = (y * targetW + x) * 4;
-            int dstIdx = (y * targetW + x) * 4;
-            pixels[dstIdx + 0] = finalRgba[srcIdx + 2];
-            pixels[dstIdx + 1] = finalRgba[srcIdx + 1];
-            pixels[dstIdx + 2] = finalRgba[srcIdx + 0];
-            pixels[dstIdx + 3] = finalRgba[srcIdx + 3];
-        }
+    for (int i = 0; i < targetW * targetH; i++) {
+        pixels[i * 4 + 0] = finalRgba[i * 4 + 2];  // B
+        pixels[i * 4 + 1] = finalRgba[i * 4 + 1];  // G
+        pixels[i * 4 + 2] = finalRgba[i * 4 + 0];  // R
+        pixels[i * 4 + 3] = finalRgba[i * 4 + 3];  // A
     }
 
     WebPFree(rgba);
@@ -124,46 +117,17 @@ void ImageLoader::setAuthCredentials(const std::string& username, const std::str
 }
 
 void ImageLoader::setMaxConcurrentLoads(int max) {
-    s_maxConcurrentLoads = max > 0 ? max : 1;
+    s_maxConcurrentLoads = std::max(1, std::min(max, 4));
 }
 
 void ImageLoader::setMaxThumbnailSize(int maxSize) {
     s_maxThumbnailSize = maxSize > 0 ? maxSize : 0;
 }
 
-void ImageLoader::processQueue() {
-    // Get one request from the queue without blocking
-    LoadRequest request;
-    bool hasRequest = false;
-
-    {
-        std::lock_guard<std::mutex> lock(s_queueMutex);
-        if (!s_loadQueue.empty() && s_activeLoads < s_maxConcurrentLoads) {
-            request = s_loadQueue.front();
-            s_loadQueue.pop();
-            s_activeLoads++;
-            hasRequest = true;
-        }
-    }
-
-    if (hasRequest) {
-        // Execute on background thread - don't use brls::async to avoid blocking
-        std::thread([request]() {
-            executeLoad(request);
-            s_activeLoads--;
-
-            // Schedule next load on main thread to avoid race conditions
-            brls::sync([]() {
-                processQueue();
-            });
-        }).detach();
-    }
-}
-
 void ImageLoader::executeLoad(const LoadRequest& request) {
     const std::string& url = request.url;
-    LoadCallback callback = request.callback;
     brls::Image* target = request.target;
+    LoadCallback callback = request.callback;
 
     HttpClient client;
 
@@ -189,7 +153,6 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     HttpResponse resp = client.get(url);
 
     if (!resp.success || resp.body.empty()) {
-        brls::Logger::error("ImageLoader: Failed to load {}: {}", url, resp.error);
         return;
     }
 
@@ -217,7 +180,6 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     }
 
     if (!isValidImage) {
-        brls::Logger::warning("ImageLoader: Invalid image format for {}", url);
         return;
     }
 
@@ -230,7 +192,6 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             s_maxThumbnailSize
         );
         if (imageData.empty()) {
-            brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
             return;
         }
     } else {
@@ -240,13 +201,13 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     // Cache the image
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.size() > 50) {
+        if (s_cache.size() > 40) {
             s_cache.clear();
         }
         s_cache[url] = imageData;
     }
 
-    // Update UI on main thread - only if target is valid
+    // Update UI on main thread
     if (target) {
         brls::sync([imageData, callback, target]() {
             target->setImageFromMem(imageData.data(), imageData.size());
@@ -255,10 +216,60 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     }
 }
 
+void ImageLoader::processQueue() {
+    // Only allow one processor thread at a time
+    bool expected = false;
+    if (!s_processorRunning.compare_exchange_strong(expected, true)) {
+        return;  // Another processor is already running
+    }
+
+    // Start a single background thread that processes the entire queue
+    std::thread([]() {
+        while (true) {
+            // Check if we can process more
+            if (s_activeLoads >= s_maxConcurrentLoads) {
+                // Wait a bit before checking again
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                continue;
+            }
+
+            // Get next request
+            LoadRequest request;
+            bool hasRequest = false;
+
+            {
+                std::lock_guard<std::mutex> lock(s_queueMutex);
+                if (!s_loadQueue.empty()) {
+                    request = s_loadQueue.front();
+                    s_loadQueue.pop();
+                    hasRequest = true;
+                }
+            }
+
+            if (!hasRequest) {
+                // Queue is empty, exit processor
+                s_processorRunning = false;
+                return;
+            }
+
+            s_activeLoads++;
+
+            // Execute load in a new thread
+            std::thread([request]() {
+                executeLoad(request);
+                s_activeLoads--;
+            }).detach();
+
+            // Small delay between starting loads to prevent overwhelming the system
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        }
+    }).detach();
+}
+
 void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target) {
     if (url.empty() || !target) return;
 
-    // Check cache first (on main thread, fast)
+    // Check cache first
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
         auto it = s_cache.find(url);
@@ -275,7 +286,7 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
         s_loadQueue.push({url, callback, target});
     }
 
-    // Start processing (non-blocking)
+    // Start processor if not already running
     processQueue();
 }
 
