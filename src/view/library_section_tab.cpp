@@ -11,6 +11,7 @@
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/async.hpp"
+#include "utils/image_loader.hpp"
 
 namespace vitasuwayomi {
 
@@ -364,6 +365,10 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
     if (m_titleLabel) {
         m_titleLabel->setText(m_currentCategoryName);
     }
+
+    // Cancel pending image loads and clear cache to free memory before loading new category
+    ImageLoader::cancelAll();
+    ImageLoader::clearCache();
 
     // Clear current display while loading
     m_mangaList.clear();
