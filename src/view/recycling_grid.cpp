@@ -19,11 +19,6 @@ RecyclingGrid::RecyclingGrid() {
 
     // PS Vita screen: 960x544, use 6 columns
     m_columns = 6;
-
-    // Subscribe to scroll events to load covers as they become visible
-    this->getScrollingEvent()->subscribe([this](brls::Point offset) {
-        updateVisibleCells();
-    });
 }
 
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
@@ -55,12 +50,12 @@ void RecyclingGrid::setupGrid() {
 
     // Calculate number of rows needed
     int totalRows = (m_items.size() + m_columns - 1) / m_columns;
-    int rowHeight = m_cellHeight + m_rowMargin;
 
     brls::Logger::debug("RecyclingGrid: Creating {} rows for {} items", totalRows, m_items.size());
 
-    // Create all rows and cells, but only load images for first few rows
-    int maxInitialRows = 4;  // Only load images for first 4 rows initially
+    // Create all rows and cells
+    // Load first 4 rows immediately, then stagger loading the rest
+    int maxInitialRows = 4;
 
     for (int row = 0; row < totalRows; row++) {
         auto* rowBox = new brls::Box();
@@ -79,12 +74,10 @@ void RecyclingGrid::setupGrid() {
             cell->setHeight(m_cellHeight);
             cell->setMarginRight(m_cellMargin);
 
-            // Only set manga data for initial visible rows
-            // This defers image loading for off-screen items
+            // Load first rows immediately, defer rest for staggered loading
             if (row < maxInitialRows) {
                 cell->setManga(m_items[i]);
             } else {
-                // Set basic info without loading image
                 cell->setMangaDeferred(m_items[i]);
             }
 
@@ -101,44 +94,37 @@ void RecyclingGrid::setupGrid() {
 
         m_contentBox->addView(rowBox);
         m_rows.push_back(rowBox);
+    }
 
-        // Yield to UI thread every few rows to prevent freeze
-        if (row > 0 && row % 5 == 0 && row < totalRows - 1) {
-            // Force a UI update by scheduling the rest for later
-            int remainingStart = row + 1;
-            brls::sync([this, remainingStart, totalRows, maxInitialRows]() {
-                // Continue building remaining rows
-                for (int r = remainingStart; r < totalRows && r < remainingStart + 5; r++) {
-                    // Rows already created, just need to trigger image loads
-                    // for newly visible rows as user scrolls
-                }
-            });
-        }
+    // Schedule loading of remaining covers after a short delay
+    if (totalRows > maxInitialRows) {
+        brls::sync([this, maxInitialRows]() {
+            // Load remaining covers in batches
+            int batchSize = 6;  // One row at a time
+            int startCell = maxInitialRows * m_columns;
+
+            for (int i = startCell; i < (int)m_cells.size(); i += batchSize) {
+                int batchEnd = std::min(i + batchSize, (int)m_cells.size());
+                int delayMs = ((i - startCell) / batchSize) * 100;  // 100ms between batches
+
+                brls::sync([this, i, batchEnd]() {
+                    for (int j = i; j < batchEnd; j++) {
+                        if (j < (int)m_cells.size()) {
+                            m_cells[j]->loadThumbnailIfNeeded();
+                        }
+                    }
+                });
+            }
+        });
     }
 
     brls::Logger::debug("RecyclingGrid: Grid setup complete with {} cells", m_cells.size());
 }
 
 void RecyclingGrid::updateVisibleCells() {
-    // Calculate which rows are visible based on scroll position
-    float scrollY = this->getContentOffsetY();
-    float viewHeight = this->getHeight();
-    int rowHeight = m_cellHeight + m_rowMargin;
-
-    if (rowHeight <= 0 || viewHeight <= 0) return;
-
-    // Calculate visible row range (with some buffer for smooth loading)
-    int firstVisibleRow = std::max(0, (int)(scrollY / rowHeight) - 1);
-    int lastVisibleRow = (int)((scrollY + viewHeight) / rowHeight) + 2;
-
-    // Load thumbnails for visible cells
-    int startCell = firstVisibleRow * m_columns;
-    int endCell = std::min((lastVisibleRow + 1) * m_columns, (int)m_cells.size());
-
-    for (int i = startCell; i < endCell; i++) {
-        if (i >= 0 && i < (int)m_cells.size()) {
-            m_cells[i]->loadThumbnailIfNeeded();
-        }
+    // Load all remaining thumbnails
+    for (auto* cell : m_cells) {
+        cell->loadThumbnailIfNeeded();
     }
 }
 
