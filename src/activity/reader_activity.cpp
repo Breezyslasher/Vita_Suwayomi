@@ -727,18 +727,17 @@ void ReaderActivity::showSettings() {
 void ReaderActivity::applySettings() {
     if (!pageImage) return;
 
-    // Apply scaling mode
+    // Apply scaling mode - always use FIT to maintain aspect ratio
+    // This ensures the manga page is never stretched/distorted
+    // Margins will show when page doesn't fill screen (dark/light mode aware)
     switch (m_settings.scaleMode) {
         case ReaderScaleMode::FIT_SCREEN:
-            pageImage->setScalingType(brls::ImageScalingType::FIT);
-            break;
         case ReaderScaleMode::FIT_WIDTH:
-            pageImage->setScalingType(brls::ImageScalingType::STRETCH);
-            break;
         case ReaderScaleMode::FIT_HEIGHT:
             pageImage->setScalingType(brls::ImageScalingType::FIT);
             break;
         case ReaderScaleMode::ORIGINAL:
+            // FILL maintains aspect ratio but may crop - closest to original
             pageImage->setScalingType(brls::ImageScalingType::FILL);
             break;
     }
@@ -779,9 +778,8 @@ void ReaderActivity::resetZoom() {
     m_zoomOffset = {0, 0};
 
     if (pageImage) {
-        // Reset to fit scaling
+        // Reset to fit scaling - maintains aspect ratio, shows margins
         pageImage->setScalingType(brls::ImageScalingType::FIT);
-        brls::Application::notify("Zoom: Fit");
     }
 }
 
