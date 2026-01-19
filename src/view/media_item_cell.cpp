@@ -125,13 +125,10 @@ MangaItemCell::MangaItemCell() {
     m_descriptionLabel->setVisibility(brls::Visibility::GONE);
 }
 
-void MangaItemCell::setManga(const Manga& manga) {
-    m_manga = manga;
-
+void MangaItemCell::updateDisplay() {
     // Set title - Komikku style, left-aligned
     if (m_titleLabel) {
-        std::string title = manga.title;
-        // Truncate long titles for card display
+        std::string title = m_manga.title;
         if (title.length() > 16) {
             title = title.substr(0, 14) + "..";
         }
@@ -141,14 +138,14 @@ void MangaItemCell::setManga(const Manga& manga) {
 
     // Set subtitle (author or chapter count)
     if (m_subtitleLabel) {
-        if (!manga.author.empty()) {
-            std::string author = manga.author;
+        if (!m_manga.author.empty()) {
+            std::string author = m_manga.author;
             if (author.length() > 18) {
                 author = author.substr(0, 16) + "..";
             }
             m_subtitleLabel->setText(author);
-        } else if (manga.chapterCount > 0) {
-            m_subtitleLabel->setText(std::to_string(manga.chapterCount) + " ch");
+        } else if (m_manga.chapterCount > 0) {
+            m_subtitleLabel->setText(std::to_string(m_manga.chapterCount) + " ch");
         } else {
             m_subtitleLabel->setText("");
         }
@@ -156,8 +153,8 @@ void MangaItemCell::setManga(const Manga& manga) {
 
     // Show unread badge (teal, top-right)
     if (m_unreadBadge) {
-        if (manga.unreadCount > 0) {
-            m_unreadBadge->setText(std::to_string(manga.unreadCount));
+        if (m_manga.unreadCount > 0) {
+            m_unreadBadge->setText(std::to_string(m_manga.unreadCount));
             m_unreadBadge->setVisibility(brls::Visibility::VISIBLE);
         } else {
             m_unreadBadge->setVisibility(brls::Visibility::GONE);
@@ -166,9 +163,9 @@ void MangaItemCell::setManga(const Manga& manga) {
 
     // Show download badge if any chapters are downloaded locally
     if (m_downloadBadge) {
-        static const std::string ICON_CHECK = "\xEE\xA1\xAC";  // check_circle
+        static const std::string ICON_CHECK = "\xEE\xA1\xAC";
         DownloadsManager& dm = DownloadsManager::getInstance();
-        DownloadItem* download = dm.getMangaDownload(manga.id);
+        DownloadItem* download = dm.getMangaDownload(m_manga.id);
         if (download != nullptr) {
             m_downloadBadge->setText(ICON_CHECK);
             m_downloadBadge->setVisibility(brls::Visibility::VISIBLE);
@@ -176,60 +173,59 @@ void MangaItemCell::setManga(const Manga& manga) {
             m_downloadBadge->setVisibility(brls::Visibility::GONE);
         }
     }
+}
 
-    // Load thumbnail
+void MangaItemCell::setManga(const Manga& manga) {
+    m_manga = manga;
+    m_thumbnailLoaded = false;
+    updateDisplay();
     loadThumbnail();
 }
 
+void MangaItemCell::setMangaDeferred(const Manga& manga) {
+    // Set manga data but don't load thumbnail yet
+    m_manga = manga;
+    m_thumbnailLoaded = false;
+    updateDisplay();
+}
+
+void MangaItemCell::loadThumbnailIfNeeded() {
+    if (!m_thumbnailLoaded && m_manga.id > 0) {
+        loadThumbnail();
+    }
+}
+
 void MangaItemCell::loadThumbnail() {
-    if (!m_thumbnailImage) return;
+    if (!m_thumbnailImage || m_thumbnailLoaded) return;
 
-    brls::Logger::debug("MangaItemCell::loadThumbnail for '{}' id={} thumbnailUrl='{}'",
-                       m_manga.title, m_manga.id, m_manga.thumbnailUrl);
+    m_thumbnailLoaded = true;  // Mark as loaded to prevent duplicate loads
 
-    // Check if we have a Vita local cover path (for downloaded items)
-    // Vita local paths start with "ux0:"
+    // Check for local Vita cover path
     if (!m_manga.thumbnailUrl.empty() && m_manga.thumbnailUrl.find("ux0:") == 0) {
-        // Local Vita path - load directly from file
-        brls::Logger::debug("MangaItemCell: Loading local cover from {}", m_manga.thumbnailUrl);
         loadLocalCoverToImage(m_thumbnailImage, m_manga.thumbnailUrl);
         return;
     }
 
-    // Need valid manga ID to fetch thumbnail
-    if (m_manga.id <= 0) {
-        brls::Logger::warning("MangaItemCell: Invalid manga ID for '{}'", m_manga.title);
-        return;
-    }
+    if (m_manga.id <= 0) return;
 
     SuwayomiClient& client = SuwayomiClient::getInstance();
     std::string url;
 
-    // Use thumbnailUrl from GraphQL if available (prepend server URL if relative)
     if (!m_manga.thumbnailUrl.empty()) {
         if (m_manga.thumbnailUrl[0] == '/') {
-            // Relative URL - prepend server URL
             url = client.getServerUrl();
-            // Remove trailing slash
             while (!url.empty() && url.back() == '/') url.pop_back();
             url += m_manga.thumbnailUrl;
         } else if (m_manga.thumbnailUrl.find("http") == 0) {
-            // Absolute URL - use directly
             url = m_manga.thumbnailUrl;
         } else {
-            // Unknown format - use REST endpoint
             url = client.getMangaThumbnailUrl(m_manga.id);
         }
     } else {
-        // No thumbnailUrl - use REST endpoint
         url = client.getMangaThumbnailUrl(m_manga.id);
     }
 
-    brls::Logger::debug("MangaItemCell: Loading cover from URL: {}", url);
-
-    ImageLoader::loadAsync(url, [](brls::Image* img) {
-        brls::Logger::debug("MangaItemCell: Cover loaded successfully");
-    }, m_thumbnailImage);
+    ImageLoader::loadAsync(url, nullptr, m_thumbnailImage);
 }
 
 brls::View* MangaItemCell::create() {
