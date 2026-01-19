@@ -32,11 +32,17 @@ public:
      */
     void cycleRotation();
 
+    /**
+     * Set background color (shown in margins when image doesn't fill view)
+     */
+    void setBackgroundFillColor(NVGcolor color) { m_bgColor = color; }
+
     static brls::View* create();
 
 private:
     float m_rotationDegrees = 0.0f;
     float m_rotationRadians = 0.0f;
+    NVGcolor m_bgColor = nvgRGBA(26, 26, 46, 255);  // Default dark mode color
 };
 
 } // namespace vitasuwayomi

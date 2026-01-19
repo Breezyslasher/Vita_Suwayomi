@@ -918,16 +918,28 @@ void ReaderActivity::resetSwipeState() {
 }
 
 void ReaderActivity::updateMarginColors() {
-    // Set container background based on dark/light mode
+    // Set background color based on dark/light mode
     // This shows when the manga page doesn't fill the screen
+    NVGcolor bgColor;
+    if (m_isDarkMode) {
+        // Dark mode - dark gray background
+        bgColor = nvgRGBA(26, 26, 46, 255);  // #1a1a2e
+    } else {
+        // Light mode - light gray/white background
+        bgColor = nvgRGBA(240, 240, 245, 255);  // #f0f0f5
+    }
+
+    // Set container background
     if (container) {
-        if (m_isDarkMode) {
-            // Dark mode - dark gray background
-            container->setBackgroundColor(nvgRGBA(26, 26, 46, 255));  // #1a1a2e
-        } else {
-            // Light mode - light gray/white background
-            container->setBackgroundColor(nvgRGBA(240, 240, 245, 255));  // #f0f0f5
-        }
+        container->setBackgroundColor(bgColor);
+    }
+
+    // Set image background colors (prevents edge artifacts)
+    if (pageImage) {
+        pageImage->setBackgroundFillColor(bgColor);
+    }
+    if (previewImage) {
+        previewImage->setBackgroundFillColor(bgColor);
     }
 }
 

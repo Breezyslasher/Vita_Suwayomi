@@ -17,6 +17,15 @@ RotatableImage::RotatableImage() {
 
 void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float height,
                           brls::Style style, brls::FrameContext* ctx) {
+    // First, clear the area with background color to prevent edge artifacts
+    // This fixes the issue where edge pixels get stretched/clamped
+    nvgSave(vg);
+    nvgBeginPath(vg);
+    nvgRect(vg, x, y, width, height);
+    nvgFillColor(vg, m_bgColor);
+    nvgFill(vg);
+    nvgRestore(vg);
+
     if (m_rotationDegrees == 0.0f) {
         // No rotation, draw normally
         brls::Image::draw(vg, x, y, width, height, style, ctx);
