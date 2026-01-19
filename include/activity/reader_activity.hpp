@@ -98,7 +98,6 @@ private:
     // UI components - NOBORU style
     BRLS_BIND(brls::Box, container, "reader/container");
     BRLS_BIND(RotatableImage, pageImage, "reader/page_image");
-    BRLS_BIND(RotatableImage, previewImage, "reader/preview_image");  // Preview of next/prev page
     BRLS_BIND(brls::Box, topBar, "reader/top_bar");
     BRLS_BIND(brls::Box, bottomBar, "reader/bottom_bar");
     BRLS_BIND(brls::Box, pageCounter, "reader/page_counter");
@@ -133,21 +132,29 @@ private:
     std::vector<Chapter> m_chapters;
     int m_totalChapters = 0;
 
+    // Next chapter preloading
+    std::vector<Page> m_nextChapterPages;
+    bool m_nextChapterLoaded = false;
+    void preloadNextChapter();
+
     // Image caching (preloaded pages)
     std::map<int, std::string> m_cachedImages;
+
+    // Dark mode support
+    bool m_isDarkMode = true;
+    void updateMarginColors();
 
     // Touch gesture tracking
     bool m_isPanning = false;
     brls::Point m_touchStart;
     brls::Point m_touchCurrent;
 
-    // NOBORU-style swipe animation (partial page preview)
+    // NOBORU-style swipe animation (shows margins during swipe)
     bool m_isSwipeAnimating = false;
     float m_swipeOffset = 0.0f;           // Current swipe offset in pixels
-    int m_previewPageIndex = -1;          // Index of page being previewed (-1 = none)
-    bool m_previewIsNext = true;          // true = previewing next page, false = previous
-    void updateSwipePreview(float offset);
-    void loadPreviewPage(int index);
+    int m_targetPageIndex = -1;           // Index of page to navigate to (-1 = none)
+    bool m_swipingToNext = true;          // true = swiping to next page, false = previous
+    void updateSwipeMargins(float offset);
     void completeSwipeAnimation(bool turnPage);
     void resetSwipeState();
 
