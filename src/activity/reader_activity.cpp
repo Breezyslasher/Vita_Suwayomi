@@ -138,7 +138,7 @@ void ReaderActivity::onContentAvailable() {
                     m_touchCurrent = status.position;
                     m_swipeOffset = 0.0f;
                     m_previewPageIndex = -1;
-                } else if (status.state == brls::GestureState::CHANGED) {
+                } else if (status.state == brls::GestureState::UPDATE) {
                     // Real-time swipe tracking for preview
                     m_touchCurrent = status.position;
                     float dx = m_touchCurrent.x - m_touchStart.x;
