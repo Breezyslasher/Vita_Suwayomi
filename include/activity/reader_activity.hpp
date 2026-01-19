@@ -98,6 +98,7 @@ private:
     // UI components - NOBORU style
     BRLS_BIND(brls::Box, container, "reader/container");
     BRLS_BIND(RotatableImage, pageImage, "reader/page_image");
+    BRLS_BIND(RotatableImage, previewImage, "reader/preview_image");  // Preview of next/prev page
     BRLS_BIND(brls::Box, topBar, "reader/top_bar");
     BRLS_BIND(brls::Box, bottomBar, "reader/bottom_bar");
     BRLS_BIND(brls::Box, pageCounter, "reader/page_counter");
@@ -139,6 +140,16 @@ private:
     bool m_isPanning = false;
     brls::Point m_touchStart;
     brls::Point m_touchCurrent;
+
+    // NOBORU-style swipe animation (partial page preview)
+    bool m_isSwipeAnimating = false;
+    float m_swipeOffset = 0.0f;           // Current swipe offset in pixels
+    int m_previewPageIndex = -1;          // Index of page being previewed (-1 = none)
+    bool m_previewIsNext = true;          // true = previewing next page, false = previous
+    void updateSwipePreview(float offset);
+    void loadPreviewPage(int index);
+    void completeSwipeAnimation(bool turnPage);
+    void resetSwipeState();
 
     // NOBORU-style touch controls
     // Double-tap detection
