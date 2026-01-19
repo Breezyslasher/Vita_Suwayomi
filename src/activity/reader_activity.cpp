@@ -105,9 +105,8 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // NOBORU-style touch handling with enhanced swipe controls
+    // NOBORU-style touch handling with swipe controls
     // Features:
-    // - Real-time swipe preview (shows next/prev page while swiping)
     // - Responsive swipe detection with lower thresholds
     // - Double-tap to zoom in/out
     // - Tap to toggle UI controls
@@ -119,53 +118,16 @@ void ReaderActivity::onContentAvailable() {
         m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
         m_lastTapPosition = {0, 0};
 
-        // Hide preview image initially
-        if (previewImage) {
-            previewImage->setVisibility(brls::Visibility::GONE);
-        }
-
-        // Pan gesture for swipe detection (NOBORU style with real-time preview)
+        // Pan gesture for swipe detection (NOBORU style)
         pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 const float TAP_THRESHOLD = 15.0f;       // Max movement for tap
-                const float PAGE_TURN_THRESHOLD = 80.0f; // Threshold to complete page turn
-                const float SWIPE_START_THRESHOLD = 20.0f; // When to start showing preview
+                const float PAGE_TURN_THRESHOLD = 50.0f; // Threshold to complete page turn
 
                 if (status.state == brls::GestureState::START) {
                     m_isPanning = false;
-                    m_isSwipeAnimating = false;
                     m_touchStart = status.position;
                     m_touchCurrent = status.position;
-                    m_swipeOffset = 0.0f;
-                    m_previewPageIndex = -1;
-                } else if (status.state == brls::GestureState::UPDATE) {
-                    // Real-time swipe tracking for preview
-                    m_touchCurrent = status.position;
-                    float dx = m_touchCurrent.x - m_touchStart.x;
-                    float dy = m_touchCurrent.y - m_touchStart.y;
-
-                    // Only track horizontal swipes for preview
-                    if (std::abs(dx) > std::abs(dy) && std::abs(dx) > SWIPE_START_THRESHOLD) {
-                        m_isSwipeAnimating = true;
-                        m_swipeOffset = dx;
-
-                        // Determine which page to preview based on swipe direction
-                        bool swipingRight = dx > 0;
-                        bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingRight : !swipingRight;
-
-                        int previewIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
-
-                        // Load preview if not already loaded
-                        if (previewIndex != m_previewPageIndex && previewIndex >= 0 &&
-                            previewIndex < static_cast<int>(m_pages.size())) {
-                            m_previewPageIndex = previewIndex;
-                            m_previewIsNext = wantNextPage;
-                            loadPreviewPage(previewIndex);
-                        }
-
-                        // Update visual positions
-                        updateSwipePreview(dx);
-                    }
                 } else if (status.state == brls::GestureState::END) {
                     m_touchCurrent = status.position;
 
@@ -195,24 +157,30 @@ void ReaderActivity::onContentAvailable() {
                             m_lastTapPosition = status.position;
                             toggleControls();
                         }
-                        resetSwipeState();
-                    } else if (m_isSwipeAnimating) {
-                        // Complete swipe animation
-                        float absX = std::abs(dx);
-
-                        if (absX >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
-                            // Swipe was long enough - turn the page
-                            completeSwipeAnimation(true);
-                        } else {
-                            // Swipe too short - snap back
-                            completeSwipeAnimation(false);
-                        }
                     } else {
-                        // Vertical swipe or short horizontal swipe
+                        // It's a swipe - check direction and turn page
+                        m_isPanning = true;
                         float absX = std::abs(dx);
                         float absY = std::abs(dy);
 
-                        if (absY > absX && absY >= PAGE_TURN_THRESHOLD) {
+                        if (absX > absY && absX >= PAGE_TURN_THRESHOLD) {
+                            // Horizontal swipe
+                            if (dx > 0) {
+                                // Swipe right
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                    nextPage();
+                                } else {
+                                    previousPage();
+                                }
+                            } else {
+                                // Swipe left
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                    previousPage();
+                                } else {
+                                    nextPage();
+                                }
+                            }
+                        } else if (absY > absX && absY >= PAGE_TURN_THRESHOLD) {
                             // Vertical swipe
                             if (dy > 0) {
                                 previousPage();
@@ -220,7 +188,6 @@ void ReaderActivity::onContentAvailable() {
                                 nextPage();
                             }
                         }
-                        resetSwipeState();
                     }
 
                     m_isPanning = false;
