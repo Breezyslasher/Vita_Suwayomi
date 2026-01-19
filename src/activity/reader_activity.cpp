@@ -108,9 +108,14 @@ void ReaderActivity::onContentAvailable() {
     // Set background color based on dark/light mode (shows when page doesn't fill screen)
     updateMarginColors();
 
+    // Hide preview image initially
+    if (previewImage) {
+        previewImage->setVisibility(brls::Visibility::GONE);
+    }
+
     // NOBORU-style touch handling with swipe controls
     // Features:
-    // - Real-time swipe with page movement
+    // - Real-time swipe showing next/prev page sliding in
     // - Responsive swipe detection with lower thresholds
     // - Double-tap to zoom in/out
     // - Tap to toggle UI controls
@@ -122,12 +127,12 @@ void ReaderActivity::onContentAvailable() {
         m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
         m_lastTapPosition = {0, 0};
 
-        // Pan gesture for swipe detection (NOBORU style with margin indicators)
+        // Pan gesture for swipe detection (NOBORU style with page preview)
         pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 const float TAP_THRESHOLD = 15.0f;       // Max movement for tap
                 const float PAGE_TURN_THRESHOLD = 80.0f; // Threshold to complete page turn
-                const float SWIPE_START_THRESHOLD = 20.0f; // When to start showing margins
+                const float SWIPE_START_THRESHOLD = 20.0f; // When to start showing preview
 
                 if (status.state == brls::GestureState::START) {
                     m_isPanning = false;
@@ -135,7 +140,7 @@ void ReaderActivity::onContentAvailable() {
                     m_touchStart = status.position;
                     m_touchCurrent = status.position;
                     m_swipeOffset = 0.0f;
-                    m_targetPageIndex = -1;
+                    m_previewPageIndex = -1;
                 } else if (status.state == brls::GestureState::STAY) {
                     // Real-time swipe tracking (STAY = finger still on screen)
                     m_touchCurrent = status.position;
@@ -151,18 +156,18 @@ void ReaderActivity::onContentAvailable() {
                         bool swipingRight = dx > 0;
                         bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingRight : !swipingRight;
 
-                        int targetIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
+                        int previewIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
 
-                        // Check bounds and set target
-                        if (targetIndex >= 0 && targetIndex < static_cast<int>(m_pages.size())) {
-                            m_targetPageIndex = targetIndex;
+                        // Load preview page if not already loaded
+                        if (previewIndex != m_previewPageIndex && previewIndex >= 0 &&
+                            previewIndex < static_cast<int>(m_pages.size())) {
+                            m_previewPageIndex = previewIndex;
                             m_swipingToNext = wantNextPage;
-                        } else {
-                            m_targetPageIndex = -1;  // At boundary
+                            loadPreviewPage(previewIndex);
                         }
 
-                        // Update visual positions with margin indicators
-                        updateSwipeMargins(dx);
+                        // Update visual positions - show preview page sliding in
+                        updateSwipePreview(dx);
                     }
                 } else if (status.state == brls::GestureState::END) {
                     m_touchCurrent = status.position;
@@ -198,7 +203,7 @@ void ReaderActivity::onContentAvailable() {
                         // Complete swipe animation
                         float absX = std::abs(dx);
 
-                        if (absX >= PAGE_TURN_THRESHOLD && m_targetPageIndex >= 0) {
+                        if (absX >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
                             // Swipe was long enough - turn the page
                             completeSwipeAnimation(true);
                         } else {
@@ -396,7 +401,7 @@ void ReaderActivity::loadPage(int index) {
     // Load image
     if (pageImage) {
         int currentPageAtLoad = m_currentPage;
-        ImageLoader::loadAsync(imageUrl, [this, index, currentPageAtLoad](brls::Image* img) {
+        ImageLoader::loadAsyncFullSize(imageUrl, [this, index, currentPageAtLoad](brls::Image* img) {
             if (index == currentPageAtLoad) {
                 brls::Logger::debug("ReaderActivity: Page {} loaded", index);
             }
@@ -411,13 +416,13 @@ void ReaderActivity::preloadAdjacentPages() {
     // Preload next page
     if (m_currentPage + 1 < static_cast<int>(m_pages.size())) {
         std::string nextUrl = m_pages[m_currentPage + 1].imageUrl;
-        ImageLoader::preload(nextUrl);
+        ImageLoader::preloadFullSize(nextUrl);
     }
 
     // Preload previous page
     if (m_currentPage > 0) {
         std::string prevUrl = m_pages[m_currentPage - 1].imageUrl;
-        ImageLoader::preload(prevUrl);
+        ImageLoader::preloadFullSize(prevUrl);
     }
 }
 
@@ -824,23 +829,63 @@ void ReaderActivity::handlePinchZoom(float scaleFactor) {
 
 // NOBORU-style swipe methods
 
-void ReaderActivity::updateSwipeMargins(float offset) {
-    // Update the page position during swipe (page follows finger)
+void ReaderActivity::updateSwipePreview(float offset) {
+    // Update visual positions during swipe - current page moves, preview slides in
     const float SCREEN_WIDTH = 960.0f;
 
-    if (!pageImage) return;
+    if (!pageImage || !previewImage) return;
+
+    // Show preview image
+    previewImage->setVisibility(brls::Visibility::VISIBLE);
 
     // Clamp offset to screen width
     offset = std::max(-SCREEN_WIDTH, std::min(SCREEN_WIDTH, offset));
 
-    // Move the page with the finger
+    // Move current page with finger
     pageImage->setTranslationX(offset);
+
+    // Position preview page sliding in from the edge
+    if (m_swipingToNext) {
+        // Next page slides in from right (for RTL swipe right) or left (for LTR swipe left)
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+            // RTL: swiping right, next page comes from right
+            previewImage->setTranslationX(SCREEN_WIDTH + offset);
+        } else {
+            // LTR: swiping left, next page comes from left
+            previewImage->setTranslationX(-SCREEN_WIDTH + offset);
+        }
+    } else {
+        // Previous page slides in from opposite side
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+            // RTL: swiping left, prev page comes from left
+            previewImage->setTranslationX(-SCREEN_WIDTH + offset);
+        } else {
+            // LTR: swiping right, prev page comes from right
+            previewImage->setTranslationX(SCREEN_WIDTH + offset);
+        }
+    }
+}
+
+void ReaderActivity::loadPreviewPage(int index) {
+    if (index < 0 || index >= static_cast<int>(m_pages.size())) {
+        return;
+    }
+
+    if (!previewImage) return;
+
+    std::string imageUrl = m_pages[index].imageUrl;
+    brls::Logger::debug("Loading preview page {}", index);
+
+    // Load the preview image (full size for manga reader)
+    ImageLoader::loadAsyncFullSize(imageUrl, [this, index](brls::Image* img) {
+        brls::Logger::debug("Preview page {} loaded", index);
+    }, previewImage);
 }
 
 void ReaderActivity::completeSwipeAnimation(bool turnPage) {
-    if (turnPage && m_targetPageIndex >= 0) {
-        // Turn to the target page
-        m_currentPage = m_targetPageIndex;
+    if (turnPage && m_previewPageIndex >= 0) {
+        // Turn to the preview page
+        m_currentPage = m_previewPageIndex;
         updatePageDisplay();
         loadPage(m_currentPage);
         updateProgress();
@@ -858,11 +903,17 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
 void ReaderActivity::resetSwipeState() {
     m_isSwipeAnimating = false;
     m_swipeOffset = 0.0f;
-    m_targetPageIndex = -1;
+    m_previewPageIndex = -1;
 
-    // Reset page position
+    // Reset page positions
     if (pageImage) {
         pageImage->setTranslationX(0.0f);
+    }
+
+    // Hide preview image
+    if (previewImage) {
+        previewImage->setVisibility(brls::Visibility::GONE);
+        previewImage->setTranslationX(0.0f);
     }
 }
 
@@ -896,9 +947,9 @@ void ReaderActivity::preloadNextChapter() {
             m_nextChapterLoaded = true;
             brls::Logger::info("Next chapter preloaded: {} pages", m_nextChapterPages.size());
 
-            // Preload first few images of next chapter
+            // Preload first few images of next chapter (full size for manga reader)
             for (size_t i = 0; i < std::min(size_t(3), m_nextChapterPages.size()); i++) {
-                ImageLoader::preload(m_nextChapterPages[i].imageUrl);
+                ImageLoader::preloadFullSize(m_nextChapterPages[i].imageUrl);
             }
         }
     });

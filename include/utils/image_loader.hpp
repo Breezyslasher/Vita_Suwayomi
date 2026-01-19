@@ -22,11 +22,17 @@ public:
     // Set authentication credentials for image loading
     static void setAuthCredentials(const std::string& username, const std::string& password);
 
-    // Load image asynchronously from URL
+    // Load image asynchronously from URL (with thumbnail downscaling)
     static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target);
+
+    // Load full-size image asynchronously (no downscaling - for manga reader)
+    static void loadAsyncFullSize(const std::string& url, LoadCallback callback, brls::Image* target);
 
     // Preload image to cache without displaying
     static void preload(const std::string& url);
+
+    // Preload full-size image to cache (for manga reader)
+    static void preloadFullSize(const std::string& url);
 
     // Clear image cache
     static void clearCache();
@@ -46,6 +52,7 @@ private:
         std::string url;
         LoadCallback callback;
         brls::Image* target;
+        bool fullSize;  // true = no downscaling
     };
 
     static void processQueue();

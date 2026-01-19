@@ -98,6 +98,7 @@ private:
     // UI components - NOBORU style
     BRLS_BIND(brls::Box, container, "reader/container");
     BRLS_BIND(RotatableImage, pageImage, "reader/page_image");
+    BRLS_BIND(RotatableImage, previewImage, "reader/preview_image");  // Preview page for swipe
     BRLS_BIND(brls::Box, topBar, "reader/top_bar");
     BRLS_BIND(brls::Box, bottomBar, "reader/bottom_bar");
     BRLS_BIND(brls::Box, pageCounter, "reader/page_counter");
@@ -149,12 +150,13 @@ private:
     brls::Point m_touchStart;
     brls::Point m_touchCurrent;
 
-    // NOBORU-style swipe animation (shows margins during swipe)
+    // NOBORU-style swipe animation (shows next/prev page sliding in)
     bool m_isSwipeAnimating = false;
     float m_swipeOffset = 0.0f;           // Current swipe offset in pixels
-    int m_targetPageIndex = -1;           // Index of page to navigate to (-1 = none)
+    int m_previewPageIndex = -1;          // Index of page being previewed (-1 = none)
     bool m_swipingToNext = true;          // true = swiping to next page, false = previous
-    void updateSwipeMargins(float offset);
+    void updateSwipePreview(float offset);
+    void loadPreviewPage(int index);
     void completeSwipeAnimation(bool turnPage);
     void resetSwipeState();
 

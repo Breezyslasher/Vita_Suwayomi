@@ -165,6 +165,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     const std::string& url = request.url;
     LoadCallback callback = request.callback;
     brls::Image* target = request.target;
+    bool fullSize = request.fullSize;
 
     HttpClient client;
 
@@ -224,13 +225,15 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             return;
         }
 
-        // Convert WebP to TGA if needed (with downscaling)
+        // Convert WebP to TGA if needed (with optional downscaling)
         std::vector<uint8_t> imageData;
         if (isWebP) {
+            // Only downscale for thumbnails, not full-size manga pages
+            int maxSize = fullSize ? 0 : s_maxThumbnailSize;
             imageData = convertWebPtoTGA(
                 reinterpret_cast<const uint8_t*>(resp.body.data()),
                 resp.body.size(),
-                s_maxThumbnailSize
+                maxSize
             );
             if (imageData.empty()) {
                 brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
@@ -248,7 +251,9 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
                 brls::Logger::debug("ImageLoader: Cache full, clearing {} entries", s_cache.size());
                 s_cache.clear();
             }
-            s_cache[url] = imageData;
+            // Use different cache key for full-size images
+            std::string cacheKey = fullSize ? (url + "_full") : url;
+            s_cache[cacheKey] = imageData;
         }
 
         // Update UI on main thread
@@ -277,10 +282,35 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
         }
     }
 
-    // Add to queue
+    // Add to queue (with thumbnail downscaling)
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_loadQueue.push({url, callback, target});
+        s_loadQueue.push({url, callback, target, false});
+    }
+
+    // Try to process queue
+    processQueue();
+}
+
+void ImageLoader::loadAsyncFullSize(const std::string& url, LoadCallback callback, brls::Image* target) {
+    if (url.empty() || !target) return;
+
+    // Check cache first (use different cache key for full size)
+    std::string cacheKey = url + "_full";
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        auto it = s_cache.find(cacheKey);
+        if (it != s_cache.end()) {
+            target->setImageFromMem(it->second.data(), it->second.size());
+            if (callback) callback(target);
+            return;
+        }
+    }
+
+    // Add to queue (without downscaling)
+    {
+        std::lock_guard<std::mutex> lock(s_queueMutex);
+        s_loadQueue.push({url, callback, target, true});
     }
 
     // Try to process queue
@@ -298,10 +328,31 @@ void ImageLoader::preload(const std::string& url) {
         }
     }
 
-    // Add to queue with null target
+    // Add to queue with null target (with downscaling)
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_loadQueue.push({url, nullptr, nullptr});
+        s_loadQueue.push({url, nullptr, nullptr, false});
+    }
+
+    processQueue();
+}
+
+void ImageLoader::preloadFullSize(const std::string& url) {
+    if (url.empty()) return;
+
+    // Check if already cached
+    std::string cacheKey = url + "_full";
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        if (s_cache.find(cacheKey) != s_cache.end()) {
+            return;
+        }
+    }
+
+    // Add to queue with null target (without downscaling)
+    {
+        std::lock_guard<std::mutex> lock(s_queueMutex);
+        s_loadQueue.push({url, nullptr, nullptr, true});
     }
 
     processQueue();

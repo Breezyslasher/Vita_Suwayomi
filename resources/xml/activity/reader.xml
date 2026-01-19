@@ -9,6 +9,17 @@
     alignItems="center"
     backgroundColor="#1a1a2e">
 
+    <!-- Preview page (slides in during swipe) - hidden by default, positioned off-screen -->
+    <RotatableImage
+        id="reader/preview_image"
+        width="100%"
+        height="100%"
+        scalingType="fit"
+        positionType="absolute"
+        positionTop="0"
+        positionLeft="0"
+        visibility="gone"/>
+
     <!-- Main page display area - fills entire screen (960x544) -->
     <!-- Background shows through when page doesn't fill screen (dark/light mode aware) -->
     <RotatableImage
