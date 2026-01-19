@@ -10,6 +10,7 @@
 
 #include <borealis.hpp>
 #include <cmath>
+#include <chrono>
 
 namespace vitasuwayomi {
 
@@ -104,44 +105,63 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // NOBORU-style touch handling
-    // Uses PanGestureRecognizer to track touch movement
-    // - Swipe threshold: 10px to detect swipe start
-    // - Page turn threshold: 90px to trigger page change
+    // NOBORU-style touch handling with enhanced swipe controls
+    // Features:
+    // - Responsive swipe detection with lower thresholds
+    // - Double-tap to zoom in/out
+    // - Tap to toggle UI controls
+    // - Swipe for page navigation respecting reading direction
     if (pageImage) {
         pageImage->setFocusable(true);
+
+        // Initialize double-tap tracking
+        m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+        m_lastTapPosition = {0, 0};
 
         // Pan gesture for swipe detection (NOBORU style)
         pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::START) {
-                    m_isPanning = false;  // Will be set to true if we move enough
+                    m_isPanning = false;
                     m_touchStart = status.position;
                     m_touchCurrent = status.position;
-                    brls::Logger::info("Touch START at ({}, {})", status.position.x, status.position.y);
                 } else if (status.state == brls::GestureState::END) {
                     m_touchCurrent = status.position;
 
-                    // Calculate distance moved (NOBORU style)
+                    // Calculate distance moved
                     float dx = m_touchCurrent.x - m_touchStart.x;
                     float dy = m_touchCurrent.y - m_touchStart.y;
                     float distance = std::sqrt(dx * dx + dy * dy);
 
-                    brls::Logger::info("Touch END: start=({},{}), end=({},{}), dx={}, dy={}, dist={}",
-                        m_touchStart.x, m_touchStart.y,
-                        m_touchCurrent.x, m_touchCurrent.y,
-                        dx, dy, distance);
+                    // NOBORU-style thresholds (more responsive)
+                    const float TAP_THRESHOLD = 15.0f;       // Max movement for tap
+                    const float PAGE_TURN_THRESHOLD = 50.0f; // Reduced for responsiveness
 
-                    // NOBORU thresholds: 10px for swipe detection, 90px for page turn
-                    const float SWIPE_DETECT_THRESHOLD = 10.0f;
-                    const float PAGE_TURN_THRESHOLD = 90.0f;
+                    if (distance < TAP_THRESHOLD) {
+                        // It's a tap - check for double-tap
+                        auto now = std::chrono::steady_clock::now();
+                        auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            now - m_lastTapTime).count();
 
-                    if (distance < SWIPE_DETECT_THRESHOLD) {
-                        // Too short - treat as tap
-                        brls::Logger::info("Tap detected (distance {} < {})", distance, SWIPE_DETECT_THRESHOLD);
-                        toggleControls();
+                        float tapDistance = std::sqrt(
+                            std::pow(status.position.x - m_lastTapPosition.x, 2) +
+                            std::pow(status.position.y - m_lastTapPosition.y, 2));
+
+                        if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
+                            tapDistance < DOUBLE_TAP_DISTANCE) {
+                            // Double-tap detected - toggle zoom
+                            brls::Logger::info("Double-tap detected - toggling zoom");
+                            handleDoubleTap(status.position);
+                            // Reset to prevent triple-tap
+                            m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+                        } else {
+                            // Single tap - toggle controls
+                            m_lastTapTime = now;
+                            m_lastTapPosition = status.position;
+                            toggleControls();
+                        }
                     } else {
-                        // It's a swipe - check if long enough to turn page
+                        // It's a swipe - check direction and turn page
                         m_isPanning = true;
 
                         float absX = std::abs(dx);
@@ -150,7 +170,6 @@ void ReaderActivity::onContentAvailable() {
                         if (absX > absY) {
                             // Horizontal swipe
                             if (absX >= PAGE_TURN_THRESHOLD) {
-                                brls::Logger::info("Horizontal page turn: dx={}", dx);
                                 if (dx > 0) {
                                     // Swipe right
                                     if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
@@ -166,22 +185,17 @@ void ReaderActivity::onContentAvailable() {
                                         nextPage();
                                     }
                                 }
-                            } else {
-                                brls::Logger::info("Horizontal swipe too short ({} < {})", absX, PAGE_TURN_THRESHOLD);
                             }
                         } else {
                             // Vertical swipe
                             if (absY >= PAGE_TURN_THRESHOLD) {
-                                brls::Logger::info("Vertical page turn: dy={}", dy);
                                 if (dy > 0) {
-                                    // Swipe down
+                                    // Swipe down = previous page
                                     previousPage();
                                 } else {
-                                    // Swipe up
+                                    // Swipe up = next page
                                     nextPage();
                                 }
-                            } else {
-                                brls::Logger::info("Vertical swipe too short ({} < {})", absY, PAGE_TURN_THRESHOLD);
                             }
                         }
                     }
@@ -191,7 +205,7 @@ void ReaderActivity::onContentAvailable() {
             }, brls::PanAxis::ANY));
     }
 
-    // Container fallback with same logic
+    // Container fallback with same NOBORU-style logic
     if (container) {
         container->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
@@ -202,11 +216,28 @@ void ReaderActivity::onContentAvailable() {
                     float dy = status.position.y - m_touchStart.y;
                     float distance = std::sqrt(dx * dx + dy * dy);
 
-                    const float SWIPE_DETECT_THRESHOLD = 10.0f;
-                    const float PAGE_TURN_THRESHOLD = 90.0f;
+                    const float TAP_THRESHOLD = 15.0f;
+                    const float PAGE_TURN_THRESHOLD = 50.0f;
 
-                    if (distance < SWIPE_DETECT_THRESHOLD) {
-                        toggleControls();
+                    if (distance < TAP_THRESHOLD) {
+                        // Check for double-tap
+                        auto now = std::chrono::steady_clock::now();
+                        auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            now - m_lastTapTime).count();
+
+                        float tapDistance = std::sqrt(
+                            std::pow(status.position.x - m_lastTapPosition.x, 2) +
+                            std::pow(status.position.y - m_lastTapPosition.y, 2));
+
+                        if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
+                            tapDistance < DOUBLE_TAP_DISTANCE) {
+                            handleDoubleTap(status.position);
+                            m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+                        } else {
+                            m_lastTapTime = now;
+                            m_lastTapPosition = status.position;
+                            toggleControls();
+                        }
                     } else if (std::abs(dx) > std::abs(dy) && std::abs(dx) >= PAGE_TURN_THRESHOLD) {
                         if (dx > 0) {
                             m_settings.direction == ReaderDirection::RIGHT_TO_LEFT ? nextPage() : previousPage();
@@ -678,6 +709,67 @@ void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
 void ReaderActivity::handleSwipe(brls::Point delta) {
     // Legacy function - swipe handling is now inline in gesture recognizers
     // Kept for compatibility with header declaration
+}
+
+void ReaderActivity::handleDoubleTap(brls::Point position) {
+    if (m_isZoomed) {
+        // Zoomed in - reset to normal view
+        resetZoom();
+    } else {
+        // Not zoomed - zoom in to 2x centered on tap position
+        zoomTo(2.0f, position);
+    }
+}
+
+void ReaderActivity::resetZoom() {
+    m_isZoomed = false;
+    m_zoomLevel = 1.0f;
+    m_zoomOffset = {0, 0};
+
+    if (pageImage) {
+        // Reset to fit scaling
+        pageImage->setScalingType(brls::ImageScalingType::FIT);
+        brls::Application::notify("Zoom: Fit");
+    }
+}
+
+void ReaderActivity::zoomTo(float level, brls::Point center) {
+    m_isZoomed = true;
+    m_zoomLevel = level;
+
+    if (pageImage) {
+        // Use FILL scaling for zoomed view
+        pageImage->setScalingType(brls::ImageScalingType::FILL);
+
+        std::string zoomText = "Zoom: " + std::to_string(static_cast<int>(level * 100)) + "%";
+        brls::Application::notify(zoomText);
+    }
+}
+
+void ReaderActivity::handlePinchZoom(float scaleFactor) {
+    // Pinch-to-zoom - scale by the pinch factor
+    float newZoom = m_zoomLevel * scaleFactor;
+
+    // Clamp zoom between 0.5x and 4x
+    newZoom = std::max(0.5f, std::min(4.0f, newZoom));
+
+    if (newZoom != m_zoomLevel) {
+        if (newZoom <= 1.05f && newZoom >= 0.95f) {
+            // Near 1x - snap to fit
+            resetZoom();
+        } else {
+            m_zoomLevel = newZoom;
+            m_isZoomed = (newZoom > 1.0f);
+
+            if (pageImage) {
+                if (m_isZoomed) {
+                    pageImage->setScalingType(brls::ImageScalingType::FILL);
+                } else {
+                    pageImage->setScalingType(brls::ImageScalingType::FIT);
+                }
+            }
+        }
+    }
 }
 
 } // namespace vitasuwayomi

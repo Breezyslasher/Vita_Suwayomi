@@ -166,7 +166,7 @@ void MangaItemCell::setManga(const Manga& manga) {
 
     // Show download badge if any chapters are downloaded locally
     if (m_downloadBadge) {
-        static const std::string ICON_CHECK = "\xEE\xA1\xAC";  // check_circle
+        static const std::string ICON_CHECK = "\xE2\x9C\x94";  // ✔ U+2714 heavy check mark
         DownloadsManager& dm = DownloadsManager::getInstance();
         DownloadItem* download = dm.getMangaDownload(manga.id);
         if (download != nullptr) {

@@ -410,12 +410,11 @@ void MangaDetailView::populateChaptersList() {
         }
 
         // Download button - shows state based on local download state
-        // Material Design icon codepoints (UTF-8):
-        // file_download: U+E2C4, check_circle: U+E86C, hourglass: U+E88B, error: U+E000
-        static const std::string ICON_DOWNLOAD = "\xEE\x8B\x84";      // file_download
-        static const std::string ICON_CHECK = "\xEE\xA1\xAC";         // check_circle
-        static const std::string ICON_HOURGLASS = "\xEE\xA2\x8B";     // hourglass_empty
-        static const std::string ICON_ERROR = "\xEE\x80\x80";         // error
+        // Using Unicode characters supported by DejaVuSans font
+        static const std::string ICON_DOWNLOAD = "\xE2\xAC\x87";      // ⬇ U+2B07 downwards arrow
+        static const std::string ICON_CHECK = "\xE2\x9C\x94";         // ✔ U+2714 heavy check mark
+        static const std::string ICON_HOURGLASS = "\xE2\x8F\xB3";     // ⏳ U+23F3 hourglass
+        static const std::string ICON_ERROR = "\xE2\x9C\x95";         // ✕ U+2715 multiplication x
 
         Chapter capturedChapter = chapter;
         auto* dlBtn = new brls::Button();

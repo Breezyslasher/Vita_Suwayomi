@@ -7,6 +7,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <chrono>
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "view/rotatable_image.hpp"
@@ -138,6 +139,29 @@ private:
     bool m_isPanning = false;
     brls::Point m_touchStart;
     brls::Point m_touchCurrent;
+
+    // NOBORU-style touch controls
+    // Double-tap detection
+    std::chrono::steady_clock::time_point m_lastTapTime;
+    brls::Point m_lastTapPosition;
+    static constexpr int DOUBLE_TAP_THRESHOLD_MS = 300;  // Max time between taps
+    static constexpr float DOUBLE_TAP_DISTANCE = 50.0f;  // Max distance between taps
+
+    // Zoom state
+    bool m_isZoomed = false;
+    float m_zoomLevel = 1.0f;
+    brls::Point m_zoomOffset = {0, 0};
+
+    // Multi-touch tracking for pinch-to-zoom
+    bool m_isPinching = false;
+    float m_initialPinchDistance = 0.0f;
+    float m_initialZoomLevel = 1.0f;
+
+    // Touch control methods
+    void handleDoubleTap(brls::Point position);
+    void handlePinchZoom(float scaleFactor);
+    void resetZoom();
+    void zoomTo(float level, brls::Point center);
 };
 
 } // namespace vitasuwayomi
