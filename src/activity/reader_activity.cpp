@@ -956,42 +956,34 @@ void ReaderActivity::showSettings() {
         brls::sync([this]() { showSettings(); });
     });
 
-    // Reading direction - full text, only show vertical if webtoon mode
-    std::string dirText;
-    switch (m_settings.direction) {
-        case ReaderDirection::LEFT_TO_RIGHT: dirText = "Left to Right"; break;
-        case ReaderDirection::RIGHT_TO_LEFT: dirText = "Right to Left"; break;
-        case ReaderDirection::TOP_TO_BOTTOM: dirText = "Vertical"; break;
-    }
-    dialog->addButton(dirText, [this]() {
-        // Cycle reading direction - only include vertical if webtoon mode
-        if (m_settings.isWebtoonFormat) {
-            // Webtoon mode: cycle through all directions
-            switch (m_settings.direction) {
-                case ReaderDirection::LEFT_TO_RIGHT:
-                    m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
-                    break;
-                case ReaderDirection::RIGHT_TO_LEFT:
-                    m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
-                    break;
-                case ReaderDirection::TOP_TO_BOTTOM:
-                    m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
-                    break;
-            }
-        } else {
-            // Manga mode: only LTR and RTL
+    // Reading direction - depends on mode
+    // Webtoon mode: only Vertical (no cycling)
+    // Manga mode: only LTR and RTL (toggle between them)
+    if (m_settings.isWebtoonFormat) {
+        // Webtoon mode - direction is locked to Vertical
+        dialog->addButton("Vertical", [this]() {
+            // No change - Vertical is the only option for webtoon
+            // Re-open settings dialog
+            brls::sync([this]() { showSettings(); });
+        });
+    } else {
+        // Manga mode - toggle between LTR and RTL
+        std::string dirText = (m_settings.direction == ReaderDirection::LEFT_TO_RIGHT)
+                              ? "Left to Right" : "Right to Left";
+        dialog->addButton(dirText, [this]() {
+            // Toggle between LTR and RTL
             if (m_settings.direction == ReaderDirection::LEFT_TO_RIGHT) {
                 m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
             } else {
                 m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
             }
-        }
-        updateDirectionLabel();
-        saveSettingsToApp();
+            updateDirectionLabel();
+            saveSettingsToApp();
 
-        // Re-open settings dialog
-        brls::sync([this]() { showSettings(); });
-    });
+            // Re-open settings dialog
+            brls::sync([this]() { showSettings(); });
+        });
+    }
 
     // Rotation
     std::string rotText;
