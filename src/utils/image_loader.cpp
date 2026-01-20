@@ -78,6 +78,97 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
     }
 }
 
+// Helper to create TGA from RGBA data
+static std::vector<uint8_t> createTGAFromRGBA(const uint8_t* rgba, int width, int height) {
+    size_t imageSize = width * height * 4;
+    std::vector<uint8_t> tgaData(18 + imageSize);
+
+    uint8_t* header = tgaData.data();
+    memset(header, 0, 18);
+    header[2] = 2;
+    header[12] = width & 0xFF;
+    header[13] = (width >> 8) & 0xFF;
+    header[14] = height & 0xFF;
+    header[15] = (height >> 8) & 0xFF;
+    header[16] = 32;
+    header[17] = 0x28;
+
+    uint8_t* pixels = tgaData.data() + 18;
+    for (int i = 0; i < width * height; i++) {
+        pixels[i * 4 + 0] = rgba[i * 4 + 2];  // B
+        pixels[i * 4 + 1] = rgba[i * 4 + 1];  // G
+        pixels[i * 4 + 2] = rgba[i * 4 + 0];  // R
+        pixels[i * 4 + 3] = rgba[i * 4 + 3];  // A
+    }
+
+    return tgaData;
+}
+
+// Get WebP image dimensions without decoding
+static bool getWebPDimensions(const uint8_t* webpData, size_t webpSize, int& width, int& height) {
+    return WebPGetInfo(webpData, webpSize, &width, &height) != 0;
+}
+
+// Calculate number of segments needed for a tall image
+static int calculateSegments(int width, int height, int maxSize) {
+    if (height <= maxSize) return 1;
+    // Split based on height, keeping each segment within maxSize
+    return (height + maxSize - 1) / maxSize;
+}
+
+// Convert WebP to TGA for a specific segment of a tall image
+static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, size_t webpSize,
+                                                     int segment, int totalSegments, int maxSize) {
+    std::vector<uint8_t> tgaData;
+
+    int width, height;
+    if (!WebPGetInfo(webpData, webpSize, &width, &height)) {
+        return tgaData;
+    }
+
+    uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &width, &height);
+    if (!rgba) {
+        return tgaData;
+    }
+
+    // Calculate segment bounds
+    int segmentHeight = (height + totalSegments - 1) / totalSegments;
+    int startY = segment * segmentHeight;
+    int endY = std::min(startY + segmentHeight, height);
+    int actualHeight = endY - startY;
+
+    // Scale down if still too wide
+    int targetW = width;
+    int targetH = actualHeight;
+    if (width > maxSize) {
+        float scale = (float)maxSize / width;
+        targetW = maxSize;
+        targetH = std::max(1, (int)(actualHeight * scale));
+    }
+
+    // Extract and optionally scale the segment
+    std::vector<uint8_t> segmentRgba;
+    if (targetW != width || targetH != actualHeight) {
+        // Need to scale - extract segment first, then scale
+        std::vector<uint8_t> extracted(width * actualHeight * 4);
+        memcpy(extracted.data(), rgba + (startY * width * 4), width * actualHeight * 4);
+
+        segmentRgba.resize(targetW * targetH * 4);
+        downscaleRGBA(extracted.data(), width, actualHeight, segmentRgba.data(), targetW, targetH);
+    } else {
+        // Just extract the segment
+        segmentRgba.resize(width * actualHeight * 4);
+        memcpy(segmentRgba.data(), rgba + (startY * width * 4), width * actualHeight * 4);
+    }
+
+    WebPFree(rgba);
+
+    brls::Logger::debug("ImageLoader: Segment {}/{} - {}x{} (from {}x{} startY={})",
+                        segment + 1, totalSegments, targetW, targetH, width, height, startY);
+
+    return createTGAFromRGBA(segmentRgba.data(), targetW, targetH);
+}
+
 // Helper function to convert WebP to TGA format with downscaling
 static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t webpSize, int maxSize) {
     std::vector<uint8_t> tgaData;
@@ -362,6 +453,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     const std::string& url = request.url;
     RotatableLoadCallback callback = request.callback;
     RotatableImage* target = request.target;
+    int segment = request.segment;
+    int totalSegments = request.totalSegments;
 
     HttpClient client;
 
@@ -416,20 +509,32 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
 
         // Convert WebP to TGA with size limit for Vita GPU (max texture 2048x2048)
-        // Webtoon images are often very tall and need to be downscaled
+        // Webtoon images are often very tall and may need to be split into segments
         const int MAX_TEXTURE_SIZE = 2048;
         std::vector<uint8_t> imageData;
         if (isWebP) {
-            imageData = convertWebPtoTGA(
-                reinterpret_cast<const uint8_t*>(resp.body.data()),
-                resp.body.size(),
-                MAX_TEXTURE_SIZE  // Limit size for Vita GPU
-            );
+            if (totalSegments > 1) {
+                // Loading a specific segment of a tall image
+                imageData = convertWebPtoTGASegment(
+                    reinterpret_cast<const uint8_t*>(resp.body.data()),
+                    resp.body.size(),
+                    segment,
+                    totalSegments,
+                    MAX_TEXTURE_SIZE
+                );
+                brls::Logger::info("ImageLoader: Loaded segment {}/{} of WebP", segment + 1, totalSegments);
+            } else {
+                // Normal loading with downscaling if needed
+                imageData = convertWebPtoTGA(
+                    reinterpret_cast<const uint8_t*>(resp.body.data()),
+                    resp.body.size(),
+                    MAX_TEXTURE_SIZE  // Limit size for Vita GPU
+                );
+            }
             if (imageData.empty()) {
                 brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
                 return;
             }
-            brls::Logger::debug("ImageLoader: Converted WebP with max size {}", MAX_TEXTURE_SIZE);
         } else {
             // For JPG/PNG, pass through directly
             // NVG will handle loading, but may fail for very large images
@@ -437,8 +542,11 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             brls::Logger::debug("ImageLoader: Using JPG/PNG directly ({} bytes)", imageData.size());
         }
 
-        // Cache the image
+        // Cache the image (include segment in key if segmented)
         std::string cacheKey = url + "_full";
+        if (totalSegments > 1) {
+            cacheKey += "_seg" + std::to_string(segment);
+        }
         {
             std::lock_guard<std::mutex> lock(s_cacheMutex);
             if (s_cache.size() > 50) {
@@ -477,7 +585,32 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
     // Add to rotatable queue
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_rotatableLoadQueue.push({url, callback, target});
+        s_rotatableLoadQueue.push({url, callback, target, 0, 1});  // segment=0, totalSegments=1
+    }
+
+    processQueue();
+}
+
+void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, int totalSegments,
+                                            RotatableLoadCallback callback, RotatableImage* target) {
+    if (url.empty() || !target) return;
+
+    // Check cache first (with segment key)
+    std::string cacheKey = url + "_full_seg" + std::to_string(segment);
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        auto it = s_cache.find(cacheKey);
+        if (it != s_cache.end()) {
+            target->setImageFromMem(it->second.data(), it->second.size());
+            if (callback) callback(target);
+            return;
+        }
+    }
+
+    // Add to rotatable queue with segment info
+    {
+        std::lock_guard<std::mutex> lock(s_queueMutex);
+        s_rotatableLoadQueue.push({url, callback, target, segment, totalSegments});
     }
 
     processQueue();
@@ -499,6 +632,100 @@ void ImageLoader::preload(const std::string& url) {
     }
 
     processQueue();
+}
+
+bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& height, int& suggestedSegments) {
+    // Maximum texture size for Vita GPU
+    const int MAX_TEXTURE_SIZE = 2048;
+
+    // Default values
+    width = 0;
+    height = 0;
+    suggestedSegments = 1;
+
+    if (url.empty()) return false;
+
+    HttpClient client;
+
+    // Add authentication if needed
+    if (!s_authUsername.empty() && !s_authPassword.empty()) {
+        std::string credentials = s_authUsername + ":" + s_authPassword;
+        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string encoded;
+        int val = 0, valb = -6;
+        for (unsigned char c : credentials) {
+            val = (val << 8) + c;
+            valb += 8;
+            while (valb >= 0) {
+                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                valb -= 6;
+            }
+        }
+        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+        while (encoded.size() % 4) encoded.push_back('=');
+        client.setDefaultHeader("Authorization", "Basic " + encoded);
+    }
+
+    HttpResponse resp = client.get(url);
+
+    if (!resp.success || resp.body.empty()) {
+        brls::Logger::warning("ImageLoader::getImageDimensions: failed to fetch {}", url);
+        return false;
+    }
+
+    // Check format and get dimensions
+    if (resp.body.size() < 12) return false;
+
+    unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
+
+    // WebP
+    if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+        data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
+        if (WebPGetInfo(data, resp.body.size(), &width, &height)) {
+            suggestedSegments = calculateSegments(width, height, MAX_TEXTURE_SIZE);
+            brls::Logger::info("ImageLoader: WebP {}x{} -> {} segments", width, height, suggestedSegments);
+            return true;
+        }
+    }
+    // PNG - dimensions at bytes 16-23
+    else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+        if (resp.body.size() >= 24) {
+            width = (data[16] << 24) | (data[17] << 16) | (data[18] << 8) | data[19];
+            height = (data[20] << 24) | (data[21] << 16) | (data[22] << 8) | data[23];
+            suggestedSegments = calculateSegments(width, height, MAX_TEXTURE_SIZE);
+            brls::Logger::info("ImageLoader: PNG {}x{} -> {} segments", width, height, suggestedSegments);
+            return true;
+        }
+    }
+    // JPEG - need to parse markers
+    else if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
+        // Simple JPEG parser - look for SOF0/SOF2 markers
+        size_t i = 2;
+        while (i + 8 < resp.body.size()) {
+            if (data[i] != 0xFF) {
+                i++;
+                continue;
+            }
+            uint8_t marker = data[i + 1];
+            // SOF0 (0xC0) or SOF2 (0xC2) contain dimensions
+            if (marker == 0xC0 || marker == 0xC2) {
+                height = (data[i + 5] << 8) | data[i + 6];
+                width = (data[i + 7] << 8) | data[i + 8];
+                suggestedSegments = calculateSegments(width, height, MAX_TEXTURE_SIZE);
+                brls::Logger::info("ImageLoader: JPEG {}x{} -> {} segments", width, height, suggestedSegments);
+                return true;
+            }
+            // Skip this marker segment
+            if (marker == 0xD8 || marker == 0xD9 || (marker >= 0xD0 && marker <= 0xD7)) {
+                i += 2;  // No length field
+            } else {
+                uint16_t len = (data[i + 2] << 8) | data[i + 3];
+                i += 2 + len;
+            }
+        }
+    }
+
+    return false;
 }
 
 void ImageLoader::preloadFullSize(const std::string& url) {

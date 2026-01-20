@@ -183,6 +183,11 @@ struct Page {
     int index = 0;
     std::string url;
     std::string imageUrl;
+
+    // For webtoon page splitting (tall images split into segments)
+    int segment = 0;        // Which segment of the original image (0 = first/only)
+    int totalSegments = 1;  // Total segments for this page (1 = not split)
+    int originalIndex = -1; // Original page index before splitting (-1 = not split)
 };
 
 // Recent chapter update
