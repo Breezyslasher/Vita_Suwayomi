@@ -732,23 +732,32 @@ void ReaderActivity::showSettings() {
 void ReaderActivity::applySettings() {
     if (!pageImage) return;
 
-    // Apply scaling mode - always use FIT to maintain aspect ratio
-    // This ensures the manga page is never stretched/distorted
-    // Margins will show when page doesn't fill screen (dark/light mode aware)
+    // Determine scaling type based on mode
+    brls::ImageScalingType scalingType = brls::ImageScalingType::FIT;
     switch (m_settings.scaleMode) {
         case ReaderScaleMode::FIT_SCREEN:
         case ReaderScaleMode::FIT_WIDTH:
         case ReaderScaleMode::FIT_HEIGHT:
-            pageImage->setScalingType(brls::ImageScalingType::FIT);
+            scalingType = brls::ImageScalingType::FIT;
             break;
         case ReaderScaleMode::ORIGINAL:
             // FILL maintains aspect ratio but may crop - closest to original
-            pageImage->setScalingType(brls::ImageScalingType::FILL);
+            scalingType = brls::ImageScalingType::FILL;
             break;
     }
 
-    // Apply rotation
-    pageImage->setRotation(static_cast<float>(m_settings.rotation));
+    // Apply scaling to both main and preview images
+    pageImage->setScalingType(scalingType);
+    if (previewImage) {
+        previewImage->setScalingType(scalingType);
+    }
+
+    // Apply rotation to both main and preview images
+    float rotation = static_cast<float>(m_settings.rotation);
+    pageImage->setRotation(rotation);
+    if (previewImage) {
+        previewImage->setRotation(rotation);
+    }
 }
 
 void ReaderActivity::handleTouch(brls::Point point) {
@@ -872,6 +881,9 @@ void ReaderActivity::loadPreviewPage(int index) {
     }
 
     if (!previewImage) return;
+
+    // Apply current rotation to preview image before loading
+    previewImage->setRotation(static_cast<float>(m_settings.rotation));
 
     std::string imageUrl = m_pages[index].imageUrl;
     brls::Logger::debug("Loading preview page {}", index);
