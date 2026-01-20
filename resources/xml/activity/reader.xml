@@ -108,11 +108,13 @@
         <brls:Button
             id="reader/settings_btn"
             style="borderless"
-            width="60"
+            width="auto"
             height="44"
+            paddingLeft="10"
+            paddingRight="10"
             marginLeft="15">
             <brls:Label
-                text="[SET]"
+                text="Settings"
                 fontSize="14"
                 textColor="#ffffff"
                 horizontalAlign="center"/>

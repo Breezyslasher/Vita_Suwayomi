@@ -778,22 +778,11 @@ void ReaderActivity::nextPage() {
         loadPage(m_currentPage);
         updateProgress();
     } else {
-        // End of chapter - mark as read
+        // End of chapter - mark as read and go to next automatically
         markChapterAsRead();
 
         if (m_chapterIndex < m_totalChapters - 1) {
-            auto* dialog = new brls::Dialog("End of chapter. Go to next?");
-            dialog->addButton("Next Chapter", [this]() {
-                // Use sync to safely navigate after dialog closes
-                brls::sync([this]() {
-                    nextChapter();
-                });
-            });
-            dialog->addButton("Stay", []() {
-                // Just close dialog, do nothing
-            });
-            dialog->setCancelable(true);
-            dialog->open();
+            nextChapter();
         } else {
             brls::Application::notify("End of manga");
         }
@@ -807,18 +796,8 @@ void ReaderActivity::previousPage() {
         loadPage(m_currentPage);
         updateProgress();
     } else if (m_chapterIndex > 0) {
-        auto* dialog = new brls::Dialog("Beginning of chapter. Go to previous?");
-        dialog->addButton("Previous Chapter", [this]() {
-            // Use sync to safely navigate after dialog closes
-            brls::sync([this]() {
-                previousChapter();
-            });
-        });
-        dialog->addButton("Stay", []() {
-            // Just close dialog, do nothing
-        });
-        dialog->setCancelable(true);
-        dialog->open();
+        // Beginning of chapter - go to previous chapter automatically
+        previousChapter();
     }
 }
 
@@ -972,33 +951,49 @@ void ReaderActivity::showSettings() {
         // Reload pages to apply/remove page splitting
         m_pages.clear();
         loadPages();
+
+        // Re-open settings dialog
+        brls::sync([this]() { showSettings(); });
     });
 
-    // Reading direction with rotation-aware swipe
+    // Reading direction - full text, only show vertical if webtoon mode
     std::string dirText;
     switch (m_settings.direction) {
-        case ReaderDirection::LEFT_TO_RIGHT: dirText = "LTR"; break;
-        case ReaderDirection::RIGHT_TO_LEFT: dirText = "RTL"; break;
+        case ReaderDirection::LEFT_TO_RIGHT: dirText = "Left to Right"; break;
+        case ReaderDirection::RIGHT_TO_LEFT: dirText = "Right to Left"; break;
         case ReaderDirection::TOP_TO_BOTTOM: dirText = "Vertical"; break;
     }
     dialog->addButton(dirText, [this]() {
-        // Cycle reading direction
-        switch (m_settings.direction) {
-            case ReaderDirection::LEFT_TO_RIGHT:
+        // Cycle reading direction - only include vertical if webtoon mode
+        if (m_settings.isWebtoonFormat) {
+            // Webtoon mode: cycle through all directions
+            switch (m_settings.direction) {
+                case ReaderDirection::LEFT_TO_RIGHT:
+                    m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
+                    break;
+                case ReaderDirection::RIGHT_TO_LEFT:
+                    m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
+                    break;
+                case ReaderDirection::TOP_TO_BOTTOM:
+                    m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
+                    break;
+            }
+        } else {
+            // Manga mode: only LTR and RTL
+            if (m_settings.direction == ReaderDirection::LEFT_TO_RIGHT) {
                 m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
-                break;
-            case ReaderDirection::RIGHT_TO_LEFT:
-                m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
-                break;
-            case ReaderDirection::TOP_TO_BOTTOM:
+            } else {
                 m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
-                break;
+            }
         }
         updateDirectionLabel();
         saveSettingsToApp();
+
+        // Re-open settings dialog
+        brls::sync([this]() { showSettings(); });
     });
 
-    // Rotation (shorter labels)
+    // Rotation
     std::string rotText;
     switch (m_settings.rotation) {
         case ImageRotation::ROTATE_0: rotText = "0\u00B0"; break;
@@ -1023,6 +1018,9 @@ void ReaderActivity::showSettings() {
         }
         applySettings();
         saveSettingsToApp();
+
+        // Re-open settings dialog
+        brls::sync([this]() { showSettings(); });
     });
 
     dialog->setCancelable(true);
