@@ -303,6 +303,33 @@ void ReaderActivity::onContentAvailable() {
         m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
         m_lastTapPosition = {0, 0};
 
+        // Tap gesture for instant controls toggle (no hold delay)
+        pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    // Check for double-tap
+                    auto now = std::chrono::steady_clock::now();
+                    auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now - m_lastTapTime).count();
+
+                    float tapDistance = std::sqrt(
+                        std::pow(status.position.x - m_lastTapPosition.x, 2) +
+                        std::pow(status.position.y - m_lastTapPosition.y, 2));
+
+                    if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
+                        tapDistance < DOUBLE_TAP_DISTANCE) {
+                        // Double-tap - zoom toggle
+                        handleDoubleTap(status.position);
+                        m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+                    } else {
+                        // Single tap - toggle controls immediately
+                        m_lastTapTime = now;
+                        m_lastTapPosition = status.position;
+                        toggleControls();
+                    }
+                }
+            }));
+
         // Pan gesture for swipe detection (NOBORU style with page preview)
         // Swipe direction changes based on rotation:
         // - 0°/180°: horizontal swipes (left/right)
@@ -374,26 +401,7 @@ void ReaderActivity::onContentAvailable() {
                     float rawDelta = useVerticalSwipe ? dy : dx;
 
                     if (distance < TAP_THRESHOLD) {
-                        // It's a tap - check for double-tap
-                        auto now = std::chrono::steady_clock::now();
-                        auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            now - m_lastTapTime).count();
-
-                        float tapDistance = std::sqrt(
-                            std::pow(status.position.x - m_lastTapPosition.x, 2) +
-                            std::pow(status.position.y - m_lastTapPosition.y, 2));
-
-                        if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
-                            tapDistance < DOUBLE_TAP_DISTANCE) {
-                            // Double-tap detected - toggle zoom
-                            handleDoubleTap(status.position);
-                            m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
-                        } else {
-                            // Single tap - toggle controls
-                            m_lastTapTime = now;
-                            m_lastTapPosition = status.position;
-                            toggleControls();
-                        }
+                        // It's a tap - handled by TapGestureRecognizer for instant response
                         resetSwipeState();
                     } else if (m_isSwipeAnimating) {
                         // Complete swipe animation - use raw delta for threshold
@@ -429,9 +437,34 @@ void ReaderActivity::onContentAvailable() {
 
     // Container fallback - simpler touch handling without preview
     if (container) {
+        // Tap gesture for instant controls toggle on container
+        container->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    // Check for double-tap
+                    auto now = std::chrono::steady_clock::now();
+                    auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now - m_lastTapTime).count();
+
+                    float tapDistance = std::sqrt(
+                        std::pow(status.position.x - m_lastTapPosition.x, 2) +
+                        std::pow(status.position.y - m_lastTapPosition.y, 2));
+
+                    if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
+                        tapDistance < DOUBLE_TAP_DISTANCE) {
+                        handleDoubleTap(status.position);
+                        m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+                    } else {
+                        m_lastTapTime = now;
+                        m_lastTapPosition = status.position;
+                        toggleControls();
+                    }
+                }
+            }));
+
+        // Pan gesture for swipe navigation on container
         container->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-                const float TAP_THRESHOLD = 15.0f;
                 const float PAGE_TURN_THRESHOLD = 80.0f;
 
                 if (status.state == brls::GestureState::START) {
@@ -439,28 +472,9 @@ void ReaderActivity::onContentAvailable() {
                 } else if (status.state == brls::GestureState::END) {
                     float dx = status.position.x - m_touchStart.x;
                     float dy = status.position.y - m_touchStart.y;
-                    float distance = std::sqrt(dx * dx + dy * dy);
 
-                    if (distance < TAP_THRESHOLD) {
-                        // Check for double-tap
-                        auto now = std::chrono::steady_clock::now();
-                        auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            now - m_lastTapTime).count();
-
-                        float tapDistance = std::sqrt(
-                            std::pow(status.position.x - m_lastTapPosition.x, 2) +
-                            std::pow(status.position.y - m_lastTapPosition.y, 2));
-
-                        if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
-                            tapDistance < DOUBLE_TAP_DISTANCE) {
-                            handleDoubleTap(status.position);
-                            m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
-                        } else {
-                            m_lastTapTime = now;
-                            m_lastTapPosition = status.position;
-                            toggleControls();
-                        }
-                    } else if (std::abs(dx) > std::abs(dy) && std::abs(dx) >= PAGE_TURN_THRESHOLD) {
+                    // Only process swipes, not taps (handled by TapGestureRecognizer)
+                    if (std::abs(dx) > std::abs(dy) && std::abs(dx) >= PAGE_TURN_THRESHOLD) {
                         if (dx > 0) {
                             m_settings.direction == ReaderDirection::RIGHT_TO_LEFT ? nextPage() : previousPage();
                         } else {
