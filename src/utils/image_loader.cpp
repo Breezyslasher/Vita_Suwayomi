@@ -50,6 +50,7 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
 }
 
 // Helper function to convert WebP to TGA format with optional downscaling
+// Adds a 1-pixel transparent border to prevent GPU edge clamping artifacts
 static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t webpSize, int maxSize) {
     std::vector<uint8_t> tgaData;
 
@@ -94,27 +95,38 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
         finalRgba = scaledRgba.data();
     }
 
-    // Create TGA file in memory
-    size_t imageSize = targetW * targetH * 4;
+    // Add 1-pixel transparent border to prevent GPU edge clamping artifacts
+    // This ensures that when the GPU samples at texture edges, it gets transparent
+    // pixels instead of stretching the edge content
+    const int BORDER = 1;
+    int paddedW = targetW + (BORDER * 2);
+    int paddedH = targetH + (BORDER * 2);
+
+    // Create TGA file in memory with padded dimensions
+    size_t imageSize = paddedW * paddedH * 4;
     tgaData.resize(18 + imageSize);
 
     // TGA header
     uint8_t* header = tgaData.data();
     memset(header, 0, 18);
     header[2] = 2;          // Uncompressed true-color image
-    header[12] = targetW & 0xFF;
-    header[13] = (targetW >> 8) & 0xFF;
-    header[14] = targetH & 0xFF;
-    header[15] = (targetH >> 8) & 0xFF;
+    header[12] = paddedW & 0xFF;
+    header[13] = (paddedW >> 8) & 0xFF;
+    header[14] = paddedH & 0xFF;
+    header[15] = (paddedH >> 8) & 0xFF;
     header[16] = 32;        // 32 bits per pixel (RGBA)
     header[17] = 0x28;      // Image descriptor: top-left origin + 8 alpha bits
 
-    // Convert RGBA to BGRA for TGA
+    // Initialize all pixels to transparent (prevents edge artifacts)
     uint8_t* pixels = tgaData.data() + 18;
+    memset(pixels, 0, imageSize);
+
+    // Copy image data with border offset, converting RGBA to BGRA
     for (int y = 0; y < targetH; y++) {
         for (int x = 0; x < targetW; x++) {
             int srcIdx = (y * targetW + x) * 4;
-            int dstIdx = (y * targetW + x) * 4;
+            // Offset by border in destination
+            int dstIdx = ((y + BORDER) * paddedW + (x + BORDER)) * 4;
             pixels[dstIdx + 0] = finalRgba[srcIdx + 2];  // B
             pixels[dstIdx + 1] = finalRgba[srcIdx + 1];  // G
             pixels[dstIdx + 2] = finalRgba[srcIdx + 0];  // R
@@ -125,7 +137,8 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
     // Free WebP decoded data
     WebPFree(rgba);
 
-    brls::Logger::debug("ImageLoader: Converted WebP to TGA {}x{} ({} bytes)", targetW, targetH, tgaData.size());
+    brls::Logger::debug("ImageLoader: Converted WebP to TGA {}x{} (padded to {}x{}, {} bytes)",
+                        targetW, targetH, paddedW, paddedH, tgaData.size());
     return tgaData;
 }
 
