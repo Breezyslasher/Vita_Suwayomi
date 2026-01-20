@@ -333,6 +333,90 @@ bool Application::loadSettings() {
     m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
     m_settings.showDownloadedBadge = extractBool("showDownloadedBadge", true);
 
+    // Load per-manga reader settings
+    m_settings.mangaReaderSettings.clear();
+    size_t mangaSettingsPos = content.find("\"mangaReaderSettings\"");
+    if (mangaSettingsPos != std::string::npos) {
+        size_t openBrace = content.find('{', mangaSettingsPos + 21);
+        if (openBrace != std::string::npos) {
+            // Find matching close brace
+            int braceCount = 1;
+            size_t pos = openBrace + 1;
+            size_t closeBrace = std::string::npos;
+            while (pos < content.length() && braceCount > 0) {
+                if (content[pos] == '{') braceCount++;
+                else if (content[pos] == '}') braceCount--;
+                if (braceCount == 0) closeBrace = pos;
+                pos++;
+            }
+
+            if (closeBrace != std::string::npos) {
+                std::string mangaJson = content.substr(openBrace + 1, closeBrace - openBrace - 1);
+
+                // Parse each manga entry: "123": {...}
+                size_t searchPos = 0;
+                while (searchPos < mangaJson.length()) {
+                    size_t quoteStart = mangaJson.find('"', searchPos);
+                    if (quoteStart == std::string::npos) break;
+
+                    size_t quoteEnd = mangaJson.find('"', quoteStart + 1);
+                    if (quoteEnd == std::string::npos) break;
+
+                    std::string mangaIdStr = mangaJson.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+                    int mangaId = atoi(mangaIdStr.c_str());
+
+                    if (mangaId > 0) {
+                        size_t entryBrace = mangaJson.find('{', quoteEnd);
+                        size_t entryEnd = mangaJson.find('}', entryBrace);
+                        if (entryBrace != std::string::npos && entryEnd != std::string::npos) {
+                            std::string entryJson = mangaJson.substr(entryBrace, entryEnd - entryBrace + 1);
+
+                            MangaReaderSettings settings;
+
+                            // Extract readingMode
+                            size_t rmPos = entryJson.find("\"readingMode\"");
+                            if (rmPos != std::string::npos) {
+                                size_t colonPos = entryJson.find(':', rmPos);
+                                if (colonPos != std::string::npos) {
+                                    int val = atoi(entryJson.c_str() + colonPos + 1);
+                                    settings.readingMode = static_cast<ReadingMode>(val);
+                                }
+                            }
+
+                            // Extract pageScaleMode
+                            size_t psPos = entryJson.find("\"pageScaleMode\"");
+                            if (psPos != std::string::npos) {
+                                size_t colonPos = entryJson.find(':', psPos);
+                                if (colonPos != std::string::npos) {
+                                    int val = atoi(entryJson.c_str() + colonPos + 1);
+                                    settings.pageScaleMode = static_cast<PageScaleMode>(val);
+                                }
+                            }
+
+                            // Extract imageRotation
+                            size_t irPos = entryJson.find("\"imageRotation\"");
+                            if (irPos != std::string::npos) {
+                                size_t colonPos = entryJson.find(':', irPos);
+                                if (colonPos != std::string::npos) {
+                                    settings.imageRotation = atoi(entryJson.c_str() + colonPos + 1);
+                                }
+                            }
+
+                            m_settings.mangaReaderSettings[mangaId] = settings;
+                            searchPos = entryEnd + 1;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        searchPos = quoteEnd + 1;
+                    }
+                }
+
+                brls::Logger::debug("Loaded {} per-manga reader settings", m_settings.mangaReaderSettings.size());
+            }
+        }
+    }
+
     // Load auth credentials (stored separately for security)
     m_authUsername = extractString("authUsername");
     m_authPassword = extractString("authPassword");
@@ -403,7 +487,21 @@ bool Application::saveSettings() {
 
     // Display settings
     json += "  \"showUnreadBadge\": " + std::string(m_settings.showUnreadBadge ? "true" : "false") + ",\n";
-    json += "  \"showDownloadedBadge\": " + std::string(m_settings.showDownloadedBadge ? "true" : "false") + "\n";
+    json += "  \"showDownloadedBadge\": " + std::string(m_settings.showDownloadedBadge ? "true" : "false") + ",\n";
+
+    // Per-manga reader settings
+    json += "  \"mangaReaderSettings\": {";
+    bool firstManga = true;
+    for (const auto& pair : m_settings.mangaReaderSettings) {
+        if (!firstManga) json += ",";
+        firstManga = false;
+        json += "\n    \"" + std::to_string(pair.first) + "\": {";
+        json += "\"readingMode\": " + std::to_string(static_cast<int>(pair.second.readingMode)) + ", ";
+        json += "\"pageScaleMode\": " + std::to_string(static_cast<int>(pair.second.pageScaleMode)) + ", ";
+        json += "\"imageRotation\": " + std::to_string(pair.second.imageRotation) + "}";
+    }
+    if (!m_settings.mangaReaderSettings.empty()) json += "\n  ";
+    json += "}\n";
 
     json += "}\n";
 

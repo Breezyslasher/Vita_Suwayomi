@@ -9,6 +9,7 @@
 #include <functional>
 #include <mutex>
 #include <set>
+#include <map>
 
 // Application version
 #define VITA_SUWAYOMI_VERSION "1.0.0"
@@ -53,6 +54,13 @@ enum class ReaderBackground {
     GRAY = 2
 };
 
+// Per-manga reader settings (overrides defaults when set)
+struct MangaReaderSettings {
+    ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;
+    PageScaleMode pageScaleMode = PageScaleMode::FIT_SCREEN;
+    int imageRotation = 0;  // 0, 90, 180, or 270 degrees
+};
+
 // Application settings structure
 struct AppSettings {
     // UI Settings
@@ -89,6 +97,10 @@ struct AppSettings {
     // Display Settings
     bool showUnreadBadge = true;
     bool showDownloadedBadge = true;
+
+    // Per-manga reader settings (keyed by manga ID)
+    // If a manga has custom settings, they override the defaults above
+    std::map<int, MangaReaderSettings> mangaReaderSettings;
 };
 
 /**

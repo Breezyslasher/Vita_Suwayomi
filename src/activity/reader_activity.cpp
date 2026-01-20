@@ -38,11 +38,27 @@ brls::View* ReaderActivity::createContentView() {
 void ReaderActivity::onContentAvailable() {
     brls::Logger::debug("ReaderActivity: content available");
 
-    // Load settings from AppSettings
+    // Load settings - check for per-manga settings first, then use global defaults
     AppSettings& appSettings = Application::getInstance().getSettings();
 
+    // Check if this manga has custom settings
+    ReadingMode readingMode = appSettings.readingMode;
+    PageScaleMode pageScaleMode = appSettings.pageScaleMode;
+    int imageRotation = appSettings.imageRotation;
+
+    auto it = appSettings.mangaReaderSettings.find(m_mangaId);
+    if (it != appSettings.mangaReaderSettings.end()) {
+        // Use per-manga settings
+        readingMode = it->second.readingMode;
+        pageScaleMode = it->second.pageScaleMode;
+        imageRotation = it->second.imageRotation;
+        brls::Logger::debug("ReaderActivity: using per-manga settings for manga {}", m_mangaId);
+    } else {
+        brls::Logger::debug("ReaderActivity: using global default settings for manga {}", m_mangaId);
+    }
+
     // Map ReadingMode to ReaderDirection
-    switch (appSettings.readingMode) {
+    switch (readingMode) {
         case ReadingMode::LEFT_TO_RIGHT:
             m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
             break;
@@ -56,7 +72,7 @@ void ReaderActivity::onContentAvailable() {
     }
 
     // Map imageRotation to ImageRotation enum
-    switch (appSettings.imageRotation) {
+    switch (imageRotation) {
         case 90:  m_settings.rotation = ImageRotation::ROTATE_90; break;
         case 180: m_settings.rotation = ImageRotation::ROTATE_180; break;
         case 270: m_settings.rotation = ImageRotation::ROTATE_270; break;
@@ -64,7 +80,7 @@ void ReaderActivity::onContentAvailable() {
     }
 
     // Map PageScaleMode to ReaderScaleMode
-    switch (appSettings.pageScaleMode) {
+    switch (pageScaleMode) {
         case PageScaleMode::FIT_SCREEN:
             m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
             break;
@@ -203,18 +219,20 @@ void ReaderActivity::onContentAvailable() {
                     float dx = m_touchCurrent.x - m_touchStart.x;
                     float dy = m_touchCurrent.y - m_touchStart.y;
 
-                    // Get effective swipe delta based on rotation
-                    float swipeDelta = useVerticalSwipe ? dy : dx;
+                    // Raw delta follows the finger (for visual feedback)
+                    float rawDelta = useVerticalSwipe ? dy : dx;
                     float crossDelta = useVerticalSwipe ? dx : dy;
-                    if (invertDirection) swipeDelta = -swipeDelta;
+
+                    // Logical delta accounts for rotation inversion (for page turn logic)
+                    float logicalDelta = invertDirection ? -rawDelta : rawDelta;
 
                     // Only track swipes in the primary direction
-                    if (std::abs(swipeDelta) > std::abs(crossDelta) && std::abs(swipeDelta) > SWIPE_START_THRESHOLD) {
+                    if (std::abs(rawDelta) > std::abs(crossDelta) && std::abs(rawDelta) > SWIPE_START_THRESHOLD) {
                         m_isSwipeAnimating = true;
-                        m_swipeOffset = swipeDelta;
+                        m_swipeOffset = rawDelta;  // Store raw for visual
 
-                        // Determine which page we're swiping to based on direction
-                        bool swipingPositive = swipeDelta > 0;
+                        // Determine which page we're swiping to based on logical direction
+                        bool swipingPositive = logicalDelta > 0;
                         bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingPositive : !swipingPositive;
 
                         int previewIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
@@ -227,8 +245,8 @@ void ReaderActivity::onContentAvailable() {
                             loadPreviewPage(previewIndex);
                         }
 
-                        // Update visual positions - show preview page sliding in
-                        updateSwipePreview(swipeDelta);
+                        // Update visual positions - page follows finger (use raw delta)
+                        updateSwipePreview(rawDelta);
                     }
                 } else if (status.state == brls::GestureState::END) {
                     m_touchCurrent = status.position;
@@ -238,9 +256,8 @@ void ReaderActivity::onContentAvailable() {
                     float dy = m_touchCurrent.y - m_touchStart.y;
                     float distance = std::sqrt(dx * dx + dy * dy);
 
-                    // Get effective swipe delta based on rotation
-                    float swipeDelta = useVerticalSwipe ? dy : dx;
-                    if (invertDirection) swipeDelta = -swipeDelta;
+                    // Raw delta for threshold checking (how far finger actually moved)
+                    float rawDelta = useVerticalSwipe ? dy : dx;
 
                     if (distance < TAP_THRESHOLD) {
                         // It's a tap - check for double-tap
@@ -265,8 +282,8 @@ void ReaderActivity::onContentAvailable() {
                         }
                         resetSwipeState();
                     } else if (m_isSwipeAnimating) {
-                        // Complete swipe animation
-                        float absSwipe = std::abs(swipeDelta);
+                        // Complete swipe animation - use raw delta for threshold
+                        float absSwipe = std::abs(rawDelta);
 
                         if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
                             // Swipe was long enough - turn the page
@@ -277,11 +294,12 @@ void ReaderActivity::onContentAvailable() {
                         }
                     } else {
                         // Secondary axis swipe (fallback navigation)
+                        // Use logical inversion for correct page direction
                         float crossDelta = useVerticalSwipe ? dx : dy;
-                        if (invertDirection) crossDelta = -crossDelta;
+                        float logicalCross = invertDirection ? -crossDelta : crossDelta;
 
                         if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
-                            if (crossDelta > 0) {
+                            if (logicalCross > 0) {
                                 previousPage();
                             } else {
                                 nextPage();
@@ -833,41 +851,47 @@ void ReaderActivity::applySettings() {
 void ReaderActivity::saveSettingsToApp() {
     AppSettings& appSettings = Application::getInstance().getSettings();
 
+    // Save per-manga settings (not global defaults)
+    MangaReaderSettings mangaSettings;
+
     // Map ReaderDirection to ReadingMode
     switch (m_settings.direction) {
         case ReaderDirection::LEFT_TO_RIGHT:
-            appSettings.readingMode = ReadingMode::LEFT_TO_RIGHT;
+            mangaSettings.readingMode = ReadingMode::LEFT_TO_RIGHT;
             break;
         case ReaderDirection::RIGHT_TO_LEFT:
-            appSettings.readingMode = ReadingMode::RIGHT_TO_LEFT;
+            mangaSettings.readingMode = ReadingMode::RIGHT_TO_LEFT;
             break;
         case ReaderDirection::TOP_TO_BOTTOM:
-            appSettings.readingMode = ReadingMode::VERTICAL;
+            mangaSettings.readingMode = ReadingMode::VERTICAL;
             break;
     }
 
     // Map ImageRotation to imageRotation int
-    appSettings.imageRotation = static_cast<int>(m_settings.rotation);
+    mangaSettings.imageRotation = static_cast<int>(m_settings.rotation);
 
     // Map ReaderScaleMode to PageScaleMode
     switch (m_settings.scaleMode) {
         case ReaderScaleMode::FIT_SCREEN:
-            appSettings.pageScaleMode = PageScaleMode::FIT_SCREEN;
+            mangaSettings.pageScaleMode = PageScaleMode::FIT_SCREEN;
             break;
         case ReaderScaleMode::FIT_WIDTH:
-            appSettings.pageScaleMode = PageScaleMode::FIT_WIDTH;
+            mangaSettings.pageScaleMode = PageScaleMode::FIT_WIDTH;
             break;
         case ReaderScaleMode::FIT_HEIGHT:
-            appSettings.pageScaleMode = PageScaleMode::FIT_HEIGHT;
+            mangaSettings.pageScaleMode = PageScaleMode::FIT_HEIGHT;
             break;
         case ReaderScaleMode::ORIGINAL:
-            appSettings.pageScaleMode = PageScaleMode::ORIGINAL;
+            mangaSettings.pageScaleMode = PageScaleMode::ORIGINAL;
             break;
     }
 
+    // Store per-manga settings (overrides defaults for this manga)
+    appSettings.mangaReaderSettings[m_mangaId] = mangaSettings;
+
     // Save to disk
     Application::getInstance().saveSettings();
-    brls::Logger::debug("ReaderActivity: saved settings to AppSettings");
+    brls::Logger::debug("ReaderActivity: saved per-manga settings for manga {}", m_mangaId);
 }
 
 void ReaderActivity::handleTouch(brls::Point point) {
