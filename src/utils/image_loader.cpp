@@ -415,20 +415,26 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             return;
         }
 
-        // Convert WebP to TGA if needed (no downscaling for manga pages)
+        // Convert WebP to TGA with size limit for Vita GPU (max texture 2048x2048)
+        // Webtoon images are often very tall and need to be downscaled
+        const int MAX_TEXTURE_SIZE = 2048;
         std::vector<uint8_t> imageData;
         if (isWebP) {
             imageData = convertWebPtoTGA(
                 reinterpret_cast<const uint8_t*>(resp.body.data()),
                 resp.body.size(),
-                0  // No downscaling
+                MAX_TEXTURE_SIZE  // Limit size for Vita GPU
             );
             if (imageData.empty()) {
                 brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
                 return;
             }
+            brls::Logger::debug("ImageLoader: Converted WebP with max size {}", MAX_TEXTURE_SIZE);
         } else {
+            // For JPG/PNG, pass through directly
+            // NVG will handle loading, but may fail for very large images
             imageData.assign(resp.body.begin(), resp.body.end());
+            brls::Logger::debug("ImageLoader: Using JPG/PNG directly ({} bytes)", imageData.size());
         }
 
         // Cache the image

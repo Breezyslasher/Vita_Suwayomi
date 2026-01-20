@@ -603,16 +603,17 @@ void ReaderActivity::loadPage(int index) {
 }
 
 void ReaderActivity::preloadAdjacentPages() {
-    // Preload next page
-    if (m_currentPage + 1 < static_cast<int>(m_pages.size())) {
-        std::string nextUrl = m_pages[m_currentPage + 1].imageUrl;
-        ImageLoader::preloadFullSize(nextUrl);
+    // Preload next 3 pages for smoother swiping/reading
+    for (int i = 1; i <= 3; i++) {
+        int nextIdx = m_currentPage + i;
+        if (nextIdx < static_cast<int>(m_pages.size())) {
+            ImageLoader::preloadFullSize(m_pages[nextIdx].imageUrl);
+        }
     }
 
-    // Preload previous page
+    // Preload previous page (for going back)
     if (m_currentPage > 0) {
-        std::string prevUrl = m_pages[m_currentPage - 1].imageUrl;
-        ImageLoader::preloadFullSize(prevUrl);
+        ImageLoader::preloadFullSize(m_pages[m_currentPage - 1].imageUrl);
     }
 }
 
