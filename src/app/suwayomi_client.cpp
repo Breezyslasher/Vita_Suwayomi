@@ -1199,6 +1199,222 @@ bool SuwayomiClient::setMangaCategoriesGraphQL(int mangaId, const std::vector<in
     return !response.empty();
 }
 
+bool SuwayomiClient::fetchMangaMetaGraphQL(int mangaId, std::map<std::string, std::string>& meta) {
+    const char* query = R"(
+        query GetMangaMeta($id: Int!) {
+            manga(id: $id) {
+                id
+                meta {
+                    key
+                    value
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) + "}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (response.empty()) {
+        brls::Logger::warning("Failed to fetch manga meta for manga {}", mangaId);
+        return false;
+    }
+
+    meta.clear();
+
+    // Parse the meta array from response
+    // Response format: {"data":{"manga":{"id":123,"meta":[{"key":"k1","value":"v1"},...]}}
+    size_t metaPos = response.find("\"meta\"");
+    if (metaPos == std::string::npos) {
+        brls::Logger::debug("No meta field found for manga {}", mangaId);
+        return true;  // No meta is valid
+    }
+
+    size_t arrayStart = response.find('[', metaPos);
+    size_t arrayEnd = response.find(']', arrayStart);
+    if (arrayStart == std::string::npos || arrayEnd == std::string::npos) {
+        return true;  // Empty or invalid meta
+    }
+
+    std::string metaArray = response.substr(arrayStart, arrayEnd - arrayStart + 1);
+
+    // Parse each meta entry
+    size_t pos = 0;
+    while ((pos = metaArray.find("{\"key\"", pos)) != std::string::npos) {
+        // Extract key
+        size_t keyStart = metaArray.find("\"key\"", pos);
+        if (keyStart == std::string::npos) break;
+        keyStart = metaArray.find("\"", keyStart + 5);  // Skip to opening quote of value
+        if (keyStart == std::string::npos) break;
+        keyStart++;
+        size_t keyEnd = metaArray.find("\"", keyStart);
+        if (keyEnd == std::string::npos) break;
+        std::string key = metaArray.substr(keyStart, keyEnd - keyStart);
+
+        // Extract value
+        size_t valueStart = metaArray.find("\"value\"", keyEnd);
+        if (valueStart == std::string::npos) break;
+        valueStart = metaArray.find("\"", valueStart + 7);  // Skip to opening quote of value
+        if (valueStart == std::string::npos) break;
+        valueStart++;
+        size_t valueEnd = metaArray.find("\"", valueStart);
+        if (valueEnd == std::string::npos) break;
+        std::string value = metaArray.substr(valueStart, valueEnd - valueStart);
+
+        meta[key] = value;
+        pos = valueEnd + 1;
+    }
+
+    brls::Logger::debug("Fetched {} meta entries for manga {}", meta.size(), mangaId);
+    return true;
+}
+
+bool SuwayomiClient::setMangaMetaGraphQL(int mangaId, const std::string& key, const std::string& value) {
+    const char* query = R"(
+        mutation SetMangaMeta($id: Int!, $key: String!, $value: String!) {
+            setMangaMeta(input: { meta: { mangaId: $id, key: $key, value: $value } }) {
+                meta {
+                    key
+                    value
+                }
+            }
+        }
+    )";
+
+    // Escape special characters in key and value for JSON
+    std::string escapedKey = key;
+    std::string escapedValue = value;
+    // Basic JSON escaping for quotes
+    size_t pos = 0;
+    while ((pos = escapedKey.find("\"", pos)) != std::string::npos) {
+        escapedKey.replace(pos, 1, "\\\"");
+        pos += 2;
+    }
+    pos = 0;
+    while ((pos = escapedValue.find("\"", pos)) != std::string::npos) {
+        escapedValue.replace(pos, 1, "\\\"");
+        pos += 2;
+    }
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) +
+                            ",\"key\":\"" + escapedKey +
+                            "\",\"value\":\"" + escapedValue + "\"}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (!response.empty()) {
+        brls::Logger::debug("Set manga meta: {}={} for manga {}", key, value, mangaId);
+        return true;
+    }
+
+    brls::Logger::warning("Failed to set manga meta for manga {}", mangaId);
+    return false;
+}
+
+bool SuwayomiClient::deleteMangaMetaGraphQL(int mangaId, const std::string& key) {
+    const char* query = R"(
+        mutation DeleteMangaMeta($id: Int!, $key: String!) {
+            deleteMangaMeta(input: { mangaId: $id, key: $key }) {
+                meta {
+                    key
+                }
+                manga {
+                    id
+                }
+            }
+        }
+    )";
+
+    std::string escapedKey = key;
+    size_t pos = 0;
+    while ((pos = escapedKey.find("\"", pos)) != std::string::npos) {
+        escapedKey.replace(pos, 1, "\\\"");
+        pos += 2;
+    }
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) +
+                            ",\"key\":\"" + escapedKey + "\"}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (!response.empty()) {
+        brls::Logger::debug("Deleted manga meta key '{}' for manga {}", key, mangaId);
+        return true;
+    }
+
+    brls::Logger::warning("Failed to delete manga meta for manga {}", mangaId);
+    return false;
+}
+
+// Public wrapper methods with REST fallback
+bool SuwayomiClient::fetchMangaMeta(int mangaId, std::map<std::string, std::string>& meta) {
+    // Try GraphQL first
+    if (fetchMangaMetaGraphQL(mangaId, meta)) {
+        return true;
+    }
+
+    // REST fallback: GET /api/v1/manga/{id}/meta
+    brls::Logger::info("GraphQL failed for fetchMangaMeta, falling back to REST...");
+    HttpClient client = createHttpClient();
+    std::string response = client.get(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta"));
+
+    if (response.empty()) {
+        brls::Logger::warning("REST fallback also failed for manga meta");
+        return false;
+    }
+
+    // Parse REST response (array of {key, value} objects)
+    meta.clear();
+    size_t pos = 0;
+    while ((pos = response.find("\"key\"", pos)) != std::string::npos) {
+        size_t keyStart = response.find("\"", pos + 5) + 1;
+        size_t keyEnd = response.find("\"", keyStart);
+        std::string key = response.substr(keyStart, keyEnd - keyStart);
+
+        size_t valueStart = response.find("\"value\"", keyEnd);
+        if (valueStart != std::string::npos) {
+            valueStart = response.find("\"", valueStart + 7) + 1;
+            size_t valueEnd = response.find("\"", valueStart);
+            std::string value = response.substr(valueStart, valueEnd - valueStart);
+            meta[key] = value;
+            pos = valueEnd + 1;
+        } else {
+            break;
+        }
+    }
+
+    return true;
+}
+
+bool SuwayomiClient::setMangaMeta(int mangaId, const std::string& key, const std::string& value) {
+    // Try GraphQL first
+    if (setMangaMetaGraphQL(mangaId, key, value)) {
+        return true;
+    }
+
+    // REST fallback: PATCH /api/v1/manga/{id}/meta
+    brls::Logger::info("GraphQL failed for setMangaMeta, falling back to REST...");
+    HttpClient client = createHttpClient();
+    client.setHeader("Content-Type", "application/json");
+
+    std::string body = "{\"key\":\"" + key + "\",\"value\":\"" + value + "\"}";
+    std::string response = client.patch(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta"), body);
+
+    return !response.empty();
+}
+
+bool SuwayomiClient::deleteMangaMeta(int mangaId, const std::string& key) {
+    // Try GraphQL first
+    if (deleteMangaMetaGraphQL(mangaId, key)) {
+        return true;
+    }
+
+    // REST fallback: DELETE /api/v1/manga/{id}/meta/{key}
+    brls::Logger::info("GraphQL failed for deleteMangaMeta, falling back to REST...");
+    HttpClient client = createHttpClient();
+    std::string response = client.del(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta/" + key));
+
+    return !response.empty();
+}
+
 bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga) {
     // Use the mangas query with categoryId filter - this is the correct Suwayomi API
     // The filter ensures only manga assigned to this specific category are returned

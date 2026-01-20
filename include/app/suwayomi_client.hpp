@@ -10,6 +10,7 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include <map>
 #include "utils/http_client.hpp"
 
 namespace vitasuwayomi {
@@ -114,6 +115,9 @@ struct Manga {
 
     // Tracking info
     std::vector<int> categoryIds;
+
+    // Per-manga metadata (key-value pairs from server)
+    std::map<std::string, std::string> meta;
 
     // Source info
     std::string sourceName;
@@ -345,6 +349,11 @@ public:
     // Set manga categories (replaces all categories)
     bool setMangaCategories(int mangaId, const std::vector<int>& categoryIds);
 
+    // Manga Metadata (per-manga settings like reader preferences)
+    bool fetchMangaMeta(int mangaId, std::map<std::string, std::string>& meta);
+    bool setMangaMeta(int mangaId, const std::string& key, const std::string& value);
+    bool deleteMangaMeta(int mangaId, const std::string& key);
+
     // Configuration
     void setServerUrl(const std::string& url) { m_serverUrl = url; }
     const std::string& getServerUrl() const { return m_serverUrl; }
@@ -390,6 +399,11 @@ private:
     bool setMangaCategoriesGraphQL(int mangaId, const std::vector<int>& categoryIds);
     bool fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga);
     bool fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga);
+
+    // Manga Meta GraphQL methods
+    bool fetchMangaMetaGraphQL(int mangaId, std::map<std::string, std::string>& meta);
+    bool setMangaMetaGraphQL(int mangaId, const std::string& key, const std::string& value);
+    bool deleteMangaMetaGraphQL(int mangaId, const std::string& key);
 
     // Extension GraphQL methods
     bool fetchExtensionListGraphQL(std::vector<Extension>& extensions);

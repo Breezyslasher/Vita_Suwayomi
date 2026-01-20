@@ -285,8 +285,16 @@ void SettingsTab::createReaderSection() {
 
     // Section header
     auto* header = new brls::Header();
-    header->setTitle("Reader");
+    header->setTitle("Reader (Defaults)");
     m_contentBox->addView(header);
+
+    // Info label explaining these are defaults
+    auto* readerInfoLabel = new brls::Label();
+    readerInfoLabel->setText("These settings are used for new manga. Per-manga settings can be changed in the reader and are synced to the server.");
+    readerInfoLabel->setFontSize(14);
+    readerInfoLabel->setMarginLeft(16);
+    readerInfoLabel->setMarginBottom(12);
+    m_contentBox->addView(readerInfoLabel);
 
     // Reading mode selector
     m_readingModeSelector = new brls::SelectorCell();
@@ -309,6 +317,29 @@ void SettingsTab::createReaderSection() {
             Application::getInstance().saveSettings();
         });
     m_contentBox->addView(m_pageScaleModeSelector);
+
+    // Image rotation selector (default for new manga)
+    int rotationIndex = 0;
+    switch (settings.imageRotation) {
+        case 0: rotationIndex = 0; break;
+        case 90: rotationIndex = 1; break;
+        case 180: rotationIndex = 2; break;
+        case 270: rotationIndex = 3; break;
+    }
+    auto* rotationSelector = new brls::SelectorCell();
+    rotationSelector->init("Default Rotation",
+        {"0° (Normal)", "90° (Clockwise)", "180° (Upside Down)", "270° (Counter-Clockwise)"},
+        rotationIndex,
+        [&settings](int index) {
+            switch (index) {
+                case 0: settings.imageRotation = 0; break;
+                case 1: settings.imageRotation = 90; break;
+                case 2: settings.imageRotation = 180; break;
+                case 3: settings.imageRotation = 270; break;
+            }
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(rotationSelector);
 
     // Reader background selector
     m_readerBgSelector = new brls::SelectorCell();

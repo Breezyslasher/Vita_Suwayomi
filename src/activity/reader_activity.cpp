@@ -38,23 +38,71 @@ brls::View* ReaderActivity::createContentView() {
 void ReaderActivity::onContentAvailable() {
     brls::Logger::debug("ReaderActivity: content available");
 
-    // Load settings - check for per-manga settings first, then use global defaults
+    // Load settings - priority order:
+    // 1. Server meta (per-manga settings synced to server)
+    // 2. Local per-manga settings cache
+    // 3. Global defaults
+
     AppSettings& appSettings = Application::getInstance().getSettings();
 
-    // Check if this manga has custom settings
+    // Start with global defaults
     ReadingMode readingMode = appSettings.readingMode;
     PageScaleMode pageScaleMode = appSettings.pageScaleMode;
     int imageRotation = appSettings.imageRotation;
 
-    auto it = appSettings.mangaReaderSettings.find(m_mangaId);
-    if (it != appSettings.mangaReaderSettings.end()) {
-        // Use per-manga settings
-        readingMode = it->second.readingMode;
-        pageScaleMode = it->second.pageScaleMode;
-        imageRotation = it->second.imageRotation;
-        brls::Logger::debug("ReaderActivity: using per-manga settings for manga {}", m_mangaId);
-    } else {
-        brls::Logger::debug("ReaderActivity: using global default settings for manga {}", m_mangaId);
+    // Try to load from server meta first (synchronously for initial display)
+    std::map<std::string, std::string> serverMeta;
+    bool hasServerSettings = false;
+
+    if (SuwayomiClient::getInstance().fetchMangaMeta(m_mangaId, serverMeta)) {
+        // Check for reader settings in server meta
+        // Standard keys used by Tachiyomi/Mihon clients
+        auto readerModeIt = serverMeta.find("readerMode");
+        auto rotationIt = serverMeta.find("rotation");
+        auto scaleModeIt = serverMeta.find("scaleType");
+
+        if (readerModeIt != serverMeta.end()) {
+            int mode = std::atoi(readerModeIt->second.c_str());
+            if (mode >= 0 && mode <= 3) {
+                readingMode = static_cast<ReadingMode>(mode);
+                hasServerSettings = true;
+            }
+        }
+
+        if (rotationIt != serverMeta.end()) {
+            imageRotation = std::atoi(rotationIt->second.c_str());
+            // Validate rotation
+            if (imageRotation != 0 && imageRotation != 90 &&
+                imageRotation != 180 && imageRotation != 270) {
+                imageRotation = 0;
+            }
+            hasServerSettings = true;
+        }
+
+        if (scaleModeIt != serverMeta.end()) {
+            int scale = std::atoi(scaleModeIt->second.c_str());
+            if (scale >= 0 && scale <= 3) {
+                pageScaleMode = static_cast<PageScaleMode>(scale);
+                hasServerSettings = true;
+            }
+        }
+
+        if (hasServerSettings) {
+            brls::Logger::info("ReaderActivity: loaded settings from server for manga {}", m_mangaId);
+        }
+    }
+
+    // If no server settings, check local per-manga cache
+    if (!hasServerSettings) {
+        auto it = appSettings.mangaReaderSettings.find(m_mangaId);
+        if (it != appSettings.mangaReaderSettings.end()) {
+            readingMode = it->second.readingMode;
+            pageScaleMode = it->second.pageScaleMode;
+            imageRotation = it->second.imageRotation;
+            brls::Logger::debug("ReaderActivity: using local per-manga settings for manga {}", m_mangaId);
+        } else {
+            brls::Logger::debug("ReaderActivity: using global default settings for manga {}", m_mangaId);
+        }
     }
 
     // Map ReadingMode to ReaderDirection
@@ -886,12 +934,39 @@ void ReaderActivity::saveSettingsToApp() {
             break;
     }
 
-    // Store per-manga settings (overrides defaults for this manga)
+    // Store per-manga settings locally (overrides defaults for this manga)
     appSettings.mangaReaderSettings[m_mangaId] = mangaSettings;
 
-    // Save to disk
+    // Save to local disk
     Application::getInstance().saveSettings();
-    brls::Logger::debug("ReaderActivity: saved per-manga settings for manga {}", m_mangaId);
+    brls::Logger::debug("ReaderActivity: saved per-manga settings locally for manga {}", m_mangaId);
+
+    // Save to server asynchronously (using standard Tachiyomi/Mihon meta keys)
+    int mangaId = m_mangaId;
+    int readerMode = static_cast<int>(mangaSettings.readingMode);
+    int rotation = mangaSettings.imageRotation;
+    int scaleType = static_cast<int>(mangaSettings.pageScaleMode);
+
+    vitasuwayomi::asyncTask<bool>([mangaId, readerMode, rotation, scaleType]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        // Save reader mode
+        client.setMangaMeta(mangaId, "readerMode", std::to_string(readerMode));
+
+        // Save rotation
+        client.setMangaMeta(mangaId, "rotation", std::to_string(rotation));
+
+        // Save scale type
+        client.setMangaMeta(mangaId, "scaleType", std::to_string(scaleType));
+
+        return true;
+    }, [mangaId](bool success) {
+        if (success) {
+            brls::Logger::info("ReaderActivity: saved settings to server for manga {}", mangaId);
+        } else {
+            brls::Logger::warning("ReaderActivity: failed to save settings to server for manga {}", mangaId);
+        }
+    });
 }
 
 void ReaderActivity::handleTouch(brls::Point point) {
