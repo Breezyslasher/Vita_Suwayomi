@@ -88,7 +88,12 @@ void RotatableImage::calculateImageBounds(float viewX, float viewY, float viewW,
         return;
     }
 
-    float imageAspect = (float)m_imageWidth / (float)m_imageHeight;
+    // For 90/270 degree rotation, the effective dimensions are swapped
+    bool isRotated90or270 = (m_rotationDegrees == 90.0f || m_rotationDegrees == 270.0f);
+    int effectiveWidth = isRotated90or270 ? m_imageHeight : m_imageWidth;
+    int effectiveHeight = isRotated90or270 ? m_imageWidth : m_imageHeight;
+
+    float imageAspect = (float)effectiveWidth / (float)effectiveHeight;
     float viewAspect = viewW / viewH;
 
     switch (m_scalingType) {
@@ -150,35 +155,64 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
         return;
     }
 
-    // Calculate where the image should be drawn
+    // Calculate where the image should be drawn (accounts for rotation)
     float imgX, imgY, imgW, imgH;
     calculateImageBounds(x, y, width, height, imgX, imgY, imgW, imgH);
 
     // Save state
     nvgSave(vg);
 
-    // Apply rotation if needed
-    if (m_rotationDegrees != 0.0f) {
-        float centerX = x + width / 2.0f;
-        float centerY = y + height / 2.0f;
+    // Use scissor to clip rendering to the calculated bounds
+    nvgScissor(vg, imgX, imgY, imgW, imgH);
+
+    // Calculate center of the destination area
+    float centerX = imgX + imgW / 2.0f;
+    float centerY = imgY + imgH / 2.0f;
+
+    // For rotated images, we need to render differently
+    bool isRotated90or270 = (m_rotationDegrees == 90.0f || m_rotationDegrees == 270.0f);
+
+    if (isRotated90or270) {
+        // For 90/270 rotation, we need to swap the pattern dimensions
+        // The image pattern needs to be sized for the rotated output
         nvgTranslate(vg, centerX, centerY);
         nvgRotate(vg, m_rotationRadians);
         nvgTranslate(vg, -centerX, -centerY);
+
+        // When rotated 90/270, swap width/height for the pattern
+        // The pattern should map the original texture to a rect that when rotated fills imgW x imgH
+        float patternW = imgH;  // Swapped
+        float patternH = imgW;  // Swapped
+        float patternX = centerX - patternW / 2.0f;
+        float patternY = centerY - patternH / 2.0f;
+
+        NVGpaint imgPaint = nvgImagePattern(vg, patternX, patternY, patternW, patternH, 0, m_nvgImage, 1.0f);
+
+        nvgBeginPath(vg);
+        nvgRect(vg, patternX, patternY, patternW, patternH);
+        nvgFillPaint(vg, imgPaint);
+        nvgFill(vg);
+    } else if (m_rotationDegrees == 180.0f) {
+        // 180 degree rotation - same dimensions, just rotated
+        nvgTranslate(vg, centerX, centerY);
+        nvgRotate(vg, m_rotationRadians);
+        nvgTranslate(vg, -centerX, -centerY);
+
+        NVGpaint imgPaint = nvgImagePattern(vg, imgX, imgY, imgW, imgH, 0, m_nvgImage, 1.0f);
+
+        nvgBeginPath(vg);
+        nvgRect(vg, imgX, imgY, imgW, imgH);
+        nvgFillPaint(vg, imgPaint);
+        nvgFill(vg);
+    } else {
+        // No rotation (0 degrees)
+        NVGpaint imgPaint = nvgImagePattern(vg, imgX, imgY, imgW, imgH, 0, m_nvgImage, 1.0f);
+
+        nvgBeginPath(vg);
+        nvgRect(vg, imgX, imgY, imgW, imgH);
+        nvgFillPaint(vg, imgPaint);
+        nvgFill(vg);
     }
-
-    // CRITICAL: Use scissor to clip rendering to ONLY the image bounds
-    // This prevents any edge artifacts from appearing in the margins
-    nvgScissor(vg, imgX, imgY, imgW, imgH);
-
-    // Create image pattern - sized exactly to the image bounds
-    // The pattern maps the full texture (0,0 to imageWidth,imageHeight) to the draw bounds
-    NVGpaint imgPaint = nvgImagePattern(vg, imgX, imgY, imgW, imgH, 0, m_nvgImage, 1.0f);
-
-    // Draw the image as a filled rectangle
-    nvgBeginPath(vg);
-    nvgRect(vg, imgX, imgY, imgW, imgH);
-    nvgFillPaint(vg, imgPaint);
-    nvgFill(vg);
 
     // Restore state (removes scissor and rotation)
     nvgRestore(vg);
