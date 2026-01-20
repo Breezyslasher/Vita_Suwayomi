@@ -398,10 +398,10 @@ void ReaderActivity::loadPage(int index) {
     showPageCounter();
     schedulePageCounterHide();
 
-    // Load image
+    // Load image using RotatableImage (with scissor clipping to prevent edge artifacts)
     if (pageImage) {
         int currentPageAtLoad = m_currentPage;
-        ImageLoader::loadAsyncFullSize(imageUrl, [this, index, currentPageAtLoad](brls::Image* img) {
+        ImageLoader::loadAsyncFullSize(imageUrl, [this, index, currentPageAtLoad](RotatableImage* img) {
             if (index == currentPageAtLoad) {
                 brls::Logger::debug("ReaderActivity: Page {} loaded", index);
             }
@@ -877,7 +877,7 @@ void ReaderActivity::loadPreviewPage(int index) {
     brls::Logger::debug("Loading preview page {}", index);
 
     // Load the preview image (full size for manga reader)
-    ImageLoader::loadAsyncFullSize(imageUrl, [this, index](brls::Image* img) {
+    ImageLoader::loadAsyncFullSize(imageUrl, [this, index](RotatableImage* img) {
         brls::Logger::debug("Preview page {} loaded", index);
     }, previewImage);
 }
