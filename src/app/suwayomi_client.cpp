@@ -1354,14 +1354,15 @@ bool SuwayomiClient::fetchMangaMeta(int mangaId, std::map<std::string, std::stri
     // REST fallback: GET /api/v1/manga/{id}/meta
     brls::Logger::info("GraphQL failed for fetchMangaMeta, falling back to REST...");
     HttpClient client = createHttpClient();
-    std::string response = client.get(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta"));
+    HttpResponse httpResp = client.get(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta"));
 
-    if (response.empty()) {
+    if (!httpResp.success || httpResp.body.empty()) {
         brls::Logger::warning("REST fallback also failed for manga meta");
         return false;
     }
 
     // Parse REST response (array of {key, value} objects)
+    std::string response = httpResp.body;
     meta.clear();
     size_t pos = 0;
     while ((pos = response.find("\"key\"", pos)) != std::string::npos) {
@@ -1393,12 +1394,19 @@ bool SuwayomiClient::setMangaMeta(int mangaId, const std::string& key, const std
     // REST fallback: PATCH /api/v1/manga/{id}/meta
     brls::Logger::info("GraphQL failed for setMangaMeta, falling back to REST...");
     HttpClient client = createHttpClient();
-    client.setHeader("Content-Type", "application/json");
+    client.setDefaultHeader("Content-Type", "application/json");
 
     std::string body = "{\"key\":\"" + key + "\",\"value\":\"" + value + "\"}";
-    std::string response = client.patch(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta"), body);
 
-    return !response.empty();
+    // Use request() with PATCH method since HttpClient doesn't have patch()
+    HttpRequest req;
+    req.url = buildApiUrl("manga/" + std::to_string(mangaId) + "/meta");
+    req.method = "PATCH";
+    req.body = body;
+    req.headers["Content-Type"] = "application/json";
+
+    HttpResponse httpResp = client.request(req);
+    return httpResp.success;
 }
 
 bool SuwayomiClient::deleteMangaMeta(int mangaId, const std::string& key) {
@@ -1410,9 +1418,9 @@ bool SuwayomiClient::deleteMangaMeta(int mangaId, const std::string& key) {
     // REST fallback: DELETE /api/v1/manga/{id}/meta/{key}
     brls::Logger::info("GraphQL failed for deleteMangaMeta, falling back to REST...");
     HttpClient client = createHttpClient();
-    std::string response = client.del(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta/" + key));
+    HttpResponse httpResp = client.del(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta/" + key));
 
-    return !response.empty();
+    return httpResp.success;
 }
 
 bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga) {
