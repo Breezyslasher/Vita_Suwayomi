@@ -533,6 +533,97 @@ void ReaderActivity::onContentAvailable() {
         settingsBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsBtn));
     }
 
+    // Set up settings overlay panel
+    if (settingsOverlay) {
+        // Tap on overlay background (outside panel) closes settings
+        settingsOverlay->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    // Check if tap is outside the settings panel
+                    if (settingsPanel) {
+                        brls::Rect panelRect = settingsPanel->getFrame();
+                        if (status.position.x < panelRect.getMinX() ||
+                            status.position.x > panelRect.getMaxX() ||
+                            status.position.y < panelRect.getMinY() ||
+                            status.position.y > panelRect.getMaxY()) {
+                            hideSettings();
+                        }
+                    } else {
+                        hideSettings();
+                    }
+                }
+            }));
+    }
+
+    // Settings panel buttons
+    if (settingsFormatBtn) {
+        settingsFormatBtn->registerClickAction([this](brls::View*) {
+            m_settings.isWebtoonFormat = !m_settings.isWebtoonFormat;
+
+            // Apply mode defaults
+            if (m_settings.isWebtoonFormat) {
+                m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
+                m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
+            } else {
+                m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
+                m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
+            }
+
+            updateDirectionLabel();
+            applySettings();
+            saveSettingsToApp();
+            updateSettingsLabels();
+
+            // Reload pages for page splitting change
+            m_pages.clear();
+            loadPages();
+            return true;
+        });
+        settingsFormatBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsFormatBtn));
+    }
+
+    if (settingsDirBtn) {
+        settingsDirBtn->registerClickAction([this](brls::View*) {
+            // Direction only changes in manga mode (webtoon is locked to vertical)
+            if (!m_settings.isWebtoonFormat) {
+                if (m_settings.direction == ReaderDirection::LEFT_TO_RIGHT) {
+                    m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
+                } else {
+                    m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
+                }
+                updateDirectionLabel();
+                saveSettingsToApp();
+                updateSettingsLabels();
+            }
+            return true;
+        });
+        settingsDirBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsDirBtn));
+    }
+
+    if (settingsRotBtn) {
+        settingsRotBtn->registerClickAction([this](brls::View*) {
+            switch (m_settings.rotation) {
+                case ImageRotation::ROTATE_0:
+                    m_settings.rotation = ImageRotation::ROTATE_90;
+                    break;
+                case ImageRotation::ROTATE_90:
+                    m_settings.rotation = ImageRotation::ROTATE_180;
+                    break;
+                case ImageRotation::ROTATE_180:
+                    m_settings.rotation = ImageRotation::ROTATE_270;
+                    break;
+                case ImageRotation::ROTATE_270:
+                    m_settings.rotation = ImageRotation::ROTATE_0;
+                    break;
+            }
+            applySettings();
+            saveSettingsToApp();
+            updateSettingsLabels();
+            return true;
+        });
+        settingsRotBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsRotBtn));
+    }
+
     // Update direction label
     updateDirectionLabel();
 
@@ -927,96 +1018,67 @@ void ReaderActivity::schedulePageCounterHide() {
 }
 
 void ReaderActivity::showSettings() {
-    auto* dialog = new brls::Dialog("Settings");
+    if (m_settingsVisible) return;
 
-    // Format toggle (Manga / Webtoon) - affects page splitting and default scroll direction
-    std::string formatText = m_settings.isWebtoonFormat ? "Webtoon" : "Manga";
-    dialog->addButton(formatText, [this]() {
-        m_settings.isWebtoonFormat = !m_settings.isWebtoonFormat;
+    // Update labels before showing
+    updateSettingsLabels();
 
-        // When switching to webtoon, apply webtoon defaults
+    // Show the overlay
+    if (settingsOverlay) {
+        settingsOverlay->setVisibility(brls::Visibility::VISIBLE);
+        m_settingsVisible = true;
+
+        // Register circle button to close settings while overlay is visible
+        this->registerAction("Close Settings", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            hideSettings();
+            return true;
+        });
+    }
+}
+
+void ReaderActivity::hideSettings() {
+    if (!m_settingsVisible) return;
+
+    if (settingsOverlay) {
+        settingsOverlay->setVisibility(brls::Visibility::GONE);
+        m_settingsVisible = false;
+
+        // Restore normal circle button behavior (close reader)
+        this->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            brls::Application::popActivity();
+            return true;
+        });
+    }
+}
+
+void ReaderActivity::updateSettingsLabels() {
+    // Update format label
+    if (settingsFormatLabel) {
+        settingsFormatLabel->setText(m_settings.isWebtoonFormat ? "Webtoon" : "Manga");
+    }
+
+    // Update direction label
+    if (settingsDirLabel) {
         if (m_settings.isWebtoonFormat) {
-            m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
-            m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
+            settingsDirLabel->setText("Vertical (locked)");
         } else {
-            // When switching to manga, apply manga defaults
-            m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
-            m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
+            settingsDirLabel->setText(
+                m_settings.direction == ReaderDirection::LEFT_TO_RIGHT
+                    ? "Left to Right" : "Right to Left");
         }
-
-        updateDirectionLabel();
-        applySettings();
-        saveSettingsToApp();
-
-        // Reload pages to apply/remove page splitting
-        m_pages.clear();
-        loadPages();
-
-        // Re-open settings dialog
-        brls::sync([this]() { showSettings(); });
-    });
-
-    // Reading direction - depends on mode
-    // Webtoon mode: only Vertical (no cycling)
-    // Manga mode: only LTR and RTL (toggle between them)
-    if (m_settings.isWebtoonFormat) {
-        // Webtoon mode - direction is locked to Vertical
-        dialog->addButton("Vertical", [this]() {
-            // No change - Vertical is the only option for webtoon
-            // Re-open settings dialog
-            brls::sync([this]() { showSettings(); });
-        });
-    } else {
-        // Manga mode - toggle between LTR and RTL
-        std::string dirText = (m_settings.direction == ReaderDirection::LEFT_TO_RIGHT)
-                              ? "Left to Right" : "Right to Left";
-        dialog->addButton(dirText, [this]() {
-            // Toggle between LTR and RTL
-            if (m_settings.direction == ReaderDirection::LEFT_TO_RIGHT) {
-                m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
-            } else {
-                m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
-            }
-            updateDirectionLabel();
-            saveSettingsToApp();
-
-            // Re-open settings dialog
-            brls::sync([this]() { showSettings(); });
-        });
     }
 
-    // Rotation
-    std::string rotText;
-    switch (m_settings.rotation) {
-        case ImageRotation::ROTATE_0: rotText = "0\u00B0"; break;
-        case ImageRotation::ROTATE_90: rotText = "90\u00B0"; break;
-        case ImageRotation::ROTATE_180: rotText = "180\u00B0"; break;
-        case ImageRotation::ROTATE_270: rotText = "270\u00B0"; break;
-    }
-    dialog->addButton(rotText, [this]() {
+    // Update rotation label
+    if (settingsRotLabel) {
+        std::string rotText;
         switch (m_settings.rotation) {
-            case ImageRotation::ROTATE_0:
-                m_settings.rotation = ImageRotation::ROTATE_90;
-                break;
-            case ImageRotation::ROTATE_90:
-                m_settings.rotation = ImageRotation::ROTATE_180;
-                break;
-            case ImageRotation::ROTATE_180:
-                m_settings.rotation = ImageRotation::ROTATE_270;
-                break;
-            case ImageRotation::ROTATE_270:
-                m_settings.rotation = ImageRotation::ROTATE_0;
-                break;
+            case ImageRotation::ROTATE_0: rotText = "0\u00B0"; break;
+            case ImageRotation::ROTATE_90: rotText = "90\u00B0"; break;
+            case ImageRotation::ROTATE_180: rotText = "180\u00B0"; break;
+            case ImageRotation::ROTATE_270: rotText = "270\u00B0"; break;
         }
-        applySettings();
-        saveSettingsToApp();
-
-        // Re-open settings dialog
-        brls::sync([this]() { showSettings(); });
-    });
-
-    dialog->setCancelable(true);
-    dialog->open();
+        settingsRotLabel->setText(rotText);
+    }
 }
 
 void ReaderActivity::applySettings() {

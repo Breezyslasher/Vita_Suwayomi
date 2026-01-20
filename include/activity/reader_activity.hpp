@@ -69,6 +69,8 @@ public:
     // Controls
     void toggleControls();
     void showSettings();
+    void hideSettings();
+    void updateSettingsLabels();
 
     // Get current state
     int getCurrentPage() const { return m_currentPage; }
@@ -118,6 +120,16 @@ private:
     BRLS_BIND(brls::Button, nextChapterBtn, "reader/next_chapter");
     BRLS_BIND(brls::Button, settingsBtn, "reader/settings_btn");
 
+    // Settings overlay panel
+    BRLS_BIND(brls::Box, settingsOverlay, "reader/settings_overlay");
+    BRLS_BIND(brls::Box, settingsPanel, "reader/settings_panel");
+    BRLS_BIND(brls::Button, settingsFormatBtn, "reader/settings_format_btn");
+    BRLS_BIND(brls::Button, settingsDirBtn, "reader/settings_dir_btn");
+    BRLS_BIND(brls::Button, settingsRotBtn, "reader/settings_rot_btn");
+    BRLS_BIND(brls::Label, settingsFormatLabel, "reader/settings_format_label");
+    BRLS_BIND(brls::Label, settingsDirLabel, "reader/settings_dir_label");
+    BRLS_BIND(brls::Label, settingsRotLabel, "reader/settings_rot_label");
+
     // Manga/Chapter info
     int m_mangaId = 0;
     int m_chapterIndex = 0;
@@ -132,6 +144,7 @@ private:
     // Reader settings
     ReaderSettings m_settings;
     bool m_controlsVisible = false;
+    bool m_settingsVisible = false;
 
     // Chapter navigation
     std::vector<Chapter> m_chapters;

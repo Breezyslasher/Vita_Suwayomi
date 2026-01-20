@@ -104,22 +104,112 @@
                 singleLine="true"/>
         </brls:Box>
 
-        <!-- Settings button -->
+        <!-- Settings button (gear icon) -->
         <brls:Button
             id="reader/settings_btn"
             style="borderless"
-            width="auto"
-            height="44"
-            paddingLeft="10"
-            paddingRight="10"
-            marginLeft="15">
+            width="36"
+            height="36"
+            marginLeft="10">
             <brls:Label
-                text="Settings"
-                fontSize="14"
+                text="⚙"
+                fontSize="20"
                 textColor="#ffffff"
                 horizontalAlign="center"/>
         </brls:Button>
 
+    </brls:Box>
+
+    <!-- Settings overlay panel (hidden by default) -->
+    <brls:Box
+        id="reader/settings_overlay"
+        width="100%"
+        height="100%"
+        axis="column"
+        justifyContent="center"
+        alignItems="center"
+        positionType="absolute"
+        positionTop="0"
+        positionLeft="0"
+        backgroundColor="#00000080"
+        visibility="gone">
+
+        <!-- Settings panel box -->
+        <brls:Box
+            id="reader/settings_panel"
+            width="400"
+            height="auto"
+            axis="column"
+            justifyContent="flexStart"
+            alignItems="stretch"
+            backgroundColor="#16213eF0"
+            cornerRadius="8"
+            paddingTop="15"
+            paddingBottom="15"
+            paddingLeft="20"
+            paddingRight="20">
+
+            <!-- Title -->
+            <brls:Label
+                text="Settings"
+                fontSize="18"
+                textColor="#ffffff"
+                horizontalAlign="center"
+                marginBottom="15"/>
+
+            <!-- Format button (Manga/Webtoon) -->
+            <brls:Button
+                id="reader/settings_format_btn"
+                style="bordered"
+                width="100%"
+                height="40"
+                marginBottom="10">
+                <brls:Label
+                    id="reader/settings_format_label"
+                    text="Manga"
+                    fontSize="14"
+                    textColor="#ffffff"
+                    horizontalAlign="center"/>
+            </brls:Button>
+
+            <!-- Direction button -->
+            <brls:Button
+                id="reader/settings_dir_btn"
+                style="bordered"
+                width="100%"
+                height="40"
+                marginBottom="10">
+                <brls:Label
+                    id="reader/settings_dir_label"
+                    text="Right to Left"
+                    fontSize="14"
+                    textColor="#ffffff"
+                    horizontalAlign="center"/>
+            </brls:Button>
+
+            <!-- Rotation button -->
+            <brls:Button
+                id="reader/settings_rot_btn"
+                style="bordered"
+                width="100%"
+                height="40"
+                marginBottom="15">
+                <brls:Label
+                    id="reader/settings_rot_label"
+                    text="0°"
+                    fontSize="14"
+                    textColor="#ffffff"
+                    horizontalAlign="center"/>
+            </brls:Button>
+
+            <!-- Close hint -->
+            <brls:Label
+                text="Press ○ or tap outside to close"
+                fontSize="12"
+                textColor="#808080"
+                horizontalAlign="center"/>
+
+        </brls:Box>
     </brls:Box>
 
     <!-- Bottom bar overlay (80px, NOBORU style) -->
