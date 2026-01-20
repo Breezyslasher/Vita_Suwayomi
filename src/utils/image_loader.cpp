@@ -498,18 +498,21 @@ void ImageLoader::preload(const std::string& url) {
 void ImageLoader::preloadFullSize(const std::string& url) {
     if (url.empty()) return;
 
+    // Use same cache key as loadAsyncFullSize/executeRotatableLoad
+    std::string cacheKey = url + "_full";
+
     // Check if already cached
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.find(url) != s_cache.end()) {
+        if (s_cache.find(cacheKey) != s_cache.end()) {
             return;
         }
     }
 
-    // Queue for full-size loading (no downscaling)
+    // Queue for full-size loading using rotatable queue (same as reader pages)
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_loadQueue.push({url, nullptr, nullptr, true});  // fullSize = true
+        s_rotatableLoadQueue.push({url, nullptr, nullptr});  // No callback/target for preload
     }
 
     processQueue();
