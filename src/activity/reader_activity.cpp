@@ -77,6 +77,7 @@ void ReaderActivity::onContentAvailable() {
         auto scaleModeIt = serverMeta.find("scaleType");
         auto cropBordersIt = serverMeta.find("cropBorders");
         auto sidePaddingIt = serverMeta.find("webtoonSidePadding");
+        auto isWebtoonIt = serverMeta.find("isWebtoonFormat");
 
         if (readerModeIt != serverMeta.end()) {
             int mode = std::atoi(readerModeIt->second.c_str());
@@ -117,6 +118,11 @@ void ReaderActivity::onContentAvailable() {
             hasServerSettings = true;
         }
 
+        if (isWebtoonIt != serverMeta.end()) {
+            m_settings.isWebtoonFormat = (isWebtoonIt->second == "true" || isWebtoonIt->second == "1");
+            hasServerSettings = true;
+        }
+
         if (hasServerSettings) {
             brls::Logger::info("ReaderActivity: loaded settings from server for manga {}", m_mangaId);
         }
@@ -133,9 +139,11 @@ void ReaderActivity::onContentAvailable() {
             imageRotation = it->second.imageRotation;
             cropBorders = it->second.cropBorders;
             webtoonSidePadding = it->second.webtoonSidePadding;
+            m_settings.isWebtoonFormat = it->second.isWebtoonFormat;
             hasLocalSettings = true;
-            brls::Logger::info("ReaderActivity: FOUND local settings - readingMode={}, pageScaleMode={}, rotation={}",
-                              static_cast<int>(readingMode), static_cast<int>(pageScaleMode), imageRotation);
+            brls::Logger::info("ReaderActivity: FOUND local settings - readingMode={}, pageScaleMode={}, rotation={}, webtoon={}",
+                              static_cast<int>(readingMode), static_cast<int>(pageScaleMode), imageRotation,
+                              m_settings.isWebtoonFormat ? "true" : "false");
         } else {
             brls::Logger::info("ReaderActivity: NO local settings found, using global defaults");
         }
@@ -152,6 +160,7 @@ void ReaderActivity::onContentAvailable() {
                 readingMode = ReadingMode::WEBTOON;
                 pageScaleMode = PageScaleMode::FIT_WIDTH;
                 imageRotation = 0;  // No rotation for webtoons
+                m_settings.isWebtoonFormat = true;  // Set webtoon format flag for page splitting
                 brls::Logger::info("ReaderActivity: auto-detected webtoon format for '{}', applying webtoon defaults", mangaInfo.title);
             }
         }
@@ -523,8 +532,8 @@ void ReaderActivity::onContentAvailable() {
 void ReaderActivity::loadPages() {
     brls::Logger::debug("Loading pages for chapter {}", m_chapterIndex);
 
-    // Capture webtoon mode flag for async task
-    bool isWebtoonMode = (m_settings.direction == ReaderDirection::TOP_TO_BOTTOM);
+    // Capture webtoon mode flag for async task - use format setting
+    bool isWebtoonMode = m_settings.isWebtoonFormat;
 
     vitasuwayomi::asyncTask<bool>([this, isWebtoonMode]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -875,10 +884,13 @@ void ReaderActivity::toggleControls() {
 }
 
 void ReaderActivity::showControls() {
+    // Instant show - no animation delay
     if (topBar) {
+        topBar->setAlpha(1.0f);
         topBar->setVisibility(brls::Visibility::VISIBLE);
     }
     if (bottomBar) {
+        bottomBar->setAlpha(1.0f);
         bottomBar->setVisibility(brls::Visibility::VISIBLE);
     }
     // Hide page counter when controls are visible (it's redundant)
@@ -887,10 +899,13 @@ void ReaderActivity::showControls() {
 }
 
 void ReaderActivity::hideControls() {
+    // Instant hide - no animation delay
     if (topBar) {
+        topBar->setAlpha(0.0f);
         topBar->setVisibility(brls::Visibility::GONE);
     }
     if (bottomBar) {
+        bottomBar->setAlpha(0.0f);
         bottomBar->setVisibility(brls::Visibility::GONE);
     }
     // Show page counter when controls are hidden
@@ -900,12 +915,14 @@ void ReaderActivity::hideControls() {
 
 void ReaderActivity::showPageCounter() {
     if (pageCounter) {
+        pageCounter->setAlpha(1.0f);
         pageCounter->setVisibility(brls::Visibility::VISIBLE);
     }
 }
 
 void ReaderActivity::hidePageCounter() {
     if (pageCounter) {
+        pageCounter->setAlpha(0.0f);
         pageCounter->setVisibility(brls::Visibility::GONE);
     }
 }
@@ -917,48 +934,38 @@ void ReaderActivity::schedulePageCounterHide() {
 }
 
 void ReaderActivity::showSettings() {
-    auto* dialog = new brls::Dialog("Reader Settings");
+    auto* dialog = new brls::Dialog("Settings");
 
-    // Image rotation option (0, 90, 180, 270 degrees)
-    std::string rotText;
-    switch (m_settings.rotation) {
-        case ImageRotation::ROTATE_0: rotText = "Rotation: 0"; break;
-        case ImageRotation::ROTATE_90: rotText = "Rotation: 90"; break;
-        case ImageRotation::ROTATE_180: rotText = "Rotation: 180"; break;
-        case ImageRotation::ROTATE_270: rotText = "Rotation: 270"; break;
-    }
-    dialog->addButton(rotText, [this]() {
-        // Cycle rotation - apply first, then notify
-        switch (m_settings.rotation) {
-            case ImageRotation::ROTATE_0:
-                m_settings.rotation = ImageRotation::ROTATE_90;
-                break;
-            case ImageRotation::ROTATE_90:
-                m_settings.rotation = ImageRotation::ROTATE_180;
-                break;
-            case ImageRotation::ROTATE_180:
-                m_settings.rotation = ImageRotation::ROTATE_270;
-                break;
-            case ImageRotation::ROTATE_270:
-                m_settings.rotation = ImageRotation::ROTATE_0;
-                break;
+    // Format toggle (Manga / Webtoon) - affects page splitting and default scroll direction
+    std::string formatText = m_settings.isWebtoonFormat ? "Webtoon" : "Manga";
+    dialog->addButton(formatText, [this]() {
+        m_settings.isWebtoonFormat = !m_settings.isWebtoonFormat;
+
+        // When switching to webtoon, apply webtoon defaults
+        if (m_settings.isWebtoonFormat) {
+            m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
+            m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
+        } else {
+            // When switching to manga, apply manga defaults
+            m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
+            m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
         }
+
+        updateDirectionLabel();
         applySettings();
         saveSettingsToApp();
+
+        // Reload pages to apply/remove page splitting
+        m_pages.clear();
+        loadPages();
     });
 
-    // Reading direction option (LTR for western, RTL for manga)
+    // Reading direction with rotation-aware swipe
     std::string dirText;
     switch (m_settings.direction) {
-        case ReaderDirection::LEFT_TO_RIGHT:
-            dirText = "Direction: LTR";
-            break;
-        case ReaderDirection::RIGHT_TO_LEFT:
-            dirText = "Direction: RTL";
-            break;
-        case ReaderDirection::TOP_TO_BOTTOM:
-            dirText = "Direction: TTB";
-            break;
+        case ReaderDirection::LEFT_TO_RIGHT: dirText = "LTR"; break;
+        case ReaderDirection::RIGHT_TO_LEFT: dirText = "RTL"; break;
+        case ReaderDirection::TOP_TO_BOTTOM: dirText = "Vertical"; break;
     }
     dialog->addButton(dirText, [this]() {
         // Cycle reading direction
@@ -977,28 +984,27 @@ void ReaderActivity::showSettings() {
         saveSettingsToApp();
     });
 
-    // Scaling mode option
-    std::string scaleText;
-    switch (m_settings.scaleMode) {
-        case ReaderScaleMode::FIT_SCREEN: scaleText = "Scale: Fit"; break;
-        case ReaderScaleMode::FIT_WIDTH: scaleText = "Scale: Width"; break;
-        case ReaderScaleMode::FIT_HEIGHT: scaleText = "Scale: Height"; break;
-        case ReaderScaleMode::ORIGINAL: scaleText = "Scale: Original"; break;
+    // Rotation (shorter labels)
+    std::string rotText;
+    switch (m_settings.rotation) {
+        case ImageRotation::ROTATE_0: rotText = "0\u00B0"; break;
+        case ImageRotation::ROTATE_90: rotText = "90\u00B0"; break;
+        case ImageRotation::ROTATE_180: rotText = "180\u00B0"; break;
+        case ImageRotation::ROTATE_270: rotText = "270\u00B0"; break;
     }
-    dialog->addButton(scaleText, [this]() {
-        // Cycle scale mode
-        switch (m_settings.scaleMode) {
-            case ReaderScaleMode::FIT_SCREEN:
-                m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
+    dialog->addButton(rotText, [this]() {
+        switch (m_settings.rotation) {
+            case ImageRotation::ROTATE_0:
+                m_settings.rotation = ImageRotation::ROTATE_90;
                 break;
-            case ReaderScaleMode::FIT_WIDTH:
-                m_settings.scaleMode = ReaderScaleMode::FIT_HEIGHT;
+            case ImageRotation::ROTATE_90:
+                m_settings.rotation = ImageRotation::ROTATE_180;
                 break;
-            case ReaderScaleMode::FIT_HEIGHT:
-                m_settings.scaleMode = ReaderScaleMode::ORIGINAL;
+            case ImageRotation::ROTATE_180:
+                m_settings.rotation = ImageRotation::ROTATE_270;
                 break;
-            case ReaderScaleMode::ORIGINAL:
-                m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
+            case ImageRotation::ROTATE_270:
+                m_settings.rotation = ImageRotation::ROTATE_0;
                 break;
         }
         applySettings();
@@ -1081,13 +1087,15 @@ void ReaderActivity::saveSettingsToApp() {
     // Webtoon settings
     mangaSettings.cropBorders = m_settings.cropBorders;
     mangaSettings.webtoonSidePadding = m_settings.webtoonSidePadding;
+    mangaSettings.isWebtoonFormat = m_settings.isWebtoonFormat;
 
     // Store per-manga settings locally (overrides defaults for this manga)
     appSettings.mangaReaderSettings[m_mangaId] = mangaSettings;
 
-    brls::Logger::info("ReaderActivity: SAVING settings for manga {} - readingMode={}, pageScaleMode={}, rotation={}",
+    brls::Logger::info("ReaderActivity: SAVING settings for manga {} - readingMode={}, pageScaleMode={}, rotation={}, webtoon={}",
                        m_mangaId, static_cast<int>(mangaSettings.readingMode),
-                       static_cast<int>(mangaSettings.pageScaleMode), mangaSettings.imageRotation);
+                       static_cast<int>(mangaSettings.pageScaleMode), mangaSettings.imageRotation,
+                       mangaSettings.isWebtoonFormat ? "true" : "false");
     brls::Logger::info("ReaderActivity: local cache now has {} per-manga settings",
                        appSettings.mangaReaderSettings.size());
 
@@ -1102,8 +1110,9 @@ void ReaderActivity::saveSettingsToApp() {
     int scaleType = static_cast<int>(mangaSettings.pageScaleMode);
     bool cropBorders = mangaSettings.cropBorders;
     int webtoonSidePadding = mangaSettings.webtoonSidePadding;
+    bool isWebtoonFormat = mangaSettings.isWebtoonFormat;
 
-    vitasuwayomi::asyncTask<bool>([mangaId, readerMode, rotation, scaleType, cropBorders, webtoonSidePadding]() {
+    vitasuwayomi::asyncTask<bool>([mangaId, readerMode, rotation, scaleType, cropBorders, webtoonSidePadding, isWebtoonFormat]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         // Save reader mode
@@ -1118,6 +1127,7 @@ void ReaderActivity::saveSettingsToApp() {
         // Save webtoon settings
         client.setMangaMeta(mangaId, "cropBorders", cropBorders ? "true" : "false");
         client.setMangaMeta(mangaId, "webtoonSidePadding", std::to_string(webtoonSidePadding));
+        client.setMangaMeta(mangaId, "isWebtoonFormat", isWebtoonFormat ? "true" : "false");
 
         return true;
     }, [mangaId](bool success) {

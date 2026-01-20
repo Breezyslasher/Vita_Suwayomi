@@ -45,6 +45,7 @@ struct ReaderSettings {
     bool keepScreenOn = true;
     bool cropBorders = false;       // Auto-crop white/black borders
     int webtoonSidePadding = 0;     // Side padding percentage (0-20%)
+    bool isWebtoonFormat = false;   // Treat as webtoon (vertical scroll, page splitting)
 };
 
 class ReaderActivity : public brls::Activity {
