@@ -36,7 +36,7 @@ brls::View* ReaderActivity::createContentView() {
 }
 
 void ReaderActivity::onContentAvailable() {
-    brls::Logger::debug("ReaderActivity: content available");
+    brls::Logger::info("ReaderActivity: content available for manga {}", m_mangaId);
 
     // Load settings - priority order:
     // 1. Server meta (per-manga settings synced to server)
@@ -50,6 +50,11 @@ void ReaderActivity::onContentAvailable() {
     PageScaleMode pageScaleMode = appSettings.pageScaleMode;
     int imageRotation = appSettings.imageRotation;
 
+    brls::Logger::info("ReaderActivity: global defaults - readingMode={}, pageScaleMode={}, rotation={}",
+                       static_cast<int>(readingMode), static_cast<int>(pageScaleMode), imageRotation);
+    brls::Logger::info("ReaderActivity: local cache has {} per-manga settings",
+                       appSettings.mangaReaderSettings.size());
+
     // Try to load from server meta first (synchronously for initial display)
     std::map<std::string, std::string> serverMeta;
     bool hasServerSettings = false;
@@ -58,7 +63,13 @@ void ReaderActivity::onContentAvailable() {
     bool cropBorders = appSettings.cropBorders;
     int webtoonSidePadding = appSettings.webtoonSidePadding;
 
+    brls::Logger::info("ReaderActivity: fetching server meta for manga {}...", m_mangaId);
     if (SuwayomiClient::getInstance().fetchMangaMeta(m_mangaId, serverMeta)) {
+        brls::Logger::info("ReaderActivity: server returned {} meta entries", serverMeta.size());
+        for (const auto& entry : serverMeta) {
+            brls::Logger::info("ReaderActivity: server meta [{}] = {}", entry.first, entry.second);
+        }
+
         // Check for reader settings in server meta
         // Standard keys used by Tachiyomi/Mihon clients
         auto readerModeIt = serverMeta.find("readerMode");
@@ -114,6 +125,7 @@ void ReaderActivity::onContentAvailable() {
     // If no server settings, check local per-manga cache
     bool hasLocalSettings = false;
     if (!hasServerSettings) {
+        brls::Logger::info("ReaderActivity: no server settings, checking local cache for manga {}", m_mangaId);
         auto it = appSettings.mangaReaderSettings.find(m_mangaId);
         if (it != appSettings.mangaReaderSettings.end()) {
             readingMode = it->second.readingMode;
@@ -122,10 +134,13 @@ void ReaderActivity::onContentAvailable() {
             cropBorders = it->second.cropBorders;
             webtoonSidePadding = it->second.webtoonSidePadding;
             hasLocalSettings = true;
-            brls::Logger::debug("ReaderActivity: using local per-manga settings for manga {}", m_mangaId);
+            brls::Logger::info("ReaderActivity: FOUND local settings - readingMode={}, pageScaleMode={}, rotation={}",
+                              static_cast<int>(readingMode), static_cast<int>(pageScaleMode), imageRotation);
         } else {
-            brls::Logger::debug("ReaderActivity: using global default settings for manga {}", m_mangaId);
+            brls::Logger::info("ReaderActivity: NO local settings found, using global defaults");
         }
+    } else {
+        brls::Logger::info("ReaderActivity: using server settings (skipping local cache)");
     }
 
     // Auto-detect webtoon format if enabled and no custom settings exist
@@ -983,9 +998,15 @@ void ReaderActivity::saveSettingsToApp() {
     // Store per-manga settings locally (overrides defaults for this manga)
     appSettings.mangaReaderSettings[m_mangaId] = mangaSettings;
 
+    brls::Logger::info("ReaderActivity: SAVING settings for manga {} - readingMode={}, pageScaleMode={}, rotation={}",
+                       m_mangaId, static_cast<int>(mangaSettings.readingMode),
+                       static_cast<int>(mangaSettings.pageScaleMode), mangaSettings.imageRotation);
+    brls::Logger::info("ReaderActivity: local cache now has {} per-manga settings",
+                       appSettings.mangaReaderSettings.size());
+
     // Save to local disk
-    Application::getInstance().saveSettings();
-    brls::Logger::debug("ReaderActivity: saved per-manga settings locally for manga {}", m_mangaId);
+    bool saveResult = Application::getInstance().saveSettings();
+    brls::Logger::info("ReaderActivity: saveSettings returned {}", saveResult ? "true" : "false");
 
     // Save to server asynchronously (using standard Tachiyomi/Mihon meta keys)
     int mangaId = m_mangaId;
