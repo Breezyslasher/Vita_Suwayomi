@@ -480,6 +480,26 @@ void ImageLoader::preload(const std::string& url) {
     processQueue();
 }
 
+void ImageLoader::preloadFullSize(const std::string& url) {
+    if (url.empty()) return;
+
+    // Check if already cached
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        if (s_cache.find(url) != s_cache.end()) {
+            return;
+        }
+    }
+
+    // Queue for full-size loading (no downscaling)
+    {
+        std::lock_guard<std::mutex> lock(s_queueMutex);
+        s_loadQueue.push({url, nullptr, nullptr, true});  // fullSize = true
+    }
+
+    processQueue();
+}
+
 void ImageLoader::clearCache() {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
     s_cache.clear();
