@@ -137,6 +137,45 @@ struct Manga {
             default: return "Unknown";
         }
     }
+
+    // Helper to detect if manga is a webtoon/long strip format
+    // Based on genre tags and source name
+    bool isWebtoon() const {
+        // Check genre for webtoon indicators
+        for (const auto& g : genre) {
+            std::string lower = g;
+            for (auto& c : lower) c = std::tolower(c);
+
+            if (lower.find("long strip") != std::string::npos ||
+                lower.find("webtoon") != std::string::npos ||
+                lower.find("web comic") != std::string::npos ||
+                lower.find("manhwa") != std::string::npos ||
+                lower.find("manhua") != std::string::npos ||
+                lower.find("full color") != std::string::npos) {
+                return true;
+            }
+        }
+
+        // Check source name for common webtoon sources
+        std::string lowerSource = sourceName;
+        for (auto& c : lowerSource) c = std::tolower(c);
+
+        if (lowerSource.find("webtoon") != std::string::npos ||
+            lowerSource.find("tapas") != std::string::npos ||
+            lowerSource.find("tappytoon") != std::string::npos ||
+            lowerSource.find("lezhin") != std::string::npos ||
+            lowerSource.find("toomics") != std::string::npos ||
+            lowerSource.find("manhwa") != std::string::npos ||
+            lowerSource.find("manhua") != std::string::npos ||
+            lowerSource.find("bilibili") != std::string::npos ||
+            lowerSource.find("asura") != std::string::npos ||
+            lowerSource.find("reaper") != std::string::npos ||
+            lowerSource.find("flame") != std::string::npos) {
+            return true;
+        }
+
+        return false;
+    }
 };
 
 // Page info for chapter reader

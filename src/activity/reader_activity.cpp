@@ -112,6 +112,7 @@ void ReaderActivity::onContentAvailable() {
     }
 
     // If no server settings, check local per-manga cache
+    bool hasLocalSettings = false;
     if (!hasServerSettings) {
         auto it = appSettings.mangaReaderSettings.find(m_mangaId);
         if (it != appSettings.mangaReaderSettings.end()) {
@@ -120,9 +121,24 @@ void ReaderActivity::onContentAvailable() {
             imageRotation = it->second.imageRotation;
             cropBorders = it->second.cropBorders;
             webtoonSidePadding = it->second.webtoonSidePadding;
+            hasLocalSettings = true;
             brls::Logger::debug("ReaderActivity: using local per-manga settings for manga {}", m_mangaId);
         } else {
             brls::Logger::debug("ReaderActivity: using global default settings for manga {}", m_mangaId);
+        }
+    }
+
+    // Auto-detect webtoon format if enabled and no custom settings exist
+    if (!hasServerSettings && !hasLocalSettings && appSettings.webtoonDetection) {
+        Manga mangaInfo;
+        if (SuwayomiClient::getInstance().fetchManga(m_mangaId, mangaInfo)) {
+            if (mangaInfo.isWebtoon()) {
+                // Apply webtoon-optimized defaults
+                readingMode = ReadingMode::WEBTOON;
+                pageScaleMode = PageScaleMode::FIT_WIDTH;
+                imageRotation = 0;  // No rotation for webtoons
+                brls::Logger::info("ReaderActivity: auto-detected webtoon format for '{}', applying webtoon defaults", mangaInfo.title);
+            }
         }
     }
 
