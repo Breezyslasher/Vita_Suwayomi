@@ -237,11 +237,21 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     chaptersActions->setAxis(brls::Axis::ROW);
 
     m_sortBtn = new brls::Button();
-    m_sortBtn->setWidth(100);
+    m_sortBtn->setWidth(44);
     m_sortBtn->setHeight(40);
-    m_sortBtn->setText("Sort");
+    m_sortBtn->setCornerRadius(8);
+
+    // Add sort icon
+    m_sortIcon = new brls::Image();
+    m_sortIcon->setWidth(24);
+    m_sortIcon->setHeight(24);
+    m_sortIcon->setScalingType(brls::ImageScalingType::FIT);
+    updateSortIcon();
+    m_sortBtn->addView(m_sortIcon);
+
     m_sortBtn->registerClickAction([this](brls::View* view) {
         m_sortDescending = !m_sortDescending;
+        updateSortIcon();
         populateChaptersList();
         return true;
     });
@@ -412,18 +422,14 @@ void MangaDetailView::populateChaptersList() {
         }
 
         // Download button - shows state based on local download state
-        // Using Unicode characters supported by DejaVuSans font
-        static const std::string ICON_DOWNLOAD = "\xE2\xAC\x87";      // ⬇ U+2B07 downwards arrow
-        static const std::string ICON_CHECK = "\xE2\x9C\x94";         // ✔ U+2714 heavy check mark
-        static const std::string ICON_HOURGLASS = "\xE2\x8F\xB3";     // ⏳ U+23F3 hourglass
-        static const std::string ICON_ERROR = "\xE2\x9C\x95";         // ✕ U+2715 multiplication x
-
         Chapter capturedChapter = chapter;
         auto* dlBtn = new brls::Button();
         dlBtn->setWidth(40);
         dlBtn->setHeight(36);
         dlBtn->setCornerRadius(18);  // Circular button
         dlBtn->setFocusable(true);
+        dlBtn->setJustifyContent(brls::JustifyContent::CENTER);
+        dlBtn->setAlignItems(brls::AlignItems::CENTER);
 
         // Check local download state first
         DownloadsManager& dm = DownloadsManager::getInstance();
@@ -443,17 +449,35 @@ void MangaDetailView::populateChaptersList() {
             dlBtn->setText(std::to_string(percent) + "%");
             dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
         } else if (isLocallyDownloaded) {
-            dlBtn->setText(ICON_CHECK);  // Checkmark icon
+            // Completed - show checkmark icon
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("romfs:/icons/checkbox_checked.png");
+            dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 deleteChapterDownload(capturedChapter);
                 return true;
             });
         } else if (isLocallyQueued) {
-            dlBtn->setText(ICON_HOURGLASS);  // Hourglass icon
+            // Queued - show refresh/waiting icon
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("romfs:/icons/refresh.png");
+            dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
         } else if (isLocallyFailed) {
-            dlBtn->setText(ICON_ERROR);  // Error icon
+            // Failed - show cross icon
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("romfs:/icons/cross.png");
+            dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 downloadChapter(capturedChapter);  // Retry
@@ -461,7 +485,12 @@ void MangaDetailView::populateChaptersList() {
             });
         } else {
             // Not downloaded - show download icon
-            dlBtn->setText(ICON_DOWNLOAD);  // Download icon
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("romfs:/icons/download.png");
+            dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 downloadChapter(capturedChapter);
@@ -873,6 +902,16 @@ void MangaDetailView::showTrackingDialog() {
 
 void MangaDetailView::updateTracking() {
     // TODO: Implement tracking update
+}
+
+void MangaDetailView::updateSortIcon() {
+    if (!m_sortIcon) return;
+
+    std::string iconPath = m_sortDescending
+        ? "romfs:/icons/sort-9-1.png"
+        : "romfs:/icons/sort-1-9.png";
+
+    m_sortIcon->setImageFromFile(iconPath);
 }
 
 } // namespace vitasuwayomi

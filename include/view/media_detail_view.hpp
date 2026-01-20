@@ -85,10 +85,14 @@ private:
 
     // Chapter sort/filter
     brls::Button* m_sortBtn = nullptr;
+    brls::Image* m_sortIcon = nullptr;
     brls::Button* m_filterBtn = nullptr;
     bool m_sortDescending = true;  // Default: newest first
     bool m_filterDownloaded = false;
     bool m_filterUnread = false;
+
+    // Helper to update sort icon
+    void updateSortIcon();
 };
 
 // Alias for backward compatibility
