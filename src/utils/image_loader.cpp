@@ -16,6 +16,17 @@
 #include <thread>
 #include <chrono>
 
+// stb_image for JPEG/PNG decoding
+// Note: stb_image.h should be available from borealis/extern or nanovg
+// If not found, you may need to add it to the project
+#define STBI_ONLY_JPEG
+#define STBI_ONLY_PNG
+#define STBI_NO_HDR
+#define STBI_NO_LINEAR
+#define STB_IMAGE_STATIC
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 namespace vitasuwayomi {
 
 // Static member initialization
@@ -167,6 +178,93 @@ static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, siz
                         segment + 1, totalSegments, targetW, targetH, width, height, startY);
 
     return createTGAFromRGBA(segmentRgba.data(), targetW, targetH);
+}
+
+// Convert JPEG/PNG to TGA for a specific segment of a tall image (using stb_image)
+static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t dataSize,
+                                                      int segment, int totalSegments, int maxSize) {
+    std::vector<uint8_t> tgaData;
+
+    int width, height, channels;
+    // Force 4 channels (RGBA)
+    uint8_t* rgba = stbi_load_from_memory(data, static_cast<int>(dataSize), &width, &height, &channels, 4);
+    if (!rgba) {
+        brls::Logger::error("ImageLoader: stb_image failed to decode image");
+        return tgaData;
+    }
+
+    // Calculate segment bounds
+    int segmentHeight = (height + totalSegments - 1) / totalSegments;
+    int startY = segment * segmentHeight;
+    int endY = std::min(startY + segmentHeight, height);
+    int actualHeight = endY - startY;
+
+    // Scale down if still too wide
+    int targetW = width;
+    int targetH = actualHeight;
+    if (width > maxSize) {
+        float scale = (float)maxSize / width;
+        targetW = maxSize;
+        targetH = std::max(1, (int)(actualHeight * scale));
+    }
+
+    // Extract and optionally scale the segment
+    std::vector<uint8_t> segmentRgba;
+    if (targetW != width || targetH != actualHeight) {
+        // Need to scale - extract segment first, then scale
+        std::vector<uint8_t> extracted(width * actualHeight * 4);
+        memcpy(extracted.data(), rgba + (startY * width * 4), width * actualHeight * 4);
+
+        segmentRgba.resize(targetW * targetH * 4);
+        downscaleRGBA(extracted.data(), width, actualHeight, segmentRgba.data(), targetW, targetH);
+    } else {
+        // Just extract the segment
+        segmentRgba.resize(width * actualHeight * 4);
+        memcpy(segmentRgba.data(), rgba + (startY * width * 4), width * actualHeight * 4);
+    }
+
+    stbi_image_free(rgba);
+
+    brls::Logger::debug("ImageLoader: JPEG/PNG Segment {}/{} - {}x{} (from {}x{} startY={})",
+                        segment + 1, totalSegments, targetW, targetH, width, height, startY);
+
+    return createTGAFromRGBA(segmentRgba.data(), targetW, targetH);
+}
+
+// Convert JPEG/PNG to TGA with optional downscaling (using stb_image)
+static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSize, int maxSize) {
+    std::vector<uint8_t> tgaData;
+
+    int width, height, channels;
+    // Force 4 channels (RGBA)
+    uint8_t* rgba = stbi_load_from_memory(data, static_cast<int>(dataSize), &width, &height, &channels, 4);
+    if (!rgba) {
+        brls::Logger::error("ImageLoader: stb_image failed to decode image");
+        return tgaData;
+    }
+
+    int targetW = width;
+    int targetH = height;
+
+    if (maxSize > 0 && (width > maxSize || height > maxSize)) {
+        float scale = (float)maxSize / std::max(width, height);
+        targetW = std::max(1, (int)(width * scale));
+        targetH = std::max(1, (int)(height * scale));
+    }
+
+    uint8_t* finalRgba = rgba;
+    std::vector<uint8_t> scaledRgba;
+
+    if (targetW != width || targetH != height) {
+        scaledRgba.resize(targetW * targetH * 4);
+        downscaleRGBA(rgba, width, height, scaledRgba.data(), targetW, targetH);
+        finalRgba = scaledRgba.data();
+    }
+
+    tgaData = createTGAFromRGBA(finalRgba, targetW, targetH);
+
+    stbi_image_free(rgba);
+    return tgaData;
 }
 
 // Helper function to convert WebP to TGA format with downscaling
@@ -484,15 +582,24 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
 
         // Check image format
         bool isWebP = false;
+        bool isJpegOrPng = false;
         bool isValidImage = false;
 
         if (resp.body.size() > 12) {
             unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
 
-            // JPEG, PNG, GIF
-            if ((data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) ||
-                (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) ||
-                (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46)) {
+            // JPEG
+            if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
+                isJpegOrPng = true;
+                isValidImage = true;
+            }
+            // PNG
+            else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+                isJpegOrPng = true;
+                isValidImage = true;
+            }
+            // GIF (pass through - typically small enough)
+            else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
                 isValidImage = true;
             }
             // WebP
@@ -508,13 +615,14 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             return;
         }
 
-        // Convert WebP to TGA with size limit for Vita GPU (max texture 2048x2048)
-        // Webtoon images are often very tall and may need to be split into segments
+        // Convert images to TGA with size limit for Vita GPU (max texture 2048x2048)
+        // Webtoon images are often very tall and need to be split into segments
         const int MAX_TEXTURE_SIZE = 2048;
         std::vector<uint8_t> imageData;
+
         if (isWebP) {
             if (totalSegments > 1) {
-                // Loading a specific segment of a tall image
+                // Loading a specific segment of a tall WebP image
                 imageData = convertWebPtoTGASegment(
                     reinterpret_cast<const uint8_t*>(resp.body.data()),
                     resp.body.size(),
@@ -524,22 +632,45 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 );
                 brls::Logger::info("ImageLoader: Loaded segment {}/{} of WebP", segment + 1, totalSegments);
             } else {
-                // Normal loading with downscaling if needed
+                // Normal WebP loading with downscaling if needed
                 imageData = convertWebPtoTGA(
                     reinterpret_cast<const uint8_t*>(resp.body.data()),
                     resp.body.size(),
-                    MAX_TEXTURE_SIZE  // Limit size for Vita GPU
+                    MAX_TEXTURE_SIZE
                 );
             }
             if (imageData.empty()) {
                 brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
                 return;
             }
+        } else if (isJpegOrPng) {
+            if (totalSegments > 1) {
+                // Loading a specific segment of a tall JPEG/PNG image
+                imageData = convertImageToTGASegment(
+                    reinterpret_cast<const uint8_t*>(resp.body.data()),
+                    resp.body.size(),
+                    segment,
+                    totalSegments,
+                    MAX_TEXTURE_SIZE
+                );
+                brls::Logger::info("ImageLoader: Loaded segment {}/{} of JPEG/PNG", segment + 1, totalSegments);
+            } else {
+                // Normal JPEG/PNG loading with downscaling if needed
+                imageData = convertImageToTGA(
+                    reinterpret_cast<const uint8_t*>(resp.body.data()),
+                    resp.body.size(),
+                    MAX_TEXTURE_SIZE
+                );
+            }
+            if (imageData.empty()) {
+                brls::Logger::error("ImageLoader: JPEG/PNG conversion failed for {}", url);
+                return;
+            }
         } else {
-            // For JPG/PNG, pass through directly
-            // NVG will handle loading, but may fail for very large images
+            // For GIF and other formats, pass through directly
+            // NVG will handle loading
             imageData.assign(resp.body.begin(), resp.body.end());
-            brls::Logger::debug("ImageLoader: Using JPG/PNG directly ({} bytes)", imageData.size());
+            brls::Logger::debug("ImageLoader: Using image directly ({} bytes)", imageData.size());
         }
 
         // Cache the image (include segment in key if segmented)
