@@ -454,7 +454,7 @@ void MangaDetailView::populateChaptersList() {
             icon->setWidth(20);
             icon->setHeight(20);
             icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("romfs:/icons/checkbox_checked.png");
+            icon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
             dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
@@ -467,7 +467,7 @@ void MangaDetailView::populateChaptersList() {
             icon->setWidth(20);
             icon->setHeight(20);
             icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("romfs:/icons/refresh.png");
+            icon->setImageFromFile("app0:resources/icons/refresh.png");
             dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
         } else if (isLocallyFailed) {
@@ -476,7 +476,7 @@ void MangaDetailView::populateChaptersList() {
             icon->setWidth(20);
             icon->setHeight(20);
             icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("romfs:/icons/cross.png");
+            icon->setImageFromFile("app0:resources/icons/cross.png");
             dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
@@ -489,7 +489,7 @@ void MangaDetailView::populateChaptersList() {
             icon->setWidth(20);
             icon->setHeight(20);
             icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("romfs:/icons/download.png");
+            icon->setImageFromFile("app0:resources/icons/download.png");
             dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
@@ -908,8 +908,8 @@ void MangaDetailView::updateSortIcon() {
     if (!m_sortIcon) return;
 
     std::string iconPath = m_sortDescending
-        ? "romfs:/icons/sort-9-1.png"
-        : "romfs:/icons/sort-1-9.png";
+        ? "app0:resources/icons/sort-9-1.png"
+        : "app0:resources/icons/sort-1-9.png";
 
     m_sortIcon->setImageFromFile(iconPath);
 }

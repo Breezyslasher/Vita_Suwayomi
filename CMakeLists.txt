@@ -194,6 +194,36 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     FILE resources/xml/view/manga_item.xml resources/xml/view/manga_item.xml
     FILE resources/xml/view/chapter_item.xml resources/xml/view/chapter_item.xml
 
+    # Icons
+    FILE resources/icons/a.png resources/icons/a.png
+    FILE resources/icons/az.png resources/icons/az.png
+    FILE resources/icons/back.png resources/icons/back.png
+    FILE resources/icons/checkbox.png resources/icons/checkbox.png
+    FILE resources/icons/checkbox_checked.png resources/icons/checkbox_checked.png
+    FILE resources/icons/checkbox_crossed.png resources/icons/checkbox_crossed.png
+    FILE resources/icons/circle.png resources/icons/circle.png
+    FILE resources/icons/cross.png resources/icons/cross.png
+    FILE resources/icons/download.png resources/icons/download.png
+    FILE resources/icons/hide.png resources/icons/hide.png
+    FILE resources/icons/history.png resources/icons/history.png
+    FILE resources/icons/hot.png resources/icons/hot.png
+    FILE resources/icons/import.png resources/icons/import.png
+    FILE resources/icons/left.png resources/icons/left.png
+    FILE resources/icons/menu.png resources/icons/menu.png
+    FILE resources/icons/mini_star.png resources/icons/mini_star.png
+    FILE resources/icons/options.png resources/icons/options.png
+    FILE resources/icons/radio.png resources/icons/radio.png
+    FILE resources/icons/radio_checked.png resources/icons/radio_checked.png
+    FILE resources/icons/refresh.png resources/icons/refresh.png
+    FILE resources/icons/right.png resources/icons/right.png
+    FILE resources/icons/search.png resources/icons/search.png
+    FILE resources/icons/show.png resources/icons/show.png
+    FILE resources/icons/sort-1-9.png resources/icons/sort-1-9.png
+    FILE resources/icons/sort-9-1.png resources/icons/sort-9-1.png
+    FILE resources/icons/star.png resources/icons/star.png
+    FILE resources/icons/tag.png resources/icons/tag.png
+    FILE resources/icons/web.png resources/icons/web.png
+
     # Fonts (using simpler DejaVu fonts for Vita compatibility)
     FILE resources/font/font.ttf resources/font/font.ttf
     FILE resources/font/icon.ttf resources/font/icon.ttf

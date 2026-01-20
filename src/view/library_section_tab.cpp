@@ -580,19 +580,19 @@ void LibrarySectionTab::updateSortButtonText() {
     std::string iconPath;
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
-            iconPath = "romfs:/icons/az.png";  // A-Z
+            iconPath = "app0:resources/icons/az.png";  // A-Z
             break;
         case LibrarySortMode::TITLE_DESC:
-            iconPath = "romfs:/icons/a.png";   // Z-A (reverse)
+            iconPath = "app0:resources/icons/a.png";   // Z-A (reverse)
             break;
         case LibrarySortMode::UNREAD_DESC:
-            iconPath = "romfs:/icons/sort-9-1.png";  // Most unread first
+            iconPath = "app0:resources/icons/sort-9-1.png";  // Most unread first
             break;
         case LibrarySortMode::UNREAD_ASC:
-            iconPath = "romfs:/icons/sort-1-9.png";  // Least unread first
+            iconPath = "app0:resources/icons/sort-1-9.png";  // Least unread first
             break;
         case LibrarySortMode::RECENTLY_ADDED:
-            iconPath = "romfs:/icons/history.png";   // Recent
+            iconPath = "app0:resources/icons/history.png";   // Recent
             break;
     }
     m_sortIcon->setImageFromFile(iconPath);
