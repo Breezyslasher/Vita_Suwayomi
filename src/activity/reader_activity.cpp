@@ -128,11 +128,21 @@ void ReaderActivity::onContentAvailable() {
         m_lastTapPosition = {0, 0};
 
         // Pan gesture for swipe detection (NOBORU style with page preview)
+        // Swipe direction changes based on rotation:
+        // - 0°/180°: horizontal swipes (left/right)
+        // - 90°/270°: vertical swipes (up/down)
+        // - 180°/270°: inverted direction compared to 0°/90°
         pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 const float TAP_THRESHOLD = 15.0f;       // Max movement for tap
                 const float PAGE_TURN_THRESHOLD = 80.0f; // Threshold to complete page turn
                 const float SWIPE_START_THRESHOLD = 20.0f; // When to start showing preview
+
+                // Determine swipe axis and inversion based on rotation
+                bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
+                                         m_settings.rotation == ImageRotation::ROTATE_270);
+                bool invertDirection = (m_settings.rotation == ImageRotation::ROTATE_180 ||
+                                        m_settings.rotation == ImageRotation::ROTATE_270);
 
                 if (status.state == brls::GestureState::START) {
                     m_isPanning = false;
@@ -147,14 +157,19 @@ void ReaderActivity::onContentAvailable() {
                     float dx = m_touchCurrent.x - m_touchStart.x;
                     float dy = m_touchCurrent.y - m_touchStart.y;
 
-                    // Only track horizontal swipes
-                    if (std::abs(dx) > std::abs(dy) && std::abs(dx) > SWIPE_START_THRESHOLD) {
+                    // Get effective swipe delta based on rotation
+                    float swipeDelta = useVerticalSwipe ? dy : dx;
+                    float crossDelta = useVerticalSwipe ? dx : dy;
+                    if (invertDirection) swipeDelta = -swipeDelta;
+
+                    // Only track swipes in the primary direction
+                    if (std::abs(swipeDelta) > std::abs(crossDelta) && std::abs(swipeDelta) > SWIPE_START_THRESHOLD) {
                         m_isSwipeAnimating = true;
-                        m_swipeOffset = dx;
+                        m_swipeOffset = swipeDelta;
 
                         // Determine which page we're swiping to based on direction
-                        bool swipingRight = dx > 0;
-                        bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingRight : !swipingRight;
+                        bool swipingPositive = swipeDelta > 0;
+                        bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingPositive : !swipingPositive;
 
                         int previewIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
 
@@ -167,7 +182,7 @@ void ReaderActivity::onContentAvailable() {
                         }
 
                         // Update visual positions - show preview page sliding in
-                        updateSwipePreview(dx);
+                        updateSwipePreview(swipeDelta);
                     }
                 } else if (status.state == brls::GestureState::END) {
                     m_touchCurrent = status.position;
@@ -176,6 +191,10 @@ void ReaderActivity::onContentAvailable() {
                     float dx = m_touchCurrent.x - m_touchStart.x;
                     float dy = m_touchCurrent.y - m_touchStart.y;
                     float distance = std::sqrt(dx * dx + dy * dy);
+
+                    // Get effective swipe delta based on rotation
+                    float swipeDelta = useVerticalSwipe ? dy : dx;
+                    if (invertDirection) swipeDelta = -swipeDelta;
 
                     if (distance < TAP_THRESHOLD) {
                         // It's a tap - check for double-tap
@@ -201,9 +220,9 @@ void ReaderActivity::onContentAvailable() {
                         resetSwipeState();
                     } else if (m_isSwipeAnimating) {
                         // Complete swipe animation
-                        float absX = std::abs(dx);
+                        float absSwipe = std::abs(swipeDelta);
 
-                        if (absX >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
+                        if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
                             // Swipe was long enough - turn the page
                             completeSwipeAnimation(true);
                         } else {
@@ -211,13 +230,12 @@ void ReaderActivity::onContentAvailable() {
                             completeSwipeAnimation(false);
                         }
                     } else {
-                        // Vertical swipe or short horizontal swipe
-                        float absX = std::abs(dx);
-                        float absY = std::abs(dy);
+                        // Secondary axis swipe (fallback navigation)
+                        float crossDelta = useVerticalSwipe ? dx : dy;
+                        if (invertDirection) crossDelta = -crossDelta;
 
-                        if (absY > absX && absY >= PAGE_TURN_THRESHOLD) {
-                            // Vertical swipe
-                            if (dy > 0) {
+                        if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
+                            if (crossDelta > 0) {
                                 previousPage();
                             } else {
                                 nextPage();
@@ -841,37 +859,77 @@ void ReaderActivity::handlePinchZoom(float scaleFactor) {
 void ReaderActivity::updateSwipePreview(float offset) {
     // Update visual positions during swipe - current page moves, preview slides in
     const float SCREEN_WIDTH = 960.0f;
+    const float SCREEN_HEIGHT = 544.0f;
 
     if (!pageImage || !previewImage) return;
 
     // Show preview image
     previewImage->setVisibility(brls::Visibility::VISIBLE);
 
-    // Clamp offset to screen width
-    offset = std::max(-SCREEN_WIDTH, std::min(SCREEN_WIDTH, offset));
+    // Determine if we should use vertical swipe based on rotation
+    bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
+                             m_settings.rotation == ImageRotation::ROTATE_270);
 
-    // Move current page with finger
-    pageImage->setTranslationX(offset);
+    if (useVerticalSwipe) {
+        // Vertical swipe for 90/270 rotation
+        // Clamp offset to screen height
+        offset = std::max(-SCREEN_HEIGHT, std::min(SCREEN_HEIGHT, offset));
 
-    // Position preview page sliding in from the edge
-    if (m_swipingToNext) {
-        // Next page slides in from right (for RTL swipe right) or left (for LTR swipe left)
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-            // RTL: swiping right, next page comes from right
-            previewImage->setTranslationX(SCREEN_WIDTH + offset);
+        // Move current page with finger (vertically)
+        pageImage->setTranslationY(offset);
+        pageImage->setTranslationX(0.0f);
+
+        // Position preview page sliding in from top/bottom
+        if (m_swipingToNext) {
+            // Next page slides in from bottom (swipe up) or top (swipe down)
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                // RTL: next page comes from bottom
+                previewImage->setTranslationY(SCREEN_HEIGHT + offset);
+            } else {
+                // LTR: next page comes from top
+                previewImage->setTranslationY(-SCREEN_HEIGHT + offset);
+            }
         } else {
-            // LTR: swiping left, next page comes from left
-            previewImage->setTranslationX(-SCREEN_WIDTH + offset);
+            // Previous page slides in from opposite side
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                // RTL: prev page comes from top
+                previewImage->setTranslationY(-SCREEN_HEIGHT + offset);
+            } else {
+                // LTR: prev page comes from bottom
+                previewImage->setTranslationY(SCREEN_HEIGHT + offset);
+            }
         }
+        previewImage->setTranslationX(0.0f);
     } else {
-        // Previous page slides in from opposite side
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-            // RTL: swiping left, prev page comes from left
-            previewImage->setTranslationX(-SCREEN_WIDTH + offset);
+        // Horizontal swipe for 0/180 rotation
+        // Clamp offset to screen width
+        offset = std::max(-SCREEN_WIDTH, std::min(SCREEN_WIDTH, offset));
+
+        // Move current page with finger (horizontally)
+        pageImage->setTranslationX(offset);
+        pageImage->setTranslationY(0.0f);
+
+        // Position preview page sliding in from the edge
+        if (m_swipingToNext) {
+            // Next page slides in from right (for RTL swipe right) or left (for LTR swipe left)
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                // RTL: swiping right, next page comes from right
+                previewImage->setTranslationX(SCREEN_WIDTH + offset);
+            } else {
+                // LTR: swiping left, next page comes from left
+                previewImage->setTranslationX(-SCREEN_WIDTH + offset);
+            }
         } else {
-            // LTR: swiping right, prev page comes from right
-            previewImage->setTranslationX(SCREEN_WIDTH + offset);
+            // Previous page slides in from opposite side
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                // RTL: swiping left, prev page comes from left
+                previewImage->setTranslationX(-SCREEN_WIDTH + offset);
+            } else {
+                // LTR: swiping right, prev page comes from right
+                previewImage->setTranslationX(SCREEN_WIDTH + offset);
+            }
         }
+        previewImage->setTranslationY(0.0f);
     }
 }
 
@@ -917,15 +975,17 @@ void ReaderActivity::resetSwipeState() {
     m_swipeOffset = 0.0f;
     m_previewPageIndex = -1;
 
-    // Reset page positions
+    // Reset page positions (both X and Y)
     if (pageImage) {
         pageImage->setTranslationX(0.0f);
+        pageImage->setTranslationY(0.0f);
     }
 
     // Hide preview image
     if (previewImage) {
         previewImage->setVisibility(brls::Visibility::GONE);
         previewImage->setTranslationX(0.0f);
+        previewImage->setTranslationY(0.0f);
     }
 }
 
