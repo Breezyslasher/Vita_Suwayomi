@@ -1,15 +1,20 @@
 /**
  * VitaSuwayomi - Asynchronous Image Loader implementation
  * With concurrent load limiting and image downscaling for PS Vita memory constraints
+ * Non-blocking design with staggered loading to prevent UI freezes
  */
 
 #include "utils/image_loader.hpp"
 #include "utils/http_client.hpp"
+#include "utils/library_cache.hpp"
 #include "app/suwayomi_client.hpp"
+#include "app/application.hpp"
 
 // WebP decoding support
 #include <webp/decode.h>
 #include <cstring>
+#include <thread>
+#include <chrono>
 
 namespace vitasuwayomi {
 
@@ -22,10 +27,34 @@ std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
 std::atomic<int> ImageLoader::s_activeLoads{0};
-int ImageLoader::s_maxConcurrentLoads = 4;  // Limit concurrent loads for Vita
-int ImageLoader::s_maxThumbnailSize = 200;  // Max dimension for thumbnails
+int ImageLoader::s_maxConcurrentLoads = 2;  // Reduced for Vita stability
+int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
-// Helper function to downscale RGBA image using simple box filter
+// Flag to track if queue processor is running
+static std::atomic<bool> s_processorRunning{false};
+
+// Helper to extract manga ID from thumbnail URL
+// URLs look like: http://server/api/v1/manga/123/thumbnail or /api/v1/manga/123/thumbnail
+static int extractMangaIdFromUrl(const std::string& url) {
+    // Look for /manga/XXX/ pattern
+    size_t pos = url.find("/manga/");
+    if (pos != std::string::npos) {
+        pos += 7;  // Skip "/manga/"
+        size_t endPos = url.find('/', pos);
+        if (endPos == std::string::npos) {
+            endPos = url.length();
+        }
+        std::string idStr = url.substr(pos, endPos - pos);
+        try {
+            return std::stoi(idStr);
+        } catch (...) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
+// Helper function to downscale RGBA image
 static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
                           uint8_t* dst, int dstW, int dstH) {
     float scaleX = (float)srcW / dstW;
@@ -33,7 +62,6 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
 
     for (int y = 0; y < dstH; y++) {
         for (int x = 0; x < dstW; x++) {
-            // Simple point sampling for speed
             int srcX = (int)(x * scaleX);
             int srcY = (int)(y * scaleY);
             if (srcX >= srcW) srcX = srcW - 1;
@@ -50,83 +78,60 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
     }
 }
 
-// Helper function to convert WebP to TGA format with optional downscaling
+// Helper function to convert WebP to TGA format with downscaling
 static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t webpSize, int maxSize) {
     std::vector<uint8_t> tgaData;
 
-    // Get WebP image info
     int width, height;
     if (!WebPGetInfo(webpData, webpSize, &width, &height)) {
-        brls::Logger::error("ImageLoader: Failed to get WebP info");
         return tgaData;
     }
 
-    brls::Logger::debug("ImageLoader: Decoding WebP {}x{}", width, height);
-
-    // Decode WebP to RGBA
     uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &width, &height);
     if (!rgba) {
-        brls::Logger::error("ImageLoader: Failed to decode WebP");
         return tgaData;
     }
 
-    // Calculate target size with aspect ratio preservation
     int targetW = width;
     int targetH = height;
-    bool needsDownscale = false;
 
     if (maxSize > 0 && (width > maxSize || height > maxSize)) {
         float scale = (float)maxSize / std::max(width, height);
-        targetW = (int)(width * scale);
-        targetH = (int)(height * scale);
-        if (targetW < 1) targetW = 1;
-        if (targetH < 1) targetH = 1;
-        needsDownscale = true;
-        brls::Logger::debug("ImageLoader: Downscaling from {}x{} to {}x{}", width, height, targetW, targetH);
+        targetW = std::max(1, (int)(width * scale));
+        targetH = std::max(1, (int)(height * scale));
     }
 
-    // Downscale if needed
     uint8_t* finalRgba = rgba;
     std::vector<uint8_t> scaledRgba;
 
-    if (needsDownscale) {
+    if (targetW != width || targetH != height) {
         scaledRgba.resize(targetW * targetH * 4);
         downscaleRGBA(rgba, width, height, scaledRgba.data(), targetW, targetH);
         finalRgba = scaledRgba.data();
     }
 
-    // Create TGA file in memory
     size_t imageSize = targetW * targetH * 4;
     tgaData.resize(18 + imageSize);
 
-    // TGA header
     uint8_t* header = tgaData.data();
     memset(header, 0, 18);
-    header[2] = 2;          // Uncompressed true-color image
+    header[2] = 2;
     header[12] = targetW & 0xFF;
     header[13] = (targetW >> 8) & 0xFF;
     header[14] = targetH & 0xFF;
     header[15] = (targetH >> 8) & 0xFF;
-    header[16] = 32;        // 32 bits per pixel (RGBA)
-    header[17] = 0x28;      // Image descriptor: top-left origin + 8 alpha bits
+    header[16] = 32;
+    header[17] = 0x28;
 
-    // Convert RGBA to BGRA for TGA
     uint8_t* pixels = tgaData.data() + 18;
-    for (int y = 0; y < targetH; y++) {
-        for (int x = 0; x < targetW; x++) {
-            int srcIdx = (y * targetW + x) * 4;
-            int dstIdx = (y * targetW + x) * 4;
-            pixels[dstIdx + 0] = finalRgba[srcIdx + 2];  // B
-            pixels[dstIdx + 1] = finalRgba[srcIdx + 1];  // G
-            pixels[dstIdx + 2] = finalRgba[srcIdx + 0];  // R
-            pixels[dstIdx + 3] = finalRgba[srcIdx + 3];  // A
-        }
+    for (int i = 0; i < targetW * targetH; i++) {
+        pixels[i * 4 + 0] = finalRgba[i * 4 + 2];  // B
+        pixels[i * 4 + 1] = finalRgba[i * 4 + 1];  // G
+        pixels[i * 4 + 2] = finalRgba[i * 4 + 0];  // R
+        pixels[i * 4 + 3] = finalRgba[i * 4 + 3];  // A
     }
 
-    // Free WebP decoded data
     WebPFree(rgba);
-
-    brls::Logger::debug("ImageLoader: Converted WebP to TGA {}x{} ({} bytes)", targetW, targetH, tgaData.size());
     return tgaData;
 }
 
@@ -136,52 +141,21 @@ void ImageLoader::setAuthCredentials(const std::string& username, const std::str
 }
 
 void ImageLoader::setMaxConcurrentLoads(int max) {
-    s_maxConcurrentLoads = max > 0 ? max : 1;
+    s_maxConcurrentLoads = std::max(1, std::min(max, 4));
 }
 
 void ImageLoader::setMaxThumbnailSize(int maxSize) {
     s_maxThumbnailSize = maxSize > 0 ? maxSize : 0;
 }
 
-void ImageLoader::processQueue() {
-    std::lock_guard<std::mutex> lock(s_queueMutex);
-
-    // Process brls::Image queue while we have capacity
-    while (!s_loadQueue.empty() && s_activeLoads < s_maxConcurrentLoads) {
-        LoadRequest request = s_loadQueue.front();
-        s_loadQueue.pop();
-        s_activeLoads++;
-
-        brls::async([request]() {
-            executeLoad(request);
-            s_activeLoads--;
-            processQueue();
-        });
-    }
-
-    // Process RotatableImage queue while we have capacity
-    while (!s_rotatableLoadQueue.empty() && s_activeLoads < s_maxConcurrentLoads) {
-        RotatableLoadRequest request = s_rotatableLoadQueue.front();
-        s_rotatableLoadQueue.pop();
-        s_activeLoads++;
-
-        brls::async([request]() {
-            executeRotatableLoad(request);
-            s_activeLoads--;
-            processQueue();
-        });
-    }
-}
-
 void ImageLoader::executeLoad(const LoadRequest& request) {
     const std::string& url = request.url;
-    LoadCallback callback = request.callback;
     brls::Image* target = request.target;
-    bool fullSize = request.fullSize;
+    LoadCallback callback = request.callback;
 
     HttpClient client;
 
-    // Add authentication if credentials are set
+    // Add authentication if needed
     if (!s_authUsername.empty() && !s_authPassword.empty()) {
         std::string credentials = s_authUsername + ":" + s_authPassword;
         static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -202,88 +176,132 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
 
     HttpResponse resp = client.get(url);
 
-    if (resp.success && !resp.body.empty()) {
-        brls::Logger::debug("ImageLoader: Loaded {} bytes from {}", resp.body.size(), url);
+    if (!resp.success || resp.body.empty()) {
+        return;
+    }
 
-        // Check if it's WebP and convert to TGA
-        bool isWebP = false;
-        bool isValidImage = false;
+    // Check image format
+    bool isWebP = false;
+    bool isValidImage = false;
 
-        if (resp.body.size() > 12) {
-            unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
+    if (resp.body.size() > 12) {
+        unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
 
-            // JPEG: FF D8 FF
-            if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
-                isValidImage = true;
-            }
-            // PNG: 89 50 4E 47
-            else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
-                isValidImage = true;
-            }
-            // GIF: 47 49 46
-            else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
-                isValidImage = true;
-            }
-            // WebP: RIFF....WEBP
-            else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
-                     data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
-                isWebP = true;
-                isValidImage = true;
-            }
+        if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
+            isValidImage = true;  // JPEG
         }
+        else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+            isValidImage = true;  // PNG
+        }
+        else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
+            isValidImage = true;  // GIF
+        }
+        else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+                 data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
+            isWebP = true;
+            isValidImage = true;
+        }
+    }
 
-        if (!isValidImage) {
-            brls::Logger::warning("ImageLoader: Invalid image format for {}", url);
+    if (!isValidImage) {
+        return;
+    }
+
+    // Convert WebP if needed
+    std::vector<uint8_t> imageData;
+    if (isWebP) {
+        imageData = convertWebPtoTGA(
+            reinterpret_cast<const uint8_t*>(resp.body.data()),
+            resp.body.size(),
+            s_maxThumbnailSize
+        );
+        if (imageData.empty()) {
             return;
         }
+    } else {
+        imageData.assign(resp.body.begin(), resp.body.end());
+    }
 
-        // Convert WebP to TGA if needed (with optional downscaling)
-        std::vector<uint8_t> imageData;
-        if (isWebP) {
-            // Only downscale for thumbnails, not full-size manga pages
-            int maxSize = fullSize ? 0 : s_maxThumbnailSize;
-            imageData = convertWebPtoTGA(
-                reinterpret_cast<const uint8_t*>(resp.body.data()),
-                resp.body.size(),
-                maxSize
-            );
-            if (imageData.empty()) {
-                brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
+    // Cache the image in memory
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        if (s_cache.size() > 40) {
+            s_cache.clear();
+        }
+        s_cache[url] = imageData;
+    }
+
+    // Save to disk cache if enabled
+    if (Application::getInstance().getSettings().cacheCoverImages) {
+        int mangaId = extractMangaIdFromUrl(url);
+        if (mangaId > 0) {
+            LibraryCache::getInstance().saveCoverImage(mangaId, imageData);
+        }
+    }
+
+    // Update UI on main thread
+    if (target) {
+        brls::sync([imageData, callback, target]() {
+            target->setImageFromMem(imageData.data(), imageData.size());
+            if (callback) callback(target);
+        });
+    }
+}
+
+void ImageLoader::processQueue() {
+    // Only allow one processor thread at a time
+    bool expected = false;
+    if (!s_processorRunning.compare_exchange_strong(expected, true)) {
+        return;  // Another processor is already running
+    }
+
+    // Start a single background thread that processes the entire queue
+    std::thread([]() {
+        while (true) {
+            // Check if we can process more
+            if (s_activeLoads >= s_maxConcurrentLoads) {
+                // Wait a bit before checking again
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                continue;
+            }
+
+            // Get next request
+            LoadRequest request;
+            bool hasRequest = false;
+
+            {
+                std::lock_guard<std::mutex> lock(s_queueMutex);
+                if (!s_loadQueue.empty()) {
+                    request = s_loadQueue.front();
+                    s_loadQueue.pop();
+                    hasRequest = true;
+                }
+            }
+
+            if (!hasRequest) {
+                // Queue is empty, exit processor
+                s_processorRunning = false;
                 return;
             }
-        } else {
-            imageData.assign(resp.body.begin(), resp.body.end());
-        }
 
-        // Cache the image (with size limit)
-        {
-            std::lock_guard<std::mutex> lock(s_cacheMutex);
-            // More aggressive cache eviction for Vita memory
-            if (s_cache.size() > 50) {
-                brls::Logger::debug("ImageLoader: Cache full, clearing {} entries", s_cache.size());
-                s_cache.clear();
-            }
-            // Use different cache key for full-size images
-            std::string cacheKey = fullSize ? (url + "_full") : url;
-            s_cache[cacheKey] = imageData;
-        }
+            s_activeLoads++;
 
-        // Update UI on main thread
-        brls::sync([imageData, callback, target]() {
-            if (target) {
-                target->setImageFromMem(imageData.data(), imageData.size());
-                if (callback) callback(target);
-            }
-        });
-    } else {
-        brls::Logger::error("ImageLoader: Failed to load {}: {}", url, resp.error);
-    }
+            // Execute load in a new thread
+            std::thread([request]() {
+                executeLoad(request);
+                s_activeLoads--;
+            }).detach();
+
+            // Small delay between starting loads to prevent overwhelming the system
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        }
+    }).detach();
 }
 
 void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target) {
     if (url.empty() || !target) return;
 
-    // Check cache first
+    // Check memory cache first
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
         auto it = s_cache.find(url);
@@ -294,38 +312,34 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
         }
     }
 
-    // Add to queue (with thumbnail downscaling)
-    {
-        std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_loadQueue.push({url, callback, target, false});
-    }
-
-    // Try to process queue
-    processQueue();
-}
-
-void ImageLoader::loadAsyncFullSize(const std::string& url, LoadCallback callback, brls::Image* target) {
-    if (url.empty() || !target) return;
-
-    // Check cache first (use different cache key for full size)
-    std::string cacheKey = url + "_full";
-    {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        auto it = s_cache.find(cacheKey);
-        if (it != s_cache.end()) {
-            target->setImageFromMem(it->second.data(), it->second.size());
-            if (callback) callback(target);
-            return;
+    // Check disk cache if enabled
+    if (Application::getInstance().getSettings().cacheCoverImages) {
+        int mangaId = extractMangaIdFromUrl(url);
+        if (mangaId > 0) {
+            std::vector<uint8_t> diskData;
+            if (LibraryCache::getInstance().loadCoverImage(mangaId, diskData)) {
+                // Found in disk cache - add to memory cache and display
+                {
+                    std::lock_guard<std::mutex> lock(s_cacheMutex);
+                    if (s_cache.size() > 40) {
+                        s_cache.clear();
+                    }
+                    s_cache[url] = diskData;
+                }
+                target->setImageFromMem(diskData.data(), diskData.size());
+                if (callback) callback(target);
+                return;
+            }
         }
     }
 
-    // Add to queue (without downscaling)
+    // Add to queue for network download
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
         s_loadQueue.push({url, callback, target, true});
     }
 
-    // Try to process queue
+    // Start processor if not already running
     processQueue();
 }
 
@@ -451,7 +465,6 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
 void ImageLoader::preload(const std::string& url) {
     if (url.empty()) return;
 
-    // Check if already cached
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
         if (s_cache.find(url) != s_cache.end()) {
@@ -459,28 +472,6 @@ void ImageLoader::preload(const std::string& url) {
         }
     }
 
-    // Add to queue with null target (with downscaling)
-    {
-        std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_loadQueue.push({url, nullptr, nullptr, false});
-    }
-
-    processQueue();
-}
-
-void ImageLoader::preloadFullSize(const std::string& url) {
-    if (url.empty()) return;
-
-    // Check if already cached
-    std::string cacheKey = url + "_full";
-    {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.find(cacheKey) != s_cache.end()) {
-            return;
-        }
-    }
-
-    // Add to queue with null target (without downscaling)
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
         s_loadQueue.push({url, nullptr, nullptr, true});
@@ -492,16 +483,13 @@ void ImageLoader::preloadFullSize(const std::string& url) {
 void ImageLoader::clearCache() {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
     s_cache.clear();
-    brls::Logger::info("ImageLoader: Cache cleared");
 }
 
 void ImageLoader::cancelAll() {
     std::lock_guard<std::mutex> lock(s_queueMutex);
-    // Clear the queue
     while (!s_loadQueue.empty()) {
         s_loadQueue.pop();
     }
-    brls::Logger::info("ImageLoader: Cancelled {} pending loads", s_loadQueue.size());
 }
 
 } // namespace vitasuwayomi

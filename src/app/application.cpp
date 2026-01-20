@@ -5,6 +5,7 @@
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
+#include "utils/library_cache.hpp"
 #include "activity/login_activity.hpp"
 #include "activity/main_activity.hpp"
 #include "activity/reader_activity.hpp"
@@ -52,6 +53,9 @@ bool Application::init() {
     // Apply settings
     applyTheme();
     applyLogLevel();
+
+    // Initialize library cache
+    LibraryCache::getInstance().init();
 
     m_initialized = true;
     return true;
@@ -317,6 +321,10 @@ bool Application::loadSettings() {
         brls::Logger::debug("Loaded {} hidden categories", m_settings.hiddenCategoryIds.size());
     }
 
+    // Load cache settings
+    m_settings.cacheLibraryData = extractBool("cacheLibraryData", true);
+    m_settings.cacheCoverImages = extractBool("cacheCoverImages", true);
+
     // Load download settings
     m_settings.downloadToServer = extractBool("downloadToServer", true);
     m_settings.autoDownloadChapters = extractBool("autoDownloadChapters", false);
@@ -474,6 +482,10 @@ bool Application::saveSettings() {
         hiddenCatsStr += std::to_string(catId);
     }
     json += "  \"hiddenCategoryIds\": \"" + hiddenCatsStr + "\",\n";
+
+    // Cache settings
+    json += "  \"cacheLibraryData\": " + std::string(m_settings.cacheLibraryData ? "true" : "false") + ",\n";
+    json += "  \"cacheCoverImages\": " + std::string(m_settings.cacheCoverImages ? "true" : "false") + ",\n";
 
     // Download settings
     json += "  \"downloadToServer\": " + std::string(m_settings.downloadToServer ? "true" : "false") + ",\n";

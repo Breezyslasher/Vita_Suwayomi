@@ -174,9 +174,11 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     // Menu button
     auto* menuBtn = new brls::Button();
-    menuBtn->setWidth(70);
+    menuBtn->setWidth(90);
     menuBtn->setHeight(40);
     menuBtn->setText("Menu");
+    menuBtn->setMarginLeft(10);
+    menuBtn->setShrink(0.0f);  // Don't shrink
     menuBtn->registerClickAction([this](brls::View* view) {
         showMangaMenu();
         return true;

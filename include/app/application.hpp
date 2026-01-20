@@ -83,6 +83,8 @@ struct AppSettings {
     bool updateOnlyWifi = true;
     int defaultCategoryId = 0;
     std::set<int> hiddenCategoryIds;  // Categories hidden from library view
+    bool cacheLibraryData = true;     // Cache manga info for faster loading
+    bool cacheCoverImages = true;     // Cache cover images to disk
 
     // Download Settings
     bool downloadToServer = true;      // Download on server side vs local

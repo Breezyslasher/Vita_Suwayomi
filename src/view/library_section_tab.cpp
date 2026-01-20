@@ -12,6 +12,7 @@
 #include "app/downloads_manager.hpp"
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
+#include "utils/library_cache.hpp"
 
 namespace vitasuwayomi {
 
@@ -90,18 +91,6 @@ LibrarySectionTab::LibrarySectionTab() {
     });
     buttonBox->addView(m_updateBtn);
 
-    // Menu button for category settings
-    m_menuBtn = new brls::Button();
-    m_menuBtn->setText("Menu");
-    m_menuBtn->setMarginLeft(8);
-    m_menuBtn->setWidth(70);
-    m_menuBtn->setHeight(40);
-    m_menuBtn->registerClickAction([this](brls::View* view) {
-        showCategoryMenu();
-        return true;
-    });
-    buttonBox->addView(m_menuBtn);
-
     topRow->addView(buttonBox);
 
     this->addView(topRow);
@@ -169,12 +158,41 @@ void LibrarySectionTab::loadCategories() {
     brls::Logger::debug("LibrarySectionTab: Loading categories...");
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak]() {
+    // Check if we have cached categories for instant loading
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+    LibraryCache& cache = LibraryCache::getInstance();
+
+    if (cacheEnabled && cache.hasCategoriesCache()) {
+        std::vector<Category> cachedCategories;
+        if (cache.loadCategories(cachedCategories)) {
+            brls::Logger::info("LibrarySectionTab: Loaded {} categories from cache", cachedCategories.size());
+
+            // Sort by order
+            std::sort(cachedCategories.begin(), cachedCategories.end(),
+                      [](const Category& a, const Category& b) {
+                          return a.order < b.order;
+                      });
+
+            m_categories = cachedCategories;
+            m_categoriesLoaded = true;
+            createCategoryTabs();
+
+            // Load first category from cache
+            if (!m_categories.empty()) {
+                selectCategory(m_categories[0].id);
+            } else {
+                selectCategory(0);
+            }
+            // Continue to try refreshing from server in background
+        }
+    }
+
+    asyncRun([this, aliveWeak, cacheEnabled]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Category> categories;
 
         if (client.fetchCategories(categories)) {
-            brls::Logger::info("LibrarySectionTab: Got {} categories", categories.size());
+            brls::Logger::info("LibrarySectionTab: Got {} categories from server", categories.size());
 
             // Sort categories by order
             std::sort(categories.begin(), categories.end(),
@@ -182,11 +200,15 @@ void LibrarySectionTab::loadCategories() {
                           return a.order < b.order;
                       });
 
+            // Save to cache
+            if (cacheEnabled) {
+                LibraryCache::getInstance().saveCategories(categories);
+            }
+
             brls::sync([this, categories, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
-                m_allCategories = categories;  // Store all categories (including hidden)
                 m_categories = categories;
                 m_categoriesLoaded = true;
                 createCategoryTabs();
@@ -200,15 +222,18 @@ void LibrarySectionTab::loadCategories() {
                 }
             });
         } else {
-            brls::Logger::warning("LibrarySectionTab: Failed to fetch categories, loading all library");
+            brls::Logger::warning("LibrarySectionTab: Failed to fetch categories from server");
 
             brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
-                m_categoriesLoaded = true;
-                createCategoryTabs();
-                selectCategory(0);
+                // Only show fallback if we don't have cached data already
+                if (!m_categoriesLoaded) {
+                    m_categoriesLoaded = true;
+                    createCategoryTabs();
+                    selectCategory(0);
+                }
             });
         }
     });
@@ -366,41 +391,58 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         m_titleLabel->setText(m_currentCategoryName);
     }
 
-    // Cancel pending image loads and clear cache to free memory before loading new category
+    // Cancel pending image loads and clear memory cache to free memory
     ImageLoader::cancelAll();
     ImageLoader::clearCache();
 
-    // Clear current display while loading
-    m_mangaList.clear();
-    if (m_contentGrid) {
-        m_contentGrid->setDataSource(m_mangaList);
+    // Check if we have cached data (for instant loading)
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+    LibraryCache& cache = LibraryCache::getInstance();
+
+    if (cacheEnabled && cache.hasCategoryCache(categoryId)) {
+        std::vector<Manga> cachedManga;
+        if (cache.loadCategoryManga(categoryId, cachedManga)) {
+            brls::Logger::info("LibrarySectionTab: Loaded {} manga from cache for category {}",
+                              cachedManga.size(), categoryId);
+            m_mangaList = cachedManga;
+            sortMangaList();
+            m_loaded = true;
+            // Continue to refresh from server in background
+        }
+    } else {
+        // No cache - clear display while loading
+        m_mangaList.clear();
+        if (m_contentGrid) {
+            m_contentGrid->setDataSource(m_mangaList);
+        }
     }
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, categoryId, aliveWeak]() {
+    asyncRun([this, categoryId, aliveWeak, cacheEnabled]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
 
-        // Always fetch manga for the specific category only
-        // This ensures only books from the selected category are shown
         bool success = client.fetchCategoryManga(categoryId, manga);
 
         if (success) {
-            brls::Logger::info("LibrarySectionTab: Got {} manga for category {}",
+            brls::Logger::info("LibrarySectionTab: Got {} manga for category {} from server",
                               manga.size(), categoryId);
+
+            // Save to cache if enabled
+            if (cacheEnabled) {
+                LibraryCache::getInstance().saveCategoryManga(categoryId, manga);
+            }
 
             brls::sync([this, manga, categoryId, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) {
-                    brls::Logger::debug("LibrarySectionTab: Tab destroyed, skipping UI update");
                     return;
                 }
 
                 // Only update if we're still on the same category
                 if (m_currentCategoryId == categoryId) {
                     m_mangaList = manga;
-                    // Apply current sort mode
                     sortMangaList();
                 }
                 m_loaded = true;
@@ -413,7 +455,10 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
-                brls::Application::notify("Failed to load manga");
+                // Only notify if we didn't have cached data
+                if (m_mangaList.empty()) {
+                    brls::Application::notify("Failed to load manga");
+                }
                 m_loaded = true;
             });
         }
@@ -619,78 +664,6 @@ void LibrarySectionTab::scrollToCategoryIndex(int index) {
 
     // Apply the scroll offset
     m_categoryScrollContainer->setTranslationX(m_categoryScrollOffset);
-}
-
-void LibrarySectionTab::showCategoryMenu() {
-    // Show dialog with category visibility options
-    brls::Dialog* dialog = new brls::Dialog("Category Settings");
-
-    // Create a scrolling container for the category list
-    auto* scrollView = new brls::ScrollingFrame();
-    scrollView->setWidth(400);
-    scrollView->setHeight(300);
-
-    auto* contentBox = new brls::Box();
-    contentBox->setAxis(brls::Axis::COLUMN);
-    contentBox->setPadding(10);
-
-    auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
-
-    // Add a toggle for each category
-    for (const auto& cat : m_allCategories) {
-        // Skip empty categories - they can't be shown anyway
-        if (cat.mangaCount <= 0) continue;
-
-        auto* toggle = new brls::BooleanCell();
-        std::string catName = cat.name;
-        if (catName.length() > 20) {
-            catName = catName.substr(0, 18) + "..";
-        }
-
-        // Category is visible if NOT in hidden list
-        bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
-
-        int catId = cat.id;
-        toggle->init(catName + " (" + std::to_string(cat.mangaCount) + ")", isVisible,
-            [this, catId](bool value) {
-                auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
-                if (value) {
-                    // Show category (remove from hidden)
-                    hidden.erase(catId);
-                } else {
-                    // Hide category (add to hidden)
-                    hidden.insert(catId);
-                }
-                Application::getInstance().saveSettings();
-            });
-
-        contentBox->addView(toggle);
-    }
-
-    // If no categories, show message
-    if (m_allCategories.empty()) {
-        auto* label = new brls::Label();
-        label->setText("No categories available");
-        label->setFontSize(16);
-        contentBox->addView(label);
-    }
-
-    scrollView->setContentView(contentBox);
-
-    // Add the scroll view to the dialog
-    dialog->addView(scrollView);
-
-    dialog->addButton("Apply", [dialog, this]() {
-        dialog->close();
-        // Refresh to apply visibility changes
-        refresh();
-    });
-
-    dialog->addButton("Cancel", [dialog]() {
-        dialog->close();
-    });
-
-    dialog->open();
 }
 
 } // namespace vitasuwayomi
