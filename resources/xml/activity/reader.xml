@@ -74,11 +74,11 @@
             width="44"
             height="44"
             marginRight="15">
-            <brls:Label
-                text="<"
-                fontSize="24"
-                textColor="#ffffff"
-                horizontalAlign="center"/>
+            <brls:Image
+                width="24"
+                height="24"
+                image="@res/icons/back.png"
+                scalingType="fit"/>
         </brls:Button>
 
         <!-- Title area (manga + chapter) -->
@@ -111,11 +111,11 @@
             width="36"
             height="36"
             marginLeft="10">
-            <brls:Label
-                text="⚙"
-                fontSize="20"
-                textColor="#ffffff"
-                horizontalAlign="center"/>
+            <brls:Image
+                width="24"
+                height="24"
+                image="@res/icons/options.png"
+                scalingType="fit"/>
         </brls:Button>
 
     </brls:Box>
@@ -244,11 +244,11 @@
                 style="borderless"
                 width="44"
                 height="44">
-                <brls:Label
-                    text="◀◀"
-                    fontSize="14"
-                    textColor="#4a9fff"
-                    horizontalAlign="center"/>
+                <brls:Image
+                    width="20"
+                    height="20"
+                    image="@res/icons/left.png"
+                    scalingType="fit"/>
             </brls:Button>
 
             <!-- Page slider with blue accent -->
@@ -265,11 +265,11 @@
                 style="borderless"
                 width="44"
                 height="44">
-                <brls:Label
-                    text="▶▶"
-                    fontSize="14"
-                    textColor="#4a9fff"
-                    horizontalAlign="center"/>
+                <brls:Image
+                    width="20"
+                    height="20"
+                    image="@res/icons/right.png"
+                    scalingType="fit"/>
             </brls:Button>
 
         </brls:Box>
