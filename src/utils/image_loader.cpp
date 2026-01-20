@@ -95,9 +95,9 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
         finalRgba = scaledRgba.data();
     }
 
-    // Add 1-pixel transparent border to prevent GPU edge clamping artifacts
-    // This ensures that when the GPU samples at texture edges, it gets transparent
-    // pixels instead of stretching the edge content
+    // Add 1-pixel border by duplicating edge pixels to prevent GPU edge clamping artifacts
+    // When GPU samples at texture edges during scaling, it clamps to edge pixels.
+    // By duplicating edge pixels outward, the clamping uses the correct edge color.
     const int BORDER = 1;
     int paddedW = targetW + (BORDER * 2);
     int paddedH = targetH + (BORDER * 2);
@@ -117,20 +117,29 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
     header[16] = 32;        // 32 bits per pixel (RGBA)
     header[17] = 0x28;      // Image descriptor: top-left origin + 8 alpha bits
 
-    // Initialize all pixels to transparent (prevents edge artifacts)
     uint8_t* pixels = tgaData.data() + 18;
-    memset(pixels, 0, imageSize);
 
-    // Copy image data with border offset, converting RGBA to BGRA
-    for (int y = 0; y < targetH; y++) {
-        for (int x = 0; x < targetW; x++) {
-            int srcIdx = (y * targetW + x) * 4;
-            // Offset by border in destination
-            int dstIdx = ((y + BORDER) * paddedW + (x + BORDER)) * 4;
-            pixels[dstIdx + 0] = finalRgba[srcIdx + 2];  // B
-            pixels[dstIdx + 1] = finalRgba[srcIdx + 1];  // G
-            pixels[dstIdx + 2] = finalRgba[srcIdx + 0];  // R
-            pixels[dstIdx + 3] = finalRgba[srcIdx + 3];  // A
+    // Helper lambda to copy a pixel from source RGBA to dest BGRA
+    auto copyPixel = [&](int srcX, int srcY, int dstX, int dstY) {
+        // Clamp source coordinates to valid range
+        srcX = std::max(0, std::min(srcX, targetW - 1));
+        srcY = std::max(0, std::min(srcY, targetH - 1));
+
+        int srcIdx = (srcY * targetW + srcX) * 4;
+        int dstIdx = (dstY * paddedW + dstX) * 4;
+        pixels[dstIdx + 0] = finalRgba[srcIdx + 2];  // B
+        pixels[dstIdx + 1] = finalRgba[srcIdx + 1];  // G
+        pixels[dstIdx + 2] = finalRgba[srcIdx + 0];  // R
+        pixels[dstIdx + 3] = finalRgba[srcIdx + 3];  // A
+    };
+
+    // Copy entire padded area, clamping source coordinates to duplicate edges
+    for (int dstY = 0; dstY < paddedH; dstY++) {
+        for (int dstX = 0; dstX < paddedW; dstX++) {
+            // Map destination to source (offset by border, then clamp)
+            int srcX = dstX - BORDER;
+            int srcY = dstY - BORDER;
+            copyPixel(srcX, srcY, dstX, dstY);
         }
     }
 
