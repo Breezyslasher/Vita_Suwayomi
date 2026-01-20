@@ -43,6 +43,8 @@ struct ReaderSettings {
     ImageRotation rotation = ImageRotation::ROTATE_0;
     ReaderScaleMode scaleMode = ReaderScaleMode::FIT_SCREEN;
     bool keepScreenOn = true;
+    bool cropBorders = false;       // Auto-crop white/black borders
+    int webtoonSidePadding = 0;     // Side padding percentage (0-20%)
 };
 
 class ReaderActivity : public brls::Activity {

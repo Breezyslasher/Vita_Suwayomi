@@ -301,6 +301,14 @@ bool Application::loadSettings() {
     m_settings.showPageNumber = extractBool("showPageNumber", true);
     m_settings.tapToNavigate = extractBool("tapToNavigate", true);
 
+    // Load webtoon settings
+    m_settings.cropBorders = extractBool("cropBorders", false);
+    m_settings.webtoonDetection = extractBool("webtoonDetection", true);
+    m_settings.webtoonSidePadding = extractInt("webtoonSidePadding");
+    if (m_settings.webtoonSidePadding < 0 || m_settings.webtoonSidePadding > 20) {
+        m_settings.webtoonSidePadding = 0;
+    }
+
     // Load library settings
     m_settings.updateOnStart = extractBool("updateOnStart", false);
     m_settings.updateOnlyWifi = extractBool("updateOnlyWifi", true);
@@ -469,6 +477,11 @@ bool Application::saveSettings() {
     json += "  \"keepScreenOn\": " + std::string(m_settings.keepScreenOn ? "true" : "false") + ",\n";
     json += "  \"showPageNumber\": " + std::string(m_settings.showPageNumber ? "true" : "false") + ",\n";
     json += "  \"tapToNavigate\": " + std::string(m_settings.tapToNavigate ? "true" : "false") + ",\n";
+
+    // Webtoon settings
+    json += "  \"cropBorders\": " + std::string(m_settings.cropBorders ? "true" : "false") + ",\n";
+    json += "  \"webtoonDetection\": " + std::string(m_settings.webtoonDetection ? "true" : "false") + ",\n";
+    json += "  \"webtoonSidePadding\": " + std::to_string(m_settings.webtoonSidePadding) + ",\n";
 
     // Library settings
     json += "  \"updateOnStart\": " + std::string(m_settings.updateOnStart ? "true" : "false") + ",\n";

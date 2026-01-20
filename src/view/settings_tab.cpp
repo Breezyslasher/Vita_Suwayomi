@@ -375,6 +375,54 @@ void SettingsTab::createReaderSection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(tapNavToggle);
+
+    // Webtoon section header
+    auto* webtoonHeader = new brls::Header();
+    webtoonHeader->setTitle("Webtoon / Long Strip");
+    m_contentBox->addView(webtoonHeader);
+
+    // Crop borders toggle
+    auto* cropBordersToggle = new brls::BooleanCell();
+    cropBordersToggle->init("Crop Borders", settings.cropBorders, [&settings](bool value) {
+        settings.cropBorders = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(cropBordersToggle);
+
+    // Info label for crop borders
+    auto* cropInfoLabel = new brls::Label();
+    cropInfoLabel->setText("Automatically removes white/black borders from pages");
+    cropInfoLabel->setFontSize(14);
+    cropInfoLabel->setMarginLeft(16);
+    cropInfoLabel->setMarginTop(4);
+    m_contentBox->addView(cropInfoLabel);
+
+    // Auto-detect webtoon toggle
+    auto* webtoonDetectToggle = new brls::BooleanCell();
+    webtoonDetectToggle->init("Auto-Detect Webtoon", settings.webtoonDetection, [&settings](bool value) {
+        settings.webtoonDetection = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(webtoonDetectToggle);
+
+    // Info label for webtoon detection
+    auto* detectInfoLabel = new brls::Label();
+    detectInfoLabel->setText("Automatically switch to vertical mode for long strip images");
+    detectInfoLabel->setFontSize(14);
+    detectInfoLabel->setMarginLeft(16);
+    detectInfoLabel->setMarginTop(4);
+    m_contentBox->addView(detectInfoLabel);
+
+    // Side padding selector
+    auto* paddingSelector = new brls::SelectorCell();
+    paddingSelector->init("Side Padding",
+        {"None", "5%", "10%", "15%", "20%"},
+        settings.webtoonSidePadding / 5,
+        [&settings](int index) {
+            settings.webtoonSidePadding = index * 5;
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(paddingSelector);
 }
 
 void SettingsTab::createDownloadsSection() {

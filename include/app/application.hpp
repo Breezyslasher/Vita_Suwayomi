@@ -59,6 +59,8 @@ struct MangaReaderSettings {
     ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;
     PageScaleMode pageScaleMode = PageScaleMode::FIT_SCREEN;
     int imageRotation = 0;  // 0, 90, 180, or 270 degrees
+    bool cropBorders = false;
+    int webtoonSidePadding = 0;
 };
 
 // Application settings structure
@@ -77,6 +79,11 @@ struct AppSettings {
     bool keepScreenOn = true;
     bool showPageNumber = true;
     bool tapToNavigate = true;
+
+    // Webtoon Settings (also applies to vertical mode)
+    bool cropBorders = false;           // Auto-crop white/black borders from pages
+    bool webtoonDetection = true;       // Auto-detect webtoon format (aspect ratio based)
+    int webtoonSidePadding = 0;         // Side padding percentage (0-20%)
 
     // Library Settings
     bool updateOnStart = false;

@@ -54,12 +54,18 @@ void ReaderActivity::onContentAvailable() {
     std::map<std::string, std::string> serverMeta;
     bool hasServerSettings = false;
 
+    // Also load webtoon settings
+    bool cropBorders = appSettings.cropBorders;
+    int webtoonSidePadding = appSettings.webtoonSidePadding;
+
     if (SuwayomiClient::getInstance().fetchMangaMeta(m_mangaId, serverMeta)) {
         // Check for reader settings in server meta
         // Standard keys used by Tachiyomi/Mihon clients
         auto readerModeIt = serverMeta.find("readerMode");
         auto rotationIt = serverMeta.find("rotation");
         auto scaleModeIt = serverMeta.find("scaleType");
+        auto cropBordersIt = serverMeta.find("cropBorders");
+        auto sidePaddingIt = serverMeta.find("webtoonSidePadding");
 
         if (readerModeIt != serverMeta.end()) {
             int mode = std::atoi(readerModeIt->second.c_str());
@@ -87,6 +93,19 @@ void ReaderActivity::onContentAvailable() {
             }
         }
 
+        if (cropBordersIt != serverMeta.end()) {
+            cropBorders = (cropBordersIt->second == "true" || cropBordersIt->second == "1");
+            hasServerSettings = true;
+        }
+
+        if (sidePaddingIt != serverMeta.end()) {
+            webtoonSidePadding = std::atoi(sidePaddingIt->second.c_str());
+            if (webtoonSidePadding < 0 || webtoonSidePadding > 20) {
+                webtoonSidePadding = 0;
+            }
+            hasServerSettings = true;
+        }
+
         if (hasServerSettings) {
             brls::Logger::info("ReaderActivity: loaded settings from server for manga {}", m_mangaId);
         }
@@ -99,6 +118,8 @@ void ReaderActivity::onContentAvailable() {
             readingMode = it->second.readingMode;
             pageScaleMode = it->second.pageScaleMode;
             imageRotation = it->second.imageRotation;
+            cropBorders = it->second.cropBorders;
+            webtoonSidePadding = it->second.webtoonSidePadding;
             brls::Logger::debug("ReaderActivity: using local per-manga settings for manga {}", m_mangaId);
         } else {
             brls::Logger::debug("ReaderActivity: using global default settings for manga {}", m_mangaId);
@@ -143,10 +164,15 @@ void ReaderActivity::onContentAvailable() {
             break;
     }
 
-    brls::Logger::debug("ReaderActivity: loaded settings - direction={}, rotation={}, scaleMode={}",
+    // Set webtoon-specific settings
+    m_settings.cropBorders = cropBorders;
+    m_settings.webtoonSidePadding = webtoonSidePadding;
+
+    brls::Logger::debug("ReaderActivity: loaded settings - direction={}, rotation={}, scaleMode={}, cropBorders={}",
                         static_cast<int>(m_settings.direction),
                         static_cast<int>(m_settings.rotation),
-                        static_cast<int>(m_settings.scaleMode));
+                        static_cast<int>(m_settings.scaleMode),
+                        m_settings.cropBorders);
 
     // Set manga title in top bar
     if (mangaLabel) {
@@ -934,6 +960,10 @@ void ReaderActivity::saveSettingsToApp() {
             break;
     }
 
+    // Webtoon settings
+    mangaSettings.cropBorders = m_settings.cropBorders;
+    mangaSettings.webtoonSidePadding = m_settings.webtoonSidePadding;
+
     // Store per-manga settings locally (overrides defaults for this manga)
     appSettings.mangaReaderSettings[m_mangaId] = mangaSettings;
 
@@ -946,8 +976,10 @@ void ReaderActivity::saveSettingsToApp() {
     int readerMode = static_cast<int>(mangaSettings.readingMode);
     int rotation = mangaSettings.imageRotation;
     int scaleType = static_cast<int>(mangaSettings.pageScaleMode);
+    bool cropBorders = mangaSettings.cropBorders;
+    int webtoonSidePadding = mangaSettings.webtoonSidePadding;
 
-    vitasuwayomi::asyncTask<bool>([mangaId, readerMode, rotation, scaleType]() {
+    vitasuwayomi::asyncTask<bool>([mangaId, readerMode, rotation, scaleType, cropBorders, webtoonSidePadding]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         // Save reader mode
@@ -958,6 +990,10 @@ void ReaderActivity::saveSettingsToApp() {
 
         // Save scale type
         client.setMangaMeta(mangaId, "scaleType", std::to_string(scaleType));
+
+        // Save webtoon settings
+        client.setMangaMeta(mangaId, "cropBorders", cropBorders ? "true" : "false");
+        client.setMangaMeta(mangaId, "webtoonSidePadding", std::to_string(webtoonSidePadding));
 
         return true;
     }, [mangaId](bool success) {
