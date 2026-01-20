@@ -67,17 +67,29 @@ LibrarySectionTab::LibrarySectionTab() {
     buttonBox->setAlignItems(brls::AlignItems::CENTER);
     buttonBox->setShrink(0.0f);  // Don't shrink buttons
 
-    // Sort button - bigger size
+    // Sort button with icon
     m_sortBtn = new brls::Button();
-    m_sortBtn->setText("Sort");
     m_sortBtn->setMarginLeft(10);
-    m_sortBtn->setWidth(80);
+    m_sortBtn->setWidth(44);
     m_sortBtn->setHeight(40);
+    m_sortBtn->setCornerRadius(8);
+    m_sortBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_sortBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    m_sortIcon = new brls::Image();
+    m_sortIcon->setWidth(24);
+    m_sortIcon->setHeight(24);
+    m_sortIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_sortBtn->addView(m_sortIcon);
+
     m_sortBtn->registerClickAction([this](brls::View* view) {
         cycleSortMode();
         return true;
     });
     buttonBox->addView(m_sortBtn);
+
+    // Initialize sort icon
+    updateSortButtonText();
 
     // Update button - bigger size
     m_updateBtn = new brls::Button();
@@ -563,25 +575,27 @@ void LibrarySectionTab::cycleSortMode() {
 }
 
 void LibrarySectionTab::updateSortButtonText() {
-    if (!m_sortBtn) return;
+    if (!m_sortIcon) return;
 
+    std::string iconPath;
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
-            m_sortBtn->setText("A-Z");
+            iconPath = "romfs:/icons/az.png";  // A-Z
             break;
         case LibrarySortMode::TITLE_DESC:
-            m_sortBtn->setText("Z-A");
+            iconPath = "romfs:/icons/a.png";   // Z-A (reverse)
             break;
         case LibrarySortMode::UNREAD_DESC:
-            m_sortBtn->setText("Unread");
+            iconPath = "romfs:/icons/sort-9-1.png";  // Most unread first
             break;
         case LibrarySortMode::UNREAD_ASC:
-            m_sortBtn->setText("Read");
+            iconPath = "romfs:/icons/sort-1-9.png";  // Least unread first
             break;
         case LibrarySortMode::RECENTLY_ADDED:
-            m_sortBtn->setText("Recent");
+            iconPath = "romfs:/icons/history.png";   // Recent
             break;
     }
+    m_sortIcon->setImageFromFile(iconPath);
 }
 
 void LibrarySectionTab::navigateToPreviousCategory() {

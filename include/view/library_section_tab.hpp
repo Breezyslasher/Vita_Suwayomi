@@ -70,6 +70,7 @@ private:
     // Action buttons
     brls::Button* m_updateBtn = nullptr;
     brls::Button* m_sortBtn = nullptr;
+    brls::Image* m_sortIcon = nullptr;
 
     // Main content grid
     RecyclingGrid* m_contentGrid = nullptr;
