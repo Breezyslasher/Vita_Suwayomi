@@ -38,6 +38,52 @@ brls::View* ReaderActivity::createContentView() {
 void ReaderActivity::onContentAvailable() {
     brls::Logger::debug("ReaderActivity: content available");
 
+    // Load settings from AppSettings
+    AppSettings& appSettings = Application::getInstance().getSettings();
+
+    // Map ReadingMode to ReaderDirection
+    switch (appSettings.readingMode) {
+        case ReadingMode::LEFT_TO_RIGHT:
+            m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
+            break;
+        case ReadingMode::RIGHT_TO_LEFT:
+            m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
+            break;
+        case ReadingMode::VERTICAL:
+        case ReadingMode::WEBTOON:
+            m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
+            break;
+    }
+
+    // Map imageRotation to ImageRotation enum
+    switch (appSettings.imageRotation) {
+        case 90:  m_settings.rotation = ImageRotation::ROTATE_90; break;
+        case 180: m_settings.rotation = ImageRotation::ROTATE_180; break;
+        case 270: m_settings.rotation = ImageRotation::ROTATE_270; break;
+        default:  m_settings.rotation = ImageRotation::ROTATE_0; break;
+    }
+
+    // Map PageScaleMode to ReaderScaleMode
+    switch (appSettings.pageScaleMode) {
+        case PageScaleMode::FIT_SCREEN:
+            m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
+            break;
+        case PageScaleMode::FIT_WIDTH:
+            m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
+            break;
+        case PageScaleMode::FIT_HEIGHT:
+            m_settings.scaleMode = ReaderScaleMode::FIT_HEIGHT;
+            break;
+        case PageScaleMode::ORIGINAL:
+            m_settings.scaleMode = ReaderScaleMode::ORIGINAL;
+            break;
+    }
+
+    brls::Logger::debug("ReaderActivity: loaded settings - direction={}, rotation={}, scaleMode={}",
+                        static_cast<int>(m_settings.direction),
+                        static_cast<int>(m_settings.rotation),
+                        static_cast<int>(m_settings.scaleMode));
+
     // Set manga title in top bar
     if (mangaLabel) {
         mangaLabel->setText(m_mangaTitle);
@@ -343,6 +389,9 @@ void ReaderActivity::onContentAvailable() {
 
     // Update direction label
     updateDirectionLabel();
+
+    // Apply loaded settings (rotation, scaling, etc.)
+    applySettings();
 
     // Load pages asynchronously
     loadPages();
@@ -685,6 +734,7 @@ void ReaderActivity::showSettings() {
                 break;
         }
         applySettings();
+        saveSettingsToApp();
     });
 
     // Reading direction option (LTR for western, RTL for manga)
@@ -714,6 +764,7 @@ void ReaderActivity::showSettings() {
                 break;
         }
         updateDirectionLabel();
+        saveSettingsToApp();
     });
 
     // Scaling mode option
@@ -741,6 +792,7 @@ void ReaderActivity::showSettings() {
                 break;
         }
         applySettings();
+        saveSettingsToApp();
     });
 
     dialog->setCancelable(true);
@@ -776,6 +828,46 @@ void ReaderActivity::applySettings() {
     if (previewImage) {
         previewImage->setRotation(rotation);
     }
+}
+
+void ReaderActivity::saveSettingsToApp() {
+    AppSettings& appSettings = Application::getInstance().getSettings();
+
+    // Map ReaderDirection to ReadingMode
+    switch (m_settings.direction) {
+        case ReaderDirection::LEFT_TO_RIGHT:
+            appSettings.readingMode = ReadingMode::LEFT_TO_RIGHT;
+            break;
+        case ReaderDirection::RIGHT_TO_LEFT:
+            appSettings.readingMode = ReadingMode::RIGHT_TO_LEFT;
+            break;
+        case ReaderDirection::TOP_TO_BOTTOM:
+            appSettings.readingMode = ReadingMode::VERTICAL;
+            break;
+    }
+
+    // Map ImageRotation to imageRotation int
+    appSettings.imageRotation = static_cast<int>(m_settings.rotation);
+
+    // Map ReaderScaleMode to PageScaleMode
+    switch (m_settings.scaleMode) {
+        case ReaderScaleMode::FIT_SCREEN:
+            appSettings.pageScaleMode = PageScaleMode::FIT_SCREEN;
+            break;
+        case ReaderScaleMode::FIT_WIDTH:
+            appSettings.pageScaleMode = PageScaleMode::FIT_WIDTH;
+            break;
+        case ReaderScaleMode::FIT_HEIGHT:
+            appSettings.pageScaleMode = PageScaleMode::FIT_HEIGHT;
+            break;
+        case ReaderScaleMode::ORIGINAL:
+            appSettings.pageScaleMode = PageScaleMode::ORIGINAL;
+            break;
+    }
+
+    // Save to disk
+    Application::getInstance().saveSettings();
+    brls::Logger::debug("ReaderActivity: saved settings to AppSettings");
 }
 
 void ReaderActivity::handleTouch(brls::Point point) {

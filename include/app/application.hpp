@@ -65,6 +65,7 @@ struct AppSettings {
     ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;
     PageScaleMode pageScaleMode = PageScaleMode::FIT_SCREEN;
     ReaderBackground readerBackground = ReaderBackground::BLACK;
+    int imageRotation = 0;  // 0, 90, 180, or 270 degrees
     bool keepScreenOn = true;
     bool showPageNumber = true;
     bool tapToNavigate = true;

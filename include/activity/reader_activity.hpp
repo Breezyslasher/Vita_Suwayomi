@@ -84,6 +84,7 @@ private:
     void preloadAdjacentPages();
     void markChapterAsRead();
     void applySettings();
+    void saveSettingsToApp();  // Persist settings to AppSettings
 
     // Touch handling
     void handleTouch(brls::Point point);

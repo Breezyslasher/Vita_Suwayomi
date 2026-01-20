@@ -287,6 +287,12 @@ bool Application::loadSettings() {
     m_settings.readingMode = static_cast<ReadingMode>(extractInt("readingMode"));
     m_settings.pageScaleMode = static_cast<PageScaleMode>(extractInt("pageScaleMode"));
     m_settings.readerBackground = static_cast<ReaderBackground>(extractInt("readerBackground"));
+    m_settings.imageRotation = extractInt("imageRotation");
+    // Validate rotation (must be 0, 90, 180, or 270)
+    if (m_settings.imageRotation != 0 && m_settings.imageRotation != 90 &&
+        m_settings.imageRotation != 180 && m_settings.imageRotation != 270) {
+        m_settings.imageRotation = 0;
+    }
     m_settings.keepScreenOn = extractBool("keepScreenOn", true);
     m_settings.showPageNumber = extractBool("showPageNumber", true);
     m_settings.tapToNavigate = extractBool("tapToNavigate", true);
@@ -367,6 +373,7 @@ bool Application::saveSettings() {
     json += "  \"readingMode\": " + std::to_string(static_cast<int>(m_settings.readingMode)) + ",\n";
     json += "  \"pageScaleMode\": " + std::to_string(static_cast<int>(m_settings.pageScaleMode)) + ",\n";
     json += "  \"readerBackground\": " + std::to_string(static_cast<int>(m_settings.readerBackground)) + ",\n";
+    json += "  \"imageRotation\": " + std::to_string(m_settings.imageRotation) + ",\n";
     json += "  \"keepScreenOn\": " + std::string(m_settings.keepScreenOn ? "true" : "false") + ",\n";
     json += "  \"showPageNumber\": " + std::string(m_settings.showPageNumber ? "true" : "false") + ",\n";
     json += "  \"tapToNavigate\": " + std::string(m_settings.tapToNavigate ? "true" : "false") + ",\n";
