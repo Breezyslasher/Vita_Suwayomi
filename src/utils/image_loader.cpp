@@ -265,13 +265,21 @@ void ImageLoader::processQueue() {
                 continue;
             }
 
-            // Get next request
+            // Get next request from either queue
             LoadRequest request;
+            RotatableLoadRequest rotatableRequest;
             bool hasRequest = false;
+            bool isRotatable = false;
 
             {
                 std::lock_guard<std::mutex> lock(s_queueMutex);
-                if (!s_loadQueue.empty()) {
+                // Check rotatable queue first (reader pages have priority)
+                if (!s_rotatableLoadQueue.empty()) {
+                    rotatableRequest = s_rotatableLoadQueue.front();
+                    s_rotatableLoadQueue.pop();
+                    hasRequest = true;
+                    isRotatable = true;
+                } else if (!s_loadQueue.empty()) {
                     request = s_loadQueue.front();
                     s_loadQueue.pop();
                     hasRequest = true;
@@ -279,7 +287,7 @@ void ImageLoader::processQueue() {
             }
 
             if (!hasRequest) {
-                // Queue is empty, exit processor
+                // Both queues are empty, exit processor
                 s_processorRunning = false;
                 return;
             }
@@ -287,10 +295,17 @@ void ImageLoader::processQueue() {
             s_activeLoads++;
 
             // Execute load in a new thread
-            std::thread([request]() {
-                executeLoad(request);
-                s_activeLoads--;
-            }).detach();
+            if (isRotatable) {
+                std::thread([rotatableRequest]() {
+                    executeRotatableLoad(rotatableRequest);
+                    s_activeLoads--;
+                }).detach();
+            } else {
+                std::thread([request]() {
+                    executeLoad(request);
+                    s_activeLoads--;
+                }).detach();
+            }
 
             // Small delay between starting loads to prevent overwhelming the system
             std::this_thread::sleep_for(std::chrono::milliseconds(30));
