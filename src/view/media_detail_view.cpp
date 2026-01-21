@@ -71,14 +71,13 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     readButtonContainer->setAlignItems(brls::AlignItems::FLEX_START);
     readButtonContainer->setMarginBottom(10);
 
-    // Select button icon on top
+    // Select button icon on top (64x16 original, scale to 80x20)
     auto* selectIcon = new brls::Image();
-    selectIcon->setWidth(28);
-    selectIcon->setHeight(28);
+    selectIcon->setWidth(80);
+    selectIcon->setHeight(20);
     selectIcon->setScalingType(brls::ImageScalingType::FIT);
     selectIcon->setImageFromFile("app0:resources/images/select_button.png");
     selectIcon->setMarginBottom(2);
-    selectIcon->setMarginLeft(4);
     readButtonContainer->addView(selectIcon);
 
     m_readButton = new brls::Button();
@@ -261,9 +260,10 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     sortContainer->setAlignItems(brls::AlignItems::CENTER);
     sortContainer->setMarginRight(10);
 
+    // R button icon (24x16 original, scale to 36x24)
     auto* rButtonIcon = new brls::Image();
-    rButtonIcon->setWidth(28);
-    rButtonIcon->setHeight(28);
+    rButtonIcon->setWidth(36);
+    rButtonIcon->setHeight(24);
     rButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
     rButtonIcon->setMarginBottom(2);
@@ -296,9 +296,10 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     menuContainer->setAxis(brls::Axis::COLUMN);
     menuContainer->setAlignItems(brls::AlignItems::CENTER);
 
+    // Start button icon (64x16 original, scale to 80x20)
     auto* startButtonIcon = new brls::Image();
-    startButtonIcon->setWidth(28);
-    startButtonIcon->setHeight(28);
+    startButtonIcon->setWidth(80);
+    startButtonIcon->setHeight(20);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
     startButtonIcon->setMarginBottom(2);
