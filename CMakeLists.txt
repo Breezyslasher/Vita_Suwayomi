@@ -207,6 +207,7 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     FILE resources/icons/download.png resources/icons/download.png
     FILE resources/icons/hide.png resources/icons/hide.png
     FILE resources/icons/history.png resources/icons/history.png
+    FILE resources/icons/history_sort.png resources/icons/history_sort.png
     FILE resources/icons/hot.png resources/icons/hot.png
     FILE resources/icons/import.png resources/icons/import.png
     FILE resources/icons/left.png resources/icons/left.png
