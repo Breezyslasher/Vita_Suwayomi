@@ -216,19 +216,29 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         rightPanel->addView(m_genreBox);
     }
 
-    // Description (truncated)
+    // Description (collapsible - shows 2 lines by default, L to expand)
     if (!m_manga.description.empty()) {
+        m_fullDescription = m_manga.description;
+        m_descriptionExpanded = false;
+
         m_descriptionLabel = new brls::Label();
-        std::string desc = m_manga.description;
-        if (desc.length() > 300) {
-            desc = desc.substr(0, 297) + "...";
+        // Show first ~80 chars (approximately 2 lines) when collapsed
+        std::string truncatedDesc = m_fullDescription;
+        if (truncatedDesc.length() > 80) {
+            truncatedDesc = truncatedDesc.substr(0, 77) + "... [L]";
         }
-        m_descriptionLabel->setText(desc);
+        m_descriptionLabel->setText(truncatedDesc);
         m_descriptionLabel->setFontSize(12);
         m_descriptionLabel->setTextColor(nvgRGB(192, 192, 192));
         m_descriptionLabel->setMarginBottom(15);
         rightPanel->addView(m_descriptionLabel);
     }
+
+    // Register L trigger for description toggle
+    this->registerAction("Summary", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
+        toggleDescription();
+        return true;
+    });
 
     // Chapters header
     auto* chaptersHeader = new brls::Box();
@@ -1281,6 +1291,26 @@ void MangaDetailView::updateSortIcon() {
         : "app0:resources/icons/sort-1-9.png";
 
     m_sortIcon->setImageFromFile(iconPath);
+}
+
+void MangaDetailView::toggleDescription() {
+    if (!m_descriptionLabel || m_fullDescription.empty()) return;
+
+    m_descriptionExpanded = !m_descriptionExpanded;
+
+    if (m_descriptionExpanded) {
+        // Show full description
+        m_descriptionLabel->setText(m_fullDescription + " [L]");
+        brls::Application::notify("Summary expanded");
+    } else {
+        // Show truncated description (first ~80 chars / 2 lines)
+        std::string truncatedDesc = m_fullDescription;
+        if (truncatedDesc.length() > 80) {
+            truncatedDesc = truncatedDesc.substr(0, 77) + "... [L]";
+        }
+        m_descriptionLabel->setText(truncatedDesc);
+        brls::Application::notify("Summary collapsed");
+    }
 }
 
 void MangaDetailView::cancelAllDownloading() {

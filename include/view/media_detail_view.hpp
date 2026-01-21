@@ -91,6 +91,11 @@ private:
     bool m_filterDownloaded = false;
     bool m_filterUnread = false;
 
+    // Description expand/collapse
+    bool m_descriptionExpanded = false;
+    std::string m_fullDescription;
+    void toggleDescription();
+
     // Helper to update sort icon
     void updateSortIcon();
 
