@@ -172,13 +172,23 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     titleBox->addView(statsRow);
     titleRow->addView(titleBox);
 
-    // Menu button
+    // Menu button with icon
     auto* menuBtn = new brls::Button();
-    menuBtn->setWidth(90);
+    menuBtn->setWidth(44);
     menuBtn->setHeight(40);
-    menuBtn->setText("Menu");
     menuBtn->setMarginLeft(10);
-    menuBtn->setShrink(0.0f);  // Don't shrink
+    menuBtn->setCornerRadius(8);
+    menuBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    menuBtn->setAlignItems(brls::AlignItems::CENTER);
+    menuBtn->setShrink(0.0f);
+
+    auto* menuIcon = new brls::Image();
+    menuIcon->setWidth(24);
+    menuIcon->setHeight(24);
+    menuIcon->setScalingType(brls::ImageScalingType::FIT);
+    menuIcon->setImageFromFile("app0:resources/icons/menu.png");
+    menuBtn->addView(menuIcon);
+
     menuBtn->registerClickAction([this](brls::View* view) {
         showMangaMenu();
         return true;
