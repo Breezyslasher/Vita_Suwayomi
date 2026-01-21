@@ -169,7 +169,8 @@
                     text="Manga"
                     fontSize="14"
                     textColor="#ffffff"
-                    horizontalAlign="center"/>
+                    horizontalAlign="center"
+                    width="100%"/>
             </brls:Button>
 
             <!-- Direction button -->
@@ -184,7 +185,8 @@
                     text="Right to Left"
                     fontSize="14"
                     textColor="#ffffff"
-                    horizontalAlign="center"/>
+                    horizontalAlign="center"
+                    width="100%"/>
             </brls:Button>
 
             <!-- Rotation button -->
@@ -199,7 +201,8 @@
                     text="0°"
                     fontSize="14"
                     textColor="#ffffff"
-                    horizontalAlign="center"/>
+                    horizontalAlign="center"
+                    width="100%"/>
             </brls:Button>
 
             <!-- Close hint -->
