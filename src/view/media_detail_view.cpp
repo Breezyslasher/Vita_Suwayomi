@@ -9,6 +9,7 @@
 #include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
+#include <cmath>
 
 namespace vitasuwayomi {
 
@@ -520,6 +521,7 @@ void MangaDetailView::populateChaptersList() {
 
         // Square button to download/delete chapter when row is focused
         bool localDownloaded = isLocallyDownloaded;
+        bool chapterRead = chapter.read;
         chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_Y, [this, capturedChapter, localDownloaded](brls::View* view) {
             if (localDownloaded) {
                 deleteChapterDownload(capturedChapter);
@@ -529,8 +531,118 @@ void MangaDetailView::populateChaptersList() {
             return true;
         });
 
-        // Touch support
+        // Touch support - tap to open chapter
         chapterRow->addGestureRecognizer(new brls::TapGestureRecognizer(chapterRow));
+
+        // Swipe gesture support (Komikku-style)
+        // Left swipe: Mark as read/unread
+        // Right swipe: Download/Delete chapter
+        int mangaId = m_manga.id;
+        int chapterIndex = capturedChapter.index;
+        int chapterId = capturedChapter.id;
+        std::string mangaTitle = m_manga.title;
+        std::string chapterName = capturedChapter.name;
+
+        chapterRow->addGestureRecognizer(new brls::PanGestureRecognizer(
+            [this, chapterRow, mangaId, chapterIndex, chapterId, chapterRead, localDownloaded, mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                static brls::Point touchStart;
+                static bool isValidSwipe = false;
+                static NVGcolor originalBgColor;
+                const float SWIPE_THRESHOLD = 60.0f;  // Minimum distance to trigger action
+                const float TAP_THRESHOLD = 15.0f;    // Max movement for tap (ignore)
+
+                if (status.state == brls::GestureState::START) {
+                    touchStart = status.position;
+                    isValidSwipe = false;
+                    originalBgColor = chapterRow->getBackgroundColor();
+                } else if (status.state == brls::GestureState::STAY) {
+                    float dx = status.position.x - touchStart.x;
+                    float dy = status.position.y - touchStart.y;
+
+                    // Only consider horizontal swipes (ignore vertical scrolling)
+                    if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
+                        isValidSwipe = true;
+
+                        // Visual feedback - change background color based on swipe direction
+                        if (dx < -SWIPE_THRESHOLD * 0.5f) {
+                            // Swiping left - mark read/unread (blue tint)
+                            chapterRow->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
+                        } else if (dx > SWIPE_THRESHOLD * 0.5f) {
+                            // Swiping right - download/delete (green/red tint)
+                            if (localDownloaded) {
+                                chapterRow->setBackgroundColor(nvgRGBA(231, 76, 60, 100));  // Red for delete
+                            } else {
+                                chapterRow->setBackgroundColor(nvgRGBA(46, 204, 113, 100));  // Green for download
+                            }
+                        } else {
+                            chapterRow->setBackgroundColor(originalBgColor);
+                        }
+                    }
+                } else if (status.state == brls::GestureState::END) {
+                    // Reset background color
+                    chapterRow->setBackgroundColor(originalBgColor);
+
+                    float dx = status.position.x - touchStart.x;
+                    float dy = status.position.y - touchStart.y;
+                    float distance = std::sqrt(dx * dx + dy * dy);
+
+                    // Only process horizontal swipes that exceed threshold
+                    if (isValidSwipe && std::abs(dx) > SWIPE_THRESHOLD && std::abs(dx) > std::abs(dy) * 1.5f) {
+                        if (dx < 0) {
+                            // Left swipe - toggle read status
+                            if (chapterRead) {
+                                // Mark as unread
+                                asyncRun([mangaId, chapterIndex]() {
+                                    SuwayomiClient::getInstance().markChapterUnread(mangaId, chapterIndex);
+                                    brls::sync([]() {
+                                        brls::Application::notify("Marked as unread");
+                                    });
+                                });
+                            } else {
+                                // Mark as read
+                                asyncRun([mangaId, chapterIndex]() {
+                                    SuwayomiClient::getInstance().markChapterRead(mangaId, chapterIndex);
+                                    brls::sync([]() {
+                                        brls::Application::notify("Marked as read");
+                                    });
+                                });
+                            }
+                        } else {
+                            // Right swipe - download or delete
+                            if (localDownloaded) {
+                                // Delete download
+                                asyncRun([mangaId, chapterIndex]() {
+                                    DownloadsManager& dm = DownloadsManager::getInstance();
+                                    if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+                                        brls::sync([]() {
+                                            brls::Application::notify("Download deleted");
+                                        });
+                                    }
+                                });
+                            } else {
+                                // Start download
+                                asyncRun([mangaId, chapterId, chapterIndex, mangaTitle, chapterName]() {
+                                    DownloadsManager& dm = DownloadsManager::getInstance();
+                                    dm.init();
+                                    if (dm.queueChapterDownload(mangaId, chapterId, chapterIndex, mangaTitle, chapterName)) {
+                                        dm.setProgressCallback([](int downloaded, int total) {
+                                            brls::sync([downloaded, total]() {
+                                                std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
+                                                brls::Application::notify(msg);
+                                            });
+                                        });
+                                        dm.startDownloads();
+                                        brls::sync([]() {
+                                            brls::Application::notify("Download started");
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    isValidSwipe = false;
+                }
+            }, brls::PanAxis::HORIZONTAL));
 
         m_chaptersBox->addView(chapterRow);
     }
