@@ -789,6 +789,9 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
             if (m_progressCallback) {
                 m_progressCallback(chapter.downloadedPages, chapter.pageCount);
             }
+
+            // Small delay between downloads to prevent memory exhaustion on Vita
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
         // Mark as completed if all pages downloaded
@@ -884,9 +887,15 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
     if (fd >= 0) {
         sceIoWrite(fd, resp.body.data(), resp.body.size());
         sceIoClose(fd);
+        // Clear response body to free memory immediately
+        resp.body.clear();
+        resp.body.shrink_to_fit();
         return true;
     }
 
+    // Clear response body to free memory
+    resp.body.clear();
+    resp.body.shrink_to_fit();
     return false;
 #else
     localPath = "/tmp/page_" + std::to_string(pageIndex) + ".jpg";
