@@ -65,20 +65,20 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     coverContainer->addView(m_coverImage);
     leftPanel->addView(coverContainer);
 
-    // Continue Reading button (Komikku teal accent) with Select button icon
+    // Continue Reading button (Komikku teal accent) with Select button icon above
     auto* readButtonContainer = new brls::Box();
-    readButtonContainer->setAxis(brls::Axis::ROW);
-    readButtonContainer->setAlignItems(brls::AlignItems::CENTER);
-    readButtonContainer->setJustifyContent(brls::JustifyContent::CENTER);
+    readButtonContainer->setAxis(brls::Axis::COLUMN);
+    readButtonContainer->setAlignItems(brls::AlignItems::FLEX_START);
     readButtonContainer->setMarginBottom(10);
 
-    // Select button icon
+    // Select button icon on top
     auto* selectIcon = new brls::Image();
     selectIcon->setWidth(28);
     selectIcon->setHeight(28);
     selectIcon->setScalingType(brls::ImageScalingType::FIT);
     selectIcon->setImageFromFile("app0:resources/images/select_button.png");
-    selectIcon->setMarginRight(8);
+    selectIcon->setMarginBottom(2);
+    selectIcon->setMarginLeft(4);
     readButtonContainer->addView(selectIcon);
 
     m_readButton = new brls::Button();
