@@ -225,6 +225,20 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     FILE resources/icons/tag.png resources/icons/tag.png
     FILE resources/icons/web.png resources/icons/web.png
 
+    # Button images
+    FILE resources/images/circle_button.png resources/images/circle_button.png
+    FILE resources/images/cross_button.png resources/images/cross_button.png
+    FILE resources/images/dpad.png resources/images/dpad.png
+    FILE resources/images/gradient.png resources/images/gradient.png
+    FILE resources/images/l_button.png resources/images/l_button.png
+    FILE resources/images/logo-small.png resources/images/logo-small.png
+    FILE resources/images/logo.png resources/images/logo.png
+    FILE resources/images/r_button.png resources/images/r_button.png
+    FILE resources/images/select_button.png resources/images/select_button.png
+    FILE resources/images/square_button.png resources/images/square_button.png
+    FILE resources/images/start_button.png resources/images/start_button.png
+    FILE resources/images/triangle_button.png resources/images/triangle_button.png
+
     # Fonts (using simpler DejaVu fonts for Vita compatibility)
     FILE resources/font/font.ttf resources/font/font.ttf
     FILE resources/font/icon.ttf resources/font/icon.ttf
