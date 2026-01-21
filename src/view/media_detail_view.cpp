@@ -868,20 +868,27 @@ void MangaDetailView::downloadUnreadChapters() {
 void MangaDetailView::deleteAllDownloads() {
     brls::Logger::info("MangaDetailView: Deleting all downloads");
 
-    asyncRun([this]() {
+    // Collect chapter data before async to avoid capturing 'this'
+    int mangaId = m_manga.id;
+    std::vector<int> chapterIndexes;
+    for (const auto& ch : m_chapters) {
+        if (ch.downloaded) {
+            chapterIndexes.push_back(ch.index);
+        }
+    }
+
+    if (chapterIndexes.empty()) {
+        brls::Application::notify("No downloads to delete");
+        return;
+    }
+
+    // Don't capture 'this' - use only copied data
+    asyncRun([mangaId, chapterIndexes]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        std::vector<int> chapterIndexes;
-        for (const auto& ch : m_chapters) {
-            if (ch.downloaded) {
-                chapterIndexes.push_back(ch.index);
-            }
-        }
-
-        if (client.deleteChapterDownloads(m_manga.id, chapterIndexes)) {
-            brls::sync([this]() {
+        if (client.deleteChapterDownloads(mangaId, chapterIndexes)) {
+            brls::sync([]() {
                 brls::Application::notify("Downloads deleted");
-                loadChapters();  // Refresh chapter list
             });
         } else {
             brls::sync([]() {
@@ -1046,13 +1053,17 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
 }
 
 void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
-    asyncRun([this, chapter]() {
+    // Collect data before async to avoid capturing 'this'
+    int mangaId = m_manga.id;
+    int chapterIndex = chapter.index;
+
+    // Don't capture 'this' - use only copied data
+    asyncRun([mangaId, chapterIndex]() {
         DownloadsManager& dm = DownloadsManager::getInstance();
 
-        if (dm.deleteChapterDownload(m_manga.id, chapter.index)) {
-            brls::sync([this]() {
+        if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+            brls::sync([]() {
                 brls::Application::notify("Local download deleted");
-                loadChapters();
             });
         } else {
             brls::sync([]() {
@@ -1087,15 +1098,23 @@ void MangaDetailView::updateSortIcon() {
 void MangaDetailView::cancelAllDownloading() {
     brls::Logger::info("MangaDetailView: Cancelling all downloading chapters");
 
-    asyncRun([this]() {
+    // Collect chapter data before async to avoid capturing 'this'
+    int mangaId = m_manga.id;
+    std::vector<int> chapterIndexes;
+    for (const auto& ch : m_chapters) {
+        chapterIndexes.push_back(ch.index);
+    }
+
+    // Don't capture 'this' - use only copied data
+    asyncRun([mangaId, chapterIndexes]() {
         DownloadsManager& dm = DownloadsManager::getInstance();
 
         int cancelledCount = 0;
-        for (const auto& ch : m_chapters) {
-            DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, ch.index);
+        for (int chapterIndex : chapterIndexes) {
+            DownloadedChapter* localCh = dm.getChapterDownload(mangaId, chapterIndex);
             if (localCh && (localCh->state == LocalDownloadState::QUEUED ||
                            localCh->state == LocalDownloadState::DOWNLOADING)) {
-                if (dm.cancelChapterDownload(m_manga.id, ch.index)) {
+                if (dm.cancelChapterDownload(mangaId, chapterIndex)) {
                     cancelledCount++;
                 }
             }
@@ -1104,13 +1123,12 @@ void MangaDetailView::cancelAllDownloading() {
         // Pause the download manager to stop any active downloads
         dm.pauseDownloads();
 
-        brls::sync([this, cancelledCount]() {
+        brls::sync([cancelledCount]() {
             if (cancelledCount > 0) {
                 brls::Application::notify("Cancelled " + std::to_string(cancelledCount) + " downloads");
             } else {
                 brls::Application::notify("No active downloads to cancel");
             }
-            loadChapters();  // Refresh chapter list
         });
     });
 }
