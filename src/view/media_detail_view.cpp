@@ -10,6 +10,7 @@
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
 #include <cmath>
+#include <set>
 
 namespace vitasuwayomi {
 
@@ -743,35 +744,85 @@ void MangaDetailView::showMangaMenu() {
         dialog->close();
         // Defer and don't open nested dialog - just delete directly
         brls::sync([mangaId, chapters]() {
-            // Collect LOCAL downloaded chapter indexes from DownloadsManager
-            DownloadsManager& dm = DownloadsManager::getInstance();
-            std::vector<int> localChapterIndexes;
-            for (const auto& ch : chapters) {
-                if (dm.isChapterDownloaded(mangaId, ch.index)) {
-                    localChapterIndexes.push_back(ch.index);
+            // Get download mode setting
+            DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+            brls::Logger::debug("Remove all chapters: downloadMode = {} (0=Server, 1=Local, 2=Both)",
+                               static_cast<int>(downloadMode));
+
+            // Collect server-downloaded chapter indexes (from chapter data)
+            std::vector<int> serverChapterIndexes;
+            if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
+                for (const auto& ch : chapters) {
+                    if (ch.downloaded) {
+                        serverChapterIndexes.push_back(ch.index);
+                    }
                 }
             }
 
-            if (localChapterIndexes.empty()) {
-                brls::Application::notify("No local downloads to delete");
+            // Collect locally-downloaded chapter indexes from DownloadsManager
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            std::vector<int> localChapterIndexes;
+            if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
+                for (const auto& ch : chapters) {
+                    if (dm.isChapterDownloaded(mangaId, ch.index)) {
+                        localChapterIndexes.push_back(ch.index);
+                    }
+                }
+            }
+
+            if (serverChapterIndexes.empty() && localChapterIndexes.empty()) {
+                brls::Application::notify("No downloads to delete");
                 return;
             }
 
-            brls::Application::notify("Deleting " + std::to_string(localChapterIndexes.size()) + " downloads...");
+            int totalToDelete = 0;
+            if (downloadMode == DownloadMode::SERVER_ONLY) {
+                totalToDelete = serverChapterIndexes.size();
+            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                totalToDelete = localChapterIndexes.size();
+            } else {
+                // BOTH - count unique chapters (some may be in both)
+                std::set<int> uniqueIndexes(serverChapterIndexes.begin(), serverChapterIndexes.end());
+                uniqueIndexes.insert(localChapterIndexes.begin(), localChapterIndexes.end());
+                totalToDelete = uniqueIndexes.size();
+            }
+
+            brls::Application::notify("Deleting " + std::to_string(totalToDelete) + " downloads...");
 
             // Run delete in async without capturing 'this'
-            asyncRun([mangaId, localChapterIndexes]() {
-                DownloadsManager& dm = DownloadsManager::getInstance();
-                int deletedCount = 0;
+            asyncRun([downloadMode, mangaId, serverChapterIndexes, localChapterIndexes]() {
+                int serverDeletedCount = 0;
+                int localDeletedCount = 0;
 
-                for (int chapterIndex : localChapterIndexes) {
-                    if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
-                        deletedCount++;
+                // Delete from server if applicable
+                if (!serverChapterIndexes.empty() &&
+                    (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
+                    SuwayomiClient client;
+                    if (client.deleteChapterDownloads(mangaId, serverChapterIndexes)) {
+                        serverDeletedCount = serverChapterIndexes.size();
                     }
                 }
 
-                brls::sync([deletedCount]() {
-                    brls::Application::notify("Deleted " + std::to_string(deletedCount) + " downloads");
+                // Delete from local if applicable
+                if (!localChapterIndexes.empty() &&
+                    (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
+                    DownloadsManager& dm = DownloadsManager::getInstance();
+                    for (int chapterIndex : localChapterIndexes) {
+                        if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+                            localDeletedCount++;
+                        }
+                    }
+                }
+
+                brls::sync([downloadMode, serverDeletedCount, localDeletedCount]() {
+                    if (downloadMode == DownloadMode::SERVER_ONLY) {
+                        brls::Application::notify("Deleted " + std::to_string(serverDeletedCount) + " server downloads");
+                    } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                        brls::Application::notify("Deleted " + std::to_string(localDeletedCount) + " local downloads");
+                    } else {
+                        brls::Application::notify("Deleted " + std::to_string(serverDeletedCount) + " server + " +
+                                                 std::to_string(localDeletedCount) + " local downloads");
+                    }
                 });
             });
         });
