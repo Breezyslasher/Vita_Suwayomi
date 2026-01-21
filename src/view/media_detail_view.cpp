@@ -519,10 +519,10 @@ void MangaDetailView::populateChaptersList() {
             return true;
         });
 
-        // Square button to download/delete chapter when row is focused
+        // X button to download/delete chapter when row is focused
         bool localDownloaded = isLocallyDownloaded;
         bool chapterRead = chapter.read;
-        chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_Y, [this, capturedChapter, localDownloaded](brls::View* view) {
+        chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_X, [this, capturedChapter, localDownloaded](brls::View* view) {
             if (localDownloaded) {
                 deleteChapterDownload(capturedChapter);
             } else {
