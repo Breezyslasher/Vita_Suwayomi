@@ -74,8 +74,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     // Select button icon
     auto* selectIcon = new brls::Image();
-    selectIcon->setWidth(24);
-    selectIcon->setHeight(24);
+    selectIcon->setWidth(28);
+    selectIcon->setHeight(28);
     selectIcon->setScalingType(brls::ImageScalingType::FIT);
     selectIcon->setImageFromFile("app0:resources/images/select_button.png");
     selectIcon->setMarginRight(8);
@@ -262,11 +262,11 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     sortContainer->setMarginRight(10);
 
     auto* rButtonIcon = new brls::Image();
-    rButtonIcon->setWidth(20);
-    rButtonIcon->setHeight(20);
+    rButtonIcon->setWidth(28);
+    rButtonIcon->setHeight(28);
     rButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
-    rButtonIcon->setMarginBottom(4);
+    rButtonIcon->setMarginBottom(2);
     sortContainer->addView(rButtonIcon);
 
     m_sortBtn = new brls::Button();
@@ -297,11 +297,11 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     menuContainer->setAlignItems(brls::AlignItems::CENTER);
 
     auto* startButtonIcon = new brls::Image();
-    startButtonIcon->setWidth(20);
-    startButtonIcon->setHeight(20);
+    startButtonIcon->setWidth(28);
+    startButtonIcon->setHeight(28);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
-    startButtonIcon->setMarginBottom(4);
+    startButtonIcon->setMarginBottom(2);
     menuContainer->addView(startButtonIcon);
 
     auto* menuBtn = new brls::Button();
@@ -568,16 +568,22 @@ void MangaDetailView::populateChaptersList() {
         dlBtn->addGestureRecognizer(new brls::TapGestureRecognizer(dlBtn));
         statusBox->addView(dlBtn);
 
-        // X button icon indicator (shows X button action is available)
+        // X button icon indicator (shows X button action is available) - only visible when focused
         auto* xButtonIcon = new brls::Image();
-        xButtonIcon->setWidth(20);
-        xButtonIcon->setHeight(20);
+        xButtonIcon->setWidth(24);
+        xButtonIcon->setHeight(24);
         xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
         xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
         xButtonIcon->setMarginLeft(8);
+        xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);  // Hidden by default
         statusBox->addView(xButtonIcon);
 
         chapterRow->addView(statusBox);
+
+        // Show/hide X button icon based on focus state
+        chapterRow->getFocusEvent()->subscribe([xButtonIcon](bool focused) {
+            xButtonIcon->setVisibility(focused ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE);
+        });
 
         // Click action - open chapter
         chapterRow->registerClickAction([this, capturedChapter](brls::View* view) {
