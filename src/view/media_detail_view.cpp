@@ -723,6 +723,15 @@ void MangaDetailView::downloadAllChapters() {
         if (!localChapterPairs.empty()) {
             brls::Logger::info("MangaDetailView: Queueing {} to LOCAL", localChapterPairs.size());
             if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
+                // Set up completion callback to refresh UI when each chapter finishes
+                localMgr.setChapterCompletionCallback([this, mangaId](int completedMangaId, int chapterIndex, bool success) {
+                    if (completedMangaId == mangaId) {
+                        brls::sync([this]() {
+                            populateChaptersList();  // Refresh to show completed status
+                        });
+                    }
+                });
+
                 localMgr.startDownloads();
                 brls::Logger::info("MangaDetailView: Local queue SUCCESS");
                 if (downloadMode == DownloadMode::LOCAL_ONLY) {
@@ -742,7 +751,7 @@ void MangaDetailView::downloadAllChapters() {
             return;
         }
 
-        brls::sync([downloadMode, serverSuccess, localSuccess, serverChapterIds, localChapterPairs]() {
+        brls::sync([this, downloadMode, serverSuccess, localSuccess, serverChapterIds, localChapterPairs]() {
             if (downloadMode == DownloadMode::SERVER_ONLY) {
                 if (serverSuccess && !serverChapterIds.empty()) {
                     brls::Application::notify("Queued " + std::to_string(serverChapterIds.size()) + " chapters to server");
@@ -766,6 +775,8 @@ void MangaDetailView::downloadAllChapters() {
                 if (!localChapterPairs.empty()) msg += std::to_string(localChapterPairs.size()) + " locally";
                 brls::Application::notify(msg);
             }
+            // Refresh chapter list to show queued status
+            populateChaptersList();
         });
     });
 }
@@ -816,6 +827,15 @@ void MangaDetailView::downloadUnreadChapters() {
 
         if (!localChapterPairs.empty()) {
             if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
+                // Set up completion callback to refresh UI when each chapter finishes
+                localMgr.setChapterCompletionCallback([this, mangaId](int completedMangaId, int chapterIndex, bool success) {
+                    if (completedMangaId == mangaId) {
+                        brls::sync([this]() {
+                            populateChaptersList();  // Refresh to show completed status
+                        });
+                    }
+                });
+
                 localMgr.startDownloads();
             } else {
                 localSuccess = false;
@@ -829,7 +849,7 @@ void MangaDetailView::downloadUnreadChapters() {
             return;
         }
 
-        brls::sync([downloadMode, serverSuccess, localSuccess, serverChapterIds, localChapterPairs]() {
+        brls::sync([this, downloadMode, serverSuccess, localSuccess, serverChapterIds, localChapterPairs]() {
             if (downloadMode == DownloadMode::SERVER_ONLY) {
                 if (serverSuccess && !serverChapterIds.empty()) {
                     brls::Application::notify("Queued " + std::to_string(serverChapterIds.size()) + " unread to server");
@@ -853,6 +873,8 @@ void MangaDetailView::downloadUnreadChapters() {
                 if (!localChapterPairs.empty()) msg += std::to_string(localChapterPairs.size()) + " locally";
                 brls::Application::notify(msg);
             }
+            // Refresh chapter list to show queued status
+            populateChaptersList();
         });
     });
 }
@@ -1001,7 +1023,8 @@ void MangaDetailView::markChapterRead(const Chapter& chapter) {
 void MangaDetailView::downloadChapter(const Chapter& chapter) {
     brls::Application::notify("Downloading to Vita...");
 
-    asyncRun([this, chapter]() {
+    int mangaId = m_manga.id;
+    asyncRun([this, chapter, mangaId]() {
         DownloadsManager& dm = DownloadsManager::getInstance();
         dm.init();
 
@@ -1015,12 +1038,21 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
                 });
             });
 
+            // Set up completion callback to refresh UI when chapter finishes
+            dm.setChapterCompletionCallback([this, mangaId](int completedMangaId, int chapterIndex, bool success) {
+                if (completedMangaId == mangaId) {
+                    brls::sync([this]() {
+                        populateChaptersList();  // Refresh to show completed status
+                    });
+                }
+            });
+
             // Start downloading
             dm.startDownloads();
 
             brls::sync([this]() {
                 brls::Application::notify("Download started");
-                loadChapters();  // Refresh to show progress
+                populateChaptersList();  // Refresh to show queued status
             });
         } else {
             brls::sync([]() {

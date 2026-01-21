@@ -607,6 +607,10 @@ void DownloadsManager::setProgressCallback(DownloadProgressCallback callback) {
     m_progressCallback = callback;
 }
 
+void DownloadsManager::setChapterCompletionCallback(ChapterCompletionCallback callback) {
+    m_chapterCompletionCallback = callback;
+}
+
 std::string DownloadsManager::getDownloadsPath() const {
     return m_downloadsPath;
 }
@@ -799,43 +803,69 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
 
         // Mark as completed if all pages downloaded
         if (chapter.downloadedPages == chapter.pageCount) {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            chapter.state = LocalDownloadState::COMPLETED;
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                chapter.state = LocalDownloadState::COMPLETED;
 
-            // Update manga's completed chapters count
-            for (auto& manga : m_downloads) {
-                if (manga.mangaId == mangaId) {
-                    manga.completedChapters = 0;
-                    for (const auto& ch : manga.chapters) {
-                        if (ch.state == LocalDownloadState::COMPLETED) {
-                            manga.completedChapters++;
+                // Update manga's completed chapters count
+                for (auto& manga : m_downloads) {
+                    if (manga.mangaId == mangaId) {
+                        manga.completedChapters = 0;
+                        for (const auto& ch : manga.chapters) {
+                            if (ch.state == LocalDownloadState::COMPLETED) {
+                                manga.completedChapters++;
+                            }
                         }
+                        break;
                     }
-                    break;
                 }
-            }
 
-            saveStateUnlocked();
+                saveStateUnlocked();
+            }
             brls::Logger::info("DownloadsManager: Chapter {} download completed", chapter.chapterIndex);
+
+            // Notify completion callback
+            if (m_chapterCompletionCallback) {
+                m_chapterCompletionCallback(mangaId, chapter.chapterIndex, true);
+            }
         } else {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            chapter.state = LocalDownloadState::FAILED;
-            saveStateUnlocked();
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                chapter.state = LocalDownloadState::FAILED;
+                saveStateUnlocked();
+            }
             brls::Logger::error("DownloadsManager: Chapter {} incomplete ({}/{})",
                                chapter.chapterIndex, chapter.downloadedPages, chapter.pageCount);
+
+            // Notify completion callback (failure)
+            if (m_chapterCompletionCallback) {
+                m_chapterCompletionCallback(mangaId, chapter.chapterIndex, false);
+            }
         }
     } catch (const std::exception& e) {
         brls::Logger::error("DownloadsManager: Exception downloading chapter {}: {}",
                            chapter.chapterIndex, e.what());
-        std::lock_guard<std::mutex> lock(m_mutex);
-        chapter.state = LocalDownloadState::FAILED;
-        saveStateUnlocked();
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            chapter.state = LocalDownloadState::FAILED;
+            saveStateUnlocked();
+        }
+        // Notify completion callback (failure)
+        if (m_chapterCompletionCallback) {
+            m_chapterCompletionCallback(mangaId, chapter.chapterIndex, false);
+        }
     } catch (...) {
         brls::Logger::error("DownloadsManager: Unknown exception downloading chapter {}",
                            chapter.chapterIndex);
-        std::lock_guard<std::mutex> lock(m_mutex);
-        chapter.state = LocalDownloadState::FAILED;
-        saveStateUnlocked();
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            chapter.state = LocalDownloadState::FAILED;
+            saveStateUnlocked();
+        }
+        // Notify completion callback (failure)
+        if (m_chapterCompletionCallback) {
+            m_chapterCompletionCallback(mangaId, chapter.chapterIndex, false);
+        }
     }
 }
 
