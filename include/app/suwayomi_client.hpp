@@ -10,6 +10,7 @@
 #include <vector>
 #include <functional>
 #include <memory>
+#include <map>
 #include "utils/http_client.hpp"
 
 namespace vitasuwayomi {
@@ -115,6 +116,9 @@ struct Manga {
     // Tracking info
     std::vector<int> categoryIds;
 
+    // Per-manga metadata (key-value pairs from server)
+    std::map<std::string, std::string> meta;
+
     // Source info
     std::string sourceName;
 
@@ -133,6 +137,45 @@ struct Manga {
             default: return "Unknown";
         }
     }
+
+    // Helper to detect if manga is a webtoon/long strip format
+    // Based on genre tags and source name
+    bool isWebtoon() const {
+        // Check genre for webtoon indicators
+        for (const auto& g : genre) {
+            std::string lower = g;
+            for (auto& c : lower) c = std::tolower(c);
+
+            if (lower.find("long strip") != std::string::npos ||
+                lower.find("webtoon") != std::string::npos ||
+                lower.find("web comic") != std::string::npos ||
+                lower.find("manhwa") != std::string::npos ||
+                lower.find("manhua") != std::string::npos ||
+                lower.find("full color") != std::string::npos) {
+                return true;
+            }
+        }
+
+        // Check source name for common webtoon sources
+        std::string lowerSource = sourceName;
+        for (auto& c : lowerSource) c = std::tolower(c);
+
+        if (lowerSource.find("webtoon") != std::string::npos ||
+            lowerSource.find("tapas") != std::string::npos ||
+            lowerSource.find("tappytoon") != std::string::npos ||
+            lowerSource.find("lezhin") != std::string::npos ||
+            lowerSource.find("toomics") != std::string::npos ||
+            lowerSource.find("manhwa") != std::string::npos ||
+            lowerSource.find("manhua") != std::string::npos ||
+            lowerSource.find("bilibili") != std::string::npos ||
+            lowerSource.find("asura") != std::string::npos ||
+            lowerSource.find("reaper") != std::string::npos ||
+            lowerSource.find("flame") != std::string::npos) {
+            return true;
+        }
+
+        return false;
+    }
 };
 
 // Page info for chapter reader
@@ -140,6 +183,11 @@ struct Page {
     int index = 0;
     std::string url;
     std::string imageUrl;
+
+    // For webtoon page splitting (tall images split into segments)
+    int segment = 0;        // Which segment of the original image (0 = first/only)
+    int totalSegments = 1;  // Total segments for this page (1 = not split)
+    int originalIndex = -1; // Original page index before splitting (-1 = not split)
 };
 
 // Recent chapter update
@@ -175,6 +223,9 @@ struct DownloadQueueItem {
     int mangaId = 0;
     std::string mangaTitle;
     std::string chapterName;
+    float chapterNumber = 0.0f;
+    int pageCount = 0;
+    int downloadedPages = 0;
     float progress = 0.0f;
     DownloadState state = DownloadState::QUEUED;
     std::string error;
@@ -311,7 +362,7 @@ public:
     // Download Management
     bool queueChapterDownload(int mangaId, int chapterIndex);
     bool deleteChapterDownload(int mangaId, int chapterIndex);
-    bool queueChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes);
+    bool queueChapterDownloads(const std::vector<int>& chapterIds);  // Uses chapter IDs for GraphQL API
     bool deleteChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes);
     bool fetchDownloadQueue(std::vector<DownloadQueueItem>& queue);
     bool startDownloads();
@@ -345,6 +396,11 @@ public:
     // Set manga categories (replaces all categories)
     bool setMangaCategories(int mangaId, const std::vector<int>& categoryIds);
 
+    // Manga Metadata (per-manga settings like reader preferences)
+    bool fetchMangaMeta(int mangaId, std::map<std::string, std::string>& meta);
+    bool setMangaMeta(int mangaId, const std::string& key, const std::string& value);
+    bool deleteMangaMeta(int mangaId, const std::string& key);
+
     // Configuration
     void setServerUrl(const std::string& url) { m_serverUrl = url; }
     const std::string& getServerUrl() const { return m_serverUrl; }
@@ -357,15 +413,15 @@ public:
     // Get update summary
     bool fetchUpdateSummary(int& pendingUpdates, int& runningJobs, bool& isUpdating);
 
+    // Create HTTP client with authentication (public for use by other managers)
+    HttpClient createHttpClient();
+
 private:
     SuwayomiClient() = default;
     ~SuwayomiClient() = default;
 
     std::string buildApiUrl(const std::string& endpoint);
     std::string buildGraphQLUrl();
-
-    // Create HTTP client with authentication
-    HttpClient createHttpClient();
 
     // GraphQL query executor - returns response body or empty string on failure
     std::string executeGraphQL(const std::string& query, const std::string& variables = "");
@@ -390,6 +446,11 @@ private:
     bool setMangaCategoriesGraphQL(int mangaId, const std::vector<int>& categoryIds);
     bool fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga);
     bool fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga);
+
+    // Manga Meta GraphQL methods
+    bool fetchMangaMetaGraphQL(int mangaId, std::map<std::string, std::string>& meta);
+    bool setMangaMetaGraphQL(int mangaId, const std::string& key, const std::string& value);
+    bool deleteMangaMetaGraphQL(int mangaId, const std::string& key);
 
     // Extension GraphQL methods
     bool fetchExtensionListGraphQL(std::vector<Extension>& extensions);

@@ -5,11 +5,13 @@
 
 #include "activity/reader_activity.hpp"
 #include "app/suwayomi_client.hpp"
+#include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
 
 #include <borealis.hpp>
 #include <cmath>
+#include <chrono>
 
 namespace vitasuwayomi {
 
@@ -35,7 +37,183 @@ brls::View* ReaderActivity::createContentView() {
 }
 
 void ReaderActivity::onContentAvailable() {
-    brls::Logger::debug("ReaderActivity: content available");
+    brls::Logger::info("ReaderActivity: content available for manga {}", m_mangaId);
+
+    // Load settings - priority order:
+    // 1. Server meta (per-manga settings synced to server)
+    // 2. Local per-manga settings cache
+    // 3. Global defaults
+
+    AppSettings& appSettings = Application::getInstance().getSettings();
+
+    // Start with global defaults
+    ReadingMode readingMode = appSettings.readingMode;
+    PageScaleMode pageScaleMode = appSettings.pageScaleMode;
+    int imageRotation = appSettings.imageRotation;
+
+    brls::Logger::info("ReaderActivity: global defaults - readingMode={}, pageScaleMode={}, rotation={}",
+                       static_cast<int>(readingMode), static_cast<int>(pageScaleMode), imageRotation);
+    brls::Logger::info("ReaderActivity: local cache has {} per-manga settings",
+                       appSettings.mangaReaderSettings.size());
+
+    // Try to load from server meta first (synchronously for initial display)
+    std::map<std::string, std::string> serverMeta;
+    bool hasServerSettings = false;
+
+    // Also load webtoon settings
+    bool cropBorders = appSettings.cropBorders;
+    int webtoonSidePadding = appSettings.webtoonSidePadding;
+
+    brls::Logger::info("ReaderActivity: fetching server meta for manga {}...", m_mangaId);
+    if (SuwayomiClient::getInstance().fetchMangaMeta(m_mangaId, serverMeta)) {
+        brls::Logger::info("ReaderActivity: server returned {} meta entries", serverMeta.size());
+        for (const auto& entry : serverMeta) {
+            brls::Logger::info("ReaderActivity: server meta [{}] = {}", entry.first, entry.second);
+        }
+
+        // Check for reader settings in server meta
+        // Standard keys used by Tachiyomi/Mihon clients
+        auto readerModeIt = serverMeta.find("readerMode");
+        auto rotationIt = serverMeta.find("rotation");
+        auto scaleModeIt = serverMeta.find("scaleType");
+        auto cropBordersIt = serverMeta.find("cropBorders");
+        auto sidePaddingIt = serverMeta.find("webtoonSidePadding");
+        auto isWebtoonIt = serverMeta.find("isWebtoonFormat");
+
+        if (readerModeIt != serverMeta.end()) {
+            int mode = std::atoi(readerModeIt->second.c_str());
+            if (mode >= 0 && mode <= 3) {
+                readingMode = static_cast<ReadingMode>(mode);
+                hasServerSettings = true;
+            }
+        }
+
+        if (rotationIt != serverMeta.end()) {
+            imageRotation = std::atoi(rotationIt->second.c_str());
+            // Validate rotation
+            if (imageRotation != 0 && imageRotation != 90 &&
+                imageRotation != 180 && imageRotation != 270) {
+                imageRotation = 0;
+            }
+            hasServerSettings = true;
+        }
+
+        if (scaleModeIt != serverMeta.end()) {
+            int scale = std::atoi(scaleModeIt->second.c_str());
+            if (scale >= 0 && scale <= 3) {
+                pageScaleMode = static_cast<PageScaleMode>(scale);
+                hasServerSettings = true;
+            }
+        }
+
+        if (cropBordersIt != serverMeta.end()) {
+            cropBorders = (cropBordersIt->second == "true" || cropBordersIt->second == "1");
+            hasServerSettings = true;
+        }
+
+        if (sidePaddingIt != serverMeta.end()) {
+            webtoonSidePadding = std::atoi(sidePaddingIt->second.c_str());
+            if (webtoonSidePadding < 0 || webtoonSidePadding > 20) {
+                webtoonSidePadding = 0;
+            }
+            hasServerSettings = true;
+        }
+
+        if (isWebtoonIt != serverMeta.end()) {
+            m_settings.isWebtoonFormat = (isWebtoonIt->second == "true" || isWebtoonIt->second == "1");
+            hasServerSettings = true;
+        }
+
+        if (hasServerSettings) {
+            brls::Logger::info("ReaderActivity: loaded settings from server for manga {}", m_mangaId);
+        }
+    }
+
+    // If no server settings, check local per-manga cache
+    bool hasLocalSettings = false;
+    if (!hasServerSettings) {
+        brls::Logger::info("ReaderActivity: no server settings, checking local cache for manga {}", m_mangaId);
+        auto it = appSettings.mangaReaderSettings.find(m_mangaId);
+        if (it != appSettings.mangaReaderSettings.end()) {
+            readingMode = it->second.readingMode;
+            pageScaleMode = it->second.pageScaleMode;
+            imageRotation = it->second.imageRotation;
+            cropBorders = it->second.cropBorders;
+            webtoonSidePadding = it->second.webtoonSidePadding;
+            m_settings.isWebtoonFormat = it->second.isWebtoonFormat;
+            hasLocalSettings = true;
+            brls::Logger::info("ReaderActivity: FOUND local settings - readingMode={}, pageScaleMode={}, rotation={}, webtoon={}",
+                              static_cast<int>(readingMode), static_cast<int>(pageScaleMode), imageRotation,
+                              m_settings.isWebtoonFormat ? "true" : "false");
+        } else {
+            brls::Logger::info("ReaderActivity: NO local settings found, using global defaults");
+        }
+    } else {
+        brls::Logger::info("ReaderActivity: using server settings (skipping local cache)");
+    }
+
+    // Auto-detect webtoon format if enabled and no custom settings exist
+    if (!hasServerSettings && !hasLocalSettings && appSettings.webtoonDetection) {
+        Manga mangaInfo;
+        if (SuwayomiClient::getInstance().fetchManga(m_mangaId, mangaInfo)) {
+            if (mangaInfo.isWebtoon()) {
+                // Apply webtoon-optimized defaults
+                readingMode = ReadingMode::WEBTOON;
+                pageScaleMode = PageScaleMode::FIT_WIDTH;
+                imageRotation = 0;  // No rotation for webtoons
+                m_settings.isWebtoonFormat = true;  // Set webtoon format flag for page splitting
+                brls::Logger::info("ReaderActivity: auto-detected webtoon format for '{}', applying webtoon defaults", mangaInfo.title);
+            }
+        }
+    }
+
+    // Map ReadingMode to ReaderDirection
+    switch (readingMode) {
+        case ReadingMode::LEFT_TO_RIGHT:
+            m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
+            break;
+        case ReadingMode::RIGHT_TO_LEFT:
+            m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
+            break;
+        case ReadingMode::VERTICAL:
+        case ReadingMode::WEBTOON:
+            m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
+            break;
+    }
+
+    // Map imageRotation to ImageRotation enum
+    switch (imageRotation) {
+        case 90:  m_settings.rotation = ImageRotation::ROTATE_90; break;
+        case 180: m_settings.rotation = ImageRotation::ROTATE_180; break;
+        case 270: m_settings.rotation = ImageRotation::ROTATE_270; break;
+        default:  m_settings.rotation = ImageRotation::ROTATE_0; break;
+    }
+
+    // Map PageScaleMode to ReaderScaleMode
+    switch (pageScaleMode) {
+        case PageScaleMode::FIT_SCREEN:
+            m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
+            break;
+        case PageScaleMode::FIT_WIDTH:
+            m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
+            break;
+        case PageScaleMode::FIT_HEIGHT:
+            m_settings.scaleMode = ReaderScaleMode::FIT_HEIGHT;
+            break;
+        case PageScaleMode::ORIGINAL:
+            m_settings.scaleMode = ReaderScaleMode::ORIGINAL;
+            break;
+    }
+
+    // Set webtoon-specific settings
+    m_settings.cropBorders = cropBorders;
+    m_settings.webtoonSidePadding = webtoonSidePadding;
+
+    brls::Logger::debug("ReaderActivity: loaded settings - direction={}, rotation={}, scaleMode={}, cropBorders={}",
+                        static_cast<int>(m_settings.direction),
+                        static_cast<int>(m_settings.rotation),
+                        static_cast<int>(m_settings.scaleMode),
+                        m_settings.cropBorders);
 
     // Set manga title in top bar
     if (mangaLabel) {
@@ -52,44 +230,14 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Set up controller input
-    this->registerAction("Previous Page", brls::ControllerButton::BUTTON_LB, [this](brls::View*) {
-        previousPage();
+    // Set up controller input - L/R for chapter navigation only
+    this->registerAction("Previous Chapter", brls::ControllerButton::BUTTON_LB, [this](brls::View*) {
+        previousChapter();
         return true;
     });
 
-    this->registerAction("Next Page", brls::ControllerButton::BUTTON_RB, [this](brls::View*) {
-        nextPage();
-        return true;
-    });
-
-    // Horizontal navigation (left/right) - works in all orientations
-    this->registerAction("Previous Page", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-            nextPage();
-        } else {
-            previousPage();
-        }
-        return true;
-    });
-
-    this->registerAction("Next Page", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-            previousPage();
-        } else {
-            nextPage();
-        }
-        return true;
-    });
-
-    // Vertical navigation (up/down) - works in all orientations
-    this->registerAction("Previous Page", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
-        previousPage();
-        return true;
-    });
-
-    this->registerAction("Next Page", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
-        nextPage();
+    this->registerAction("Next Chapter", brls::ControllerButton::BUTTON_RB, [this](brls::View*) {
+        nextChapter();
         return true;
     });
 
@@ -104,86 +252,153 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // NOBORU-style touch handling
-    // Uses PanGestureRecognizer to track touch movement
-    // - Swipe threshold: 10px to detect swipe start
-    // - Page turn threshold: 90px to trigger page change
+    // Set background color based on dark/light mode (shows when page doesn't fill screen)
+    updateMarginColors();
+
+    // Hide preview image initially
+    if (previewImage) {
+        previewImage->setVisibility(brls::Visibility::GONE);
+    }
+
+    // NOBORU-style touch handling with swipe controls
+    // Features:
+    // - Real-time swipe showing next/prev page sliding in
+    // - Responsive swipe detection with lower thresholds
+    // - Double-tap to zoom in/out
+    // - Tap to toggle UI controls
+    // - Swipe for page navigation respecting reading direction
     if (pageImage) {
         pageImage->setFocusable(true);
 
-        // Pan gesture for swipe detection (NOBORU style)
+        // Initialize double-tap tracking
+        m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+        m_lastTapPosition = {0, 0};
+
+        // Tap gesture for instant controls toggle (no hold delay)
+        pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    // Check for double-tap
+                    auto now = std::chrono::steady_clock::now();
+                    auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now - m_lastTapTime).count();
+
+                    float tapDistance = std::sqrt(
+                        std::pow(status.position.x - m_lastTapPosition.x, 2) +
+                        std::pow(status.position.y - m_lastTapPosition.y, 2));
+
+                    if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
+                        tapDistance < DOUBLE_TAP_DISTANCE) {
+                        // Double-tap - zoom toggle
+                        handleDoubleTap(status.position);
+                        m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+                    } else {
+                        // Single tap - toggle controls immediately
+                        m_lastTapTime = now;
+                        m_lastTapPosition = status.position;
+                        toggleControls();
+                    }
+                }
+            }));
+
+        // Pan gesture for swipe detection (NOBORU style with page preview)
+        // Swipe direction changes based on rotation:
+        // - 0°/180°: horizontal swipes (left/right)
+        // - 90°/270°: vertical swipes (up/down)
+        // - 180°/270°: inverted direction compared to 0°/90°
         pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                const float TAP_THRESHOLD = 15.0f;       // Max movement for tap
+                const float PAGE_TURN_THRESHOLD = 80.0f; // Threshold to complete page turn
+                const float SWIPE_START_THRESHOLD = 20.0f; // When to start showing preview
+
+                // Determine swipe axis and inversion based on rotation
+                bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
+                                         m_settings.rotation == ImageRotation::ROTATE_270);
+                bool invertDirection = (m_settings.rotation == ImageRotation::ROTATE_180 ||
+                                        m_settings.rotation == ImageRotation::ROTATE_270);
+
                 if (status.state == brls::GestureState::START) {
-                    m_isPanning = false;  // Will be set to true if we move enough
+                    m_isPanning = false;
+                    m_isSwipeAnimating = false;
                     m_touchStart = status.position;
                     m_touchCurrent = status.position;
-                    brls::Logger::info("Touch START at ({}, {})", status.position.x, status.position.y);
+                    m_swipeOffset = 0.0f;
+                    m_previewPageIndex = -1;
+                } else if (status.state == brls::GestureState::STAY) {
+                    // Real-time swipe tracking (STAY = finger still on screen)
+                    m_touchCurrent = status.position;
+                    float dx = m_touchCurrent.x - m_touchStart.x;
+                    float dy = m_touchCurrent.y - m_touchStart.y;
+
+                    // Raw delta follows the finger (for visual feedback)
+                    float rawDelta = useVerticalSwipe ? dy : dx;
+                    float crossDelta = useVerticalSwipe ? dx : dy;
+
+                    // Logical delta accounts for rotation inversion (for page turn logic)
+                    float logicalDelta = invertDirection ? -rawDelta : rawDelta;
+
+                    // Only track swipes in the primary direction
+                    if (std::abs(rawDelta) > std::abs(crossDelta) && std::abs(rawDelta) > SWIPE_START_THRESHOLD) {
+                        m_isSwipeAnimating = true;
+                        m_swipeOffset = rawDelta;  // Store raw for visual
+
+                        // Determine which page we're swiping to based on logical direction
+                        bool swipingPositive = logicalDelta > 0;
+                        bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingPositive : !swipingPositive;
+
+                        int previewIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
+
+                        // Load preview page if not already loaded
+                        if (previewIndex != m_previewPageIndex && previewIndex >= 0 &&
+                            previewIndex < static_cast<int>(m_pages.size())) {
+                            m_previewPageIndex = previewIndex;
+                            m_swipingToNext = wantNextPage;
+                            loadPreviewPage(previewIndex);
+                        }
+
+                        // Update visual positions - page follows finger (use raw delta)
+                        updateSwipePreview(rawDelta);
+                    }
                 } else if (status.state == brls::GestureState::END) {
                     m_touchCurrent = status.position;
 
-                    // Calculate distance moved (NOBORU style)
+                    // Calculate distance moved
                     float dx = m_touchCurrent.x - m_touchStart.x;
                     float dy = m_touchCurrent.y - m_touchStart.y;
                     float distance = std::sqrt(dx * dx + dy * dy);
 
-                    brls::Logger::info("Touch END: start=({},{}), end=({},{}), dx={}, dy={}, dist={}",
-                        m_touchStart.x, m_touchStart.y,
-                        m_touchCurrent.x, m_touchCurrent.y,
-                        dx, dy, distance);
+                    // Raw delta for threshold checking (how far finger actually moved)
+                    float rawDelta = useVerticalSwipe ? dy : dx;
 
-                    // NOBORU thresholds: 10px for swipe detection, 90px for page turn
-                    const float SWIPE_DETECT_THRESHOLD = 10.0f;
-                    const float PAGE_TURN_THRESHOLD = 90.0f;
+                    if (distance < TAP_THRESHOLD) {
+                        // It's a tap - handled by TapGestureRecognizer for instant response
+                        resetSwipeState();
+                    } else if (m_isSwipeAnimating) {
+                        // Complete swipe animation - use raw delta for threshold
+                        float absSwipe = std::abs(rawDelta);
 
-                    if (distance < SWIPE_DETECT_THRESHOLD) {
-                        // Too short - treat as tap
-                        brls::Logger::info("Tap detected (distance {} < {})", distance, SWIPE_DETECT_THRESHOLD);
-                        toggleControls();
-                    } else {
-                        // It's a swipe - check if long enough to turn page
-                        m_isPanning = true;
-
-                        float absX = std::abs(dx);
-                        float absY = std::abs(dy);
-
-                        if (absX > absY) {
-                            // Horizontal swipe
-                            if (absX >= PAGE_TURN_THRESHOLD) {
-                                brls::Logger::info("Horizontal page turn: dx={}", dx);
-                                if (dx > 0) {
-                                    // Swipe right
-                                    if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                                        nextPage();
-                                    } else {
-                                        previousPage();
-                                    }
-                                } else {
-                                    // Swipe left
-                                    if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                                        previousPage();
-                                    } else {
-                                        nextPage();
-                                    }
-                                }
-                            } else {
-                                brls::Logger::info("Horizontal swipe too short ({} < {})", absX, PAGE_TURN_THRESHOLD);
-                            }
+                        if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
+                            // Swipe was long enough - turn the page
+                            completeSwipeAnimation(true);
                         } else {
-                            // Vertical swipe
-                            if (absY >= PAGE_TURN_THRESHOLD) {
-                                brls::Logger::info("Vertical page turn: dy={}", dy);
-                                if (dy > 0) {
-                                    // Swipe down
-                                    previousPage();
-                                } else {
-                                    // Swipe up
-                                    nextPage();
-                                }
+                            // Swipe too short - snap back
+                            completeSwipeAnimation(false);
+                        }
+                    } else {
+                        // Secondary axis swipe (fallback navigation)
+                        // Use logical inversion for correct page direction
+                        float crossDelta = useVerticalSwipe ? dx : dy;
+                        float logicalCross = invertDirection ? -crossDelta : crossDelta;
+
+                        if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
+                            if (logicalCross > 0) {
+                                previousPage();
                             } else {
-                                brls::Logger::info("Vertical swipe too short ({} < {})", absY, PAGE_TURN_THRESHOLD);
+                                nextPage();
                             }
                         }
+                        resetSwipeState();
                     }
 
                     m_isPanning = false;
@@ -191,23 +406,46 @@ void ReaderActivity::onContentAvailable() {
             }, brls::PanAxis::ANY));
     }
 
-    // Container fallback with same logic
+    // Container fallback - simpler touch handling without preview
     if (container) {
+        // Tap gesture for instant controls toggle on container
+        container->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    // Check for double-tap
+                    auto now = std::chrono::steady_clock::now();
+                    auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now - m_lastTapTime).count();
+
+                    float tapDistance = std::sqrt(
+                        std::pow(status.position.x - m_lastTapPosition.x, 2) +
+                        std::pow(status.position.y - m_lastTapPosition.y, 2));
+
+                    if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
+                        tapDistance < DOUBLE_TAP_DISTANCE) {
+                        handleDoubleTap(status.position);
+                        m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+                    } else {
+                        m_lastTapTime = now;
+                        m_lastTapPosition = status.position;
+                        toggleControls();
+                    }
+                }
+            }));
+
+        // Pan gesture for swipe navigation on container
         container->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                const float PAGE_TURN_THRESHOLD = 80.0f;
+
                 if (status.state == brls::GestureState::START) {
                     m_touchStart = status.position;
                 } else if (status.state == brls::GestureState::END) {
                     float dx = status.position.x - m_touchStart.x;
                     float dy = status.position.y - m_touchStart.y;
-                    float distance = std::sqrt(dx * dx + dy * dy);
 
-                    const float SWIPE_DETECT_THRESHOLD = 10.0f;
-                    const float PAGE_TURN_THRESHOLD = 90.0f;
-
-                    if (distance < SWIPE_DETECT_THRESHOLD) {
-                        toggleControls();
-                    } else if (std::abs(dx) > std::abs(dy) && std::abs(dx) >= PAGE_TURN_THRESHOLD) {
+                    // Only process swipes, not taps (handled by TapGestureRecognizer)
+                    if (std::abs(dx) > std::abs(dy) && std::abs(dx) >= PAGE_TURN_THRESHOLD) {
                         if (dx > 0) {
                             m_settings.direction == ReaderDirection::RIGHT_TO_LEFT ? nextPage() : previousPage();
                         } else {
@@ -266,8 +504,102 @@ void ReaderActivity::onContentAvailable() {
         settingsBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsBtn));
     }
 
+    // Set up settings overlay panel
+    if (settingsOverlay) {
+        // Tap on overlay background (outside panel) closes settings
+        settingsOverlay->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    // Check if tap is outside the settings panel
+                    if (settingsPanel) {
+                        brls::Rect panelRect = settingsPanel->getFrame();
+                        if (status.position.x < panelRect.getMinX() ||
+                            status.position.x > panelRect.getMaxX() ||
+                            status.position.y < panelRect.getMinY() ||
+                            status.position.y > panelRect.getMaxY()) {
+                            hideSettings();
+                        }
+                    } else {
+                        hideSettings();
+                    }
+                }
+            }));
+    }
+
+    // Settings panel buttons
+    if (settingsFormatBtn) {
+        settingsFormatBtn->registerClickAction([this](brls::View*) {
+            m_settings.isWebtoonFormat = !m_settings.isWebtoonFormat;
+
+            // Apply mode defaults
+            if (m_settings.isWebtoonFormat) {
+                m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
+                m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
+            } else {
+                m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
+                m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
+            }
+
+            updateDirectionLabel();
+            applySettings();
+            saveSettingsToApp();
+            updateSettingsLabels();
+
+            // Reload pages for page splitting change
+            m_pages.clear();
+            loadPages();
+            return true;
+        });
+        settingsFormatBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsFormatBtn));
+    }
+
+    if (settingsDirBtn) {
+        settingsDirBtn->registerClickAction([this](brls::View*) {
+            // Direction only changes in manga mode (webtoon is locked to vertical)
+            if (!m_settings.isWebtoonFormat) {
+                if (m_settings.direction == ReaderDirection::LEFT_TO_RIGHT) {
+                    m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
+                } else {
+                    m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
+                }
+                updateDirectionLabel();
+                saveSettingsToApp();
+                updateSettingsLabels();
+            }
+            return true;
+        });
+        settingsDirBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsDirBtn));
+    }
+
+    if (settingsRotBtn) {
+        settingsRotBtn->registerClickAction([this](brls::View*) {
+            switch (m_settings.rotation) {
+                case ImageRotation::ROTATE_0:
+                    m_settings.rotation = ImageRotation::ROTATE_90;
+                    break;
+                case ImageRotation::ROTATE_90:
+                    m_settings.rotation = ImageRotation::ROTATE_180;
+                    break;
+                case ImageRotation::ROTATE_180:
+                    m_settings.rotation = ImageRotation::ROTATE_270;
+                    break;
+                case ImageRotation::ROTATE_270:
+                    m_settings.rotation = ImageRotation::ROTATE_0;
+                    break;
+            }
+            applySettings();
+            saveSettingsToApp();
+            updateSettingsLabels();
+            return true;
+        });
+        settingsRotBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsRotBtn));
+    }
+
     // Update direction label
     updateDirectionLabel();
+
+    // Apply loaded settings (rotation, scaling, etc.)
+    applySettings();
 
     // Load pages asynchronously
     loadPages();
@@ -276,23 +608,105 @@ void ReaderActivity::onContentAvailable() {
 void ReaderActivity::loadPages() {
     brls::Logger::debug("Loading pages for chapter {}", m_chapterIndex);
 
-    vitasuwayomi::asyncTask<bool>([this]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
+    // Capture webtoon mode flag for async task - use format setting
+    bool isWebtoonMode = m_settings.isWebtoonFormat;
+    int mangaId = m_mangaId;
+    int chapterIndex = m_chapterIndex;
 
-        // Fetch chapter info and pages
-        if (!client.fetchChapterPages(m_mangaId, m_chapterIndex, m_pages)) {
-            brls::Logger::error("Failed to fetch chapter pages");
-            return false;
+    vitasuwayomi::asyncTask<bool>([this, isWebtoonMode, mangaId, chapterIndex]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+        localMgr.init();
+
+        std::vector<Page> rawPages;
+        bool loadedFromLocal = false;
+
+        // First check if chapter is downloaded locally
+        if (localMgr.isChapterDownloaded(mangaId, chapterIndex)) {
+            brls::Logger::info("ReaderActivity: Chapter {} is downloaded locally, loading from disk", chapterIndex);
+
+            std::vector<std::string> localPaths = localMgr.getChapterPages(mangaId, chapterIndex);
+            if (!localPaths.empty()) {
+                brls::Logger::info("ReaderActivity: Found {} local pages", localPaths.size());
+
+                // Convert local paths to Page objects
+                for (size_t i = 0; i < localPaths.size(); i++) {
+                    Page page;
+                    page.index = static_cast<int>(i);
+                    page.url = localPaths[i];      // Use local path as URL
+                    page.imageUrl = localPaths[i]; // Local file path
+                    page.segment = 0;
+                    page.totalSegments = 1;
+                    page.originalIndex = static_cast<int>(i);
+                    rawPages.push_back(page);
+                }
+                loadedFromLocal = true;
+            } else {
+                brls::Logger::warning("ReaderActivity: Local chapter marked as downloaded but no pages found");
+            }
+        }
+
+        // Fall back to server if not available locally
+        if (!loadedFromLocal) {
+            brls::Logger::info("ReaderActivity: Fetching chapter {} from server", chapterIndex);
+            if (!client.fetchChapterPages(mangaId, chapterIndex, rawPages)) {
+                brls::Logger::error("Failed to fetch chapter pages");
+                return false;
+            }
+        }
+
+        // For webtoon mode, check for tall images that need splitting
+        if (isWebtoonMode && !rawPages.empty()) {
+            brls::Logger::info("Webtoon mode: checking {} pages for tall images", rawPages.size());
+            m_pages.clear();
+
+            for (size_t i = 0; i < rawPages.size(); i++) {
+                const Page& rawPage = rawPages[i];
+                int width, height, suggestedSegments;
+
+                // Get image dimensions to check if splitting is needed
+                if (ImageLoader::getImageDimensions(rawPage.imageUrl, width, height, suggestedSegments) &&
+                    suggestedSegments > 1) {
+                    // Split this page into multiple segments
+                    brls::Logger::info("Page {} ({}x{}) split into {} segments",
+                                       i, width, height, suggestedSegments);
+
+                    for (int seg = 0; seg < suggestedSegments; seg++) {
+                        Page segmentPage;
+                        segmentPage.index = static_cast<int>(m_pages.size());
+                        segmentPage.url = rawPage.url;
+                        segmentPage.imageUrl = rawPage.imageUrl;
+                        segmentPage.segment = seg;
+                        segmentPage.totalSegments = suggestedSegments;
+                        segmentPage.originalIndex = static_cast<int>(i);
+                        m_pages.push_back(segmentPage);
+                    }
+                } else {
+                    // Single page (no splitting needed)
+                    Page singlePage = rawPage;
+                    singlePage.index = static_cast<int>(m_pages.size());
+                    singlePage.segment = 0;
+                    singlePage.totalSegments = 1;
+                    singlePage.originalIndex = static_cast<int>(i);
+                    m_pages.push_back(singlePage);
+                }
+            }
+
+            brls::Logger::info("Webtoon mode: {} raw pages expanded to {} virtual pages",
+                               rawPages.size(), m_pages.size());
+        } else {
+            // Normal mode - use pages as-is
+            m_pages = std::move(rawPages);
         }
 
         // Also fetch chapter details for the name
         Chapter chapter;
-        if (client.fetchChapter(m_mangaId, m_chapterIndex, chapter)) {
+        if (client.fetchChapter(mangaId, chapterIndex, chapter)) {
             m_chapterName = chapter.name;
         }
 
         // Fetch all chapters for navigation
-        client.fetchChapters(m_mangaId, m_chapters);
+        client.fetchChapters(mangaId, m_chapters);
         m_totalChapters = static_cast<int>(m_chapters.size());
 
         return true;
@@ -334,21 +748,41 @@ void ReaderActivity::loadPage(int index) {
         return;
     }
 
-    std::string imageUrl = m_pages[index].imageUrl;
-    brls::Logger::debug("Loading page {} from: {}", index, imageUrl);
+    const Page& page = m_pages[index];
+    std::string imageUrl = page.imageUrl;
+
+    if (page.totalSegments > 1) {
+        brls::Logger::debug("Loading page {} segment {}/{} from: {}",
+                           index, page.segment + 1, page.totalSegments, imageUrl);
+    } else {
+        brls::Logger::debug("Loading page {} from: {}", index, imageUrl);
+    }
 
     // Show page counter when navigating
     showPageCounter();
     schedulePageCounterHide();
 
-    // Load image
+    // Load image using RotatableImage
     if (pageImage) {
         int currentPageAtLoad = m_currentPage;
-        ImageLoader::loadAsync(imageUrl, [this, index, currentPageAtLoad](brls::Image* img) {
-            if (index == currentPageAtLoad) {
-                brls::Logger::debug("ReaderActivity: Page {} loaded", index);
-            }
-        }, pageImage);
+
+        if (page.totalSegments > 1) {
+            // Load specific segment for webtoon splitting
+            ImageLoader::loadAsyncFullSizeSegment(
+                imageUrl, page.segment, page.totalSegments,
+                [this, index, currentPageAtLoad](RotatableImage* img) {
+                    if (index == currentPageAtLoad) {
+                        brls::Logger::debug("ReaderActivity: Page {} (segment) loaded", index);
+                    }
+                }, pageImage);
+        } else {
+            // Load full image normally
+            ImageLoader::loadAsyncFullSize(imageUrl, [this, index, currentPageAtLoad](RotatableImage* img) {
+                if (index == currentPageAtLoad) {
+                    brls::Logger::debug("ReaderActivity: Page {} loaded", index);
+                }
+            }, pageImage);
+        }
     }
 
     // Preload adjacent pages
@@ -356,30 +790,49 @@ void ReaderActivity::loadPage(int index) {
 }
 
 void ReaderActivity::preloadAdjacentPages() {
-    // Preload next page
-    if (m_currentPage + 1 < static_cast<int>(m_pages.size())) {
-        std::string nextUrl = m_pages[m_currentPage + 1].imageUrl;
-        ImageLoader::preload(nextUrl);
+    // Preload next 3 pages for smoother swiping/reading
+    for (int i = 1; i <= 3; i++) {
+        int nextIdx = m_currentPage + i;
+        if (nextIdx < static_cast<int>(m_pages.size())) {
+            // Note: For segmented pages, preloadFullSize loads the full image which will be
+            // segmented on demand. This is acceptable since the raw image needs to be fetched anyway.
+            ImageLoader::preloadFullSize(m_pages[nextIdx].imageUrl);
+        }
     }
 
-    // Preload previous page
+    // Preload previous page (for going back)
     if (m_currentPage > 0) {
-        std::string prevUrl = m_pages[m_currentPage - 1].imageUrl;
-        ImageLoader::preload(prevUrl);
+        ImageLoader::preloadFullSize(m_pages[m_currentPage - 1].imageUrl);
     }
 }
 
 void ReaderActivity::updatePageDisplay() {
     // Update page counter (top-right overlay)
     if (pageLabel) {
-        pageLabel->setText(std::to_string(m_currentPage + 1) + "/" +
-                          std::to_string(m_pages.size()));
+        const Page& page = m_pages[m_currentPage];
+        if (page.totalSegments > 1) {
+            // Show segment info: "Page-Segment/Total" e.g. "1-2/10"
+            pageLabel->setText(std::to_string(page.originalIndex + 1) + "-" +
+                              std::to_string(page.segment + 1) + "/" +
+                              std::to_string(m_pages.size()));
+        } else {
+            pageLabel->setText(std::to_string(m_currentPage + 1) + "/" +
+                              std::to_string(m_pages.size()));
+        }
     }
 
     // Update slider page label (in bottom bar)
     if (sliderPageLabel) {
-        sliderPageLabel->setText("Page " + std::to_string(m_currentPage + 1) +
-                                 " of " + std::to_string(m_pages.size()));
+        const Page& page = m_pages[m_currentPage];
+        if (page.totalSegments > 1) {
+            // Show more detail: "Page X-Y of Z"
+            sliderPageLabel->setText("Page " + std::to_string(page.originalIndex + 1) + "-" +
+                                     std::to_string(page.segment + 1) +
+                                     " of " + std::to_string(m_pages.size()));
+        } else {
+            sliderPageLabel->setText("Page " + std::to_string(m_currentPage + 1) +
+                                     " of " + std::to_string(m_pages.size()));
+        }
     }
 
     // Update slider position
@@ -421,19 +874,11 @@ void ReaderActivity::nextPage() {
         loadPage(m_currentPage);
         updateProgress();
     } else {
-        // End of chapter - mark as read
+        // End of chapter - mark as read and go to next automatically
         markChapterAsRead();
 
         if (m_chapterIndex < m_totalChapters - 1) {
-            auto* dialog = new brls::Dialog("End of chapter. Go to next?");
-            dialog->addButton("Next Chapter", [this, dialog]() {
-                dialog->dismiss();
-                nextChapter();
-            });
-            dialog->addButton("Stay", [dialog]() {
-                dialog->dismiss();
-            });
-            dialog->open();
+            nextChapter();
         } else {
             brls::Application::notify("End of manga");
         }
@@ -447,15 +892,8 @@ void ReaderActivity::previousPage() {
         loadPage(m_currentPage);
         updateProgress();
     } else if (m_chapterIndex > 0) {
-        auto* dialog = new brls::Dialog("Beginning of chapter. Go to previous?");
-        dialog->addButton("Previous Chapter", [this, dialog]() {
-            dialog->dismiss();
-            previousChapter();
-        });
-        dialog->addButton("Stay", [dialog]() {
-            dialog->dismiss();
-        });
-        dialog->open();
+        // Beginning of chapter - go to previous chapter automatically
+        previousChapter();
     }
 }
 
@@ -474,16 +912,41 @@ void ReaderActivity::nextChapter() {
 
         m_chapterIndex++;
         m_currentPage = 0;
-        m_pages.clear();
         m_cachedImages.clear();
 
-        loadPages();
+        // Use preloaded pages if available for instant transition
+        if (m_nextChapterLoaded && !m_nextChapterPages.empty()) {
+            m_pages = std::move(m_nextChapterPages);
+            m_nextChapterLoaded = false;
+            m_nextChapterPages.clear();
+
+            // Update UI
+            if (chapterLabel) {
+                chapterLabel->setText("Chapter " + std::to_string(m_chapterIndex + 1));
+            }
+            if (chapterProgress) {
+                chapterProgress->setText("Ch. " + std::to_string(m_chapterIndex + 1) +
+                                         " of " + std::to_string(m_totalChapters));
+            }
+
+            updatePageDisplay();
+            loadPage(m_currentPage);
+
+            // Start preloading next chapter
+            preloadNextChapter();
+        } else {
+            m_pages.clear();
+            loadPages();
+        }
     }
 }
 
 void ReaderActivity::previousChapter() {
     if (m_chapterIndex > 0) {
         m_chapterIndex--;
+        // Reset preloaded chapter since we're going backwards
+        m_nextChapterLoaded = false;
+        m_nextChapterPages.clear();
         m_currentPage = 0;
         m_pages.clear();
         m_cachedImages.clear();
@@ -510,10 +973,13 @@ void ReaderActivity::toggleControls() {
 }
 
 void ReaderActivity::showControls() {
+    // Instant show - no animation delay
     if (topBar) {
+        topBar->setAlpha(1.0f);
         topBar->setVisibility(brls::Visibility::VISIBLE);
     }
     if (bottomBar) {
+        bottomBar->setAlpha(1.0f);
         bottomBar->setVisibility(brls::Visibility::VISIBLE);
     }
     // Hide page counter when controls are visible (it's redundant)
@@ -522,10 +988,13 @@ void ReaderActivity::showControls() {
 }
 
 void ReaderActivity::hideControls() {
+    // Instant hide - no animation delay
     if (topBar) {
+        topBar->setAlpha(0.0f);
         topBar->setVisibility(brls::Visibility::GONE);
     }
     if (bottomBar) {
+        bottomBar->setAlpha(0.0f);
         bottomBar->setVisibility(brls::Visibility::GONE);
     }
     // Show page counter when controls are hidden
@@ -535,12 +1004,14 @@ void ReaderActivity::hideControls() {
 
 void ReaderActivity::showPageCounter() {
     if (pageCounter) {
+        pageCounter->setAlpha(1.0f);
         pageCounter->setVisibility(brls::Visibility::VISIBLE);
     }
 }
 
 void ReaderActivity::hidePageCounter() {
     if (pageCounter) {
+        pageCounter->setAlpha(0.0f);
         pageCounter->setVisibility(brls::Visibility::GONE);
     }
 }
@@ -552,116 +1023,191 @@ void ReaderActivity::schedulePageCounterHide() {
 }
 
 void ReaderActivity::showSettings() {
-    auto* dialog = new brls::Dialog("Reader Settings");
+    if (m_settingsVisible) return;
 
-    // Image rotation option (0, 90, 180, 270 degrees)
-    std::string rotText;
-    switch (m_settings.rotation) {
-        case ImageRotation::ROTATE_0: rotText = "Rotation: 0"; break;
-        case ImageRotation::ROTATE_90: rotText = "Rotation: 90"; break;
-        case ImageRotation::ROTATE_180: rotText = "Rotation: 180"; break;
-        case ImageRotation::ROTATE_270: rotText = "Rotation: 270"; break;
+    // Update labels before showing
+    updateSettingsLabels();
+
+    // Show the overlay
+    if (settingsOverlay) {
+        settingsOverlay->setVisibility(brls::Visibility::VISIBLE);
+        m_settingsVisible = true;
+
+        // Register circle button to close settings while overlay is visible
+        this->registerAction("Close Settings", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            hideSettings();
+            return true;
+        });
     }
-    dialog->addButton(rotText, [this]() {
-        // Cycle rotation - apply first, then notify
+}
+
+void ReaderActivity::hideSettings() {
+    if (!m_settingsVisible) return;
+
+    if (settingsOverlay) {
+        settingsOverlay->setVisibility(brls::Visibility::GONE);
+        m_settingsVisible = false;
+
+        // Restore normal circle button behavior (close reader)
+        this->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            brls::Application::popActivity();
+            return true;
+        });
+    }
+}
+
+void ReaderActivity::updateSettingsLabels() {
+    // Update format label
+    if (settingsFormatLabel) {
+        settingsFormatLabel->setText(m_settings.isWebtoonFormat ? "Webtoon" : "Manga");
+    }
+
+    // Update direction label
+    if (settingsDirLabel) {
+        if (m_settings.isWebtoonFormat) {
+            settingsDirLabel->setText("Vertical (locked)");
+        } else {
+            settingsDirLabel->setText(
+                m_settings.direction == ReaderDirection::LEFT_TO_RIGHT
+                    ? "Left to Right" : "Right to Left");
+        }
+    }
+
+    // Update rotation label
+    if (settingsRotLabel) {
+        std::string rotText;
         switch (m_settings.rotation) {
-            case ImageRotation::ROTATE_0:
-                m_settings.rotation = ImageRotation::ROTATE_90;
-                break;
-            case ImageRotation::ROTATE_90:
-                m_settings.rotation = ImageRotation::ROTATE_180;
-                break;
-            case ImageRotation::ROTATE_180:
-                m_settings.rotation = ImageRotation::ROTATE_270;
-                break;
-            case ImageRotation::ROTATE_270:
-                m_settings.rotation = ImageRotation::ROTATE_0;
-                break;
+            case ImageRotation::ROTATE_0: rotText = "0\u00B0"; break;
+            case ImageRotation::ROTATE_90: rotText = "90\u00B0"; break;
+            case ImageRotation::ROTATE_180: rotText = "180\u00B0"; break;
+            case ImageRotation::ROTATE_270: rotText = "270\u00B0"; break;
         }
-        applySettings();
-    });
-
-    // Reading direction option (LTR for western, RTL for manga)
-    std::string dirText;
-    switch (m_settings.direction) {
-        case ReaderDirection::LEFT_TO_RIGHT:
-            dirText = "Direction: LTR";
-            break;
-        case ReaderDirection::RIGHT_TO_LEFT:
-            dirText = "Direction: RTL";
-            break;
-        case ReaderDirection::TOP_TO_BOTTOM:
-            dirText = "Direction: TTB";
-            break;
+        settingsRotLabel->setText(rotText);
     }
-    dialog->addButton(dirText, [this]() {
-        // Cycle reading direction
-        switch (m_settings.direction) {
-            case ReaderDirection::LEFT_TO_RIGHT:
-                m_settings.direction = ReaderDirection::RIGHT_TO_LEFT;
-                break;
-            case ReaderDirection::RIGHT_TO_LEFT:
-                m_settings.direction = ReaderDirection::TOP_TO_BOTTOM;
-                break;
-            case ReaderDirection::TOP_TO_BOTTOM:
-                m_settings.direction = ReaderDirection::LEFT_TO_RIGHT;
-                break;
-        }
-        updateDirectionLabel();
-    });
-
-    // Scaling mode option
-    std::string scaleText;
-    switch (m_settings.scaleMode) {
-        case ReaderScaleMode::FIT_SCREEN: scaleText = "Scale: Fit"; break;
-        case ReaderScaleMode::FIT_WIDTH: scaleText = "Scale: Width"; break;
-        case ReaderScaleMode::FIT_HEIGHT: scaleText = "Scale: Height"; break;
-        case ReaderScaleMode::ORIGINAL: scaleText = "Scale: Original"; break;
-    }
-    dialog->addButton(scaleText, [this]() {
-        // Cycle scale mode
-        switch (m_settings.scaleMode) {
-            case ReaderScaleMode::FIT_SCREEN:
-                m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
-                break;
-            case ReaderScaleMode::FIT_WIDTH:
-                m_settings.scaleMode = ReaderScaleMode::FIT_HEIGHT;
-                break;
-            case ReaderScaleMode::FIT_HEIGHT:
-                m_settings.scaleMode = ReaderScaleMode::ORIGINAL;
-                break;
-            case ReaderScaleMode::ORIGINAL:
-                m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
-                break;
-        }
-        applySettings();
-    });
-
-    dialog->setCancelable(true);
-    dialog->open();
 }
 
 void ReaderActivity::applySettings() {
     if (!pageImage) return;
 
-    // Apply scaling mode
+    // Determine scaling type based on mode
+    brls::ImageScalingType scalingType = brls::ImageScalingType::FIT;
     switch (m_settings.scaleMode) {
         case ReaderScaleMode::FIT_SCREEN:
-            pageImage->setScalingType(brls::ImageScalingType::FIT);
-            break;
         case ReaderScaleMode::FIT_WIDTH:
-            pageImage->setScalingType(brls::ImageScalingType::STRETCH);
-            break;
         case ReaderScaleMode::FIT_HEIGHT:
-            pageImage->setScalingType(brls::ImageScalingType::FIT);
+            scalingType = brls::ImageScalingType::FIT;
             break;
         case ReaderScaleMode::ORIGINAL:
-            pageImage->setScalingType(brls::ImageScalingType::FILL);
+            // FILL maintains aspect ratio but may crop - closest to original
+            scalingType = brls::ImageScalingType::FILL;
             break;
     }
 
-    // Apply rotation
-    pageImage->setRotation(static_cast<float>(m_settings.rotation));
+    // Apply scaling to both main and preview images
+    pageImage->setScalingType(scalingType);
+    if (previewImage) {
+        previewImage->setScalingType(scalingType);
+    }
+
+    // Apply rotation to both main and preview images
+    float rotation = static_cast<float>(m_settings.rotation);
+    pageImage->setRotation(rotation);
+    if (previewImage) {
+        previewImage->setRotation(rotation);
+    }
+}
+
+void ReaderActivity::saveSettingsToApp() {
+    AppSettings& appSettings = Application::getInstance().getSettings();
+
+    // Save per-manga settings (not global defaults)
+    MangaReaderSettings mangaSettings;
+
+    // Map ReaderDirection to ReadingMode
+    switch (m_settings.direction) {
+        case ReaderDirection::LEFT_TO_RIGHT:
+            mangaSettings.readingMode = ReadingMode::LEFT_TO_RIGHT;
+            break;
+        case ReaderDirection::RIGHT_TO_LEFT:
+            mangaSettings.readingMode = ReadingMode::RIGHT_TO_LEFT;
+            break;
+        case ReaderDirection::TOP_TO_BOTTOM:
+            mangaSettings.readingMode = ReadingMode::VERTICAL;
+            break;
+    }
+
+    // Map ImageRotation to imageRotation int
+    mangaSettings.imageRotation = static_cast<int>(m_settings.rotation);
+
+    // Map ReaderScaleMode to PageScaleMode
+    switch (m_settings.scaleMode) {
+        case ReaderScaleMode::FIT_SCREEN:
+            mangaSettings.pageScaleMode = PageScaleMode::FIT_SCREEN;
+            break;
+        case ReaderScaleMode::FIT_WIDTH:
+            mangaSettings.pageScaleMode = PageScaleMode::FIT_WIDTH;
+            break;
+        case ReaderScaleMode::FIT_HEIGHT:
+            mangaSettings.pageScaleMode = PageScaleMode::FIT_HEIGHT;
+            break;
+        case ReaderScaleMode::ORIGINAL:
+            mangaSettings.pageScaleMode = PageScaleMode::ORIGINAL;
+            break;
+    }
+
+    // Webtoon settings
+    mangaSettings.cropBorders = m_settings.cropBorders;
+    mangaSettings.webtoonSidePadding = m_settings.webtoonSidePadding;
+    mangaSettings.isWebtoonFormat = m_settings.isWebtoonFormat;
+
+    // Store per-manga settings locally (overrides defaults for this manga)
+    appSettings.mangaReaderSettings[m_mangaId] = mangaSettings;
+
+    brls::Logger::info("ReaderActivity: SAVING settings for manga {} - readingMode={}, pageScaleMode={}, rotation={}, webtoon={}",
+                       m_mangaId, static_cast<int>(mangaSettings.readingMode),
+                       static_cast<int>(mangaSettings.pageScaleMode), mangaSettings.imageRotation,
+                       mangaSettings.isWebtoonFormat ? "true" : "false");
+    brls::Logger::info("ReaderActivity: local cache now has {} per-manga settings",
+                       appSettings.mangaReaderSettings.size());
+
+    // Save to local disk
+    bool saveResult = Application::getInstance().saveSettings();
+    brls::Logger::info("ReaderActivity: saveSettings returned {}", saveResult ? "true" : "false");
+
+    // Save to server asynchronously (using standard Tachiyomi/Mihon meta keys)
+    int mangaId = m_mangaId;
+    int readerMode = static_cast<int>(mangaSettings.readingMode);
+    int rotation = mangaSettings.imageRotation;
+    int scaleType = static_cast<int>(mangaSettings.pageScaleMode);
+    bool cropBorders = mangaSettings.cropBorders;
+    int webtoonSidePadding = mangaSettings.webtoonSidePadding;
+    bool isWebtoonFormat = mangaSettings.isWebtoonFormat;
+
+    vitasuwayomi::asyncTask<bool>([mangaId, readerMode, rotation, scaleType, cropBorders, webtoonSidePadding, isWebtoonFormat]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        // Save reader mode
+        client.setMangaMeta(mangaId, "readerMode", std::to_string(readerMode));
+
+        // Save rotation
+        client.setMangaMeta(mangaId, "rotation", std::to_string(rotation));
+
+        // Save scale type
+        client.setMangaMeta(mangaId, "scaleType", std::to_string(scaleType));
+
+        // Save webtoon settings
+        client.setMangaMeta(mangaId, "cropBorders", cropBorders ? "true" : "false");
+        client.setMangaMeta(mangaId, "webtoonSidePadding", std::to_string(webtoonSidePadding));
+        client.setMangaMeta(mangaId, "isWebtoonFormat", isWebtoonFormat ? "true" : "false");
+
+        return true;
+    }, [mangaId](bool success) {
+        if (success) {
+            brls::Logger::info("ReaderActivity: saved settings to server for manga {}", mangaId);
+        } else {
+            brls::Logger::warning("ReaderActivity: failed to save settings to server for manga {}", mangaId);
+        }
+    });
 }
 
 void ReaderActivity::handleTouch(brls::Point point) {
@@ -678,6 +1224,265 @@ void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
 void ReaderActivity::handleSwipe(brls::Point delta) {
     // Legacy function - swipe handling is now inline in gesture recognizers
     // Kept for compatibility with header declaration
+}
+
+void ReaderActivity::handleDoubleTap(brls::Point position) {
+    if (m_isZoomed) {
+        // Zoomed in - reset to normal view
+        resetZoom();
+    } else {
+        // Not zoomed - zoom in to 2x centered on tap position
+        zoomTo(2.0f, position);
+    }
+}
+
+void ReaderActivity::resetZoom() {
+    m_isZoomed = false;
+    m_zoomLevel = 1.0f;
+    m_zoomOffset = {0, 0};
+
+    if (pageImage) {
+        // Reset to fit scaling - maintains aspect ratio, shows margins
+        pageImage->setScalingType(brls::ImageScalingType::FIT);
+    }
+}
+
+void ReaderActivity::zoomTo(float level, brls::Point center) {
+    m_isZoomed = true;
+    m_zoomLevel = level;
+
+    if (pageImage) {
+        // Use FILL scaling for zoomed view
+        pageImage->setScalingType(brls::ImageScalingType::FILL);
+
+        std::string zoomText = "Zoom: " + std::to_string(static_cast<int>(level * 100)) + "%";
+        brls::Application::notify(zoomText);
+    }
+}
+
+void ReaderActivity::handlePinchZoom(float scaleFactor) {
+    // Pinch-to-zoom - scale by the pinch factor
+    float newZoom = m_zoomLevel * scaleFactor;
+
+    // Clamp zoom between 0.5x and 4x
+    newZoom = std::max(0.5f, std::min(4.0f, newZoom));
+
+    if (newZoom != m_zoomLevel) {
+        if (newZoom <= 1.05f && newZoom >= 0.95f) {
+            // Near 1x - snap to fit
+            resetZoom();
+        } else {
+            m_zoomLevel = newZoom;
+            m_isZoomed = (newZoom > 1.0f);
+
+            if (pageImage) {
+                if (m_isZoomed) {
+                    pageImage->setScalingType(brls::ImageScalingType::FILL);
+                } else {
+                    pageImage->setScalingType(brls::ImageScalingType::FIT);
+                }
+            }
+        }
+    }
+}
+
+// NOBORU-style swipe methods
+
+void ReaderActivity::updateSwipePreview(float offset) {
+    // Update visual positions during swipe - current page moves, preview slides in
+    const float SCREEN_WIDTH = 960.0f;
+    const float SCREEN_HEIGHT = 544.0f;
+
+    if (!pageImage || !previewImage) return;
+
+    // Show preview image
+    previewImage->setVisibility(brls::Visibility::VISIBLE);
+
+    // Determine if we should use vertical swipe based on rotation
+    bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
+                             m_settings.rotation == ImageRotation::ROTATE_270);
+
+    if (useVerticalSwipe) {
+        // Vertical swipe for 90/270 rotation
+        // Clamp offset to screen height
+        offset = std::max(-SCREEN_HEIGHT, std::min(SCREEN_HEIGHT, offset));
+
+        // Move current page with finger (vertically)
+        pageImage->setTranslationY(offset);
+        pageImage->setTranslationX(0.0f);
+
+        // Position preview page sliding in from top/bottom
+        if (m_swipingToNext) {
+            // Next page slides in from bottom (swipe up) or top (swipe down)
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                // RTL: next page comes from bottom
+                previewImage->setTranslationY(SCREEN_HEIGHT + offset);
+            } else {
+                // LTR: next page comes from top
+                previewImage->setTranslationY(-SCREEN_HEIGHT + offset);
+            }
+        } else {
+            // Previous page slides in from opposite side
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                // RTL: prev page comes from top
+                previewImage->setTranslationY(-SCREEN_HEIGHT + offset);
+            } else {
+                // LTR: prev page comes from bottom
+                previewImage->setTranslationY(SCREEN_HEIGHT + offset);
+            }
+        }
+        previewImage->setTranslationX(0.0f);
+    } else {
+        // Horizontal swipe for 0/180 rotation
+        // Clamp offset to screen width
+        offset = std::max(-SCREEN_WIDTH, std::min(SCREEN_WIDTH, offset));
+
+        // Move current page with finger (horizontally)
+        pageImage->setTranslationX(offset);
+        pageImage->setTranslationY(0.0f);
+
+        // Position preview page sliding in from the edge
+        if (m_swipingToNext) {
+            // Next page slides in from right (for RTL swipe right) or left (for LTR swipe left)
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                // RTL: swiping right, next page comes from right
+                previewImage->setTranslationX(SCREEN_WIDTH + offset);
+            } else {
+                // LTR: swiping left, next page comes from left
+                previewImage->setTranslationX(-SCREEN_WIDTH + offset);
+            }
+        } else {
+            // Previous page slides in from opposite side
+            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                // RTL: swiping left, prev page comes from left
+                previewImage->setTranslationX(-SCREEN_WIDTH + offset);
+            } else {
+                // LTR: swiping right, prev page comes from right
+                previewImage->setTranslationX(SCREEN_WIDTH + offset);
+            }
+        }
+        previewImage->setTranslationY(0.0f);
+    }
+}
+
+void ReaderActivity::loadPreviewPage(int index) {
+    if (index < 0 || index >= static_cast<int>(m_pages.size())) {
+        return;
+    }
+
+    if (!previewImage) return;
+
+    // Apply current rotation to preview image before loading
+    previewImage->setRotation(static_cast<float>(m_settings.rotation));
+
+    const Page& page = m_pages[index];
+    std::string imageUrl = page.imageUrl;
+
+    if (page.totalSegments > 1) {
+        brls::Logger::debug("Loading preview page {} segment {}/{}",
+                           index, page.segment + 1, page.totalSegments);
+
+        // Load specific segment for webtoon splitting
+        ImageLoader::loadAsyncFullSizeSegment(
+            imageUrl, page.segment, page.totalSegments,
+            [this, index](RotatableImage* img) {
+                brls::Logger::debug("Preview page {} (segment) loaded", index);
+            }, previewImage);
+    } else {
+        brls::Logger::debug("Loading preview page {}", index);
+
+        // Load the preview image (full size for manga reader)
+        ImageLoader::loadAsyncFullSize(imageUrl, [this, index](RotatableImage* img) {
+            brls::Logger::debug("Preview page {} loaded", index);
+        }, previewImage);
+    }
+}
+
+void ReaderActivity::completeSwipeAnimation(bool turnPage) {
+    if (turnPage && m_previewPageIndex >= 0) {
+        // Turn to the preview page
+        m_currentPage = m_previewPageIndex;
+        updatePageDisplay();
+        loadPage(m_currentPage);
+        updateProgress();
+
+        // Preload next chapter if near end
+        if (m_currentPage >= static_cast<int>(m_pages.size()) - 3) {
+            preloadNextChapter();
+        }
+    }
+
+    // Reset positions
+    resetSwipeState();
+}
+
+void ReaderActivity::resetSwipeState() {
+    m_isSwipeAnimating = false;
+    m_swipeOffset = 0.0f;
+    m_previewPageIndex = -1;
+
+    // Reset page positions (both X and Y)
+    if (pageImage) {
+        pageImage->setTranslationX(0.0f);
+        pageImage->setTranslationY(0.0f);
+    }
+
+    // Hide preview image
+    if (previewImage) {
+        previewImage->setVisibility(brls::Visibility::GONE);
+        previewImage->setTranslationX(0.0f);
+        previewImage->setTranslationY(0.0f);
+    }
+}
+
+void ReaderActivity::updateMarginColors() {
+    // Set background color based on dark/light mode
+    // This shows when the manga page doesn't fill the screen
+    NVGcolor bgColor;
+    if (m_isDarkMode) {
+        // Dark mode - dark gray background
+        bgColor = nvgRGBA(26, 26, 46, 255);  // #1a1a2e
+    } else {
+        // Light mode - light gray/white background
+        bgColor = nvgRGBA(240, 240, 245, 255);  // #f0f0f5
+    }
+
+    // Set container background
+    if (container) {
+        container->setBackgroundColor(bgColor);
+    }
+
+    // Set image background colors (prevents edge artifacts)
+    if (pageImage) {
+        pageImage->setBackgroundFillColor(bgColor);
+    }
+    if (previewImage) {
+        previewImage->setBackgroundFillColor(bgColor);
+    }
+}
+
+void ReaderActivity::preloadNextChapter() {
+    // Preload next chapter pages for seamless transition
+    if (m_nextChapterLoaded || m_chapterIndex >= m_totalChapters - 1) {
+        return;  // Already loaded or no next chapter
+    }
+
+    brls::Logger::info("Preloading next chapter {}", m_chapterIndex + 1);
+
+    vitasuwayomi::asyncTask<bool>([this]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        return client.fetchChapterPages(m_mangaId, m_chapterIndex + 1, m_nextChapterPages);
+    }, [this](bool success) {
+        if (success && !m_nextChapterPages.empty()) {
+            m_nextChapterLoaded = true;
+            brls::Logger::info("Next chapter preloaded: {} pages", m_nextChapterPages.size());
+
+            // Preload first few images of next chapter (full size for manga reader)
+            for (size_t i = 0; i < std::min(size_t(3), m_nextChapterPages.size()); i++) {
+                ImageLoader::preloadFullSize(m_nextChapterPages[i].imageUrl);
+            }
+        }
+    });
 }
 
 } // namespace vitasuwayomi

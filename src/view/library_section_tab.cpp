@@ -67,24 +67,46 @@ LibrarySectionTab::LibrarySectionTab() {
     buttonBox->setAlignItems(brls::AlignItems::CENTER);
     buttonBox->setShrink(0.0f);  // Don't shrink buttons
 
-    // Sort button - bigger size
+    // Sort button with icon
     m_sortBtn = new brls::Button();
-    m_sortBtn->setText("Sort");
     m_sortBtn->setMarginLeft(10);
-    m_sortBtn->setWidth(80);
+    m_sortBtn->setWidth(44);
     m_sortBtn->setHeight(40);
+    m_sortBtn->setCornerRadius(8);
+    m_sortBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_sortBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    m_sortIcon = new brls::Image();
+    m_sortIcon->setWidth(24);
+    m_sortIcon->setHeight(24);
+    m_sortIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_sortBtn->addView(m_sortIcon);
+
     m_sortBtn->registerClickAction([this](brls::View* view) {
         cycleSortMode();
         return true;
     });
     buttonBox->addView(m_sortBtn);
 
-    // Update button - bigger size
+    // Initialize sort icon
+    updateSortButtonText();
+
+    // Update button with refresh icon
     m_updateBtn = new brls::Button();
-    m_updateBtn->setText("Update");
     m_updateBtn->setMarginLeft(8);
-    m_updateBtn->setWidth(100);
+    m_updateBtn->setWidth(44);
     m_updateBtn->setHeight(40);
+    m_updateBtn->setCornerRadius(8);
+    m_updateBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_updateBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* updateIcon = new brls::Image();
+    updateIcon->setWidth(24);
+    updateIcon->setHeight(24);
+    updateIcon->setScalingType(brls::ImageScalingType::FIT);
+    updateIcon->setImageFromFile("app0:resources/icons/refresh.png");
+    m_updateBtn->addView(updateIcon);
+
     m_updateBtn->registerClickAction([this](brls::View* view) {
         triggerLibraryUpdate();
         return true;
@@ -539,7 +561,7 @@ void LibrarySectionTab::sortMangaList() {
 }
 
 void LibrarySectionTab::cycleSortMode() {
-    // Cycle through sort modes
+    // Cycle through sort modes: A-Z -> Z-A -> Unread -> Read -> (loop)
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
             m_sortMode = LibrarySortMode::TITLE_DESC;
@@ -551,8 +573,6 @@ void LibrarySectionTab::cycleSortMode() {
             m_sortMode = LibrarySortMode::UNREAD_ASC;
             break;
         case LibrarySortMode::UNREAD_ASC:
-            m_sortMode = LibrarySortMode::RECENTLY_ADDED;
-            break;
         case LibrarySortMode::RECENTLY_ADDED:
             m_sortMode = LibrarySortMode::TITLE_ASC;
             break;
@@ -563,25 +583,25 @@ void LibrarySectionTab::cycleSortMode() {
 }
 
 void LibrarySectionTab::updateSortButtonText() {
-    if (!m_sortBtn) return;
+    if (!m_sortIcon) return;
 
+    std::string iconPath;
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
-            m_sortBtn->setText("A-Z");
+        case LibrarySortMode::RECENTLY_ADDED:  // Fallback (not used)
+            iconPath = "app0:resources/icons/az.png";  // A-Z
             break;
         case LibrarySortMode::TITLE_DESC:
-            m_sortBtn->setText("Z-A");
+            iconPath = "app0:resources/icons/za.png";  // Z-A
             break;
         case LibrarySortMode::UNREAD_DESC:
-            m_sortBtn->setText("Unread");
+            iconPath = "app0:resources/icons/sort-9-1.png";  // Most unread first
             break;
         case LibrarySortMode::UNREAD_ASC:
-            m_sortBtn->setText("Read");
-            break;
-        case LibrarySortMode::RECENTLY_ADDED:
-            m_sortBtn->setText("Recent");
+            iconPath = "app0:resources/icons/sort-1-9.png";  // Least unread first
             break;
     }
+    m_sortIcon->setImageFromFile(iconPath);
 }
 
 void LibrarySectionTab::navigateToPreviousCategory() {

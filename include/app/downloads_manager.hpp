@@ -71,6 +71,9 @@ struct DownloadItem {
 // Progress callback: (downloadedPages, totalPages)
 using DownloadProgressCallback = std::function<void(int, int)>;
 
+// Chapter completion callback: (mangaId, chapterIndex, success)
+using ChapterCompletionCallback = std::function<void(int, int, bool)>;
+
 class DownloadsManager {
 public:
     static DownloadsManager& getInstance();
@@ -79,8 +82,9 @@ public:
     bool init();
 
     // Queue manga chapter(s) for download
-    bool queueChapterDownload(int mangaId, int chapterIndex, const std::string& mangaTitle);
-    bool queueChaptersDownload(int mangaId, const std::vector<int>& chapterIndexes,
+    bool queueChapterDownload(int mangaId, int chapterId, int chapterIndex,
+                              const std::string& mangaTitle, const std::string& chapterName = "");
+    bool queueChaptersDownload(int mangaId, const std::vector<std::pair<int,int>>& chapters,
                                const std::string& mangaTitle);
 
     // Start downloading queued items
@@ -130,6 +134,9 @@ public:
     // Set progress callback for UI updates
     void setProgressCallback(DownloadProgressCallback callback);
 
+    // Set chapter completion callback for UI refresh
+    void setChapterCompletionCallback(ChapterCompletionCallback callback);
+
     // Get downloads directory path
     std::string getDownloadsPath() const;
 
@@ -169,6 +176,7 @@ private:
     bool m_downloading = false;
     bool m_initialized = false;
     DownloadProgressCallback m_progressCallback;
+    ChapterCompletionCallback m_chapterCompletionCallback;
     std::string m_downloadsPath;
 };
 

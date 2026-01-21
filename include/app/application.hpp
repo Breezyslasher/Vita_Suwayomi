@@ -9,6 +9,7 @@
 #include <functional>
 #include <mutex>
 #include <set>
+#include <map>
 
 // Application version
 #define VITA_SUWAYOMI_VERSION "1.0.0"
@@ -53,6 +54,23 @@ enum class ReaderBackground {
     GRAY = 2
 };
 
+// Download mode options
+enum class DownloadMode {
+    SERVER_ONLY = 0,    // Download to server queue only
+    LOCAL_ONLY = 1,     // Download to local device only
+    BOTH = 2            // Download to both server and local
+};
+
+// Per-manga reader settings (overrides defaults when set)
+struct MangaReaderSettings {
+    ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;
+    PageScaleMode pageScaleMode = PageScaleMode::FIT_SCREEN;
+    int imageRotation = 0;  // 0, 90, 180, or 270 degrees
+    bool cropBorders = false;
+    int webtoonSidePadding = 0;
+    bool isWebtoonFormat = false;  // Treat as webtoon (vertical scroll, page splitting)
+};
+
 // Application settings structure
 struct AppSettings {
     // UI Settings
@@ -65,9 +83,15 @@ struct AppSettings {
     ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;
     PageScaleMode pageScaleMode = PageScaleMode::FIT_SCREEN;
     ReaderBackground readerBackground = ReaderBackground::BLACK;
+    int imageRotation = 0;  // 0, 90, 180, or 270 degrees
     bool keepScreenOn = true;
     bool showPageNumber = true;
     bool tapToNavigate = true;
+
+    // Webtoon Settings (also applies to vertical mode)
+    bool cropBorders = false;           // Auto-crop white/black borders from pages
+    bool webtoonDetection = true;       // Auto-detect webtoon format (aspect ratio based)
+    int webtoonSidePadding = 0;         // Side padding percentage (0-20%)
 
     // Library Settings
     bool updateOnStart = false;
@@ -78,7 +102,7 @@ struct AppSettings {
     bool cacheCoverImages = true;     // Cache cover images to disk
 
     // Download Settings
-    bool downloadToServer = true;      // Download on server side vs local
+    DownloadMode downloadMode = DownloadMode::SERVER_ONLY;  // Where to download chapters
     bool autoDownloadChapters = false;
     bool downloadOverWifiOnly = true;
     int maxConcurrentDownloads = 2;
@@ -90,6 +114,10 @@ struct AppSettings {
     // Display Settings
     bool showUnreadBadge = true;
     bool showDownloadedBadge = true;
+
+    // Per-manga reader settings (keyed by manga ID)
+    // If a manga has custom settings, they override the defaults above
+    std::map<int, MangaReaderSettings> mangaReaderSettings;
 };
 
 /**
@@ -148,6 +176,7 @@ public:
     static std::string getThemeString(AppTheme theme);
     static std::string getReadingModeString(ReadingMode mode);
     static std::string getPageScaleModeString(PageScaleMode mode);
+    static std::string getDownloadModeString(DownloadMode mode);
 
 private:
     Application() = default;

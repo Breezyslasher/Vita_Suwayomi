@@ -1004,6 +1004,8 @@ bool SuwayomiClient::updateChapterProgressGraphQL(int chapterId, int lastPageRea
 }
 
 bool SuwayomiClient::fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& pages) {
+    brls::Logger::info("GraphQL: Fetching pages for chapter id={}", chapterId);
+
     const char* query = R"(
         mutation FetchChapterPages($id: Int!) {
             fetchChapterPages(input: { chapterId: $id }) {
@@ -1014,13 +1016,22 @@ bool SuwayomiClient::fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& 
 
     std::string variables = "{\"id\":" + std::to_string(chapterId) + "}";
     std::string response = executeGraphQL(query, variables);
-    if (response.empty()) return false;
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: Empty response for fetchChapterPages");
+        return false;
+    }
 
     std::string data = extractJsonObject(response, "data");
-    if (data.empty()) return false;
+    if (data.empty()) {
+        brls::Logger::error("GraphQL: No data in response for fetchChapterPages");
+        return false;
+    }
 
     std::string fetchResult = extractJsonObject(data, "fetchChapterPages");
-    if (fetchResult.empty()) return false;
+    if (fetchResult.empty()) {
+        brls::Logger::error("GraphQL: No fetchChapterPages result in response");
+        return false;
+    }
 
     // The pages field contains an array of page URLs
     std::string pagesJson = extractJsonArray(fetchResult, "pages");
@@ -1035,7 +1046,13 @@ bool SuwayomiClient::fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& 
         pages.push_back(page);
     }
 
-    brls::Logger::debug("GraphQL: Fetched {} pages for chapter {}", pages.size(), chapterId);
+    brls::Logger::info("GraphQL: Fetched {} pages for chapter {}", pages.size(), chapterId);
+
+    if (pages.empty()) {
+        brls::Logger::warning("GraphQL: No pages returned for chapter {}", chapterId);
+        return false;
+    }
+
     return true;
 }
 
@@ -1197,6 +1214,230 @@ bool SuwayomiClient::setMangaCategoriesGraphQL(int mangaId, const std::vector<in
     std::string variables = "{\"id\":" + std::to_string(mangaId) + ",\"categories\":" + catList + "}";
     std::string response = executeGraphQL(query, variables);
     return !response.empty();
+}
+
+bool SuwayomiClient::fetchMangaMetaGraphQL(int mangaId, std::map<std::string, std::string>& meta) {
+    const char* query = R"(
+        query GetMangaMeta($id: Int!) {
+            manga(id: $id) {
+                id
+                meta {
+                    key
+                    value
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) + "}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (response.empty()) {
+        brls::Logger::warning("Failed to fetch manga meta for manga {}", mangaId);
+        return false;
+    }
+
+    meta.clear();
+
+    // Parse the meta array from response
+    // Response format: {"data":{"manga":{"id":123,"meta":[{"key":"k1","value":"v1"},...]}}
+    size_t metaPos = response.find("\"meta\"");
+    if (metaPos == std::string::npos) {
+        brls::Logger::debug("No meta field found for manga {}", mangaId);
+        return true;  // No meta is valid
+    }
+
+    size_t arrayStart = response.find('[', metaPos);
+    size_t arrayEnd = response.find(']', arrayStart);
+    if (arrayStart == std::string::npos || arrayEnd == std::string::npos) {
+        return true;  // Empty or invalid meta
+    }
+
+    std::string metaArray = response.substr(arrayStart, arrayEnd - arrayStart + 1);
+
+    // Parse each meta entry
+    size_t pos = 0;
+    while ((pos = metaArray.find("{\"key\"", pos)) != std::string::npos) {
+        // Extract key
+        size_t keyStart = metaArray.find("\"key\"", pos);
+        if (keyStart == std::string::npos) break;
+        keyStart = metaArray.find("\"", keyStart + 5);  // Skip to opening quote of value
+        if (keyStart == std::string::npos) break;
+        keyStart++;
+        size_t keyEnd = metaArray.find("\"", keyStart);
+        if (keyEnd == std::string::npos) break;
+        std::string key = metaArray.substr(keyStart, keyEnd - keyStart);
+
+        // Extract value
+        size_t valueStart = metaArray.find("\"value\"", keyEnd);
+        if (valueStart == std::string::npos) break;
+        valueStart = metaArray.find("\"", valueStart + 7);  // Skip to opening quote of value
+        if (valueStart == std::string::npos) break;
+        valueStart++;
+        size_t valueEnd = metaArray.find("\"", valueStart);
+        if (valueEnd == std::string::npos) break;
+        std::string value = metaArray.substr(valueStart, valueEnd - valueStart);
+
+        meta[key] = value;
+        pos = valueEnd + 1;
+    }
+
+    brls::Logger::debug("Fetched {} meta entries for manga {}", meta.size(), mangaId);
+    return true;
+}
+
+bool SuwayomiClient::setMangaMetaGraphQL(int mangaId, const std::string& key, const std::string& value) {
+    const char* query = R"(
+        mutation SetMangaMeta($id: Int!, $key: String!, $value: String!) {
+            setMangaMeta(input: { meta: { mangaId: $id, key: $key, value: $value } }) {
+                meta {
+                    key
+                    value
+                }
+            }
+        }
+    )";
+
+    // Escape special characters in key and value for JSON
+    std::string escapedKey = key;
+    std::string escapedValue = value;
+    // Basic JSON escaping for quotes
+    size_t pos = 0;
+    while ((pos = escapedKey.find("\"", pos)) != std::string::npos) {
+        escapedKey.replace(pos, 1, "\\\"");
+        pos += 2;
+    }
+    pos = 0;
+    while ((pos = escapedValue.find("\"", pos)) != std::string::npos) {
+        escapedValue.replace(pos, 1, "\\\"");
+        pos += 2;
+    }
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) +
+                            ",\"key\":\"" + escapedKey +
+                            "\",\"value\":\"" + escapedValue + "\"}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (!response.empty()) {
+        brls::Logger::debug("Set manga meta: {}={} for manga {}", key, value, mangaId);
+        return true;
+    }
+
+    brls::Logger::warning("Failed to set manga meta for manga {}", mangaId);
+    return false;
+}
+
+bool SuwayomiClient::deleteMangaMetaGraphQL(int mangaId, const std::string& key) {
+    const char* query = R"(
+        mutation DeleteMangaMeta($id: Int!, $key: String!) {
+            deleteMangaMeta(input: { mangaId: $id, key: $key }) {
+                meta {
+                    key
+                }
+                manga {
+                    id
+                }
+            }
+        }
+    )";
+
+    std::string escapedKey = key;
+    size_t pos = 0;
+    while ((pos = escapedKey.find("\"", pos)) != std::string::npos) {
+        escapedKey.replace(pos, 1, "\\\"");
+        pos += 2;
+    }
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) +
+                            ",\"key\":\"" + escapedKey + "\"}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (!response.empty()) {
+        brls::Logger::debug("Deleted manga meta key '{}' for manga {}", key, mangaId);
+        return true;
+    }
+
+    brls::Logger::warning("Failed to delete manga meta for manga {}", mangaId);
+    return false;
+}
+
+// Public wrapper methods with REST fallback
+bool SuwayomiClient::fetchMangaMeta(int mangaId, std::map<std::string, std::string>& meta) {
+    // Try GraphQL first
+    if (fetchMangaMetaGraphQL(mangaId, meta)) {
+        return true;
+    }
+
+    // REST fallback: GET /api/v1/manga/{id}/meta
+    brls::Logger::info("GraphQL failed for fetchMangaMeta, falling back to REST...");
+    HttpClient client = createHttpClient();
+    HttpResponse httpResp = client.get(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta"));
+
+    if (!httpResp.success || httpResp.body.empty()) {
+        brls::Logger::warning("REST fallback also failed for manga meta");
+        return false;
+    }
+
+    // Parse REST response (array of {key, value} objects)
+    std::string response = httpResp.body;
+    meta.clear();
+    size_t pos = 0;
+    while ((pos = response.find("\"key\"", pos)) != std::string::npos) {
+        size_t keyStart = response.find("\"", pos + 5) + 1;
+        size_t keyEnd = response.find("\"", keyStart);
+        std::string key = response.substr(keyStart, keyEnd - keyStart);
+
+        size_t valueStart = response.find("\"value\"", keyEnd);
+        if (valueStart != std::string::npos) {
+            valueStart = response.find("\"", valueStart + 7) + 1;
+            size_t valueEnd = response.find("\"", valueStart);
+            std::string value = response.substr(valueStart, valueEnd - valueStart);
+            meta[key] = value;
+            pos = valueEnd + 1;
+        } else {
+            break;
+        }
+    }
+
+    return true;
+}
+
+bool SuwayomiClient::setMangaMeta(int mangaId, const std::string& key, const std::string& value) {
+    // Try GraphQL first
+    if (setMangaMetaGraphQL(mangaId, key, value)) {
+        return true;
+    }
+
+    // REST fallback: PATCH /api/v1/manga/{id}/meta
+    brls::Logger::info("GraphQL failed for setMangaMeta, falling back to REST...");
+    HttpClient client = createHttpClient();
+    client.setDefaultHeader("Content-Type", "application/json");
+
+    std::string body = "{\"key\":\"" + key + "\",\"value\":\"" + value + "\"}";
+
+    // Use request() with PATCH method since HttpClient doesn't have patch()
+    HttpRequest req;
+    req.url = buildApiUrl("manga/" + std::to_string(mangaId) + "/meta");
+    req.method = "PATCH";
+    req.body = body;
+    req.headers["Content-Type"] = "application/json";
+
+    HttpResponse httpResp = client.request(req);
+    return httpResp.success;
+}
+
+bool SuwayomiClient::deleteMangaMeta(int mangaId, const std::string& key) {
+    // Try GraphQL first
+    if (deleteMangaMetaGraphQL(mangaId, key)) {
+        return true;
+    }
+
+    // REST fallback: DELETE /api/v1/manga/{id}/meta/{key}
+    brls::Logger::info("GraphQL failed for deleteMangaMeta, falling back to REST...");
+    HttpClient client = createHttpClient();
+    HttpResponse httpResp = client.del(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta/" + key));
+
+    return httpResp.success;
 }
 
 bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga) {
@@ -2291,23 +2532,10 @@ bool SuwayomiClient::deleteChapterDownload(int mangaId, int chapterIndex) {
     return response.success && response.statusCode == 200;
 }
 
-bool SuwayomiClient::queueChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes) {
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
-
-    std::string url = buildApiUrl("/download/batch");
-
-    std::string chapterList;
-    for (size_t i = 0; i < chapterIndexes.size(); i++) {
-        if (i > 0) chapterList += ",";
-        chapterList += "{\"mangaId\":" + std::to_string(mangaId) +
-                       ",\"chapterIndex\":" + std::to_string(chapterIndexes[i]) + "}";
-    }
-
-    std::string body = "{\"chapterIds\":[" + chapterList + "]}";
-    vitasuwayomi::HttpResponse response = http.post(url, body);
-
-    return response.success && response.statusCode == 200;
+bool SuwayomiClient::queueChapterDownloads(const std::vector<int>& chapterIds) {
+    // Use GraphQL API which expects actual chapter IDs
+    brls::Logger::info("SuwayomiClient: Queueing {} chapters for download", chapterIds.size());
+    return enqueueChapterDownloadsGraphQL(chapterIds);
 }
 
 bool SuwayomiClient::deleteChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes) {
@@ -2330,9 +2558,104 @@ bool SuwayomiClient::deleteChapterDownloads(int mangaId, const std::vector<int>&
 }
 
 bool SuwayomiClient::fetchDownloadQueue(std::vector<DownloadQueueItem>& queue) {
-    // Note: Download queue uses WebSocket in Suwayomi
-    // For REST, we can check download status per chapter
     queue.clear();
+
+    // Use GraphQL to fetch download queue
+    const char* graphqlQuery = R"(
+        query {
+            downloadStatus {
+                state
+                queue {
+                    chapter {
+                        id
+                        name
+                        chapterNumber
+                        pageCount
+                        manga {
+                            id
+                            title
+                        }
+                    }
+                    progress
+                    state
+                    tries
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(graphqlQuery);
+    if (response.empty()) {
+        brls::Logger::error("SuwayomiClient: Failed to fetch download queue via GraphQL");
+        return false;
+    }
+
+    // Parse the queue array from response
+    std::string queueArray = extractJsonArray(response, "queue");
+    if (queueArray.empty() || queueArray == "[]") {
+        brls::Logger::debug("SuwayomiClient: Download queue is empty");
+        return true;  // Empty queue is valid
+    }
+
+    // Parse each queue item
+    size_t pos = 0;
+    int braceCount = 0;
+    size_t itemStart = 0;
+    bool inItem = false;
+
+    for (size_t i = 0; i < queueArray.length(); i++) {
+        char c = queueArray[i];
+        if (c == '{') {
+            if (!inItem) {
+                itemStart = i;
+                inItem = true;
+            }
+            braceCount++;
+        } else if (c == '}') {
+            braceCount--;
+            if (braceCount == 0 && inItem) {
+                std::string itemJson = queueArray.substr(itemStart, i - itemStart + 1);
+
+                DownloadQueueItem item;
+
+                // Extract chapter info
+                std::string chapterJson = extractJsonObject(itemJson, "chapter");
+                if (!chapterJson.empty()) {
+                    item.chapterId = extractJsonInt(chapterJson, "id");
+                    item.chapterName = extractJsonValue(chapterJson, "name");
+                    item.chapterNumber = extractJsonFloat(chapterJson, "chapterNumber");
+                    item.pageCount = extractJsonInt(chapterJson, "pageCount");
+
+                    // Extract manga info
+                    std::string mangaJson = extractJsonObject(chapterJson, "manga");
+                    if (!mangaJson.empty()) {
+                        item.mangaId = extractJsonInt(mangaJson, "id");
+                        item.mangaTitle = extractJsonValue(mangaJson, "title");
+                    }
+                }
+
+                // Extract progress and state
+                item.progress = extractJsonFloat(itemJson, "progress");
+                item.downloadedPages = static_cast<int>(item.progress * item.pageCount);
+
+                std::string stateStr = extractJsonValue(itemJson, "state");
+                if (stateStr == "DOWNLOADING") {
+                    item.state = DownloadState::DOWNLOADING;
+                } else if (stateStr == "QUEUED") {
+                    item.state = DownloadState::QUEUED;
+                } else if (stateStr == "FINISHED") {
+                    item.state = DownloadState::DOWNLOADED;
+                } else if (stateStr == "ERROR") {
+                    item.state = DownloadState::ERROR;
+                }
+
+                queue.push_back(item);
+                inItem = false;
+            }
+        }
+    }
+
+    brls::Logger::info("SuwayomiClient: Fetched {} items in download queue", queue.size());
     return true;
 }
 

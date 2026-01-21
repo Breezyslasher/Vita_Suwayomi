@@ -1,5 +1,6 @@
 /**
  * RotatableImage implementation
+ * Uses direct NanoVG rendering to avoid edge clamping artifacts
  */
 
 #include "view/rotatable_image.hpp"
@@ -12,33 +13,208 @@
 namespace vitasuwayomi {
 
 RotatableImage::RotatableImage() {
-    // Register as a Borealis view
+    // Set default properties
+    this->setFocusable(false);
+}
+
+RotatableImage::~RotatableImage() {
+    clearImage();
+}
+
+void RotatableImage::clearImage() {
+    if (m_nvgImage != 0) {
+        NVGcontext* vg = brls::Application::getNVGContext();
+        if (vg) {
+            nvgDeleteImage(vg, m_nvgImage);
+        }
+        m_nvgImage = 0;
+        m_imageWidth = 0;
+        m_imageHeight = 0;
+    }
+}
+
+void RotatableImage::setImageFromMem(const unsigned char* data, size_t size) {
+    NVGcontext* vg = brls::Application::getNVGContext();
+    if (!vg || !data || size == 0) {
+        return;
+    }
+
+    // Clear existing image
+    clearImage();
+
+    // Create NVG image from memory
+    m_nvgImage = nvgCreateImageMem(vg, 0, const_cast<unsigned char*>(data), size);
+
+    if (m_nvgImage != 0) {
+        // Get image dimensions
+        nvgImageSize(vg, m_nvgImage, &m_imageWidth, &m_imageHeight);
+        brls::Logger::debug("RotatableImage: Loaded image {}x{}", m_imageWidth, m_imageHeight);
+    } else {
+        brls::Logger::error("RotatableImage: Failed to create NVG image");
+    }
+
+    this->invalidate();
+}
+
+void RotatableImage::setImageFromFile(const std::string& path) {
+    NVGcontext* vg = brls::Application::getNVGContext();
+    if (!vg || path.empty()) {
+        return;
+    }
+
+    // Clear existing image
+    clearImage();
+
+    // Create NVG image from file
+    m_nvgImage = nvgCreateImage(vg, path.c_str(), 0);
+
+    if (m_nvgImage != 0) {
+        nvgImageSize(vg, m_nvgImage, &m_imageWidth, &m_imageHeight);
+        brls::Logger::debug("RotatableImage: Loaded image from file {}x{}", m_imageWidth, m_imageHeight);
+    } else {
+        brls::Logger::error("RotatableImage: Failed to load image from {}", path);
+    }
+
+    this->invalidate();
+}
+
+void RotatableImage::calculateImageBounds(float viewX, float viewY, float viewW, float viewH,
+                                          float& imgX, float& imgY, float& imgW, float& imgH) {
+    if (m_imageWidth <= 0 || m_imageHeight <= 0) {
+        imgX = viewX;
+        imgY = viewY;
+        imgW = viewW;
+        imgH = viewH;
+        return;
+    }
+
+    // For 90/270 degree rotation, the effective dimensions are swapped
+    bool isRotated90or270 = (m_rotationDegrees == 90.0f || m_rotationDegrees == 270.0f);
+    int effectiveWidth = isRotated90or270 ? m_imageHeight : m_imageWidth;
+    int effectiveHeight = isRotated90or270 ? m_imageWidth : m_imageHeight;
+
+    float imageAspect = (float)effectiveWidth / (float)effectiveHeight;
+    float viewAspect = viewW / viewH;
+
+    switch (m_scalingType) {
+        case brls::ImageScalingType::FIT:
+            // Fit entire image within view, maintaining aspect ratio
+            if (viewAspect > imageAspect) {
+                // View is wider - fit to height
+                imgH = viewH;
+                imgW = viewH * imageAspect;
+                imgX = viewX + (viewW - imgW) / 2.0f;
+                imgY = viewY;
+            } else {
+                // View is taller - fit to width
+                imgW = viewW;
+                imgH = viewW / imageAspect;
+                imgX = viewX;
+                imgY = viewY + (viewH - imgH) / 2.0f;
+            }
+            break;
+
+        case brls::ImageScalingType::FILL:
+            // Fill view, cropping if necessary
+            if (viewAspect > imageAspect) {
+                // View is wider - fill width, crop top/bottom
+                imgW = viewW;
+                imgH = viewW / imageAspect;
+                imgX = viewX;
+                imgY = viewY + (viewH - imgH) / 2.0f;
+            } else {
+                // View is taller - fill height, crop left/right
+                imgH = viewH;
+                imgW = viewH * imageAspect;
+                imgX = viewX + (viewW - imgW) / 2.0f;
+                imgY = viewY;
+            }
+            break;
+
+        case brls::ImageScalingType::STRETCH:
+        default:
+            // Stretch to fill (distorts aspect ratio)
+            imgX = viewX;
+            imgY = viewY;
+            imgW = viewW;
+            imgH = viewH;
+            break;
+    }
 }
 
 void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float height,
                           brls::Style style, brls::FrameContext* ctx) {
-    if (m_rotationDegrees == 0.0f) {
-        // No rotation, draw normally
-        brls::Image::draw(vg, x, y, width, height, style, ctx);
+    // First draw the background to fill margins
+    nvgBeginPath(vg);
+    nvgRect(vg, x, y, width, height);
+    nvgFillColor(vg, m_bgColor);
+    nvgFill(vg);
+
+    // If no image, just show background
+    if (m_nvgImage == 0 || m_imageWidth <= 0 || m_imageHeight <= 0) {
         return;
     }
 
-    // Calculate center of the view
-    float centerX = x + width / 2.0f;
-    float centerY = y + height / 2.0f;
+    // Calculate where the image should be drawn (accounts for rotation)
+    float imgX, imgY, imgW, imgH;
+    calculateImageBounds(x, y, width, height, imgX, imgY, imgW, imgH);
 
-    // Save NanoVG state
+    // Save state
     nvgSave(vg);
 
-    // Move to center, rotate, then draw centered
-    nvgTranslate(vg, centerX, centerY);
-    nvgRotate(vg, m_rotationRadians);
-    nvgTranslate(vg, -centerX, -centerY);
+    // Use scissor to clip rendering to the calculated bounds
+    nvgScissor(vg, imgX, imgY, imgW, imgH);
 
-    // Draw the image at original position (transforms will apply)
-    brls::Image::draw(vg, x, y, width, height, style, ctx);
+    // Calculate center of the destination area
+    float centerX = imgX + imgW / 2.0f;
+    float centerY = imgY + imgH / 2.0f;
 
-    // Restore NanoVG state
+    // For rotated images, we need to render differently
+    bool isRotated90or270 = (m_rotationDegrees == 90.0f || m_rotationDegrees == 270.0f);
+
+    if (isRotated90or270) {
+        // For 90/270 rotation, we need to swap the pattern dimensions
+        // The image pattern needs to be sized for the rotated output
+        nvgTranslate(vg, centerX, centerY);
+        nvgRotate(vg, m_rotationRadians);
+        nvgTranslate(vg, -centerX, -centerY);
+
+        // When rotated 90/270, swap width/height for the pattern
+        // The pattern should map the original texture to a rect that when rotated fills imgW x imgH
+        float patternW = imgH;  // Swapped
+        float patternH = imgW;  // Swapped
+        float patternX = centerX - patternW / 2.0f;
+        float patternY = centerY - patternH / 2.0f;
+
+        NVGpaint imgPaint = nvgImagePattern(vg, patternX, patternY, patternW, patternH, 0, m_nvgImage, 1.0f);
+
+        nvgBeginPath(vg);
+        nvgRect(vg, patternX, patternY, patternW, patternH);
+        nvgFillPaint(vg, imgPaint);
+        nvgFill(vg);
+    } else if (m_rotationDegrees == 180.0f) {
+        // 180 degree rotation - same dimensions, just rotated
+        nvgTranslate(vg, centerX, centerY);
+        nvgRotate(vg, m_rotationRadians);
+        nvgTranslate(vg, -centerX, -centerY);
+
+        NVGpaint imgPaint = nvgImagePattern(vg, imgX, imgY, imgW, imgH, 0, m_nvgImage, 1.0f);
+
+        nvgBeginPath(vg);
+        nvgRect(vg, imgX, imgY, imgW, imgH);
+        nvgFillPaint(vg, imgPaint);
+        nvgFill(vg);
+    } else {
+        // No rotation (0 degrees)
+        NVGpaint imgPaint = nvgImagePattern(vg, imgX, imgY, imgW, imgH, 0, m_nvgImage, 1.0f);
+
+        nvgBeginPath(vg);
+        nvgRect(vg, imgX, imgY, imgW, imgH);
+        nvgFillPaint(vg, imgPaint);
+        nvgFill(vg);
+    }
+
+    // Restore state (removes scissor and rotation)
     nvgRestore(vg);
 }
 
@@ -63,10 +239,7 @@ void RotatableImage::setRotation(float degrees) {
     // Convert to radians
     m_rotationRadians = m_rotationDegrees * NVG_PI / 180.0f;
 
-    brls::Logger::info("RotatableImage: setRotation({}) -> {} degrees, {} radians",
-                       degrees, m_rotationDegrees, m_rotationRadians);
-
-    // Force redraw
+    brls::Logger::debug("RotatableImage: setRotation({}) -> {} degrees", degrees, m_rotationDegrees);
     this->invalidate();
 }
 

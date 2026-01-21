@@ -1,6 +1,6 @@
 /**
  * VitaSuwayomi - Downloads Tab
- * View for managing offline downloads
+ * View for managing offline downloads and showing download queue
  */
 
 #pragma once
@@ -18,10 +18,14 @@ public:
 
 private:
     void refresh();
+    void refreshQueue();
+    void refreshLocalDownloads();
     void showDownloadOptions(const std::string& ratingKey, const std::string& title);
 
-    brls::Box* m_listContainer = nullptr;
-    brls::Label* m_emptyLabel = nullptr;
+    brls::Box* m_queueContainer = nullptr;
+    brls::Label* m_queueEmptyLabel = nullptr;
+    brls::Box* m_localContainer = nullptr;
+    brls::Label* m_localEmptyLabel = nullptr;
 };
 
 } // namespace vitasuwayomi

@@ -285,8 +285,16 @@ void SettingsTab::createReaderSection() {
 
     // Section header
     auto* header = new brls::Header();
-    header->setTitle("Reader");
+    header->setTitle("Reader (Defaults)");
     m_contentBox->addView(header);
+
+    // Info label explaining these are defaults
+    auto* readerInfoLabel = new brls::Label();
+    readerInfoLabel->setText("These settings are used for new manga. Per-manga settings can be changed in the reader and are synced to the server.");
+    readerInfoLabel->setFontSize(14);
+    readerInfoLabel->setMarginLeft(16);
+    readerInfoLabel->setMarginBottom(12);
+    m_contentBox->addView(readerInfoLabel);
 
     // Reading mode selector
     m_readingModeSelector = new brls::SelectorCell();
@@ -309,6 +317,29 @@ void SettingsTab::createReaderSection() {
             Application::getInstance().saveSettings();
         });
     m_contentBox->addView(m_pageScaleModeSelector);
+
+    // Image rotation selector (default for new manga)
+    int rotationIndex = 0;
+    switch (settings.imageRotation) {
+        case 0: rotationIndex = 0; break;
+        case 90: rotationIndex = 1; break;
+        case 180: rotationIndex = 2; break;
+        case 270: rotationIndex = 3; break;
+    }
+    auto* rotationSelector = new brls::SelectorCell();
+    rotationSelector->init("Default Rotation",
+        {"0° (Normal)", "90° (Clockwise)", "180° (Upside Down)", "270° (Counter-Clockwise)"},
+        rotationIndex,
+        [&settings](int index) {
+            switch (index) {
+                case 0: settings.imageRotation = 0; break;
+                case 1: settings.imageRotation = 90; break;
+                case 2: settings.imageRotation = 180; break;
+                case 3: settings.imageRotation = 270; break;
+            }
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(rotationSelector);
 
     // Reader background selector
     m_readerBgSelector = new brls::SelectorCell();
@@ -344,6 +375,54 @@ void SettingsTab::createReaderSection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(tapNavToggle);
+
+    // Webtoon section header
+    auto* webtoonHeader = new brls::Header();
+    webtoonHeader->setTitle("Webtoon / Long Strip");
+    m_contentBox->addView(webtoonHeader);
+
+    // Crop borders toggle
+    auto* cropBordersToggle = new brls::BooleanCell();
+    cropBordersToggle->init("Crop Borders", settings.cropBorders, [&settings](bool value) {
+        settings.cropBorders = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(cropBordersToggle);
+
+    // Info label for crop borders
+    auto* cropInfoLabel = new brls::Label();
+    cropInfoLabel->setText("Automatically removes white/black borders from pages");
+    cropInfoLabel->setFontSize(14);
+    cropInfoLabel->setMarginLeft(16);
+    cropInfoLabel->setMarginTop(4);
+    m_contentBox->addView(cropInfoLabel);
+
+    // Auto-detect webtoon toggle
+    auto* webtoonDetectToggle = new brls::BooleanCell();
+    webtoonDetectToggle->init("Auto-Detect Webtoon", settings.webtoonDetection, [&settings](bool value) {
+        settings.webtoonDetection = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(webtoonDetectToggle);
+
+    // Info label for webtoon detection
+    auto* detectInfoLabel = new brls::Label();
+    detectInfoLabel->setText("Automatically switch to vertical mode for long strip images");
+    detectInfoLabel->setFontSize(14);
+    detectInfoLabel->setMarginLeft(16);
+    detectInfoLabel->setMarginTop(4);
+    m_contentBox->addView(detectInfoLabel);
+
+    // Side padding selector
+    auto* paddingSelector = new brls::SelectorCell();
+    paddingSelector->init("Side Padding",
+        {"None", "5%", "10%", "15%", "20%"},
+        settings.webtoonSidePadding / 5,
+        [&settings](int index) {
+            settings.webtoonSidePadding = index * 5;
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(paddingSelector);
 }
 
 void SettingsTab::createDownloadsSection() {
@@ -355,21 +434,25 @@ void SettingsTab::createDownloadsSection() {
     header->setTitle("Downloads");
     m_contentBox->addView(header);
 
-    // Download to server toggle (use server-side downloads)
-    auto* serverDownloadToggle = new brls::BooleanCell();
-    serverDownloadToggle->init("Download to Server", settings.downloadToServer, [&settings](bool value) {
-        settings.downloadToServer = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(serverDownloadToggle);
+    // Download mode selector
+    auto* downloadModeSelector = new brls::SelectorCell();
+    downloadModeSelector->init("Download Location",
+        {"Server Only", "Local Only", "Both"},
+        static_cast<int>(settings.downloadMode),
+        [](int index) {
+            brls::Logger::info("SettingsTab: Download mode changed to {} (0=Server, 1=Local, 2=Both)", index);
+            Application::getInstance().getSettings().downloadMode = static_cast<DownloadMode>(index);
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(downloadModeSelector);
 
-    // Info label for server downloads
-    auto* serverDlInfoLabel = new brls::Label();
-    serverDlInfoLabel->setText("When enabled, downloads are stored on the Suwayomi server");
-    serverDlInfoLabel->setFontSize(14);
-    serverDlInfoLabel->setMarginLeft(16);
-    serverDlInfoLabel->setMarginTop(4);
-    m_contentBox->addView(serverDlInfoLabel);
+    // Info label for download mode
+    auto* downloadModeInfoLabel = new brls::Label();
+    downloadModeInfoLabel->setText("Server: stored on Suwayomi server | Local: stored on Vita | Both: synced to both");
+    downloadModeInfoLabel->setFontSize(14);
+    downloadModeInfoLabel->setMarginLeft(16);
+    downloadModeInfoLabel->setMarginTop(4);
+    m_contentBox->addView(downloadModeInfoLabel);
 
     // Auto download new chapters toggle
     auto* autoDownloadToggle = new brls::BooleanCell();

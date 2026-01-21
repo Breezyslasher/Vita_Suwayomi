@@ -196,6 +196,15 @@ std::string Application::getPageScaleModeString(PageScaleMode mode) {
     }
 }
 
+std::string Application::getDownloadModeString(DownloadMode mode) {
+    switch (mode) {
+        case DownloadMode::SERVER_ONLY: return "Server Only";
+        case DownloadMode::LOCAL_ONLY: return "Local Only";
+        case DownloadMode::BOTH: return "Both";
+        default: return "Unknown";
+    }
+}
+
 bool Application::loadSettings() {
     brls::Logger::debug("loadSettings: Opening {}", SETTINGS_PATH);
 
@@ -291,9 +300,23 @@ bool Application::loadSettings() {
     m_settings.readingMode = static_cast<ReadingMode>(extractInt("readingMode"));
     m_settings.pageScaleMode = static_cast<PageScaleMode>(extractInt("pageScaleMode"));
     m_settings.readerBackground = static_cast<ReaderBackground>(extractInt("readerBackground"));
+    m_settings.imageRotation = extractInt("imageRotation");
+    // Validate rotation (must be 0, 90, 180, or 270)
+    if (m_settings.imageRotation != 0 && m_settings.imageRotation != 90 &&
+        m_settings.imageRotation != 180 && m_settings.imageRotation != 270) {
+        m_settings.imageRotation = 0;
+    }
     m_settings.keepScreenOn = extractBool("keepScreenOn", true);
     m_settings.showPageNumber = extractBool("showPageNumber", true);
     m_settings.tapToNavigate = extractBool("tapToNavigate", true);
+
+    // Load webtoon settings
+    m_settings.cropBorders = extractBool("cropBorders", false);
+    m_settings.webtoonDetection = extractBool("webtoonDetection", true);
+    m_settings.webtoonSidePadding = extractInt("webtoonSidePadding");
+    if (m_settings.webtoonSidePadding < 0 || m_settings.webtoonSidePadding > 20) {
+        m_settings.webtoonSidePadding = 0;
+    }
 
     // Load library settings
     m_settings.updateOnStart = extractBool("updateOnStart", false);
@@ -320,7 +343,9 @@ bool Application::loadSettings() {
     m_settings.cacheCoverImages = extractBool("cacheCoverImages", true);
 
     // Load download settings
-    m_settings.downloadToServer = extractBool("downloadToServer", true);
+    int downloadModeInt = extractInt("downloadMode");
+    m_settings.downloadMode = static_cast<DownloadMode>(downloadModeInt);
+    brls::Logger::info("loadSettings: downloadMode = {} (0=Server, 1=Local, 2=Both)", downloadModeInt);
     m_settings.autoDownloadChapters = extractBool("autoDownloadChapters", false);
     m_settings.downloadOverWifiOnly = extractBool("downloadOverWifiOnly", true);
     m_settings.maxConcurrentDownloads = extractInt("maxConcurrentDownloads");
@@ -334,6 +359,130 @@ bool Application::loadSettings() {
     // Load display settings
     m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
     m_settings.showDownloadedBadge = extractBool("showDownloadedBadge", true);
+
+    // Load per-manga reader settings
+    m_settings.mangaReaderSettings.clear();
+    size_t mangaSettingsPos = content.find("\"mangaReaderSettings\"");
+    if (mangaSettingsPos != std::string::npos) {
+        size_t openBrace = content.find('{', mangaSettingsPos + 21);
+        if (openBrace != std::string::npos) {
+            // Find matching close brace
+            int braceCount = 1;
+            size_t pos = openBrace + 1;
+            size_t closeBrace = std::string::npos;
+            while (pos < content.length() && braceCount > 0) {
+                if (content[pos] == '{') braceCount++;
+                else if (content[pos] == '}') braceCount--;
+                if (braceCount == 0) closeBrace = pos;
+                pos++;
+            }
+
+            if (closeBrace != std::string::npos) {
+                std::string mangaJson = content.substr(openBrace + 1, closeBrace - openBrace - 1);
+
+                // Parse each manga entry: "123": {...}
+                size_t searchPos = 0;
+                while (searchPos < mangaJson.length()) {
+                    size_t quoteStart = mangaJson.find('"', searchPos);
+                    if (quoteStart == std::string::npos) break;
+
+                    size_t quoteEnd = mangaJson.find('"', quoteStart + 1);
+                    if (quoteEnd == std::string::npos) break;
+
+                    std::string mangaIdStr = mangaJson.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+                    int mangaId = atoi(mangaIdStr.c_str());
+
+                    if (mangaId > 0) {
+                        size_t entryBrace = mangaJson.find('{', quoteEnd);
+                        size_t entryEnd = mangaJson.find('}', entryBrace);
+                        if (entryBrace != std::string::npos && entryEnd != std::string::npos) {
+                            std::string entryJson = mangaJson.substr(entryBrace, entryEnd - entryBrace + 1);
+
+                            MangaReaderSettings settings;
+
+                            // Extract readingMode
+                            size_t rmPos = entryJson.find("\"readingMode\"");
+                            if (rmPos != std::string::npos) {
+                                size_t colonPos = entryJson.find(':', rmPos);
+                                if (colonPos != std::string::npos) {
+                                    int val = atoi(entryJson.c_str() + colonPos + 1);
+                                    settings.readingMode = static_cast<ReadingMode>(val);
+                                }
+                            }
+
+                            // Extract pageScaleMode
+                            size_t psPos = entryJson.find("\"pageScaleMode\"");
+                            if (psPos != std::string::npos) {
+                                size_t colonPos = entryJson.find(':', psPos);
+                                if (colonPos != std::string::npos) {
+                                    int val = atoi(entryJson.c_str() + colonPos + 1);
+                                    settings.pageScaleMode = static_cast<PageScaleMode>(val);
+                                }
+                            }
+
+                            // Extract imageRotation
+                            size_t irPos = entryJson.find("\"imageRotation\"");
+                            if (irPos != std::string::npos) {
+                                size_t colonPos = entryJson.find(':', irPos);
+                                if (colonPos != std::string::npos) {
+                                    settings.imageRotation = atoi(entryJson.c_str() + colonPos + 1);
+                                }
+                            }
+
+                            // Extract cropBorders
+                            size_t cbPos = entryJson.find("\"cropBorders\"");
+                            if (cbPos != std::string::npos) {
+                                size_t colonPos = entryJson.find(':', cbPos);
+                                if (colonPos != std::string::npos) {
+                                    size_t valueStart = colonPos + 1;
+                                    while (valueStart < entryJson.length() &&
+                                           (entryJson[valueStart] == ' ' || entryJson[valueStart] == '\t')) {
+                                        valueStart++;
+                                    }
+                                    settings.cropBorders = (entryJson.substr(valueStart, 4) == "true");
+                                }
+                            }
+
+                            // Extract webtoonSidePadding
+                            size_t wspPos = entryJson.find("\"webtoonSidePadding\"");
+                            if (wspPos != std::string::npos) {
+                                size_t colonPos = entryJson.find(':', wspPos);
+                                if (colonPos != std::string::npos) {
+                                    settings.webtoonSidePadding = atoi(entryJson.c_str() + colonPos + 1);
+                                    if (settings.webtoonSidePadding < 0 || settings.webtoonSidePadding > 20) {
+                                        settings.webtoonSidePadding = 0;
+                                    }
+                                }
+                            }
+
+                            // Extract isWebtoonFormat
+                            size_t iwfPos = entryJson.find("\"isWebtoonFormat\"");
+                            if (iwfPos != std::string::npos) {
+                                size_t colonPos = entryJson.find(':', iwfPos);
+                                if (colonPos != std::string::npos) {
+                                    size_t valueStart = colonPos + 1;
+                                    while (valueStart < entryJson.length() &&
+                                           (entryJson[valueStart] == ' ' || entryJson[valueStart] == '\t')) {
+                                        valueStart++;
+                                    }
+                                    settings.isWebtoonFormat = (entryJson.substr(valueStart, 4) == "true");
+                                }
+                            }
+
+                            m_settings.mangaReaderSettings[mangaId] = settings;
+                            searchPos = entryEnd + 1;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        searchPos = quoteEnd + 1;
+                    }
+                }
+
+                brls::Logger::debug("Loaded {} per-manga reader settings", m_settings.mangaReaderSettings.size());
+            }
+        }
+    }
 
     // Load auth credentials (stored separately for security)
     m_authUsername = extractString("authUsername");
@@ -375,9 +524,15 @@ bool Application::saveSettings() {
     json += "  \"readingMode\": " + std::to_string(static_cast<int>(m_settings.readingMode)) + ",\n";
     json += "  \"pageScaleMode\": " + std::to_string(static_cast<int>(m_settings.pageScaleMode)) + ",\n";
     json += "  \"readerBackground\": " + std::to_string(static_cast<int>(m_settings.readerBackground)) + ",\n";
+    json += "  \"imageRotation\": " + std::to_string(m_settings.imageRotation) + ",\n";
     json += "  \"keepScreenOn\": " + std::string(m_settings.keepScreenOn ? "true" : "false") + ",\n";
     json += "  \"showPageNumber\": " + std::string(m_settings.showPageNumber ? "true" : "false") + ",\n";
     json += "  \"tapToNavigate\": " + std::string(m_settings.tapToNavigate ? "true" : "false") + ",\n";
+
+    // Webtoon settings
+    json += "  \"cropBorders\": " + std::string(m_settings.cropBorders ? "true" : "false") + ",\n";
+    json += "  \"webtoonDetection\": " + std::string(m_settings.webtoonDetection ? "true" : "false") + ",\n";
+    json += "  \"webtoonSidePadding\": " + std::to_string(m_settings.webtoonSidePadding) + ",\n";
 
     // Library settings
     json += "  \"updateOnStart\": " + std::string(m_settings.updateOnStart ? "true" : "false") + ",\n";
@@ -397,7 +552,7 @@ bool Application::saveSettings() {
     json += "  \"cacheCoverImages\": " + std::string(m_settings.cacheCoverImages ? "true" : "false") + ",\n";
 
     // Download settings
-    json += "  \"downloadToServer\": " + std::string(m_settings.downloadToServer ? "true" : "false") + ",\n";
+    json += "  \"downloadMode\": " + std::to_string(static_cast<int>(m_settings.downloadMode)) + ",\n";
     json += "  \"autoDownloadChapters\": " + std::string(m_settings.autoDownloadChapters ? "true" : "false") + ",\n";
     json += "  \"downloadOverWifiOnly\": " + std::string(m_settings.downloadOverWifiOnly ? "true" : "false") + ",\n";
     json += "  \"maxConcurrentDownloads\": " + std::to_string(m_settings.maxConcurrentDownloads) + ",\n";
@@ -408,7 +563,24 @@ bool Application::saveSettings() {
 
     // Display settings
     json += "  \"showUnreadBadge\": " + std::string(m_settings.showUnreadBadge ? "true" : "false") + ",\n";
-    json += "  \"showDownloadedBadge\": " + std::string(m_settings.showDownloadedBadge ? "true" : "false") + "\n";
+    json += "  \"showDownloadedBadge\": " + std::string(m_settings.showDownloadedBadge ? "true" : "false") + ",\n";
+
+    // Per-manga reader settings
+    json += "  \"mangaReaderSettings\": {";
+    bool firstManga = true;
+    for (const auto& pair : m_settings.mangaReaderSettings) {
+        if (!firstManga) json += ",";
+        firstManga = false;
+        json += "\n    \"" + std::to_string(pair.first) + "\": {";
+        json += "\"readingMode\": " + std::to_string(static_cast<int>(pair.second.readingMode)) + ", ";
+        json += "\"pageScaleMode\": " + std::to_string(static_cast<int>(pair.second.pageScaleMode)) + ", ";
+        json += "\"imageRotation\": " + std::to_string(pair.second.imageRotation) + ", ";
+        json += "\"cropBorders\": " + std::string(pair.second.cropBorders ? "true" : "false") + ", ";
+        json += "\"webtoonSidePadding\": " + std::to_string(pair.second.webtoonSidePadding) + ", ";
+        json += "\"isWebtoonFormat\": " + std::string(pair.second.isWebtoonFormat ? "true" : "false") + "}";
+    }
+    if (!m_settings.mangaReaderSettings.empty()) json += "\n  ";
+    json += "}\n";
 
     json += "}\n";
 

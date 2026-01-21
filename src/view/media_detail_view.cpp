@@ -29,6 +29,20 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         return true;
     }, false, false, brls::Sound::SOUND_BACK);
 
+    // Register R trigger for sort toggle
+    this->registerAction("Sort", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
+        m_sortDescending = !m_sortDescending;
+        updateSortIcon();
+        populateChaptersList();
+        return true;
+    });
+
+    // Register Start button for options menu
+    this->registerAction("Options", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        showMangaMenu();
+        return true;
+    });
+
     // ========== LEFT PANEL: Cover + Action Buttons (260px) ==========
     auto* leftPanel = new brls::Box();
     leftPanel->setAxis(brls::Axis::COLUMN);
@@ -85,20 +99,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         m_libraryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_libraryButton));
         leftPanel->addView(m_libraryButton);
     }
-
-    // Download button
-    m_downloadButton = new brls::Button();
-    m_downloadButton->setWidth(220);
-    m_downloadButton->setHeight(44);
-    m_downloadButton->setCornerRadius(22);  // Pill-shaped
-    m_downloadButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
-    m_downloadButton->setText("Download");
-    m_downloadButton->registerClickAction([this](brls::View* view) {
-        showDownloadOptions();
-        return true;
-    });
-    m_downloadButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_downloadButton));
-    leftPanel->addView(m_downloadButton);
 
     this->addView(leftPanel);
 
@@ -172,13 +172,23 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     titleBox->addView(statsRow);
     titleRow->addView(titleBox);
 
-    // Menu button
+    // Menu button with icon
     auto* menuBtn = new brls::Button();
-    menuBtn->setWidth(90);
+    menuBtn->setWidth(44);
     menuBtn->setHeight(40);
-    menuBtn->setText("Menu");
     menuBtn->setMarginLeft(10);
-    menuBtn->setShrink(0.0f);  // Don't shrink
+    menuBtn->setCornerRadius(8);
+    menuBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    menuBtn->setAlignItems(brls::AlignItems::CENTER);
+    menuBtn->setShrink(0.0f);
+
+    auto* menuIcon = new brls::Image();
+    menuIcon->setWidth(24);
+    menuIcon->setHeight(24);
+    menuIcon->setScalingType(brls::ImageScalingType::FIT);
+    menuIcon->setImageFromFile("app0:resources/icons/menu.png");
+    menuBtn->addView(menuIcon);
+
     menuBtn->registerClickAction([this](brls::View* view) {
         showMangaMenu();
         return true;
@@ -237,11 +247,21 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     chaptersActions->setAxis(brls::Axis::ROW);
 
     m_sortBtn = new brls::Button();
-    m_sortBtn->setWidth(100);
+    m_sortBtn->setWidth(44);
     m_sortBtn->setHeight(40);
-    m_sortBtn->setText("Sort");
+    m_sortBtn->setCornerRadius(8);
+
+    // Add sort icon
+    m_sortIcon = new brls::Image();
+    m_sortIcon->setWidth(24);
+    m_sortIcon->setHeight(24);
+    m_sortIcon->setScalingType(brls::ImageScalingType::FIT);
+    updateSortIcon();
+    m_sortBtn->addView(m_sortIcon);
+
     m_sortBtn->registerClickAction([this](brls::View* view) {
         m_sortDescending = !m_sortDescending;
+        updateSortIcon();
         populateChaptersList();
         return true;
     });
@@ -412,19 +432,14 @@ void MangaDetailView::populateChaptersList() {
         }
 
         // Download button - shows state based on local download state
-        // Material Design icon codepoints (UTF-8):
-        // file_download: U+E2C4, check_circle: U+E86C, hourglass: U+E88B, error: U+E000
-        static const std::string ICON_DOWNLOAD = "\xEE\x8B\x84";      // file_download
-        static const std::string ICON_CHECK = "\xEE\xA1\xAC";         // check_circle
-        static const std::string ICON_HOURGLASS = "\xEE\xA2\x8B";     // hourglass_empty
-        static const std::string ICON_ERROR = "\xEE\x80\x80";         // error
-
         Chapter capturedChapter = chapter;
         auto* dlBtn = new brls::Button();
         dlBtn->setWidth(40);
         dlBtn->setHeight(36);
         dlBtn->setCornerRadius(18);  // Circular button
         dlBtn->setFocusable(true);
+        dlBtn->setJustifyContent(brls::JustifyContent::CENTER);
+        dlBtn->setAlignItems(brls::AlignItems::CENTER);
 
         // Check local download state first
         DownloadsManager& dm = DownloadsManager::getInstance();
@@ -444,17 +459,35 @@ void MangaDetailView::populateChaptersList() {
             dlBtn->setText(std::to_string(percent) + "%");
             dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
         } else if (isLocallyDownloaded) {
-            dlBtn->setText(ICON_CHECK);  // Checkmark icon
+            // Completed - show checkmark icon
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
+            dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 deleteChapterDownload(capturedChapter);
                 return true;
             });
         } else if (isLocallyQueued) {
-            dlBtn->setText(ICON_HOURGLASS);  // Hourglass icon
+            // Queued - show refresh/waiting icon
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("app0:resources/icons/refresh.png");
+            dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
         } else if (isLocallyFailed) {
-            dlBtn->setText(ICON_ERROR);  // Error icon
+            // Failed - show cross icon
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("app0:resources/icons/cross.png");
+            dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 downloadChapter(capturedChapter);  // Retry
@@ -462,7 +495,12 @@ void MangaDetailView::populateChaptersList() {
             });
         } else {
             // Not downloaded - show download icon
-            dlBtn->setText(ICON_DOWNLOAD);  // Download icon
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("app0:resources/icons/download.png");
+            dlBtn->addView(icon);
             dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 downloadChapter(capturedChapter);
@@ -503,23 +541,24 @@ void MangaDetailView::populateChaptersList() {
 void MangaDetailView::showMangaMenu() {
     brls::Dialog* dialog = new brls::Dialog("Options");
 
-    dialog->addButton("All Read", [this, dialog]() {
+    dialog->addButton("Download all chapters", [this, dialog]() {
         dialog->close();
-        markAllRead();
+        downloadAllChapters();
     });
 
-    dialog->addButton("All Unread", [this, dialog]() {
-        dialog->close();
-        markAllUnread();
-    });
-
-    dialog->addButton("Del DL", [this, dialog]() {
+    dialog->addButton("Remove all chapters", [this, dialog]() {
         dialog->close();
         onDeleteDownloads();
     });
 
-    dialog->addButton("Close", [dialog]() {
+    dialog->addButton("Cancel downloading chapters", [this, dialog]() {
         dialog->close();
+        cancelAllDownloading();
+    });
+
+    dialog->addButton("Reset cover", [this, dialog]() {
+        dialog->close();
+        resetCover();
     });
 
     dialog->open();
@@ -624,26 +663,129 @@ void MangaDetailView::downloadAllChapters() {
     brls::Logger::info("MangaDetailView: Downloading all chapters");
     brls::Application::notify("Queueing all chapters for download...");
 
-    asyncRun([this]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
+    // Get download mode setting
+    DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+    brls::Logger::info("MangaDetailView: Download mode = {} (0=Server, 1=Local, 2=Both)",
+                       static_cast<int>(downloadMode));
 
-        std::vector<int> chapterIndexes;
+    int mangaId = m_manga.id;
+    std::string mangaTitle = m_manga.title;
+
+    asyncRun([this, downloadMode, mangaId, mangaTitle]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+        localMgr.init();
+
+        brls::Logger::info("MangaDetailView: In async, download mode = {}", static_cast<int>(downloadMode));
+
+        // Collect chapters based on download mode
+        std::vector<int> serverChapterIds;      // Chapters to download to server
+        std::vector<int> localChapterIds;       // Chapters to download locally
+        std::vector<std::pair<int, int>> localChapterPairs;  // (chapterId, chapterIndex)
+
         for (const auto& ch : m_chapters) {
-            if (!ch.downloaded) {
-                chapterIndexes.push_back(ch.index);
+            bool needsServerDownload = !ch.downloaded;  // Not on server
+            bool needsLocalDownload = !localMgr.isChapterDownloaded(mangaId, ch.index);  // Not local
+
+            // For server downloads
+            if ((downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) && needsServerDownload) {
+                serverChapterIds.push_back(ch.id);
+            }
+
+            // For local downloads - download if not already local (regardless of server status)
+            if ((downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) && needsLocalDownload) {
+                localChapterIds.push_back(ch.id);
+                localChapterPairs.push_back({ch.id, ch.index});
             }
         }
 
-        if (client.queueChapterDownloads(m_manga.id, chapterIndexes)) {
-            client.startDownloads();
-            brls::sync([chapterIndexes]() {
-                brls::Application::notify("Queued " + std::to_string(chapterIndexes.size()) + " chapters");
-            });
-        } else {
-            brls::sync([]() {
-                brls::Application::notify("Failed to queue downloads");
-            });
+        brls::Logger::info("MangaDetailView: Found {} chapters for server, {} for local",
+                          serverChapterIds.size(), localChapterIds.size());
+
+        bool serverSuccess = true;
+        bool localSuccess = true;
+        int totalQueued = 0;
+
+        // Queue to server if needed
+        if (!serverChapterIds.empty()) {
+            brls::Logger::info("MangaDetailView: Queueing {} to SERVER", serverChapterIds.size());
+            if (client.queueChapterDownloads(serverChapterIds)) {
+                client.startDownloads();
+                brls::Logger::info("MangaDetailView: Server queue SUCCESS");
+                totalQueued += serverChapterIds.size();
+            } else {
+                serverSuccess = false;
+                brls::Logger::error("MangaDetailView: Server queue FAILED");
+            }
         }
+
+        // Queue to local if needed
+        if (!localChapterPairs.empty()) {
+            brls::Logger::info("MangaDetailView: Queueing {} to LOCAL", localChapterPairs.size());
+            if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
+                // Set progress callback for UI updates
+                localMgr.setProgressCallback([](int downloaded, int total) {
+                    brls::sync([downloaded, total]() {
+                        std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
+                        brls::Application::notify(msg);
+                    });
+                });
+
+                // Set up completion callback to refresh UI when each chapter finishes
+                localMgr.setChapterCompletionCallback([this, mangaId](int completedMangaId, int chapterIndex, bool success) {
+                    if (completedMangaId == mangaId) {
+                        brls::sync([this]() {
+                            populateChaptersList();  // Refresh to show completed status
+                        });
+                    }
+                });
+
+                localMgr.startDownloads();
+                brls::Logger::info("MangaDetailView: Local queue SUCCESS");
+                if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                    totalQueued = localChapterPairs.size();
+                }
+            } else {
+                localSuccess = false;
+                brls::Logger::error("MangaDetailView: Local queue FAILED");
+            }
+        }
+
+        // Handle case where nothing to download
+        if (serverChapterIds.empty() && localChapterPairs.empty()) {
+            brls::sync([]() {
+                brls::Application::notify("All chapters already downloaded");
+            });
+            return;
+        }
+
+        brls::sync([this, downloadMode, serverSuccess, localSuccess, serverChapterIds, localChapterPairs]() {
+            if (downloadMode == DownloadMode::SERVER_ONLY) {
+                if (serverSuccess && !serverChapterIds.empty()) {
+                    brls::Application::notify("Queued " + std::to_string(serverChapterIds.size()) + " chapters to server");
+                } else if (serverChapterIds.empty()) {
+                    brls::Application::notify("All chapters already on server");
+                } else {
+                    brls::Application::notify("Failed to queue to server");
+                }
+            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                if (localSuccess && !localChapterPairs.empty()) {
+                    brls::Application::notify("Queued " + std::to_string(localChapterPairs.size()) + " chapters locally");
+                } else if (localChapterPairs.empty()) {
+                    brls::Application::notify("All chapters already downloaded locally");
+                } else {
+                    brls::Application::notify("Failed to queue locally");
+                }
+            } else {  // BOTH
+                std::string msg = "Queued ";
+                if (!serverChapterIds.empty()) msg += std::to_string(serverChapterIds.size()) + " to server";
+                if (!serverChapterIds.empty() && !localChapterPairs.empty()) msg += ", ";
+                if (!localChapterPairs.empty()) msg += std::to_string(localChapterPairs.size()) + " locally";
+                brls::Application::notify(msg);
+            }
+            // Refresh chapter list to show queued status
+            populateChaptersList();
+        });
     });
 }
 
@@ -651,26 +793,105 @@ void MangaDetailView::downloadUnreadChapters() {
     brls::Logger::info("MangaDetailView: Downloading unread chapters");
     brls::Application::notify("Queueing unread chapters for download...");
 
-    asyncRun([this]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
+    // Get download mode setting
+    DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+    int mangaId = m_manga.id;
+    std::string mangaTitle = m_manga.title;
 
-        std::vector<int> chapterIndexes;
+    asyncRun([this, downloadMode, mangaId, mangaTitle]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+        localMgr.init();
+
+        // Collect unread chapters based on download mode
+        std::vector<int> serverChapterIds;
+        std::vector<std::pair<int, int>> localChapterPairs;
+
         for (const auto& ch : m_chapters) {
-            if (!ch.downloaded && !ch.read) {
-                chapterIndexes.push_back(ch.index);
+            if (ch.read) continue;  // Skip read chapters
+
+            bool needsServerDownload = !ch.downloaded;
+            bool needsLocalDownload = !localMgr.isChapterDownloaded(mangaId, ch.index);
+
+            if ((downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) && needsServerDownload) {
+                serverChapterIds.push_back(ch.id);
+            }
+
+            if ((downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) && needsLocalDownload) {
+                localChapterPairs.push_back({ch.id, ch.index});
             }
         }
 
-        if (client.queueChapterDownloads(m_manga.id, chapterIndexes)) {
-            client.startDownloads();
-            brls::sync([chapterIndexes]() {
-                brls::Application::notify("Queued " + std::to_string(chapterIndexes.size()) + " chapters");
-            });
-        } else {
-            brls::sync([]() {
-                brls::Application::notify("Failed to queue downloads");
-            });
+        bool serverSuccess = true;
+        bool localSuccess = true;
+
+        if (!serverChapterIds.empty()) {
+            if (client.queueChapterDownloads(serverChapterIds)) {
+                client.startDownloads();
+            } else {
+                serverSuccess = false;
+            }
         }
+
+        if (!localChapterPairs.empty()) {
+            if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
+                // Set progress callback for UI updates
+                localMgr.setProgressCallback([](int downloaded, int total) {
+                    brls::sync([downloaded, total]() {
+                        std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
+                        brls::Application::notify(msg);
+                    });
+                });
+
+                // Set up completion callback to refresh UI when each chapter finishes
+                localMgr.setChapterCompletionCallback([this, mangaId](int completedMangaId, int chapterIndex, bool success) {
+                    if (completedMangaId == mangaId) {
+                        brls::sync([this]() {
+                            populateChaptersList();  // Refresh to show completed status
+                        });
+                    }
+                });
+
+                localMgr.startDownloads();
+            } else {
+                localSuccess = false;
+            }
+        }
+
+        if (serverChapterIds.empty() && localChapterPairs.empty()) {
+            brls::sync([]() {
+                brls::Application::notify("All unread chapters already downloaded");
+            });
+            return;
+        }
+
+        brls::sync([this, downloadMode, serverSuccess, localSuccess, serverChapterIds, localChapterPairs]() {
+            if (downloadMode == DownloadMode::SERVER_ONLY) {
+                if (serverSuccess && !serverChapterIds.empty()) {
+                    brls::Application::notify("Queued " + std::to_string(serverChapterIds.size()) + " unread to server");
+                } else if (serverChapterIds.empty()) {
+                    brls::Application::notify("All unread already on server");
+                } else {
+                    brls::Application::notify("Failed to queue to server");
+                }
+            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                if (localSuccess && !localChapterPairs.empty()) {
+                    brls::Application::notify("Queued " + std::to_string(localChapterPairs.size()) + " unread locally");
+                } else if (localChapterPairs.empty()) {
+                    brls::Application::notify("All unread already local");
+                } else {
+                    brls::Application::notify("Failed to queue locally");
+                }
+            } else {
+                std::string msg = "Queued ";
+                if (!serverChapterIds.empty()) msg += std::to_string(serverChapterIds.size()) + " to server";
+                if (!serverChapterIds.empty() && !localChapterPairs.empty()) msg += ", ";
+                if (!localChapterPairs.empty()) msg += std::to_string(localChapterPairs.size()) + " locally";
+                brls::Application::notify(msg);
+            }
+            // Refresh chapter list to show queued status
+            populateChaptersList();
+        });
     });
 }
 
@@ -818,12 +1039,13 @@ void MangaDetailView::markChapterRead(const Chapter& chapter) {
 void MangaDetailView::downloadChapter(const Chapter& chapter) {
     brls::Application::notify("Downloading to Vita...");
 
-    asyncRun([this, chapter]() {
+    int mangaId = m_manga.id;
+    asyncRun([this, chapter, mangaId]() {
         DownloadsManager& dm = DownloadsManager::getInstance();
         dm.init();
 
-        // Queue chapter for local download
-        if (dm.queueChapterDownload(m_manga.id, chapter.index, m_manga.title)) {
+        // Queue chapter for local download (using chapter.id for API calls)
+        if (dm.queueChapterDownload(m_manga.id, chapter.id, chapter.index, m_manga.title, chapter.name)) {
             // Set progress callback for UI updates
             dm.setProgressCallback([](int downloaded, int total) {
                 brls::sync([downloaded, total]() {
@@ -832,12 +1054,21 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
                 });
             });
 
+            // Set up completion callback to refresh UI when chapter finishes
+            dm.setChapterCompletionCallback([this, mangaId](int completedMangaId, int chapterIndex, bool success) {
+                if (completedMangaId == mangaId) {
+                    brls::sync([this]() {
+                        populateChaptersList();  // Refresh to show completed status
+                    });
+                }
+            });
+
             // Start downloading
             dm.startDownloads();
 
             brls::sync([this]() {
                 brls::Application::notify("Download started");
-                loadChapters();  // Refresh to show progress
+                populateChaptersList();  // Refresh to show queued status
             });
         } else {
             brls::sync([]() {
@@ -874,6 +1105,83 @@ void MangaDetailView::showTrackingDialog() {
 
 void MangaDetailView::updateTracking() {
     // TODO: Implement tracking update
+}
+
+void MangaDetailView::updateSortIcon() {
+    if (!m_sortIcon) return;
+
+    std::string iconPath = m_sortDescending
+        ? "app0:resources/icons/sort-9-1.png"
+        : "app0:resources/icons/sort-1-9.png";
+
+    m_sortIcon->setImageFromFile(iconPath);
+}
+
+void MangaDetailView::cancelAllDownloading() {
+    brls::Logger::info("MangaDetailView: Cancelling all downloading chapters");
+
+    asyncRun([this]() {
+        DownloadsManager& dm = DownloadsManager::getInstance();
+
+        int cancelledCount = 0;
+        for (const auto& ch : m_chapters) {
+            DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, ch.index);
+            if (localCh && (localCh->state == LocalDownloadState::QUEUED ||
+                           localCh->state == LocalDownloadState::DOWNLOADING)) {
+                if (dm.cancelChapterDownload(m_manga.id, ch.index)) {
+                    cancelledCount++;
+                }
+            }
+        }
+
+        // Pause the download manager to stop any active downloads
+        dm.pauseDownloads();
+
+        brls::sync([this, cancelledCount]() {
+            if (cancelledCount > 0) {
+                brls::Application::notify("Cancelled " + std::to_string(cancelledCount) + " downloads");
+            } else {
+                brls::Application::notify("No active downloads to cancel");
+            }
+            loadChapters();  // Refresh chapter list
+        });
+    });
+}
+
+void MangaDetailView::resetCover() {
+    brls::Logger::info("MangaDetailView: Resetting cover for manga {}", m_manga.id);
+
+    asyncRun([this]() {
+        DownloadsManager& dm = DownloadsManager::getInstance();
+        dm.init();
+
+        // Get the manga download item to find and delete local cover
+        DownloadItem* mangaDl = dm.getMangaDownload(m_manga.id);
+        if (mangaDl && !mangaDl->localCoverPath.empty()) {
+            // Delete the local cover file
+            brls::Logger::info("MangaDetailView: Deleting local cover at {}", mangaDl->localCoverPath);
+            // The cover will be re-downloaded next time it's loaded
+            mangaDl->localCoverPath = "";
+            dm.saveState();
+        }
+
+        // Re-download cover from server
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::string coverUrl = client.getMangaThumbnailUrl(m_manga.id);
+
+        brls::sync([this, coverUrl]() {
+            brls::Application::notify("Refreshing cover...");
+
+            // Reload cover image from server
+            if (m_coverImage && !coverUrl.empty()) {
+                ImageLoader::loadAsync(coverUrl, [](brls::Image* image) {
+                    brls::Logger::debug("MangaDetailView: Cover refreshed");
+                }, m_coverImage);
+            }
+
+            brls::Application::notify("Cover reset");
+        });
+    });
 }
 
 } // namespace vitasuwayomi

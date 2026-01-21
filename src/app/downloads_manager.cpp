@@ -6,6 +6,7 @@
 #include "app/downloads_manager.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/http_client.hpp"
+#include "utils/image_loader.hpp"
 
 #include <borealis.hpp>
 #include <sstream>
@@ -97,12 +98,13 @@ bool DownloadsManager::init() {
     return true;
 }
 
-bool DownloadsManager::queueChapterDownload(int mangaId, int chapterIndex,
-                                             const std::string& mangaTitle) {
+bool DownloadsManager::queueChapterDownload(int mangaId, int chapterId, int chapterIndex,
+                                             const std::string& mangaTitle,
+                                             const std::string& chapterName) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    brls::Logger::info("DownloadsManager: Queueing chapter {} for manga {} ({})",
-                       chapterIndex, mangaId, mangaTitle);
+    brls::Logger::info("DownloadsManager: Queueing chapter {} (id={}) for manga {} ({})",
+                       chapterIndex, chapterId, mangaId, mangaTitle);
 
     // Find or create manga download item
     DownloadItem* manga = nullptr;
@@ -134,7 +136,9 @@ bool DownloadsManager::queueChapterDownload(int mangaId, int chapterIndex,
 
     // Add chapter to queue
     DownloadedChapter chapter;
+    chapter.chapterId = chapterId;
     chapter.chapterIndex = chapterIndex;
+    chapter.name = chapterName;
     chapter.state = LocalDownloadState::QUEUED;
     manga->chapters.push_back(chapter);
     manga->totalChapters = static_cast<int>(manga->chapters.size());
@@ -144,10 +148,11 @@ bool DownloadsManager::queueChapterDownload(int mangaId, int chapterIndex,
 }
 
 bool DownloadsManager::queueChaptersDownload(int mangaId,
-                                              const std::vector<int>& chapterIndexes,
+                                              const std::vector<std::pair<int,int>>& chapters,
                                               const std::string& mangaTitle) {
-    for (int idx : chapterIndexes) {
-        if (!queueChapterDownload(mangaId, idx, mangaTitle)) {
+    // chapters is a vector of pairs: (chapterId, chapterIndex)
+    for (const auto& ch : chapters) {
+        if (!queueChapterDownload(mangaId, ch.first, ch.second, mangaTitle)) {
             return false;
         }
     }
@@ -564,6 +569,84 @@ void DownloadsManager::saveStateUnlocked() {
 #endif
 }
 
+// Helper to extract int from JSON
+static int extractJsonInt(const std::string& json, const std::string& key, int defaultVal = 0) {
+    std::string searchKey = "\"" + key + "\":";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return defaultVal;
+    pos += searchKey.length();
+    // Skip whitespace
+    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\n')) pos++;
+    // Extract number
+    std::string numStr;
+    while (pos < json.length() && (isdigit(json[pos]) || json[pos] == '-')) {
+        numStr += json[pos++];
+    }
+    return numStr.empty() ? defaultVal : std::stoi(numStr);
+}
+
+// Helper to extract float from JSON
+static float extractJsonFloat(const std::string& json, const std::string& key, float defaultVal = 0.0f) {
+    std::string searchKey = "\"" + key + "\":";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return defaultVal;
+    pos += searchKey.length();
+    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\n')) pos++;
+    std::string numStr;
+    while (pos < json.length() && (isdigit(json[pos]) || json[pos] == '-' || json[pos] == '.')) {
+        numStr += json[pos++];
+    }
+    return numStr.empty() ? defaultVal : std::stof(numStr);
+}
+
+// Helper to extract string from JSON
+static std::string extractJsonString(const std::string& json, const std::string& key) {
+    std::string searchKey = "\"" + key + "\":\"";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return "";
+    pos += searchKey.length();
+    std::string result;
+    while (pos < json.length() && json[pos] != '"') {
+        if (json[pos] == '\\' && pos + 1 < json.length()) {
+            pos++;
+            if (json[pos] == 'n') result += '\n';
+            else if (json[pos] == 't') result += '\t';
+            else if (json[pos] == '"') result += '"';
+            else if (json[pos] == '\\') result += '\\';
+            else result += json[pos];
+        } else {
+            result += json[pos];
+        }
+        pos++;
+    }
+    return result;
+}
+
+// Helper to extract bool from JSON
+static bool extractJsonBool(const std::string& json, const std::string& key, bool defaultVal = false) {
+    std::string searchKey = "\"" + key + "\":";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return defaultVal;
+    pos += searchKey.length();
+    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\n')) pos++;
+    if (pos + 4 <= json.length() && json.substr(pos, 4) == "true") return true;
+    if (pos + 5 <= json.length() && json.substr(pos, 5) == "false") return false;
+    return defaultVal;
+}
+
+// Helper to find matching bracket
+static size_t findMatchingBracket(const std::string& json, size_t start, char open, char close) {
+    int depth = 1;
+    for (size_t i = start; i < json.length(); i++) {
+        if (json[i] == open) depth++;
+        else if (json[i] == close) {
+            depth--;
+            if (depth == 0) return i;
+        }
+    }
+    return std::string::npos;
+}
+
 void DownloadsManager::loadState() {
 #ifdef __vita__
     SceUID fd = sceIoOpen(STATE_FILE_PATH, SCE_O_RDONLY, 0);
@@ -587,19 +670,134 @@ void DownloadsManager::loadState() {
 
     brls::Logger::debug("DownloadsManager: Loading state ({} bytes)", content.length());
 
-    // Simple JSON parsing - basic implementation
     m_downloads.clear();
 
     // Find downloads array
     size_t pos = content.find("\"downloads\":");
+    if (pos == std::string::npos) {
+        brls::Logger::warning("DownloadsManager: No downloads key found in state");
+        return;
+    }
+
+    // Find the opening bracket of downloads array
+    pos = content.find('[', pos);
     if (pos == std::string::npos) return;
 
-    brls::Logger::info("DownloadsManager: State loaded");
+    size_t arrayEnd = findMatchingBracket(content, pos + 1, '[', ']');
+    if (arrayEnd == std::string::npos) return;
+
+    std::string downloadsArray = content.substr(pos + 1, arrayEnd - pos - 1);
+
+    // Parse each manga object in the downloads array
+    size_t mangaStart = 0;
+    while ((mangaStart = downloadsArray.find('{', mangaStart)) != std::string::npos) {
+        size_t mangaEnd = findMatchingBracket(downloadsArray, mangaStart + 1, '{', '}');
+        if (mangaEnd == std::string::npos) break;
+
+        std::string mangaJson = downloadsArray.substr(mangaStart, mangaEnd - mangaStart + 1);
+
+        DownloadItem item;
+        item.mangaId = extractJsonInt(mangaJson, "mangaId");
+        item.title = extractJsonString(mangaJson, "title");
+        item.author = extractJsonString(mangaJson, "author");
+        item.localPath = extractJsonString(mangaJson, "localPath");
+        item.localCoverPath = extractJsonString(mangaJson, "localCoverPath");
+        item.state = static_cast<LocalDownloadState>(extractJsonInt(mangaJson, "state"));
+        item.totalBytes = extractJsonInt(mangaJson, "totalBytes");
+        item.lastChapterRead = extractJsonInt(mangaJson, "lastChapterRead");
+        item.lastPageRead = extractJsonInt(mangaJson, "lastPageRead");
+        item.lastReadTime = extractJsonInt(mangaJson, "lastReadTime");
+
+        // Parse chapters array
+        size_t chaptersPos = mangaJson.find("\"chapters\":");
+        if (chaptersPos != std::string::npos) {
+            size_t chaptersStart = mangaJson.find('[', chaptersPos);
+            if (chaptersStart != std::string::npos) {
+                size_t chaptersEnd = findMatchingBracket(mangaJson, chaptersStart + 1, '[', ']');
+                if (chaptersEnd != std::string::npos) {
+                    std::string chaptersArray = mangaJson.substr(chaptersStart + 1, chaptersEnd - chaptersStart - 1);
+
+                    size_t chStart = 0;
+                    while ((chStart = chaptersArray.find('{', chStart)) != std::string::npos) {
+                        size_t chEnd = findMatchingBracket(chaptersArray, chStart + 1, '{', '}');
+                        if (chEnd == std::string::npos) break;
+
+                        std::string chJson = chaptersArray.substr(chStart, chEnd - chStart + 1);
+
+                        DownloadedChapter chapter;
+                        chapter.chapterId = extractJsonInt(chJson, "chapterId");
+                        chapter.chapterIndex = extractJsonInt(chJson, "chapterIndex");
+                        chapter.name = extractJsonString(chJson, "name");
+                        chapter.chapterNumber = extractJsonFloat(chJson, "chapterNumber");
+                        chapter.localPath = extractJsonString(chJson, "localPath");
+                        chapter.pageCount = extractJsonInt(chJson, "pageCount");
+                        chapter.downloadedPages = extractJsonInt(chJson, "downloadedPages");
+                        chapter.state = static_cast<LocalDownloadState>(extractJsonInt(chJson, "state"));
+                        chapter.lastPageRead = extractJsonInt(chJson, "lastPageRead");
+
+                        // Parse pages array
+                        size_t pagesPos = chJson.find("\"pages\":");
+                        if (pagesPos != std::string::npos) {
+                            size_t pagesStart = chJson.find('[', pagesPos);
+                            if (pagesStart != std::string::npos) {
+                                size_t pagesEnd = findMatchingBracket(chJson, pagesStart + 1, '[', ']');
+                                if (pagesEnd != std::string::npos) {
+                                    std::string pagesArray = chJson.substr(pagesStart + 1, pagesEnd - pagesStart - 1);
+
+                                    size_t pgStart = 0;
+                                    while ((pgStart = pagesArray.find('{', pgStart)) != std::string::npos) {
+                                        size_t pgEnd = pagesArray.find('}', pgStart);
+                                        if (pgEnd == std::string::npos) break;
+
+                                        std::string pgJson = pagesArray.substr(pgStart, pgEnd - pgStart + 1);
+
+                                        DownloadedPage page;
+                                        page.index = extractJsonInt(pgJson, "index");
+                                        page.localPath = extractJsonString(pgJson, "localPath");
+                                        page.size = extractJsonInt(pgJson, "size");
+                                        page.downloaded = extractJsonBool(pgJson, "downloaded");
+
+                                        chapter.pages.push_back(page);
+                                        pgStart = pgEnd + 1;
+                                    }
+                                }
+                            }
+                        }
+
+                        item.chapters.push_back(chapter);
+                        chStart = chEnd + 1;
+                    }
+                }
+            }
+        }
+
+        item.totalChapters = static_cast<int>(item.chapters.size());
+        item.completedChapters = 0;
+        for (const auto& ch : item.chapters) {
+            if (ch.state == LocalDownloadState::COMPLETED) {
+                item.completedChapters++;
+            }
+        }
+
+        if (item.mangaId > 0) {
+            m_downloads.push_back(item);
+            brls::Logger::debug("DownloadsManager: Loaded manga {} with {} chapters",
+                               item.mangaId, item.chapters.size());
+        }
+
+        mangaStart = mangaEnd + 1;
+    }
+
+    brls::Logger::info("DownloadsManager: State loaded with {} downloads", m_downloads.size());
 #endif
 }
 
 void DownloadsManager::setProgressCallback(DownloadProgressCallback callback) {
     m_progressCallback = callback;
+}
+
+void DownloadsManager::setChapterCompletionCallback(ChapterCompletionCallback callback) {
+    m_chapterCompletionCallback = callback;
 }
 
 std::string DownloadsManager::getDownloadsPath() const {
@@ -616,8 +814,30 @@ std::string DownloadsManager::downloadCoverImage(int mangaId, const std::string&
         return localPath;
     }
 
-    // Download cover
+    // Download cover using authenticated HTTP client (same approach as ImageLoader)
     HttpClient http;
+
+    // Add authentication if credentials are set
+    const std::string& authUser = ImageLoader::getAuthUsername();
+    const std::string& authPass = ImageLoader::getAuthPassword();
+    if (!authUser.empty() && !authPass.empty()) {
+        std::string credentials = authUser + ":" + authPass;
+        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string encoded;
+        int val = 0, valb = -6;
+        for (unsigned char c : credentials) {
+            val = (val << 8) + c;
+            valb += 8;
+            while (valb >= 0) {
+                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                valb -= 6;
+            }
+        }
+        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+        while (encoded.size() % 4) encoded.push_back('=');
+        http.setDefaultHeader("Authorization", "Basic " + encoded);
+    }
+
     HttpResponse resp = http.get(coverUrl);
 
     if (!resp.success || resp.body.empty()) {
@@ -680,135 +900,210 @@ int64_t DownloadsManager::getTotalDownloadSize() const {
 }
 
 void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) {
-    brls::Logger::info("DownloadsManager: Downloading chapter {} for manga {}",
-                       chapter.chapterIndex, mangaId);
+    brls::Logger::info("DownloadsManager: Downloading chapter {} (id={}) for manga {}",
+                       chapter.chapterIndex, chapter.chapterId, mangaId);
 
-    SuwayomiClient& client = SuwayomiClient::getInstance();
+    try {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
 
-    // Fetch pages from server
-    std::vector<Page> pages;
-    if (!client.fetchChapterPages(mangaId, chapter.chapterIndex, pages)) {
-        brls::Logger::error("DownloadsManager: Failed to fetch pages for chapter {}",
-                           chapter.chapterIndex);
-        std::lock_guard<std::mutex> lock(m_mutex);
-        chapter.state = LocalDownloadState::FAILED;
-        saveStateUnlocked();
-        return;
-    }
+        // Fetch pages from server using chapter ID (not index)
+        brls::Logger::info("DownloadsManager: Fetching pages for chapter id={}", chapter.chapterId);
+        std::vector<Page> pages;
+        if (!client.fetchChapterPages(mangaId, chapter.chapterId, pages)) {
+            brls::Logger::error("DownloadsManager: Failed to fetch pages for chapter {} (id={})",
+                               chapter.chapterIndex, chapter.chapterId);
+            std::lock_guard<std::mutex> lock(m_mutex);
+            chapter.state = LocalDownloadState::FAILED;
+            saveStateUnlocked();
+            return;
+        }
+        brls::Logger::info("DownloadsManager: Got {} pages for chapter {}", pages.size(), chapter.chapterId);
 
-    chapter.pageCount = static_cast<int>(pages.size());
-    chapter.downloadedPages = 0;
-    chapter.pages.clear();
+        chapter.pageCount = static_cast<int>(pages.size());
+        chapter.downloadedPages = 0;
+        chapter.pages.clear();
 
-    // Find manga to get the local path
-    std::string mangaDir;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        for (auto& manga : m_downloads) {
-            if (manga.mangaId == mangaId) {
-                mangaDir = manga.localPath;
-                break;
+        // Find manga to get the local path
+        std::string mangaDir;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            for (auto& manga : m_downloads) {
+                if (manga.mangaId == mangaId) {
+                    mangaDir = manga.localPath;
+                    break;
+                }
             }
         }
-    }
 
-    if (mangaDir.empty()) {
-        brls::Logger::error("DownloadsManager: Manga dir not found for {}", mangaId);
-        return;
-    }
-
-    // Create chapter directory
-    std::string chapterDir = createChapterDir(mangaDir, chapter.chapterIndex, chapter.name);
-    chapter.localPath = chapterDir;
-
-    // Download each page
-    for (const auto& page : pages) {
-        if (!m_downloading) {
-            // Download was paused/cancelled
+        if (mangaDir.empty()) {
+            brls::Logger::error("DownloadsManager: Manga dir not found for {}", mangaId);
             std::lock_guard<std::mutex> lock(m_mutex);
-            chapter.state = LocalDownloadState::PAUSED;
+            chapter.state = LocalDownloadState::FAILED;
             saveStateUnlocked();
             return;
         }
 
-        DownloadedPage downloadedPage;
-        downloadedPage.index = page.index;
+        brls::Logger::info("DownloadsManager: Creating chapter dir in {}", mangaDir);
 
-        // Use the page's imageUrl that was already fetched
-        std::string imageUrl = page.imageUrl;
-        if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, downloadedPage.localPath)) {
-            downloadedPage.downloaded = true;
-            chapter.downloadedPages++;
+        // Create chapter directory
+        std::string chapterDir = createChapterDir(mangaDir, chapter.chapterIndex, chapter.name);
+        chapter.localPath = chapterDir;
+
+        brls::Logger::info("DownloadsManager: Starting page downloads to {}", chapterDir);
+
+        // Download each page
+        for (size_t i = 0; i < pages.size(); i++) {
+            const auto& page = pages[i];
+
+            if (!m_downloading) {
+                // Download was paused/cancelled
+                brls::Logger::info("DownloadsManager: Download paused/cancelled");
+                std::lock_guard<std::mutex> lock(m_mutex);
+                chapter.state = LocalDownloadState::PAUSED;
+                saveStateUnlocked();
+                return;
+            }
+
+            DownloadedPage downloadedPage;
+            downloadedPage.index = page.index;
+
+            // Use the page's imageUrl that was already fetched
+            std::string imageUrl = page.imageUrl;
+            brls::Logger::info("DownloadsManager: Downloading page {} of {}", page.index + 1, pages.size());
+
+            if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, downloadedPage.localPath)) {
+                downloadedPage.downloaded = true;
+                chapter.downloadedPages++;
+                brls::Logger::info("DownloadsManager: Page {} downloaded successfully", page.index);
+            } else {
+                brls::Logger::error("DownloadsManager: Page {} download failed", page.index);
+            }
+
+            chapter.pages.push_back(downloadedPage);
+
+            // Update progress callback
+            if (m_progressCallback) {
+                m_progressCallback(chapter.downloadedPages, chapter.pageCount);
+            }
+
+            // Small delay between downloads to avoid overwhelming the system
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
 
-        chapter.pages.push_back(downloadedPage);
+        // Mark as completed if all pages downloaded
+        if (chapter.downloadedPages == chapter.pageCount) {
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                chapter.state = LocalDownloadState::COMPLETED;
 
-        // Update progress callback
-        if (m_progressCallback) {
-            m_progressCallback(chapter.downloadedPages, chapter.pageCount);
-        }
-    }
-
-    // Mark as completed if all pages downloaded
-    if (chapter.downloadedPages == chapter.pageCount) {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        chapter.state = LocalDownloadState::COMPLETED;
-
-        // Update manga's completed chapters count
-        for (auto& manga : m_downloads) {
-            if (manga.mangaId == mangaId) {
-                manga.completedChapters = 0;
-                for (const auto& ch : manga.chapters) {
-                    if (ch.state == LocalDownloadState::COMPLETED) {
-                        manga.completedChapters++;
+                // Update manga's completed chapters count
+                for (auto& manga : m_downloads) {
+                    if (manga.mangaId == mangaId) {
+                        manga.completedChapters = 0;
+                        for (const auto& ch : manga.chapters) {
+                            if (ch.state == LocalDownloadState::COMPLETED) {
+                                manga.completedChapters++;
+                            }
+                        }
+                        break;
                     }
                 }
-                break;
+
+                saveStateUnlocked();
+            }
+            brls::Logger::info("DownloadsManager: Chapter {} download completed", chapter.chapterIndex);
+
+            // Notify completion callback
+            if (m_chapterCompletionCallback) {
+                m_chapterCompletionCallback(mangaId, chapter.chapterIndex, true);
+            }
+        } else {
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                chapter.state = LocalDownloadState::FAILED;
+                saveStateUnlocked();
+            }
+            brls::Logger::error("DownloadsManager: Chapter {} incomplete ({}/{})",
+                               chapter.chapterIndex, chapter.downloadedPages, chapter.pageCount);
+
+            // Notify completion callback (failure)
+            if (m_chapterCompletionCallback) {
+                m_chapterCompletionCallback(mangaId, chapter.chapterIndex, false);
             }
         }
-
-        saveStateUnlocked();
-        brls::Logger::info("DownloadsManager: Chapter {} download completed", chapter.chapterIndex);
-    } else {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        chapter.state = LocalDownloadState::FAILED;
-        saveStateUnlocked();
-        brls::Logger::error("DownloadsManager: Chapter {} incomplete ({}/{})",
-                           chapter.chapterIndex, chapter.downloadedPages, chapter.pageCount);
+    } catch (const std::exception& e) {
+        brls::Logger::error("DownloadsManager: Exception downloading chapter {}: {}",
+                           chapter.chapterIndex, e.what());
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            chapter.state = LocalDownloadState::FAILED;
+            saveStateUnlocked();
+        }
+        // Notify completion callback (failure)
+        if (m_chapterCompletionCallback) {
+            m_chapterCompletionCallback(mangaId, chapter.chapterIndex, false);
+        }
+    } catch (...) {
+        brls::Logger::error("DownloadsManager: Unknown exception downloading chapter {}",
+                           chapter.chapterIndex);
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            chapter.state = LocalDownloadState::FAILED;
+            saveStateUnlocked();
+        }
+        // Notify completion callback (failure)
+        if (m_chapterCompletionCallback) {
+            m_chapterCompletionCallback(mangaId, chapter.chapterIndex, false);
+        }
     }
 }
 
 bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex,
                                      const std::string& imageUrl, std::string& localPath) {
-    if (imageUrl.empty()) return false;
-
-    HttpClient http;
-    HttpResponse resp = http.get(imageUrl);
-
-    if (!resp.success || resp.body.empty()) {
-        brls::Logger::error("DownloadsManager: Failed to download page {} from {}",
-                           pageIndex, imageUrl);
+    if (imageUrl.empty()) {
+        brls::Logger::error("DownloadsManager: Empty URL for page {}", pageIndex);
         return false;
     }
 
-#ifdef __vita__
     // Construct local path
     localPath = m_downloadsPath + "/manga_" + std::to_string(mangaId) +
                 "/chapter_" + std::to_string(chapterIndex) +
                 "/page_" + std::to_string(pageIndex) + ".jpg";
 
-    SceUID fd = sceIoOpen(localPath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-    if (fd >= 0) {
-        sceIoWrite(fd, resp.body.data(), resp.body.size());
-        sceIoClose(fd);
+    brls::Logger::debug("DownloadsManager: Downloading page {} from {} to {}", pageIndex, imageUrl, localPath);
+
+    // Create HTTP client with authentication (same approach as ImageLoader)
+    HttpClient http;
+
+    // Add authentication if credentials are set
+    const std::string& authUser = ImageLoader::getAuthUsername();
+    const std::string& authPass = ImageLoader::getAuthPassword();
+    if (!authUser.empty() && !authPass.empty()) {
+        std::string credentials = authUser + ":" + authPass;
+        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string encoded;
+        int val = 0, valb = -6;
+        for (unsigned char c : credentials) {
+            val = (val << 8) + c;
+            valb += 8;
+            while (valb >= 0) {
+                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                valb -= 6;
+            }
+        }
+        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+        while (encoded.size() % 4) encoded.push_back('=');
+        http.setDefaultHeader("Authorization", "Basic " + encoded);
+    }
+
+    // Stream directly to file - no memory buffering (like NOBORU does)
+    if (http.downloadToFile(imageUrl, localPath)) {
+        brls::Logger::debug("DownloadsManager: Page {} downloaded successfully", pageIndex);
         return true;
     }
 
+    brls::Logger::error("DownloadsManager: Failed to download page {} from {}", pageIndex, imageUrl);
     return false;
-#else
-    localPath = "/tmp/page_" + std::to_string(pageIndex) + ".jpg";
-    return true;
-#endif
 }
 
 std::string DownloadsManager::createMangaDir(int mangaId, const std::string& title) {

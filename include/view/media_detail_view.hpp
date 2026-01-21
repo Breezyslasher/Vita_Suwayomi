@@ -75,7 +75,6 @@ private:
     // Action buttons
     brls::Button* m_readButton = nullptr;
     brls::Button* m_libraryButton = nullptr;
-    brls::Button* m_downloadButton = nullptr;
     brls::Button* m_trackingButton = nullptr;
 
     // Chapters list
@@ -85,10 +84,20 @@ private:
 
     // Chapter sort/filter
     brls::Button* m_sortBtn = nullptr;
+    brls::Image* m_sortIcon = nullptr;
     brls::Button* m_filterBtn = nullptr;
     bool m_sortDescending = true;  // Default: newest first
     bool m_filterDownloaded = false;
     bool m_filterUnread = false;
+
+    // Helper to update sort icon
+    void updateSortIcon();
+
+    // Cancel all downloading chapters (keep completed)
+    void cancelAllDownloading();
+
+    // Reset cover image
+    void resetCover();
 };
 
 // Alias for backward compatibility

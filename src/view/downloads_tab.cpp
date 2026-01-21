@@ -1,12 +1,14 @@
 /**
  * VitaSuwayomi - Downloads Tab Implementation
- * Shows downloaded manga for offline reading
+ * Shows download queue and downloaded manga for offline reading
  */
 
 #include "view/downloads_tab.hpp"
 #include "app/downloads_manager.hpp"
+#include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "utils/image_loader.hpp"
+#include "utils/async.hpp"
 #include <fstream>
 
 #ifdef __vita__
@@ -59,34 +61,52 @@ DownloadsTab::DownloadsTab() {
     auto header = new brls::Label();
     header->setText("Downloads");
     header->setFontSize(24);
-    header->setMargins(0, 0, 20, 0);
+    header->setMargins(0, 0, 15, 0);
     this->addView(header);
 
-    // Sync button
-    auto syncBtn = new brls::Button();
-    syncBtn->setText("Sync Progress to Server");
-    syncBtn->setMargins(0, 0, 20, 0);
-    syncBtn->registerClickAction([](brls::View*) {
-        DownloadsManager::getInstance().syncProgressToServer();
-        brls::Application::notify("Progress synced to server");
-        return true;
-    });
-    this->addView(syncBtn);
+    // Download Queue Section
+    auto queueHeader = new brls::Label();
+    queueHeader->setText("Download Queue");
+    queueHeader->setFontSize(18);
+    queueHeader->setMargins(0, 0, 10, 0);
+    this->addView(queueHeader);
 
-    // List container
-    m_listContainer = new brls::Box();
-    m_listContainer->setAxis(brls::Axis::COLUMN);
-    m_listContainer->setGrow(1.0f);
-    this->addView(m_listContainer);
+    // Queue container
+    m_queueContainer = new brls::Box();
+    m_queueContainer->setAxis(brls::Axis::COLUMN);
+    m_queueContainer->setMargins(0, 0, 20, 0);
+    this->addView(m_queueContainer);
 
-    // Empty label
-    m_emptyLabel = new brls::Label();
-    m_emptyLabel->setText("No downloads yet.\nUse the download button on manga details to save for offline reading.");
-    m_emptyLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    m_emptyLabel->setVerticalAlign(brls::VerticalAlign::CENTER);
-    m_emptyLabel->setGrow(1.0f);
-    m_emptyLabel->setVisibility(brls::Visibility::GONE);
-    m_listContainer->addView(m_emptyLabel);
+    // Queue empty label
+    m_queueEmptyLabel = new brls::Label();
+    m_queueEmptyLabel->setText("No downloads in queue");
+    m_queueEmptyLabel->setFontSize(14);
+    m_queueEmptyLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
+    m_queueEmptyLabel->setMargins(0, 0, 10, 0);
+    m_queueEmptyLabel->setVisibility(brls::Visibility::GONE);
+    m_queueContainer->addView(m_queueEmptyLabel);
+
+    // Local Downloads Section
+    auto localHeader = new brls::Label();
+    localHeader->setText("Downloaded Manga");
+    localHeader->setFontSize(18);
+    localHeader->setMargins(0, 0, 10, 0);
+    this->addView(localHeader);
+
+    // Local container
+    m_localContainer = new brls::Box();
+    m_localContainer->setAxis(brls::Axis::COLUMN);
+    m_localContainer->setGrow(1.0f);
+    this->addView(m_localContainer);
+
+    // Local empty label
+    m_localEmptyLabel = new brls::Label();
+    m_localEmptyLabel->setText("No downloaded manga.\nUse the download option on manga details to save for offline reading.");
+    m_localEmptyLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    m_localEmptyLabel->setFontSize(14);
+    m_localEmptyLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
+    m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
+    m_localContainer->addView(m_localEmptyLabel);
 }
 
 void DownloadsTab::willAppear(bool resetState) {
@@ -95,9 +115,128 @@ void DownloadsTab::willAppear(bool resetState) {
 }
 
 void DownloadsTab::refresh() {
-    // Clear existing items (except empty label)
-    while (m_listContainer->getChildren().size() > 1) {
-        m_listContainer->removeView(m_listContainer->getChildren()[0]);
+    refreshQueue();
+    refreshLocalDownloads();
+}
+
+void DownloadsTab::refreshQueue() {
+    // Clear existing queue items (except empty label)
+    while (m_queueContainer->getChildren().size() > 1) {
+        m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+    }
+
+    // Fetch download queue from server
+    asyncRun([this]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<DownloadQueueItem> queue;
+
+        if (!client.fetchDownloadQueue(queue)) {
+            brls::sync([this]() {
+                m_queueEmptyLabel->setText("Failed to fetch queue");
+                m_queueEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
+            });
+            return;
+        }
+
+        brls::sync([this, queue]() {
+            // Clear existing items again (in case of race)
+            while (m_queueContainer->getChildren().size() > 1) {
+                m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+            }
+
+            if (queue.empty()) {
+                m_queueEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
+                return;
+            }
+
+            m_queueEmptyLabel->setVisibility(brls::Visibility::GONE);
+
+            for (const auto& item : queue) {
+                auto row = new brls::Box();
+                row->setAxis(brls::Axis::ROW);
+                row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+                row->setAlignItems(brls::AlignItems::CENTER);
+                row->setPadding(8);
+                row->setMargins(0, 0, 8, 0);
+                row->setCornerRadius(6);
+
+                // Background color based on state
+                if (item.state == DownloadState::DOWNLOADING) {
+                    row->setBackgroundColor(nvgRGBA(30, 60, 30, 200));  // Green tint for active
+                } else if (item.state == DownloadState::ERROR) {
+                    row->setBackgroundColor(nvgRGBA(60, 30, 30, 200));  // Red tint for error
+                } else {
+                    row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
+                }
+
+                // Info box
+                auto infoBox = new brls::Box();
+                infoBox->setAxis(brls::Axis::COLUMN);
+                infoBox->setGrow(1.0f);
+
+                // Manga title
+                auto titleLabel = new brls::Label();
+                titleLabel->setText(item.mangaTitle);
+                titleLabel->setFontSize(16);
+                infoBox->addView(titleLabel);
+
+                // Chapter name
+                auto chapterLabel = new brls::Label();
+                std::string chapterText = item.chapterName;
+                if (item.chapterNumber > 0) {
+                    chapterText = "Ch. " + std::to_string(static_cast<int>(item.chapterNumber));
+                    if (!item.chapterName.empty()) {
+                        chapterText += " - " + item.chapterName;
+                    }
+                }
+                chapterLabel->setText(chapterText);
+                chapterLabel->setFontSize(14);
+                chapterLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
+                infoBox->addView(chapterLabel);
+
+                row->addView(infoBox);
+
+                // Progress label (x/x pages)
+                auto progressLabel = new brls::Label();
+                progressLabel->setFontSize(16);
+                progressLabel->setMargins(0, 0, 0, 10);
+
+                std::string progressText;
+                if (item.state == DownloadState::DOWNLOADING) {
+                    progressText = std::to_string(item.downloadedPages) + "/" +
+                                   std::to_string(item.pageCount) + " pages";
+                } else if (item.state == DownloadState::QUEUED) {
+                    progressText = "Queued";
+                } else if (item.state == DownloadState::DOWNLOADED) {
+                    progressText = "Done";
+                } else if (item.state == DownloadState::ERROR) {
+                    progressText = "Error";
+                } else {
+                    progressText = std::to_string(item.downloadedPages) + "/" +
+                                   std::to_string(item.pageCount);
+                }
+                progressLabel->setText(progressText);
+
+                // Color based on state
+                if (item.state == DownloadState::DOWNLOADING) {
+                    progressLabel->setTextColor(nvgRGBA(100, 200, 100, 255));  // Green
+                } else if (item.state == DownloadState::ERROR) {
+                    progressLabel->setTextColor(nvgRGBA(200, 100, 100, 255));  // Red
+                }
+
+                row->addView(progressLabel);
+
+                // Add row at the beginning (before empty label)
+                m_queueContainer->addView(row, 0);
+            }
+        });
+    });
+}
+
+void DownloadsTab::refreshLocalDownloads() {
+    // Clear existing local items (except empty label)
+    while (m_localContainer->getChildren().size() > 1) {
+        m_localContainer->removeView(m_localContainer->getChildren()[0]);
     }
 
     // Ensure manager is initialized and state is loaded
@@ -105,14 +244,14 @@ void DownloadsTab::refresh() {
     mgr.init();
 
     auto downloads = mgr.getDownloads();
-    brls::Logger::info("DownloadsTab: Found {} downloads", downloads.size());
+    brls::Logger::info("DownloadsTab: Found {} local downloads", downloads.size());
 
     if (downloads.empty()) {
-        m_emptyLabel->setVisibility(brls::Visibility::VISIBLE);
+        m_localEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
         return;
     }
 
-    m_emptyLabel->setVisibility(brls::Visibility::GONE);
+    m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
 
     for (const auto& item : downloads) {
         auto row = new brls::Box();
@@ -233,7 +372,7 @@ void DownloadsTab::refresh() {
         }
 
         // Add row at the beginning (before empty label)
-        m_listContainer->addView(row, 0);
+        m_localContainer->addView(row, 0);
     }
 }
 
