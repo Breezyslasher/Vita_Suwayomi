@@ -663,14 +663,22 @@ void MangaDetailView::downloadAllChapters() {
     brls::Logger::info("MangaDetailView: Downloading all chapters");
     brls::Application::notify("Queueing all chapters for download...");
 
-    asyncRun([this]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
+    // Get download mode setting
+    DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+    int mangaId = m_manga.id;
+    std::string mangaTitle = m_manga.title;
 
-        // Collect chapter IDs (not indexes) for the GraphQL API
+    asyncRun([this, downloadMode, mangaId, mangaTitle]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+
+        // Collect chapter info
         std::vector<int> chapterIds;
+        std::vector<std::pair<int, int>> chapterPairs;  // (chapterId, chapterIndex)
         for (const auto& ch : m_chapters) {
             if (!ch.downloaded) {
                 chapterIds.push_back(ch.id);
+                chapterPairs.push_back({ch.id, ch.index});
             }
         }
 
@@ -681,16 +689,49 @@ void MangaDetailView::downloadAllChapters() {
             return;
         }
 
-        if (client.queueChapterDownloads(chapterIds)) {
-            client.startDownloads();
-            brls::sync([chapterIds]() {
-                brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " chapters");
-            });
-        } else {
-            brls::sync([]() {
-                brls::Application::notify("Failed to queue downloads");
-            });
+        bool serverSuccess = true;
+        bool localSuccess = true;
+
+        // Queue to server if SERVER_ONLY or BOTH
+        if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
+            if (client.queueChapterDownloads(chapterIds)) {
+                client.startDownloads();
+            } else {
+                serverSuccess = false;
+            }
         }
+
+        // Queue to local if LOCAL_ONLY or BOTH
+        if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
+            localMgr.init();
+            if (localMgr.queueChaptersDownload(mangaId, chapterPairs, mangaTitle)) {
+                localMgr.startDownloads();
+            } else {
+                localSuccess = false;
+            }
+        }
+
+        brls::sync([chapterIds, downloadMode, serverSuccess, localSuccess]() {
+            if (downloadMode == DownloadMode::SERVER_ONLY) {
+                if (serverSuccess) {
+                    brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " chapters to server");
+                } else {
+                    brls::Application::notify("Failed to queue to server");
+                }
+            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                if (localSuccess) {
+                    brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " chapters locally");
+                } else {
+                    brls::Application::notify("Failed to queue locally");
+                }
+            } else {
+                if (serverSuccess && localSuccess) {
+                    brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " chapters to both");
+                } else {
+                    brls::Application::notify("Some downloads failed to queue");
+                }
+            }
+        });
     });
 }
 
@@ -698,14 +739,22 @@ void MangaDetailView::downloadUnreadChapters() {
     brls::Logger::info("MangaDetailView: Downloading unread chapters");
     brls::Application::notify("Queueing unread chapters for download...");
 
-    asyncRun([this]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
+    // Get download mode setting
+    DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+    int mangaId = m_manga.id;
+    std::string mangaTitle = m_manga.title;
 
-        // Collect chapter IDs (not indexes) for the GraphQL API
+    asyncRun([this, downloadMode, mangaId, mangaTitle]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+
+        // Collect chapter info
         std::vector<int> chapterIds;
+        std::vector<std::pair<int, int>> chapterPairs;  // (chapterId, chapterIndex)
         for (const auto& ch : m_chapters) {
             if (!ch.downloaded && !ch.read) {
                 chapterIds.push_back(ch.id);
+                chapterPairs.push_back({ch.id, ch.index});
             }
         }
 
@@ -716,16 +765,49 @@ void MangaDetailView::downloadUnreadChapters() {
             return;
         }
 
-        if (client.queueChapterDownloads(chapterIds)) {
-            client.startDownloads();
-            brls::sync([chapterIds]() {
-                brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " chapters");
-            });
-        } else {
-            brls::sync([]() {
-                brls::Application::notify("Failed to queue downloads");
-            });
+        bool serverSuccess = true;
+        bool localSuccess = true;
+
+        // Queue to server if SERVER_ONLY or BOTH
+        if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
+            if (client.queueChapterDownloads(chapterIds)) {
+                client.startDownloads();
+            } else {
+                serverSuccess = false;
+            }
         }
+
+        // Queue to local if LOCAL_ONLY or BOTH
+        if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
+            localMgr.init();
+            if (localMgr.queueChaptersDownload(mangaId, chapterPairs, mangaTitle)) {
+                localMgr.startDownloads();
+            } else {
+                localSuccess = false;
+            }
+        }
+
+        brls::sync([chapterIds, downloadMode, serverSuccess, localSuccess]() {
+            if (downloadMode == DownloadMode::SERVER_ONLY) {
+                if (serverSuccess) {
+                    brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " unread chapters to server");
+                } else {
+                    brls::Application::notify("Failed to queue to server");
+                }
+            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                if (localSuccess) {
+                    brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " unread chapters locally");
+                } else {
+                    brls::Application::notify("Failed to queue locally");
+                }
+            } else {
+                if (serverSuccess && localSuccess) {
+                    brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " unread chapters to both");
+                } else {
+                    brls::Application::notify("Some downloads failed to queue");
+                }
+            }
+        });
     });
 }
 

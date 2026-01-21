@@ -54,6 +54,13 @@ enum class ReaderBackground {
     GRAY = 2
 };
 
+// Download mode options
+enum class DownloadMode {
+    SERVER_ONLY = 0,    // Download to server queue only
+    LOCAL_ONLY = 1,     // Download to local device only
+    BOTH = 2            // Download to both server and local
+};
+
 // Per-manga reader settings (overrides defaults when set)
 struct MangaReaderSettings {
     ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;
@@ -95,7 +102,7 @@ struct AppSettings {
     bool cacheCoverImages = true;     // Cache cover images to disk
 
     // Download Settings
-    bool downloadToServer = true;      // Download on server side vs local
+    DownloadMode downloadMode = DownloadMode::SERVER_ONLY;  // Where to download chapters
     bool autoDownloadChapters = false;
     bool downloadOverWifiOnly = true;
     int maxConcurrentDownloads = 2;
@@ -169,6 +176,7 @@ public:
     static std::string getThemeString(AppTheme theme);
     static std::string getReadingModeString(ReadingMode mode);
     static std::string getPageScaleModeString(PageScaleMode mode);
+    static std::string getDownloadModeString(DownloadMode mode);
 
 private:
     Application() = default;

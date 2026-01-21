@@ -434,21 +434,24 @@ void SettingsTab::createDownloadsSection() {
     header->setTitle("Downloads");
     m_contentBox->addView(header);
 
-    // Download to server toggle (use server-side downloads)
-    auto* serverDownloadToggle = new brls::BooleanCell();
-    serverDownloadToggle->init("Download to Server", settings.downloadToServer, [&settings](bool value) {
-        settings.downloadToServer = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(serverDownloadToggle);
+    // Download mode selector
+    auto* downloadModeSelector = new brls::SelectorCell();
+    downloadModeSelector->init("Download Location",
+        {"Server Only", "Local Only", "Both"},
+        static_cast<int>(settings.downloadMode),
+        [&settings](int index) {
+            settings.downloadMode = static_cast<DownloadMode>(index);
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(downloadModeSelector);
 
-    // Info label for server downloads
-    auto* serverDlInfoLabel = new brls::Label();
-    serverDlInfoLabel->setText("When enabled, downloads are stored on the Suwayomi server");
-    serverDlInfoLabel->setFontSize(14);
-    serverDlInfoLabel->setMarginLeft(16);
-    serverDlInfoLabel->setMarginTop(4);
-    m_contentBox->addView(serverDlInfoLabel);
+    // Info label for download mode
+    auto* downloadModeInfoLabel = new brls::Label();
+    downloadModeInfoLabel->setText("Server: stored on Suwayomi server | Local: stored on Vita | Both: synced to both");
+    downloadModeInfoLabel->setFontSize(14);
+    downloadModeInfoLabel->setMarginLeft(16);
+    downloadModeInfoLabel->setMarginTop(4);
+    m_contentBox->addView(downloadModeInfoLabel);
 
     // Auto download new chapters toggle
     auto* autoDownloadToggle = new brls::BooleanCell();

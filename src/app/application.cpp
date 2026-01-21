@@ -196,6 +196,15 @@ std::string Application::getPageScaleModeString(PageScaleMode mode) {
     }
 }
 
+std::string Application::getDownloadModeString(DownloadMode mode) {
+    switch (mode) {
+        case DownloadMode::SERVER_ONLY: return "Server Only";
+        case DownloadMode::LOCAL_ONLY: return "Local Only";
+        case DownloadMode::BOTH: return "Both";
+        default: return "Unknown";
+    }
+}
+
 bool Application::loadSettings() {
     brls::Logger::debug("loadSettings: Opening {}", SETTINGS_PATH);
 
@@ -334,7 +343,7 @@ bool Application::loadSettings() {
     m_settings.cacheCoverImages = extractBool("cacheCoverImages", true);
 
     // Load download settings
-    m_settings.downloadToServer = extractBool("downloadToServer", true);
+    m_settings.downloadMode = static_cast<DownloadMode>(extractInt("downloadMode"));
     m_settings.autoDownloadChapters = extractBool("autoDownloadChapters", false);
     m_settings.downloadOverWifiOnly = extractBool("downloadOverWifiOnly", true);
     m_settings.maxConcurrentDownloads = extractInt("maxConcurrentDownloads");
@@ -541,7 +550,7 @@ bool Application::saveSettings() {
     json += "  \"cacheCoverImages\": " + std::string(m_settings.cacheCoverImages ? "true" : "false") + ",\n";
 
     // Download settings
-    json += "  \"downloadToServer\": " + std::string(m_settings.downloadToServer ? "true" : "false") + ",\n";
+    json += "  \"downloadMode\": " + std::to_string(static_cast<int>(m_settings.downloadMode)) + ",\n";
     json += "  \"autoDownloadChapters\": " + std::string(m_settings.autoDownloadChapters ? "true" : "false") + ",\n";
     json += "  \"downloadOverWifiOnly\": " + std::string(m_settings.downloadOverWifiOnly ? "true" : "false") + ",\n";
     json += "  \"maxConcurrentDownloads\": " + std::to_string(m_settings.maxConcurrentDownloads) + ",\n";
