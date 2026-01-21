@@ -797,7 +797,7 @@ void MangaDetailView::showMangaMenu() {
                 // Delete from server if applicable
                 if (!serverChapterIndexes.empty() &&
                     (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
-                    SuwayomiClient client;
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
                     if (client.deleteChapterDownloads(mangaId, serverChapterIndexes)) {
                         serverDeletedCount = serverChapterIndexes.size();
                     }
