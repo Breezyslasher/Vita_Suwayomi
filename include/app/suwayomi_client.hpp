@@ -410,15 +410,15 @@ public:
     // Get update summary
     bool fetchUpdateSummary(int& pendingUpdates, int& runningJobs, bool& isUpdating);
 
+    // Create HTTP client with authentication (public for use by other managers)
+    HttpClient createHttpClient();
+
 private:
     SuwayomiClient() = default;
     ~SuwayomiClient() = default;
 
     std::string buildApiUrl(const std::string& endpoint);
     std::string buildGraphQLUrl();
-
-    // Create HTTP client with authentication
-    HttpClient createHttpClient();
 
     // GraphQL query executor - returns response body or empty string on failure
     std::string executeGraphQL(const std::string& query, const std::string& variables = "");
