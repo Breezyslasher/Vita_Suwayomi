@@ -551,7 +551,7 @@ void LibrarySectionTab::sortMangaList() {
 }
 
 void LibrarySectionTab::cycleSortMode() {
-    // Cycle through sort modes
+    // Cycle through sort modes: A-Z -> Z-A -> Unread -> Read -> (loop)
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
             m_sortMode = LibrarySortMode::TITLE_DESC;
@@ -563,8 +563,6 @@ void LibrarySectionTab::cycleSortMode() {
             m_sortMode = LibrarySortMode::UNREAD_ASC;
             break;
         case LibrarySortMode::UNREAD_ASC:
-            m_sortMode = LibrarySortMode::RECENTLY_ADDED;
-            break;
         case LibrarySortMode::RECENTLY_ADDED:
             m_sortMode = LibrarySortMode::TITLE_ASC;
             break;
@@ -580,19 +578,17 @@ void LibrarySectionTab::updateSortButtonText() {
     std::string iconPath;
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
+        case LibrarySortMode::RECENTLY_ADDED:  // Fallback (not used)
             iconPath = "app0:resources/icons/az.png";  // A-Z
             break;
         case LibrarySortMode::TITLE_DESC:
-            iconPath = "app0:resources/icons/za.png";  // Z-A (reverse)
+            iconPath = "app0:resources/icons/za.png";  // Z-A
             break;
         case LibrarySortMode::UNREAD_DESC:
             iconPath = "app0:resources/icons/sort-9-1.png";  // Most unread first
             break;
         case LibrarySortMode::UNREAD_ASC:
             iconPath = "app0:resources/icons/sort-1-9.png";  // Least unread first
-            break;
-        case LibrarySortMode::RECENTLY_ADDED:
-            iconPath = "app0:resources/icons/history.png";   // Recent
             break;
     }
     m_sortIcon->setImageFromFile(iconPath);
