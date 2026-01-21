@@ -229,44 +229,14 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Set up controller input
-    this->registerAction("Previous Page", brls::ControllerButton::BUTTON_LB, [this](brls::View*) {
-        previousPage();
+    // Set up controller input - L/R for chapter navigation only
+    this->registerAction("Previous Chapter", brls::ControllerButton::BUTTON_LB, [this](brls::View*) {
+        previousChapter();
         return true;
     });
 
-    this->registerAction("Next Page", brls::ControllerButton::BUTTON_RB, [this](brls::View*) {
-        nextPage();
-        return true;
-    });
-
-    // Horizontal navigation (left/right) - works in all orientations
-    this->registerAction("Previous Page", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-            nextPage();
-        } else {
-            previousPage();
-        }
-        return true;
-    });
-
-    this->registerAction("Next Page", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-            previousPage();
-        } else {
-            nextPage();
-        }
-        return true;
-    });
-
-    // Vertical navigation (up/down) - works in all orientations
-    this->registerAction("Previous Page", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
-        previousPage();
-        return true;
-    });
-
-    this->registerAction("Next Page", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
-        nextPage();
+    this->registerAction("Next Chapter", brls::ControllerButton::BUTTON_RB, [this](brls::View*) {
+        nextChapter();
         return true;
     });
 
