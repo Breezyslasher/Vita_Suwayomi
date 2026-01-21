@@ -64,11 +64,25 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     coverContainer->addView(m_coverImage);
     leftPanel->addView(coverContainer);
 
-    // Continue Reading button (Komikku teal accent)
+    // Continue Reading button (Komikku teal accent) with Select button icon
+    auto* readButtonContainer = new brls::Box();
+    readButtonContainer->setAxis(brls::Axis::ROW);
+    readButtonContainer->setAlignItems(brls::AlignItems::CENTER);
+    readButtonContainer->setJustifyContent(brls::JustifyContent::CENTER);
+    readButtonContainer->setMarginBottom(10);
+
+    // Select button icon
+    auto* selectIcon = new brls::Image();
+    selectIcon->setWidth(24);
+    selectIcon->setHeight(24);
+    selectIcon->setScalingType(brls::ImageScalingType::FIT);
+    selectIcon->setImageFromFile("app0:resources/icons/select_button.png");
+    selectIcon->setMarginRight(8);
+    readButtonContainer->addView(selectIcon);
+
     m_readButton = new brls::Button();
-    m_readButton->setWidth(220);
+    m_readButton->setWidth(190);
     m_readButton->setHeight(44);
-    m_readButton->setMarginBottom(10);
     m_readButton->setCornerRadius(22);  // Pill-shaped button
     m_readButton->setBackgroundColor(nvgRGBA(0, 150, 136, 255)); // Teal
 
@@ -82,7 +96,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         return true;
     });
     m_readButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_readButton));
-    leftPanel->addView(m_readButton);
+    readButtonContainer->addView(m_readButton);
+    leftPanel->addView(readButtonContainer);
 
     // Add to Library button (only shown if not already in library)
     if (!m_manga.inLibrary) {
@@ -172,31 +187,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     titleBox->addView(statsRow);
     titleRow->addView(titleBox);
-
-    // Menu button with icon
-    auto* menuBtn = new brls::Button();
-    menuBtn->setWidth(44);
-    menuBtn->setHeight(40);
-    menuBtn->setMarginLeft(10);
-    menuBtn->setCornerRadius(8);
-    menuBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    menuBtn->setAlignItems(brls::AlignItems::CENTER);
-    menuBtn->setShrink(0.0f);
-
-    auto* menuIcon = new brls::Image();
-    menuIcon->setWidth(24);
-    menuIcon->setHeight(24);
-    menuIcon->setScalingType(brls::ImageScalingType::FIT);
-    menuIcon->setImageFromFile("app0:resources/icons/menu.png");
-    menuBtn->addView(menuIcon);
-
-    menuBtn->registerClickAction([this](brls::View* view) {
-        showMangaMenu();
-        return true;
-    });
-    menuBtn->addGestureRecognizer(new brls::TapGestureRecognizer(menuBtn));
-    titleRow->addView(menuBtn);
-
     rightPanel->addView(titleRow);
 
     // Genre tags
@@ -254,15 +244,30 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_chaptersLabel->setTextColor(nvgRGB(255, 255, 255));
     chaptersHeader->addView(m_chaptersLabel);
 
+    // Actions row: Sort (R) and Menu (Start) buttons with icons
     auto* chaptersActions = new brls::Box();
     chaptersActions->setAxis(brls::Axis::ROW);
+    chaptersActions->setAlignItems(brls::AlignItems::CENTER);
+
+    // Sort button with R icon above
+    auto* sortContainer = new brls::Box();
+    sortContainer->setAxis(brls::Axis::COLUMN);
+    sortContainer->setAlignItems(brls::AlignItems::CENTER);
+    sortContainer->setMarginRight(10);
+
+    auto* rButtonIcon = new brls::Image();
+    rButtonIcon->setWidth(20);
+    rButtonIcon->setHeight(20);
+    rButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    rButtonIcon->setImageFromFile("app0:resources/icons/r_button.png");
+    rButtonIcon->setMarginBottom(4);
+    sortContainer->addView(rButtonIcon);
 
     m_sortBtn = new brls::Button();
     m_sortBtn->setWidth(44);
     m_sortBtn->setHeight(40);
     m_sortBtn->setCornerRadius(8);
 
-    // Add sort icon
     m_sortIcon = new brls::Image();
     m_sortIcon->setWidth(24);
     m_sortIcon->setHeight(24);
@@ -277,7 +282,43 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         return true;
     });
     m_sortBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_sortBtn));
-    chaptersActions->addView(m_sortBtn);
+    sortContainer->addView(m_sortBtn);
+    chaptersActions->addView(sortContainer);
+
+    // Menu button with Start icon above
+    auto* menuContainer = new brls::Box();
+    menuContainer->setAxis(brls::Axis::COLUMN);
+    menuContainer->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* startButtonIcon = new brls::Image();
+    startButtonIcon->setWidth(20);
+    startButtonIcon->setHeight(20);
+    startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    startButtonIcon->setImageFromFile("app0:resources/icons/start_button.png");
+    startButtonIcon->setMarginBottom(4);
+    menuContainer->addView(startButtonIcon);
+
+    auto* menuBtn = new brls::Button();
+    menuBtn->setWidth(44);
+    menuBtn->setHeight(40);
+    menuBtn->setCornerRadius(8);
+    menuBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    menuBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* menuIcon = new brls::Image();
+    menuIcon->setWidth(24);
+    menuIcon->setHeight(24);
+    menuIcon->setScalingType(brls::ImageScalingType::FIT);
+    menuIcon->setImageFromFile("app0:resources/icons/menu.png");
+    menuBtn->addView(menuIcon);
+
+    menuBtn->registerClickAction([this](brls::View* view) {
+        showMangaMenu();
+        return true;
+    });
+    menuBtn->addGestureRecognizer(new brls::TapGestureRecognizer(menuBtn));
+    menuContainer->addView(menuBtn);
+    chaptersActions->addView(menuContainer);
 
     chaptersHeader->addView(chaptersActions);
     rightPanel->addView(chaptersHeader);
@@ -520,6 +561,15 @@ void MangaDetailView::populateChaptersList() {
         }
         dlBtn->addGestureRecognizer(new brls::TapGestureRecognizer(dlBtn));
         statusBox->addView(dlBtn);
+
+        // X button icon indicator (shows X button action is available)
+        auto* xButtonIcon = new brls::Image();
+        xButtonIcon->setWidth(20);
+        xButtonIcon->setHeight(20);
+        xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+        xButtonIcon->setImageFromFile("app0:resources/icons/square_button.png");
+        xButtonIcon->setMarginLeft(8);
+        statusBox->addView(xButtonIcon);
 
         chapterRow->addView(statusBox);
 
