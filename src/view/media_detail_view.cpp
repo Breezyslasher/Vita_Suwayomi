@@ -531,9 +531,9 @@ void MangaDetailView::populateChaptersList() {
             return true;
         });
 
-        // Select button to start reading
+        // Select button to start reading (same as Start Reading button)
         chapterRow->registerAction("Read", brls::ControllerButton::BUTTON_BACK, [this, capturedChapter](brls::View* view) {
-            onChapterSelected(capturedChapter);
+            onRead(capturedChapter.id);
             return true;
         });
 
@@ -553,14 +553,14 @@ void MangaDetailView::populateChaptersList() {
             [this, chapterRow, mangaId, chapterIndex, chapterId, chapterRead, localDownloaded, mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 static brls::Point touchStart;
                 static bool isValidSwipe = false;
-                static NVGcolor originalBgColor;
+                // Original background color for chapter rows
+                const NVGcolor originalBgColor = nvgRGBA(40, 40, 40, 255);
                 const float SWIPE_THRESHOLD = 60.0f;  // Minimum distance to trigger action
                 const float TAP_THRESHOLD = 15.0f;    // Max movement for tap (ignore)
 
                 if (status.state == brls::GestureState::START) {
                     touchStart = status.position;
                     isValidSwipe = false;
-                    originalBgColor = chapterRow->getBackgroundColor();
                 } else if (status.state == brls::GestureState::STAY) {
                     float dx = status.position.x - touchStart.x;
                     float dy = status.position.y - touchStart.y;
