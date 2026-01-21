@@ -91,12 +91,22 @@ LibrarySectionTab::LibrarySectionTab() {
     // Initialize sort icon
     updateSortButtonText();
 
-    // Update button - bigger size
+    // Update button with refresh icon
     m_updateBtn = new brls::Button();
-    m_updateBtn->setText("Update");
     m_updateBtn->setMarginLeft(8);
-    m_updateBtn->setWidth(100);
+    m_updateBtn->setWidth(44);
     m_updateBtn->setHeight(40);
+    m_updateBtn->setCornerRadius(8);
+    m_updateBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_updateBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* updateIcon = new brls::Image();
+    updateIcon->setWidth(24);
+    updateIcon->setHeight(24);
+    updateIcon->setScalingType(brls::ImageScalingType::FIT);
+    updateIcon->setImageFromFile("app0:resources/icons/refresh.png");
+    m_updateBtn->addView(updateIcon);
+
     m_updateBtn->registerClickAction([this](brls::View* view) {
         triggerLibraryUpdate();
         return true;
