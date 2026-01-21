@@ -581,9 +581,15 @@ void MangaDetailView::populateChaptersList() {
 
         chapterRow->addView(statusBox);
 
-        // Show/hide X button icon based on focus state
-        chapterRow->getFocusEvent()->subscribe([xButtonIcon](bool focused) {
-            xButtonIcon->setVisibility(focused ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE);
+        // Show X button icon when this row gets focus, hide previous
+        chapterRow->getFocusEvent()->subscribe([this, xButtonIcon](brls::View* view) {
+            // Hide previously focused icon
+            if (m_currentFocusedIcon && m_currentFocusedIcon != xButtonIcon) {
+                m_currentFocusedIcon->setVisibility(brls::Visibility::INVISIBLE);
+            }
+            // Show this icon
+            xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
+            m_currentFocusedIcon = xButtonIcon;
         });
 
         // Click action - open chapter

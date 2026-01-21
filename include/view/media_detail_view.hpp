@@ -91,6 +91,9 @@ private:
     bool m_filterDownloaded = false;
     bool m_filterUnread = false;
 
+    // Currently visible chapter action icon (shown on focused row)
+    brls::Image* m_currentFocusedIcon = nullptr;
+
     // Description expand/collapse
     bool m_descriptionExpanded = false;
     std::string m_fullDescription;
