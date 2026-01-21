@@ -197,6 +197,7 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     # Icons
     FILE resources/icons/a.png resources/icons/a.png
     FILE resources/icons/az.png resources/icons/az.png
+    FILE resources/icons/za.png resources/icons/za.png
     FILE resources/icons/back.png resources/icons/back.png
     FILE resources/icons/checkbox.png resources/icons/checkbox.png
     FILE resources/icons/checkbox_checked.png resources/icons/checkbox_checked.png

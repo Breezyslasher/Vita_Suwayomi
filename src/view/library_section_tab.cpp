@@ -583,7 +583,7 @@ void LibrarySectionTab::updateSortButtonText() {
             iconPath = "app0:resources/icons/az.png";  // A-Z
             break;
         case LibrarySortMode::TITLE_DESC:
-            iconPath = "app0:resources/icons/a.png";   // Z-A (reverse)
+            iconPath = "app0:resources/icons/za.png";  // Z-A (reverse)
             break;
         case LibrarySortMode::UNREAD_DESC:
             iconPath = "app0:resources/icons/sort-9-1.png";  // Most unread first
