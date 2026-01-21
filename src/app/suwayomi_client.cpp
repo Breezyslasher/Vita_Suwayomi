@@ -1004,6 +1004,8 @@ bool SuwayomiClient::updateChapterProgressGraphQL(int chapterId, int lastPageRea
 }
 
 bool SuwayomiClient::fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& pages) {
+    brls::Logger::info("GraphQL: Fetching pages for chapter id={}", chapterId);
+
     const char* query = R"(
         mutation FetchChapterPages($id: Int!) {
             fetchChapterPages(input: { chapterId: $id }) {
@@ -1014,13 +1016,22 @@ bool SuwayomiClient::fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& 
 
     std::string variables = "{\"id\":" + std::to_string(chapterId) + "}";
     std::string response = executeGraphQL(query, variables);
-    if (response.empty()) return false;
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: Empty response for fetchChapterPages");
+        return false;
+    }
 
     std::string data = extractJsonObject(response, "data");
-    if (data.empty()) return false;
+    if (data.empty()) {
+        brls::Logger::error("GraphQL: No data in response for fetchChapterPages");
+        return false;
+    }
 
     std::string fetchResult = extractJsonObject(data, "fetchChapterPages");
-    if (fetchResult.empty()) return false;
+    if (fetchResult.empty()) {
+        brls::Logger::error("GraphQL: No fetchChapterPages result in response");
+        return false;
+    }
 
     // The pages field contains an array of page URLs
     std::string pagesJson = extractJsonArray(fetchResult, "pages");
@@ -1035,7 +1046,13 @@ bool SuwayomiClient::fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& 
         pages.push_back(page);
     }
 
-    brls::Logger::debug("GraphQL: Fetched {} pages for chapter {}", pages.size(), chapterId);
+    brls::Logger::info("GraphQL: Fetched {} pages for chapter {}", pages.size(), chapterId);
+
+    if (pages.empty()) {
+        brls::Logger::warning("GraphQL: No pages returned for chapter {}", chapterId);
+        return false;
+    }
+
     return true;
 }
 

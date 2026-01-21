@@ -688,18 +688,21 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
     brls::Logger::info("DownloadsManager: Downloading chapter {} (id={}) for manga {}",
                        chapter.chapterIndex, chapter.chapterId, mangaId);
 
-    SuwayomiClient& client = SuwayomiClient::getInstance();
+    try {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
 
-    // Fetch pages from server using chapter ID (not index)
-    std::vector<Page> pages;
-    if (!client.fetchChapterPages(mangaId, chapter.chapterId, pages)) {
-        brls::Logger::error("DownloadsManager: Failed to fetch pages for chapter {} (id={})",
-                           chapter.chapterIndex, chapter.chapterId);
-        std::lock_guard<std::mutex> lock(m_mutex);
-        chapter.state = LocalDownloadState::FAILED;
-        saveStateUnlocked();
-        return;
-    }
+        // Fetch pages from server using chapter ID (not index)
+        brls::Logger::info("DownloadsManager: Fetching pages for chapter id={}", chapter.chapterId);
+        std::vector<Page> pages;
+        if (!client.fetchChapterPages(mangaId, chapter.chapterId, pages)) {
+            brls::Logger::error("DownloadsManager: Failed to fetch pages for chapter {} (id={})",
+                               chapter.chapterIndex, chapter.chapterId);
+            std::lock_guard<std::mutex> lock(m_mutex);
+            chapter.state = LocalDownloadState::FAILED;
+            saveStateUnlocked();
+            return;
+        }
+        brls::Logger::info("DownloadsManager: Got {} pages for chapter {}", pages.size(), chapter.chapterId);
 
     chapter.pageCount = static_cast<int>(pages.size());
     chapter.downloadedPages = 0;
@@ -781,11 +784,29 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
         brls::Logger::error("DownloadsManager: Chapter {} incomplete ({}/{})",
                            chapter.chapterIndex, chapter.downloadedPages, chapter.pageCount);
     }
+    } catch (const std::exception& e) {
+        brls::Logger::error("DownloadsManager: Exception downloading chapter {}: {}",
+                           chapter.chapterIndex, e.what());
+        std::lock_guard<std::mutex> lock(m_mutex);
+        chapter.state = LocalDownloadState::FAILED;
+        saveStateUnlocked();
+    } catch (...) {
+        brls::Logger::error("DownloadsManager: Unknown exception downloading chapter {}",
+                           chapter.chapterIndex);
+        std::lock_guard<std::mutex> lock(m_mutex);
+        chapter.state = LocalDownloadState::FAILED;
+        saveStateUnlocked();
+    }
 }
 
 bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex,
                                      const std::string& imageUrl, std::string& localPath) {
-    if (imageUrl.empty()) return false;
+    if (imageUrl.empty()) {
+        brls::Logger::error("DownloadsManager: Empty URL for page {}", pageIndex);
+        return false;
+    }
+
+    brls::Logger::debug("DownloadsManager: Downloading page {} from {}", pageIndex, imageUrl);
 
     // Use SuwayomiClient's HTTP client which includes authentication headers
     SuwayomiClient& client = SuwayomiClient::getInstance();
