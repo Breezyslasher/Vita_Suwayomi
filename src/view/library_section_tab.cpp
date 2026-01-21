@@ -592,7 +592,7 @@ void LibrarySectionTab::updateSortButtonText() {
             iconPath = "app0:resources/icons/sort-1-9.png";  // Least unread first
             break;
         case LibrarySortMode::RECENTLY_ADDED:
-            iconPath = "app0:resources/icons/history_sort.png";   // Recent
+            iconPath = "app0:resources/icons/history.png";   // Recent
             break;
     }
     m_sortIcon->setImageFromFile(iconPath);

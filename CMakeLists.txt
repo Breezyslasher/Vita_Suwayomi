@@ -207,14 +207,11 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     FILE resources/icons/download.png resources/icons/download.png
     FILE resources/icons/hide.png resources/icons/hide.png
     FILE resources/icons/history.png resources/icons/history.png
-    FILE resources/icons/history_sort.png resources/icons/history_sort.png
     FILE resources/icons/hot.png resources/icons/hot.png
     FILE resources/icons/import.png resources/icons/import.png
     FILE resources/icons/left.png resources/icons/left.png
     FILE resources/icons/menu.png resources/icons/menu.png
     FILE resources/icons/mini_star.png resources/icons/mini_star.png
-    FILE resources/icons/no.png resources/icons/no.png
-    FILE resources/icons/on.png resources/icons/on.png
     FILE resources/icons/options.png resources/icons/options.png
     FILE resources/icons/radio.png resources/icons/radio.png
     FILE resources/icons/radio_checked.png resources/icons/radio_checked.png
