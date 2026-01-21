@@ -860,8 +860,8 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
         DownloadsManager& dm = DownloadsManager::getInstance();
         dm.init();
 
-        // Queue chapter for local download
-        if (dm.queueChapterDownload(m_manga.id, chapter.index, m_manga.title)) {
+        // Queue chapter for local download (using chapter.id for API calls)
+        if (dm.queueChapterDownload(m_manga.id, chapter.id, chapter.index, m_manga.title, chapter.name)) {
             // Set progress callback for UI updates
             dm.setProgressCallback([](int downloaded, int total) {
                 brls::sync([downloaded, total]() {

@@ -97,12 +97,13 @@ bool DownloadsManager::init() {
     return true;
 }
 
-bool DownloadsManager::queueChapterDownload(int mangaId, int chapterIndex,
-                                             const std::string& mangaTitle) {
+bool DownloadsManager::queueChapterDownload(int mangaId, int chapterId, int chapterIndex,
+                                             const std::string& mangaTitle,
+                                             const std::string& chapterName) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    brls::Logger::info("DownloadsManager: Queueing chapter {} for manga {} ({})",
-                       chapterIndex, mangaId, mangaTitle);
+    brls::Logger::info("DownloadsManager: Queueing chapter {} (id={}) for manga {} ({})",
+                       chapterIndex, chapterId, mangaId, mangaTitle);
 
     // Find or create manga download item
     DownloadItem* manga = nullptr;
@@ -134,7 +135,9 @@ bool DownloadsManager::queueChapterDownload(int mangaId, int chapterIndex,
 
     // Add chapter to queue
     DownloadedChapter chapter;
+    chapter.chapterId = chapterId;
     chapter.chapterIndex = chapterIndex;
+    chapter.name = chapterName;
     chapter.state = LocalDownloadState::QUEUED;
     manga->chapters.push_back(chapter);
     manga->totalChapters = static_cast<int>(manga->chapters.size());
@@ -144,10 +147,11 @@ bool DownloadsManager::queueChapterDownload(int mangaId, int chapterIndex,
 }
 
 bool DownloadsManager::queueChaptersDownload(int mangaId,
-                                              const std::vector<int>& chapterIndexes,
+                                              const std::vector<std::pair<int,int>>& chapters,
                                               const std::string& mangaTitle) {
-    for (int idx : chapterIndexes) {
-        if (!queueChapterDownload(mangaId, idx, mangaTitle)) {
+    // chapters is a vector of pairs: (chapterId, chapterIndex)
+    for (const auto& ch : chapters) {
+        if (!queueChapterDownload(mangaId, ch.first, ch.second, mangaTitle)) {
             return false;
         }
     }
@@ -680,16 +684,16 @@ int64_t DownloadsManager::getTotalDownloadSize() const {
 }
 
 void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) {
-    brls::Logger::info("DownloadsManager: Downloading chapter {} for manga {}",
-                       chapter.chapterIndex, mangaId);
+    brls::Logger::info("DownloadsManager: Downloading chapter {} (id={}) for manga {}",
+                       chapter.chapterIndex, chapter.chapterId, mangaId);
 
     SuwayomiClient& client = SuwayomiClient::getInstance();
 
-    // Fetch pages from server
+    // Fetch pages from server using chapter ID (not index)
     std::vector<Page> pages;
-    if (!client.fetchChapterPages(mangaId, chapter.chapterIndex, pages)) {
-        brls::Logger::error("DownloadsManager: Failed to fetch pages for chapter {}",
-                           chapter.chapterIndex);
+    if (!client.fetchChapterPages(mangaId, chapter.chapterId, pages)) {
+        brls::Logger::error("DownloadsManager: Failed to fetch pages for chapter {} (id={})",
+                           chapter.chapterIndex, chapter.chapterId);
         std::lock_guard<std::mutex> lock(m_mutex);
         chapter.state = LocalDownloadState::FAILED;
         saveStateUnlocked();

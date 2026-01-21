@@ -79,8 +79,9 @@ public:
     bool init();
 
     // Queue manga chapter(s) for download
-    bool queueChapterDownload(int mangaId, int chapterIndex, const std::string& mangaTitle);
-    bool queueChaptersDownload(int mangaId, const std::vector<int>& chapterIndexes,
+    bool queueChapterDownload(int mangaId, int chapterId, int chapterIndex,
+                              const std::string& mangaTitle, const std::string& chapterName = "");
+    bool queueChaptersDownload(int mangaId, const std::vector<std::pair<int,int>>& chapters,
                                const std::string& mangaTitle);
 
     // Start downloading queued items
