@@ -541,24 +541,70 @@ void MangaDetailView::populateChaptersList() {
 void MangaDetailView::showMangaMenu() {
     brls::Dialog* dialog = new brls::Dialog("Options");
 
+    // Collect data before creating dialog callbacks to avoid capturing 'this' unsafely
+    int mangaId = m_manga.id;
+    std::string mangaTitle = m_manga.title;
+
+    // Copy chapters data for the callbacks
+    std::vector<Chapter> chapters = m_chapters;
+
     dialog->addButton("Download all chapters", [this, dialog]() {
         dialog->close();
-        downloadAllChapters();
+        // Defer to avoid dialog nesting issues
+        brls::sync([this]() {
+            downloadAllChapters();
+        });
     });
 
-    dialog->addButton("Remove all chapters", [this, dialog]() {
+    dialog->addButton("Remove all chapters", [this, mangaId, chapters, dialog]() {
         dialog->close();
-        onDeleteDownloads();
+        // Defer and don't open nested dialog - just delete directly
+        brls::sync([this, mangaId, chapters]() {
+            // Collect downloaded chapter indexes
+            std::vector<int> chapterIndexes;
+            for (const auto& ch : chapters) {
+                if (ch.downloaded) {
+                    chapterIndexes.push_back(ch.index);
+                }
+            }
+
+            if (chapterIndexes.empty()) {
+                brls::Application::notify("No downloads to delete");
+                return;
+            }
+
+            brls::Application::notify("Deleting downloads...");
+
+            // Run delete in async without capturing 'this'
+            asyncRun([mangaId, chapterIndexes]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                if (client.deleteChapterDownloads(mangaId, chapterIndexes)) {
+                    brls::sync([]() {
+                        brls::Application::notify("Downloads deleted");
+                    });
+                } else {
+                    brls::sync([]() {
+                        brls::Application::notify("Failed to delete downloads");
+                    });
+                }
+            });
+        });
     });
 
     dialog->addButton("Cancel downloading chapters", [this, dialog]() {
         dialog->close();
-        cancelAllDownloading();
+        // Defer to avoid issues
+        brls::sync([this]() {
+            cancelAllDownloading();
+        });
     });
 
     dialog->addButton("Reset cover", [this, dialog]() {
         dialog->close();
-        resetCover();
+        brls::sync([this]() {
+            resetCover();
+        });
     });
 
     dialog->open();
@@ -964,25 +1010,38 @@ void MangaDetailView::onDeleteDownloads() {
 void MangaDetailView::showChapterMenu(const Chapter& chapter) {
     brls::Dialog* dialog = new brls::Dialog(chapter.name);
 
+    // Collect data before creating callbacks to avoid unsafe 'this' capture
+    int mangaId = m_manga.id;
+    int chapterId = chapter.id;
+    int chapterIndex = chapter.index;
+
     dialog->addButton("Read", [this, chapter, dialog]() {
         dialog->close();
-        onChapterSelected(chapter);
+        brls::sync([this, chapter]() {
+            onChapterSelected(chapter);
+        });
     });
 
     if (chapter.read) {
-        dialog->addButton("Mark Unread", [this, chapter, dialog]() {
+        dialog->addButton("Mark Unread", [mangaId, chapterIndex, dialog]() {
             dialog->close();
-            asyncRun([this, chapter]() {
-                SuwayomiClient::getInstance().markChapterUnread(m_manga.id, chapter.index);
-                brls::sync([this]() { loadChapters(); });
+            // Don't capture 'this' - just mark and notify
+            asyncRun([mangaId, chapterIndex]() {
+                SuwayomiClient::getInstance().markChapterUnread(mangaId, chapterIndex);
+                brls::sync([]() {
+                    brls::Application::notify("Marked as unread");
+                });
             });
         });
     } else {
-        dialog->addButton("Mark Read", [this, chapter, dialog]() {
+        dialog->addButton("Mark Read", [mangaId, chapterIndex, dialog]() {
             dialog->close();
-            asyncRun([this, chapter]() {
-                SuwayomiClient::getInstance().markChapterRead(m_manga.id, chapter.index);
-                brls::sync([this]() { loadChapters(); });
+            // Don't capture 'this' - just mark and notify
+            asyncRun([mangaId, chapterIndex]() {
+                SuwayomiClient::getInstance().markChapterRead(mangaId, chapterIndex);
+                brls::sync([]() {
+                    brls::Application::notify("Marked as read");
+                });
             });
         });
     }
@@ -990,12 +1049,16 @@ void MangaDetailView::showChapterMenu(const Chapter& chapter) {
     if (chapter.downloaded) {
         dialog->addButton("Delete Download", [this, chapter, dialog]() {
             dialog->close();
-            deleteChapterDownload(chapter);
+            brls::sync([this, chapter]() {
+                deleteChapterDownload(chapter);
+            });
         });
     } else {
         dialog->addButton("Download", [this, chapter, dialog]() {
             dialog->close();
-            downloadChapter(chapter);
+            brls::sync([this, chapter]() {
+                downloadChapter(chapter);
+            });
         });
     }
 
@@ -1007,9 +1070,16 @@ void MangaDetailView::showChapterMenu(const Chapter& chapter) {
 }
 
 void MangaDetailView::markChapterRead(const Chapter& chapter) {
-    asyncRun([this, chapter]() {
-        SuwayomiClient::getInstance().markChapterRead(m_manga.id, chapter.index);
-        brls::sync([this]() { loadChapters(); });
+    // Collect data before async to avoid capturing 'this'
+    int mangaId = m_manga.id;
+    int chapterIndex = chapter.index;
+
+    // Don't capture 'this' - just mark and notify
+    asyncRun([mangaId, chapterIndex]() {
+        SuwayomiClient::getInstance().markChapterRead(mangaId, chapterIndex);
+        brls::sync([]() {
+            brls::Application::notify("Marked as read");
+        });
     });
 }
 
