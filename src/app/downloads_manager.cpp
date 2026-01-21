@@ -240,11 +240,31 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
 
     for (auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
-            for (auto& chapter : manga.chapters) {
-                if (chapter.chapterIndex == chapterIndex) {
-                    if (chapter.state == LocalDownloadState::QUEUED ||
-                        chapter.state == LocalDownloadState::DOWNLOADING) {
-                        chapter.state = LocalDownloadState::FAILED;
+            for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
+                if (it->chapterIndex == chapterIndex) {
+                    if (it->state == LocalDownloadState::QUEUED ||
+                        it->state == LocalDownloadState::DOWNLOADING) {
+                        // Delete any partial download files
+                        for (auto& page : it->pages) {
+                            if (!page.localPath.empty()) {
+                                deleteFile(page.localPath);
+                            }
+                        }
+
+                        // Remove the chapter entry instead of marking as failed
+                        manga.chapters.erase(it);
+                        manga.totalChapters = static_cast<int>(manga.chapters.size());
+
+                        // If no chapters left, remove manga entry
+                        if (manga.chapters.empty()) {
+                            for (auto mangaIt = m_downloads.begin(); mangaIt != m_downloads.end(); ++mangaIt) {
+                                if (mangaIt->mangaId == mangaId) {
+                                    m_downloads.erase(mangaIt);
+                                    break;
+                                }
+                            }
+                        }
+
                         saveStateUnlocked();
                         return true;
                     }

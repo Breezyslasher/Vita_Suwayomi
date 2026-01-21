@@ -76,7 +76,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     selectIcon->setWidth(24);
     selectIcon->setHeight(24);
     selectIcon->setScalingType(brls::ImageScalingType::FIT);
-    selectIcon->setImageFromFile("app0:resources/icons/select_button.png");
+    selectIcon->setImageFromFile("app0:resources/images/select_button.png");
     selectIcon->setMarginRight(8);
     readButtonContainer->addView(selectIcon);
 
@@ -207,22 +207,27 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     }
 
     // Description (collapsible - shows 2 lines by default, L to expand)
+    brls::Logger::debug("MangaDetailView: Description length = {}", m_manga.description.length());
+    m_descriptionLabel = new brls::Label();
+    m_descriptionLabel->setFontSize(12);
+    m_descriptionLabel->setTextColor(nvgRGB(192, 192, 192));
+    m_descriptionLabel->setMarginBottom(15);
+
     if (!m_manga.description.empty()) {
         m_fullDescription = m_manga.description;
         m_descriptionExpanded = false;
 
-        m_descriptionLabel = new brls::Label();
         // Show first ~80 chars (approximately 2 lines) when collapsed
         std::string truncatedDesc = m_fullDescription;
         if (truncatedDesc.length() > 80) {
             truncatedDesc = truncatedDesc.substr(0, 77) + "... [L]";
         }
         m_descriptionLabel->setText(truncatedDesc);
-        m_descriptionLabel->setFontSize(12);
-        m_descriptionLabel->setTextColor(nvgRGB(192, 192, 192));
-        m_descriptionLabel->setMarginBottom(15);
-        rightPanel->addView(m_descriptionLabel);
+    } else {
+        m_fullDescription = "";
+        m_descriptionLabel->setText("No description available [L]");
     }
+    rightPanel->addView(m_descriptionLabel);
 
     // Register L trigger for description toggle
     this->registerAction("Summary", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
@@ -259,7 +264,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     rButtonIcon->setWidth(20);
     rButtonIcon->setHeight(20);
     rButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    rButtonIcon->setImageFromFile("app0:resources/icons/r_button.png");
+    rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
     rButtonIcon->setMarginBottom(4);
     sortContainer->addView(rButtonIcon);
 
@@ -294,7 +299,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     startButtonIcon->setWidth(20);
     startButtonIcon->setHeight(20);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    startButtonIcon->setImageFromFile("app0:resources/icons/start_button.png");
+    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
     startButtonIcon->setMarginBottom(4);
     menuContainer->addView(startButtonIcon);
 
@@ -567,7 +572,7 @@ void MangaDetailView::populateChaptersList() {
         xButtonIcon->setWidth(20);
         xButtonIcon->setHeight(20);
         xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-        xButtonIcon->setImageFromFile("app0:resources/icons/square_button.png");
+        xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
         xButtonIcon->setMarginLeft(8);
         statusBox->addView(xButtonIcon);
 
@@ -734,38 +739,40 @@ void MangaDetailView::showMangaMenu() {
         });
     });
 
-    dialog->addButton("Remove all chapters", [this, mangaId, chapters, dialog]() {
+    dialog->addButton("Remove all chapters", [mangaId, chapters, dialog]() {
         dialog->close();
         // Defer and don't open nested dialog - just delete directly
-        brls::sync([this, mangaId, chapters]() {
-            // Collect downloaded chapter indexes
-            std::vector<int> chapterIndexes;
+        brls::sync([mangaId, chapters]() {
+            // Collect LOCAL downloaded chapter indexes from DownloadsManager
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            std::vector<int> localChapterIndexes;
             for (const auto& ch : chapters) {
-                if (ch.downloaded) {
-                    chapterIndexes.push_back(ch.index);
+                if (dm.isChapterDownloaded(mangaId, ch.index)) {
+                    localChapterIndexes.push_back(ch.index);
                 }
             }
 
-            if (chapterIndexes.empty()) {
-                brls::Application::notify("No downloads to delete");
+            if (localChapterIndexes.empty()) {
+                brls::Application::notify("No local downloads to delete");
                 return;
             }
 
-            brls::Application::notify("Deleting downloads...");
+            brls::Application::notify("Deleting " + std::to_string(localChapterIndexes.size()) + " downloads...");
 
             // Run delete in async without capturing 'this'
-            asyncRun([mangaId, chapterIndexes]() {
-                SuwayomiClient& client = SuwayomiClient::getInstance();
+            asyncRun([mangaId, localChapterIndexes]() {
+                DownloadsManager& dm = DownloadsManager::getInstance();
+                int deletedCount = 0;
 
-                if (client.deleteChapterDownloads(mangaId, chapterIndexes)) {
-                    brls::sync([]() {
-                        brls::Application::notify("Downloads deleted");
-                    });
-                } else {
-                    brls::sync([]() {
-                        brls::Application::notify("Failed to delete downloads");
-                    });
+                for (int chapterIndex : localChapterIndexes) {
+                    if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+                        deletedCount++;
+                    }
                 }
+
+                brls::sync([deletedCount]() {
+                    brls::Application::notify("Deleted " + std::to_string(deletedCount) + " downloads");
+                });
             });
         });
     });
