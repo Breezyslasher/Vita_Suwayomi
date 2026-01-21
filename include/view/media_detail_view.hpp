@@ -13,6 +13,7 @@ namespace vitasuwayomi {
 class MangaDetailView : public brls::Box {
 public:
     MangaDetailView(const Manga& manga);
+    ~MangaDetailView();
 
     static brls::View* create();
 
