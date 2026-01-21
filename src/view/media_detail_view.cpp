@@ -100,20 +100,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         leftPanel->addView(m_libraryButton);
     }
 
-    // Download button
-    m_downloadButton = new brls::Button();
-    m_downloadButton->setWidth(220);
-    m_downloadButton->setHeight(44);
-    m_downloadButton->setCornerRadius(22);  // Pill-shaped
-    m_downloadButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
-    m_downloadButton->setText("Download");
-    m_downloadButton->registerClickAction([this](brls::View* view) {
-        showDownloadOptions();
-        return true;
-    });
-    m_downloadButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_downloadButton));
-    leftPanel->addView(m_downloadButton);
-
     this->addView(leftPanel);
 
     // ========== RIGHT PANEL: Info + Chapters (grows to fill) ==========

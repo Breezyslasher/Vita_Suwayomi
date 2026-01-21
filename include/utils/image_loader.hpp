@@ -24,6 +24,10 @@ public:
     // Set authentication credentials for image loading
     static void setAuthCredentials(const std::string& username, const std::string& password);
 
+    // Get authentication credentials (for other components that need to download)
+    static const std::string& getAuthUsername() { return s_authUsername; }
+    static const std::string& getAuthPassword() { return s_authPassword; }
+
     // Load image asynchronously from URL (with thumbnail downscaling) - for brls::Image
     static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target);
 

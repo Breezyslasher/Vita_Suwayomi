@@ -75,7 +75,6 @@ private:
     // Action buttons
     brls::Button* m_readButton = nullptr;
     brls::Button* m_libraryButton = nullptr;
-    brls::Button* m_downloadButton = nullptr;
     brls::Button* m_trackingButton = nullptr;
 
     // Chapters list
