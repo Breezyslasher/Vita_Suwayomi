@@ -5,6 +5,7 @@
 
 #include "activity/reader_activity.hpp"
 #include "app/suwayomi_client.hpp"
+#include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
 
@@ -609,15 +610,49 @@ void ReaderActivity::loadPages() {
 
     // Capture webtoon mode flag for async task - use format setting
     bool isWebtoonMode = m_settings.isWebtoonFormat;
+    int mangaId = m_mangaId;
+    int chapterIndex = m_chapterIndex;
 
-    vitasuwayomi::asyncTask<bool>([this, isWebtoonMode]() {
+    vitasuwayomi::asyncTask<bool>([this, isWebtoonMode, mangaId, chapterIndex]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+        localMgr.init();
 
-        // Fetch chapter info and pages
         std::vector<Page> rawPages;
-        if (!client.fetchChapterPages(m_mangaId, m_chapterIndex, rawPages)) {
-            brls::Logger::error("Failed to fetch chapter pages");
-            return false;
+        bool loadedFromLocal = false;
+
+        // First check if chapter is downloaded locally
+        if (localMgr.isChapterDownloaded(mangaId, chapterIndex)) {
+            brls::Logger::info("ReaderActivity: Chapter {} is downloaded locally, loading from disk", chapterIndex);
+
+            std::vector<std::string> localPaths = localMgr.getChapterPages(mangaId, chapterIndex);
+            if (!localPaths.empty()) {
+                brls::Logger::info("ReaderActivity: Found {} local pages", localPaths.size());
+
+                // Convert local paths to Page objects
+                for (size_t i = 0; i < localPaths.size(); i++) {
+                    Page page;
+                    page.index = static_cast<int>(i);
+                    page.url = localPaths[i];      // Use local path as URL
+                    page.imageUrl = localPaths[i]; // Local file path
+                    page.segment = 0;
+                    page.totalSegments = 1;
+                    page.originalIndex = static_cast<int>(i);
+                    rawPages.push_back(page);
+                }
+                loadedFromLocal = true;
+            } else {
+                brls::Logger::warning("ReaderActivity: Local chapter marked as downloaded but no pages found");
+            }
+        }
+
+        // Fall back to server if not available locally
+        if (!loadedFromLocal) {
+            brls::Logger::info("ReaderActivity: Fetching chapter {} from server", chapterIndex);
+            if (!client.fetchChapterPages(mangaId, chapterIndex, rawPages)) {
+                brls::Logger::error("Failed to fetch chapter pages");
+                return false;
+            }
         }
 
         // For webtoon mode, check for tall images that need splitting
@@ -666,12 +701,12 @@ void ReaderActivity::loadPages() {
 
         // Also fetch chapter details for the name
         Chapter chapter;
-        if (client.fetchChapter(m_mangaId, m_chapterIndex, chapter)) {
+        if (client.fetchChapter(mangaId, chapterIndex, chapter)) {
             m_chapterName = chapter.name;
         }
 
         // Fetch all chapters for navigation
-        client.fetchChapters(m_mangaId, m_chapters);
+        client.fetchChapters(mangaId, m_chapters);
         m_totalChapters = static_cast<int>(m_chapters.size());
 
         return true;

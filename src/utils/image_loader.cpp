@@ -15,6 +15,13 @@
 #include <cstring>
 #include <thread>
 #include <chrono>
+#include <fstream>
+
+// Vita I/O for local file loading
+#ifdef __vita__
+#include <psp2/io/fcntl.h>
+#include <psp2/io/stat.h>
+#endif
 
 // stb_image for JPEG/PNG decoding
 // Note: stb_image.h should be available from borealis/extern or nanovg
@@ -554,39 +561,87 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     int segment = request.segment;
     int totalSegments = request.totalSegments;
 
-    HttpClient client;
+    std::string imageBody;
+    bool loadSuccess = false;
 
-    // Add authentication if credentials are set
-    if (!s_authUsername.empty() && !s_authPassword.empty()) {
-        std::string credentials = s_authUsername + ":" + s_authPassword;
-        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        std::string encoded;
-        int val = 0, valb = -6;
-        for (unsigned char c : credentials) {
-            val = (val << 8) + c;
-            valb += 8;
-            while (valb >= 0) {
-                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                valb -= 6;
+    // Check if this is a local file path (Vita paths start with ux0: or similar)
+    bool isLocalFile = (url.find("ux0:") == 0 || url.find("ur0:") == 0 ||
+                        url.find("uma0:") == 0 || url.find("/") == 0);
+
+    if (isLocalFile) {
+        // Load from local file
+        brls::Logger::debug("ImageLoader: Loading local file: {}", url);
+
+#ifdef __vita__
+        SceUID fd = sceIoOpen(url.c_str(), SCE_O_RDONLY, 0);
+        if (fd >= 0) {
+            SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
+            sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+            if (fileSize > 0 && fileSize < 50 * 1024 * 1024) {  // Max 50MB
+                imageBody.resize(fileSize);
+                SceSSize bytesRead = sceIoRead(fd, &imageBody[0], fileSize);
+                if (bytesRead == fileSize) {
+                    loadSuccess = true;
+                    brls::Logger::debug("ImageLoader: Loaded {} bytes from local file", fileSize);
+                }
+            }
+            sceIoClose(fd);
+        } else {
+            brls::Logger::error("ImageLoader: Failed to open local file: {}", url);
+        }
+#else
+        // Non-Vita: use standard file I/O
+        std::ifstream file(url, std::ios::binary | std::ios::ate);
+        if (file.is_open()) {
+            std::streamsize size = file.tellg();
+            file.seekg(0, std::ios::beg);
+            imageBody.resize(size);
+            if (file.read(&imageBody[0], size)) {
+                loadSuccess = true;
             }
         }
-        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-        while (encoded.size() % 4) encoded.push_back('=');
-        client.setDefaultHeader("Authorization", "Basic " + encoded);
+#endif
+    } else {
+        // Load from HTTP
+        HttpClient client;
+
+        // Add authentication if credentials are set
+        if (!s_authUsername.empty() && !s_authPassword.empty()) {
+            std::string credentials = s_authUsername + ":" + s_authPassword;
+            static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            std::string encoded;
+            int val = 0, valb = -6;
+            for (unsigned char c : credentials) {
+                val = (val << 8) + c;
+                valb += 8;
+                while (valb >= 0) {
+                    encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                    valb -= 6;
+                }
+            }
+            if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+            while (encoded.size() % 4) encoded.push_back('=');
+            client.setDefaultHeader("Authorization", "Basic " + encoded);
+        }
+
+        HttpResponse resp = client.get(url);
+        if (resp.success && !resp.body.empty()) {
+            imageBody = std::move(resp.body);
+            loadSuccess = true;
+        }
     }
 
-    HttpResponse resp = client.get(url);
-
-    if (resp.success && !resp.body.empty()) {
-        brls::Logger::debug("ImageLoader: Loaded {} bytes from {} for RotatableImage", resp.body.size(), url);
+    if (loadSuccess && !imageBody.empty()) {
+        brls::Logger::debug("ImageLoader: Loaded {} bytes from {} for RotatableImage", imageBody.size(), url);
 
         // Check image format
         bool isWebP = false;
         bool isJpegOrPng = false;
         bool isValidImage = false;
 
-        if (resp.body.size() > 12) {
-            unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
+        if (imageBody.size() > 12) {
+            unsigned char* data = reinterpret_cast<unsigned char*>(imageBody.data());
 
             // JPEG
             if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
@@ -624,8 +679,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             if (totalSegments > 1) {
                 // Loading a specific segment of a tall WebP image
                 imageData = convertWebPtoTGASegment(
-                    reinterpret_cast<const uint8_t*>(resp.body.data()),
-                    resp.body.size(),
+                    reinterpret_cast<const uint8_t*>(imageBody.data()),
+                    imageBody.size(),
                     segment,
                     totalSegments,
                     MAX_TEXTURE_SIZE
@@ -634,8 +689,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             } else {
                 // Normal WebP loading with downscaling if needed
                 imageData = convertWebPtoTGA(
-                    reinterpret_cast<const uint8_t*>(resp.body.data()),
-                    resp.body.size(),
+                    reinterpret_cast<const uint8_t*>(imageBody.data()),
+                    imageBody.size(),
                     MAX_TEXTURE_SIZE
                 );
             }
@@ -647,8 +702,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             if (totalSegments > 1) {
                 // Loading a specific segment of a tall JPEG/PNG image
                 imageData = convertImageToTGASegment(
-                    reinterpret_cast<const uint8_t*>(resp.body.data()),
-                    resp.body.size(),
+                    reinterpret_cast<const uint8_t*>(imageBody.data()),
+                    imageBody.size(),
                     segment,
                     totalSegments,
                     MAX_TEXTURE_SIZE
@@ -657,8 +712,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             } else {
                 // Normal JPEG/PNG loading with downscaling if needed
                 imageData = convertImageToTGA(
-                    reinterpret_cast<const uint8_t*>(resp.body.data()),
-                    resp.body.size(),
+                    reinterpret_cast<const uint8_t*>(imageBody.data()),
+                    imageBody.size(),
                     MAX_TEXTURE_SIZE
                 );
             }
@@ -669,7 +724,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         } else {
             // For GIF and other formats, pass through directly
             // NVG will handle loading
-            imageData.assign(resp.body.begin(), resp.body.end());
+            imageData.assign(imageBody.begin(), imageBody.end());
             brls::Logger::debug("ImageLoader: Using image directly ({} bytes)", imageData.size());
         }
 
@@ -694,7 +749,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             }
         });
     } else {
-        brls::Logger::error("ImageLoader: Failed to load {}: {}", url, resp.error);
+        brls::Logger::error("ImageLoader: Failed to load {}", url);
     }
 }
 
@@ -776,43 +831,83 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
 
     if (url.empty()) return false;
 
-    HttpClient client;
+    std::string imageData;
+    bool loadSuccess = false;
 
-    // Add authentication if needed
-    if (!s_authUsername.empty() && !s_authPassword.empty()) {
-        std::string credentials = s_authUsername + ":" + s_authPassword;
-        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        std::string encoded;
-        int val = 0, valb = -6;
-        for (unsigned char c : credentials) {
-            val = (val << 8) + c;
-            valb += 8;
-            while (valb >= 0) {
-                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                valb -= 6;
+    // Check if this is a local file path
+    bool isLocalFile = (url.find("ux0:") == 0 || url.find("ur0:") == 0 ||
+                        url.find("uma0:") == 0 || url.find("/") == 0);
+
+    if (isLocalFile) {
+#ifdef __vita__
+        SceUID fd = sceIoOpen(url.c_str(), SCE_O_RDONLY, 0);
+        if (fd >= 0) {
+            SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
+            sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+            if (fileSize > 0 && fileSize < 50 * 1024 * 1024) {
+                imageData.resize(fileSize);
+                SceSSize bytesRead = sceIoRead(fd, &imageData[0], fileSize);
+                if (bytesRead == fileSize) {
+                    loadSuccess = true;
+                }
+            }
+            sceIoClose(fd);
+        }
+#else
+        std::ifstream file(url, std::ios::binary | std::ios::ate);
+        if (file.is_open()) {
+            std::streamsize size = file.tellg();
+            file.seekg(0, std::ios::beg);
+            imageData.resize(size);
+            if (file.read(&imageData[0], size)) {
+                loadSuccess = true;
             }
         }
-        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-        while (encoded.size() % 4) encoded.push_back('=');
-        client.setDefaultHeader("Authorization", "Basic " + encoded);
+#endif
+    } else {
+        HttpClient client;
+
+        // Add authentication if needed
+        if (!s_authUsername.empty() && !s_authPassword.empty()) {
+            std::string credentials = s_authUsername + ":" + s_authPassword;
+            static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            std::string encoded;
+            int val = 0, valb = -6;
+            for (unsigned char c : credentials) {
+                val = (val << 8) + c;
+                valb += 8;
+                while (valb >= 0) {
+                    encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                    valb -= 6;
+                }
+            }
+            if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+            while (encoded.size() % 4) encoded.push_back('=');
+            client.setDefaultHeader("Authorization", "Basic " + encoded);
+        }
+
+        HttpResponse resp = client.get(url);
+        if (resp.success && !resp.body.empty()) {
+            imageData = std::move(resp.body);
+            loadSuccess = true;
+        }
     }
 
-    HttpResponse resp = client.get(url);
-
-    if (!resp.success || resp.body.empty()) {
+    if (!loadSuccess || imageData.empty()) {
         brls::Logger::warning("ImageLoader::getImageDimensions: failed to fetch {}", url);
         return false;
     }
 
     // Check format and get dimensions
-    if (resp.body.size() < 12) return false;
+    if (imageData.size() < 12) return false;
 
-    unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
+    unsigned char* data = reinterpret_cast<unsigned char*>(imageData.data());
 
     // WebP
     if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
         data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
-        if (WebPGetInfo(data, resp.body.size(), &width, &height)) {
+        if (WebPGetInfo(data, imageData.size(), &width, &height)) {
             suggestedSegments = calculateSegments(width, height, MAX_TEXTURE_SIZE);
             brls::Logger::info("ImageLoader: WebP {}x{} -> {} segments", width, height, suggestedSegments);
             return true;
@@ -820,7 +915,7 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
     }
     // PNG - dimensions at bytes 16-23
     else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
-        if (resp.body.size() >= 24) {
+        if (imageData.size() >= 24) {
             width = (data[16] << 24) | (data[17] << 16) | (data[18] << 8) | data[19];
             height = (data[20] << 24) | (data[21] << 16) | (data[22] << 8) | data[23];
             suggestedSegments = calculateSegments(width, height, MAX_TEXTURE_SIZE);
@@ -832,7 +927,7 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
     else if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
         // Simple JPEG parser - look for SOF0/SOF2 markers
         size_t i = 2;
-        while (i + 8 < resp.body.size()) {
+        while (i + 8 < imageData.size()) {
             if (data[i] != 0xFF) {
                 i++;
                 continue;
