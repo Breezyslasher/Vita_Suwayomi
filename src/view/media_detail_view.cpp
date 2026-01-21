@@ -665,12 +665,17 @@ void MangaDetailView::downloadAllChapters() {
 
     // Get download mode setting
     DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+    brls::Logger::info("MangaDetailView: Download mode = {} (0=Server, 1=Local, 2=Both)",
+                       static_cast<int>(downloadMode));
+
     int mangaId = m_manga.id;
     std::string mangaTitle = m_manga.title;
 
     asyncRun([this, downloadMode, mangaId, mangaTitle]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         DownloadsManager& localMgr = DownloadsManager::getInstance();
+
+        brls::Logger::info("MangaDetailView: In async, download mode = {}", static_cast<int>(downloadMode));
 
         // Collect chapter info
         std::vector<int> chapterIds;
@@ -681,6 +686,8 @@ void MangaDetailView::downloadAllChapters() {
                 chapterPairs.push_back({ch.id, ch.index});
             }
         }
+
+        brls::Logger::info("MangaDetailView: Found {} chapters to download", chapterIds.size());
 
         if (chapterIds.empty()) {
             brls::sync([]() {
@@ -694,20 +701,26 @@ void MangaDetailView::downloadAllChapters() {
 
         // Queue to server if SERVER_ONLY or BOTH
         if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
+            brls::Logger::info("MangaDetailView: Queueing to SERVER");
             if (client.queueChapterDownloads(chapterIds)) {
                 client.startDownloads();
+                brls::Logger::info("MangaDetailView: Server queue SUCCESS");
             } else {
                 serverSuccess = false;
+                brls::Logger::error("MangaDetailView: Server queue FAILED");
             }
         }
 
         // Queue to local if LOCAL_ONLY or BOTH
         if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
+            brls::Logger::info("MangaDetailView: Queueing to LOCAL");
             localMgr.init();
             if (localMgr.queueChaptersDownload(mangaId, chapterPairs, mangaTitle)) {
                 localMgr.startDownloads();
+                brls::Logger::info("MangaDetailView: Local queue SUCCESS");
             } else {
                 localSuccess = false;
+                brls::Logger::error("MangaDetailView: Local queue FAILED");
             }
         }
 

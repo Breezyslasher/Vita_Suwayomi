@@ -439,8 +439,9 @@ void SettingsTab::createDownloadsSection() {
     downloadModeSelector->init("Download Location",
         {"Server Only", "Local Only", "Both"},
         static_cast<int>(settings.downloadMode),
-        [&settings](int index) {
-            settings.downloadMode = static_cast<DownloadMode>(index);
+        [](int index) {
+            brls::Logger::info("SettingsTab: Download mode changed to {} (0=Server, 1=Local, 2=Both)", index);
+            Application::getInstance().getSettings().downloadMode = static_cast<DownloadMode>(index);
             Application::getInstance().saveSettings();
         });
     m_contentBox->addView(downloadModeSelector);

@@ -343,7 +343,9 @@ bool Application::loadSettings() {
     m_settings.cacheCoverImages = extractBool("cacheCoverImages", true);
 
     // Load download settings
-    m_settings.downloadMode = static_cast<DownloadMode>(extractInt("downloadMode"));
+    int downloadModeInt = extractInt("downloadMode");
+    m_settings.downloadMode = static_cast<DownloadMode>(downloadModeInt);
+    brls::Logger::info("loadSettings: downloadMode = {} (0=Server, 1=Local, 2=Both)", downloadModeInt);
     m_settings.autoDownloadChapters = extractBool("autoDownloadChapters", false);
     m_settings.downloadOverWifiOnly = extractBool("downloadOverWifiOnly", true);
     m_settings.maxConcurrentDownloads = extractInt("maxConcurrentDownloads");
