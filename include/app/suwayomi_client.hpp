@@ -223,6 +223,9 @@ struct DownloadQueueItem {
     int mangaId = 0;
     std::string mangaTitle;
     std::string chapterName;
+    float chapterNumber = 0.0f;
+    int pageCount = 0;
+    int downloadedPages = 0;
     float progress = 0.0f;
     DownloadState state = DownloadState::QUEUED;
     std::string error;

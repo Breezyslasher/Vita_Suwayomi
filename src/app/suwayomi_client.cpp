@@ -2558,9 +2558,104 @@ bool SuwayomiClient::deleteChapterDownloads(int mangaId, const std::vector<int>&
 }
 
 bool SuwayomiClient::fetchDownloadQueue(std::vector<DownloadQueueItem>& queue) {
-    // Note: Download queue uses WebSocket in Suwayomi
-    // For REST, we can check download status per chapter
     queue.clear();
+
+    // Use GraphQL to fetch download queue
+    const char* graphqlQuery = R"(
+        query {
+            downloadStatus {
+                state
+                queue {
+                    chapter {
+                        id
+                        name
+                        chapterNumber
+                        pageCount
+                        manga {
+                            id
+                            title
+                        }
+                    }
+                    progress
+                    state
+                    tries
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(graphqlQuery);
+    if (response.empty()) {
+        brls::Logger::error("SuwayomiClient: Failed to fetch download queue via GraphQL");
+        return false;
+    }
+
+    // Parse the queue array from response
+    std::string queueArray = extractJsonArray(response, "queue");
+    if (queueArray.empty() || queueArray == "[]") {
+        brls::Logger::debug("SuwayomiClient: Download queue is empty");
+        return true;  // Empty queue is valid
+    }
+
+    // Parse each queue item
+    size_t pos = 0;
+    int braceCount = 0;
+    size_t itemStart = 0;
+    bool inItem = false;
+
+    for (size_t i = 0; i < queueArray.length(); i++) {
+        char c = queueArray[i];
+        if (c == '{') {
+            if (!inItem) {
+                itemStart = i;
+                inItem = true;
+            }
+            braceCount++;
+        } else if (c == '}') {
+            braceCount--;
+            if (braceCount == 0 && inItem) {
+                std::string itemJson = queueArray.substr(itemStart, i - itemStart + 1);
+
+                DownloadQueueItem item;
+
+                // Extract chapter info
+                std::string chapterJson = extractJsonObject(itemJson, "chapter");
+                if (!chapterJson.empty()) {
+                    item.chapterId = extractJsonInt(chapterJson, "id");
+                    item.chapterName = extractJsonValue(chapterJson, "name");
+                    item.chapterNumber = extractJsonFloat(chapterJson, "chapterNumber");
+                    item.pageCount = extractJsonInt(chapterJson, "pageCount");
+
+                    // Extract manga info
+                    std::string mangaJson = extractJsonObject(chapterJson, "manga");
+                    if (!mangaJson.empty()) {
+                        item.mangaId = extractJsonInt(mangaJson, "id");
+                        item.mangaTitle = extractJsonValue(mangaJson, "title");
+                    }
+                }
+
+                // Extract progress and state
+                item.progress = extractJsonFloat(itemJson, "progress");
+                item.downloadedPages = static_cast<int>(item.progress * item.pageCount);
+
+                std::string stateStr = extractJsonValue(itemJson, "state");
+                if (stateStr == "DOWNLOADING") {
+                    item.state = DownloadState::DOWNLOADING;
+                } else if (stateStr == "QUEUED") {
+                    item.state = DownloadState::QUEUED;
+                } else if (stateStr == "FINISHED") {
+                    item.state = DownloadState::DOWNLOADED;
+                } else if (stateStr == "ERROR") {
+                    item.state = DownloadState::ERROR;
+                }
+
+                queue.push_back(item);
+                inItem = false;
+            }
+        }
+    }
+
+    brls::Logger::info("SuwayomiClient: Fetched {} items in download queue", queue.size());
     return true;
 }
 
