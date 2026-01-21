@@ -555,22 +555,22 @@ void MangaDetailView::populateChaptersList() {
 void MangaDetailView::showMangaMenu() {
     brls::Dialog* dialog = new brls::Dialog("Options");
 
-    dialog->addButton("DL All", [this, dialog]() {
+    dialog->addButton("Download all chapters", [this, dialog]() {
         dialog->close();
         downloadAllChapters();
     });
 
-    dialog->addButton("Del All", [this, dialog]() {
+    dialog->addButton("Remove all chapters", [this, dialog]() {
         dialog->close();
         onDeleteDownloads();
     });
 
-    dialog->addButton("Cancel DL", [this, dialog]() {
+    dialog->addButton("Cancel downloading chapters", [this, dialog]() {
         dialog->close();
         cancelAllDownloading();
     });
 
-    dialog->addButton("Reset Cover", [this, dialog]() {
+    dialog->addButton("Reset cover", [this, dialog]() {
         dialog->close();
         resetCover();
     });
