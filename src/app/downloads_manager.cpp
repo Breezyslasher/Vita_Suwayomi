@@ -569,6 +569,84 @@ void DownloadsManager::saveStateUnlocked() {
 #endif
 }
 
+// Helper to extract int from JSON
+static int extractJsonInt(const std::string& json, const std::string& key, int defaultVal = 0) {
+    std::string searchKey = "\"" + key + "\":";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return defaultVal;
+    pos += searchKey.length();
+    // Skip whitespace
+    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\n')) pos++;
+    // Extract number
+    std::string numStr;
+    while (pos < json.length() && (isdigit(json[pos]) || json[pos] == '-')) {
+        numStr += json[pos++];
+    }
+    return numStr.empty() ? defaultVal : std::stoi(numStr);
+}
+
+// Helper to extract float from JSON
+static float extractJsonFloat(const std::string& json, const std::string& key, float defaultVal = 0.0f) {
+    std::string searchKey = "\"" + key + "\":";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return defaultVal;
+    pos += searchKey.length();
+    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\n')) pos++;
+    std::string numStr;
+    while (pos < json.length() && (isdigit(json[pos]) || json[pos] == '-' || json[pos] == '.')) {
+        numStr += json[pos++];
+    }
+    return numStr.empty() ? defaultVal : std::stof(numStr);
+}
+
+// Helper to extract string from JSON
+static std::string extractJsonString(const std::string& json, const std::string& key) {
+    std::string searchKey = "\"" + key + "\":\"";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return "";
+    pos += searchKey.length();
+    std::string result;
+    while (pos < json.length() && json[pos] != '"') {
+        if (json[pos] == '\\' && pos + 1 < json.length()) {
+            pos++;
+            if (json[pos] == 'n') result += '\n';
+            else if (json[pos] == 't') result += '\t';
+            else if (json[pos] == '"') result += '"';
+            else if (json[pos] == '\\') result += '\\';
+            else result += json[pos];
+        } else {
+            result += json[pos];
+        }
+        pos++;
+    }
+    return result;
+}
+
+// Helper to extract bool from JSON
+static bool extractJsonBool(const std::string& json, const std::string& key, bool defaultVal = false) {
+    std::string searchKey = "\"" + key + "\":";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return defaultVal;
+    pos += searchKey.length();
+    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\n')) pos++;
+    if (pos + 4 <= json.length() && json.substr(pos, 4) == "true") return true;
+    if (pos + 5 <= json.length() && json.substr(pos, 5) == "false") return false;
+    return defaultVal;
+}
+
+// Helper to find matching bracket
+static size_t findMatchingBracket(const std::string& json, size_t start, char open, char close) {
+    int depth = 1;
+    for (size_t i = start; i < json.length(); i++) {
+        if (json[i] == open) depth++;
+        else if (json[i] == close) {
+            depth--;
+            if (depth == 0) return i;
+        }
+    }
+    return std::string::npos;
+}
+
 void DownloadsManager::loadState() {
 #ifdef __vita__
     SceUID fd = sceIoOpen(STATE_FILE_PATH, SCE_O_RDONLY, 0);
@@ -592,14 +670,125 @@ void DownloadsManager::loadState() {
 
     brls::Logger::debug("DownloadsManager: Loading state ({} bytes)", content.length());
 
-    // Simple JSON parsing - basic implementation
     m_downloads.clear();
 
     // Find downloads array
     size_t pos = content.find("\"downloads\":");
+    if (pos == std::string::npos) {
+        brls::Logger::warning("DownloadsManager: No downloads key found in state");
+        return;
+    }
+
+    // Find the opening bracket of downloads array
+    pos = content.find('[', pos);
     if (pos == std::string::npos) return;
 
-    brls::Logger::info("DownloadsManager: State loaded");
+    size_t arrayEnd = findMatchingBracket(content, pos + 1, '[', ']');
+    if (arrayEnd == std::string::npos) return;
+
+    std::string downloadsArray = content.substr(pos + 1, arrayEnd - pos - 1);
+
+    // Parse each manga object in the downloads array
+    size_t mangaStart = 0;
+    while ((mangaStart = downloadsArray.find('{', mangaStart)) != std::string::npos) {
+        size_t mangaEnd = findMatchingBracket(downloadsArray, mangaStart + 1, '{', '}');
+        if (mangaEnd == std::string::npos) break;
+
+        std::string mangaJson = downloadsArray.substr(mangaStart, mangaEnd - mangaStart + 1);
+
+        DownloadItem item;
+        item.mangaId = extractJsonInt(mangaJson, "mangaId");
+        item.title = extractJsonString(mangaJson, "title");
+        item.author = extractJsonString(mangaJson, "author");
+        item.localPath = extractJsonString(mangaJson, "localPath");
+        item.localCoverPath = extractJsonString(mangaJson, "localCoverPath");
+        item.state = static_cast<LocalDownloadState>(extractJsonInt(mangaJson, "state"));
+        item.totalBytes = extractJsonInt(mangaJson, "totalBytes");
+        item.lastChapterRead = extractJsonInt(mangaJson, "lastChapterRead");
+        item.lastPageRead = extractJsonInt(mangaJson, "lastPageRead");
+        item.lastReadTime = extractJsonInt(mangaJson, "lastReadTime");
+
+        // Parse chapters array
+        size_t chaptersPos = mangaJson.find("\"chapters\":");
+        if (chaptersPos != std::string::npos) {
+            size_t chaptersStart = mangaJson.find('[', chaptersPos);
+            if (chaptersStart != std::string::npos) {
+                size_t chaptersEnd = findMatchingBracket(mangaJson, chaptersStart + 1, '[', ']');
+                if (chaptersEnd != std::string::npos) {
+                    std::string chaptersArray = mangaJson.substr(chaptersStart + 1, chaptersEnd - chaptersStart - 1);
+
+                    size_t chStart = 0;
+                    while ((chStart = chaptersArray.find('{', chStart)) != std::string::npos) {
+                        size_t chEnd = findMatchingBracket(chaptersArray, chStart + 1, '{', '}');
+                        if (chEnd == std::string::npos) break;
+
+                        std::string chJson = chaptersArray.substr(chStart, chEnd - chStart + 1);
+
+                        DownloadedChapter chapter;
+                        chapter.chapterId = extractJsonInt(chJson, "chapterId");
+                        chapter.chapterIndex = extractJsonInt(chJson, "chapterIndex");
+                        chapter.name = extractJsonString(chJson, "name");
+                        chapter.chapterNumber = extractJsonFloat(chJson, "chapterNumber");
+                        chapter.localPath = extractJsonString(chJson, "localPath");
+                        chapter.pageCount = extractJsonInt(chJson, "pageCount");
+                        chapter.downloadedPages = extractJsonInt(chJson, "downloadedPages");
+                        chapter.state = static_cast<LocalDownloadState>(extractJsonInt(chJson, "state"));
+                        chapter.lastPageRead = extractJsonInt(chJson, "lastPageRead");
+
+                        // Parse pages array
+                        size_t pagesPos = chJson.find("\"pages\":");
+                        if (pagesPos != std::string::npos) {
+                            size_t pagesStart = chJson.find('[', pagesPos);
+                            if (pagesStart != std::string::npos) {
+                                size_t pagesEnd = findMatchingBracket(chJson, pagesStart + 1, '[', ']');
+                                if (pagesEnd != std::string::npos) {
+                                    std::string pagesArray = chJson.substr(pagesStart + 1, pagesEnd - pagesStart - 1);
+
+                                    size_t pgStart = 0;
+                                    while ((pgStart = pagesArray.find('{', pgStart)) != std::string::npos) {
+                                        size_t pgEnd = pagesArray.find('}', pgStart);
+                                        if (pgEnd == std::string::npos) break;
+
+                                        std::string pgJson = pagesArray.substr(pgStart, pgEnd - pgStart + 1);
+
+                                        DownloadedPage page;
+                                        page.index = extractJsonInt(pgJson, "index");
+                                        page.localPath = extractJsonString(pgJson, "localPath");
+                                        page.size = extractJsonInt(pgJson, "size");
+                                        page.downloaded = extractJsonBool(pgJson, "downloaded");
+
+                                        chapter.pages.push_back(page);
+                                        pgStart = pgEnd + 1;
+                                    }
+                                }
+                            }
+                        }
+
+                        item.chapters.push_back(chapter);
+                        chStart = chEnd + 1;
+                    }
+                }
+            }
+        }
+
+        item.totalChapters = static_cast<int>(item.chapters.size());
+        item.completedChapters = 0;
+        for (const auto& ch : item.chapters) {
+            if (ch.state == LocalDownloadState::COMPLETED) {
+                item.completedChapters++;
+            }
+        }
+
+        if (item.mangaId > 0) {
+            m_downloads.push_back(item);
+            brls::Logger::debug("DownloadsManager: Loaded manga {} with {} chapters",
+                               item.mangaId, item.chapters.size());
+        }
+
+        mangaStart = mangaEnd + 1;
+    }
+
+    brls::Logger::info("DownloadsManager: State loaded with {} downloads", m_downloads.size());
 #endif
 }
 

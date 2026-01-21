@@ -723,6 +723,14 @@ void MangaDetailView::downloadAllChapters() {
         if (!localChapterPairs.empty()) {
             brls::Logger::info("MangaDetailView: Queueing {} to LOCAL", localChapterPairs.size());
             if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
+                // Set progress callback for UI updates
+                localMgr.setProgressCallback([](int downloaded, int total) {
+                    brls::sync([downloaded, total]() {
+                        std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
+                        brls::Application::notify(msg);
+                    });
+                });
+
                 // Set up completion callback to refresh UI when each chapter finishes
                 localMgr.setChapterCompletionCallback([this, mangaId](int completedMangaId, int chapterIndex, bool success) {
                     if (completedMangaId == mangaId) {
@@ -827,6 +835,14 @@ void MangaDetailView::downloadUnreadChapters() {
 
         if (!localChapterPairs.empty()) {
             if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
+                // Set progress callback for UI updates
+                localMgr.setProgressCallback([](int downloaded, int total) {
+                    brls::sync([downloaded, total]() {
+                        std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
+                        brls::Application::notify(msg);
+                    });
+                });
+
                 // Set up completion callback to refresh UI when each chapter finishes
                 localMgr.setChapterCompletionCallback([this, mangaId](int completedMangaId, int chapterIndex, bool success) {
                     if (completedMangaId == mangaId) {
