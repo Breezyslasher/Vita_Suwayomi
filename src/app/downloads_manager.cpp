@@ -759,7 +759,9 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
         brls::Logger::info("DownloadsManager: Starting page downloads to {}", chapterDir);
 
         // Download each page
-        for (const auto& page : pages) {
+        for (size_t i = 0; i < pages.size(); i++) {
+            const auto& page = pages[i];
+
             if (!m_downloading) {
                 // Download was paused/cancelled
                 brls::Logger::info("DownloadsManager: Download paused/cancelled");
@@ -775,6 +777,10 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
             // Use the page's imageUrl that was already fetched
             std::string imageUrl = page.imageUrl;
             brls::Logger::info("DownloadsManager: Downloading page {} of {}", page.index + 1, pages.size());
+
+            // Longer delay BEFORE download to let system stabilize
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
             if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, downloadedPage.localPath)) {
                 downloadedPage.downloaded = true;
                 chapter.downloadedPages++;
@@ -790,8 +796,8 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
                 m_progressCallback(chapter.downloadedPages, chapter.pageCount);
             }
 
-            // Small delay between downloads to prevent memory exhaustion on Vita
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            // Delay AFTER download to prevent memory exhaustion on Vita
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
         }
 
         // Mark as completed if all pages downloaded
@@ -883,19 +889,24 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
                 "/chapter_" + std::to_string(chapterIndex) +
                 "/page_" + std::to_string(pageIndex) + ".jpg";
 
+    brls::Logger::debug("DownloadsManager: Writing {} bytes to {}", resp.body.size(), localPath);
+
     SceUID fd = sceIoOpen(localPath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
     if (fd >= 0) {
-        sceIoWrite(fd, resp.body.data(), resp.body.size());
+        SceSSize written = sceIoWrite(fd, resp.body.data(), resp.body.size());
         sceIoClose(fd);
+
         // Clear response body to free memory immediately
-        resp.body.clear();
-        resp.body.shrink_to_fit();
-        return true;
+        std::string().swap(resp.body);  // Force deallocation
+
+        if (written > 0) {
+            brls::Logger::debug("DownloadsManager: Wrote {} bytes", written);
+            return true;
+        }
     }
 
     // Clear response body to free memory
-    resp.body.clear();
-    resp.body.shrink_to_fit();
+    std::string().swap(resp.body);  // Force deallocation
     return false;
 #else
     localPath = "/tmp/page_" + std::to_string(pageIndex) + ".jpg";
