@@ -620,8 +620,9 @@ std::string DownloadsManager::downloadCoverImage(int mangaId, const std::string&
         return localPath;
     }
 
-    // Download cover
-    HttpClient http;
+    // Download cover using authenticated HTTP client
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    HttpClient http = client.createHttpClient();
     HttpResponse resp = http.get(coverUrl);
 
     if (!resp.success || resp.body.empty()) {
@@ -786,7 +787,9 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
                                      const std::string& imageUrl, std::string& localPath) {
     if (imageUrl.empty()) return false;
 
-    HttpClient http;
+    // Use SuwayomiClient's HTTP client which includes authentication headers
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    HttpClient http = client.createHttpClient();
     HttpResponse resp = http.get(imageUrl);
 
     if (!resp.success || resp.body.empty()) {
