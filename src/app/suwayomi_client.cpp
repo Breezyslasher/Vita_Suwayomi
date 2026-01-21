@@ -2532,23 +2532,10 @@ bool SuwayomiClient::deleteChapterDownload(int mangaId, int chapterIndex) {
     return response.success && response.statusCode == 200;
 }
 
-bool SuwayomiClient::queueChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes) {
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
-
-    std::string url = buildApiUrl("/download/batch");
-
-    std::string chapterList;
-    for (size_t i = 0; i < chapterIndexes.size(); i++) {
-        if (i > 0) chapterList += ",";
-        chapterList += "{\"mangaId\":" + std::to_string(mangaId) +
-                       ",\"chapterIndex\":" + std::to_string(chapterIndexes[i]) + "}";
-    }
-
-    std::string body = "{\"chapterIds\":[" + chapterList + "]}";
-    vitasuwayomi::HttpResponse response = http.post(url, body);
-
-    return response.success && response.statusCode == 200;
+bool SuwayomiClient::queueChapterDownloads(const std::vector<int>& chapterIds) {
+    // Use GraphQL API which expects actual chapter IDs
+    brls::Logger::info("SuwayomiClient: Queueing {} chapters for download", chapterIds.size());
+    return enqueueChapterDownloadsGraphQL(chapterIds);
 }
 
 bool SuwayomiClient::deleteChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes) {

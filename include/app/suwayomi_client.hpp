@@ -359,7 +359,7 @@ public:
     // Download Management
     bool queueChapterDownload(int mangaId, int chapterIndex);
     bool deleteChapterDownload(int mangaId, int chapterIndex);
-    bool queueChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes);
+    bool queueChapterDownloads(const std::vector<int>& chapterIds);  // Uses chapter IDs for GraphQL API
     bool deleteChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes);
     bool fetchDownloadQueue(std::vector<DownloadQueueItem>& queue);
     bool startDownloads();

@@ -666,17 +666,25 @@ void MangaDetailView::downloadAllChapters() {
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        std::vector<int> chapterIndexes;
+        // Collect chapter IDs (not indexes) for the GraphQL API
+        std::vector<int> chapterIds;
         for (const auto& ch : m_chapters) {
             if (!ch.downloaded) {
-                chapterIndexes.push_back(ch.index);
+                chapterIds.push_back(ch.id);
             }
         }
 
-        if (client.queueChapterDownloads(m_manga.id, chapterIndexes)) {
+        if (chapterIds.empty()) {
+            brls::sync([]() {
+                brls::Application::notify("No chapters to download");
+            });
+            return;
+        }
+
+        if (client.queueChapterDownloads(chapterIds)) {
             client.startDownloads();
-            brls::sync([chapterIndexes]() {
-                brls::Application::notify("Queued " + std::to_string(chapterIndexes.size()) + " chapters");
+            brls::sync([chapterIds]() {
+                brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " chapters");
             });
         } else {
             brls::sync([]() {
@@ -693,17 +701,25 @@ void MangaDetailView::downloadUnreadChapters() {
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        std::vector<int> chapterIndexes;
+        // Collect chapter IDs (not indexes) for the GraphQL API
+        std::vector<int> chapterIds;
         for (const auto& ch : m_chapters) {
             if (!ch.downloaded && !ch.read) {
-                chapterIndexes.push_back(ch.index);
+                chapterIds.push_back(ch.id);
             }
         }
 
-        if (client.queueChapterDownloads(m_manga.id, chapterIndexes)) {
+        if (chapterIds.empty()) {
+            brls::sync([]() {
+                brls::Application::notify("No unread chapters to download");
+            });
+            return;
+        }
+
+        if (client.queueChapterDownloads(chapterIds)) {
             client.startDownloads();
-            brls::sync([chapterIndexes]() {
-                brls::Application::notify("Queued " + std::to_string(chapterIndexes.size()) + " chapters");
+            brls::sync([chapterIds]() {
+                brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " chapters");
             });
         } else {
             brls::sync([]() {
