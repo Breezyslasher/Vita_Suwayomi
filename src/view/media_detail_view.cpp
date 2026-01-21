@@ -29,6 +29,20 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         return true;
     }, false, false, brls::Sound::SOUND_BACK);
 
+    // Register R trigger for sort toggle
+    this->registerAction("Sort", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
+        m_sortDescending = !m_sortDescending;
+        updateSortIcon();
+        populateChaptersList();
+        return true;
+    });
+
+    // Register Start button for options menu
+    this->registerAction("Options", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        showMangaMenu();
+        return true;
+    });
+
     // ========== LEFT PANEL: Cover + Action Buttons (260px) ==========
     auto* leftPanel = new brls::Box();
     leftPanel->setAxis(brls::Axis::COLUMN);
@@ -541,23 +555,24 @@ void MangaDetailView::populateChaptersList() {
 void MangaDetailView::showMangaMenu() {
     brls::Dialog* dialog = new brls::Dialog("Options");
 
-    dialog->addButton("All Read", [this, dialog]() {
+    dialog->addButton("DL All", [this, dialog]() {
         dialog->close();
-        markAllRead();
+        downloadAllChapters();
     });
 
-    dialog->addButton("All Unread", [this, dialog]() {
-        dialog->close();
-        markAllUnread();
-    });
-
-    dialog->addButton("Del DL", [this, dialog]() {
+    dialog->addButton("Del All", [this, dialog]() {
         dialog->close();
         onDeleteDownloads();
     });
 
-    dialog->addButton("Close", [dialog]() {
+    dialog->addButton("Cancel DL", [this, dialog]() {
         dialog->close();
+        cancelAllDownloading();
+    });
+
+    dialog->addButton("Reset Cover", [this, dialog]() {
+        dialog->close();
+        resetCover();
     });
 
     dialog->open();
@@ -922,6 +937,73 @@ void MangaDetailView::updateSortIcon() {
         : "app0:resources/icons/sort-1-9.png";
 
     m_sortIcon->setImageFromFile(iconPath);
+}
+
+void MangaDetailView::cancelAllDownloading() {
+    brls::Logger::info("MangaDetailView: Cancelling all downloading chapters");
+
+    asyncRun([this]() {
+        DownloadsManager& dm = DownloadsManager::getInstance();
+
+        int cancelledCount = 0;
+        for (const auto& ch : m_chapters) {
+            DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, ch.index);
+            if (localCh && (localCh->state == LocalDownloadState::QUEUED ||
+                           localCh->state == LocalDownloadState::DOWNLOADING)) {
+                if (dm.cancelChapterDownload(m_manga.id, ch.index)) {
+                    cancelledCount++;
+                }
+            }
+        }
+
+        // Pause the download manager to stop any active downloads
+        dm.pauseDownloads();
+
+        brls::sync([this, cancelledCount]() {
+            if (cancelledCount > 0) {
+                brls::Application::notify("Cancelled " + std::to_string(cancelledCount) + " downloads");
+            } else {
+                brls::Application::notify("No active downloads to cancel");
+            }
+            loadChapters();  // Refresh chapter list
+        });
+    });
+}
+
+void MangaDetailView::resetCover() {
+    brls::Logger::info("MangaDetailView: Resetting cover for manga {}", m_manga.id);
+
+    asyncRun([this]() {
+        DownloadsManager& dm = DownloadsManager::getInstance();
+        dm.init();
+
+        // Get the manga download item to find and delete local cover
+        DownloadItem* mangaDl = dm.getMangaDownload(m_manga.id);
+        if (mangaDl && !mangaDl->localCoverPath.empty()) {
+            // Delete the local cover file
+            brls::Logger::info("MangaDetailView: Deleting local cover at {}", mangaDl->localCoverPath);
+            // The cover will be re-downloaded next time it's loaded
+            mangaDl->localCoverPath = "";
+            dm.saveState();
+        }
+
+        // Re-download cover from server
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::string coverUrl = client.getMangaThumbnailUrl(m_manga.id);
+
+        brls::sync([this, coverUrl]() {
+            brls::Application::notify("Refreshing cover...");
+
+            // Reload cover image from server
+            if (m_coverImage && !coverUrl.empty()) {
+                ImageLoader::loadAsync(coverUrl, [](brls::Image* image) {
+                    brls::Logger::debug("MangaDetailView: Cover refreshed");
+                }, m_coverImage);
+            }
+
+            brls::Application::notify("Cover reset");
+        });
+    });
 }
 
 } // namespace vitasuwayomi

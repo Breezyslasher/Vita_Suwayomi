@@ -93,6 +93,12 @@ private:
 
     // Helper to update sort icon
     void updateSortIcon();
+
+    // Cancel all downloading chapters (keep completed)
+    void cancelAllDownloading();
+
+    // Reset cover image
+    void resetCover();
 };
 
 // Alias for backward compatibility
