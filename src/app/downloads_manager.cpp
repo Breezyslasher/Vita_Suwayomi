@@ -778,9 +778,6 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
             std::string imageUrl = page.imageUrl;
             brls::Logger::info("DownloadsManager: Downloading page {} of {}", page.index + 1, pages.size());
 
-            // Longer delay BEFORE download to let system stabilize
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
             if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, downloadedPage.localPath)) {
                 downloadedPage.downloaded = true;
                 chapter.downloadedPages++;
@@ -796,8 +793,8 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
                 m_progressCallback(chapter.downloadedPages, chapter.pageCount);
             }
 
-            // Delay AFTER download to prevent memory exhaustion on Vita
-            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            // Small delay between downloads to avoid overwhelming the system
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
 
         // Mark as completed if all pages downloaded
@@ -849,7 +846,12 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
         return false;
     }
 
-    brls::Logger::debug("DownloadsManager: Downloading page {} from {}", pageIndex, imageUrl);
+    // Construct local path
+    localPath = m_downloadsPath + "/manga_" + std::to_string(mangaId) +
+                "/chapter_" + std::to_string(chapterIndex) +
+                "/page_" + std::to_string(pageIndex) + ".jpg";
+
+    brls::Logger::debug("DownloadsManager: Downloading page {} from {} to {}", pageIndex, imageUrl, localPath);
 
     // Create HTTP client with authentication (same approach as ImageLoader)
     HttpClient http;
@@ -875,43 +877,14 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
         http.setDefaultHeader("Authorization", "Basic " + encoded);
     }
 
-    HttpResponse resp = http.get(imageUrl);
-
-    if (!resp.success || resp.body.empty()) {
-        brls::Logger::error("DownloadsManager: Failed to download page {} from {}",
-                           pageIndex, imageUrl);
-        return false;
+    // Stream directly to file - no memory buffering (like NOBORU does)
+    if (http.downloadToFile(imageUrl, localPath)) {
+        brls::Logger::debug("DownloadsManager: Page {} downloaded successfully", pageIndex);
+        return true;
     }
 
-#ifdef __vita__
-    // Construct local path
-    localPath = m_downloadsPath + "/manga_" + std::to_string(mangaId) +
-                "/chapter_" + std::to_string(chapterIndex) +
-                "/page_" + std::to_string(pageIndex) + ".jpg";
-
-    brls::Logger::debug("DownloadsManager: Writing {} bytes to {}", resp.body.size(), localPath);
-
-    SceUID fd = sceIoOpen(localPath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-    if (fd >= 0) {
-        SceSSize written = sceIoWrite(fd, resp.body.data(), resp.body.size());
-        sceIoClose(fd);
-
-        // Clear response body to free memory immediately
-        std::string().swap(resp.body);  // Force deallocation
-
-        if (written > 0) {
-            brls::Logger::debug("DownloadsManager: Wrote {} bytes", written);
-            return true;
-        }
-    }
-
-    // Clear response body to free memory
-    std::string().swap(resp.body);  // Force deallocation
+    brls::Logger::error("DownloadsManager: Failed to download page {} from {}", pageIndex, imageUrl);
     return false;
-#else
-    localPath = "/tmp/page_" + std::to_string(pageIndex) + ".jpg";
-    return true;
-#endif
 }
 
 std::string DownloadsManager::createMangaDir(int mangaId, const std::string& title) {

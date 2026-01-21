@@ -72,6 +72,9 @@ public:
     using SizeCallback = std::function<void(int64_t totalSize)>;
     bool downloadFile(const std::string& url, WriteCallback writeCallback, SizeCallback sizeCallback = nullptr);
 
+    // Download directly to file (streams to disk, no memory buffering)
+    bool downloadToFile(const std::string& url, const std::string& filePath);
+
     // URL encoding
     static std::string urlEncode(const std::string& str);
     static std::string urlDecode(const std::string& str);

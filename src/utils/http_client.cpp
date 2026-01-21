@@ -10,6 +10,10 @@
 #include <cstdio>
 #include <cctype>
 
+#ifdef __vita__
+#include <psp2/io/fcntl.h>
+#endif
+
 namespace vitasuwayomi {
 
 // User agent string
@@ -438,6 +442,51 @@ bool HttpClient::downloadFile(const std::string& url, WriteCallback writeCallbac
         brls::Logger::error("HttpClient: Download failed: {}", curl_easy_strerror(res));
         return false;
     }
+}
+
+bool HttpClient::downloadToFile(const std::string& url, const std::string& filePath) {
+#ifdef __vita__
+    // Open file for writing
+    SceUID fd = sceIoOpen(filePath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
+    if (fd < 0) {
+        brls::Logger::error("HttpClient: Failed to open file for writing: {}", filePath);
+        return false;
+    }
+
+    bool success = downloadFile(url, [fd](const char* data, size_t size) -> bool {
+        SceSSize written = sceIoWrite(fd, data, size);
+        return written == (SceSSize)size;
+    });
+
+    sceIoClose(fd);
+
+    if (!success) {
+        // Delete partial file on failure
+        sceIoRemove(filePath.c_str());
+    }
+
+    return success;
+#else
+    // Non-Vita: use standard file operations
+    FILE* fp = fopen(filePath.c_str(), "wb");
+    if (!fp) {
+        brls::Logger::error("HttpClient: Failed to open file for writing: {}", filePath);
+        return false;
+    }
+
+    bool success = downloadFile(url, [fp](const char* data, size_t size) -> bool {
+        size_t written = fwrite(data, 1, size, fp);
+        return written == size;
+    });
+
+    fclose(fp);
+
+    if (!success) {
+        remove(filePath.c_str());
+    }
+
+    return success;
+#endif
 }
 
 } // namespace vitasuwayomi
