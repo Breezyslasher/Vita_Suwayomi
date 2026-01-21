@@ -531,6 +531,12 @@ void MangaDetailView::populateChaptersList() {
             return true;
         });
 
+        // Select button to start reading
+        chapterRow->registerAction("Read", brls::ControllerButton::BUTTON_BACK, [this, capturedChapter](brls::View* view) {
+            onChapterSelected(capturedChapter);
+            return true;
+        });
+
         // Touch support - tap to open chapter
         chapterRow->addGestureRecognizer(new brls::TapGestureRecognizer(chapterRow));
 
