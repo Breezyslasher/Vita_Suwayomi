@@ -8,10 +8,21 @@
 #include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
+#include "view/webtoon_scroll_view.hpp"
 
 #include <borealis.hpp>
 #include <cmath>
 #include <chrono>
+
+// Register WebtoonScrollView for XML creation
+namespace {
+    struct RegisterWebtoonScrollView {
+        RegisterWebtoonScrollView() {
+            brls::Application::registerXMLView("WebtoonScrollView", vitasuwayomi::WebtoonScrollView::create);
+        }
+    };
+    static RegisterWebtoonScrollView __registerWebtoonScrollView;
+}
 
 namespace vitasuwayomi {
 
@@ -545,7 +556,12 @@ void ReaderActivity::onContentAvailable() {
             saveSettingsToApp();
             updateSettingsLabels();
 
-            // Reload pages for page splitting change
+            // Clear the webtoon scroll view if switching away from webtoon
+            if (webtoonScroll && !m_settings.isWebtoonFormat) {
+                webtoonScroll->clearPages();
+            }
+
+            // Reload pages for page splitting and mode change
             m_pages.clear();
             loadPages();
             return true;
@@ -710,7 +726,7 @@ void ReaderActivity::loadPages() {
         m_totalChapters = static_cast<int>(m_chapters.size());
 
         return true;
-    }, [this](bool success) {
+    }, [this, isWebtoonMode](bool success) {
         if (!success || m_pages.empty()) {
             brls::Logger::error("No pages to display");
 
@@ -738,8 +754,52 @@ void ReaderActivity::loadPages() {
         m_currentPage = std::min(m_startPage, static_cast<int>(m_pages.size()) - 1);
         m_currentPage = std::max(0, m_currentPage);
 
+        // Check if we should use continuous scroll mode for webtoon
+        if (isWebtoonMode) {
+            m_continuousScrollMode = true;
+
+            // Hide single-page views, show scroll view
+            if (pageImage) {
+                pageImage->setVisibility(brls::Visibility::GONE);
+            }
+            if (previewImage) {
+                previewImage->setVisibility(brls::Visibility::GONE);
+            }
+            if (webtoonScroll) {
+                webtoonScroll->setVisibility(brls::Visibility::VISIBLE);
+                webtoonScroll->setSidePadding(m_settings.webtoonSidePadding);
+
+                // Set up progress callback
+                webtoonScroll->setProgressCallback([this](int currentPage, int totalPages, float scrollPercent) {
+                    m_currentPage = currentPage;
+                    updatePageDisplay();
+                    updateProgress();
+                });
+
+                // Set up tap callback to toggle controls
+                webtoonScroll->setTapCallback([this]() {
+                    toggleControls();
+                });
+
+                // Load all pages into the scroll view
+                webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
+                webtoonScroll->scrollToPage(m_currentPage);
+            }
+        } else {
+            m_continuousScrollMode = false;
+
+            // Use single-page mode
+            if (webtoonScroll) {
+                webtoonScroll->setVisibility(brls::Visibility::GONE);
+            }
+            if (pageImage) {
+                pageImage->setVisibility(brls::Visibility::VISIBLE);
+            }
+
+            loadPage(m_currentPage);
+        }
+
         updatePageDisplay();
-        loadPage(m_currentPage);
     });
 }
 
@@ -1462,6 +1522,63 @@ void ReaderActivity::preloadNextChapter() {
             }
         }
     });
+}
+
+void ReaderActivity::updateReaderMode() {
+    // Determine if we should use continuous scroll mode
+    // Continuous scroll is used for Webtoon format
+    bool shouldUseContinuousScroll = m_settings.isWebtoonFormat;
+
+    if (shouldUseContinuousScroll == m_continuousScrollMode) {
+        return;  // Mode hasn't changed
+    }
+
+    m_continuousScrollMode = shouldUseContinuousScroll;
+
+    brls::Logger::info("ReaderActivity: Switching to {} mode",
+                       m_continuousScrollMode ? "continuous scroll" : "single page");
+
+    if (m_continuousScrollMode) {
+        // Switch to continuous scroll (WebtoonScrollView)
+        if (pageImage) {
+            pageImage->setVisibility(brls::Visibility::GONE);
+        }
+        if (previewImage) {
+            previewImage->setVisibility(brls::Visibility::GONE);
+        }
+        if (webtoonScroll) {
+            webtoonScroll->setVisibility(brls::Visibility::VISIBLE);
+            webtoonScroll->setSidePadding(m_settings.webtoonSidePadding);
+
+            // Set up progress callback
+            webtoonScroll->setProgressCallback([this](int currentPage, int totalPages, float scrollPercent) {
+                m_currentPage = currentPage;
+                updatePageDisplay();
+                updateProgress();
+            });
+
+            // Set up tap callback to toggle controls
+            webtoonScroll->setTapCallback([this]() {
+                toggleControls();
+            });
+
+            // Load pages into the scroll view
+            if (!m_pages.empty()) {
+                webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
+                webtoonScroll->scrollToPage(m_currentPage);
+            }
+        }
+    } else {
+        // Switch to single page mode
+        if (webtoonScroll) {
+            webtoonScroll->setVisibility(brls::Visibility::GONE);
+            webtoonScroll->clearPages();
+        }
+        if (pageImage) {
+            pageImage->setVisibility(brls::Visibility::VISIBLE);
+            loadPage(m_currentPage);
+        }
+    }
 }
 
 } // namespace vitasuwayomi
