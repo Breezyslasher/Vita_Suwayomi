@@ -156,6 +156,9 @@ SearchTab::SearchTab() {
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
+    m_contentGrid->setOnLoadMore([this]() {
+        loadNextPage();
+    });
     this->addView(m_contentGrid);
 
     // Load sources initially
@@ -398,6 +401,7 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
     brls::Logger::debug("SearchTab: Loading popular manga from source {}", sourceId);
     m_resultsLabel->setText("Loading popular manga...");
     m_currentPage = 1;
+    m_contentGrid->setHasMorePages(false);
 
     asyncRun([this, sourceId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -405,13 +409,14 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
         bool hasNextPage = false;
 
         if (client.fetchPopularManga(sourceId, 1, manga, hasNextPage)) {
-            brls::Logger::info("SearchTab: Got {} popular manga", manga.size());
+            brls::Logger::info("SearchTab: Got {} popular manga (hasNext: {})", manga.size(), hasNextPage);
 
             brls::sync([this, manga, hasNextPage]() {
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
-                m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
+                m_contentGrid->setHasMorePages(hasNextPage);
+                m_resultsLabel->setText(std::to_string(manga.size()) + " manga");
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch popular manga");
@@ -426,6 +431,7 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
     brls::Logger::debug("SearchTab: Loading latest manga from source {}", sourceId);
     m_resultsLabel->setText("Loading latest manga...");
     m_currentPage = 1;
+    m_contentGrid->setHasMorePages(false);
 
     asyncRun([this, sourceId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -433,13 +439,14 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
         bool hasNextPage = false;
 
         if (client.fetchLatestManga(sourceId, 1, manga, hasNextPage)) {
-            brls::Logger::info("SearchTab: Got {} latest manga", manga.size());
+            brls::Logger::info("SearchTab: Got {} latest manga (hasNext: {})", manga.size(), hasNextPage);
 
             brls::sync([this, manga, hasNextPage]() {
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
-                m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
+                m_contentGrid->setHasMorePages(hasNextPage);
+                m_resultsLabel->setText(std::to_string(manga.size()) + " manga");
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch latest manga");
@@ -587,6 +594,9 @@ void SearchTab::loadNextPage() {
     m_currentPage++;
     brls::Logger::debug("SearchTab: Loading page {}", m_currentPage);
 
+    // Show loading state
+    m_contentGrid->setLoading(true);
+
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
@@ -601,15 +611,30 @@ void SearchTab::loadNextPage() {
             success = client.searchManga(m_currentSourceId, m_searchQuery, m_currentPage, manga, hasNextPage);
         }
 
-        if (success) {
+        if (success && !manga.empty()) {
             brls::sync([this, manga, hasNextPage]() {
                 // Append to existing list
                 for (const auto& m : manga) {
                     m_mangaList.push_back(m);
                 }
                 m_hasNextPage = hasNextPage;
-                m_contentGrid->setDataSource(m_mangaList);
+
+                // Use appendItems instead of setDataSource
+                m_contentGrid->appendItems(manga);
+                m_contentGrid->setLoading(false);
+                m_contentGrid->setHasMorePages(hasNextPage);
                 m_resultsLabel->setText(std::to_string(m_mangaList.size()) + " manga");
+
+                brls::Logger::info("SearchTab: Loaded page {}, total {} manga (hasNext: {})",
+                                  m_currentPage, m_mangaList.size(), hasNextPage);
+            });
+        } else {
+            brls::sync([this]() {
+                m_contentGrid->setLoading(false);
+                m_contentGrid->setHasMorePages(false);
+                if (m_mangaList.empty()) {
+                    m_resultsLabel->setText("No more results");
+                }
             });
         }
     });
