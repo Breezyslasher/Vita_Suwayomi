@@ -27,7 +27,7 @@ WebtoonScrollView::~WebtoonScrollView() {
 void WebtoonScrollView::setupGestures() {
     this->setFocusable(true);
 
-    // Pan gesture for scrolling
+    // Pan gesture for scrolling (ANY axis to support rotated views)
     this->addGestureRecognizer(new brls::PanGestureRecognizer(
         [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
             if (status.state == brls::GestureState::START) {
@@ -38,11 +38,30 @@ void WebtoonScrollView::setupGestures() {
                 m_scrollVelocity = 0.0f;
                 m_lastTouchTime = std::chrono::steady_clock::now();
             } else if (status.state == brls::GestureState::STAY) {
-                // Calculate scroll delta
-                float dy = status.position.y - m_touchLast.y;
+                // Calculate raw deltas
+                float rawDx = status.position.x - m_touchLast.x;
+                float rawDy = status.position.y - m_touchLast.y;
 
-                // Update scroll position (inverted - drag down = scroll up)
-                m_scrollY += dy;
+                // Calculate scroll delta based on rotation
+                // 0°: Normal vertical scrolling (dy)
+                // 90°: Horizontal scrolling, swipe left = scroll down (-dx)
+                // 180°: Inverted vertical scrolling (-dy)
+                // 270°: Horizontal scrolling, swipe right = scroll down (dx)
+                float scrollDelta = 0.0f;
+                int rotation = static_cast<int>(m_rotationDegrees);
+
+                if (rotation == 0) {
+                    scrollDelta = rawDy;
+                } else if (rotation == 90) {
+                    scrollDelta = -rawDx;
+                } else if (rotation == 180) {
+                    scrollDelta = -rawDy;
+                } else if (rotation == 270) {
+                    scrollDelta = rawDx;
+                }
+
+                // Update scroll position
+                m_scrollY += scrollDelta;
 
                 // Clamp scroll position
                 float maxScroll = 0.0f;
@@ -55,7 +74,7 @@ void WebtoonScrollView::setupGestures() {
                 auto now = std::chrono::steady_clock::now();
                 auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastTouchTime).count();
                 if (dt > 0) {
-                    m_scrollVelocity = dy / (dt / 16.67f);  // Normalize to ~60fps
+                    m_scrollVelocity = scrollDelta / (dt / 16.67f);  // Normalize to ~60fps
                 }
 
                 m_touchLast = status.position;
@@ -81,7 +100,7 @@ void WebtoonScrollView::setupGestures() {
                 }
                 // Otherwise, momentum will be applied in onFrame()
             }
-        }, brls::PanAxis::VERTICAL));
+        }, brls::PanAxis::ANY));
 }
 
 void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWidth) {
