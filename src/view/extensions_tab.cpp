@@ -366,7 +366,8 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext, bool clickTo
     icon->setSize(brls::Size(40, 40));
     icon->setMarginRight(15);
     if (!ext.iconUrl.empty()) {
-        ImageLoader::loadAsync(ext.iconUrl, [](brls::Image* img) {
+        std::string fullIconUrl = Application::getInstance().getServerUrl() + ext.iconUrl;
+        ImageLoader::loadAsync(fullIconUrl, [](brls::Image* img) {
             brls::Logger::debug("ExtensionsTab: Extension icon loaded");
         }, icon);
     }
