@@ -590,59 +590,186 @@ void SettingsTab::showLanguageFilterDialog() {
     Application& app = Application::getInstance();
     AppSettings& settings = app.getSettings();
 
-    brls::Dialog* dialog = new brls::Dialog("Select Source Languages");
-
-    // Common languages to show
+    // All supported languages (ISO 639-1 codes used by Tachiyomi/Suwayomi extensions)
     std::vector<std::pair<std::string, std::string>> languages = {
-        {"en", "English"},
+        {"all", "All Languages"},
         {"multi", "Multi-language"},
+        {"en", "English"},
         {"ja", "Japanese"},
         {"ko", "Korean"},
         {"zh", "Chinese"},
+        {"zh-Hans", "Chinese (Simplified)"},
+        {"zh-Hant", "Chinese (Traditional)"},
         {"es", "Spanish"},
+        {"es-419", "Spanish (Latin America)"},
+        {"pt", "Portuguese"},
+        {"pt-BR", "Portuguese (Brazil)"},
         {"fr", "French"},
         {"de", "German"},
-        {"pt", "Portuguese"},
-        {"ru", "Russian"},
         {"it", "Italian"},
+        {"ru", "Russian"},
         {"ar", "Arabic"},
-        {"all", "All Languages"}
+        {"id", "Indonesian"},
+        {"th", "Thai"},
+        {"vi", "Vietnamese"},
+        {"tr", "Turkish"},
+        {"pl", "Polish"},
+        {"uk", "Ukrainian"},
+        {"nl", "Dutch"},
+        {"hi", "Hindi"},
+        {"bn", "Bengali"},
+        {"ms", "Malay"},
+        {"tl", "Filipino"},
+        {"my", "Burmese"},
+        {"bg", "Bulgarian"},
+        {"ca", "Catalan"},
+        {"cs", "Czech"},
+        {"da", "Danish"},
+        {"el", "Greek"},
+        {"fa", "Persian"},
+        {"fi", "Finnish"},
+        {"he", "Hebrew"},
+        {"hu", "Hungarian"},
+        {"lt", "Lithuanian"},
+        {"mn", "Mongolian"},
+        {"no", "Norwegian"},
+        {"ro", "Romanian"},
+        {"sr", "Serbian"},
+        {"sv", "Swedish"},
+        {"ta", "Tamil"},
+        {"te", "Telugu"},
+        {"af", "Afrikaans"},
+        {"sq", "Albanian"},
+        {"am", "Amharic"},
+        {"hy", "Armenian"},
+        {"az", "Azerbaijani"},
+        {"eu", "Basque"},
+        {"be", "Belarusian"},
+        {"bs", "Bosnian"},
+        {"hr", "Croatian"},
+        {"et", "Estonian"},
+        {"fil", "Filipino"},
+        {"gl", "Galician"},
+        {"ka", "Georgian"},
+        {"gu", "Gujarati"},
+        {"is", "Icelandic"},
+        {"kn", "Kannada"},
+        {"kk", "Kazakh"},
+        {"km", "Khmer"},
+        {"lo", "Lao"},
+        {"lv", "Latvian"},
+        {"mk", "Macedonian"},
+        {"ml", "Malayalam"},
+        {"mr", "Marathi"},
+        {"ne", "Nepali"},
+        {"pa", "Punjabi"},
+        {"si", "Sinhala"},
+        {"sk", "Slovak"},
+        {"sl", "Slovenian"},
+        {"sw", "Swahili"},
+        {"ur", "Urdu"},
+        {"uz", "Uzbek"}
     };
+
+    // Create a scrollable dialog-like view
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(500);
+    dialogBox->setHeight(400);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setCornerRadius(12);
+
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Select Source Languages");
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(15);
+    dialogBox->addView(titleLabel);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Tap languages to toggle. Select 'All' to show all.");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setMarginBottom(10);
+    dialogBox->addView(infoLabel);
+
+    // Scrollable language list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
+
+    auto* langList = new brls::Box();
+    langList->setAxis(brls::Axis::COLUMN);
 
     for (const auto& [code, name] : languages) {
         bool isEnabled = (code == "all" && settings.enabledSourceLanguages.empty()) ||
                          (code != "all" && settings.enabledSourceLanguages.count(code) > 0);
 
-        std::string label = name;
-        if (isEnabled) label = "> " + label;
+        auto* langRow = new brls::Box();
+        langRow->setAxis(brls::Axis::ROW);
+        langRow->setAlignItems(brls::AlignItems::CENTER);
+        langRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+        langRow->setPadding(8, 12, 8, 12);
+        langRow->setMarginBottom(4);
+        langRow->setCornerRadius(8);
+        langRow->setBackgroundColor(isEnabled ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+        langRow->setFocusable(true);
 
-        dialog->addButton(label, [this, code, dialog, &settings]() {
-            if (code == "all") {
-                settings.enabledSourceLanguages.clear();
+        auto* nameLabel = new brls::Label();
+        nameLabel->setText(name);
+        nameLabel->setFontSize(16);
+        langRow->addView(nameLabel);
+
+        auto* codeLabel = new brls::Label();
+        codeLabel->setText(code);
+        codeLabel->setFontSize(14);
+        codeLabel->setTextColor(nvgRGB(120, 120, 120));
+        langRow->addView(codeLabel);
+
+        std::string langCode = code;
+        langRow->registerClickAction([langCode, langRow](brls::View* view) {
+            AppSettings& s = Application::getInstance().getSettings();
+
+            if (langCode == "all") {
+                s.enabledSourceLanguages.clear();
+                brls::Application::notify("Showing all languages");
             } else {
-                // Toggle this language
-                if (settings.enabledSourceLanguages.count(code) > 0) {
-                    settings.enabledSourceLanguages.erase(code);
+                if (s.enabledSourceLanguages.count(langCode) > 0) {
+                    s.enabledSourceLanguages.erase(langCode);
                 } else {
-                    settings.enabledSourceLanguages.insert(code);
+                    s.enabledSourceLanguages.insert(langCode);
                 }
-            }
-            Application::getInstance().saveSettings();
-            dialog->close();
 
-            // Notify user
-            std::string msg = settings.enabledSourceLanguages.empty() ?
-                "Showing all languages" :
-                "Language filter updated";
-            brls::Application::notify(msg);
+                // Update visual state
+                bool nowEnabled = s.enabledSourceLanguages.count(langCode) > 0;
+                langRow->setBackgroundColor(nowEnabled ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+            }
+
+            Application::getInstance().saveSettings();
+            return true;
         });
+        langRow->addGestureRecognizer(new brls::TapGestureRecognizer(langRow));
+
+        langList->addView(langRow);
     }
 
-    dialog->addButton("Cancel", [dialog]() {
-        dialog->close();
-    });
+    scrollView->setContentView(langList);
+    dialogBox->addView(scrollView);
 
-    dialog->open();
+    // Close button
+    auto* closeBtn = new brls::Button();
+    closeBtn->setText("Done");
+    closeBtn->setMarginTop(15);
+    closeBtn->registerClickAction([](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    });
+    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
+    dialogBox->addView(closeBtn);
+
+    // Push as new activity
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
 
 void SettingsTab::createAboutSection() {

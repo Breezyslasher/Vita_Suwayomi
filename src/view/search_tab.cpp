@@ -206,12 +206,33 @@ void SearchTab::filterSourcesByLanguage() {
 
         // Filter by language setting
         if (!settings.enabledSourceLanguages.empty()) {
-            if (settings.enabledSourceLanguages.count(source.lang) == 0 &&
-                settings.enabledSourceLanguages.count("multi") == 0) {
-                // Skip sources not in enabled languages (unless it's multi-language)
-                if (source.lang != "multi") {
-                    continue;
+            bool languageMatch = false;
+
+            // Check exact match first
+            if (settings.enabledSourceLanguages.count(source.lang) > 0) {
+                languageMatch = true;
+            }
+            // Check if base language is enabled (e.g., "zh" matches "zh-Hans", "zh-Hant")
+            else {
+                // Get base language code (before any dash)
+                std::string baseLang = source.lang;
+                size_t dashPos = baseLang.find('-');
+                if (dashPos != std::string::npos) {
+                    baseLang = baseLang.substr(0, dashPos);
                 }
+
+                if (settings.enabledSourceLanguages.count(baseLang) > 0) {
+                    languageMatch = true;
+                }
+            }
+
+            // Always show multi-language sources if "multi" or "all" is selected
+            if (source.lang == "multi" || source.lang == "all") {
+                languageMatch = true;
+            }
+
+            if (!languageMatch) {
+                continue;
             }
         }
 
