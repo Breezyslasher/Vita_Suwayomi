@@ -81,6 +81,7 @@ set(APP_SOURCES
     src/view/media_item_cell.cpp
     src/view/recycling_grid.cpp
     src/view/rotatable_image.cpp
+    src/view/webtoon_scroll_view.cpp
     src/view/downloads_tab.cpp
     src/view/extensions_tab.cpp
     src/view/source_browse_tab.cpp

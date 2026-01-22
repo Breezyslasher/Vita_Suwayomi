@@ -9,7 +9,7 @@
     alignItems="center"
     backgroundColor="#1a1a2e">
 
-    <!-- Main page display area -->
+    <!-- Main page display area (single page mode) -->
     <RotatableImage
         id="reader/page_image"
         width="100%"
@@ -19,6 +19,16 @@
     <!-- Preview page (slides in during swipe) - hidden by default, AFTER main page for z-order -->
     <RotatableImage
         id="reader/preview_image"
+        width="100%"
+        height="100%"
+        positionType="absolute"
+        positionTop="0"
+        positionLeft="0"
+        visibility="gone"/>
+
+    <!-- Webtoon continuous scroll view - hidden by default, shown in webtoon mode -->
+    <WebtoonScrollView
+        id="reader/webtoon_scroll"
         width="100%"
         height="100%"
         positionType="absolute"

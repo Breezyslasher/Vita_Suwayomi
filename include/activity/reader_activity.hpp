@@ -11,6 +11,7 @@
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "view/rotatable_image.hpp"
+#include "view/webtoon_scroll_view.hpp"
 
 namespace vitasuwayomi {
 
@@ -130,6 +131,9 @@ private:
     BRLS_BIND(brls::Label, settingsDirLabel, "reader/settings_dir_label");
     BRLS_BIND(brls::Label, settingsRotLabel, "reader/settings_rot_label");
 
+    // Webtoon continuous scroll view
+    BRLS_BIND(WebtoonScrollView, webtoonScroll, "reader/webtoon_scroll");
+
     // Manga/Chapter info
     int m_mangaId = 0;
     int m_chapterIndex = 0;
@@ -145,6 +149,10 @@ private:
     ReaderSettings m_settings;
     bool m_controlsVisible = false;
     bool m_settingsVisible = false;
+    bool m_continuousScrollMode = false;  // True when using WebtoonScrollView
+
+    // Switch between single-page and continuous scroll modes
+    void updateReaderMode();
 
     // Chapter navigation
     std::vector<Chapter> m_chapters;
