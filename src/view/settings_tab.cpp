@@ -38,6 +38,7 @@ SettingsTab::SettingsTab() {
     createLibrarySection();
     createReaderSection();
     createDownloadsSection();
+    createBrowseSection();
     createAboutSection();
 
     m_scrollView->setContentView(m_contentBox);
@@ -536,6 +537,112 @@ void SettingsTab::createDownloadsSection() {
     pathLabel->setMarginLeft(16);
     pathLabel->setMarginTop(8);
     m_contentBox->addView(pathLabel);
+}
+
+void SettingsTab::createBrowseSection() {
+    Application& app = Application::getInstance();
+    AppSettings& settings = app.getSettings();
+
+    // Section header
+    auto* header = new brls::Header();
+    header->setTitle("Browse / Sources");
+    m_contentBox->addView(header);
+
+    // Source language filter
+    auto* languageFilterCell = new brls::DetailCell();
+    languageFilterCell->setText("Source Languages");
+
+    // Build description of currently enabled languages
+    std::string langDesc;
+    if (settings.enabledSourceLanguages.empty()) {
+        langDesc = "All languages";
+    } else {
+        for (const auto& lang : settings.enabledSourceLanguages) {
+            if (!langDesc.empty()) langDesc += ", ";
+            langDesc += lang;
+        }
+    }
+    languageFilterCell->setDetailText(langDesc);
+    languageFilterCell->registerClickAction([this](brls::View* view) {
+        showLanguageFilterDialog();
+        return true;
+    });
+    m_contentBox->addView(languageFilterCell);
+
+    // Info label
+    auto* langInfoLabel = new brls::Label();
+    langInfoLabel->setText("Filter which source languages appear in Browse and Search");
+    langInfoLabel->setFontSize(14);
+    langInfoLabel->setMarginLeft(16);
+    langInfoLabel->setMarginTop(4);
+    m_contentBox->addView(langInfoLabel);
+
+    // Show NSFW sources toggle
+    auto* nsfwToggle = new brls::BooleanCell();
+    nsfwToggle->init("Show NSFW Sources", settings.showNsfwSources, [&settings](bool value) {
+        settings.showNsfwSources = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(nsfwToggle);
+}
+
+void SettingsTab::showLanguageFilterDialog() {
+    Application& app = Application::getInstance();
+    AppSettings& settings = app.getSettings();
+
+    brls::Dialog* dialog = new brls::Dialog("Select Source Languages");
+
+    // Common languages to show
+    std::vector<std::pair<std::string, std::string>> languages = {
+        {"en", "English"},
+        {"multi", "Multi-language"},
+        {"ja", "Japanese"},
+        {"ko", "Korean"},
+        {"zh", "Chinese"},
+        {"es", "Spanish"},
+        {"fr", "French"},
+        {"de", "German"},
+        {"pt", "Portuguese"},
+        {"ru", "Russian"},
+        {"it", "Italian"},
+        {"ar", "Arabic"},
+        {"all", "All Languages"}
+    };
+
+    for (const auto& [code, name] : languages) {
+        bool isEnabled = (code == "all" && settings.enabledSourceLanguages.empty()) ||
+                         (code != "all" && settings.enabledSourceLanguages.count(code) > 0);
+
+        std::string label = name;
+        if (isEnabled) label = "> " + label;
+
+        dialog->addButton(label, [this, code, dialog, &settings]() {
+            if (code == "all") {
+                settings.enabledSourceLanguages.clear();
+            } else {
+                // Toggle this language
+                if (settings.enabledSourceLanguages.count(code) > 0) {
+                    settings.enabledSourceLanguages.erase(code);
+                } else {
+                    settings.enabledSourceLanguages.insert(code);
+                }
+            }
+            Application::getInstance().saveSettings();
+            dialog->close();
+
+            // Notify user
+            std::string msg = settings.enabledSourceLanguages.empty() ?
+                "Showing all languages" :
+                "Language filter updated";
+            brls::Application::notify(msg);
+        });
+    }
+
+    dialog->addButton("Cancel", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->open();
 }
 
 void SettingsTab::createAboutSection() {
