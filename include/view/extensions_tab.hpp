@@ -1,6 +1,7 @@
 /**
  * VitaSuwayomi - Extensions Tab
  * Manage Suwayomi extensions (install, update, uninstall)
+ * Extensions are grouped by language for better organization
  */
 
 #pragma once
@@ -8,6 +9,7 @@
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
 #include <set>
+#include <map>
 
 namespace vitasuwayomi {
 
@@ -30,7 +32,9 @@ private:
     void showUpdates();
     void updateButtonStyles();
     void populateList(const std::vector<Extension>& extensions);
-    brls::Box* createExtensionItem(const Extension& ext);
+    void populateListGroupedByLanguage(const std::vector<Extension>& extensions);
+    brls::Box* createLanguageHeader(const std::string& langCode, int extensionCount);
+    brls::Box* createExtensionItem(const Extension& ext, bool clickToInstall = false);
     void installExtension(const Extension& ext);
     void updateExtension(const Extension& ext);
     void uninstallExtension(const Extension& ext);
@@ -38,6 +42,8 @@ private:
     void updateLanguageFilter();
     void filterByLanguage(const std::string& lang);
     std::vector<Extension> getFilteredExtensions(const std::vector<Extension>& extensions);
+    std::map<std::string, std::vector<Extension>> groupExtensionsByLanguage(const std::vector<Extension>& extensions);
+    std::string getLanguageDisplayName(const std::string& langCode);
 
     brls::Label* m_titleLabel = nullptr;
     brls::Button* m_installedBtn = nullptr;
@@ -54,6 +60,9 @@ private:
 
     std::set<std::string> m_availableLanguages;
     std::string m_selectedLanguage = "all";  // "all" means no filter
+
+    // Track collapsed language sections
+    std::set<std::string> m_collapsedLanguages;
 };
 
 } // namespace vitasuwayomi
