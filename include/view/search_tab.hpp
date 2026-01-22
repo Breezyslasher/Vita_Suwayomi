@@ -67,6 +67,11 @@ private:
     // Main content grid
     RecyclingGrid* m_contentGrid = nullptr;
 
+    // Search results view (horizontal rows by source)
+    brls::ScrollingFrame* m_searchResultsScroll = nullptr;
+    brls::Box* m_searchResultsBox = nullptr;
+    void populateSearchResultsRows(const std::map<std::string, std::vector<Manga>>& resultsBySource);
+
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;
     int64_t m_currentSourceId = 0;
