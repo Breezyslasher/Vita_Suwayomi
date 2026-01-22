@@ -108,6 +108,10 @@ struct AppSettings {
     int maxConcurrentDownloads = 2;
     bool deleteAfterRead = false;
 
+    // Source/Browse Settings
+    std::set<std::string> enabledSourceLanguages;  // Empty = all languages, otherwise filter by these (e.g. "en", "multi")
+    bool showNsfwSources = false;
+
     // Network Settings
     int connectionTimeout = 30;        // seconds
 

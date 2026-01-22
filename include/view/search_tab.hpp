@@ -42,18 +42,35 @@ private:
     brls::Label* m_searchLabel = nullptr;
     brls::Label* m_resultsLabel = nullptr;
 
+    // Header row with title and search icon
+    brls::Box* m_headerBox = nullptr;
+    brls::Button* m_globalSearchBtn = nullptr;
+
     // Mode selector buttons
     brls::Box* m_modeBox = nullptr;
     brls::Button* m_sourcesBtn = nullptr;
     brls::Button* m_popularBtn = nullptr;
     brls::Button* m_latestBtn = nullptr;
+    brls::Button* m_filterBtn = nullptr;
     brls::Button* m_backBtn = nullptr;
 
-    // Source selector
+    // Source list (scrollable)
+    brls::ScrollingFrame* m_sourceScrollView = nullptr;
     brls::Box* m_sourceListBox = nullptr;
+
+    // Filtered sources (based on language setting)
+    std::vector<Source> m_filteredSources;
+    void filterSourcesByLanguage();
+    void showGlobalSearchDialog();
+    void showFilterDialog();
 
     // Main content grid
     RecyclingGrid* m_contentGrid = nullptr;
+
+    // Search results view (horizontal rows by source)
+    brls::ScrollingFrame* m_searchResultsScroll = nullptr;
+    brls::Box* m_searchResultsBox = nullptr;
+    void populateSearchResultsRows(const std::map<std::string, std::vector<Manga>>& resultsBySource);
 
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;
