@@ -67,7 +67,8 @@ void WebtoonScrollView::setupGestures() {
                 float maxScroll = 0.0f;
                 bool horizontal = (rotation == 90 || rotation == 270);
                 float viewSize = horizontal ? m_viewWidth : m_viewHeight;
-                float minScroll = -(m_totalHeight - viewSize);
+                float totalContentSize = getTotalContentSize();
+                float minScroll = -(totalContentSize - viewSize);
                 if (minScroll > maxScroll) minScroll = maxScroll;
 
                 m_scrollY = std::max(minScroll, std::min(maxScroll, m_scrollY));
@@ -182,7 +183,8 @@ void WebtoonScrollView::scrollToPage(int pageIndex) {
     // Clamp scroll position based on layout direction
     float maxScroll = 0.0f;
     float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
-    float minScroll = -(m_totalHeight - viewSize);
+    float totalContentSize = getTotalContentSize();
+    float minScroll = -(totalContentSize - viewSize);
     if (minScroll > maxScroll) minScroll = maxScroll;
 
     m_scrollY = std::max(minScroll, std::min(maxScroll, targetScroll));
@@ -194,10 +196,11 @@ void WebtoonScrollView::scrollToPage(int pageIndex) {
 
 float WebtoonScrollView::getScrollProgress() const {
     float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
-    if (m_totalHeight <= viewSize) {
+    float totalContentSize = getTotalContentSize();
+    if (totalContentSize <= viewSize) {
         return 0.0f;
     }
-    float scrollable = m_totalHeight - viewSize;
+    float scrollable = totalContentSize - viewSize;
     return std::min(1.0f, std::max(0.0f, -m_scrollY / scrollable));
 }
 
@@ -242,6 +245,48 @@ bool WebtoonScrollView::isHorizontalLayout() const {
     return (rotation == 90 || rotation == 270);
 }
 
+float WebtoonScrollView::getEffectivePageSize(int pageIndex) const {
+    if (pageIndex < 0 || pageIndex >= static_cast<int>(m_pageHeights.size())) {
+        return 0.0f;
+    }
+
+    if (!isHorizontalLayout()) {
+        // Vertical layout: use stored page height directly
+        return m_pageHeights[pageIndex];
+    }
+
+    // Horizontal layout: calculate page width from stored height
+    // m_pageHeights was calculated as availableWidth * aspectRatio
+    // For horizontal mode, we need availableHeight * aspectRatio
+    // So: pageWidth = m_pageHeights[i] * (availableHeight / availableWidth)
+    float availableWidth = m_viewWidth - (m_sidePadding * 2);
+    float availableHeight = m_viewHeight - (m_sidePadding * 2);
+
+    if (availableWidth > 0 && m_pageHeights[pageIndex] > 0) {
+        return m_pageHeights[pageIndex] * (availableHeight / availableWidth);
+    }
+
+    // Fallback
+    return availableHeight * 1.5f;
+}
+
+float WebtoonScrollView::getTotalContentSize() const {
+    if (!isHorizontalLayout()) {
+        // Vertical layout: use stored total height
+        return m_totalHeight;
+    }
+
+    // Horizontal layout: recalculate total width
+    float totalWidth = 0.0f;
+    for (size_t i = 0; i < m_pageHeights.size(); i++) {
+        totalWidth += getEffectivePageSize(static_cast<int>(i));
+        if (i < m_pageHeights.size() - 1) {
+            totalWidth += m_pageGap;
+        }
+    }
+    return totalWidth;
+}
+
 void WebtoonScrollView::onFrame() {
     // Apply momentum scrolling when not touching
     if (!m_isTouching && std::abs(m_scrollVelocity) > MOMENTUM_MIN_VELOCITY) {
@@ -251,7 +296,8 @@ void WebtoonScrollView::onFrame() {
         // Clamp scroll position based on layout direction
         float maxScroll = 0.0f;
         float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
-        float minScroll = -(m_totalHeight - viewSize);
+        float totalContentSize = getTotalContentSize();
+        float minScroll = -(totalContentSize - viewSize);
         if (minScroll > maxScroll) minScroll = maxScroll;
 
         // Bounce back if out of bounds
@@ -275,7 +321,7 @@ float WebtoonScrollView::getPageOffset(int pageIndex) const {
 
     float offset = 0.0f;
     for (int i = 0; i < pageIndex; i++) {
-        offset += m_pageHeights[i] + m_pageGap;
+        offset += getEffectivePageSize(i) + m_pageGap;
     }
     return offset;
 }
@@ -286,7 +332,7 @@ bool WebtoonScrollView::isPageVisible(int pageIndex) const {
     }
 
     float pageStart = getPageOffset(pageIndex);
-    float pageSize = m_pageHeights[pageIndex];
+    float pageSize = getEffectivePageSize(pageIndex);
     float pageEnd = pageStart + pageSize;
 
     if (isHorizontalLayout()) {
@@ -407,7 +453,8 @@ void WebtoonScrollView::updateCurrentPage() {
     float offset = 0.0f;
 
     for (int i = 0; i < static_cast<int>(m_pageHeights.size()); i++) {
-        float pageEnd = offset + m_pageHeights[i];
+        float pageSize = getEffectivePageSize(i);
+        float pageEnd = offset + pageSize;
 
         if (pageEnd > visibleStart) {
             newCurrentPage = i;
@@ -455,13 +502,33 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         float currentX = x + m_scrollY;  // scrollY is used as horizontal offset
 
         for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
-            float pageWidth = m_pageHeights[i];  // In horizontal mode, "height" becomes width
+            RotatableImage* img = m_pageImages[i];
+
+            // Calculate the correct page width for the rotated image
+            // When rotated 90/270, the effective aspect ratio is imageHeight/imageWidth
+            // The page width should fill the available height: availableHeight * (imageH/imageW)
+            float pageWidth;
+            if (img && img->hasImage() && img->getImageWidth() > 0 && img->getImageHeight() > 0) {
+                // For 90/270 rotation, the rotated aspect ratio is height/width
+                float rotatedAspect = static_cast<float>(img->getImageHeight()) / static_cast<float>(img->getImageWidth());
+                pageWidth = availableHeight * rotatedAspect;
+            } else {
+                // Fallback: use stored height scaled by aspect ratio
+                // m_pageHeights was calculated as availableWidth * aspectRatio
+                // For horizontal, we need availableHeight * aspectRatio
+                float availableWidth = width - (m_sidePadding * 2);
+                if (availableWidth > 0) {
+                    pageWidth = m_pageHeights[i] * (availableHeight / availableWidth);
+                } else {
+                    pageWidth = availableHeight * 1.5f;  // Default 2:3 aspect ratio
+                }
+            }
+
             float pageRight = currentX + pageWidth;
 
             // Check if page is in visible area (with some margin for smooth scrolling)
             if (pageRight >= x - 100 && currentX <= x + width + 100) {
                 // Draw this page
-                RotatableImage* img = m_pageImages[i];
                 if (img) {
                     // Update image size for horizontal layout
                     img->setWidth(pageWidth);

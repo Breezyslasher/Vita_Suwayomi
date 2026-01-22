@@ -108,6 +108,12 @@ private:
     // Check if layout should be horizontal (at 90 or 270 rotation)
     bool isHorizontalLayout() const;
 
+    // Get effective page size for current layout mode (width for horizontal, height for vertical)
+    float getEffectivePageSize(int pageIndex) const;
+
+    // Get total content size for current layout mode
+    float getTotalContentSize() const;
+
     // Update current page based on scroll position
     void updateCurrentPage();
 
