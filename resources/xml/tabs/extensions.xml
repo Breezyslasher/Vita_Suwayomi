@@ -48,9 +48,20 @@
             id="extensions/updates_btn"
             style="bordered"
             width="120"
-            height="35">
+            height="35"
+            marginRight="10">
             <brls:Label
                 text="Updates"
+                fontSize="13"/>
+        </brls:Button>
+
+        <brls:Button
+            id="extensions/lang_filter_btn"
+            style="bordered"
+            width="140"
+            height="35">
+            <brls:Label
+                text="All Languages"
                 fontSize="13"/>
         </brls:Button>
 

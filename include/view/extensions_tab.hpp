@@ -7,6 +7,7 @@
 
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
+#include <set>
 
 namespace vitasuwayomi {
 
@@ -34,11 +35,15 @@ private:
     void updateExtension(const Extension& ext);
     void uninstallExtension(const Extension& ext);
     void showError(const std::string& message);
+    void updateLanguageFilter();
+    void filterByLanguage(const std::string& lang);
+    std::vector<Extension> getFilteredExtensions(const std::vector<Extension>& extensions);
 
     brls::Label* m_titleLabel = nullptr;
     brls::Button* m_installedBtn = nullptr;
     brls::Button* m_availableBtn = nullptr;
     brls::Button* m_updatesBtn = nullptr;
+    brls::Button* m_langFilterBtn = nullptr;
     brls::Box* m_listBox = nullptr;
 
     ViewMode m_currentView = ViewMode::INSTALLED;
@@ -46,6 +51,9 @@ private:
     std::vector<Extension> m_installed;
     std::vector<Extension> m_available;
     std::vector<Extension> m_updates;
+
+    std::set<std::string> m_availableLanguages;
+    std::string m_selectedLanguage = "all";  // "all" means no filter
 };
 
 } // namespace vitasuwayomi
