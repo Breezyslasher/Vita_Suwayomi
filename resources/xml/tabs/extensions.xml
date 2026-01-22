@@ -43,14 +43,6 @@
             style="bordered"
             text="Updates"
             width="120"
-            height="35"
-            marginRight="10"/>
-
-        <brls:Button
-            id="extensions/lang_filter_btn"
-            style="bordered"
-            text="All Languages"
-            width="140"
             height="35"/>
 
     </brls:Box>

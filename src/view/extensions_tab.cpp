@@ -1,15 +1,77 @@
 /**
  * VitaSuwayomi - Extensions Tab
  * Manage Suwayomi extensions (install, update, uninstall)
+ * Extensions are grouped by language for better organization
+ * Language filtering follows global settings from Settings tab
  */
 
 #include "view/extensions_tab.hpp"
 #include "app/suwayomi_client.hpp"
+#include "app/application.hpp"
 #include "utils/image_loader.hpp"
 
 #include <borealis.hpp>
+#include <algorithm>
 
 namespace vitasuwayomi {
+
+// Language code to display name mapping
+std::string ExtensionsTab::getLanguageDisplayName(const std::string& langCode) {
+    static const std::map<std::string, std::string> languageNames = {
+        {"all", "All Languages"},
+        {"en", "English"},
+        {"ja", "Japanese"},
+        {"ko", "Korean"},
+        {"zh", "Chinese"},
+        {"zh-Hans", "Chinese (Simplified)"},
+        {"zh-Hant", "Chinese (Traditional)"},
+        {"es", "Spanish"},
+        {"es-419", "Spanish (Latin America)"},
+        {"pt", "Portuguese"},
+        {"pt-BR", "Portuguese (Brazil)"},
+        {"fr", "French"},
+        {"de", "German"},
+        {"it", "Italian"},
+        {"ru", "Russian"},
+        {"ar", "Arabic"},
+        {"id", "Indonesian"},
+        {"th", "Thai"},
+        {"vi", "Vietnamese"},
+        {"pl", "Polish"},
+        {"tr", "Turkish"},
+        {"nl", "Dutch"},
+        {"uk", "Ukrainian"},
+        {"cs", "Czech"},
+        {"ro", "Romanian"},
+        {"bg", "Bulgarian"},
+        {"hu", "Hungarian"},
+        {"el", "Greek"},
+        {"he", "Hebrew"},
+        {"fa", "Persian"},
+        {"hi", "Hindi"},
+        {"bn", "Bengali"},
+        {"ms", "Malay"},
+        {"fil", "Filipino"},
+        {"my", "Burmese"},
+        {"localsourcelang", "Local Source"},
+        {"other", "Other"},
+        {"multi", "Multi-language"}
+    };
+
+    auto it = languageNames.find(langCode);
+    if (it != languageNames.end()) {
+        return it->second;
+    }
+
+    // Return the code itself if not found (capitalize first letter)
+    if (!langCode.empty()) {
+        std::string result = langCode;
+        result[0] = std::toupper(result[0]);
+        return result;
+    }
+
+    return "Unknown";
+}
 
 ExtensionsTab::ExtensionsTab() {
     // Load from XML
@@ -20,7 +82,6 @@ ExtensionsTab::ExtensionsTab() {
     m_installedBtn = dynamic_cast<brls::Button*>(this->getView("extensions/installed_btn"));
     m_availableBtn = dynamic_cast<brls::Button*>(this->getView("extensions/available_btn"));
     m_updatesBtn = dynamic_cast<brls::Button*>(this->getView("extensions/updates_btn"));
-    m_langFilterBtn = dynamic_cast<brls::Button*>(this->getView("extensions/lang_filter_btn"));
     m_listBox = dynamic_cast<brls::Box*>(this->getView("extensions/list"));
 
     // Set up button handlers
@@ -45,13 +106,6 @@ ExtensionsTab::ExtensionsTab() {
         });
     }
 
-    if (m_langFilterBtn) {
-        m_langFilterBtn->registerClickAction([this](brls::View*) {
-            updateLanguageFilter();
-            return true;
-        });
-    }
-
     // Load extensions list
     loadExtensions();
 }
@@ -70,18 +124,12 @@ void ExtensionsTab::loadExtensions() {
         if (client.fetchExtensionList(extensions)) {
             m_extensions = extensions;
 
-            // Collect available languages and categorize extensions
+            // Categorize extensions
             m_installed.clear();
             m_available.clear();
             m_updates.clear();
-            m_availableLanguages.clear();
 
             for (const auto& ext : m_extensions) {
-                // Collect unique languages
-                if (!ext.lang.empty()) {
-                    m_availableLanguages.insert(ext.lang);
-                }
-
                 if (ext.installed) {
                     m_installed.push_back(ext);
                     if (ext.hasUpdate) {
@@ -93,11 +141,6 @@ void ExtensionsTab::loadExtensions() {
             }
 
             brls::sync([this]() {
-                // Update language filter button text
-                if (m_langFilterBtn) {
-                    std::string langText = m_selectedLanguage == "all" ? "All Languages" : m_selectedLanguage;
-                    m_langFilterBtn->setText(langText);
-                }
                 showInstalled();
             });
         } else {
@@ -111,77 +154,83 @@ void ExtensionsTab::loadExtensions() {
 void ExtensionsTab::showInstalled() {
     m_currentView = ViewMode::INSTALLED;
     updateButtonStyles();
-    populateList(getFilteredExtensions(m_installed));
+    auto filtered = getFilteredExtensions(m_installed);
+    populateListGroupedByLanguage(filtered);
 }
 
 void ExtensionsTab::showAvailable() {
     m_currentView = ViewMode::AVAILABLE;
     updateButtonStyles();
-    populateList(getFilteredExtensions(m_available));
+    auto filtered = getFilteredExtensions(m_available);
+    populateListGroupedByLanguage(filtered);
 }
 
 void ExtensionsTab::showUpdates() {
     m_currentView = ViewMode::UPDATES;
     updateButtonStyles();
-    populateList(getFilteredExtensions(m_updates));
+    auto filtered = getFilteredExtensions(m_updates);
+    populateListGroupedByLanguage(filtered);
 }
 
 std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Extension>& extensions) {
-    if (m_selectedLanguage == "all") {
-        return extensions;
+    const AppSettings& settings = Application::getInstance().getSettings();
+
+    // If global settings has enabled languages, use that filter
+    if (!settings.enabledSourceLanguages.empty()) {
+        std::vector<Extension> filtered;
+        for (const auto& ext : extensions) {
+            bool languageMatch = false;
+
+            // Check exact match first
+            if (settings.enabledSourceLanguages.count(ext.lang) > 0) {
+                languageMatch = true;
+            }
+            // Check if base language is enabled (e.g., "zh" matches "zh-Hans", "zh-Hant")
+            else {
+                std::string baseLang = ext.lang;
+                size_t dashPos = baseLang.find('-');
+                if (dashPos != std::string::npos) {
+                    baseLang = baseLang.substr(0, dashPos);
+                }
+
+                if (settings.enabledSourceLanguages.count(baseLang) > 0) {
+                    languageMatch = true;
+                }
+            }
+
+            // Always show multi-language and "all" language extensions
+            if (ext.lang == "multi" || ext.lang == "all") {
+                languageMatch = true;
+            }
+
+            if (languageMatch) {
+                filtered.push_back(ext);
+            }
+        }
+        return filtered;
     }
 
-    std::vector<Extension> filtered;
+    // No filtering - return all
+    return extensions;
+}
+
+std::map<std::string, std::vector<Extension>> ExtensionsTab::groupExtensionsByLanguage(const std::vector<Extension>& extensions) {
+    std::map<std::string, std::vector<Extension>> grouped;
+
     for (const auto& ext : extensions) {
-        if (ext.lang == m_selectedLanguage) {
-            filtered.push_back(ext);
-        }
-    }
-    return filtered;
-}
-
-void ExtensionsTab::filterByLanguage(const std::string& lang) {
-    m_selectedLanguage = lang;
-
-    // Update button text
-    if (m_langFilterBtn) {
-        std::string langText = lang == "all" ? "All Languages" : lang;
-        m_langFilterBtn->setText(langText);
+        std::string lang = ext.lang.empty() ? "other" : ext.lang;
+        grouped[lang].push_back(ext);
     }
 
-    // Refresh current view with new filter
-    switch (m_currentView) {
-        case ViewMode::INSTALLED:
-            showInstalled();
-            break;
-        case ViewMode::AVAILABLE:
-            showAvailable();
-            break;
-        case ViewMode::UPDATES:
-            showUpdates();
-            break;
-    }
-}
-
-void ExtensionsTab::updateLanguageFilter() {
-    // Cycle through available languages
-    std::vector<std::string> langs;
-    langs.push_back("all");
-    for (const auto& lang : m_availableLanguages) {
-        langs.push_back(lang);
+    // Sort extensions within each language group alphabetically
+    for (auto& pair : grouped) {
+        std::sort(pair.second.begin(), pair.second.end(),
+            [](const Extension& a, const Extension& b) {
+                return a.name < b.name;
+            });
     }
 
-    // Find current index and move to next
-    size_t currentIndex = 0;
-    for (size_t i = 0; i < langs.size(); i++) {
-        if (langs[i] == m_selectedLanguage) {
-            currentIndex = i;
-            break;
-        }
-    }
-
-    size_t nextIndex = (currentIndex + 1) % langs.size();
-    filterByLanguage(langs[nextIndex]);
+    return grouped;
 }
 
 void ExtensionsTab::updateButtonStyles() {
@@ -204,29 +253,100 @@ void ExtensionsTab::updateButtonStyles() {
     }
 }
 
-void ExtensionsTab::populateList(const std::vector<Extension>& extensions) {
+brls::Box* ExtensionsTab::createLanguageHeader(const std::string& langCode, int extensionCount) {
+    auto* header = new brls::Box();
+    header->setAxis(brls::Axis::ROW);
+    header->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    header->setAlignItems(brls::AlignItems::CENTER);
+    header->setPadding(8, 15, 8, 15);
+    header->setMarginTop(10);
+    header->setMarginBottom(5);
+    header->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+    header->setCornerRadius(4);
+    header->setFocusable(true);
+
+    // Language name label
+    auto* langLabel = new brls::Label();
+    langLabel->setText(getLanguageDisplayName(langCode));
+    langLabel->setFontSize(16);
+    langLabel->setTextColor(nvgRGB(200, 200, 200));
+    header->addView(langLabel);
+
+    // Count label
+    auto* countLabel = new brls::Label();
+    countLabel->setText(std::to_string(extensionCount) + " extension" + (extensionCount != 1 ? "s" : ""));
+    countLabel->setFontSize(12);
+    countLabel->setTextColor(nvgRGB(140, 140, 140));
+    header->addView(countLabel);
+
+    // Add touch gesture support
+    header->addGestureRecognizer(new brls::TapGestureRecognizer(header));
+
+    return header;
+}
+
+void ExtensionsTab::populateListGroupedByLanguage(const std::vector<Extension>& extensions) {
     if (!m_listBox) return;
 
     m_listBox->clearViews();
 
     if (extensions.empty()) {
         auto* emptyLabel = new brls::Label();
-        emptyLabel->setText("No extensions found");
+        if (m_currentView == ViewMode::AVAILABLE) {
+            emptyLabel->setText("No available extensions to install");
+        } else if (m_currentView == ViewMode::UPDATES) {
+            emptyLabel->setText("All extensions are up to date");
+        } else {
+            emptyLabel->setText("No extensions installed");
+        }
         emptyLabel->setFontSize(16);
         emptyLabel->setMargins(20, 20, 20, 20);
         m_listBox->addView(emptyLabel);
         return;
     }
 
-    for (const auto& ext : extensions) {
-        auto* item = createExtensionItem(ext);
-        if (item) {
-            m_listBox->addView(item);
+    // Group extensions by language
+    auto grouped = groupExtensionsByLanguage(extensions);
+
+    // Sort languages: "en" first, then alphabetically by display name
+    std::vector<std::pair<std::string, std::vector<Extension>>> sortedGroups(grouped.begin(), grouped.end());
+    std::sort(sortedGroups.begin(), sortedGroups.end(),
+        [this](const auto& a, const auto& b) {
+            // English first
+            if (a.first == "en" && b.first != "en") return true;
+            if (a.first != "en" && b.first == "en") return false;
+            // Then by display name
+            return getLanguageDisplayName(a.first) < getLanguageDisplayName(b.first);
+        });
+
+    // Determine if this is the Available tab (for click-to-install)
+    bool clickToInstall = (m_currentView == ViewMode::AVAILABLE);
+
+    // Add each language group
+    for (const auto& pair : sortedGroups) {
+        const std::string& langCode = pair.first;
+        const std::vector<Extension>& langExtensions = pair.second;
+
+        // Add language header
+        auto* header = createLanguageHeader(langCode, langExtensions.size());
+        m_listBox->addView(header);
+
+        // Add extensions for this language
+        for (const auto& ext : langExtensions) {
+            auto* item = createExtensionItem(ext, clickToInstall);
+            if (item) {
+                m_listBox->addView(item);
+            }
         }
     }
 }
 
-brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
+void ExtensionsTab::populateList(const std::vector<Extension>& extensions) {
+    // Redirect to grouped version
+    populateListGroupedByLanguage(extensions);
+}
+
+brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext, bool clickToInstall) {
     auto* container = new brls::Box();
     container->setAxis(brls::Axis::ROW);
     container->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -262,7 +382,11 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     infoBox->addView(nameLabel);
 
     auto* detailLabel = new brls::Label();
-    detailLabel->setText(ext.lang + " • v" + ext.versionName);
+    std::string detailText = getLanguageDisplayName(ext.lang) + " • v" + ext.versionName;
+    if (ext.isNsfw) {
+        detailText += " • 18+";
+    }
+    detailLabel->setText(detailText);
     detailLabel->setFontSize(11);
     detailLabel->setTextColor(nvgRGB(160, 160, 160));
     infoBox->addView(detailLabel);
@@ -270,18 +394,20 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     leftBox->addView(infoBox);
     container->addView(leftBox);
 
-    // Right side: action button
+    // Right side: action button or status
     auto* actionBtn = new brls::Button();
 
     if (ext.installed) {
         if (ext.hasUpdate) {
             actionBtn->setText("Update");
+            actionBtn->setBackgroundColor(nvgRGBA(255, 152, 0, 255));  // Orange for updates
             actionBtn->registerClickAction([this, ext](brls::View*) {
                 updateExtension(ext);
                 return true;
             });
         } else {
             actionBtn->setText("Uninstall");
+            actionBtn->setBackgroundColor(nvgRGBA(100, 100, 100, 255));  // Gray for uninstall
             actionBtn->registerClickAction([this, ext](brls::View*) {
                 uninstallExtension(ext);
                 return true;
@@ -289,6 +415,7 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
         }
     } else {
         actionBtn->setText("Install");
+        actionBtn->setBackgroundColor(nvgRGBA(0, 150, 136, 255));  // Teal for install
         actionBtn->registerClickAction([this, ext](brls::View*) {
             installExtension(ext);
             return true;
@@ -299,6 +426,14 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
 
     // Add touch gesture support
     container->addGestureRecognizer(new brls::TapGestureRecognizer(container));
+
+    // If click-to-install is enabled (Available tab), make the whole row clickable to install
+    if (clickToInstall && !ext.installed) {
+        container->registerClickAction([this, ext](brls::View*) {
+            installExtension(ext);
+            return true;
+        });
+    }
 
     return container;
 }
