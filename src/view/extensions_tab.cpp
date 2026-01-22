@@ -6,6 +6,7 @@
 
 #include "view/extensions_tab.hpp"
 #include "app/suwayomi_client.hpp"
+#include "app/application.hpp"
 #include "utils/image_loader.hpp"
 
 #include <borealis.hpp>
@@ -153,11 +154,8 @@ void ExtensionsTab::loadExtensions() {
             }
 
             brls::sync([this]() {
-                // Update language filter button text
-                if (m_langFilterBtn) {
-                    std::string langText = getLanguageDisplayName(m_selectedLanguage);
-                    m_langFilterBtn->setText(langText);
-                }
+                // Update language filter button text based on global settings or local filter
+                updateLanguageButtonText();
                 showInstalled();
             });
         } else {
@@ -190,17 +188,56 @@ void ExtensionsTab::showUpdates() {
 }
 
 std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Extension>& extensions) {
-    if (m_selectedLanguage == "all") {
-        return extensions;
+    const AppSettings& settings = Application::getInstance().getSettings();
+
+    // If local filter is set to a specific language, use that
+    if (m_selectedLanguage != "all") {
+        std::vector<Extension> filtered;
+        for (const auto& ext : extensions) {
+            if (ext.lang == m_selectedLanguage) {
+                filtered.push_back(ext);
+            }
+        }
+        return filtered;
     }
 
-    std::vector<Extension> filtered;
-    for (const auto& ext : extensions) {
-        if (ext.lang == m_selectedLanguage) {
-            filtered.push_back(ext);
+    // If no local filter and global settings has enabled languages, use global filter
+    if (!settings.enabledSourceLanguages.empty()) {
+        std::vector<Extension> filtered;
+        for (const auto& ext : extensions) {
+            bool languageMatch = false;
+
+            // Check exact match first
+            if (settings.enabledSourceLanguages.count(ext.lang) > 0) {
+                languageMatch = true;
+            }
+            // Check if base language is enabled (e.g., "zh" matches "zh-Hans", "zh-Hant")
+            else {
+                std::string baseLang = ext.lang;
+                size_t dashPos = baseLang.find('-');
+                if (dashPos != std::string::npos) {
+                    baseLang = baseLang.substr(0, dashPos);
+                }
+
+                if (settings.enabledSourceLanguages.count(baseLang) > 0) {
+                    languageMatch = true;
+                }
+            }
+
+            // Always show multi-language and "all" language extensions
+            if (ext.lang == "multi" || ext.lang == "all") {
+                languageMatch = true;
+            }
+
+            if (languageMatch) {
+                filtered.push_back(ext);
+            }
         }
+        return filtered;
     }
-    return filtered;
+
+    // No filtering - return all
+    return extensions;
 }
 
 std::map<std::string, std::vector<Extension>> ExtensionsTab::groupExtensionsByLanguage(const std::vector<Extension>& extensions) {
@@ -226,10 +263,7 @@ void ExtensionsTab::filterByLanguage(const std::string& lang) {
     m_selectedLanguage = lang;
 
     // Update button text
-    if (m_langFilterBtn) {
-        std::string langText = getLanguageDisplayName(lang);
-        m_langFilterBtn->setText(langText);
-    }
+    updateLanguageButtonText();
 
     // Refresh current view with new filter
     switch (m_currentView) {
@@ -242,6 +276,29 @@ void ExtensionsTab::filterByLanguage(const std::string& lang) {
         case ViewMode::UPDATES:
             showUpdates();
             break;
+    }
+}
+
+void ExtensionsTab::updateLanguageButtonText() {
+    if (!m_langFilterBtn) return;
+
+    const AppSettings& settings = Application::getInstance().getSettings();
+
+    if (m_selectedLanguage != "all") {
+        // Local filter is active - show that language
+        m_langFilterBtn->setText(getLanguageDisplayName(m_selectedLanguage));
+    } else if (!settings.enabledSourceLanguages.empty()) {
+        // Global filter is active - show count of enabled languages
+        size_t count = settings.enabledSourceLanguages.size();
+        if (count == 1) {
+            // Show the single language name
+            m_langFilterBtn->setText(getLanguageDisplayName(*settings.enabledSourceLanguages.begin()));
+        } else {
+            m_langFilterBtn->setText(std::to_string(count) + " Languages");
+        }
+    } else {
+        // No filter active
+        m_langFilterBtn->setText("All Languages");
     }
 }
 

@@ -40,6 +40,7 @@ private:
     void uninstallExtension(const Extension& ext);
     void showError(const std::string& message);
     void updateLanguageFilter();
+    void updateLanguageButtonText();
     void filterByLanguage(const std::string& lang);
     std::vector<Extension> getFilteredExtensions(const std::vector<Extension>& extensions);
     std::map<std::string, std::vector<Extension>> groupExtensionsByLanguage(const std::vector<Extension>& extensions);
