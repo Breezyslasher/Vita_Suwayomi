@@ -36,30 +36,15 @@
         positionLeft="0"
         visibility="gone"/>
 
-    <!-- Page counter overlay (top-right, auto-hides) -->
-    <brls:Box
+    <!-- Page counter overlay (top-right, auto-hides, rotates with content) -->
+    <RotatableLabel
         id="reader/page_counter"
-        width="auto"
-        height="32"
-        axis="row"
-        justifyContent="center"
-        alignItems="center"
-        paddingLeft="12"
-        paddingRight="12"
-        backgroundColor="#000000AA"
+        width="80"
+        height="40"
         positionType="absolute"
         positionTop="10"
         positionRight="10"
-        cornerRadius="4"
-        visibility="visible">
-
-        <brls:Label
-            id="reader/page_label"
-            text="1/20"
-            fontSize="14"
-            textColor="#ffffff"
-            horizontalAlign="center"/>
-    </brls:Box>
+        visibility="visible"/>
 
     <!-- Top bar overlay (80px, NOBORU style) -->
     <brls:Box

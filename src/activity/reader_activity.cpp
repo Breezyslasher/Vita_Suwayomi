@@ -4,6 +4,7 @@
  */
 
 #include "activity/reader_activity.hpp"
+#include "view/rotatable_label.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
@@ -14,14 +15,15 @@
 #include <cmath>
 #include <chrono>
 
-// Register WebtoonScrollView for XML creation
+// Register custom views for XML creation
 namespace {
-    struct RegisterWebtoonScrollView {
-        RegisterWebtoonScrollView() {
+    struct RegisterCustomViews {
+        RegisterCustomViews() {
             brls::Application::registerXMLView("WebtoonScrollView", vitasuwayomi::WebtoonScrollView::create);
+            brls::Application::registerXMLView("RotatableLabel", vitasuwayomi::RotatableLabel::create);
         }
     };
-    static RegisterWebtoonScrollView __registerWebtoonScrollView;
+    static RegisterCustomViews __registerCustomViews;
 }
 
 namespace vitasuwayomi {
@@ -868,16 +870,16 @@ void ReaderActivity::preloadAdjacentPages() {
 }
 
 void ReaderActivity::updatePageDisplay() {
-    // Update page counter (top-right overlay)
-    if (pageLabel) {
+    // Update page counter (top-right overlay with rotation support)
+    if (pageCounter) {
         const Page& page = m_pages[m_currentPage];
         if (page.totalSegments > 1) {
             // Show segment info: "Page-Segment/Total" e.g. "1-2/10"
-            pageLabel->setText(std::to_string(page.originalIndex + 1) + "-" +
+            pageCounter->setText(std::to_string(page.originalIndex + 1) + "-" +
                               std::to_string(page.segment + 1) + "/" +
                               std::to_string(m_pages.size()));
         } else {
-            pageLabel->setText(std::to_string(m_currentPage + 1) + "/" +
+            pageCounter->setText(std::to_string(m_currentPage + 1) + "/" +
                               std::to_string(m_pages.size()));
         }
     }
@@ -1083,6 +1085,63 @@ void ReaderActivity::schedulePageCounterHide() {
     // For now, the page counter stays visible until controls are shown
 }
 
+void ReaderActivity::updatePageCounterRotation() {
+    if (!pageCounter) return;
+
+    // Get rotation in degrees
+    float rotation = static_cast<float>(m_settings.rotation);
+
+    // Screen dimensions (PS Vita)
+    const float SCREEN_WIDTH = 960.0f;
+    const float SCREEN_HEIGHT = 544.0f;
+    const float COUNTER_MARGIN = 10.0f;
+
+    // Counter dimensions from XML
+    float counterWidth = 80.0f;
+    float counterHeight = 40.0f;
+
+    // Apply rotation to the RotatableLabel (text will rotate with it)
+    pageCounter->setRotation(rotation);
+
+    // Reset any previous transform
+    pageCounter->setTranslationX(0.0f);
+    pageCounter->setTranslationY(0.0f);
+
+    // Position the counter to stay in a logical position for the user
+    // When content is rotated, we move the counter so it appears in the
+    // "top-right" from the user's perspective in the rotated view
+    int rot = static_cast<int>(rotation);
+    switch (rot) {
+        case 0:
+            // Normal: top-right, no translation needed
+            // Position is already set in XML (positionTop=10, positionRight=10)
+            break;
+
+        case 90:
+            // Content rotated 90° clockwise
+            // Counter needs to move to bottom-right to appear at "top-right" for user
+            pageCounter->setTranslationX(0.0f);
+            pageCounter->setTranslationY(SCREEN_HEIGHT - counterHeight - 2 * COUNTER_MARGIN);
+            break;
+
+        case 180:
+            // Content rotated 180° (upside down)
+            // Counter needs to move to bottom-left to appear at "top-right" for user
+            pageCounter->setTranslationX(-(SCREEN_WIDTH - counterWidth - 2 * COUNTER_MARGIN));
+            pageCounter->setTranslationY(SCREEN_HEIGHT - counterHeight - 2 * COUNTER_MARGIN);
+            break;
+
+        case 270:
+            // Content rotated 270° clockwise (90° counter-clockwise)
+            // Counter needs to move to top-left to appear at "top-right" for user
+            pageCounter->setTranslationX(-(SCREEN_WIDTH - counterWidth - 2 * COUNTER_MARGIN));
+            pageCounter->setTranslationY(0.0f);
+            break;
+    }
+
+    brls::Logger::debug("ReaderActivity: Page counter rotation set to {}°", rot);
+}
+
 void ReaderActivity::showSettings() {
     if (m_settingsVisible) return;
 
@@ -1181,6 +1240,9 @@ void ReaderActivity::applySettings() {
     if (webtoonScroll) {
         webtoonScroll->setRotation(rotation);
     }
+
+    // Update page counter position to stay upright relative to content
+    updatePageCounterRotation();
 }
 
 void ReaderActivity::saveSettingsToApp() {
