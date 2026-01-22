@@ -185,18 +185,18 @@ void ExtensionsTab::updateLanguageFilter() {
 }
 
 void ExtensionsTab::updateButtonStyles() {
-    // Update button text to show active state
+    // Update button styles to show active state
     if (m_installedBtn) {
-        std::string text = m_currentView == ViewMode::INSTALLED ? "> Installed" : "Installed";
-        m_installedBtn->setText(text);
+        m_installedBtn->setStyle(m_currentView == ViewMode::INSTALLED ?
+            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
     }
     if (m_availableBtn) {
-        std::string text = m_currentView == ViewMode::AVAILABLE ? "> Available" : "Available";
-        m_availableBtn->setText(text);
+        m_availableBtn->setStyle(m_currentView == ViewMode::AVAILABLE ?
+            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
     }
     if (m_updatesBtn) {
-        std::string text = m_currentView == ViewMode::UPDATES ? "> Updates" : "Updates";
-        m_updatesBtn->setText(text);
+        m_updatesBtn->setStyle(m_currentView == ViewMode::UPDATES ?
+            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
     }
 }
 
