@@ -18,6 +18,8 @@
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
 #include <psp2/io/dirent.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace vitasuwayomi {
@@ -53,6 +55,15 @@ static bool deleteFile(const std::string& path) {
     return sceIoRemove(path.c_str()) >= 0;
 #else
     return std::remove(path.c_str()) == 0;
+#endif
+}
+
+// Helper to remove empty directory
+static bool removeDirectory(const std::string& path) {
+#ifdef __vita__
+    return sceIoRmdir(path.c_str()) >= 0;
+#else
+    return rmdir(path.c_str()) == 0;
 #endif
 }
 
@@ -240,11 +251,31 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
 
     for (auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
-            for (auto& chapter : manga.chapters) {
-                if (chapter.chapterIndex == chapterIndex) {
-                    if (chapter.state == LocalDownloadState::QUEUED ||
-                        chapter.state == LocalDownloadState::DOWNLOADING) {
-                        chapter.state = LocalDownloadState::FAILED;
+            for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
+                if (it->chapterIndex == chapterIndex) {
+                    if (it->state == LocalDownloadState::QUEUED ||
+                        it->state == LocalDownloadState::DOWNLOADING) {
+                        // Delete any partial download files
+                        for (auto& page : it->pages) {
+                            if (!page.localPath.empty()) {
+                                deleteFile(page.localPath);
+                            }
+                        }
+
+                        // Remove the chapter entry instead of marking as failed
+                        manga.chapters.erase(it);
+                        manga.totalChapters = static_cast<int>(manga.chapters.size());
+
+                        // If no chapters left, remove manga entry
+                        if (manga.chapters.empty()) {
+                            for (auto mangaIt = m_downloads.begin(); mangaIt != m_downloads.end(); ++mangaIt) {
+                                if (mangaIt->mangaId == mangaId) {
+                                    m_downloads.erase(mangaIt);
+                                    break;
+                                }
+                            }
+                        }
+
                         saveStateUnlocked();
                         return true;
                     }
@@ -291,6 +322,10 @@ bool DownloadsManager::deleteChapterDownload(int mangaId, int chapterIndex) {
         if (manga.mangaId == mangaId) {
             for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
                 if (it->chapterIndex == chapterIndex) {
+                    // Store paths before erasing
+                    std::string chapterDir = it->localPath;
+                    std::string mangaDir = manga.localPath;
+
                     // Delete page files
                     for (auto& page : it->pages) {
                         if (!page.localPath.empty()) {
@@ -298,11 +333,23 @@ bool DownloadsManager::deleteChapterDownload(int mangaId, int chapterIndex) {
                         }
                     }
 
+                    // Remove chapter directory
+                    if (!chapterDir.empty()) {
+                        removeDirectory(chapterDir);
+                        brls::Logger::debug("DownloadsManager: Removed chapter directory: {}", chapterDir);
+                    }
+
                     manga.chapters.erase(it);
                     manga.totalChapters = static_cast<int>(manga.chapters.size());
 
-                    // If no chapters left, remove manga entry
+                    // If no chapters left, remove manga entry and directory
                     if (manga.chapters.empty()) {
+                        // Remove manga directory
+                        if (!mangaDir.empty()) {
+                            removeDirectory(mangaDir);
+                            brls::Logger::debug("DownloadsManager: Removed manga directory: {}", mangaDir);
+                        }
+
                         for (auto mit = m_downloads.begin(); mit != m_downloads.end(); ++mit) {
                             if (mit->mangaId == mangaId) {
                                 m_downloads.erase(mit);
