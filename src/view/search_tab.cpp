@@ -474,7 +474,10 @@ void SearchTab::performSearch(const std::string& query) {
         // Search each filtered source
         for (const auto& source : sourcesToSearch) {
             std::vector<Manga> results;
-            if (client.quickSearchManga(source.id, query, results)) {
+            bool hasNextPage = false;
+
+            // Use searchManga which uses GraphQL API
+            if (client.searchManga(source.id, query, 1, results, hasNextPage)) {
                 if (!results.empty()) {
                     for (auto& manga : results) {
                         manga.sourceName = source.name;
