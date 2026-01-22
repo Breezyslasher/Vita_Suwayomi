@@ -186,17 +186,21 @@ void ExtensionsTab::updateLanguageFilter() {
 
 void ExtensionsTab::updateButtonStyles() {
     // Update button styles to show active state
+    // Selected: teal accent, Unselected: dark gray
+    NVGcolor selectedColor = nvgRGBA(0, 150, 136, 255);
+    NVGcolor normalColor = nvgRGBA(50, 50, 50, 255);
+
     if (m_installedBtn) {
-        m_installedBtn->setStyle(m_currentView == ViewMode::INSTALLED ?
-            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
+        m_installedBtn->setBackgroundColor(m_currentView == ViewMode::INSTALLED ?
+            selectedColor : normalColor);
     }
     if (m_availableBtn) {
-        m_availableBtn->setStyle(m_currentView == ViewMode::AVAILABLE ?
-            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
+        m_availableBtn->setBackgroundColor(m_currentView == ViewMode::AVAILABLE ?
+            selectedColor : normalColor);
     }
     if (m_updatesBtn) {
-        m_updatesBtn->setStyle(m_currentView == ViewMode::UPDATES ?
-            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
+        m_updatesBtn->setBackgroundColor(m_currentView == ViewMode::UPDATES ?
+            selectedColor : normalColor);
     }
 }
 
