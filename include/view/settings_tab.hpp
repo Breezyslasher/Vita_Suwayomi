@@ -19,11 +19,9 @@ private:
     void createLibrarySection();
     void createReaderSection();
     void createDownloadsSection();
-    void createBrowseSection();
     void createAboutSection();
 
     void onDisconnect();
-    void showLanguageFilterDialog();
     void onThemeChanged(int index);
     void showCategoryVisibilityDialog();
 

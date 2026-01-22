@@ -352,32 +352,6 @@ bool Application::loadSettings() {
     if (m_settings.maxConcurrentDownloads <= 0) m_settings.maxConcurrentDownloads = 2;
     m_settings.deleteAfterRead = extractBool("deleteAfterRead", false);
 
-    // Load browse/source settings
-    m_settings.showNsfwSources = extractBool("showNsfwSources", false);
-    m_settings.enabledSourceLanguages.clear();
-    size_t langArrayPos = content.find("\"enabledSourceLanguages\"");
-    if (langArrayPos != std::string::npos) {
-        size_t arrayStart = content.find('[', langArrayPos);
-        size_t arrayEnd = content.find(']', arrayStart);
-        if (arrayStart != std::string::npos && arrayEnd != std::string::npos) {
-            std::string langArray = content.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
-            // Parse language codes like "en", "multi", etc
-            size_t pos = 0;
-            while (pos < langArray.length()) {
-                size_t quoteStart = langArray.find('"', pos);
-                if (quoteStart == std::string::npos) break;
-                size_t quoteEnd = langArray.find('"', quoteStart + 1);
-                if (quoteEnd == std::string::npos) break;
-                std::string lang = langArray.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
-                if (!lang.empty()) {
-                    m_settings.enabledSourceLanguages.insert(lang);
-                }
-                pos = quoteEnd + 1;
-            }
-        }
-    }
-    brls::Logger::info("loadSettings: enabledSourceLanguages count = {}", m_settings.enabledSourceLanguages.size());
-
     // Load network settings
     m_settings.connectionTimeout = extractInt("connectionTimeout");
     if (m_settings.connectionTimeout <= 0) m_settings.connectionTimeout = 30;
@@ -583,19 +557,6 @@ bool Application::saveSettings() {
     json += "  \"downloadOverWifiOnly\": " + std::string(m_settings.downloadOverWifiOnly ? "true" : "false") + ",\n";
     json += "  \"maxConcurrentDownloads\": " + std::to_string(m_settings.maxConcurrentDownloads) + ",\n";
     json += "  \"deleteAfterRead\": " + std::string(m_settings.deleteAfterRead ? "true" : "false") + ",\n";
-
-    // Browse/Source settings
-    json += "  \"showNsfwSources\": " + std::string(m_settings.showNsfwSources ? "true" : "false") + ",\n";
-    json += "  \"enabledSourceLanguages\": [";
-    {
-        bool first = true;
-        for (const auto& lang : m_settings.enabledSourceLanguages) {
-            if (!first) json += ", ";
-            first = false;
-            json += "\"" + lang + "\"";
-        }
-    }
-    json += "],\n";
 
     // Network settings
     json += "  \"connectionTimeout\": " + std::to_string(m_settings.connectionTimeout) + ",\n";
