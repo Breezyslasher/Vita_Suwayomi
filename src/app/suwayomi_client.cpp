@@ -10,6 +10,7 @@
 #include <cstring>
 #include <ctime>
 #include <algorithm>
+#include <set>
 
 namespace vitasuwayomi {
 
@@ -2914,6 +2915,7 @@ bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extension
                     hasUpdate
                     isObsolete
                     isNsfw
+                    repo
                 }
             }
         }
@@ -2932,19 +2934,25 @@ bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extension
     if (nodesJson.empty()) return false;
 
     extensions.clear();
+    std::set<std::string> seenPkgNames;
     std::vector<std::string> items = splitJsonArray(nodesJson);
     for (const auto& item : items) {
-        extensions.push_back(parseExtensionFromGraphQL(item));
+        Extension ext = parseExtensionFromGraphQL(item);
+        // Skip duplicates based on pkgName
+        if (seenPkgNames.find(ext.pkgName) == seenPkgNames.end()) {
+            seenPkgNames.insert(ext.pkgName);
+            extensions.push_back(ext);
+        }
     }
 
-    brls::Logger::debug("GraphQL: Fetched {} extensions", extensions.size());
+    brls::Logger::debug("GraphQL: Fetched {} extensions (deduplicated)", extensions.size());
     return true;
 }
 
 bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
         mutation InstallExtension($pkgName: String!) {
-            installExternalExtension(input: { extensionPkgName: $pkgName }) {
+            updateExtension(input: { pkgName: $pkgName, install: true }) {
                 extension {
                     pkgName
                     isInstalled
@@ -2971,10 +2979,11 @@ bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
 bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
         mutation UpdateExtension($pkgName: String!) {
-            updateExtension(input: { pkgName: $pkgName }) {
+            updateExtension(input: { pkgName: $pkgName, update: true }) {
                 extension {
                     pkgName
                     isInstalled
+                    hasUpdate
                 }
             }
         }
@@ -2997,7 +3006,7 @@ bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
 bool SuwayomiClient::uninstallExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
         mutation UninstallExtension($pkgName: String!) {
-            uninstallExtension(input: { pkgName: $pkgName }) {
+            updateExtension(input: { pkgName: $pkgName, uninstall: true }) {
                 extension {
                     pkgName
                     isInstalled

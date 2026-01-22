@@ -20,6 +20,7 @@ ExtensionsTab::ExtensionsTab() {
     m_installedBtn = dynamic_cast<brls::Button*>(this->getView("extensions/installed_btn"));
     m_availableBtn = dynamic_cast<brls::Button*>(this->getView("extensions/available_btn"));
     m_updatesBtn = dynamic_cast<brls::Button*>(this->getView("extensions/updates_btn"));
+    m_langFilterBtn = dynamic_cast<brls::Button*>(this->getView("extensions/lang_filter_btn"));
     m_listBox = dynamic_cast<brls::Box*>(this->getView("extensions/list"));
 
     // Set up button handlers
@@ -44,6 +45,13 @@ ExtensionsTab::ExtensionsTab() {
         });
     }
 
+    if (m_langFilterBtn) {
+        m_langFilterBtn->registerClickAction([this](brls::View*) {
+            updateLanguageFilter();
+            return true;
+        });
+    }
+
     // Load extensions list
     loadExtensions();
 }
@@ -62,12 +70,18 @@ void ExtensionsTab::loadExtensions() {
         if (client.fetchExtensionList(extensions)) {
             m_extensions = extensions;
 
-            // Categorize extensions
+            // Collect available languages and categorize extensions
             m_installed.clear();
             m_available.clear();
             m_updates.clear();
+            m_availableLanguages.clear();
 
             for (const auto& ext : m_extensions) {
+                // Collect unique languages
+                if (!ext.lang.empty()) {
+                    m_availableLanguages.insert(ext.lang);
+                }
+
                 if (ext.installed) {
                     m_installed.push_back(ext);
                     if (ext.hasUpdate) {
@@ -79,6 +93,11 @@ void ExtensionsTab::loadExtensions() {
             }
 
             brls::sync([this]() {
+                // Update language filter button text
+                if (m_langFilterBtn) {
+                    std::string langText = m_selectedLanguage == "all" ? "All Languages" : m_selectedLanguage;
+                    m_langFilterBtn->setText(langText);
+                }
                 showInstalled();
             });
         } else {
@@ -92,34 +111,92 @@ void ExtensionsTab::loadExtensions() {
 void ExtensionsTab::showInstalled() {
     m_currentView = ViewMode::INSTALLED;
     updateButtonStyles();
-    populateList(m_installed);
+    populateList(getFilteredExtensions(m_installed));
 }
 
 void ExtensionsTab::showAvailable() {
     m_currentView = ViewMode::AVAILABLE;
     updateButtonStyles();
-    populateList(m_available);
+    populateList(getFilteredExtensions(m_available));
 }
 
 void ExtensionsTab::showUpdates() {
     m_currentView = ViewMode::UPDATES;
     updateButtonStyles();
-    populateList(m_updates);
+    populateList(getFilteredExtensions(m_updates));
+}
+
+std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Extension>& extensions) {
+    if (m_selectedLanguage == "all") {
+        return extensions;
+    }
+
+    std::vector<Extension> filtered;
+    for (const auto& ext : extensions) {
+        if (ext.lang == m_selectedLanguage) {
+            filtered.push_back(ext);
+        }
+    }
+    return filtered;
+}
+
+void ExtensionsTab::filterByLanguage(const std::string& lang) {
+    m_selectedLanguage = lang;
+
+    // Update button text
+    if (m_langFilterBtn) {
+        std::string langText = lang == "all" ? "All Languages" : lang;
+        m_langFilterBtn->setText(langText);
+    }
+
+    // Refresh current view with new filter
+    switch (m_currentView) {
+        case ViewMode::INSTALLED:
+            showInstalled();
+            break;
+        case ViewMode::AVAILABLE:
+            showAvailable();
+            break;
+        case ViewMode::UPDATES:
+            showUpdates();
+            break;
+    }
+}
+
+void ExtensionsTab::updateLanguageFilter() {
+    // Cycle through available languages
+    std::vector<std::string> langs;
+    langs.push_back("all");
+    for (const auto& lang : m_availableLanguages) {
+        langs.push_back(lang);
+    }
+
+    // Find current index and move to next
+    size_t currentIndex = 0;
+    for (size_t i = 0; i < langs.size(); i++) {
+        if (langs[i] == m_selectedLanguage) {
+            currentIndex = i;
+            break;
+        }
+    }
+
+    size_t nextIndex = (currentIndex + 1) % langs.size();
+    filterByLanguage(langs[nextIndex]);
 }
 
 void ExtensionsTab::updateButtonStyles() {
-    // Update button text to show active state
+    // Update button styles to show active state
     if (m_installedBtn) {
-        std::string text = m_currentView == ViewMode::INSTALLED ? "> Installed" : "Installed";
-        m_installedBtn->setText(text);
+        m_installedBtn->setStyle(m_currentView == ViewMode::INSTALLED ?
+            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
     }
     if (m_availableBtn) {
-        std::string text = m_currentView == ViewMode::AVAILABLE ? "> Available" : "Available";
-        m_availableBtn->setText(text);
+        m_availableBtn->setStyle(m_currentView == ViewMode::AVAILABLE ?
+            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
     }
     if (m_updatesBtn) {
-        std::string text = m_currentView == ViewMode::UPDATES ? "> Updates" : "Updates";
-        m_updatesBtn->setText(text);
+        m_updatesBtn->setStyle(m_currentView == ViewMode::UPDATES ?
+            brls::ButtonStyle::PRIMARY : brls::ButtonStyle::BORDERED);
     }
 }
 
