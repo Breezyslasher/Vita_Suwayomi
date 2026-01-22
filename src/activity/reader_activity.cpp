@@ -1091,55 +1091,16 @@ void ReaderActivity::updatePageCounterRotation() {
     // Get rotation in degrees
     float rotation = static_cast<float>(m_settings.rotation);
 
-    // Screen dimensions (PS Vita)
-    const float SCREEN_WIDTH = 960.0f;
-    const float SCREEN_HEIGHT = 544.0f;
-    const float COUNTER_MARGIN = 10.0f;
-
-    // Counter dimensions from XML
-    float counterWidth = 80.0f;
-    float counterHeight = 40.0f;
-
     // Apply rotation to the RotatableLabel (text will rotate with it)
     pageCounter->setRotation(rotation);
 
-    // Reset any previous transform
+    // Keep counter fixed at physical top-right corner of screen
+    // Position is set in XML (positionTop=10, positionRight=10)
+    // No translation needed - counter stays in place, only text rotates
     pageCounter->setTranslationX(0.0f);
     pageCounter->setTranslationY(0.0f);
 
-    // Position the counter to stay in a logical position for the user
-    // When content is rotated, we move the counter so it appears in the
-    // "top-right" from the user's perspective in the rotated view
-    int rot = static_cast<int>(rotation);
-    switch (rot) {
-        case 0:
-            // Normal: top-right, no translation needed
-            // Position is already set in XML (positionTop=10, positionRight=10)
-            break;
-
-        case 90:
-            // Content rotated 90° clockwise
-            // Counter needs to move to bottom-right to appear at "top-right" for user
-            pageCounter->setTranslationX(0.0f);
-            pageCounter->setTranslationY(SCREEN_HEIGHT - counterHeight - 2 * COUNTER_MARGIN);
-            break;
-
-        case 180:
-            // Content rotated 180° (upside down)
-            // Counter needs to move to bottom-left to appear at "top-right" for user
-            pageCounter->setTranslationX(-(SCREEN_WIDTH - counterWidth - 2 * COUNTER_MARGIN));
-            pageCounter->setTranslationY(SCREEN_HEIGHT - counterHeight - 2 * COUNTER_MARGIN);
-            break;
-
-        case 270:
-            // Content rotated 270° clockwise (90° counter-clockwise)
-            // Counter needs to move to top-left to appear at "top-right" for user
-            pageCounter->setTranslationX(-(SCREEN_WIDTH - counterWidth - 2 * COUNTER_MARGIN));
-            pageCounter->setTranslationY(0.0f);
-            break;
-    }
-
-    brls::Logger::debug("ReaderActivity: Page counter rotation set to {}°", rot);
+    brls::Logger::debug("ReaderActivity: Page counter rotation set to {}°", static_cast<int>(rotation));
 }
 
 void ReaderActivity::showSettings() {
