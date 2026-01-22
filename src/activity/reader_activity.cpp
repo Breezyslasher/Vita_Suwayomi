@@ -1289,7 +1289,8 @@ void ReaderActivity::handlePinchZoom(float scaleFactor) {
 // NOBORU-style swipe methods
 
 void ReaderActivity::updateSwipePreview(float offset) {
-    // Update visual positions during swipe - current page moves, preview slides in
+    // Update visual positions during swipe - PUSH EFFECT
+    // Current page is pushed off screen, preview page follows behind pushing it
     const float SCREEN_WIDTH = 960.0f;
     const float SCREEN_HEIGHT = 544.0f;
 
@@ -1311,25 +1312,14 @@ void ReaderActivity::updateSwipePreview(float offset) {
         pageImage->setTranslationY(offset);
         pageImage->setTranslationX(0.0f);
 
-        // Position preview page sliding in from top/bottom
-        if (m_swipingToNext) {
-            // Next page slides in from bottom (swipe up) or top (swipe down)
-            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                // RTL: next page comes from bottom
-                previewImage->setTranslationY(SCREEN_HEIGHT + offset);
-            } else {
-                // LTR: next page comes from top
-                previewImage->setTranslationY(-SCREEN_HEIGHT + offset);
-            }
+        // PUSH EFFECT: Preview page is always one screen behind current page
+        // When current page is pushed off, preview slides in from behind
+        if (offset > 0) {
+            // Swiping down - preview pushes from top (above current page)
+            previewImage->setTranslationY(offset - SCREEN_HEIGHT);
         } else {
-            // Previous page slides in from opposite side
-            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                // RTL: prev page comes from top
-                previewImage->setTranslationY(-SCREEN_HEIGHT + offset);
-            } else {
-                // LTR: prev page comes from bottom
-                previewImage->setTranslationY(SCREEN_HEIGHT + offset);
-            }
+            // Swiping up - preview pushes from bottom (below current page)
+            previewImage->setTranslationY(offset + SCREEN_HEIGHT);
         }
         previewImage->setTranslationX(0.0f);
     } else {
@@ -1341,25 +1331,14 @@ void ReaderActivity::updateSwipePreview(float offset) {
         pageImage->setTranslationX(offset);
         pageImage->setTranslationY(0.0f);
 
-        // Position preview page sliding in from the edge
-        if (m_swipingToNext) {
-            // Next page slides in from right (for RTL swipe right) or left (for LTR swipe left)
-            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                // RTL: swiping right, next page comes from right
-                previewImage->setTranslationX(SCREEN_WIDTH + offset);
-            } else {
-                // LTR: swiping left, next page comes from left
-                previewImage->setTranslationX(-SCREEN_WIDTH + offset);
-            }
+        // PUSH EFFECT: Preview page is always one screen behind current page
+        // When current page is pushed off, preview slides in from behind
+        if (offset > 0) {
+            // Swiping right - preview pushes from left (behind current page)
+            previewImage->setTranslationX(offset - SCREEN_WIDTH);
         } else {
-            // Previous page slides in from opposite side
-            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
-                // RTL: swiping left, prev page comes from left
-                previewImage->setTranslationX(-SCREEN_WIDTH + offset);
-            } else {
-                // LTR: swiping right, prev page comes from right
-                previewImage->setTranslationX(SCREEN_WIDTH + offset);
-            }
+            // Swiping left - preview pushes from right (behind current page)
+            previewImage->setTranslationX(offset + SCREEN_WIDTH);
         }
         previewImage->setTranslationY(0.0f);
     }
