@@ -102,8 +102,11 @@ private:
     // Check if a page is in the visible range
     bool isPageVisible(int pageIndex) const;
 
-    // Calculate the Y offset for a page
+    // Calculate the offset for a page (Y for vertical, X for horizontal)
     float getPageOffset(int pageIndex) const;
+
+    // Check if layout should be horizontal (at 90 or 270 rotation)
+    bool isHorizontalLayout() const;
 
     // Update current page based on scroll position
     void updateCurrentPage();

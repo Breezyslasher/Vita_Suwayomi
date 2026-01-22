@@ -63,9 +63,11 @@ void WebtoonScrollView::setupGestures() {
                 // Update scroll position
                 m_scrollY += scrollDelta;
 
-                // Clamp scroll position
+                // Clamp scroll position based on layout direction
                 float maxScroll = 0.0f;
-                float minScroll = -(m_totalHeight - m_viewHeight);
+                bool horizontal = (rotation == 90 || rotation == 270);
+                float viewSize = horizontal ? m_viewWidth : m_viewHeight;
+                float minScroll = -(m_totalHeight - viewSize);
                 if (minScroll > maxScroll) minScroll = maxScroll;
 
                 m_scrollY = std::max(minScroll, std::min(maxScroll, m_scrollY));
@@ -175,14 +177,15 @@ void WebtoonScrollView::scrollToPage(int pageIndex) {
     }
 
     // Calculate scroll position for this page
-    float targetY = -getPageOffset(pageIndex);
+    float targetScroll = -getPageOffset(pageIndex);
 
-    // Clamp scroll position
+    // Clamp scroll position based on layout direction
     float maxScroll = 0.0f;
-    float minScroll = -(m_totalHeight - m_viewHeight);
+    float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+    float minScroll = -(m_totalHeight - viewSize);
     if (minScroll > maxScroll) minScroll = maxScroll;
 
-    m_scrollY = std::max(minScroll, std::min(maxScroll, targetY));
+    m_scrollY = std::max(minScroll, std::min(maxScroll, targetScroll));
     m_scrollVelocity = 0.0f;
 
     updateVisibleImages();
@@ -190,10 +193,11 @@ void WebtoonScrollView::scrollToPage(int pageIndex) {
 }
 
 float WebtoonScrollView::getScrollProgress() const {
-    if (m_totalHeight <= m_viewHeight) {
+    float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+    if (m_totalHeight <= viewSize) {
         return 0.0f;
     }
-    float scrollable = m_totalHeight - m_viewHeight;
+    float scrollable = m_totalHeight - viewSize;
     return std::min(1.0f, std::max(0.0f, -m_scrollY / scrollable));
 }
 
@@ -233,15 +237,21 @@ void WebtoonScrollView::setRotation(float degrees) {
     brls::Logger::debug("WebtoonScrollView: setRotation({}) -> {} degrees", degrees, m_rotationDegrees);
 }
 
+bool WebtoonScrollView::isHorizontalLayout() const {
+    int rotation = static_cast<int>(m_rotationDegrees);
+    return (rotation == 90 || rotation == 270);
+}
+
 void WebtoonScrollView::onFrame() {
     // Apply momentum scrolling when not touching
     if (!m_isTouching && std::abs(m_scrollVelocity) > MOMENTUM_MIN_VELOCITY) {
         m_scrollY += m_scrollVelocity;
         m_scrollVelocity *= MOMENTUM_FRICTION;
 
-        // Clamp scroll position
+        // Clamp scroll position based on layout direction
         float maxScroll = 0.0f;
-        float minScroll = -(m_totalHeight - m_viewHeight);
+        float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+        float minScroll = -(m_totalHeight - viewSize);
         if (minScroll > maxScroll) minScroll = maxScroll;
 
         // Bounce back if out of bounds
@@ -275,15 +285,25 @@ bool WebtoonScrollView::isPageVisible(int pageIndex) const {
         return false;
     }
 
-    float pageTop = getPageOffset(pageIndex);
-    float pageBottom = pageTop + m_pageHeights[pageIndex];
+    float pageStart = getPageOffset(pageIndex);
+    float pageSize = m_pageHeights[pageIndex];
+    float pageEnd = pageStart + pageSize;
 
-    // Current visible range (scrollY is negative when scrolled down)
-    float visibleTop = -m_scrollY;
-    float visibleBottom = visibleTop + m_viewHeight;
+    if (isHorizontalLayout()) {
+        // Horizontal layout: check X position
+        float visibleLeft = -m_scrollY;  // scrollY acts as scrollX
+        float visibleRight = visibleLeft + m_viewWidth;
 
-    // Check if page overlaps with visible area
-    return (pageBottom > visibleTop && pageTop < visibleBottom);
+        // Check if page overlaps with visible area
+        return (pageEnd > visibleLeft && pageStart < visibleRight);
+    } else {
+        // Vertical layout: check Y position
+        float visibleTop = -m_scrollY;
+        float visibleBottom = visibleTop + m_viewHeight;
+
+        // Check if page overlaps with visible area
+        return (pageEnd > visibleTop && pageStart < visibleBottom);
+    }
 }
 
 void WebtoonScrollView::updateVisibleImages() {
@@ -379,21 +399,22 @@ void WebtoonScrollView::updateVisibleImages() {
 }
 
 void WebtoonScrollView::updateCurrentPage() {
-    // Find the page at the top of the visible area
-    float visibleTop = -m_scrollY;
+    // Find the page at the start of the visible area
+    // (top for vertical layout, left for horizontal layout)
+    float visibleStart = -m_scrollY;
 
     int newCurrentPage = 0;
     float offset = 0.0f;
 
     for (int i = 0; i < static_cast<int>(m_pageHeights.size()); i++) {
-        float pageBottom = offset + m_pageHeights[i];
+        float pageEnd = offset + m_pageHeights[i];
 
-        if (pageBottom > visibleTop) {
+        if (pageEnd > visibleStart) {
             newCurrentPage = i;
             break;
         }
 
-        offset = pageBottom + m_pageGap;
+        offset = pageEnd + m_pageGap;
     }
 
     if (newCurrentPage != m_currentPage) {
@@ -422,31 +443,65 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
     nvgSave(vg);
     nvgScissor(vg, x, y, width, height);
 
-    // Calculate the X position for centered pages
-    float availableWidth = width - (m_sidePadding * 2);
-    float pageX = x + m_sidePadding;
+    bool horizontal = isHorizontalLayout();
 
-    // Draw visible pages
-    float currentY = y + m_scrollY;  // Start position adjusted by scroll
+    if (horizontal) {
+        // Horizontal layout (for 90/270 rotation)
+        // Pages are laid out left to right, scrollY acts as scrollX
+        float availableHeight = height - (m_sidePadding * 2);
+        float pageY = y + m_sidePadding;
 
-    for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
-        float pageHeight = m_pageHeights[i];
-        float pageBottom = currentY + pageHeight;
+        // Draw visible pages horizontally
+        float currentX = x + m_scrollY;  // scrollY is used as horizontal offset
 
-        // Check if page is in visible area (with some margin for smooth scrolling)
-        if (pageBottom >= y - 100 && currentY <= y + height + 100) {
-            // Draw this page
-            RotatableImage* img = m_pageImages[i];
-            if (img) {
-                // Update image width in case view resized
-                img->setWidth(availableWidth);
+        for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
+            float pageWidth = m_pageHeights[i];  // In horizontal mode, "height" becomes width
+            float pageRight = currentX + pageWidth;
 
-                // Draw the image
-                img->draw(vg, pageX, currentY, availableWidth, pageHeight, style, ctx);
+            // Check if page is in visible area (with some margin for smooth scrolling)
+            if (pageRight >= x - 100 && currentX <= x + width + 100) {
+                // Draw this page
+                RotatableImage* img = m_pageImages[i];
+                if (img) {
+                    // Update image size for horizontal layout
+                    img->setWidth(pageWidth);
+                    img->setHeight(availableHeight);
+
+                    // Draw the image
+                    img->draw(vg, currentX, pageY, pageWidth, availableHeight, style, ctx);
+                }
             }
-        }
 
-        currentY = pageBottom + m_pageGap;
+            currentX = pageRight + m_pageGap;
+        }
+    } else {
+        // Vertical layout (for 0/180 rotation)
+        // Calculate the X position for centered pages
+        float availableWidth = width - (m_sidePadding * 2);
+        float pageX = x + m_sidePadding;
+
+        // Draw visible pages vertically
+        float currentY = y + m_scrollY;  // Start position adjusted by scroll
+
+        for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
+            float pageHeight = m_pageHeights[i];
+            float pageBottom = currentY + pageHeight;
+
+            // Check if page is in visible area (with some margin for smooth scrolling)
+            if (pageBottom >= y - 100 && currentY <= y + height + 100) {
+                // Draw this page
+                RotatableImage* img = m_pageImages[i];
+                if (img) {
+                    // Update image width in case view resized
+                    img->setWidth(availableWidth);
+
+                    // Draw the image
+                    img->draw(vg, pageX, currentY, availableWidth, pageHeight, style, ctx);
+                }
+            }
+
+            currentY = pageBottom + m_pageGap;
+        }
     }
 
     // Restore state
