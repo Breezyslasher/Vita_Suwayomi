@@ -73,6 +73,16 @@ public:
     void setSidePadding(int percent);
 
     /**
+     * Set rotation for all page images (0, 90, 180, 270 degrees)
+     */
+    void setRotation(float degrees);
+
+    /**
+     * Get current rotation
+     */
+    float getRotation() const { return m_rotationDegrees; }
+
+    /**
      * Handle frame update for progressive loading
      */
     void onFrame();
@@ -133,6 +143,7 @@ private:
     float m_sidePadding = 0.0f;       // Padding on each side
     float m_pageGap = 0.0f;           // Gap between pages (0 for seamless webtoon)
     std::vector<float> m_pageHeights; // Height of each page
+    float m_rotationDegrees = 0.0f;   // Image rotation (0, 90, 180, 270)
 
     // Callbacks
     ScrollProgressCallback m_progressCallback;

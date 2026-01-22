@@ -110,6 +110,7 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
         pageImg->setHeight(defaultHeight);  // Will be adjusted when image loads
         pageImg->setScalingType(brls::ImageScalingType::FIT);
         pageImg->setBackgroundFillColor(nvgRGBA(26, 26, 46, 255));
+        pageImg->setRotation(m_rotationDegrees);  // Apply current rotation
 
         m_pageImages.push_back(pageImg);
         m_pageHeights.push_back(defaultHeight);
@@ -183,6 +184,34 @@ void WebtoonScrollView::setSidePadding(int percent) {
     }
     float paddingRatio = percent / 100.0f;
     m_sidePadding = m_viewWidth * paddingRatio;
+}
+
+void WebtoonScrollView::setRotation(float degrees) {
+    // Normalize to 0, 90, 180, 270
+    int normalized = static_cast<int>(degrees) % 360;
+    if (normalized < 0) normalized += 360;
+
+    // Snap to nearest 90 degree increment
+    if (normalized < 45) {
+        m_rotationDegrees = 0.0f;
+    } else if (normalized < 135) {
+        m_rotationDegrees = 90.0f;
+    } else if (normalized < 225) {
+        m_rotationDegrees = 180.0f;
+    } else if (normalized < 315) {
+        m_rotationDegrees = 270.0f;
+    } else {
+        m_rotationDegrees = 0.0f;
+    }
+
+    // Apply rotation to all existing page images
+    for (auto* img : m_pageImages) {
+        if (img) {
+            img->setRotation(m_rotationDegrees);
+        }
+    }
+
+    brls::Logger::debug("WebtoonScrollView: setRotation({}) -> {} degrees", degrees, m_rotationDegrees);
 }
 
 void WebtoonScrollView::onFrame() {

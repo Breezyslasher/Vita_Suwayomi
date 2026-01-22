@@ -768,6 +768,7 @@ void ReaderActivity::loadPages() {
             if (webtoonScroll) {
                 webtoonScroll->setVisibility(brls::Visibility::VISIBLE);
                 webtoonScroll->setSidePadding(m_settings.webtoonSidePadding);
+                webtoonScroll->setRotation(static_cast<float>(m_settings.rotation));
 
                 // Set up progress callback
                 webtoonScroll->setProgressCallback([this](int currentPage, int totalPages, float scrollPercent) {
@@ -1175,6 +1176,11 @@ void ReaderActivity::applySettings() {
     if (previewImage) {
         previewImage->setRotation(rotation);
     }
+
+    // Apply rotation to webtoon scroll view if in continuous mode
+    if (webtoonScroll) {
+        webtoonScroll->setRotation(rotation);
+    }
 }
 
 void ReaderActivity::saveSettingsToApp() {
@@ -1549,6 +1555,7 @@ void ReaderActivity::updateReaderMode() {
         if (webtoonScroll) {
             webtoonScroll->setVisibility(brls::Visibility::VISIBLE);
             webtoonScroll->setSidePadding(m_settings.webtoonSidePadding);
+            webtoonScroll->setRotation(static_cast<float>(m_settings.rotation));
 
             // Set up progress callback
             webtoonScroll->setProgressCallback([this](int currentPage, int totalPages, float scrollPercent) {
