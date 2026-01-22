@@ -2,6 +2,7 @@
  * VitaSuwayomi - Extensions Tab
  * Manage Suwayomi extensions (install, update, uninstall)
  * Extensions are grouped by language for better organization
+ * Language filtering follows global settings from Settings tab
  */
 
 #include "view/extensions_tab.hpp"
@@ -81,7 +82,6 @@ ExtensionsTab::ExtensionsTab() {
     m_installedBtn = dynamic_cast<brls::Button*>(this->getView("extensions/installed_btn"));
     m_availableBtn = dynamic_cast<brls::Button*>(this->getView("extensions/available_btn"));
     m_updatesBtn = dynamic_cast<brls::Button*>(this->getView("extensions/updates_btn"));
-    m_langFilterBtn = dynamic_cast<brls::Button*>(this->getView("extensions/lang_filter_btn"));
     m_listBox = dynamic_cast<brls::Box*>(this->getView("extensions/list"));
 
     // Set up button handlers
@@ -106,13 +106,6 @@ ExtensionsTab::ExtensionsTab() {
         });
     }
 
-    if (m_langFilterBtn) {
-        m_langFilterBtn->registerClickAction([this](brls::View*) {
-            updateLanguageFilter();
-            return true;
-        });
-    }
-
     // Load extensions list
     loadExtensions();
 }
@@ -131,18 +124,12 @@ void ExtensionsTab::loadExtensions() {
         if (client.fetchExtensionList(extensions)) {
             m_extensions = extensions;
 
-            // Collect available languages and categorize extensions
+            // Categorize extensions
             m_installed.clear();
             m_available.clear();
             m_updates.clear();
-            m_availableLanguages.clear();
 
             for (const auto& ext : m_extensions) {
-                // Collect unique languages
-                if (!ext.lang.empty()) {
-                    m_availableLanguages.insert(ext.lang);
-                }
-
                 if (ext.installed) {
                     m_installed.push_back(ext);
                     if (ext.hasUpdate) {
@@ -154,8 +141,6 @@ void ExtensionsTab::loadExtensions() {
             }
 
             brls::sync([this]() {
-                // Update language filter button text based on global settings or local filter
-                updateLanguageButtonText();
                 showInstalled();
             });
         } else {
@@ -190,18 +175,7 @@ void ExtensionsTab::showUpdates() {
 std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Extension>& extensions) {
     const AppSettings& settings = Application::getInstance().getSettings();
 
-    // If local filter is set to a specific language, use that
-    if (m_selectedLanguage != "all") {
-        std::vector<Extension> filtered;
-        for (const auto& ext : extensions) {
-            if (ext.lang == m_selectedLanguage) {
-                filtered.push_back(ext);
-            }
-        }
-        return filtered;
-    }
-
-    // If no local filter and global settings has enabled languages, use global filter
+    // If global settings has enabled languages, use that filter
     if (!settings.enabledSourceLanguages.empty()) {
         std::vector<Extension> filtered;
         for (const auto& ext : extensions) {
@@ -257,70 +231,6 @@ std::map<std::string, std::vector<Extension>> ExtensionsTab::groupExtensionsByLa
     }
 
     return grouped;
-}
-
-void ExtensionsTab::filterByLanguage(const std::string& lang) {
-    m_selectedLanguage = lang;
-
-    // Update button text
-    updateLanguageButtonText();
-
-    // Refresh current view with new filter
-    switch (m_currentView) {
-        case ViewMode::INSTALLED:
-            showInstalled();
-            break;
-        case ViewMode::AVAILABLE:
-            showAvailable();
-            break;
-        case ViewMode::UPDATES:
-            showUpdates();
-            break;
-    }
-}
-
-void ExtensionsTab::updateLanguageButtonText() {
-    if (!m_langFilterBtn) return;
-
-    const AppSettings& settings = Application::getInstance().getSettings();
-
-    if (m_selectedLanguage != "all") {
-        // Local filter is active - show that language
-        m_langFilterBtn->setText(getLanguageDisplayName(m_selectedLanguage));
-    } else if (!settings.enabledSourceLanguages.empty()) {
-        // Global filter is active - show count of enabled languages
-        size_t count = settings.enabledSourceLanguages.size();
-        if (count == 1) {
-            // Show the single language name
-            m_langFilterBtn->setText(getLanguageDisplayName(*settings.enabledSourceLanguages.begin()));
-        } else {
-            m_langFilterBtn->setText(std::to_string(count) + " Languages");
-        }
-    } else {
-        // No filter active
-        m_langFilterBtn->setText("All Languages");
-    }
-}
-
-void ExtensionsTab::updateLanguageFilter() {
-    // Cycle through available languages
-    std::vector<std::string> langs;
-    langs.push_back("all");
-    for (const auto& lang : m_availableLanguages) {
-        langs.push_back(lang);
-    }
-
-    // Find current index and move to next
-    size_t currentIndex = 0;
-    for (size_t i = 0; i < langs.size(); i++) {
-        if (langs[i] == m_selectedLanguage) {
-            currentIndex = i;
-            break;
-        }
-    }
-
-    size_t nextIndex = (currentIndex + 1) % langs.size();
-    filterByLanguage(langs[nextIndex]);
 }
 
 void ExtensionsTab::updateButtonStyles() {
