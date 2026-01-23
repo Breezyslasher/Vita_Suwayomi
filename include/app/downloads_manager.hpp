@@ -132,6 +132,12 @@ public:
     void saveState();
     void loadState();
 
+    // Resume incomplete downloads (queues PAUSED/FAILED/interrupted chapters)
+    void resumeIncompleteDownloads();
+
+    // Check if there are any incomplete downloads
+    bool hasIncompleteDownloads() const;
+
     // Set progress callback for UI updates
     void setProgressCallback(DownloadProgressCallback callback);
 
@@ -166,6 +172,9 @@ private:
 
     // Internal save without locking (caller must hold m_mutex)
     void saveStateUnlocked();
+
+    // Validate that downloaded files actually exist on disk
+    void validateDownloadedFiles();
 
     // Create directories for manga/chapter
     std::string createMangaDir(int mangaId, const std::string& title);

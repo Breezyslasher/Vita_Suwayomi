@@ -58,6 +58,23 @@ static bool deleteFile(const std::string& path) {
 #endif
 }
 
+// Helper to get file size (returns -1 if file doesn't exist)
+static int64_t getFileSize(const std::string& path) {
+#ifdef __vita__
+    SceIoStat stat;
+    if (sceIoGetstat(path.c_str(), &stat) >= 0) {
+        return stat.st_size;
+    }
+    return -1;
+#else
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (f.good()) {
+        return f.tellg();
+    }
+    return -1;
+#endif
+}
+
 // Helper to remove empty directory
 static bool removeDirectory(const std::string& path) {
 #ifdef __vita__
@@ -571,6 +588,105 @@ void DownloadsManager::saveState() {
     saveStateUnlocked();
 }
 
+void DownloadsManager::validateDownloadedFiles() {
+    // This should be called with m_mutex already held
+    brls::Logger::info("DownloadsManager: Validating downloaded files...");
+
+    int totalValidated = 0;
+    int totalMissing = 0;
+
+    for (auto& manga : m_downloads) {
+        for (auto& chapter : manga.chapters) {
+            // Skip chapters that are queued or have no pages yet
+            if (chapter.pages.empty()) {
+                continue;
+            }
+
+            int validPages = 0;
+            for (auto& page : chapter.pages) {
+                if (page.downloaded && !page.localPath.empty()) {
+                    // Check if the file actually exists
+                    int64_t size = getFileSize(page.localPath);
+                    if (size > 0) {
+                        page.size = size;
+                        validPages++;
+                        totalValidated++;
+                    } else {
+                        // File is missing or empty - mark as not downloaded
+                        brls::Logger::warning("DownloadsManager: Page file missing: {}", page.localPath);
+                        page.downloaded = false;
+                        page.size = 0;
+                        totalMissing++;
+                    }
+                }
+            }
+
+            // Update downloadedPages count based on actual files
+            chapter.downloadedPages = validPages;
+
+            // Update chapter state based on actual downloaded pages
+            if (chapter.state == LocalDownloadState::COMPLETED) {
+                if (validPages < chapter.pageCount || validPages == 0) {
+                    // Was marked completed but files are missing - mark for re-download
+                    brls::Logger::warning("DownloadsManager: Chapter {} has missing pages ({}/{}), marking for re-download",
+                                         chapter.chapterIndex, validPages, chapter.pageCount);
+                    chapter.state = LocalDownloadState::QUEUED;
+                }
+            }
+        }
+
+        // Update manga completed chapters count
+        manga.completedChapters = 0;
+        for (const auto& ch : manga.chapters) {
+            if (ch.state == LocalDownloadState::COMPLETED) {
+                manga.completedChapters++;
+            }
+        }
+    }
+
+    brls::Logger::info("DownloadsManager: Validation complete - {} pages valid, {} pages missing",
+                       totalValidated, totalMissing);
+}
+
+void DownloadsManager::resumeIncompleteDownloads() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    int queuedCount = 0;
+    for (auto& manga : m_downloads) {
+        for (auto& chapter : manga.chapters) {
+            // Queue any chapters that were interrupted or need to be resumed
+            if (chapter.state == LocalDownloadState::DOWNLOADING ||
+                chapter.state == LocalDownloadState::PAUSED ||
+                chapter.state == LocalDownloadState::FAILED) {
+                // Convert to QUEUED for resumption
+                chapter.state = LocalDownloadState::QUEUED;
+                queuedCount++;
+            }
+        }
+    }
+
+    if (queuedCount > 0) {
+        brls::Logger::info("DownloadsManager: Queued {} incomplete chapters for resumption", queuedCount);
+        saveStateUnlocked();
+    }
+}
+
+bool DownloadsManager::hasIncompleteDownloads() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    for (const auto& manga : m_downloads) {
+        for (const auto& chapter : manga.chapters) {
+            if (chapter.state == LocalDownloadState::QUEUED ||
+                chapter.state == LocalDownloadState::DOWNLOADING ||
+                chapter.state == LocalDownloadState::PAUSED ||
+                chapter.state == LocalDownloadState::FAILED) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void DownloadsManager::saveStateUnlocked() {
 #ifdef __vita__
     std::stringstream ss;
@@ -846,7 +962,14 @@ void DownloadsManager::loadState() {
 
         item.totalChapters = static_cast<int>(item.chapters.size());
         item.completedChapters = 0;
-        for (const auto& ch : item.chapters) {
+
+        // Convert any DOWNLOADING chapters to QUEUED (app was interrupted)
+        for (auto& ch : item.chapters) {
+            if (ch.state == LocalDownloadState::DOWNLOADING) {
+                brls::Logger::info("DownloadsManager: Chapter {} was interrupted, marking as QUEUED for resume",
+                                  ch.chapterIndex);
+                ch.state = LocalDownloadState::QUEUED;
+            }
             if (ch.state == LocalDownloadState::COMPLETED) {
                 item.completedChapters++;
             }
@@ -862,6 +985,24 @@ void DownloadsManager::loadState() {
     }
 
     brls::Logger::info("DownloadsManager: State loaded with {} downloads", m_downloads.size());
+
+    // Validate that all marked-as-downloaded files actually exist
+    validateDownloadedFiles();
+
+    // Save any state changes from validation
+    bool hasChanges = false;
+    for (const auto& manga : m_downloads) {
+        for (const auto& chapter : manga.chapters) {
+            if (chapter.state == LocalDownloadState::QUEUED) {
+                hasChanges = true;
+                break;
+            }
+        }
+        if (hasChanges) break;
+    }
+    if (hasChanges) {
+        saveStateUnlocked();
+    }
 #endif
 }
 
@@ -993,8 +1134,37 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
         brls::Logger::info("DownloadsManager: Got {} pages for chapter {}", pages.size(), chapter.chapterId);
 
         chapter.pageCount = static_cast<int>(pages.size());
-        chapter.downloadedPages = 0;
+
+        // Check for existing partially downloaded pages (resume support)
+        // Build a map of already downloaded page indices
+        std::vector<bool> existingPages(pages.size(), false);
+        int existingCount = 0;
+
+        if (!chapter.pages.empty()) {
+            // We have existing page records - check which files actually exist
+            for (const auto& existingPage : chapter.pages) {
+                if (existingPage.downloaded && !existingPage.localPath.empty()) {
+                    int64_t size = getFileSize(existingPage.localPath);
+                    if (size > 0 && existingPage.index < static_cast<int>(pages.size())) {
+                        existingPages[existingPage.index] = true;
+                        existingCount++;
+                        brls::Logger::debug("DownloadsManager: Page {} already downloaded ({})",
+                                           existingPage.index, existingPage.localPath);
+                    }
+                }
+            }
+        }
+
+        // If resuming, log the progress
+        if (existingCount > 0) {
+            brls::Logger::info("DownloadsManager: Resuming chapter {} - {}/{} pages already downloaded",
+                              chapter.chapterIndex, existingCount, pages.size());
+        }
+
+        // Reset pages vector but preserve count of existing pages
+        chapter.downloadedPages = existingCount;
         chapter.pages.clear();
+        chapter.pages.resize(pages.size());
 
         // Find manga to get the local path
         std::string mangaDir;
@@ -1024,7 +1194,7 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
 
         brls::Logger::info("DownloadsManager: Starting page downloads to {}", chapterDir);
 
-        // Download each page
+        // Download each page (skip already downloaded ones)
         for (size_t i = 0; i < pages.size(); i++) {
             const auto& page = pages[i];
 
@@ -1037,26 +1207,54 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
                 return;
             }
 
-            DownloadedPage downloadedPage;
-            downloadedPage.index = page.index;
+            // Initialize page record
+            chapter.pages[i].index = page.index;
+
+            // Check if this page is already downloaded (resume support)
+            if (existingPages[i]) {
+                // Page already exists - construct the expected path and mark as downloaded
+                std::string expectedPath = m_downloadsPath + "/manga_" + std::to_string(mangaId) +
+                                          "/chapter_" + std::to_string(chapter.chapterIndex) +
+                                          "/page_" + std::to_string(page.index) + ".jpg";
+                chapter.pages[i].localPath = expectedPath;
+                chapter.pages[i].downloaded = true;
+                chapter.pages[i].size = getFileSize(expectedPath);
+                brls::Logger::debug("DownloadsManager: Skipping page {} - already downloaded", page.index);
+
+                // Update progress callback
+                if (m_progressCallback) {
+                    m_progressCallback(chapter.downloadedPages, chapter.pageCount);
+                }
+                continue;
+            }
 
             // Use the page's imageUrl that was already fetched
             std::string imageUrl = page.imageUrl;
-            brls::Logger::info("DownloadsManager: Downloading page {} of {}", page.index + 1, pages.size());
+            brls::Logger::info("DownloadsManager: Downloading page {} of {} ({}%)",
+                              page.index + 1, pages.size(),
+                              static_cast<int>((chapter.downloadedPages * 100) / chapter.pageCount));
 
-            if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, downloadedPage.localPath)) {
-                downloadedPage.downloaded = true;
+            std::string localPath;
+            if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, localPath)) {
+                chapter.pages[i].localPath = localPath;
+                chapter.pages[i].downloaded = true;
+                chapter.pages[i].size = getFileSize(localPath);
                 chapter.downloadedPages++;
                 brls::Logger::info("DownloadsManager: Page {} downloaded successfully", page.index);
             } else {
                 brls::Logger::error("DownloadsManager: Page {} download failed", page.index);
+                chapter.pages[i].downloaded = false;
             }
-
-            chapter.pages.push_back(downloadedPage);
 
             // Update progress callback
             if (m_progressCallback) {
                 m_progressCallback(chapter.downloadedPages, chapter.pageCount);
+            }
+
+            // Save state periodically (every 5 pages) to enable better resume
+            if ((i + 1) % 5 == 0) {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                saveStateUnlocked();
             }
 
             // Small delay between downloads to avoid overwhelming the system
