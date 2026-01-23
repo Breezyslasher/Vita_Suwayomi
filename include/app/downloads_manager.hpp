@@ -9,6 +9,7 @@
 #include <vector>
 #include <functional>
 #include <mutex>
+#include <atomic>
 
 namespace vitasuwayomi {
 
@@ -173,7 +174,7 @@ private:
 
     std::vector<DownloadItem> m_downloads;
     mutable std::mutex m_mutex;
-    bool m_downloading = false;
+    std::atomic<bool> m_downloading{false};
     bool m_initialized = false;
     DownloadProgressCallback m_progressCallback;
     ChapterCompletionCallback m_chapterCompletionCallback;

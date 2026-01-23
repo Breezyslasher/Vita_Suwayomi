@@ -19,6 +19,9 @@ public:
 
     void refresh();
 
+    // Override to refresh chapter data when returning from reader
+    void willAppear(bool resetState) override;
+
 private:
     void loadDetails();
     void loadChapters();

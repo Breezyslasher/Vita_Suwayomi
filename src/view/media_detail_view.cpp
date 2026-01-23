@@ -355,6 +355,12 @@ void MangaDetailView::refresh() {
     loadDetails();
 }
 
+void MangaDetailView::willAppear(bool resetState) {
+    brls::Box::willAppear(resetState);
+    // Reload chapters to update the read button text when returning from reader
+    loadChapters();
+}
+
 void MangaDetailView::loadDetails() {
     brls::Logger::debug("MangaDetailView: Loading details for manga {}", m_manga.id);
 
@@ -766,11 +772,13 @@ void MangaDetailView::showMangaMenu() {
             brls::Logger::debug("Remove all chapters: downloadMode = {} (0=Server, 1=Local, 2=Both)",
                                static_cast<int>(downloadMode));
 
-            // Collect server-downloaded chapter indexes (from chapter data)
+            // Collect server-downloaded chapter IDs and indexes (from chapter data)
+            std::vector<int> serverChapterIds;
             std::vector<int> serverChapterIndexes;
             if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
                 for (const auto& ch : chapters) {
                     if (ch.downloaded) {
+                        serverChapterIds.push_back(ch.id);
                         serverChapterIndexes.push_back(ch.index);
                     }
                 }
@@ -807,16 +815,16 @@ void MangaDetailView::showMangaMenu() {
             brls::Application::notify("Deleting " + std::to_string(totalToDelete) + " downloads...");
 
             // Run delete in async without capturing 'this'
-            asyncRun([downloadMode, mangaId, serverChapterIndexes, localChapterIndexes]() {
+            asyncRun([downloadMode, mangaId, serverChapterIds, serverChapterIndexes, localChapterIndexes]() {
                 int serverDeletedCount = 0;
                 int localDeletedCount = 0;
 
                 // Delete from server if applicable
-                if (!serverChapterIndexes.empty() &&
+                if (!serverChapterIds.empty() &&
                     (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
                     SuwayomiClient& client = SuwayomiClient::getInstance();
-                    if (client.deleteChapterDownloads(mangaId, serverChapterIndexes)) {
-                        serverDeletedCount = serverChapterIndexes.size();
+                    if (client.deleteChapterDownloads(serverChapterIds, mangaId, serverChapterIndexes)) {
+                        serverDeletedCount = serverChapterIds.size();
                     }
                 }
 
@@ -1232,23 +1240,25 @@ void MangaDetailView::deleteAllDownloads() {
 
     // Collect chapter data before async to avoid capturing 'this'
     int mangaId = m_manga.id;
+    std::vector<int> chapterIds;
     std::vector<int> chapterIndexes;
     for (const auto& ch : m_chapters) {
         if (ch.downloaded) {
+            chapterIds.push_back(ch.id);
             chapterIndexes.push_back(ch.index);
         }
     }
 
-    if (chapterIndexes.empty()) {
+    if (chapterIds.empty()) {
         brls::Application::notify("No downloads to delete");
         return;
     }
 
     // Don't capture 'this' - use only copied data
-    asyncRun([mangaId, chapterIndexes]() {
+    asyncRun([mangaId, chapterIds, chapterIndexes]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        if (client.deleteChapterDownloads(mangaId, chapterIndexes)) {
+        if (client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes)) {
             brls::sync([]() {
                 brls::Application::notify("Downloads deleted");
             });

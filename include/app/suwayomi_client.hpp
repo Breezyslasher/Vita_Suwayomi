@@ -361,15 +361,16 @@ public:
     bool fetchRecentUpdates(int page, std::vector<RecentUpdate>& updates);
 
     // Download Management
-    bool queueChapterDownload(int mangaId, int chapterIndex);
-    bool deleteChapterDownload(int mangaId, int chapterIndex);
-    bool queueChapterDownloads(const std::vector<int>& chapterIds);  // Uses chapter IDs for GraphQL API
-    bool deleteChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes);
+    // GraphQL-first with REST fallback for all download operations
+    bool queueChapterDownload(int chapterId, int mangaId, int chapterIndex);
+    bool deleteChapterDownload(int chapterId, int mangaId, int chapterIndex);
+    bool queueChapterDownloads(const std::vector<int>& chapterIds);
+    bool deleteChapterDownloads(const std::vector<int>& chapterIds, int mangaId = 0, const std::vector<int>& chapterIndexes = {});
     bool fetchDownloadQueue(std::vector<DownloadQueueItem>& queue);
     bool startDownloads();
     bool stopDownloads();
     bool clearDownloadQueue();
-    bool reorderDownload(int mangaId, int chapterIndex, int newPosition);
+    bool reorderDownload(int chapterId, int mangaId, int chapterIndex, int newPosition);
 
     // Backup/Restore
     bool exportBackup(const std::string& savePath);
@@ -463,6 +464,8 @@ private:
     bool enqueueChapterDownloadGraphQL(int chapterId);
     bool dequeueChapterDownloadGraphQL(int chapterId);
     bool enqueueChapterDownloadsGraphQL(const std::vector<int>& chapterIds);
+    bool dequeueChapterDownloadsGraphQL(const std::vector<int>& chapterIds);
+    bool reorderChapterDownloadGraphQL(int chapterId, int newPosition);
     bool startDownloadsGraphQL();
     bool stopDownloadsGraphQL();
     bool clearDownloadQueueGraphQL();

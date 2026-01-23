@@ -2539,7 +2539,15 @@ bool SuwayomiClient::setMangaCategories(int mangaId, const std::vector<int>& cat
 // Download Management
 // ============================================================================
 
-bool SuwayomiClient::queueChapterDownload(int mangaId, int chapterIndex) {
+bool SuwayomiClient::queueChapterDownload(int chapterId, int mangaId, int chapterIndex) {
+    // Try GraphQL first (primary API)
+    if (enqueueChapterDownloadGraphQL(chapterId)) {
+        brls::Logger::info("SuwayomiClient: Queued chapter {} via GraphQL", chapterId);
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("SuwayomiClient: GraphQL failed for queue download, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/download/" + std::to_string(mangaId) +
@@ -2549,7 +2557,15 @@ bool SuwayomiClient::queueChapterDownload(int mangaId, int chapterIndex) {
     return response.success && response.statusCode == 200;
 }
 
-bool SuwayomiClient::deleteChapterDownload(int mangaId, int chapterIndex) {
+bool SuwayomiClient::deleteChapterDownload(int chapterId, int mangaId, int chapterIndex) {
+    // Try GraphQL first (primary API)
+    if (dequeueChapterDownloadGraphQL(chapterId)) {
+        brls::Logger::info("SuwayomiClient: Dequeued chapter {} via GraphQL", chapterId);
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("SuwayomiClient: GraphQL failed for dequeue download, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/download/" + std::to_string(mangaId) +
@@ -2560,28 +2576,98 @@ bool SuwayomiClient::deleteChapterDownload(int mangaId, int chapterIndex) {
 }
 
 bool SuwayomiClient::queueChapterDownloads(const std::vector<int>& chapterIds) {
-    // Use GraphQL API which expects actual chapter IDs
-    brls::Logger::info("SuwayomiClient: Queueing {} chapters for download", chapterIds.size());
-    return enqueueChapterDownloadsGraphQL(chapterIds);
-}
-
-bool SuwayomiClient::deleteChapterDownloads(int mangaId, const std::vector<int>& chapterIndexes) {
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
-
-    std::string url = buildApiUrl("/download/batch");
-
-    std::string chapterList;
-    for (size_t i = 0; i < chapterIndexes.size(); i++) {
-        if (i > 0) chapterList += ",";
-        chapterList += "{\"mangaId\":" + std::to_string(mangaId) +
-                       ",\"chapterIndex\":" + std::to_string(chapterIndexes[i]) + "}";
+    // Try GraphQL first (primary API)
+    brls::Logger::info("SuwayomiClient: Queueing {} chapters for download via GraphQL", chapterIds.size());
+    if (enqueueChapterDownloadsGraphQL(chapterIds)) {
+        return true;
     }
 
-    std::string body = "{\"chapterIds\":[" + chapterList + "]}";
-    vitasuwayomi::HttpResponse response = http.del(url);
+    // REST fallback - need to queue each chapter individually
+    // Note: REST API requires mangaId/chapterIndex which we don't have here,
+    // but we can try to fetch chapter info and queue individually
+    brls::Logger::info("SuwayomiClient: GraphQL batch failed, trying individual REST fallback...");
 
-    return response.success && response.statusCode == 200;
+    vitasuwayomi::HttpClient http = createHttpClient();
+    int successCount = 0;
+
+    for (int chapterId : chapterIds) {
+        // Try to get chapter info to build REST URL
+        // For REST we need: GET /download/{mangaId}/chapter/{chapterIndex}
+        // Since we only have chapterId, we need to fetch chapter details first
+        std::string chapterQuery = R"(
+            query GetChapter($id: Int!) {
+                chapter(id: $id) {
+                    sourceOrder
+                    manga { id }
+                }
+            }
+        )";
+        std::string vars = "{\"id\":" + std::to_string(chapterId) + "}";
+        std::string response = executeGraphQL(chapterQuery, vars);
+
+        if (!response.empty()) {
+            std::string data = extractJsonObject(response, "data");
+            std::string chapterJson = extractJsonObject(data, "chapter");
+            int chapterIndex = extractJsonInt(chapterJson, "sourceOrder");
+            std::string mangaJson = extractJsonObject(chapterJson, "manga");
+            int mangaId = extractJsonInt(mangaJson, "id");
+
+            if (mangaId > 0) {
+                std::string url = buildApiUrl("/download/" + std::to_string(mangaId) +
+                                               "/chapter/" + std::to_string(chapterIndex));
+                vitasuwayomi::HttpResponse resp = http.get(url);
+                if (resp.success && resp.statusCode == 200) {
+                    successCount++;
+                }
+            }
+        }
+    }
+
+    brls::Logger::info("SuwayomiClient: REST fallback queued {}/{} chapters", successCount, chapterIds.size());
+    return successCount == static_cast<int>(chapterIds.size());
+}
+
+bool SuwayomiClient::deleteChapterDownloads(const std::vector<int>& chapterIds, int mangaId, const std::vector<int>& chapterIndexes) {
+    // Try GraphQL first (primary API)
+    brls::Logger::info("SuwayomiClient: Dequeuing {} chapters via GraphQL", chapterIds.size());
+    if (dequeueChapterDownloadsGraphQL(chapterIds)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("SuwayomiClient: GraphQL batch dequeue failed, falling back to REST...");
+
+    // If we have mangaId and chapterIndexes for REST fallback
+    if (mangaId > 0 && !chapterIndexes.empty()) {
+        vitasuwayomi::HttpClient http = createHttpClient();
+        http.setDefaultHeader("Content-Type", "application/json");
+
+        std::string url = buildApiUrl("/download/batch");
+
+        std::string chapterList;
+        for (size_t i = 0; i < chapterIndexes.size(); i++) {
+            if (i > 0) chapterList += ",";
+            chapterList += "{\"mangaId\":" + std::to_string(mangaId) +
+                           ",\"chapterIndex\":" + std::to_string(chapterIndexes[i]) + "}";
+        }
+
+        std::string body = "{\"chapterIds\":[" + chapterList + "]}";
+        vitasuwayomi::HttpResponse response = http.del(url);
+
+        return response.success && response.statusCode == 200;
+    }
+
+    // If no REST fallback info provided, try to dequeue individually using single dequeue
+    brls::Logger::info("SuwayomiClient: Trying individual dequeue fallback...");
+    int successCount = 0;
+    for (int chapterId : chapterIds) {
+        if (dequeueChapterDownloadGraphQL(chapterId)) {
+            successCount++;
+        }
+    }
+
+    brls::Logger::info("SuwayomiClient: Individual dequeue: {}/{} succeeded", successCount, chapterIds.size());
+    return successCount == static_cast<int>(chapterIds.size());
 }
 
 bool SuwayomiClient::fetchDownloadQueue(std::vector<DownloadQueueItem>& queue) {
@@ -2734,7 +2820,15 @@ bool SuwayomiClient::clearDownloadQueue() {
     return response.success && response.statusCode == 200;
 }
 
-bool SuwayomiClient::reorderDownload(int mangaId, int chapterIndex, int newPosition) {
+bool SuwayomiClient::reorderDownload(int chapterId, int mangaId, int chapterIndex, int newPosition) {
+    // Try GraphQL first (primary API)
+    if (reorderChapterDownloadGraphQL(chapterId, newPosition)) {
+        brls::Logger::info("SuwayomiClient: Reordered chapter {} via GraphQL", chapterId);
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("SuwayomiClient: GraphQL failed for reorder, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
     http.setDefaultHeader("Content-Type", "application/json");
 
@@ -3110,6 +3204,46 @@ bool SuwayomiClient::enqueueChapterDownloadsGraphQL(const std::vector<int>& chap
     idList += "]";
 
     std::string variables = "{\"ids\":" + idList + "}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::dequeueChapterDownloadsGraphQL(const std::vector<int>& chapterIds) {
+    const char* query = R"(
+        mutation DequeueDownloads($ids: [Int!]!) {
+            dequeueChapterDownloads(input: { ids: $ids }) {
+                downloadStatus {
+                    state
+                }
+            }
+        }
+    )";
+
+    std::string idList = "[";
+    for (size_t i = 0; i < chapterIds.size(); i++) {
+        if (i > 0) idList += ",";
+        idList += std::to_string(chapterIds[i]);
+    }
+    idList += "]";
+
+    std::string variables = "{\"ids\":" + idList + "}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::reorderChapterDownloadGraphQL(int chapterId, int newPosition) {
+    const char* query = R"(
+        mutation ReorderDownload($id: Int!, $position: Int!) {
+            reorderChapterDownload(input: { chapterId: $id, to: $position }) {
+                downloadStatus {
+                    state
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(chapterId) +
+                            ",\"position\":" + std::to_string(newPosition) + "}";
     std::string response = executeGraphQL(query, variables);
     return !response.empty();
 }
