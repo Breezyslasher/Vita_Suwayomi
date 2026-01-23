@@ -355,6 +355,12 @@ void MangaDetailView::refresh() {
     loadDetails();
 }
 
+void MangaDetailView::willAppear(bool resetState) {
+    brls::Box::willAppear(resetState);
+    // Reload chapters to update the read button text when returning from reader
+    loadChapters();
+}
+
 void MangaDetailView::loadDetails() {
     brls::Logger::debug("MangaDetailView: Loading details for manga {}", m_manga.id);
 
