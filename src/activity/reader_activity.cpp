@@ -992,8 +992,16 @@ void ReaderActivity::nextChapter() {
                                          " of " + std::to_string(m_totalChapters));
             }
 
+            // Handle webtoon mode vs single-page mode
+            if (m_continuousScrollMode && webtoonScroll) {
+                // Update webtoon scroll view with new pages and scroll to beginning
+                webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
+                webtoonScroll->scrollToPage(0);
+            } else {
+                loadPage(m_currentPage);
+            }
+
             updatePageDisplay();
-            loadPage(m_currentPage);
 
             // Start preloading next chapter
             preloadNextChapter();
@@ -1013,6 +1021,11 @@ void ReaderActivity::previousChapter() {
         m_currentPage = 0;
         m_pages.clear();
         m_cachedImages.clear();
+
+        // Clear webtoon scroll view to reset scroll position for new chapter
+        if (m_continuousScrollMode && webtoonScroll) {
+            webtoonScroll->clearPages();
+        }
 
         loadPages();
     }

@@ -43,21 +43,24 @@ void WebtoonScrollView::setupGestures() {
                 float rawDy = status.position.y - m_touchLast.y;
 
                 // Calculate scroll delta based on rotation
-                // 0°: Normal vertical scrolling (dy)
-                // 90°: Horizontal scrolling, swipe left = scroll down (-dx)
-                // 180°: Inverted vertical scrolling (-dy)
-                // 270°: Horizontal scrolling, swipe right = scroll down (dx)
+                // scrollY: 0 = beginning (top/left), negative = scrolled towards end
+                // 0°: Normal vertical scrolling - swipe up (negative dy) to scroll down
+                // 90°: Horizontal scrolling - swipe left (negative dx) to scroll down (forward)
+                // 180°: Inverted vertical scrolling - swipe down (positive dy) to scroll down
+                // 270°: Horizontal scrolling - swipe right (positive dx) to scroll down (forward)
                 float scrollDelta = 0.0f;
                 int rotation = static_cast<int>(m_rotationDegrees);
 
                 if (rotation == 0) {
                     scrollDelta = rawDy;
                 } else if (rotation == 90) {
-                    scrollDelta = -rawDx;
+                    // Swipe left (negative dx) should scroll forward (decrease scrollY)
+                    scrollDelta = rawDx;
                 } else if (rotation == 180) {
                     scrollDelta = -rawDy;
                 } else if (rotation == 270) {
-                    scrollDelta = rawDx;
+                    // Swipe right (positive dx) should scroll forward (decrease scrollY)
+                    scrollDelta = -rawDx;
                 }
 
                 // Update scroll position
