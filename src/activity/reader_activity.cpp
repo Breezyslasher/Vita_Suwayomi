@@ -4,6 +4,7 @@
  */
 
 #include "activity/reader_activity.hpp"
+#include "view/rotatable_label.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
@@ -14,14 +15,15 @@
 #include <cmath>
 #include <chrono>
 
-// Register WebtoonScrollView for XML creation
+// Register custom views for XML creation
 namespace {
-    struct RegisterWebtoonScrollView {
-        RegisterWebtoonScrollView() {
+    struct RegisterCustomViews {
+        RegisterCustomViews() {
             brls::Application::registerXMLView("WebtoonScrollView", vitasuwayomi::WebtoonScrollView::create);
+            brls::Application::registerXMLView("RotatableLabel", vitasuwayomi::RotatableLabel::create);
         }
     };
-    static RegisterWebtoonScrollView __registerWebtoonScrollView;
+    static RegisterCustomViews __registerCustomViews;
 }
 
 namespace vitasuwayomi {
@@ -868,16 +870,16 @@ void ReaderActivity::preloadAdjacentPages() {
 }
 
 void ReaderActivity::updatePageDisplay() {
-    // Update page counter (top-right overlay)
-    if (pageLabel) {
+    // Update page counter (top-right overlay with rotation support)
+    if (pageCounter) {
         const Page& page = m_pages[m_currentPage];
         if (page.totalSegments > 1) {
             // Show segment info: "Page-Segment/Total" e.g. "1-2/10"
-            pageLabel->setText(std::to_string(page.originalIndex + 1) + "-" +
+            pageCounter->setText(std::to_string(page.originalIndex + 1) + "-" +
                               std::to_string(page.segment + 1) + "/" +
                               std::to_string(m_pages.size()));
         } else {
-            pageLabel->setText(std::to_string(m_currentPage + 1) + "/" +
+            pageCounter->setText(std::to_string(m_currentPage + 1) + "/" +
                               std::to_string(m_pages.size()));
         }
     }
@@ -990,8 +992,16 @@ void ReaderActivity::nextChapter() {
                                          " of " + std::to_string(m_totalChapters));
             }
 
+            // Handle webtoon mode vs single-page mode
+            if (m_continuousScrollMode && webtoonScroll) {
+                // Update webtoon scroll view with new pages and scroll to beginning
+                webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
+                webtoonScroll->scrollToPage(0);
+            } else {
+                loadPage(m_currentPage);
+            }
+
             updatePageDisplay();
-            loadPage(m_currentPage);
 
             // Start preloading next chapter
             preloadNextChapter();
@@ -1011,6 +1021,11 @@ void ReaderActivity::previousChapter() {
         m_currentPage = 0;
         m_pages.clear();
         m_cachedImages.clear();
+
+        // Clear webtoon scroll view to reset scroll position for new chapter
+        if (m_continuousScrollMode && webtoonScroll) {
+            webtoonScroll->clearPages();
+        }
 
         loadPages();
     }
@@ -1081,6 +1096,24 @@ void ReaderActivity::schedulePageCounterHide() {
     // Auto-hide page counter after 1.5 seconds (like NOBORU)
     // Note: In a real implementation, you'd use a timer/delayed callback
     // For now, the page counter stays visible until controls are shown
+}
+
+void ReaderActivity::updatePageCounterRotation() {
+    if (!pageCounter) return;
+
+    // Get rotation in degrees
+    float rotation = static_cast<float>(m_settings.rotation);
+
+    // Apply rotation to the RotatableLabel (text will rotate with it)
+    pageCounter->setRotation(rotation);
+
+    // Keep counter fixed at physical top-right corner of screen
+    // Position is set in XML (positionTop=10, positionRight=10)
+    // No translation needed - counter stays in place, only text rotates
+    pageCounter->setTranslationX(0.0f);
+    pageCounter->setTranslationY(0.0f);
+
+    brls::Logger::debug("ReaderActivity: Page counter rotation set to {}°", static_cast<int>(rotation));
 }
 
 void ReaderActivity::showSettings() {
@@ -1181,6 +1214,9 @@ void ReaderActivity::applySettings() {
     if (webtoonScroll) {
         webtoonScroll->setRotation(rotation);
     }
+
+    // Update page counter position to stay upright relative to content
+    updatePageCounterRotation();
 }
 
 void ReaderActivity::saveSettingsToApp() {

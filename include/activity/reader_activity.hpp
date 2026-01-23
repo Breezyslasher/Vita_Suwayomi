@@ -11,6 +11,7 @@
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "view/rotatable_image.hpp"
+#include "view/rotatable_label.hpp"
 #include "view/webtoon_scroll_view.hpp"
 
 namespace vitasuwayomi {
@@ -102,14 +103,16 @@ private:
     void hidePageCounter();
     void schedulePageCounterHide();
 
+    // Update page counter rotation/position
+    void updatePageCounterRotation();
+
     // UI components - NOBORU style
     BRLS_BIND(brls::Box, container, "reader/container");
     BRLS_BIND(RotatableImage, pageImage, "reader/page_image");
     BRLS_BIND(RotatableImage, previewImage, "reader/preview_image");  // Preview page for swipe
     BRLS_BIND(brls::Box, topBar, "reader/top_bar");
     BRLS_BIND(brls::Box, bottomBar, "reader/bottom_bar");
-    BRLS_BIND(brls::Box, pageCounter, "reader/page_counter");
-    BRLS_BIND(brls::Label, pageLabel, "reader/page_label");
+    BRLS_BIND(RotatableLabel, pageCounter, "reader/page_counter");
     BRLS_BIND(brls::Label, mangaLabel, "reader/manga_label");
     BRLS_BIND(brls::Label, chapterLabel, "reader/chapter_label");
     BRLS_BIND(brls::Label, chapterProgress, "reader/chapter_progress");
