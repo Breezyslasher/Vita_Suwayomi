@@ -128,7 +128,7 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
     m_pageHeights.clear();
     m_pageHeights.reserve(pages.size());
 
-    // Calculate image rotation (flipped for 90°/270° to show beginning on left)
+    // Calculate image rotation (swap 90/270 for webtoon mode)
     float imageRotation = m_rotationDegrees;
     if (m_rotationDegrees == 90.0f) {
         imageRotation = 270.0f;
@@ -241,16 +241,12 @@ void WebtoonScrollView::setRotation(float degrees) {
         m_rotationDegrees = 0.0f;
     }
 
-    // For webtoon mode with horizontal layout (90°/270°), we need to flip the rotation direction
-    // so that the "beginning" (top) of the original vertical content appears on the left
-    // where horizontal reading starts.
-    // - 90° rotation: use -90° (270°) so original TOP -> LEFT
-    // - 270° rotation: use -270° (90°) so original TOP -> RIGHT
+    // For webtoon mode with horizontal layout (90°/270°), swap rotation
     float imageRotation = m_rotationDegrees;
     if (m_rotationDegrees == 90.0f) {
-        imageRotation = 270.0f;  // Flip to counter-clockwise
+        imageRotation = 270.0f;
     } else if (m_rotationDegrees == 270.0f) {
-        imageRotation = 90.0f;   // Flip to clockwise
+        imageRotation = 90.0f;
     }
 
     // Apply rotation to all existing page images

@@ -504,6 +504,7 @@ Chapter SuwayomiClient::parseChapterFromGraphQL(const std::string& json) {
     ch.uploadDate = extractJsonInt64(json, "uploadDate");
     ch.pageCount = extractJsonInt(json, "pageCount");
     ch.lastPageRead = extractJsonInt(json, "lastPageRead");
+    ch.lastReadAt = extractJsonInt64(json, "lastReadAt");
     ch.index = extractJsonInt(json, "sourceOrder");
 
     // GraphQL uses isRead, isDownloaded, isBookmarked
@@ -869,6 +870,7 @@ bool SuwayomiClient::fetchChaptersGraphQL(int mangaId, std::vector<Chapter>& cha
                     isBookmarked
                     pageCount
                     lastPageRead
+                    lastReadAt
                     sourceOrder
                 }
                 totalCount
@@ -2104,12 +2106,28 @@ bool SuwayomiClient::updateChapter(int mangaId, int chapterIndex, bool read, boo
     return response.success && response.statusCode == 200;
 }
 
-bool SuwayomiClient::markChapterRead(int mangaId, int chapterIndex) {
-    return updateChapter(mangaId, chapterIndex, true, false);
+bool SuwayomiClient::markChapterRead(int mangaId, int chapterId) {
+    // Try GraphQL first (uses chapter ID correctly)
+    if (markChapterReadGraphQL(chapterId, true)) {
+        brls::Logger::debug("Marked chapter {} as read via GraphQL", chapterId);
+        return true;
+    }
+
+    // REST fallback (less reliable with ID vs index confusion)
+    brls::Logger::info("GraphQL failed for mark read, trying REST...");
+    return updateChapter(mangaId, chapterId, true, false);
 }
 
-bool SuwayomiClient::markChapterUnread(int mangaId, int chapterIndex) {
-    return updateChapter(mangaId, chapterIndex, false, false);
+bool SuwayomiClient::markChapterUnread(int mangaId, int chapterId) {
+    // Try GraphQL first (uses chapter ID correctly)
+    if (markChapterReadGraphQL(chapterId, false)) {
+        brls::Logger::debug("Marked chapter {} as unread via GraphQL", chapterId);
+        return true;
+    }
+
+    // REST fallback (less reliable with ID vs index confusion)
+    brls::Logger::info("GraphQL failed for mark unread, trying REST...");
+    return updateChapter(mangaId, chapterId, false, false);
 }
 
 bool SuwayomiClient::markChaptersRead(int mangaId, const std::vector<int>& chapterIndexes) {
@@ -2148,12 +2166,20 @@ bool SuwayomiClient::markChaptersUnread(int mangaId, const std::vector<int>& cha
     return response.success && response.statusCode == 200;
 }
 
-bool SuwayomiClient::updateChapterProgress(int mangaId, int chapterIndex, int lastPageRead) {
+bool SuwayomiClient::updateChapterProgress(int mangaId, int chapterId, int lastPageRead) {
+    // Try GraphQL first (uses chapter ID correctly)
+    if (updateChapterProgressGraphQL(chapterId, lastPageRead)) {
+        brls::Logger::debug("Updated chapter progress via GraphQL: chapter={}, page={}", chapterId, lastPageRead);
+        return true;
+    }
+
+    // REST fallback - uses /chapter/{id} endpoint with chapter ID
+    brls::Logger::info("GraphQL failed for chapter progress, trying REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
     http.setDefaultHeader("Content-Type", "application/json");
 
-    std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) +
-                                   "/chapter/" + std::to_string(chapterIndex));
+    // Use the chapter ID endpoint directly
+    std::string url = buildApiUrl("/chapter/" + std::to_string(chapterId));
 
     std::string body = "{\"lastPageRead\":" + std::to_string(lastPageRead) + "}";
 
