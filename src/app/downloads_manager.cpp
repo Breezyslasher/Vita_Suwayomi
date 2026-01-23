@@ -171,14 +171,20 @@ bool DownloadsManager::queueChaptersDownload(int mangaId,
 }
 
 void DownloadsManager::startDownloads() {
-    if (m_downloading) return;
+    // Use compare_exchange to atomically check and set m_downloading
+    // This prevents race conditions when multiple callers try to start downloads
+    bool expected = false;
+    if (!m_downloading.compare_exchange_strong(expected, true)) {
+        // Already downloading - new chapters will be picked up by existing thread
+        brls::Logger::debug("DownloadsManager: Download thread already running, chapters will be added to queue");
+        return;
+    }
 
-    m_downloading = true;
     brls::Logger::info("DownloadsManager: Starting downloads");
 
     // Run downloads in background thread
     std::thread([this]() {
-        while (m_downloading) {
+        while (m_downloading.load()) {
             DownloadedChapter* nextChapter = nullptr;
             int mangaId = 0;
 
@@ -199,10 +205,30 @@ void DownloadsManager::startDownloads() {
             }
 
             if (!nextChapter) {
-                // No more chapters to download
-                m_downloading = false;
-                brls::Logger::info("DownloadsManager: All downloads complete");
-                break;
+                // No more chapters found - but re-check with lock held to prevent race condition
+                // where a chapter is queued just as we're about to exit
+                std::lock_guard<std::mutex> lock(m_mutex);
+
+                // Double-check for any queued chapters
+                bool hasQueued = false;
+                for (const auto& manga : m_downloads) {
+                    for (const auto& chapter : manga.chapters) {
+                        if (chapter.state == LocalDownloadState::QUEUED) {
+                            hasQueued = true;
+                            break;
+                        }
+                    }
+                    if (hasQueued) break;
+                }
+
+                if (!hasQueued) {
+                    // Truly no more chapters, safe to exit
+                    m_downloading.store(false);
+                    brls::Logger::info("DownloadsManager: All downloads complete");
+                    break;
+                }
+                // Found a queued chapter in re-check, continue the loop
+                continue;
             }
 
             // Download the chapter
@@ -212,7 +238,7 @@ void DownloadsManager::startDownloads() {
 }
 
 void DownloadsManager::pauseDownloads() {
-    m_downloading = false;
+    m_downloading.store(false);
 
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto& manga : m_downloads) {
@@ -1002,7 +1028,7 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
         for (size_t i = 0; i < pages.size(); i++) {
             const auto& page = pages[i];
 
-            if (!m_downloading) {
+            if (!m_downloading.load()) {
                 // Download was paused/cancelled
                 brls::Logger::info("DownloadsManager: Download paused/cancelled");
                 std::lock_guard<std::mutex> lock(m_mutex);
