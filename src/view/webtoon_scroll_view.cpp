@@ -128,6 +128,14 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
     m_pageHeights.clear();
     m_pageHeights.reserve(pages.size());
 
+    // Calculate image rotation (flipped for 90°/270° to show beginning on left)
+    float imageRotation = m_rotationDegrees;
+    if (m_rotationDegrees == 90.0f) {
+        imageRotation = 270.0f;
+    } else if (m_rotationDegrees == 270.0f) {
+        imageRotation = 90.0f;
+    }
+
     // Create image containers for each page
     for (size_t i = 0; i < pages.size(); i++) {
         auto* pageImg = new RotatableImage();
@@ -135,7 +143,7 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
         pageImg->setHeight(defaultHeight);  // Will be adjusted when image loads
         pageImg->setScalingType(brls::ImageScalingType::FIT);
         pageImg->setBackgroundFillColor(nvgRGBA(26, 26, 46, 255));
-        pageImg->setRotation(m_rotationDegrees);  // Apply current rotation
+        pageImg->setRotation(imageRotation);  // Apply corrected rotation for webtoon mode
 
         m_pageImages.push_back(pageImg);
         m_pageHeights.push_back(defaultHeight);
@@ -233,14 +241,26 @@ void WebtoonScrollView::setRotation(float degrees) {
         m_rotationDegrees = 0.0f;
     }
 
+    // For webtoon mode with horizontal layout (90°/270°), we need to flip the rotation direction
+    // so that the "beginning" (top) of the original vertical content appears on the left
+    // where horizontal reading starts.
+    // - 90° rotation: use -90° (270°) so original TOP -> LEFT
+    // - 270° rotation: use -270° (90°) so original TOP -> RIGHT
+    float imageRotation = m_rotationDegrees;
+    if (m_rotationDegrees == 90.0f) {
+        imageRotation = 270.0f;  // Flip to counter-clockwise
+    } else if (m_rotationDegrees == 270.0f) {
+        imageRotation = 90.0f;   // Flip to clockwise
+    }
+
     // Apply rotation to all existing page images
     for (auto* img : m_pageImages) {
         if (img) {
-            img->setRotation(m_rotationDegrees);
+            img->setRotation(imageRotation);
         }
     }
 
-    brls::Logger::debug("WebtoonScrollView: setRotation({}) -> {} degrees", degrees, m_rotationDegrees);
+    brls::Logger::debug("WebtoonScrollView: setRotation({}) -> {} degrees (image: {} degrees)", degrees, m_rotationDegrees, imageRotation);
 }
 
 bool WebtoonScrollView::isHorizontalLayout() const {
