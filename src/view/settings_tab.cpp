@@ -490,6 +490,22 @@ void SettingsTab::createDownloadsSection() {
     });
     m_contentBox->addView(deleteAfterReadToggle);
 
+    // Auto-resume downloads toggle
+    auto* autoResumeToggle = new brls::BooleanCell();
+    autoResumeToggle->init("Resume Downloads on Startup", settings.autoResumeDownloads, [&settings](bool value) {
+        settings.autoResumeDownloads = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(autoResumeToggle);
+
+    // Info label for auto-resume
+    auto* autoResumeInfoLabel = new brls::Label();
+    autoResumeInfoLabel->setText("Automatically resume queued downloads when app restarts");
+    autoResumeInfoLabel->setFontSize(14);
+    autoResumeInfoLabel->setMarginLeft(16);
+    autoResumeInfoLabel->setMarginTop(4);
+    m_contentBox->addView(autoResumeInfoLabel);
+
     // Sync progress now button
     auto* syncNowCell = new brls::DetailCell();
     syncNowCell->setText("Sync Progress Now");

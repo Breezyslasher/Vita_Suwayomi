@@ -107,6 +107,7 @@ struct AppSettings {
     bool downloadOverWifiOnly = true;
     int maxConcurrentDownloads = 2;
     bool deleteAfterRead = false;
+    bool autoResumeDownloads = true;  // Auto-resume queued downloads on app restart
 
     // Source/Browse Settings
     std::set<std::string> enabledSourceLanguages;  // Empty = all languages, otherwise filter by these (e.g. "en", "multi")

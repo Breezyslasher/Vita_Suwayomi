@@ -351,6 +351,7 @@ bool Application::loadSettings() {
     m_settings.maxConcurrentDownloads = extractInt("maxConcurrentDownloads");
     if (m_settings.maxConcurrentDownloads <= 0) m_settings.maxConcurrentDownloads = 2;
     m_settings.deleteAfterRead = extractBool("deleteAfterRead", false);
+    m_settings.autoResumeDownloads = extractBool("autoResumeDownloads", true);
 
     // Load browse/source settings
     m_settings.showNsfwSources = extractBool("showNsfwSources", false);
@@ -583,6 +584,7 @@ bool Application::saveSettings() {
     json += "  \"downloadOverWifiOnly\": " + std::string(m_settings.downloadOverWifiOnly ? "true" : "false") + ",\n";
     json += "  \"maxConcurrentDownloads\": " + std::to_string(m_settings.maxConcurrentDownloads) + ",\n";
     json += "  \"deleteAfterRead\": " + std::string(m_settings.deleteAfterRead ? "true" : "false") + ",\n";
+    json += "  \"autoResumeDownloads\": " + std::string(m_settings.autoResumeDownloads ? "true" : "false") + ",\n";
 
     // Browse/Source settings
     json += "  \"showNsfwSources\": " + std::string(m_settings.showNsfwSources ? "true" : "false") + ",\n";
