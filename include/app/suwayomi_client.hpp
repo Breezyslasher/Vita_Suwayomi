@@ -83,6 +83,7 @@ struct Chapter {
     int pageCount = 0;
     int index = 0;                // Chapter index in manga
     int64_t fetchedAt = 0;        // When chapter was fetched
+    int64_t lastReadAt = 0;       // When chapter was last read (Unix timestamp)
     bool downloaded = false;
     DownloadState downloadState = DownloadState::NOT_DOWNLOADED;
     int mangaId = 0;

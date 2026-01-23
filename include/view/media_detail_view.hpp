@@ -102,6 +102,9 @@ private:
     // Helper to update sort icon
     void updateSortIcon();
 
+    // Update the read button text based on reading progress
+    void updateReadButtonText();
+
     // Cancel all downloading chapters (keep completed)
     void cancelAllDownloading();
 

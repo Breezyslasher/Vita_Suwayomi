@@ -11,6 +11,7 @@
 #include "utils/async.hpp"
 #include <cmath>
 #include <set>
+#include <limits>
 
 namespace vitasuwayomi {
 
@@ -403,6 +404,9 @@ void MangaDetailView::loadChapters() {
                     }
                     m_chapterCountLabel->setText(info);
                 }
+
+                // Update the read button text based on reading progress
+                updateReadButtonText();
             });
         } else {
             brls::Logger::error("MangaDetailView: Failed to fetch chapters");
@@ -867,11 +871,64 @@ void MangaDetailView::onChapterSelected(const Chapter& chapter) {
 }
 
 void MangaDetailView::onRead(int chapterId) {
+    int startPage = 0;
+
     if (chapterId == -1) {
         // Continue from last read or start from first chapter
-        if (m_manga.lastChapterRead > 0 && !m_chapters.empty()) {
-            // lastChapterRead is a chapter ID
+        // Find the chapter with the most recent lastReadAt timestamp
+        const Chapter* lastReadChapter = nullptr;
+        int64_t mostRecentReadAt = 0;
+
+        for (const auto& ch : m_chapters) {
+            if (ch.lastReadAt > mostRecentReadAt) {
+                mostRecentReadAt = ch.lastReadAt;
+                lastReadChapter = &ch;
+            }
+        }
+
+        if (lastReadChapter != nullptr) {
+            // Found a chapter with reading progress
+            chapterId = lastReadChapter->id;
+            startPage = lastReadChapter->lastPageRead;
+
+            // If the chapter is fully read, find the next unread chapter
+            if (lastReadChapter->read && lastReadChapter->pageCount > 0) {
+                // Find the next chapter in reading order (higher chapter number)
+                const Chapter* nextUnread = nullptr;
+                float lastChapterNum = lastReadChapter->chapterNumber;
+                float smallestHigherChapterNum = std::numeric_limits<float>::max();
+
+                for (const auto& ch : m_chapters) {
+                    if (!ch.read && ch.chapterNumber > lastChapterNum) {
+                        if (ch.chapterNumber < smallestHigherChapterNum) {
+                            smallestHigherChapterNum = ch.chapterNumber;
+                            nextUnread = &ch;
+                        }
+                    }
+                }
+
+                if (nextUnread != nullptr) {
+                    chapterId = nextUnread->id;
+                    startPage = 0;  // Start from beginning of new chapter
+                    brls::Logger::info("MangaDetailView: Last chapter read, continuing to next unread Ch. {}",
+                                      nextUnread->chapterNumber);
+                }
+                // If no next unread, stay on the last read chapter
+            }
+
+            brls::Logger::info("MangaDetailView: Continuing from chapter id={}, page={}", chapterId, startPage);
+        } else if (m_manga.lastChapterRead > 0 && !m_chapters.empty()) {
+            // Fallback to stored lastChapterRead ID
             chapterId = m_manga.lastChapterRead;
+
+            // Try to find the page for this chapter
+            for (const auto& ch : m_chapters) {
+                if (ch.id == chapterId) {
+                    startPage = ch.lastPageRead;
+                    break;
+                }
+            }
+            brls::Logger::info("MangaDetailView: Using stored lastChapterRead id={}, page={}", chapterId, startPage);
         } else if (!m_chapters.empty()) {
             // Start from first chapter (lowest chapter number)
             auto firstChapter = std::min_element(m_chapters.begin(), m_chapters.end(),
@@ -879,14 +936,24 @@ void MangaDetailView::onRead(int chapterId) {
                     return a.chapterNumber < b.chapterNumber;
                 });
             chapterId = firstChapter->id;
+            startPage = 0;
+            brls::Logger::info("MangaDetailView: Starting from first chapter id={}", chapterId);
         } else {
             brls::Application::notify("No chapters available");
             return;
         }
+    } else {
+        // Specific chapter requested, find its lastPageRead
+        for (const auto& ch : m_chapters) {
+            if (ch.id == chapterId) {
+                startPage = ch.lastPageRead;
+                break;
+            }
+        }
     }
 
-    brls::Logger::info("MangaDetailView: Reading chapter id={}", chapterId);
-    Application::getInstance().pushReaderActivity(m_manga.id, chapterId, m_manga.title);
+    brls::Logger::info("MangaDetailView: Reading chapter id={}, startPage={}", chapterId, startPage);
+    Application::getInstance().pushReaderActivityAtPage(m_manga.id, chapterId, startPage, m_manga.title);
 }
 
 void MangaDetailView::onAddToLibrary() {
@@ -1412,6 +1479,80 @@ void MangaDetailView::updateSortIcon() {
         : "app0:resources/icons/sort-1-9.png";
 
     m_sortIcon->setImageFromFile(iconPath);
+}
+
+void MangaDetailView::updateReadButtonText() {
+    if (!m_readButton || m_chapters.empty()) return;
+
+    // Find the chapter with the most recent lastReadAt timestamp
+    const Chapter* lastReadChapter = nullptr;
+    int64_t mostRecentReadAt = 0;
+
+    for (const auto& ch : m_chapters) {
+        if (ch.lastReadAt > mostRecentReadAt) {
+            mostRecentReadAt = ch.lastReadAt;
+            lastReadChapter = &ch;
+        }
+    }
+
+    std::string readText;
+
+    if (lastReadChapter != nullptr) {
+        // If the chapter is fully read, check for next unread chapter
+        if (lastReadChapter->read) {
+            // Find the next unread chapter
+            const Chapter* nextUnread = nullptr;
+            float lastChapterNum = lastReadChapter->chapterNumber;
+            float smallestHigherChapterNum = std::numeric_limits<float>::max();
+
+            for (const auto& ch : m_chapters) {
+                if (!ch.read && ch.chapterNumber > lastChapterNum) {
+                    if (ch.chapterNumber < smallestHigherChapterNum) {
+                        smallestHigherChapterNum = ch.chapterNumber;
+                        nextUnread = &ch;
+                    }
+                }
+            }
+
+            if (nextUnread != nullptr) {
+                // Format chapter number nicely
+                float chNum = nextUnread->chapterNumber;
+                if (chNum == static_cast<int>(chNum)) {
+                    readText = "Start Ch. " + std::to_string(static_cast<int>(chNum));
+                } else {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "Start Ch. %.1f", chNum);
+                    readText = buf;
+                }
+            } else {
+                // All chapters read, show re-read
+                readText = "Re-read";
+            }
+        } else {
+            // Continue from last read chapter
+            float chNum = lastReadChapter->chapterNumber;
+            int pageNum = lastReadChapter->lastPageRead + 1;  // Display as 1-indexed
+
+            if (chNum == static_cast<int>(chNum)) {
+                readText = "Continue Ch. " + std::to_string(static_cast<int>(chNum));
+            } else {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "Continue Ch. %.1f", chNum);
+                readText = buf;
+            }
+
+            // Add page info if there's progress
+            if (lastReadChapter->lastPageRead > 0 && lastReadChapter->pageCount > 0) {
+                readText += " p." + std::to_string(pageNum);
+            }
+        }
+    } else {
+        // No reading progress, show "Start Reading"
+        readText = "Start Reading";
+    }
+
+    m_readButton->setText(readText);
+    brls::Logger::debug("MangaDetailView: Updated read button text to '{}'", readText);
 }
 
 void MangaDetailView::toggleDescription() {
