@@ -4,6 +4,7 @@
  */
 
 #include "app/downloads_manager.hpp"
+#include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/http_client.hpp"
 #include "utils/image_loader.hpp"
@@ -122,6 +123,12 @@ bool DownloadsManager::init() {
 
     m_initialized = true;
     brls::Logger::info("DownloadsManager: Initialized with {} downloads", m_downloads.size());
+
+    // Auto-resume downloads if setting is enabled and there are incomplete downloads
+    if (Application::getInstance().getSettings().autoResumeDownloads && hasIncompleteDownloads()) {
+        brls::Logger::info("DownloadsManager: Auto-resuming incomplete downloads");
+        startDownloads();
+    }
 
     return true;
 }
