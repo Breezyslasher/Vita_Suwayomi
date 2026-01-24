@@ -64,49 +64,65 @@ DownloadsTab::DownloadsTab() {
     header->setMargins(0, 0, 15, 0);
     this->addView(header);
 
-    // Download Queue Section
-    auto queueHeader = new brls::Label();
-    queueHeader->setText("Download Queue");
-    queueHeader->setFontSize(18);
-    queueHeader->setMargins(0, 0, 10, 0);
-    this->addView(queueHeader);
+    // === Download Queue Section (server downloads) ===
+    m_queueSection = new brls::Box();
+    m_queueSection->setAxis(brls::Axis::COLUMN);
+    m_queueSection->setMargins(0, 0, 15, 0);
+    m_queueSection->setVisibility(brls::Visibility::GONE);  // Hidden by default
+    this->addView(m_queueSection);
 
-    // Queue container
+    m_queueHeader = new brls::Label();
+    m_queueHeader->setText("Download Queue");
+    m_queueHeader->setFontSize(18);
+    m_queueHeader->setMargins(0, 0, 10, 0);
+    m_queueSection->addView(m_queueHeader);
+
+    // Scrollable queue container
+    m_queueScroll = new brls::ScrollingFrame();
+    m_queueScroll->setMaxHeight(200);  // Limit height to make it scrollable
+    m_queueSection->addView(m_queueScroll);
+
     m_queueContainer = new brls::Box();
     m_queueContainer->setAxis(brls::Axis::COLUMN);
-    m_queueContainer->setMargins(0, 0, 20, 0);
-    this->addView(m_queueContainer);
+    m_queueScroll->setContentView(m_queueContainer);
 
-    // Queue empty label
+    // Queue empty label (not used when section is hidden, but kept for error states)
     m_queueEmptyLabel = new brls::Label();
     m_queueEmptyLabel->setText("No downloads in queue");
     m_queueEmptyLabel->setFontSize(14);
     m_queueEmptyLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
     m_queueEmptyLabel->setMargins(0, 0, 10, 0);
     m_queueEmptyLabel->setVisibility(brls::Visibility::GONE);
-    m_queueContainer->addView(m_queueEmptyLabel);
 
-    // Local Downloads Section
-    auto localHeader = new brls::Label();
-    localHeader->setText("Downloaded Manga");
-    localHeader->setFontSize(18);
-    localHeader->setMargins(0, 0, 10, 0);
-    this->addView(localHeader);
+    // === Local Downloads Section ===
+    m_localSection = new brls::Box();
+    m_localSection->setAxis(brls::Axis::COLUMN);
+    m_localSection->setGrow(1.0f);
+    m_localSection->setVisibility(brls::Visibility::GONE);  // Hidden by default
+    this->addView(m_localSection);
 
-    // Local container
+    m_localHeader = new brls::Label();
+    m_localHeader->setText("Downloaded Manga");
+    m_localHeader->setFontSize(18);
+    m_localHeader->setMargins(0, 0, 10, 0);
+    m_localSection->addView(m_localHeader);
+
+    // Scrollable local container
+    m_localScroll = new brls::ScrollingFrame();
+    m_localScroll->setGrow(1.0f);
+    m_localSection->addView(m_localScroll);
+
     m_localContainer = new brls::Box();
     m_localContainer->setAxis(brls::Axis::COLUMN);
-    m_localContainer->setGrow(1.0f);
-    this->addView(m_localContainer);
+    m_localScroll->setContentView(m_localContainer);
 
-    // Local empty label
+    // Local empty label (not used when section is hidden)
     m_localEmptyLabel = new brls::Label();
     m_localEmptyLabel->setText("No downloaded manga.\nUse the download option on manga details to save for offline reading.");
     m_localEmptyLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     m_localEmptyLabel->setFontSize(14);
     m_localEmptyLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
     m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
-    m_localContainer->addView(m_localEmptyLabel);
 }
 
 void DownloadsTab::willAppear(bool resetState) {
@@ -120,8 +136,8 @@ void DownloadsTab::refresh() {
 }
 
 void DownloadsTab::refreshQueue() {
-    // Clear existing queue items (except empty label)
-    while (m_queueContainer->getChildren().size() > 1) {
+    // Clear existing queue items
+    while (m_queueContainer->getChildren().size() > 0) {
         m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
     }
 
@@ -132,24 +148,26 @@ void DownloadsTab::refreshQueue() {
 
         if (!client.fetchDownloadQueue(queue)) {
             brls::sync([this]() {
-                m_queueEmptyLabel->setText("Failed to fetch queue");
-                m_queueEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
+                // Hide section on fetch failure (no active downloads to show)
+                m_queueSection->setVisibility(brls::Visibility::GONE);
             });
             return;
         }
 
         brls::sync([this, queue]() {
             // Clear existing items again (in case of race)
-            while (m_queueContainer->getChildren().size() > 1) {
+            while (m_queueContainer->getChildren().size() > 0) {
                 m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
             }
 
+            // Hide section if queue is empty
             if (queue.empty()) {
-                m_queueEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
+                m_queueSection->setVisibility(brls::Visibility::GONE);
                 return;
             }
 
-            m_queueEmptyLabel->setVisibility(brls::Visibility::GONE);
+            // Show section when there are items
+            m_queueSection->setVisibility(brls::Visibility::VISIBLE);
 
             for (const auto& item : queue) {
                 auto row = new brls::Box();
@@ -226,16 +244,16 @@ void DownloadsTab::refreshQueue() {
 
                 row->addView(progressLabel);
 
-                // Add row at the beginning (before empty label)
-                m_queueContainer->addView(row, 0);
+                // Add row
+                m_queueContainer->addView(row);
             }
         });
     });
 }
 
 void DownloadsTab::refreshLocalDownloads() {
-    // Clear existing local items (except empty label)
-    while (m_localContainer->getChildren().size() > 1) {
+    // Clear existing local items
+    while (m_localContainer->getChildren().size() > 0) {
         m_localContainer->removeView(m_localContainer->getChildren()[0]);
     }
 
@@ -246,12 +264,14 @@ void DownloadsTab::refreshLocalDownloads() {
     auto downloads = mgr.getDownloads();
     brls::Logger::info("DownloadsTab: Found {} local downloads", downloads.size());
 
+    // Hide section if no local downloads
     if (downloads.empty()) {
-        m_localEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
+        m_localSection->setVisibility(brls::Visibility::GONE);
         return;
     }
 
-    m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
+    // Show section when there are items
+    m_localSection->setVisibility(brls::Visibility::VISIBLE);
 
     for (const auto& item : downloads) {
         auto row = new brls::Box();
@@ -371,8 +391,8 @@ void DownloadsTab::refreshLocalDownloads() {
             row->addView(cancelBtn);
         }
 
-        // Add row at the beginning (before empty label)
-        m_localContainer->addView(row, 0);
+        // Add row
+        m_localContainer->addView(row);
     }
 }
 

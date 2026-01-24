@@ -127,6 +127,7 @@ bool DownloadsManager::init() {
     // Auto-resume downloads if setting is enabled and there are incomplete downloads
     if (Application::getInstance().getSettings().autoResumeDownloads && hasIncompleteDownloads()) {
         brls::Logger::info("DownloadsManager: Auto-resuming incomplete downloads");
+        brls::Application::notify("Resuming downloads...");
         startDownloads();
     }
 
