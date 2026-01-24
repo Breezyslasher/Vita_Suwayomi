@@ -620,7 +620,7 @@ void MangaDetailView::populateChaptersList() {
                 DownloadsManager& dm = DownloadsManager::getInstance();
                 if (dm.cancelChapterDownload(m_manga.id, chapterIdx)) {
                     brls::Application::notify("Removed from queue");
-                    refreshChaptersList();
+                    populateChaptersList();
                 }
             } else if (localDownloaded) {
                 deleteChapterDownload(capturedChapter);
@@ -721,7 +721,7 @@ void MangaDetailView::populateChaptersList() {
                                     if (dm.cancelChapterDownload(mangaId, chapterIndex)) {
                                         brls::sync([this]() {
                                             brls::Application::notify("Removed from queue");
-                                            refreshChaptersList();
+                                            populateChaptersList();
                                         });
                                     }
                                 });
