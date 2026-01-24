@@ -90,31 +90,54 @@ void ExtensionsTab::onFocusGained() {
 }
 
 void ExtensionsTab::loadExtensions() {
-    brls::Logger::debug("Loading extensions list...");
+    brls::Logger::debug("Loading extensions list with server-side filtering...");
 
     brls::async([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        std::vector<Extension> extensions;
+        const AppSettings& settings = Application::getInstance().getSettings();
 
-        if (client.fetchExtensionList(extensions)) {
-            m_extensions = extensions;
+        // Get language filter from settings
+        std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
 
-            // Categorize extensions
+        // Default to English if no languages configured (to avoid loading hundreds of extensions)
+        if (filterLanguages.empty()) {
+            filterLanguages.insert("en");
+            brls::Logger::debug("No language filter set, defaulting to English");
+        }
+
+        // Fetch installed extensions (no language filter needed - always show all installed)
+        std::vector<Extension> installedExtensions;
+        bool installedSuccess = client.fetchInstalledExtensions(installedExtensions);
+
+        // Fetch uninstalled extensions with server-side language filter
+        std::vector<Extension> uninstalledExtensions;
+        bool uninstalledSuccess = client.fetchUninstalledExtensions(uninstalledExtensions, filterLanguages);
+
+        if (installedSuccess || uninstalledSuccess) {
+            // Clear and rebuild extension lists
+            m_extensions.clear();
             m_updates.clear();
             m_installed.clear();
             m_uninstalled.clear();
 
-            for (const auto& ext : m_extensions) {
-                if (ext.installed) {
-                    if (ext.hasUpdate) {
-                        m_updates.push_back(ext);
-                    } else {
-                        m_installed.push_back(ext);
-                    }
+            // Categorize installed extensions
+            for (const auto& ext : installedExtensions) {
+                m_extensions.push_back(ext);
+                if (ext.hasUpdate) {
+                    m_updates.push_back(ext);
                 } else {
-                    m_uninstalled.push_back(ext);
+                    m_installed.push_back(ext);
                 }
             }
+
+            // Add uninstalled extensions (already filtered by server)
+            for (const auto& ext : uninstalledExtensions) {
+                m_extensions.push_back(ext);
+                m_uninstalled.push_back(ext);
+            }
+
+            brls::Logger::debug("Loaded {} installed ({} updates) and {} uninstalled extensions",
+                               installedExtensions.size(), m_updates.size(), uninstalledExtensions.size());
 
             brls::sync([this]() {
                 populateUnifiedList();
@@ -297,10 +320,11 @@ void ExtensionsTab::populateUnifiedList() {
 
     m_listBox->clearViews();
 
-    // Filter all extensions by language settings (default to "en" if none set)
-    auto filteredUpdates = getFilteredExtensions(m_updates, true);
-    auto filteredInstalled = getFilteredExtensions(m_installed, true);
-    auto filteredUninstalled = getFilteredExtensions(m_uninstalled, true);
+    // Installed extensions: show all (no language filter - user installed them)
+    // Uninstalled extensions: already filtered server-side by language
+    auto filteredUpdates = m_updates;
+    auto filteredInstalled = m_installed;
+    auto filteredUninstalled = m_uninstalled;  // Already server-side filtered
 
     // Sort installed and updates alphabetically by name
     std::sort(filteredUpdates.begin(), filteredUpdates.end(),

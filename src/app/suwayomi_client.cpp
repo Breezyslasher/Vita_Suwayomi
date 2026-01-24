@@ -3069,6 +3069,195 @@ bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extension
     return true;
 }
 
+bool SuwayomiClient::fetchInstalledExtensionsGraphQL(std::vector<Extension>& extensions) {
+    // Server-side filtered query for installed extensions only
+    const char* query = R"(
+        query {
+            extensions(condition: { isInstalled: true }) {
+                nodes {
+                    pkgName
+                    name
+                    lang
+                    versionName
+                    versionCode
+                    iconUrl
+                    isInstalled
+                    hasUpdate
+                    isObsolete
+                    isNsfw
+                    repo
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string extensionsObj = extractJsonObject(data, "extensions");
+    if (extensionsObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(extensionsObj, "nodes");
+    if (nodesJson.empty()) return false;
+
+    extensions.clear();
+    std::set<std::string> seenPkgNames;
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        Extension ext = parseExtensionFromGraphQL(item);
+        if (seenPkgNames.find(ext.pkgName) == seenPkgNames.end()) {
+            seenPkgNames.insert(ext.pkgName);
+            extensions.push_back(ext);
+        }
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} installed extensions", extensions.size());
+    return true;
+}
+
+bool SuwayomiClient::fetchUninstalledExtensionsGraphQL(std::vector<Extension>& extensions, const std::set<std::string>& languages) {
+    // Build filter for uninstalled extensions with language filter
+    // Using GraphQL filter with OR conditions for multiple languages
+
+    std::string filterConditions;
+    if (!languages.empty()) {
+        // Build OR conditions for each language
+        std::vector<std::string> langConditions;
+        for (const auto& lang : languages) {
+            // Escape the language string for JSON
+            std::string escapedLang;
+            for (char c : lang) {
+                switch (c) {
+                    case '"': escapedLang += "\\\""; break;
+                    case '\\': escapedLang += "\\\\"; break;
+                    default: escapedLang += c; break;
+                }
+            }
+            langConditions.push_back("{ lang: { equalTo: \"" + escapedLang + "\" } }");
+        }
+
+        // Always include "multi" and "all" languages
+        langConditions.push_back("{ lang: { equalTo: \"multi\" } }");
+        langConditions.push_back("{ lang: { equalTo: \"all\" } }");
+
+        // Join conditions with commas
+        std::string orConditions;
+        for (size_t i = 0; i < langConditions.size(); i++) {
+            if (i > 0) orConditions += ", ";
+            orConditions += langConditions[i];
+        }
+
+        filterConditions = "filter: { isInstalled: { equalTo: false }, or: [" + orConditions + "] }";
+    } else {
+        // No language filter, just filter by isInstalled: false
+        filterConditions = "condition: { isInstalled: false }";
+    }
+
+    // Build query string with filter conditions
+    std::string query = "query { extensions(" + filterConditions + ") { nodes { "
+        "pkgName name lang versionName versionCode iconUrl isInstalled hasUpdate isObsolete isNsfw repo "
+        "} } }";
+
+    brls::Logger::debug("GraphQL: Fetching uninstalled extensions with filter: {}", filterConditions);
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string extensionsObj = extractJsonObject(data, "extensions");
+    if (extensionsObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(extensionsObj, "nodes");
+    if (nodesJson.empty()) {
+        // Empty result is valid - no extensions match filter
+        extensions.clear();
+        brls::Logger::debug("GraphQL: No uninstalled extensions found matching filter");
+        return true;
+    }
+
+    extensions.clear();
+    std::set<std::string> seenPkgNames;
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        Extension ext = parseExtensionFromGraphQL(item);
+        if (seenPkgNames.find(ext.pkgName) == seenPkgNames.end()) {
+            seenPkgNames.insert(ext.pkgName);
+            extensions.push_back(ext);
+        }
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} uninstalled extensions (filtered by {} languages)",
+                        extensions.size(), languages.size());
+    return true;
+}
+
+bool SuwayomiClient::fetchInstalledExtensions(std::vector<Extension>& extensions) {
+    // Try GraphQL first (primary API with server-side filtering)
+    if (fetchInstalledExtensionsGraphQL(extensions)) {
+        return true;
+    }
+
+    // Fallback: fetch all and filter client-side
+    brls::Logger::info("GraphQL failed for installed extensions, falling back to full fetch...");
+    std::vector<Extension> allExtensions;
+    if (!fetchExtensionList(allExtensions)) {
+        return false;
+    }
+
+    extensions.clear();
+    for (const auto& ext : allExtensions) {
+        if (ext.installed) {
+            extensions.push_back(ext);
+        }
+    }
+    return true;
+}
+
+bool SuwayomiClient::fetchUninstalledExtensions(std::vector<Extension>& extensions, const std::set<std::string>& languages) {
+    // Try GraphQL first (primary API with server-side filtering)
+    if (fetchUninstalledExtensionsGraphQL(extensions, languages)) {
+        return true;
+    }
+
+    // Fallback: fetch all and filter client-side
+    brls::Logger::info("GraphQL failed for uninstalled extensions, falling back to client-side filter...");
+    std::vector<Extension> allExtensions;
+    if (!fetchExtensionList(allExtensions)) {
+        return false;
+    }
+
+    extensions.clear();
+    for (const auto& ext : allExtensions) {
+        if (!ext.installed) {
+            // Apply language filter
+            if (languages.empty()) {
+                extensions.push_back(ext);
+            } else {
+                bool langMatch = languages.count(ext.lang) > 0 ||
+                                ext.lang == "multi" ||
+                                ext.lang == "all";
+                // Also check base language (e.g., "zh" matches "zh-Hans")
+                if (!langMatch) {
+                    size_t dashPos = ext.lang.find('-');
+                    if (dashPos != std::string::npos) {
+                        std::string baseLang = ext.lang.substr(0, dashPos);
+                        langMatch = languages.count(baseLang) > 0;
+                    }
+                }
+                if (langMatch) {
+                    extensions.push_back(ext);
+                }
+            }
+        }
+    }
+    return true;
+}
+
 bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
         mutation InstallExtension($pkgName: String!) {
