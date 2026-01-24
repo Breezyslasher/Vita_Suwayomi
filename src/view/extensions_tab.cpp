@@ -297,12 +297,10 @@ void ExtensionsTab::populateUnifiedList() {
 
     m_listBox->clearViews();
 
-    // Filter extensions based on language settings
-    // For installed/updates: show all (user already has them installed)
-    // For uninstalled: force language filter (default to "en" if none set)
-    auto filteredUpdates = getFilteredExtensions(m_updates, false);
-    auto filteredInstalled = getFilteredExtensions(m_installed, false);
-    auto filteredUninstalled = getFilteredExtensions(m_uninstalled, true);  // Force language filter for browsing
+    // Filter all extensions by language settings (default to "en" if none set)
+    auto filteredUpdates = getFilteredExtensions(m_updates, true);
+    auto filteredInstalled = getFilteredExtensions(m_installed, true);
+    auto filteredUninstalled = getFilteredExtensions(m_uninstalled, true);
 
     // Sort installed and updates alphabetically by name
     std::sort(filteredUpdates.begin(), filteredUpdates.end(),
