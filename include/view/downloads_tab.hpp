@@ -38,6 +38,11 @@ private:
 
     // Track currently focused X button icon (like book detail view)
     brls::Image* m_currentFocusedIcon = nullptr;
+
+    // Top action icons
+    brls::Box* m_actionsRow = nullptr;
+    brls::Image* m_hideIcon = nullptr;
+    brls::Image* m_showIcon = nullptr;
 };
 
 } // namespace vitasuwayomi

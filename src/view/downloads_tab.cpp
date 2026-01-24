@@ -57,12 +57,89 @@ DownloadsTab::DownloadsTab() {
     this->setPadding(20);
     this->setGrow(1.0f);
 
-    // Header
+    // Header row with title and action icons
+    auto headerRow = new brls::Box();
+    headerRow->setAxis(brls::Axis::ROW);
+    headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    headerRow->setAlignItems(brls::AlignItems::CENTER);
+    headerRow->setMargins(0, 0, 15, 0);
+    this->addView(headerRow);
+
     auto header = new brls::Label();
     header->setText("Downloads");
     header->setFontSize(24);
-    header->setMargins(0, 0, 15, 0);
-    this->addView(header);
+    headerRow->addView(header);
+
+    // Actions row with Hide (L) and Show (R) icons
+    m_actionsRow = new brls::Box();
+    m_actionsRow->setAxis(brls::Axis::ROW);
+    m_actionsRow->setAlignItems(brls::AlignItems::CENTER);
+    headerRow->addView(m_actionsRow);
+
+    // Hide button with L icon above
+    auto* hideContainer = new brls::Box();
+    hideContainer->setAxis(brls::Axis::COLUMN);
+    hideContainer->setAlignItems(brls::AlignItems::CENTER);
+    hideContainer->setMarginRight(15);
+
+    // L button icon
+    auto* lButtonIcon = new brls::Image();
+    lButtonIcon->setWidth(36);
+    lButtonIcon->setHeight(24);
+    lButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    lButtonIcon->setImageFromFile("app0:resources/images/l_button.png");
+    lButtonIcon->setMarginBottom(2);
+    hideContainer->addView(lButtonIcon);
+
+    auto* hideBtn = new brls::Button();
+    hideBtn->setWidth(44);
+    hideBtn->setHeight(40);
+    hideBtn->setCornerRadius(8);
+    hideBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    hideBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    m_hideIcon = new brls::Image();
+    m_hideIcon->setWidth(24);
+    m_hideIcon->setHeight(24);
+    m_hideIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_hideIcon->setImageFromFile("app0:resources/icons/hide.png");
+    hideBtn->addView(m_hideIcon);
+
+    hideBtn->addGestureRecognizer(new brls::TapGestureRecognizer(hideBtn));
+    hideContainer->addView(hideBtn);
+    m_actionsRow->addView(hideContainer);
+
+    // Show button with R icon above
+    auto* showContainer = new brls::Box();
+    showContainer->setAxis(brls::Axis::COLUMN);
+    showContainer->setAlignItems(brls::AlignItems::CENTER);
+
+    // R button icon
+    auto* rButtonIcon = new brls::Image();
+    rButtonIcon->setWidth(36);
+    rButtonIcon->setHeight(24);
+    rButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
+    rButtonIcon->setMarginBottom(2);
+    showContainer->addView(rButtonIcon);
+
+    auto* showBtn = new brls::Button();
+    showBtn->setWidth(44);
+    showBtn->setHeight(40);
+    showBtn->setCornerRadius(8);
+    showBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    showBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    m_showIcon = new brls::Image();
+    m_showIcon->setWidth(24);
+    m_showIcon->setHeight(24);
+    m_showIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_showIcon->setImageFromFile("app0:resources/icons/show.png");
+    showBtn->addView(m_showIcon);
+
+    showBtn->addGestureRecognizer(new brls::TapGestureRecognizer(showBtn));
+    showContainer->addView(showBtn);
+    m_actionsRow->addView(showContainer);
 
     // === Download Queue Section (server downloads) ===
     m_queueSection = new brls::Box();
