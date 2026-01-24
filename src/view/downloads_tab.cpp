@@ -102,7 +102,7 @@ DownloadsTab::DownloadsTab() {
     this->addView(m_localSection);
 
     m_localHeader = new brls::Label();
-    m_localHeader->setText("Downloaded Manga");
+    m_localHeader->setText("Local Download Queue");
     m_localHeader->setFontSize(18);
     m_localHeader->setMargins(0, 0, 10, 0);
     m_localSection->addView(m_localHeader);
@@ -264,135 +264,106 @@ void DownloadsTab::refreshLocalDownloads() {
     auto downloads = mgr.getDownloads();
     brls::Logger::info("DownloadsTab: Found {} local downloads", downloads.size());
 
-    // Hide section if no local downloads
-    if (downloads.empty()) {
+    // Count chapters that are actively downloading or queued
+    int activeChapterCount = 0;
+    for (const auto& manga : downloads) {
+        for (const auto& chapter : manga.chapters) {
+            if (chapter.state == LocalDownloadState::QUEUED ||
+                chapter.state == LocalDownloadState::DOWNLOADING) {
+                activeChapterCount++;
+            }
+        }
+    }
+
+    // Hide section if no active downloads
+    if (activeChapterCount == 0) {
         m_localSection->setVisibility(brls::Visibility::GONE);
         return;
     }
 
-    // Show section when there are items
+    // Show section when there are active downloads
     m_localSection->setVisibility(brls::Visibility::VISIBLE);
 
-    for (const auto& item : downloads) {
-        auto row = new brls::Box();
-        row->setAxis(brls::Axis::ROW);
-        row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-        row->setAlignItems(brls::AlignItems::CENTER);
-        row->setPadding(10);
-        row->setMargins(0, 0, 10, 0);
-        row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
-        row->setCornerRadius(8);
+    // Show each chapter as a queue item (like server downloads)
+    for (const auto& manga : downloads) {
+        for (const auto& chapter : manga.chapters) {
+            // Only show queued or downloading chapters
+            if (chapter.state != LocalDownloadState::QUEUED &&
+                chapter.state != LocalDownloadState::DOWNLOADING) {
+                continue;
+            }
 
-        // Cover image (try local first, then remote URL)
-        auto coverImage = new brls::Image();
-        coverImage->setWidth(60);
-        coverImage->setHeight(80);
-        coverImage->setCornerRadius(4);
-        coverImage->setMargins(0, 15, 0, 0);
-        row->addView(coverImage);
+            auto row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            row->setPadding(8);
+            row->setMargins(0, 0, 8, 0);
+            row->setCornerRadius(6);
 
-        if (!item.localCoverPath.empty()) {
-            loadLocalCoverImage(coverImage, item.localCoverPath);
-        } else if (!item.coverUrl.empty()) {
-            ImageLoader::loadAsync(item.coverUrl, [](brls::Image* img) {
-                // Image loaded callback
-            }, coverImage);
-        }
+            // Background color based on state
+            if (chapter.state == LocalDownloadState::DOWNLOADING) {
+                row->setBackgroundColor(nvgRGBA(30, 60, 30, 200));  // Green tint for active
+            } else {
+                row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
+            }
 
-        // Title and info
-        auto infoBox = new brls::Box();
-        infoBox->setAxis(brls::Axis::COLUMN);
-        infoBox->setGrow(1.0f);
+            // Info box
+            auto infoBox = new brls::Box();
+            infoBox->setAxis(brls::Axis::COLUMN);
+            infoBox->setGrow(1.0f);
 
-        auto titleLabel = new brls::Label();
-        titleLabel->setText(item.title);
-        titleLabel->setFontSize(18);
-        infoBox->addView(titleLabel);
+            // Manga title
+            auto titleLabel = new brls::Label();
+            titleLabel->setText(manga.title);
+            titleLabel->setFontSize(16);
+            infoBox->addView(titleLabel);
 
-        // Author name (if available)
-        if (!item.author.empty()) {
-            auto authorLabel = new brls::Label();
-            authorLabel->setText(item.author);
-            authorLabel->setFontSize(14);
-            authorLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
-            infoBox->addView(authorLabel);
-        }
+            // Chapter name
+            auto chapterLabel = new brls::Label();
+            std::string chapterText;
+            if (chapter.chapterNumber > 0) {
+                chapterText = "Ch. " + std::to_string(static_cast<int>(chapter.chapterNumber));
+                if (!chapter.name.empty()) {
+                    chapterText += " - " + chapter.name;
+                }
+            } else {
+                chapterText = "Ch. " + std::to_string(chapter.chapterIndex);
+                if (!chapter.name.empty()) {
+                    chapterText += " - " + chapter.name;
+                }
+            }
+            chapterLabel->setText(chapterText);
+            chapterLabel->setFontSize(14);
+            chapterLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
+            infoBox->addView(chapterLabel);
 
-        // Status/progress
-        auto statusLabel = new brls::Label();
-        statusLabel->setFontSize(14);
+            row->addView(infoBox);
 
-        std::string statusText;
-        switch (item.state) {
-            case LocalDownloadState::QUEUED:
-                statusText = "Queued";
-                break;
-            case LocalDownloadState::DOWNLOADING:
-                if (item.totalChapters > 0) {
-                    statusText = "Downloading... " + std::to_string(item.completedChapters) +
-                                 "/" + std::to_string(item.totalChapters) + " chapters";
+            // Progress label
+            auto progressLabel = new brls::Label();
+            progressLabel->setFontSize(16);
+            progressLabel->setMargins(0, 0, 0, 10);
+
+            std::string progressText;
+            if (chapter.state == LocalDownloadState::DOWNLOADING) {
+                if (chapter.pageCount > 0) {
+                    progressText = std::to_string(chapter.downloadedPages) + "/" +
+                                   std::to_string(chapter.pageCount) + " pages";
                 } else {
-                    statusText = "Downloading...";
+                    progressText = "Downloading...";
                 }
-                break;
-            case LocalDownloadState::PAUSED:
-                statusText = "Paused";
-                break;
-            case LocalDownloadState::COMPLETED:
-                statusText = std::to_string(item.completedChapters) + " chapters downloaded";
-                if (item.lastChapterRead > 0) {
-                    statusText += " (reading ch. " + std::to_string(item.lastChapterRead) + ")";
-                }
-                break;
-            case LocalDownloadState::FAILED:
-                statusText = "Download failed";
-                break;
+                progressLabel->setTextColor(nvgRGBA(100, 200, 100, 255));  // Green
+            } else {
+                progressText = "Queued";
+            }
+            progressLabel->setText(progressText);
+
+            row->addView(progressLabel);
+
+            // Add row
+            m_localContainer->addView(row);
         }
-        statusLabel->setText(statusText);
-        infoBox->addView(statusLabel);
-
-        row->addView(infoBox);
-
-        // Actions based on state
-        if (item.state == LocalDownloadState::COMPLETED || item.completedChapters > 0) {
-            auto readBtn = new brls::Button();
-            readBtn->setText("Read");
-            readBtn->setMargins(0, 0, 0, 10);
-
-            int mangaId = item.mangaId;
-            int lastChapter = item.lastChapterRead > 0 ? item.lastChapterRead : 1;
-            std::string mangaTitle = item.title;
-            readBtn->registerClickAction([mangaId, lastChapter, mangaTitle](brls::View*) {
-                // Open reader at last read chapter
-                Application::getInstance().pushReaderActivity(mangaId, lastChapter, mangaTitle);
-                return true;
-            });
-            row->addView(readBtn);
-
-            auto deleteBtn = new brls::Button();
-            deleteBtn->setText("Delete");
-            int deleteId = item.mangaId;
-            deleteBtn->registerClickAction([deleteId](brls::View*) {
-                DownloadsManager::getInstance().deleteMangaDownload(deleteId);
-                brls::Application::notify("Download deleted");
-                return true;
-            });
-            row->addView(deleteBtn);
-        } else if (item.state == LocalDownloadState::DOWNLOADING ||
-                   item.state == LocalDownloadState::QUEUED) {
-            auto cancelBtn = new brls::Button();
-            cancelBtn->setText("Cancel");
-            int cancelId = item.mangaId;
-            cancelBtn->registerClickAction([cancelId](brls::View*) {
-                DownloadsManager::getInstance().cancelDownload(cancelId);
-                brls::Application::notify("Download cancelled");
-                return true;
-            });
-            row->addView(cancelBtn);
-        }
-
-        // Add row
-        m_localContainer->addView(row);
     }
 }
 
