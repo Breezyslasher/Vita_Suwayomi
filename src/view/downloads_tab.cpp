@@ -516,13 +516,12 @@ void DownloadsTab::refreshLocalDownloads() {
                     return true;
                 });
 
-            // Add swipe gesture for removal and reordering
+            // Add swipe gesture for removal (horizontal only, like server downloads)
             row->addGestureRecognizer(new brls::PanGestureRecognizer(
                 [this, row, mangaId, chapterIndex, originalBgColor](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                     static brls::Point touchStart;
                     static bool isValidSwipe = false;
                     const float SWIPE_THRESHOLD = 60.0f;
-                    const float VERTICAL_THRESHOLD = 40.0f;
                     const float TAP_THRESHOLD = 15.0f;
 
                     if (status.state == brls::GestureState::START) {
@@ -541,47 +540,19 @@ void DownloadsTab::refreshLocalDownloads() {
                             } else {
                                 row->setBackgroundColor(originalBgColor);
                             }
-                        } else if (std::abs(dy) > std::abs(dx) * 1.5f && std::abs(dy) > TAP_THRESHOLD) {
-                            isValidSwipe = true;
-                            if (dy < -VERTICAL_THRESHOLD * 0.5f) {
-                                // Up swipe - blue tint for move up
-                                row->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
-                            } else if (dy > VERTICAL_THRESHOLD * 0.5f) {
-                                // Down swipe - blue tint for move down
-                                row->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
-                            } else {
-                                row->setBackgroundColor(originalBgColor);
-                            }
                         }
                     } else if (status.state == brls::GestureState::END) {
                         row->setBackgroundColor(originalBgColor);
 
                         float dx = status.position.x - touchStart.x;
-                        float dy = status.position.y - touchStart.y;
-
-                        if (isValidSwipe) {
-                            if (std::abs(dx) > std::abs(dy) * 1.5f && dx < -SWIPE_THRESHOLD) {
-                                // Left swipe confirmed - remove from queue
-                                DownloadsManager& mgr = DownloadsManager::getInstance();
-                                mgr.cancelChapterDownload(mangaId, chapterIndex);
-                                refresh();
-                            } else if (std::abs(dy) > std::abs(dx) * 1.5f) {
-                                DownloadsManager& mgr = DownloadsManager::getInstance();
-                                if (dy < -VERTICAL_THRESHOLD) {
-                                    // Up swipe confirmed - move up in queue
-                                    if (mgr.moveChapterInQueue(mangaId, chapterIndex, -1)) {
-                                        refresh();
-                                    }
-                                } else if (dy > VERTICAL_THRESHOLD) {
-                                    // Down swipe confirmed - move down in queue
-                                    if (mgr.moveChapterInQueue(mangaId, chapterIndex, 1)) {
-                                        refresh();
-                                    }
-                                }
-                            }
+                        if (isValidSwipe && dx < -SWIPE_THRESHOLD) {
+                            // Left swipe confirmed - remove from queue
+                            DownloadsManager& mgr = DownloadsManager::getInstance();
+                            mgr.cancelChapterDownload(mangaId, chapterIndex);
+                            refresh();
                         }
                     }
-                }, brls::PanAxis::ANY));
+                }, brls::PanAxis::HORIZONTAL));
 
             // Add row
             m_localContainer->addView(row);
