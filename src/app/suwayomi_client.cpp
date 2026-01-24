@@ -1700,7 +1700,8 @@ bool SuwayomiClient::installExtension(const std::string& pkgName) {
         std::string url = buildApiUrl("/extension/install/" + pkgName);
         vitasuwayomi::HttpResponse response = http.get(url);
 
-        if (response.success && response.statusCode == 200) {
+        // REST API returns 201 (Created), 302 (Redirect), or 200 on success
+        if (response.success && (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 302)) {
             return true;
         }
 
@@ -1732,7 +1733,8 @@ bool SuwayomiClient::updateExtension(const std::string& pkgName) {
         std::string url = buildApiUrl("/extension/update/" + pkgName);
         vitasuwayomi::HttpResponse response = http.get(url);
 
-        if (response.success && response.statusCode == 200) {
+        // REST API returns 201 (Created), 302 (Redirect), or 200 on success
+        if (response.success && (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 302)) {
             return true;
         }
 
@@ -1764,7 +1766,8 @@ bool SuwayomiClient::uninstallExtension(const std::string& pkgName) {
         std::string url = buildApiUrl("/extension/uninstall/" + pkgName);
         vitasuwayomi::HttpResponse response = http.get(url);
 
-        if (response.success && response.statusCode == 200) {
+        // REST API returns 201 (Created), 302 (Redirect), or 200 on success
+        if (response.success && (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 302)) {
             return true;
         }
 
@@ -3308,8 +3311,8 @@ bool SuwayomiClient::fetchUninstalledExtensions(std::vector<Extension>& extensio
 
 bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
-        mutation InstallExtension($pkgName: String!) {
-            updateExtension(input: { pkgName: $pkgName, install: true }) {
+        mutation InstallExtension($id: String!, $install: Boolean) {
+            updateExtension(input: { id: $id, patch: { install: $install } }) {
                 extension {
                     pkgName
                     isInstalled
@@ -3328,7 +3331,7 @@ bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
         }
     }
 
-    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+    std::string variables = "{\"id\":\"" + escapedPkg + "\",\"install\":true}";
     std::string response = executeGraphQL(query, variables);
     if (response.empty()) return false;
 
@@ -3352,8 +3355,8 @@ bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
 
 bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
-        mutation UpdateExtension($pkgName: String!) {
-            updateExtension(input: { pkgName: $pkgName, update: true }) {
+        mutation UpdateExtension($id: String!, $update: Boolean) {
+            updateExtension(input: { id: $id, patch: { update: $update } }) {
                 extension {
                     pkgName
                     isInstalled
@@ -3372,7 +3375,7 @@ bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
         }
     }
 
-    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+    std::string variables = "{\"id\":\"" + escapedPkg + "\",\"update\":true}";
     std::string response = executeGraphQL(query, variables);
     if (response.empty()) return false;
 
@@ -3401,8 +3404,8 @@ bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
 
 bool SuwayomiClient::uninstallExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
-        mutation UninstallExtension($pkgName: String!) {
-            updateExtension(input: { pkgName: $pkgName, uninstall: true }) {
+        mutation UninstallExtension($id: String!, $uninstall: Boolean) {
+            updateExtension(input: { id: $id, patch: { uninstall: $uninstall } }) {
                 extension {
                     pkgName
                     isInstalled
@@ -3420,7 +3423,7 @@ bool SuwayomiClient::uninstallExtensionGraphQL(const std::string& pkgName) {
         }
     }
 
-    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+    std::string variables = "{\"id\":\"" + escapedPkg + "\",\"uninstall\":true}";
     std::string response = executeGraphQL(query, variables);
     if (response.empty()) return false;
 
