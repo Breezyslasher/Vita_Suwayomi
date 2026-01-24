@@ -608,11 +608,21 @@ void MangaDetailView::populateChaptersList() {
             return true;
         });
 
-        // X button to download/delete chapter when row is focused
+        // X button to download/delete/cancel chapter when row is focused
         bool localDownloaded = isLocallyDownloaded;
+        bool localQueued = isLocallyQueued;
+        bool localDownloading = isLocallyDownloading;
         bool chapterRead = chapter.read;
-        chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_X, [this, capturedChapter, localDownloaded](brls::View* view) {
-            if (localDownloaded) {
+        int chapterIdx = chapter.index;
+        chapterRow->registerAction("Download", brls::ControllerButton::BUTTON_X, [this, capturedChapter, localDownloaded, localQueued, localDownloading, chapterIdx](brls::View* view) {
+            if (localQueued || localDownloading) {
+                // Cancel the queued/downloading chapter
+                DownloadsManager& dm = DownloadsManager::getInstance();
+                if (dm.cancelChapterDownload(m_manga.id, chapterIdx)) {
+                    brls::Application::notify("Removed from queue");
+                    populateChaptersList();
+                }
+            } else if (localDownloaded) {
                 deleteChapterDownload(capturedChapter);
             } else {
                 downloadChapter(capturedChapter);
@@ -639,7 +649,7 @@ void MangaDetailView::populateChaptersList() {
         std::string chapterName = capturedChapter.name;
 
         chapterRow->addGestureRecognizer(new brls::PanGestureRecognizer(
-            [this, chapterRow, mangaId, chapterIndex, chapterId, chapterRead, localDownloaded, mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            [this, chapterRow, mangaId, chapterIndex, chapterId, chapterRead, localDownloaded, localQueued, localDownloading, mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 static brls::Point touchStart;
                 static bool isValidSwipe = false;
                 // Original background color for chapter rows
@@ -663,9 +673,9 @@ void MangaDetailView::populateChaptersList() {
                             // Swiping left - mark read/unread (blue tint)
                             chapterRow->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
                         } else if (dx > SWIPE_THRESHOLD * 0.5f) {
-                            // Swiping right - download/delete (green/red tint)
-                            if (localDownloaded) {
-                                chapterRow->setBackgroundColor(nvgRGBA(231, 76, 60, 100));  // Red for delete
+                            // Swiping right - download/delete/cancel (green/red tint)
+                            if (localDownloaded || localQueued || localDownloading) {
+                                chapterRow->setBackgroundColor(nvgRGBA(231, 76, 60, 100));  // Red for delete/cancel
                             } else {
                                 chapterRow->setBackgroundColor(nvgRGBA(46, 204, 113, 100));  // Green for download
                             }
@@ -703,8 +713,19 @@ void MangaDetailView::populateChaptersList() {
                                 });
                             }
                         } else {
-                            // Right swipe - download or delete
-                            if (localDownloaded) {
+                            // Right swipe - download, delete, or cancel
+                            if (localQueued || localDownloading) {
+                                // Cancel queued/downloading chapter
+                                asyncRun([this, mangaId, chapterIndex]() {
+                                    DownloadsManager& dm = DownloadsManager::getInstance();
+                                    if (dm.cancelChapterDownload(mangaId, chapterIndex)) {
+                                        brls::sync([this]() {
+                                            brls::Application::notify("Removed from queue");
+                                            populateChaptersList();
+                                        });
+                                    }
+                                });
+                            } else if (localDownloaded) {
                                 // Delete download
                                 asyncRun([mangaId, chapterIndex]() {
                                     DownloadsManager& dm = DownloadsManager::getInstance();
@@ -720,15 +741,9 @@ void MangaDetailView::populateChaptersList() {
                                     DownloadsManager& dm = DownloadsManager::getInstance();
                                     dm.init();
                                     if (dm.queueChapterDownload(mangaId, chapterId, chapterIndex, mangaTitle, chapterName)) {
-                                        dm.setProgressCallback([](int downloaded, int total) {
-                                            brls::sync([downloaded, total]() {
-                                                std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
-                                                brls::Application::notify(msg);
-                                            });
-                                        });
                                         dm.startDownloads();
                                         brls::sync([]() {
-                                            brls::Application::notify("Download started");
+                                            brls::Application::notify("Download queued");
                                         });
                                     }
                                 });
@@ -1031,7 +1046,6 @@ void MangaDetailView::showDownloadOptions() {
 
 void MangaDetailView::downloadAllChapters() {
     brls::Logger::info("MangaDetailView: Downloading all chapters");
-    brls::Application::notify("Queueing all chapters for download...");
 
     // Get download mode setting
     DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
@@ -1094,14 +1108,6 @@ void MangaDetailView::downloadAllChapters() {
         if (!localChapterPairs.empty()) {
             brls::Logger::info("MangaDetailView: Queueing {} to LOCAL", localChapterPairs.size());
             if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
-                // Set progress callback for UI updates (doesn't capture 'this')
-                localMgr.setProgressCallback([](int downloaded, int total) {
-                    brls::sync([downloaded, total]() {
-                        std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
-                        brls::Application::notify(msg);
-                    });
-                });
-
                 localMgr.startDownloads();
                 brls::Logger::info("MangaDetailView: Local queue SUCCESS");
             } else {
@@ -1137,7 +1143,6 @@ void MangaDetailView::downloadAllChapters() {
 
 void MangaDetailView::downloadUnreadChapters() {
     brls::Logger::info("MangaDetailView: Downloading unread chapters");
-    brls::Application::notify("Queueing unread chapters for download...");
 
     // Get download mode setting
     DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
@@ -1192,14 +1197,6 @@ void MangaDetailView::downloadUnreadChapters() {
 
         if (!localChapterPairs.empty()) {
             if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
-                // Set progress callback for UI updates (doesn't capture 'this')
-                localMgr.setProgressCallback([](int downloaded, int total) {
-                    brls::sync([downloaded, total]() {
-                        std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
-                        brls::Application::notify(msg);
-                    });
-                });
-
                 localMgr.startDownloads();
             } else {
                 localSuccess = false;
@@ -1410,8 +1407,6 @@ void MangaDetailView::markChapterRead(const Chapter& chapter) {
 }
 
 void MangaDetailView::downloadChapter(const Chapter& chapter) {
-    brls::Application::notify("Downloading to Vita...");
-
     // Collect chapter data before async to avoid accessing view members
     int mangaId = m_manga.id;
     int chapterId = chapter.id;
@@ -1426,19 +1421,9 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
 
         // Queue chapter for local download (using chapterId for API calls)
         if (dm.queueChapterDownload(mangaId, chapterId, chapterIndex, mangaTitle, chapterName)) {
-            // Set progress callback for UI updates (doesn't capture 'this')
-            dm.setProgressCallback([](int downloaded, int total) {
-                brls::sync([downloaded, total]() {
-                    std::string msg = std::to_string(downloaded) + "/" + std::to_string(total) + " pages";
-                    brls::Application::notify(msg);
-                });
-            });
-
-            // Start downloading
             dm.startDownloads();
-
             brls::sync([]() {
-                brls::Application::notify("Download started");
+                brls::Application::notify("Download queued");
             });
         } else {
             brls::sync([]() {

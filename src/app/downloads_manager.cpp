@@ -126,7 +126,13 @@ bool DownloadsManager::init() {
 
     // Auto-resume downloads if setting is enabled and there are incomplete downloads
     if (Application::getInstance().getSettings().autoResumeDownloads && hasIncompleteDownloads()) {
-        brls::Logger::info("DownloadsManager: Auto-resuming incomplete downloads");
+        int chapterCount = countIncompleteDownloads();
+        brls::Logger::info("DownloadsManager: Auto-resuming {} incomplete downloads", chapterCount);
+        if (chapterCount == 1) {
+            brls::Application::notify("Resuming 1 download...");
+        } else {
+            brls::Application::notify("Resuming " + std::to_string(chapterCount) + " downloads...");
+        }
         startDownloads();
     }
 
@@ -335,6 +341,63 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
     }
 
     return false;
+}
+
+bool DownloadsManager::moveChapterInQueue(int mangaId, int chapterIndex, int direction) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    // Find the manga and chapter
+    for (auto& manga : m_downloads) {
+        if (manga.mangaId == mangaId) {
+            for (size_t i = 0; i < manga.chapters.size(); i++) {
+                if (manga.chapters[i].chapterIndex == chapterIndex) {
+                    // Only allow reordering queued chapters
+                    if (manga.chapters[i].state != LocalDownloadState::QUEUED) {
+                        return false;
+                    }
+
+                    // Calculate new position
+                    int newPos = static_cast<int>(i) + direction;
+                    if (newPos < 0 || newPos >= static_cast<int>(manga.chapters.size())) {
+                        return false;  // Out of bounds
+                    }
+
+                    // Swap the chapters
+                    std::swap(manga.chapters[i], manga.chapters[newPos]);
+                    saveStateUnlocked();
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+std::vector<DownloadsManager::QueuedChapterInfo> DownloadsManager::getQueuedChapters() const {
+    std::vector<QueuedChapterInfo> result;
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    for (const auto& manga : m_downloads) {
+        for (const auto& chapter : manga.chapters) {
+            if (chapter.state == LocalDownloadState::QUEUED ||
+                chapter.state == LocalDownloadState::DOWNLOADING) {
+                QueuedChapterInfo info;
+                info.mangaId = manga.mangaId;
+                info.chapterId = chapter.chapterId;
+                info.chapterIndex = chapter.chapterIndex;
+                info.mangaTitle = manga.title;
+                info.chapterName = chapter.name;
+                info.chapterNumber = chapter.chapterNumber;
+                info.pageCount = chapter.pageCount;
+                info.downloadedPages = chapter.downloadedPages;
+                info.state = chapter.state;
+                result.push_back(info);
+            }
+        }
+    }
+
+    return result;
 }
 
 bool DownloadsManager::deleteMangaDownload(int mangaId) {
@@ -692,6 +755,23 @@ bool DownloadsManager::hasIncompleteDownloads() const {
         }
     }
     return false;
+}
+
+int DownloadsManager::countIncompleteDownloads() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    int count = 0;
+
+    for (const auto& manga : m_downloads) {
+        for (const auto& chapter : manga.chapters) {
+            if (chapter.state == LocalDownloadState::QUEUED ||
+                chapter.state == LocalDownloadState::DOWNLOADING ||
+                chapter.state == LocalDownloadState::PAUSED ||
+                chapter.state == LocalDownloadState::FAILED) {
+                count++;
+            }
+        }
+    }
+    return count;
 }
 
 void DownloadsManager::saveStateUnlocked() {

@@ -98,6 +98,24 @@ public:
     bool cancelDownload(int mangaId);
     bool cancelChapterDownload(int mangaId, int chapterIndex);
 
+    // Reorder queue items (for touch-based queue management)
+    // direction: -1 for up (earlier in queue), +1 for down (later in queue)
+    bool moveChapterInQueue(int mangaId, int chapterIndex, int direction);
+
+    // Get flat list of all queued/downloading chapters for display
+    struct QueuedChapterInfo {
+        int mangaId;
+        int chapterId;
+        int chapterIndex;
+        std::string mangaTitle;
+        std::string chapterName;
+        float chapterNumber;
+        int pageCount;
+        int downloadedPages;
+        LocalDownloadState state;
+    };
+    std::vector<QueuedChapterInfo> getQueuedChapters() const;
+
     // Delete downloaded manga/chapters
     bool deleteMangaDownload(int mangaId);
     bool deleteChapterDownload(int mangaId, int chapterIndex);
@@ -137,6 +155,9 @@ public:
 
     // Check if there are any incomplete downloads
     bool hasIncompleteDownloads() const;
+
+    // Count incomplete downloads (returns number of chapters to resume)
+    int countIncompleteDownloads() const;
 
     // Set progress callback for UI updates
     void setProgressCallback(DownloadProgressCallback callback);
