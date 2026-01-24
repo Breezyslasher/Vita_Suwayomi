@@ -67,6 +67,7 @@ DownloadsTab::DownloadsTab() {
     // === Download Queue Section (server downloads) ===
     m_queueSection = new brls::Box();
     m_queueSection->setAxis(brls::Axis::COLUMN);
+    m_queueSection->setGrow(1.0f);
     m_queueSection->setMargins(0, 0, 15, 0);
     m_queueSection->setVisibility(brls::Visibility::GONE);  // Hidden by default
     this->addView(m_queueSection);
@@ -77,9 +78,9 @@ DownloadsTab::DownloadsTab() {
     m_queueHeader->setMargins(0, 0, 10, 0);
     m_queueSection->addView(m_queueHeader);
 
-    // Scrollable queue container with max height
+    // Scrollable queue container
     m_queueScroll = new brls::ScrollingFrame();
-    m_queueScroll->setMaxHeight(300);  // Limit height to make it scrollable
+    m_queueScroll->setGrow(1.0f);  // Allow proper scrolling
     m_queueSection->addView(m_queueScroll);
 
     m_queueContainer = new brls::Box();
