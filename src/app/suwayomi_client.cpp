@@ -3093,7 +3093,24 @@ bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
 
     std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
     std::string response = executeGraphQL(query, variables);
-    return !response.empty();
+    if (response.empty()) return false;
+
+    // Verify the installation was successful by checking isInstalled
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string updateResult = extractJsonObject(data, "updateExtension");
+    if (updateResult.empty()) return false;
+
+    std::string extension = extractJsonObject(updateResult, "extension");
+    if (extension.empty()) return false;
+
+    bool isInstalled = extractJsonBool(extension, "isInstalled");
+    if (!isInstalled) {
+        brls::Logger::warning("GraphQL: Extension install returned but isInstalled is false");
+    }
+
+    return isInstalled;
 }
 
 bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
@@ -3120,7 +3137,29 @@ bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
 
     std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
     std::string response = executeGraphQL(query, variables);
-    return !response.empty();
+    if (response.empty()) return false;
+
+    // Verify the update was successful
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string updateResult = extractJsonObject(data, "updateExtension");
+    if (updateResult.empty()) return false;
+
+    std::string extension = extractJsonObject(updateResult, "extension");
+    if (extension.empty()) return false;
+
+    // After successful update, hasUpdate should be false and isInstalled should be true
+    bool isInstalled = extractJsonBool(extension, "isInstalled");
+    bool hasUpdate = extractJsonBool(extension, "hasUpdate");
+
+    if (!isInstalled) {
+        brls::Logger::warning("GraphQL: Extension update returned but isInstalled is false");
+        return false;
+    }
+
+    brls::Logger::debug("GraphQL: Extension updated successfully (hasUpdate: {})", hasUpdate);
+    return true;
 }
 
 bool SuwayomiClient::uninstallExtensionGraphQL(const std::string& pkgName) {
@@ -3146,7 +3185,27 @@ bool SuwayomiClient::uninstallExtensionGraphQL(const std::string& pkgName) {
 
     std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
     std::string response = executeGraphQL(query, variables);
-    return !response.empty();
+    if (response.empty()) return false;
+
+    // Verify the uninstallation was successful
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string updateResult = extractJsonObject(data, "updateExtension");
+    if (updateResult.empty()) return false;
+
+    std::string extension = extractJsonObject(updateResult, "extension");
+    if (extension.empty()) return false;
+
+    // After successful uninstall, isInstalled should be false
+    bool isInstalled = extractJsonBool(extension, "isInstalled");
+    if (isInstalled) {
+        brls::Logger::warning("GraphQL: Extension uninstall returned but isInstalled is still true");
+        return false;
+    }
+
+    brls::Logger::debug("GraphQL: Extension uninstalled successfully");
+    return true;
 }
 
 // ============================================================================

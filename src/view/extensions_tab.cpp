@@ -127,17 +127,27 @@ void ExtensionsTab::loadExtensions() {
     });
 }
 
-std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Extension>& extensions) {
+std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Extension>& extensions, bool forceLanguageFilter) {
     const AppSettings& settings = Application::getInstance().getSettings();
 
-    // If global settings has enabled languages, use that filter
-    if (!settings.enabledSourceLanguages.empty()) {
+    // Determine which languages to filter by
+    std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
+
+    // For uninstalled extensions (forceLanguageFilter=true), if no language is set,
+    // default to English to avoid showing hundreds of extensions in all languages
+    if (forceLanguageFilter && filterLanguages.empty()) {
+        filterLanguages.insert("en");  // Default to English
+        brls::Logger::debug("No language filter set, defaulting to English for uninstalled extensions");
+    }
+
+    // If we have languages to filter by, apply the filter
+    if (!filterLanguages.empty()) {
         std::vector<Extension> filtered;
         for (const auto& ext : extensions) {
             bool languageMatch = false;
 
             // Check exact match first
-            if (settings.enabledSourceLanguages.count(ext.lang) > 0) {
+            if (filterLanguages.count(ext.lang) > 0) {
                 languageMatch = true;
             }
             // Check if base language is enabled (e.g., "zh" matches "zh-Hans", "zh-Hant")
@@ -148,7 +158,7 @@ std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Ex
                     baseLang = baseLang.substr(0, dashPos);
                 }
 
-                if (settings.enabledSourceLanguages.count(baseLang) > 0) {
+                if (filterLanguages.count(baseLang) > 0) {
                     languageMatch = true;
                 }
             }
@@ -165,7 +175,7 @@ std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Ex
         return filtered;
     }
 
-    // No filtering - return all
+    // No filtering - return all (only for installed extensions when no language set)
     return extensions;
 }
 
@@ -288,9 +298,11 @@ void ExtensionsTab::populateUnifiedList() {
     m_listBox->clearViews();
 
     // Filter extensions based on language settings
-    auto filteredUpdates = getFilteredExtensions(m_updates);
-    auto filteredInstalled = getFilteredExtensions(m_installed);
-    auto filteredUninstalled = getFilteredExtensions(m_uninstalled);
+    // For installed/updates: show all (user already has them installed)
+    // For uninstalled: force language filter (default to "en" if none set)
+    auto filteredUpdates = getFilteredExtensions(m_updates, false);
+    auto filteredInstalled = getFilteredExtensions(m_installed, false);
+    auto filteredUninstalled = getFilteredExtensions(m_uninstalled, true);  // Force language filter for browsing
 
     // Sort installed and updates alphabetically by name
     std::sort(filteredUpdates.begin(), filteredUpdates.end(),

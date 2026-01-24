@@ -28,7 +28,7 @@ private:
     void updateExtension(const Extension& ext);
     void uninstallExtension(const Extension& ext);
     void showError(const std::string& message);
-    std::vector<Extension> getFilteredExtensions(const std::vector<Extension>& extensions);
+    std::vector<Extension> getFilteredExtensions(const std::vector<Extension>& extensions, bool forceLanguageFilter = false);
     std::map<std::string, std::vector<Extension>> groupExtensionsByLanguage(const std::vector<Extension>& extensions);
     std::vector<std::string> getSortedLanguages(const std::map<std::string, std::vector<Extension>>& grouped);
     std::string getLanguageDisplayName(const std::string& langCode);
