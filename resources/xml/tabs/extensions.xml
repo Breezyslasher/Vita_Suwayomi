@@ -13,39 +13,7 @@
         id="extensions/title"
         text="Extensions"
         fontSize="24"
-        marginBottom="20"/>
-
-    <!-- Tab buttons -->
-    <brls:Box
-        id="extensions/tabs"
-        width="100%"
-        axis="row"
-        marginBottom="15">
-
-        <brls:Button
-            id="extensions/installed_btn"
-            style="primary"
-            text="Installed"
-            width="120"
-            height="35"
-            marginRight="10"/>
-
-        <brls:Button
-            id="extensions/available_btn"
-            style="bordered"
-            text="Available"
-            width="120"
-            height="35"
-            marginRight="10"/>
-
-        <brls:Button
-            id="extensions/updates_btn"
-            style="bordered"
-            text="Updates"
-            width="120"
-            height="35"/>
-
-    </brls:Box>
+        marginBottom="15"/>
 
     <!-- Extensions list -->
     <brls:ScrollingFrame
