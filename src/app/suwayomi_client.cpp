@@ -1682,51 +1682,99 @@ bool SuwayomiClient::fetchExtensionList(std::vector<Extension>& extensions) {
 }
 
 bool SuwayomiClient::installExtension(const std::string& pkgName) {
-    // Try GraphQL first (primary API)
-    if (installExtensionGraphQL(pkgName)) {
-        return true;
+    const int maxRetries = 3;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        brls::Logger::info("Installing extension {} (attempt {}/{})", pkgName, attempt, maxRetries);
+
+        // Try GraphQL first (primary API)
+        if (installExtensionGraphQL(pkgName)) {
+            return true;
+        }
+
+        // REST fallback
+        brls::Logger::info("GraphQL failed for install extension, falling back to REST...");
+        vitasuwayomi::HttpClient http = createHttpClient();
+        http.setTimeout(60);  // Extended timeout for extensions
+
+        std::string url = buildApiUrl("/extension/install/" + pkgName);
+        vitasuwayomi::HttpResponse response = http.get(url);
+
+        if (response.success && response.statusCode == 200) {
+            return true;
+        }
+
+        if (attempt < maxRetries) {
+            brls::Logger::warning("Extension install failed (attempt {}/{}), retrying...", attempt, maxRetries);
+        }
     }
 
-    // REST fallback
-    brls::Logger::info("GraphQL failed for install extension, falling back to REST...");
-    vitasuwayomi::HttpClient http = createHttpClient();
-
-    std::string url = buildApiUrl("/extension/install/" + pkgName);
-    vitasuwayomi::HttpResponse response = http.get(url);
-
-    return response.success && response.statusCode == 200;
+    brls::Logger::error("Extension install failed after {} attempts", maxRetries);
+    return false;
 }
 
 bool SuwayomiClient::updateExtension(const std::string& pkgName) {
-    // Try GraphQL first (primary API)
-    if (updateExtensionGraphQL(pkgName)) {
-        return true;
+    const int maxRetries = 3;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        brls::Logger::info("Updating extension {} (attempt {}/{})", pkgName, attempt, maxRetries);
+
+        // Try GraphQL first (primary API)
+        if (updateExtensionGraphQL(pkgName)) {
+            return true;
+        }
+
+        // REST fallback
+        brls::Logger::info("GraphQL failed for update extension, falling back to REST...");
+        vitasuwayomi::HttpClient http = createHttpClient();
+        http.setTimeout(60);  // Extended timeout for extensions
+
+        std::string url = buildApiUrl("/extension/update/" + pkgName);
+        vitasuwayomi::HttpResponse response = http.get(url);
+
+        if (response.success && response.statusCode == 200) {
+            return true;
+        }
+
+        if (attempt < maxRetries) {
+            brls::Logger::warning("Extension update failed (attempt {}/{}), retrying...", attempt, maxRetries);
+        }
     }
 
-    // REST fallback
-    brls::Logger::info("GraphQL failed for update extension, falling back to REST...");
-    vitasuwayomi::HttpClient http = createHttpClient();
-
-    std::string url = buildApiUrl("/extension/update/" + pkgName);
-    vitasuwayomi::HttpResponse response = http.get(url);
-
-    return response.success && response.statusCode == 200;
+    brls::Logger::error("Extension update failed after {} attempts", maxRetries);
+    return false;
 }
 
 bool SuwayomiClient::uninstallExtension(const std::string& pkgName) {
-    // Try GraphQL first (primary API)
-    if (uninstallExtensionGraphQL(pkgName)) {
-        return true;
+    const int maxRetries = 3;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        brls::Logger::info("Uninstalling extension {} (attempt {}/{})", pkgName, attempt, maxRetries);
+
+        // Try GraphQL first (primary API)
+        if (uninstallExtensionGraphQL(pkgName)) {
+            return true;
+        }
+
+        // REST fallback
+        brls::Logger::info("GraphQL failed for uninstall extension, falling back to REST...");
+        vitasuwayomi::HttpClient http = createHttpClient();
+        http.setTimeout(60);  // Extended timeout for extensions
+
+        std::string url = buildApiUrl("/extension/uninstall/" + pkgName);
+        vitasuwayomi::HttpResponse response = http.get(url);
+
+        if (response.success && response.statusCode == 200) {
+            return true;
+        }
+
+        if (attempt < maxRetries) {
+            brls::Logger::warning("Extension uninstall failed (attempt {}/{}), retrying...", attempt, maxRetries);
+        }
     }
 
-    // REST fallback
-    brls::Logger::info("GraphQL failed for uninstall extension, falling back to REST...");
-    vitasuwayomi::HttpClient http = createHttpClient();
-
-    std::string url = buildApiUrl("/extension/uninstall/" + pkgName);
-    vitasuwayomi::HttpResponse response = http.get(url);
-
-    return response.success && response.statusCode == 200;
+    brls::Logger::error("Extension uninstall failed after {} attempts", maxRetries);
+    return false;
 }
 
 std::string SuwayomiClient::getExtensionIconUrl(const std::string& apkName) {
