@@ -129,9 +129,9 @@ bool DownloadsManager::init() {
         int chapterCount = countIncompleteDownloads();
         brls::Logger::info("DownloadsManager: Auto-resuming {} incomplete downloads", chapterCount);
         if (chapterCount == 1) {
-            brls::Application::notify("Resuming 1 chapter...");
+            brls::Application::notify("Resuming 1 download...");
         } else {
-            brls::Application::notify("Resuming " + std::to_string(chapterCount) + " chapters...");
+            brls::Application::notify("Resuming " + std::to_string(chapterCount) + " downloads...");
         }
         startDownloads();
     }
