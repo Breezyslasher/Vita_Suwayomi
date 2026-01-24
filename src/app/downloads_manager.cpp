@@ -126,8 +126,13 @@ bool DownloadsManager::init() {
 
     // Auto-resume downloads if setting is enabled and there are incomplete downloads
     if (Application::getInstance().getSettings().autoResumeDownloads && hasIncompleteDownloads()) {
-        brls::Logger::info("DownloadsManager: Auto-resuming incomplete downloads");
-        brls::Application::notify("Resuming downloads...");
+        int chapterCount = countIncompleteDownloads();
+        brls::Logger::info("DownloadsManager: Auto-resuming {} incomplete downloads", chapterCount);
+        if (chapterCount == 1) {
+            brls::Application::notify("Resuming 1 chapter...");
+        } else {
+            brls::Application::notify("Resuming " + std::to_string(chapterCount) + " chapters...");
+        }
         startDownloads();
     }
 
@@ -750,6 +755,23 @@ bool DownloadsManager::hasIncompleteDownloads() const {
         }
     }
     return false;
+}
+
+int DownloadsManager::countIncompleteDownloads() const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    int count = 0;
+
+    for (const auto& manga : m_downloads) {
+        for (const auto& chapter : manga.chapters) {
+            if (chapter.state == LocalDownloadState::QUEUED ||
+                chapter.state == LocalDownloadState::DOWNLOADING ||
+                chapter.state == LocalDownloadState::PAUSED ||
+                chapter.state == LocalDownloadState::FAILED) {
+                count++;
+            }
+        }
+    }
+    return count;
 }
 
 void DownloadsManager::saveStateUnlocked() {

@@ -156,6 +156,9 @@ public:
     // Check if there are any incomplete downloads
     bool hasIncompleteDownloads() const;
 
+    // Count incomplete downloads (returns number of chapters to resume)
+    int countIncompleteDownloads() const;
+
     // Set progress callback for UI updates
     void setProgressCallback(DownloadProgressCallback callback);
 
