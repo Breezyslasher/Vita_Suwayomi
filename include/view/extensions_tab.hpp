@@ -44,6 +44,7 @@ private:
     brls::Box* m_listBox = nullptr;
     brls::Box* m_buttonBox = nullptr;
     brls::Button* m_refreshBtn = nullptr;
+    brls::ScrollingFrame* m_scrollFrame = nullptr;
 
     std::vector<Extension> m_extensions;
     std::vector<Extension> m_updates;
@@ -53,6 +54,36 @@ private:
     // Cache for fast mode
     std::vector<Extension> m_cachedExtensions;
     bool m_cacheLoaded = false;
+
+    // Performance: Batched rendering
+    static const int BATCH_SIZE = 8;          // Items per batch
+    static const int BATCH_DELAY_MS = 16;     // ~60fps frame time
+    int m_currentBatchIndex = 0;
+    bool m_isPopulating = false;
+
+    // Performance: Track extension items for incremental updates
+    struct ExtensionItemInfo {
+        brls::Box* container = nullptr;
+        brls::Image* icon = nullptr;
+        std::string pkgName;
+        std::string iconUrl;
+        bool iconLoaded = false;
+    };
+    std::vector<ExtensionItemInfo> m_extensionItems;
+
+    // Performance: Cached grouped data
+    std::map<std::string, std::vector<Extension>> m_cachedGrouped;
+    std::vector<std::string> m_cachedSortedLanguages;
+    bool m_groupingCacheValid = false;
+
+    // Performance: Deferred icon loading
+    void loadVisibleIcons();
+    void scheduleNextBatch();
+    void populateBatch();
+
+    // Performance: Incremental updates
+    void updateExtensionItemStatus(const std::string& pkgName, bool installed, bool hasUpdate);
+    ExtensionItemInfo* findExtensionItem(const std::string& pkgName);
 };
 
 } // namespace vitasuwayomi
