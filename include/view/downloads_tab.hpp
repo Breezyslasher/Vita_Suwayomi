@@ -35,6 +35,9 @@ private:
     brls::ScrollingFrame* m_localScroll = nullptr;
     brls::Box* m_localContainer = nullptr;
     brls::Label* m_localEmptyLabel = nullptr;
+
+    // Track currently focused X button icon (like book detail view)
+    brls::Image* m_currentFocusedIcon = nullptr;
 };
 
 } // namespace vitasuwayomi

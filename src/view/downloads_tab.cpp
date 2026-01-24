@@ -72,14 +72,14 @@ DownloadsTab::DownloadsTab() {
     this->addView(m_queueSection);
 
     m_queueHeader = new brls::Label();
-    m_queueHeader->setText("Download Queue");
+    m_queueHeader->setText("Server Download Queue");
     m_queueHeader->setFontSize(18);
     m_queueHeader->setMargins(0, 0, 10, 0);
     m_queueSection->addView(m_queueHeader);
 
-    // Scrollable queue container
+    // Scrollable queue container with max height
     m_queueScroll = new brls::ScrollingFrame();
-    m_queueScroll->setMaxHeight(200);  // Limit height to make it scrollable
+    m_queueScroll->setMaxHeight(300);  // Limit height to make it scrollable
     m_queueSection->addView(m_queueScroll);
 
     m_queueContainer = new brls::Box();
@@ -107,9 +107,9 @@ DownloadsTab::DownloadsTab() {
     m_localHeader->setMargins(0, 0, 10, 0);
     m_localSection->addView(m_localHeader);
 
-    // Scrollable local container
+    // Scrollable local container with max height
     m_localScroll = new brls::ScrollingFrame();
-    m_localScroll->setGrow(1.0f);
+    m_localScroll->setMaxHeight(300);  // Limit height to make it scrollable
     m_localSection->addView(m_localScroll);
 
     m_localContainer = new brls::Box();
@@ -177,15 +177,18 @@ void DownloadsTab::refreshQueue() {
                 row->setPadding(8);
                 row->setMargins(0, 0, 8, 0);
                 row->setCornerRadius(6);
+                row->setFocusable(true);
 
                 // Background color based on state
+                NVGcolor originalBgColor;
                 if (item.state == DownloadState::DOWNLOADING) {
-                    row->setBackgroundColor(nvgRGBA(30, 60, 30, 200));  // Green tint for active
+                    originalBgColor = nvgRGBA(30, 60, 30, 200);  // Green tint for active
                 } else if (item.state == DownloadState::ERROR) {
-                    row->setBackgroundColor(nvgRGBA(60, 30, 30, 200));  // Red tint for error
+                    originalBgColor = nvgRGBA(60, 30, 30, 200);  // Red tint for error
                 } else {
-                    row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
+                    originalBgColor = nvgRGBA(40, 40, 40, 200);
                 }
+                row->setBackgroundColor(originalBgColor);
 
                 // Info box
                 auto infoBox = new brls::Box();
@@ -213,6 +216,11 @@ void DownloadsTab::refreshQueue() {
                 infoBox->addView(chapterLabel);
 
                 row->addView(infoBox);
+
+                // Status box (progress + X button icon)
+                auto statusBox = new brls::Box();
+                statusBox->setAxis(brls::Axis::ROW);
+                statusBox->setAlignItems(brls::AlignItems::CENTER);
 
                 // Progress label (x/x pages)
                 auto progressLabel = new brls::Label();
@@ -242,7 +250,93 @@ void DownloadsTab::refreshQueue() {
                     progressLabel->setTextColor(nvgRGBA(200, 100, 100, 255));  // Red
                 }
 
-                row->addView(progressLabel);
+                statusBox->addView(progressLabel);
+
+                // X button icon indicator - only visible when focused (like book detail view)
+                auto* xButtonIcon = new brls::Image();
+                xButtonIcon->setWidth(24);
+                xButtonIcon->setHeight(24);
+                xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+                xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
+                xButtonIcon->setMarginLeft(8);
+                xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);  // Hidden by default
+                statusBox->addView(xButtonIcon);
+
+                row->addView(statusBox);
+
+                // Show X button icon when this row gets focus, hide previous
+                row->getFocusEvent()->subscribe([this, xButtonIcon](brls::View* view) {
+                    // Hide previously focused icon
+                    if (m_currentFocusedIcon && m_currentFocusedIcon != xButtonIcon) {
+                        m_currentFocusedIcon->setVisibility(brls::Visibility::INVISIBLE);
+                    }
+                    // Show this icon
+                    xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
+                    m_currentFocusedIcon = xButtonIcon;
+                });
+
+                // X button action - remove from server queue
+                int mangaId = item.mangaId;
+                int chapterId = item.chapterId;
+                int chapterIndex = item.chapterIndex;
+                row->registerAction("Remove", brls::ControllerButton::BUTTON_X,
+                    [this, mangaId, chapterId, chapterIndex](brls::View* view) {
+                        asyncRun([this, mangaId, chapterId, chapterIndex]() {
+                            SuwayomiClient& client = SuwayomiClient::getInstance();
+                            // Remove from server queue using existing method
+                            std::vector<int> chapterIds = {chapterId};
+                            std::vector<int> chapterIndexes = {chapterIndex};
+                            client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes);
+                            brls::sync([this]() {
+                                refresh();
+                            });
+                        });
+                        return true;
+                    });
+
+                // Add swipe gesture for removal
+                row->addGestureRecognizer(new brls::PanGestureRecognizer(
+                    [this, row, mangaId, chapterId, chapterIndex, originalBgColor](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                        static brls::Point touchStart;
+                        static bool isValidSwipe = false;
+                        const float SWIPE_THRESHOLD = 60.0f;
+                        const float TAP_THRESHOLD = 15.0f;
+
+                        if (status.state == brls::GestureState::START) {
+                            touchStart = status.position;
+                            isValidSwipe = false;
+                        } else if (status.state == brls::GestureState::STAY) {
+                            float dx = status.position.x - touchStart.x;
+                            float dy = status.position.y - touchStart.y;
+
+                            // Visual feedback during swipe
+                            if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
+                                isValidSwipe = true;
+                                if (dx < -SWIPE_THRESHOLD * 0.5f) {
+                                    // Left swipe - red tint for removal
+                                    row->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
+                                } else {
+                                    row->setBackgroundColor(originalBgColor);
+                                }
+                            }
+                        } else if (status.state == brls::GestureState::END) {
+                            row->setBackgroundColor(originalBgColor);
+
+                            float dx = status.position.x - touchStart.x;
+                            if (isValidSwipe && dx < -SWIPE_THRESHOLD) {
+                                // Left swipe confirmed - remove from queue
+                                asyncRun([this, mangaId, chapterId, chapterIndex]() {
+                                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                                    std::vector<int> chapterIds = {chapterId};
+                                    std::vector<int> chapterIndexes = {chapterIndex};
+                                    client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes);
+                                    brls::sync([this]() {
+                                        refresh();
+                                    });
+                                });
+                            }
+                        }
+                    }, brls::PanAxis::HORIZONTAL));
 
                 // Add row
                 m_queueContainer->addView(row);
@@ -293,6 +387,9 @@ void DownloadsTab::refreshLocalDownloads() {
                 continue;
             }
 
+            int mangaId = manga.mangaId;
+            int chapterIndex = chapter.chapterIndex;
+
             auto row = new brls::Box();
             row->setAxis(brls::Axis::ROW);
             row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -300,13 +397,16 @@ void DownloadsTab::refreshLocalDownloads() {
             row->setPadding(8);
             row->setMargins(0, 0, 8, 0);
             row->setCornerRadius(6);
+            row->setFocusable(true);
 
             // Background color based on state
+            NVGcolor originalBgColor;
             if (chapter.state == LocalDownloadState::DOWNLOADING) {
-                row->setBackgroundColor(nvgRGBA(30, 60, 30, 200));  // Green tint for active
+                originalBgColor = nvgRGBA(30, 60, 30, 200);  // Green tint for active
             } else {
-                row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
+                originalBgColor = nvgRGBA(40, 40, 40, 200);
             }
+            row->setBackgroundColor(originalBgColor);
 
             // Info box
             auto infoBox = new brls::Box();
@@ -340,6 +440,11 @@ void DownloadsTab::refreshLocalDownloads() {
 
             row->addView(infoBox);
 
+            // Status box (progress + X button icon)
+            auto statusBox = new brls::Box();
+            statusBox->setAxis(brls::Axis::ROW);
+            statusBox->setAlignItems(brls::AlignItems::CENTER);
+
             // Progress label
             auto progressLabel = new brls::Label();
             progressLabel->setFontSize(16);
@@ -359,7 +464,126 @@ void DownloadsTab::refreshLocalDownloads() {
             }
             progressLabel->setText(progressText);
 
-            row->addView(progressLabel);
+            statusBox->addView(progressLabel);
+
+            // X button icon indicator - only visible when focused (like book detail view)
+            auto* xButtonIcon = new brls::Image();
+            xButtonIcon->setWidth(24);
+            xButtonIcon->setHeight(24);
+            xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+            xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
+            xButtonIcon->setMarginLeft(8);
+            xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);  // Hidden by default
+            statusBox->addView(xButtonIcon);
+
+            row->addView(statusBox);
+
+            // Show X button icon when this row gets focus, hide previous
+            row->getFocusEvent()->subscribe([this, xButtonIcon](brls::View* view) {
+                // Hide previously focused icon
+                if (m_currentFocusedIcon && m_currentFocusedIcon != xButtonIcon) {
+                    m_currentFocusedIcon->setVisibility(brls::Visibility::INVISIBLE);
+                }
+                // Show this icon
+                xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
+                m_currentFocusedIcon = xButtonIcon;
+            });
+
+            // X button action - remove from local queue
+            row->registerAction("Remove", brls::ControllerButton::BUTTON_X,
+                [this, mangaId, chapterIndex](brls::View* view) {
+                    DownloadsManager& mgr = DownloadsManager::getInstance();
+                    mgr.cancelChapterDownload(mangaId, chapterIndex);
+                    refresh();
+                    return true;
+                });
+
+            // Up button action - move up in queue
+            row->registerAction("Move Up", brls::ControllerButton::BUTTON_LB,
+                [this, mangaId, chapterIndex](brls::View* view) {
+                    DownloadsManager& mgr = DownloadsManager::getInstance();
+                    if (mgr.moveChapterInQueue(mangaId, chapterIndex, -1)) {
+                        refresh();
+                    }
+                    return true;
+                });
+
+            // Down button action - move down in queue
+            row->registerAction("Move Down", brls::ControllerButton::BUTTON_RB,
+                [this, mangaId, chapterIndex](brls::View* view) {
+                    DownloadsManager& mgr = DownloadsManager::getInstance();
+                    if (mgr.moveChapterInQueue(mangaId, chapterIndex, 1)) {
+                        refresh();
+                    }
+                    return true;
+                });
+
+            // Add swipe gesture for removal and reordering
+            row->addGestureRecognizer(new brls::PanGestureRecognizer(
+                [this, row, mangaId, chapterIndex, originalBgColor](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                    static brls::Point touchStart;
+                    static bool isValidSwipe = false;
+                    const float SWIPE_THRESHOLD = 60.0f;
+                    const float VERTICAL_THRESHOLD = 40.0f;
+                    const float TAP_THRESHOLD = 15.0f;
+
+                    if (status.state == brls::GestureState::START) {
+                        touchStart = status.position;
+                        isValidSwipe = false;
+                    } else if (status.state == brls::GestureState::STAY) {
+                        float dx = status.position.x - touchStart.x;
+                        float dy = status.position.y - touchStart.y;
+
+                        // Visual feedback during swipe
+                        if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
+                            isValidSwipe = true;
+                            if (dx < -SWIPE_THRESHOLD * 0.5f) {
+                                // Left swipe - red tint for removal
+                                row->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
+                            } else {
+                                row->setBackgroundColor(originalBgColor);
+                            }
+                        } else if (std::abs(dy) > std::abs(dx) * 1.5f && std::abs(dy) > TAP_THRESHOLD) {
+                            isValidSwipe = true;
+                            if (dy < -VERTICAL_THRESHOLD * 0.5f) {
+                                // Up swipe - blue tint for move up
+                                row->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
+                            } else if (dy > VERTICAL_THRESHOLD * 0.5f) {
+                                // Down swipe - blue tint for move down
+                                row->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
+                            } else {
+                                row->setBackgroundColor(originalBgColor);
+                            }
+                        }
+                    } else if (status.state == brls::GestureState::END) {
+                        row->setBackgroundColor(originalBgColor);
+
+                        float dx = status.position.x - touchStart.x;
+                        float dy = status.position.y - touchStart.y;
+
+                        if (isValidSwipe) {
+                            if (std::abs(dx) > std::abs(dy) * 1.5f && dx < -SWIPE_THRESHOLD) {
+                                // Left swipe confirmed - remove from queue
+                                DownloadsManager& mgr = DownloadsManager::getInstance();
+                                mgr.cancelChapterDownload(mangaId, chapterIndex);
+                                refresh();
+                            } else if (std::abs(dy) > std::abs(dx) * 1.5f) {
+                                DownloadsManager& mgr = DownloadsManager::getInstance();
+                                if (dy < -VERTICAL_THRESHOLD) {
+                                    // Up swipe confirmed - move up in queue
+                                    if (mgr.moveChapterInQueue(mangaId, chapterIndex, -1)) {
+                                        refresh();
+                                    }
+                                } else if (dy > VERTICAL_THRESHOLD) {
+                                    // Down swipe confirmed - move down in queue
+                                    if (mgr.moveChapterInQueue(mangaId, chapterIndex, 1)) {
+                                        refresh();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }, brls::PanAxis::ANY));
 
             // Add row
             m_localContainer->addView(row);
