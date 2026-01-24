@@ -278,15 +278,13 @@ void DownloadsTab::refreshQueue() {
                 // X button action - remove from server queue
                 int mangaId = item.mangaId;
                 int chapterId = item.chapterId;
-                int chapterIndex = item.chapterIndex;
                 row->registerAction("Remove", brls::ControllerButton::BUTTON_X,
-                    [this, mangaId, chapterId, chapterIndex](brls::View* view) {
-                        asyncRun([this, mangaId, chapterId, chapterIndex]() {
+                    [this, mangaId, chapterId](brls::View* view) {
+                        asyncRun([this, mangaId, chapterId]() {
                             SuwayomiClient& client = SuwayomiClient::getInstance();
                             // Remove from server queue using existing method
                             std::vector<int> chapterIds = {chapterId};
-                            std::vector<int> chapterIndexes = {chapterIndex};
-                            client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes);
+                            client.deleteChapterDownloads(chapterIds, mangaId);
                             brls::sync([this]() {
                                 refresh();
                             });
@@ -296,7 +294,7 @@ void DownloadsTab::refreshQueue() {
 
                 // Add swipe gesture for removal
                 row->addGestureRecognizer(new brls::PanGestureRecognizer(
-                    [this, row, mangaId, chapterId, chapterIndex, originalBgColor](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                    [this, row, mangaId, chapterId, originalBgColor](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                         static brls::Point touchStart;
                         static bool isValidSwipe = false;
                         const float SWIPE_THRESHOLD = 60.0f;
@@ -325,11 +323,10 @@ void DownloadsTab::refreshQueue() {
                             float dx = status.position.x - touchStart.x;
                             if (isValidSwipe && dx < -SWIPE_THRESHOLD) {
                                 // Left swipe confirmed - remove from queue
-                                asyncRun([this, mangaId, chapterId, chapterIndex]() {
+                                asyncRun([this, mangaId, chapterId]() {
                                     SuwayomiClient& client = SuwayomiClient::getInstance();
                                     std::vector<int> chapterIds = {chapterId};
-                                    std::vector<int> chapterIndexes = {chapterIndex};
-                                    client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes);
+                                    client.deleteChapterDownloads(chapterIds, mangaId);
                                     brls::sync([this]() {
                                         refresh();
                                     });
