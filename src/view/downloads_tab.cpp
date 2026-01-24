@@ -107,9 +107,9 @@ DownloadsTab::DownloadsTab() {
     m_localHeader->setMargins(0, 0, 10, 0);
     m_localSection->addView(m_localHeader);
 
-    // Scrollable local container with max height
+    // Scrollable local container
     m_localScroll = new brls::ScrollingFrame();
-    m_localScroll->setMaxHeight(300);  // Limit height to make it scrollable
+    m_localScroll->setGrow(1.0f);
     m_localSection->addView(m_localScroll);
 
     m_localContainer = new brls::Box();
