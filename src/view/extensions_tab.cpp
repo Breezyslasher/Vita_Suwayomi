@@ -80,13 +80,153 @@ ExtensionsTab::ExtensionsTab() {
     // Get references to UI elements
     m_titleLabel = dynamic_cast<brls::Label*>(this->getView("extensions/title"));
     m_listBox = dynamic_cast<brls::Box*>(this->getView("extensions/list"));
+    m_buttonBox = dynamic_cast<brls::Box*>(this->getView("extensions/buttonBox"));
 
-    // Load extensions list
-    loadExtensions();
+    // Create refresh button with icon
+    if (m_buttonBox) {
+        m_refreshBtn = new brls::Button();
+        m_refreshBtn->setWidth(44);
+        m_refreshBtn->setHeight(40);
+        m_refreshBtn->setCornerRadius(8);
+        m_refreshBtn->setJustifyContent(brls::JustifyContent::CENTER);
+        m_refreshBtn->setAlignItems(brls::AlignItems::CENTER);
+
+        auto* refreshIcon = new brls::Image();
+        refreshIcon->setWidth(24);
+        refreshIcon->setHeight(24);
+        refreshIcon->setScalingType(brls::ImageScalingType::FIT);
+        refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
+        m_refreshBtn->addView(refreshIcon);
+
+        m_refreshBtn->registerClickAction([this](brls::View*) {
+            refreshExtensions();
+            return true;
+        });
+
+        // Add touch gesture support
+        m_refreshBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_refreshBtn));
+
+        m_buttonBox->addView(m_refreshBtn);
+    }
+
+    // Use fast mode for initial load (single query, client-side filtering)
+    loadExtensionsFast();
 }
 
 void ExtensionsTab::onFocusGained() {
     brls::Box::onFocusGained();
+}
+
+void ExtensionsTab::loadExtensionsFast() {
+    brls::Logger::debug("Loading extensions list (fast mode - single query)...");
+
+    // Show loading state
+    brls::sync([this]() {
+        showLoading("Loading extensions...");
+    });
+
+    brls::async([this]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        const AppSettings& settings = Application::getInstance().getSettings();
+
+        // Use cached data if available
+        std::vector<Extension> allExtensions;
+        if (m_cacheLoaded && !m_cachedExtensions.empty()) {
+            allExtensions = m_cachedExtensions;
+            brls::Logger::debug("Using cached extensions ({} total)", allExtensions.size());
+        } else {
+            // Single query to fetch ALL extensions (like Kodi addon)
+            bool success = client.fetchExtensionList(allExtensions);
+            if (!success) {
+                brls::sync([this]() {
+                    showError("Failed to load extensions");
+                });
+                return;
+            }
+            // Cache the results
+            m_cachedExtensions = allExtensions;
+            m_cacheLoaded = true;
+            brls::Logger::debug("Fetched and cached {} extensions", allExtensions.size());
+        }
+
+        // Get language filter from settings
+        std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
+
+        // Default to English if no languages configured
+        if (filterLanguages.empty()) {
+            filterLanguages.insert("en");
+            brls::Logger::debug("No language filter set, defaulting to English");
+        }
+
+        // Clear and rebuild extension lists
+        m_extensions.clear();
+        m_updates.clear();
+        m_installed.clear();
+        m_uninstalled.clear();
+
+        // Client-side filtering and categorization
+        for (const auto& ext : allExtensions) {
+            if (ext.installed) {
+                // Always show installed extensions
+                m_extensions.push_back(ext);
+                if (ext.hasUpdate) {
+                    m_updates.push_back(ext);
+                } else {
+                    m_installed.push_back(ext);
+                }
+            } else {
+                // Filter uninstalled by language
+                bool languageMatch = false;
+
+                // Check exact match
+                if (filterLanguages.count(ext.lang) > 0) {
+                    languageMatch = true;
+                }
+                // Check base language (e.g., "zh" matches "zh-Hans")
+                else {
+                    std::string baseLang = ext.lang;
+                    size_t dashPos = baseLang.find('-');
+                    if (dashPos != std::string::npos) {
+                        baseLang = baseLang.substr(0, dashPos);
+                    }
+                    if (filterLanguages.count(baseLang) > 0) {
+                        languageMatch = true;
+                    }
+                }
+
+                // Always show multi-language and "all" language extensions
+                if (ext.lang == "multi" || ext.lang == "all") {
+                    languageMatch = true;
+                }
+
+                if (languageMatch) {
+                    m_extensions.push_back(ext);
+                    m_uninstalled.push_back(ext);
+                }
+            }
+        }
+
+        brls::Logger::debug("Fast mode: {} installed ({} updates), {} uninstalled (filtered from {} total)",
+                           m_installed.size() + m_updates.size(), m_updates.size(),
+                           m_uninstalled.size(), allExtensions.size());
+
+        brls::sync([this]() {
+            populateUnifiedList();
+        });
+    });
+}
+
+void ExtensionsTab::refreshExtensions() {
+    brls::Logger::info("Refreshing extensions from server...");
+
+    // Clear cache to force fresh fetch
+    m_cachedExtensions.clear();
+    m_cacheLoaded = false;
+
+    brls::Application::notify("Refreshing extensions...");
+
+    // Reload using fast mode
+    loadExtensionsFast();
 }
 
 void ExtensionsTab::loadExtensions() {
@@ -558,6 +698,19 @@ void ExtensionsTab::showError(const std::string& message) {
     errorLabel->setTextColor(nvgRGB(255, 100, 100));
     errorLabel->setMargins(20, 20, 20, 20);
     m_listBox->addView(errorLabel);
+}
+
+void ExtensionsTab::showLoading(const std::string& message) {
+    if (!m_listBox) return;
+
+    m_listBox->clearViews();
+
+    auto* loadingLabel = new brls::Label();
+    loadingLabel->setText(message);
+    loadingLabel->setFontSize(16);
+    loadingLabel->setTextColor(nvgRGB(180, 180, 180));
+    loadingLabel->setMargins(20, 20, 20, 20);
+    m_listBox->addView(loadingLabel);
 }
 
 } // namespace vitasuwayomi
