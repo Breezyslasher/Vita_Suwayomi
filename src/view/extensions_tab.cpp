@@ -74,41 +74,44 @@ std::string ExtensionsTab::getLanguageDisplayName(const std::string& langCode) {
 }
 
 ExtensionsTab::ExtensionsTab() {
-    // Load from XML
-    this->inflateFromXMLRes("xml/tabs/extensions.xml");
+    // Programmatic layout (like SourceBrowseTab)
+    this->setAxis(brls::Axis::COLUMN);
+    this->setPadding(20, 30, 20, 30);
 
-    // Get references to UI elements
-    m_titleLabel = dynamic_cast<brls::Label*>(this->getView("extensions/title"));
-    m_listBox = dynamic_cast<brls::Box*>(this->getView("extensions/list"));
-    m_buttonBox = dynamic_cast<brls::Box*>(this->getView("extensions/buttonBox"));
-    m_scrollFrame = dynamic_cast<brls::ScrollingFrame*>(this->getView("extensions/scroll"));
+    // Header with title and refresh button
+    auto* headerBox = new brls::Box();
+    headerBox->setAxis(brls::Axis::ROW);
+    headerBox->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    headerBox->setAlignItems(brls::AlignItems::CENTER);
+    headerBox->setMarginBottom(15);
 
-    // Create refresh button with icon
-    if (m_buttonBox) {
-        m_refreshBtn = new brls::Button();
-        m_refreshBtn->setWidth(44);
-        m_refreshBtn->setHeight(40);
-        m_refreshBtn->setCornerRadius(8);
-        m_refreshBtn->setJustifyContent(brls::JustifyContent::CENTER);
-        m_refreshBtn->setAlignItems(brls::AlignItems::CENTER);
+    // Title
+    m_titleLabel = new brls::Label();
+    m_titleLabel->setText("Extensions");
+    m_titleLabel->setFontSize(24);
+    headerBox->addView(m_titleLabel);
 
-        auto* refreshIcon = new brls::Image();
-        refreshIcon->setWidth(24);
-        refreshIcon->setHeight(24);
-        refreshIcon->setScalingType(brls::ImageScalingType::FIT);
-        refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
-        m_refreshBtn->addView(refreshIcon);
+    // Refresh button
+    m_refreshBtn = new brls::Button();
+    m_refreshBtn->setText("Refresh");
+    m_refreshBtn->registerClickAction([this](brls::View*) {
+        refreshExtensions();
+        return true;
+    });
+    headerBox->addView(m_refreshBtn);
 
-        m_refreshBtn->registerClickAction([this](brls::View*) {
-            refreshExtensions();
-            return true;
-        });
+    this->addView(headerBox);
 
-        // Add touch gesture support
-        m_refreshBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_refreshBtn));
+    // Scrolling content area
+    m_scrollFrame = new brls::ScrollingFrame();
+    m_scrollFrame->setGrow(1.0f);
 
-        m_buttonBox->addView(m_refreshBtn);
-    }
+    // Content box inside scroll frame
+    m_listBox = new brls::Box();
+    m_listBox->setAxis(brls::Axis::COLUMN);
+    m_scrollFrame->setContentView(m_listBox);
+
+    this->addView(m_scrollFrame);
 
     // Use fast mode for initial load (single query, client-side filtering)
     loadExtensionsFast();

@@ -42,7 +42,6 @@ private:
 
     brls::Label* m_titleLabel = nullptr;
     brls::Box* m_listBox = nullptr;
-    brls::Box* m_buttonBox = nullptr;
     brls::Button* m_refreshBtn = nullptr;
     brls::ScrollingFrame* m_scrollFrame = nullptr;
 
