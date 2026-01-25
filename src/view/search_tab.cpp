@@ -6,6 +6,7 @@
 #include "view/search_tab.hpp"
 #include "view/manga_item_cell.hpp"
 #include "view/manga_detail_view.hpp"
+#include "view/horizontal_scroll_row.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
@@ -599,6 +600,8 @@ void SearchTab::populateSearchResultsBySource() {
     if (!m_searchResultsScrollView) {
         m_searchResultsScrollView = new brls::ScrollingFrame();
         m_searchResultsScrollView->setGrow(1.0f);
+        // Use centered scrolling to keep focused items visible
+        m_searchResultsScrollView->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
 
         m_searchResultsBox = new brls::Box();
         m_searchResultsBox->setAxis(brls::Axis::COLUMN);
@@ -640,30 +643,20 @@ void SearchTab::createSourceRow(const std::string& sourceName, const std::vector
     sourceLabel->setTextColor(nvgRGB(100, 180, 255));
     m_searchResultsBox->addView(sourceLabel);
 
-    // Horizontal scroll container for this source's results
-    auto* scrollContainer = new brls::ScrollingFrame();
-    scrollContainer->setHeight(195);
-    scrollContainer->setMarginBottom(10);
-
-    auto* rowBox = new brls::Box();
-    rowBox->setAxis(brls::Axis::ROW);
-    rowBox->setJustifyContent(brls::JustifyContent::FLEX_START);
-    rowBox->setAlignItems(brls::AlignItems::CENTER);
-    rowBox->setHeight(185);
-
-    // Calculate total width for horizontal scrolling
-    float totalWidth = manga.size() * 160.0f;
-    rowBox->setWidth(totalWidth);
+    // Create horizontal scrolling row for cells
+    auto* rowBox = new HorizontalScrollRow();
+    rowBox->setHeight(195);
+    rowBox->setMarginBottom(10);
 
     // Create manga cells for each result
-    for (const auto& item : manga) {
+    for (size_t i = 0; i < manga.size(); i++) {
         auto* cell = new MangaItemCell();
-        cell->setManga(item);
+        cell->setManga(manga[i]);
         cell->setWidth(150);
         cell->setHeight(185);
         cell->setMarginRight(10);
 
-        Manga mangaCopy = item;
+        Manga mangaCopy = manga[i];
         cell->registerClickAction([this, mangaCopy](brls::View* view) {
             onMangaSelected(mangaCopy);
             return true;
@@ -673,8 +666,7 @@ void SearchTab::createSourceRow(const std::string& sourceName, const std::vector
         rowBox->addView(cell);
     }
 
-    scrollContainer->setContentView(rowBox);
-    m_searchResultsBox->addView(scrollContainer);
+    m_searchResultsBox->addView(rowBox);
 }
 
 void SearchTab::loadNextPage() {
