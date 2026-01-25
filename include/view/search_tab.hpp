@@ -6,6 +6,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <map>
 #include "app/suwayomi_client.hpp"
 #include "view/recycling_grid.hpp"
 
@@ -64,8 +65,15 @@ private:
     void showGlobalSearchDialog();
     void showFilterDialog();
 
-    // Main content grid
+    // Main content grid (for single source browsing)
     RecyclingGrid* m_contentGrid = nullptr;
+
+    // Search results by source (grouped horizontal rows)
+    brls::ScrollingFrame* m_searchResultsScrollView = nullptr;
+    brls::Box* m_searchResultsBox = nullptr;
+    std::map<std::string, std::vector<Manga>> m_resultsBySource;
+    void populateSearchResultsBySource();
+    void createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga);
 
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;

@@ -635,7 +635,6 @@ void SettingsTab::showLanguageFilterDialog() {
         {"hi", "Hindi"},
         {"bn", "Bengali"},
         {"ms", "Malay"},
-        {"tl", "Filipino"},
         {"my", "Burmese"},
         {"bg", "Bulgarian"},
         {"ca", "Catalan"},

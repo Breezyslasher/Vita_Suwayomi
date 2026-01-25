@@ -57,12 +57,89 @@ DownloadsTab::DownloadsTab() {
     this->setPadding(20);
     this->setGrow(1.0f);
 
-    // Header
+    // Header row with title and action icons
+    auto headerRow = new brls::Box();
+    headerRow->setAxis(brls::Axis::ROW);
+    headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    headerRow->setAlignItems(brls::AlignItems::CENTER);
+    headerRow->setMargins(0, 0, 15, 0);
+    this->addView(headerRow);
+
     auto header = new brls::Label();
     header->setText("Downloads");
     header->setFontSize(24);
-    header->setMargins(0, 0, 15, 0);
-    this->addView(header);
+    headerRow->addView(header);
+
+    // Actions row with Hide (L) and Show (R) icons
+    m_actionsRow = new brls::Box();
+    m_actionsRow->setAxis(brls::Axis::ROW);
+    m_actionsRow->setAlignItems(brls::AlignItems::CENTER);
+    headerRow->addView(m_actionsRow);
+
+    // Hide button with L icon above
+    auto* hideContainer = new brls::Box();
+    hideContainer->setAxis(brls::Axis::COLUMN);
+    hideContainer->setAlignItems(brls::AlignItems::CENTER);
+    hideContainer->setMarginRight(15);
+
+    // L button icon
+    auto* lButtonIcon = new brls::Image();
+    lButtonIcon->setWidth(36);
+    lButtonIcon->setHeight(24);
+    lButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    lButtonIcon->setImageFromFile("app0:resources/images/l_button.png");
+    lButtonIcon->setMarginBottom(2);
+    hideContainer->addView(lButtonIcon);
+
+    auto* hideBtn = new brls::Button();
+    hideBtn->setWidth(44);
+    hideBtn->setHeight(40);
+    hideBtn->setCornerRadius(8);
+    hideBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    hideBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    m_hideIcon = new brls::Image();
+    m_hideIcon->setWidth(24);
+    m_hideIcon->setHeight(24);
+    m_hideIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_hideIcon->setImageFromFile("app0:resources/icons/hide.png");
+    hideBtn->addView(m_hideIcon);
+
+    hideBtn->addGestureRecognizer(new brls::TapGestureRecognizer(hideBtn));
+    hideContainer->addView(hideBtn);
+    m_actionsRow->addView(hideContainer);
+
+    // Show button with R icon above
+    auto* showContainer = new brls::Box();
+    showContainer->setAxis(brls::Axis::COLUMN);
+    showContainer->setAlignItems(brls::AlignItems::CENTER);
+
+    // R button icon
+    auto* rButtonIcon = new brls::Image();
+    rButtonIcon->setWidth(36);
+    rButtonIcon->setHeight(24);
+    rButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
+    rButtonIcon->setMarginBottom(2);
+    showContainer->addView(rButtonIcon);
+
+    auto* showBtn = new brls::Button();
+    showBtn->setWidth(44);
+    showBtn->setHeight(40);
+    showBtn->setCornerRadius(8);
+    showBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    showBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    m_showIcon = new brls::Image();
+    m_showIcon->setWidth(24);
+    m_showIcon->setHeight(24);
+    m_showIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_showIcon->setImageFromFile("app0:resources/icons/show.png");
+    showBtn->addView(m_showIcon);
+
+    showBtn->addGestureRecognizer(new brls::TapGestureRecognizer(showBtn));
+    showContainer->addView(showBtn);
+    m_actionsRow->addView(showContainer);
 
     // === Download Queue Section (server downloads) ===
     m_queueSection = new brls::Box();
@@ -516,13 +593,12 @@ void DownloadsTab::refreshLocalDownloads() {
                     return true;
                 });
 
-            // Add swipe gesture for removal and reordering
+            // Add swipe gesture for removal (horizontal only, like server downloads)
             row->addGestureRecognizer(new brls::PanGestureRecognizer(
                 [this, row, mangaId, chapterIndex, originalBgColor](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                     static brls::Point touchStart;
                     static bool isValidSwipe = false;
                     const float SWIPE_THRESHOLD = 60.0f;
-                    const float VERTICAL_THRESHOLD = 40.0f;
                     const float TAP_THRESHOLD = 15.0f;
 
                     if (status.state == brls::GestureState::START) {
@@ -541,47 +617,19 @@ void DownloadsTab::refreshLocalDownloads() {
                             } else {
                                 row->setBackgroundColor(originalBgColor);
                             }
-                        } else if (std::abs(dy) > std::abs(dx) * 1.5f && std::abs(dy) > TAP_THRESHOLD) {
-                            isValidSwipe = true;
-                            if (dy < -VERTICAL_THRESHOLD * 0.5f) {
-                                // Up swipe - blue tint for move up
-                                row->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
-                            } else if (dy > VERTICAL_THRESHOLD * 0.5f) {
-                                // Down swipe - blue tint for move down
-                                row->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
-                            } else {
-                                row->setBackgroundColor(originalBgColor);
-                            }
                         }
                     } else if (status.state == brls::GestureState::END) {
                         row->setBackgroundColor(originalBgColor);
 
                         float dx = status.position.x - touchStart.x;
-                        float dy = status.position.y - touchStart.y;
-
-                        if (isValidSwipe) {
-                            if (std::abs(dx) > std::abs(dy) * 1.5f && dx < -SWIPE_THRESHOLD) {
-                                // Left swipe confirmed - remove from queue
-                                DownloadsManager& mgr = DownloadsManager::getInstance();
-                                mgr.cancelChapterDownload(mangaId, chapterIndex);
-                                refresh();
-                            } else if (std::abs(dy) > std::abs(dx) * 1.5f) {
-                                DownloadsManager& mgr = DownloadsManager::getInstance();
-                                if (dy < -VERTICAL_THRESHOLD) {
-                                    // Up swipe confirmed - move up in queue
-                                    if (mgr.moveChapterInQueue(mangaId, chapterIndex, -1)) {
-                                        refresh();
-                                    }
-                                } else if (dy > VERTICAL_THRESHOLD) {
-                                    // Down swipe confirmed - move down in queue
-                                    if (mgr.moveChapterInQueue(mangaId, chapterIndex, 1)) {
-                                        refresh();
-                                    }
-                                }
-                            }
+                        if (isValidSwipe && dx < -SWIPE_THRESHOLD) {
+                            // Left swipe confirmed - remove from queue
+                            DownloadsManager& mgr = DownloadsManager::getInstance();
+                            mgr.cancelChapterDownload(mangaId, chapterIndex);
+                            refresh();
                         }
                     }
-                }, brls::PanAxis::ANY));
+                }, brls::PanAxis::HORIZONTAL));
 
             // Add row
             m_localContainer->addView(row);

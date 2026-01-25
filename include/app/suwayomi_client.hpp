@@ -11,6 +11,7 @@
 #include <functional>
 #include <memory>
 #include <map>
+#include <set>
 #include "utils/http_client.hpp"
 
 namespace vitasuwayomi {
@@ -303,6 +304,8 @@ public:
 
     // Extension Management
     bool fetchExtensionList(std::vector<Extension>& extensions);
+    bool fetchInstalledExtensions(std::vector<Extension>& extensions);  // Server-side filtered: installed only
+    bool fetchUninstalledExtensions(std::vector<Extension>& extensions, const std::set<std::string>& languages);  // Server-side filtered by languages
     bool installExtension(const std::string& pkgName);
     bool updateExtension(const std::string& pkgName);
     bool uninstallExtension(const std::string& pkgName);
@@ -456,6 +459,8 @@ private:
 
     // Extension GraphQL methods
     bool fetchExtensionListGraphQL(std::vector<Extension>& extensions);
+    bool fetchInstalledExtensionsGraphQL(std::vector<Extension>& extensions);  // Server-side filtered
+    bool fetchUninstalledExtensionsGraphQL(std::vector<Extension>& extensions, const std::set<std::string>& languages);  // Server-side filtered
     bool installExtensionGraphQL(const std::string& pkgName);
     bool updateExtensionGraphQL(const std::string& pkgName);
     bool uninstallExtensionGraphQL(const std::string& pkgName);

@@ -1,8 +1,8 @@
 /**
  * VitaSuwayomi - Extensions Tab
  * Manage Suwayomi extensions (install, update, uninstall)
- * Extensions are grouped by language for better organization
- * Language filtering follows global settings from Settings tab
+ * Shows unified list: updates first, then installed, then uninstalled (sorted by language)
+ * Language filtering and sorting follows global settings from Settings tab
  */
 
 #include "view/extensions_tab.hpp"
@@ -79,69 +79,213 @@ ExtensionsTab::ExtensionsTab() {
 
     // Get references to UI elements
     m_titleLabel = dynamic_cast<brls::Label*>(this->getView("extensions/title"));
-    m_installedBtn = dynamic_cast<brls::Button*>(this->getView("extensions/installed_btn"));
-    m_availableBtn = dynamic_cast<brls::Button*>(this->getView("extensions/available_btn"));
-    m_updatesBtn = dynamic_cast<brls::Button*>(this->getView("extensions/updates_btn"));
     m_listBox = dynamic_cast<brls::Box*>(this->getView("extensions/list"));
+    m_buttonBox = dynamic_cast<brls::Box*>(this->getView("extensions/buttonBox"));
+    m_scrollFrame = dynamic_cast<brls::ScrollingFrame*>(this->getView("extensions/scroll"));
 
-    // Set up button handlers
-    if (m_installedBtn) {
-        m_installedBtn->registerClickAction([this](brls::View*) {
-            showInstalled();
+    // Create refresh button with icon
+    if (m_buttonBox) {
+        m_refreshBtn = new brls::Button();
+        m_refreshBtn->setWidth(44);
+        m_refreshBtn->setHeight(40);
+        m_refreshBtn->setCornerRadius(8);
+        m_refreshBtn->setJustifyContent(brls::JustifyContent::CENTER);
+        m_refreshBtn->setAlignItems(brls::AlignItems::CENTER);
+
+        auto* refreshIcon = new brls::Image();
+        refreshIcon->setWidth(24);
+        refreshIcon->setHeight(24);
+        refreshIcon->setScalingType(brls::ImageScalingType::FIT);
+        refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
+        m_refreshBtn->addView(refreshIcon);
+
+        m_refreshBtn->registerClickAction([this](brls::View*) {
+            refreshExtensions();
             return true;
         });
+
+        // Add touch gesture support
+        m_refreshBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_refreshBtn));
+
+        m_buttonBox->addView(m_refreshBtn);
     }
 
-    if (m_availableBtn) {
-        m_availableBtn->registerClickAction([this](brls::View*) {
-            showAvailable();
-            return true;
-        });
-    }
-
-    if (m_updatesBtn) {
-        m_updatesBtn->registerClickAction([this](brls::View*) {
-            showUpdates();
-            return true;
-        });
-    }
-
-    // Load extensions list
-    loadExtensions();
+    // Use fast mode for initial load (single query, client-side filtering)
+    loadExtensionsFast();
 }
 
 void ExtensionsTab::onFocusGained() {
     brls::Box::onFocusGained();
 }
 
-void ExtensionsTab::loadExtensions() {
-    brls::Logger::debug("Loading extensions list...");
+void ExtensionsTab::loadExtensionsFast() {
+    brls::Logger::debug("Loading extensions list (fast mode - single query)...");
+
+    // Show loading state
+    brls::sync([this]() {
+        showLoading("Loading extensions...");
+    });
 
     brls::async([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        std::vector<Extension> extensions;
+        const AppSettings& settings = Application::getInstance().getSettings();
 
-        if (client.fetchExtensionList(extensions)) {
-            m_extensions = extensions;
+        // Use cached data if available
+        std::vector<Extension> allExtensions;
+        if (m_cacheLoaded && !m_cachedExtensions.empty()) {
+            allExtensions = m_cachedExtensions;
+            brls::Logger::debug("Using cached extensions ({} total)", allExtensions.size());
+        } else {
+            // Single query to fetch ALL extensions (like Kodi addon)
+            bool success = client.fetchExtensionList(allExtensions);
+            if (!success) {
+                brls::sync([this]() {
+                    showError("Failed to load extensions");
+                });
+                return;
+            }
+            // Cache the results
+            m_cachedExtensions = allExtensions;
+            m_cacheLoaded = true;
+            brls::Logger::debug("Fetched and cached {} extensions", allExtensions.size());
+        }
 
-            // Categorize extensions
-            m_installed.clear();
-            m_available.clear();
-            m_updates.clear();
+        // Get language filter from settings
+        std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
 
-            for (const auto& ext : m_extensions) {
-                if (ext.installed) {
-                    m_installed.push_back(ext);
-                    if (ext.hasUpdate) {
-                        m_updates.push_back(ext);
-                    }
+        // Default to English if no languages configured
+        if (filterLanguages.empty()) {
+            filterLanguages.insert("en");
+            brls::Logger::debug("No language filter set, defaulting to English");
+        }
+
+        // Clear and rebuild extension lists
+        m_extensions.clear();
+        m_updates.clear();
+        m_installed.clear();
+        m_uninstalled.clear();
+
+        // Invalidate grouping cache since data changed
+        m_groupingCacheValid = false;
+
+        // Client-side filtering and categorization
+        for (const auto& ext : allExtensions) {
+            if (ext.installed) {
+                // Always show installed extensions
+                m_extensions.push_back(ext);
+                if (ext.hasUpdate) {
+                    m_updates.push_back(ext);
                 } else {
-                    m_available.push_back(ext);
+                    m_installed.push_back(ext);
+                }
+            } else {
+                // Filter uninstalled by language
+                bool languageMatch = false;
+
+                // Check exact match
+                if (filterLanguages.count(ext.lang) > 0) {
+                    languageMatch = true;
+                }
+                // Check base language (e.g., "zh" matches "zh-Hans")
+                else {
+                    std::string baseLang = ext.lang;
+                    size_t dashPos = baseLang.find('-');
+                    if (dashPos != std::string::npos) {
+                        baseLang = baseLang.substr(0, dashPos);
+                    }
+                    if (filterLanguages.count(baseLang) > 0) {
+                        languageMatch = true;
+                    }
+                }
+
+                // Always show multi-language and "all" language extensions
+                if (ext.lang == "multi" || ext.lang == "all") {
+                    languageMatch = true;
+                }
+
+                if (languageMatch) {
+                    m_extensions.push_back(ext);
+                    m_uninstalled.push_back(ext);
+                }
+            }
+        }
+
+        brls::Logger::debug("Fast mode: {} installed ({} updates), {} uninstalled (filtered from {} total)",
+                           m_installed.size() + m_updates.size(), m_updates.size(),
+                           m_uninstalled.size(), allExtensions.size());
+
+        brls::sync([this]() {
+            populateUnifiedList();
+        });
+    });
+}
+
+void ExtensionsTab::refreshExtensions() {
+    brls::Logger::info("Refreshing extensions from server...");
+
+    // Clear all caches to force fresh fetch
+    m_cachedExtensions.clear();
+    m_cacheLoaded = false;
+    m_groupingCacheValid = false;
+
+    brls::Application::notify("Refreshing extensions...");
+
+    // Reload using fast mode
+    loadExtensionsFast();
+}
+
+void ExtensionsTab::loadExtensions() {
+    brls::Logger::debug("Loading extensions list with server-side filtering...");
+
+    brls::async([this]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        const AppSettings& settings = Application::getInstance().getSettings();
+
+        // Get language filter from settings
+        std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
+
+        // Default to English if no languages configured (to avoid loading hundreds of extensions)
+        if (filterLanguages.empty()) {
+            filterLanguages.insert("en");
+            brls::Logger::debug("No language filter set, defaulting to English");
+        }
+
+        // Fetch installed extensions (no language filter needed - always show all installed)
+        std::vector<Extension> installedExtensions;
+        bool installedSuccess = client.fetchInstalledExtensions(installedExtensions);
+
+        // Fetch uninstalled extensions with server-side language filter
+        std::vector<Extension> uninstalledExtensions;
+        bool uninstalledSuccess = client.fetchUninstalledExtensions(uninstalledExtensions, filterLanguages);
+
+        if (installedSuccess || uninstalledSuccess) {
+            // Clear and rebuild extension lists
+            m_extensions.clear();
+            m_updates.clear();
+            m_installed.clear();
+            m_uninstalled.clear();
+
+            // Categorize installed extensions
+            for (const auto& ext : installedExtensions) {
+                m_extensions.push_back(ext);
+                if (ext.hasUpdate) {
+                    m_updates.push_back(ext);
+                } else {
+                    m_installed.push_back(ext);
                 }
             }
 
+            // Add uninstalled extensions (already filtered by server)
+            for (const auto& ext : uninstalledExtensions) {
+                m_extensions.push_back(ext);
+                m_uninstalled.push_back(ext);
+            }
+
+            brls::Logger::debug("Loaded {} installed ({} updates) and {} uninstalled extensions",
+                               installedExtensions.size(), m_updates.size(), uninstalledExtensions.size());
+
             brls::sync([this]() {
-                showInstalled();
+                populateUnifiedList();
             });
         } else {
             brls::sync([this]() {
@@ -151,38 +295,27 @@ void ExtensionsTab::loadExtensions() {
     });
 }
 
-void ExtensionsTab::showInstalled() {
-    m_currentView = ViewMode::INSTALLED;
-    updateButtonStyles();
-    auto filtered = getFilteredExtensions(m_installed);
-    populateListGroupedByLanguage(filtered);
-}
-
-void ExtensionsTab::showAvailable() {
-    m_currentView = ViewMode::AVAILABLE;
-    updateButtonStyles();
-    auto filtered = getFilteredExtensions(m_available);
-    populateListGroupedByLanguage(filtered);
-}
-
-void ExtensionsTab::showUpdates() {
-    m_currentView = ViewMode::UPDATES;
-    updateButtonStyles();
-    auto filtered = getFilteredExtensions(m_updates);
-    populateListGroupedByLanguage(filtered);
-}
-
-std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Extension>& extensions) {
+std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Extension>& extensions, bool forceLanguageFilter) {
     const AppSettings& settings = Application::getInstance().getSettings();
 
-    // If global settings has enabled languages, use that filter
-    if (!settings.enabledSourceLanguages.empty()) {
+    // Determine which languages to filter by
+    std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
+
+    // For uninstalled extensions (forceLanguageFilter=true), if no language is set,
+    // default to English to avoid showing hundreds of extensions in all languages
+    if (forceLanguageFilter && filterLanguages.empty()) {
+        filterLanguages.insert("en");  // Default to English
+        brls::Logger::debug("No language filter set, defaulting to English for uninstalled extensions");
+    }
+
+    // If we have languages to filter by, apply the filter
+    if (!filterLanguages.empty()) {
         std::vector<Extension> filtered;
         for (const auto& ext : extensions) {
             bool languageMatch = false;
 
             // Check exact match first
-            if (settings.enabledSourceLanguages.count(ext.lang) > 0) {
+            if (filterLanguages.count(ext.lang) > 0) {
                 languageMatch = true;
             }
             // Check if base language is enabled (e.g., "zh" matches "zh-Hans", "zh-Hant")
@@ -193,7 +326,7 @@ std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Ex
                     baseLang = baseLang.substr(0, dashPos);
                 }
 
-                if (settings.enabledSourceLanguages.count(baseLang) > 0) {
+                if (filterLanguages.count(baseLang) > 0) {
                     languageMatch = true;
                 }
             }
@@ -210,7 +343,7 @@ std::vector<Extension> ExtensionsTab::getFilteredExtensions(const std::vector<Ex
         return filtered;
     }
 
-    // No filtering - return all
+    // No filtering - return all (only for installed extensions when no language set)
     return extensions;
 }
 
@@ -233,50 +366,59 @@ std::map<std::string, std::vector<Extension>> ExtensionsTab::groupExtensionsByLa
     return grouped;
 }
 
-void ExtensionsTab::updateButtonStyles() {
-    // Update button styles to show active state
-    // Selected: teal accent, Unselected: dark gray
-    NVGcolor selectedColor = nvgRGBA(0, 150, 136, 255);
-    NVGcolor normalColor = nvgRGBA(50, 50, 50, 255);
+std::vector<std::string> ExtensionsTab::getSortedLanguages(const std::map<std::string, std::vector<Extension>>& grouped) {
+    const AppSettings& settings = Application::getInstance().getSettings();
+    std::vector<std::string> languages;
 
-    if (m_installedBtn) {
-        m_installedBtn->setBackgroundColor(m_currentView == ViewMode::INSTALLED ?
-            selectedColor : normalColor);
+    for (const auto& pair : grouped) {
+        languages.push_back(pair.first);
     }
-    if (m_availableBtn) {
-        m_availableBtn->setBackgroundColor(m_currentView == ViewMode::AVAILABLE ?
-            selectedColor : normalColor);
-    }
-    if (m_updatesBtn) {
-        m_updatesBtn->setBackgroundColor(m_currentView == ViewMode::UPDATES ?
-            selectedColor : normalColor);
-    }
+
+    // Sort languages: enabled languages first (in order), then others alphabetically
+    std::sort(languages.begin(), languages.end(),
+        [this, &settings](const std::string& a, const std::string& b) {
+            bool aEnabled = settings.enabledSourceLanguages.count(a) > 0;
+            bool bEnabled = settings.enabledSourceLanguages.count(b) > 0;
+
+            // If both are enabled or both are not enabled, sort by display name
+            if (aEnabled == bEnabled) {
+                // English first within enabled or non-enabled groups
+                if (a == "en" && b != "en") return true;
+                if (a != "en" && b == "en") return false;
+                return getLanguageDisplayName(a) < getLanguageDisplayName(b);
+            }
+
+            // Enabled languages come first
+            return aEnabled > bEnabled;
+        });
+
+    return languages;
 }
 
-brls::Box* ExtensionsTab::createLanguageHeader(const std::string& langCode, int extensionCount) {
+brls::Box* ExtensionsTab::createSectionHeader(const std::string& title, int count) {
     auto* header = new brls::Box();
     header->setAxis(brls::Axis::ROW);
     header->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     header->setAlignItems(brls::AlignItems::CENTER);
-    header->setPadding(8, 15, 8, 15);
-    header->setMarginTop(10);
+    header->setPadding(10, 15, 10, 15);
+    header->setMarginTop(5);
     header->setMarginBottom(5);
-    header->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
-    header->setCornerRadius(4);
+    header->setBackgroundColor(nvgRGBA(0, 100, 80, 255));  // Teal section header
+    header->setCornerRadius(6);
     header->setFocusable(true);
 
-    // Language name label
-    auto* langLabel = new brls::Label();
-    langLabel->setText(getLanguageDisplayName(langCode));
-    langLabel->setFontSize(16);
-    langLabel->setTextColor(nvgRGB(200, 200, 200));
-    header->addView(langLabel);
+    // Section title label
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText(title);
+    titleLabel->setFontSize(18);
+    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    header->addView(titleLabel);
 
     // Count label
     auto* countLabel = new brls::Label();
-    countLabel->setText(std::to_string(extensionCount) + " extension" + (extensionCount != 1 ? "s" : ""));
-    countLabel->setFontSize(12);
-    countLabel->setTextColor(nvgRGB(140, 140, 140));
+    countLabel->setText(std::to_string(count));
+    countLabel->setFontSize(14);
+    countLabel->setTextColor(nvgRGB(200, 255, 200));
     header->addView(countLabel);
 
     // Add touch gesture support
@@ -285,74 +427,187 @@ brls::Box* ExtensionsTab::createLanguageHeader(const std::string& langCode, int 
     return header;
 }
 
-void ExtensionsTab::populateListGroupedByLanguage(const std::vector<Extension>& extensions) {
+brls::Box* ExtensionsTab::createLanguageHeader(const std::string& langCode, int extensionCount) {
+    auto* header = new brls::Box();
+    header->setAxis(brls::Axis::ROW);
+    header->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    header->setAlignItems(brls::AlignItems::CENTER);
+    header->setPadding(6, 12, 6, 12);
+    header->setMarginTop(8);
+    header->setMarginBottom(3);
+    header->setMarginLeft(10);
+    header->setBackgroundColor(nvgRGBA(50, 50, 50, 255));
+    header->setCornerRadius(4);
+    header->setFocusable(true);
+
+    // Language name label
+    auto* langLabel = new brls::Label();
+    langLabel->setText(getLanguageDisplayName(langCode));
+    langLabel->setFontSize(14);
+    langLabel->setTextColor(nvgRGB(180, 180, 180));
+    header->addView(langLabel);
+
+    // Count label
+    auto* countLabel = new brls::Label();
+    countLabel->setText(std::to_string(extensionCount));
+    countLabel->setFontSize(11);
+    countLabel->setTextColor(nvgRGB(120, 120, 120));
+    header->addView(countLabel);
+
+    // Add touch gesture support
+    header->addGestureRecognizer(new brls::TapGestureRecognizer(header));
+
+    return header;
+}
+
+void ExtensionsTab::populateUnifiedList() {
     if (!m_listBox) return;
 
+    // Clear existing views and tracking data
     m_listBox->clearViews();
+    m_extensionItems.clear();
+    m_currentBatchIndex = 0;
+    m_isPopulating = true;
 
-    if (extensions.empty()) {
+    // Sort installed and updates alphabetically by name (only once)
+    std::sort(m_updates.begin(), m_updates.end(),
+        [](const Extension& a, const Extension& b) { return a.name < b.name; });
+    std::sort(m_installed.begin(), m_installed.end(),
+        [](const Extension& a, const Extension& b) { return a.name < b.name; });
+
+    // Cache grouped/sorted data for uninstalled extensions (only recompute when data changes)
+    if (!m_groupingCacheValid) {
+        m_cachedGrouped = groupExtensionsByLanguage(m_uninstalled);
+        m_cachedSortedLanguages = getSortedLanguages(m_cachedGrouped);
+        m_groupingCacheValid = true;
+    }
+
+    // Show message if everything is empty
+    if (m_updates.empty() && m_installed.empty() && m_uninstalled.empty()) {
         auto* emptyLabel = new brls::Label();
-        if (m_currentView == ViewMode::AVAILABLE) {
-            emptyLabel->setText("No available extensions to install");
-        } else if (m_currentView == ViewMode::UPDATES) {
-            emptyLabel->setText("All extensions are up to date");
-        } else {
-            emptyLabel->setText("No extensions installed");
-        }
+        emptyLabel->setText("No extensions available");
         emptyLabel->setFontSize(16);
         emptyLabel->setMargins(20, 20, 20, 20);
         m_listBox->addView(emptyLabel);
+        m_isPopulating = false;
         return;
     }
 
-    // Group extensions by language
-    auto grouped = groupExtensionsByLanguage(extensions);
+    // Start batched population
+    populateBatch();
+}
 
-    // Sort languages: "en" first, then alphabetically by display name
-    std::vector<std::pair<std::string, std::vector<Extension>>> sortedGroups(grouped.begin(), grouped.end());
-    std::sort(sortedGroups.begin(), sortedGroups.end(),
-        [this](const auto& a, const auto& b) {
-            // English first
-            if (a.first == "en" && b.first != "en") return true;
-            if (a.first != "en" && b.first == "en") return false;
-            // Then by display name
-            return getLanguageDisplayName(a.first) < getLanguageDisplayName(b.first);
-        });
+void ExtensionsTab::populateBatch() {
+    if (!m_listBox || !m_isPopulating) return;
 
-    // Determine if this is the Available tab (for click-to-install)
-    bool clickToInstall = (m_currentView == ViewMode::AVAILABLE);
+    int itemsThisBatch = 0;
 
-    // Add each language group
-    for (const auto& pair : sortedGroups) {
-        const std::string& langCode = pair.first;
-        const std::vector<Extension>& langExtensions = pair.second;
+    // Build a flat list of extensions with section markers for simpler batching
+    // Section indices: 0 = updates, 1 = installed, 2+ = uninstalled by language
 
-        // Add language header
-        auto* header = createLanguageHeader(langCode, langExtensions.size());
-        m_listBox->addView(header);
+    // Calculate flat index ranges
+    int totalUpdates = (int)m_updates.size();
+    int totalInstalled = (int)m_installed.size();
+    int totalUninstalled = 0;
+    for (const auto& pair : m_cachedGrouped) {
+        totalUninstalled += (int)pair.second.size();
+    }
+    int totalItems = totalUpdates + totalInstalled + totalUninstalled;
 
-        // Add extensions for this language
-        for (const auto& ext : langExtensions) {
-            auto* item = createExtensionItem(ext, clickToInstall);
+    // Process items based on current batch index
+    while (itemsThisBatch < BATCH_SIZE && m_currentBatchIndex < totalItems) {
+        int idx = m_currentBatchIndex;
+
+        if (idx < totalUpdates) {
+            // Updates section
+            if (idx == 0 && !m_updates.empty()) {
+                auto* header = createSectionHeader("Updates Available", totalUpdates);
+                m_listBox->addView(header);
+            }
+            auto* item = createExtensionItem(m_updates[idx]);
             if (item) {
                 m_listBox->addView(item);
+                itemsThisBatch++;
+            }
+        } else if (idx < totalUpdates + totalInstalled) {
+            // Installed section
+            int localIdx = idx - totalUpdates;
+            if (localIdx == 0 && !m_installed.empty()) {
+                auto* header = createSectionHeader("Installed", totalInstalled);
+                m_listBox->addView(header);
+            }
+            auto* item = createExtensionItem(m_installed[localIdx]);
+            if (item) {
+                m_listBox->addView(item);
+                itemsThisBatch++;
+            }
+        } else {
+            // Uninstalled section (grouped by language)
+            int uninstalledIdx = idx - totalUpdates - totalInstalled;
+
+            if (uninstalledIdx == 0 && !m_uninstalled.empty()) {
+                auto* header = createSectionHeader("Available to Install", totalUninstalled);
+                m_listBox->addView(header);
+            }
+
+            // Find the correct language group
+            int offset = 0;
+            for (const auto& langCode : m_cachedSortedLanguages) {
+                const auto& langExtensions = m_cachedGrouped[langCode];
+                int groupSize = (int)langExtensions.size();
+
+                if (uninstalledIdx < offset + groupSize) {
+                    // Add language header if at start of group
+                    if (uninstalledIdx == offset) {
+                        auto* langHeader = createLanguageHeader(langCode, groupSize);
+                        m_listBox->addView(langHeader);
+                    }
+
+                    int localIdx = uninstalledIdx - offset;
+                    auto* item = createExtensionItem(langExtensions[localIdx]);
+                    if (item) {
+                        m_listBox->addView(item);
+                        itemsThisBatch++;
+                    }
+                    break;
+                }
+                offset += groupSize;
             }
         }
+
+        m_currentBatchIndex++;
+    }
+
+    // Schedule next batch if more items remain
+    if (m_currentBatchIndex < totalItems) {
+        scheduleNextBatch();
+    } else {
+        m_isPopulating = false;
+        // Load remaining icons after all items are created
+        brls::sync([this]() {
+            loadVisibleIcons();
+        });
+        brls::Logger::debug("ExtensionsTab: Finished populating {} items in batches", m_extensionItems.size());
     }
 }
 
-void ExtensionsTab::populateList(const std::vector<Extension>& extensions) {
-    // Redirect to grouped version
-    populateListGroupedByLanguage(extensions);
+void ExtensionsTab::scheduleNextBatch() {
+    // Use sync with a frame delay for smoother UI
+    brls::sync([this]() {
+        if (m_isPopulating) {
+            populateBatch();
+        }
+    });
 }
 
-brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext, bool clickToInstall) {
+brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     auto* container = new brls::Box();
     container->setAxis(brls::Axis::ROW);
     container->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     container->setAlignItems(brls::AlignItems::CENTER);
-    container->setPadding(10, 15, 10, 15);
-    container->setMarginBottom(5);
+    container->setPadding(8, 12, 8, 12);
+    container->setMarginBottom(3);
+    container->setMarginLeft(ext.installed ? 0 : 20);  // Indent uninstalled items under language headers
     container->setFocusable(true);
 
     // Left side: icon and info
@@ -361,19 +616,13 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext, bool clickTo
     leftBox->setAlignItems(brls::AlignItems::CENTER);
     leftBox->setGrow(1.0f);
 
-    // Extension icon
+    // Extension icon - created but loading deferred
     auto* icon = new brls::Image();
-    icon->setSize(brls::Size(40, 40));
-    icon->setMarginRight(15);
-    if (!ext.iconUrl.empty()) {
-        std::string fullIconUrl = Application::getInstance().getServerUrl() + ext.iconUrl;
-        ImageLoader::loadAsync(fullIconUrl, [](brls::Image* img) {
-            brls::Logger::debug("ExtensionsTab: Extension icon loaded");
-        }, icon);
-    }
+    icon->setSize(brls::Size(36, 36));
+    icon->setMarginRight(12);
     leftBox->addView(icon);
 
-    // Extension info
+    // Extension info - simplified layout
     auto* infoBox = new brls::Box();
     infoBox->setAxis(brls::Axis::COLUMN);
 
@@ -383,19 +632,22 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext, bool clickTo
     infoBox->addView(nameLabel);
 
     auto* detailLabel = new brls::Label();
-    std::string detailText = getLanguageDisplayName(ext.lang) + " • v" + ext.versionName;
+    std::string detailText = "v" + ext.versionName;
+    if (!ext.installed) {
+        detailText = getLanguageDisplayName(ext.lang) + " • " + detailText;
+    }
     if (ext.isNsfw) {
         detailText += " • 18+";
     }
     detailLabel->setText(detailText);
-    detailLabel->setFontSize(11);
-    detailLabel->setTextColor(nvgRGB(160, 160, 160));
+    detailLabel->setFontSize(10);
+    detailLabel->setTextColor(nvgRGB(140, 140, 140));
     infoBox->addView(detailLabel);
 
     leftBox->addView(infoBox);
     container->addView(leftBox);
 
-    // Right side: action button or status
+    // Right side: action button
     auto* actionBtn = new brls::Button();
 
     if (ext.installed) {
@@ -421,6 +673,12 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext, bool clickTo
             installExtension(ext);
             return true;
         });
+
+        // Make whole row clickable to install for uninstalled extensions
+        container->registerClickAction([this, ext](brls::View*) {
+            installExtension(ext);
+            return true;
+        });
     }
 
     container->addView(actionBtn);
@@ -428,15 +686,61 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext, bool clickTo
     // Add touch gesture support
     container->addGestureRecognizer(new brls::TapGestureRecognizer(container));
 
-    // If click-to-install is enabled (Available tab), make the whole row clickable to install
-    if (clickToInstall && !ext.installed) {
-        container->registerClickAction([this, ext](brls::View*) {
-            installExtension(ext);
-            return true;
-        });
+    // Track this item for incremental updates and deferred icon loading
+    ExtensionItemInfo itemInfo;
+    itemInfo.container = container;
+    itemInfo.icon = icon;
+    itemInfo.pkgName = ext.pkgName;
+    itemInfo.iconUrl = ext.iconUrl.empty() ? "" : Application::getInstance().getServerUrl() + ext.iconUrl;
+    itemInfo.iconLoaded = false;
+    m_extensionItems.push_back(itemInfo);
+
+    // Load icon immediately for first batch (visible items), defer others
+    if (m_extensionItems.size() <= BATCH_SIZE * 2) {
+        if (!itemInfo.iconUrl.empty()) {
+            ImageLoader::loadAsync(itemInfo.iconUrl, [](brls::Image* img) {}, icon);
+            m_extensionItems.back().iconLoaded = true;
+        }
     }
 
     return container;
+}
+
+void ExtensionsTab::loadVisibleIcons() {
+    // Load icons for items that haven't been loaded yet
+    // This is called periodically or when scrolling
+    for (auto& item : m_extensionItems) {
+        if (!item.iconLoaded && !item.iconUrl.empty() && item.icon) {
+            item.iconLoaded = true;
+            ImageLoader::loadAsync(item.iconUrl, [](brls::Image* img) {}, item.icon);
+        }
+    }
+}
+
+ExtensionsTab::ExtensionItemInfo* ExtensionsTab::findExtensionItem(const std::string& pkgName) {
+    for (auto& item : m_extensionItems) {
+        if (item.pkgName == pkgName) {
+            return &item;
+        }
+    }
+    return nullptr;
+}
+
+void ExtensionsTab::updateExtensionItemStatus(const std::string& pkgName, bool installed, bool hasUpdate) {
+    // Find and update the extension in our data structures
+    // This avoids full reload for simple status changes
+
+    // Update cached data
+    for (auto& ext : m_cachedExtensions) {
+        if (ext.pkgName == pkgName) {
+            ext.installed = installed;
+            ext.hasUpdate = hasUpdate;
+            break;
+        }
+    }
+
+    // Invalidate grouping cache since status changed
+    m_groupingCacheValid = false;
 }
 
 void ExtensionsTab::installExtension(const Extension& ext) {
@@ -449,7 +753,10 @@ void ExtensionsTab::installExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Installed: " + ext.name);
-                loadExtensions();
+                // Update local cache instead of full server refetch
+                updateExtensionItemStatus(ext.pkgName, true, false);
+                // Still need to rebuild UI but data is cached
+                loadExtensionsFast();
             } else {
                 brls::Application::notify("Failed to install: " + ext.name);
             }
@@ -467,7 +774,9 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Updated: " + ext.name);
-                loadExtensions();
+                // Update local cache
+                updateExtensionItemStatus(ext.pkgName, true, false);
+                loadExtensionsFast();
             } else {
                 brls::Application::notify("Failed to update: " + ext.name);
             }
@@ -485,7 +794,9 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Uninstalled: " + ext.name);
-                loadExtensions();
+                // Update local cache
+                updateExtensionItemStatus(ext.pkgName, false, false);
+                loadExtensionsFast();
             } else {
                 brls::Application::notify("Failed to uninstall: " + ext.name);
             }
@@ -504,6 +815,19 @@ void ExtensionsTab::showError(const std::string& message) {
     errorLabel->setTextColor(nvgRGB(255, 100, 100));
     errorLabel->setMargins(20, 20, 20, 20);
     m_listBox->addView(errorLabel);
+}
+
+void ExtensionsTab::showLoading(const std::string& message) {
+    if (!m_listBox) return;
+
+    m_listBox->clearViews();
+
+    auto* loadingLabel = new brls::Label();
+    loadingLabel->setText(message);
+    loadingLabel->setFontSize(16);
+    loadingLabel->setTextColor(nvgRGB(180, 180, 180));
+    loadingLabel->setMargins(20, 20, 20, 20);
+    m_listBox->addView(loadingLabel);
 }
 
 } // namespace vitasuwayomi

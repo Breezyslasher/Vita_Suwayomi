@@ -1682,51 +1682,102 @@ bool SuwayomiClient::fetchExtensionList(std::vector<Extension>& extensions) {
 }
 
 bool SuwayomiClient::installExtension(const std::string& pkgName) {
-    // Try GraphQL first (primary API)
-    if (installExtensionGraphQL(pkgName)) {
-        return true;
+    const int maxRetries = 3;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        brls::Logger::info("Installing extension {} (attempt {}/{})", pkgName, attempt, maxRetries);
+
+        // Try GraphQL first (primary API)
+        if (installExtensionGraphQL(pkgName)) {
+            return true;
+        }
+
+        // REST fallback
+        brls::Logger::info("GraphQL failed for install extension, falling back to REST...");
+        vitasuwayomi::HttpClient http = createHttpClient();
+        http.setTimeout(60);  // Extended timeout for extensions
+
+        std::string url = buildApiUrl("/extension/install/" + pkgName);
+        vitasuwayomi::HttpResponse response = http.get(url);
+
+        // REST API returns 201 (Created), 302 (Redirect), or 200 on success
+        if (response.success && (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 302)) {
+            return true;
+        }
+
+        if (attempt < maxRetries) {
+            brls::Logger::warning("Extension install failed (attempt {}/{}), retrying...", attempt, maxRetries);
+        }
     }
 
-    // REST fallback
-    brls::Logger::info("GraphQL failed for install extension, falling back to REST...");
-    vitasuwayomi::HttpClient http = createHttpClient();
-
-    std::string url = buildApiUrl("/extension/install/" + pkgName);
-    vitasuwayomi::HttpResponse response = http.get(url);
-
-    return response.success && response.statusCode == 200;
+    brls::Logger::error("Extension install failed after {} attempts", maxRetries);
+    return false;
 }
 
 bool SuwayomiClient::updateExtension(const std::string& pkgName) {
-    // Try GraphQL first (primary API)
-    if (updateExtensionGraphQL(pkgName)) {
-        return true;
+    const int maxRetries = 3;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        brls::Logger::info("Updating extension {} (attempt {}/{})", pkgName, attempt, maxRetries);
+
+        // Try GraphQL first (primary API)
+        if (updateExtensionGraphQL(pkgName)) {
+            return true;
+        }
+
+        // REST fallback
+        brls::Logger::info("GraphQL failed for update extension, falling back to REST...");
+        vitasuwayomi::HttpClient http = createHttpClient();
+        http.setTimeout(60);  // Extended timeout for extensions
+
+        std::string url = buildApiUrl("/extension/update/" + pkgName);
+        vitasuwayomi::HttpResponse response = http.get(url);
+
+        // REST API returns 201 (Created), 302 (Redirect), or 200 on success
+        if (response.success && (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 302)) {
+            return true;
+        }
+
+        if (attempt < maxRetries) {
+            brls::Logger::warning("Extension update failed (attempt {}/{}), retrying...", attempt, maxRetries);
+        }
     }
 
-    // REST fallback
-    brls::Logger::info("GraphQL failed for update extension, falling back to REST...");
-    vitasuwayomi::HttpClient http = createHttpClient();
-
-    std::string url = buildApiUrl("/extension/update/" + pkgName);
-    vitasuwayomi::HttpResponse response = http.get(url);
-
-    return response.success && response.statusCode == 200;
+    brls::Logger::error("Extension update failed after {} attempts", maxRetries);
+    return false;
 }
 
 bool SuwayomiClient::uninstallExtension(const std::string& pkgName) {
-    // Try GraphQL first (primary API)
-    if (uninstallExtensionGraphQL(pkgName)) {
-        return true;
+    const int maxRetries = 3;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        brls::Logger::info("Uninstalling extension {} (attempt {}/{})", pkgName, attempt, maxRetries);
+
+        // Try GraphQL first (primary API)
+        if (uninstallExtensionGraphQL(pkgName)) {
+            return true;
+        }
+
+        // REST fallback
+        brls::Logger::info("GraphQL failed for uninstall extension, falling back to REST...");
+        vitasuwayomi::HttpClient http = createHttpClient();
+        http.setTimeout(60);  // Extended timeout for extensions
+
+        std::string url = buildApiUrl("/extension/uninstall/" + pkgName);
+        vitasuwayomi::HttpResponse response = http.get(url);
+
+        // REST API returns 201 (Created), 302 (Redirect), or 200 on success
+        if (response.success && (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 302)) {
+            return true;
+        }
+
+        if (attempt < maxRetries) {
+            brls::Logger::warning("Extension uninstall failed (attempt {}/{}), retrying...", attempt, maxRetries);
+        }
     }
 
-    // REST fallback
-    brls::Logger::info("GraphQL failed for uninstall extension, falling back to REST...");
-    vitasuwayomi::HttpClient http = createHttpClient();
-
-    std::string url = buildApiUrl("/extension/uninstall/" + pkgName);
-    vitasuwayomi::HttpResponse response = http.get(url);
-
-    return response.success && response.statusCode == 200;
+    brls::Logger::error("Extension uninstall failed after {} attempts", maxRetries);
+    return false;
 }
 
 std::string SuwayomiClient::getExtensionIconUrl(const std::string& apkName) {
@@ -3069,10 +3120,199 @@ bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extension
     return true;
 }
 
+bool SuwayomiClient::fetchInstalledExtensionsGraphQL(std::vector<Extension>& extensions) {
+    // Server-side filtered query for installed extensions only
+    const char* query = R"(
+        query {
+            extensions(condition: { isInstalled: true }) {
+                nodes {
+                    pkgName
+                    name
+                    lang
+                    versionName
+                    versionCode
+                    iconUrl
+                    isInstalled
+                    hasUpdate
+                    isObsolete
+                    isNsfw
+                    repo
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string extensionsObj = extractJsonObject(data, "extensions");
+    if (extensionsObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(extensionsObj, "nodes");
+    if (nodesJson.empty()) return false;
+
+    extensions.clear();
+    std::set<std::string> seenPkgNames;
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        Extension ext = parseExtensionFromGraphQL(item);
+        if (seenPkgNames.find(ext.pkgName) == seenPkgNames.end()) {
+            seenPkgNames.insert(ext.pkgName);
+            extensions.push_back(ext);
+        }
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} installed extensions", extensions.size());
+    return true;
+}
+
+bool SuwayomiClient::fetchUninstalledExtensionsGraphQL(std::vector<Extension>& extensions, const std::set<std::string>& languages) {
+    // Build filter for uninstalled extensions with language filter
+    // Using GraphQL filter with OR conditions for multiple languages
+
+    std::string filterConditions;
+    if (!languages.empty()) {
+        // Build OR conditions for each language
+        std::vector<std::string> langConditions;
+        for (const auto& lang : languages) {
+            // Escape the language string for JSON
+            std::string escapedLang;
+            for (char c : lang) {
+                switch (c) {
+                    case '"': escapedLang += "\\\""; break;
+                    case '\\': escapedLang += "\\\\"; break;
+                    default: escapedLang += c; break;
+                }
+            }
+            langConditions.push_back("{ lang: { equalTo: \"" + escapedLang + "\" } }");
+        }
+
+        // Always include "multi" and "all" languages
+        langConditions.push_back("{ lang: { equalTo: \"multi\" } }");
+        langConditions.push_back("{ lang: { equalTo: \"all\" } }");
+
+        // Join conditions with commas
+        std::string orConditions;
+        for (size_t i = 0; i < langConditions.size(); i++) {
+            if (i > 0) orConditions += ", ";
+            orConditions += langConditions[i];
+        }
+
+        filterConditions = "filter: { isInstalled: { equalTo: false }, or: [" + orConditions + "] }";
+    } else {
+        // No language filter, just filter by isInstalled: false
+        filterConditions = "condition: { isInstalled: false }";
+    }
+
+    // Build query string with filter conditions
+    std::string query = "query { extensions(" + filterConditions + ") { nodes { "
+        "pkgName name lang versionName versionCode iconUrl isInstalled hasUpdate isObsolete isNsfw repo "
+        "} } }";
+
+    brls::Logger::debug("GraphQL: Fetching uninstalled extensions with filter: {}", filterConditions);
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string extensionsObj = extractJsonObject(data, "extensions");
+    if (extensionsObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(extensionsObj, "nodes");
+    if (nodesJson.empty()) {
+        // Empty result is valid - no extensions match filter
+        extensions.clear();
+        brls::Logger::debug("GraphQL: No uninstalled extensions found matching filter");
+        return true;
+    }
+
+    extensions.clear();
+    std::set<std::string> seenPkgNames;
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        Extension ext = parseExtensionFromGraphQL(item);
+        if (seenPkgNames.find(ext.pkgName) == seenPkgNames.end()) {
+            seenPkgNames.insert(ext.pkgName);
+            extensions.push_back(ext);
+        }
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} uninstalled extensions (filtered by {} languages)",
+                        extensions.size(), languages.size());
+    return true;
+}
+
+bool SuwayomiClient::fetchInstalledExtensions(std::vector<Extension>& extensions) {
+    // Try GraphQL first (primary API with server-side filtering)
+    if (fetchInstalledExtensionsGraphQL(extensions)) {
+        return true;
+    }
+
+    // Fallback: fetch all and filter client-side
+    brls::Logger::info("GraphQL failed for installed extensions, falling back to full fetch...");
+    std::vector<Extension> allExtensions;
+    if (!fetchExtensionList(allExtensions)) {
+        return false;
+    }
+
+    extensions.clear();
+    for (const auto& ext : allExtensions) {
+        if (ext.installed) {
+            extensions.push_back(ext);
+        }
+    }
+    return true;
+}
+
+bool SuwayomiClient::fetchUninstalledExtensions(std::vector<Extension>& extensions, const std::set<std::string>& languages) {
+    // Try GraphQL first (primary API with server-side filtering)
+    if (fetchUninstalledExtensionsGraphQL(extensions, languages)) {
+        return true;
+    }
+
+    // Fallback: fetch all and filter client-side
+    brls::Logger::info("GraphQL failed for uninstalled extensions, falling back to client-side filter...");
+    std::vector<Extension> allExtensions;
+    if (!fetchExtensionList(allExtensions)) {
+        return false;
+    }
+
+    extensions.clear();
+    for (const auto& ext : allExtensions) {
+        if (!ext.installed) {
+            // Apply language filter
+            if (languages.empty()) {
+                extensions.push_back(ext);
+            } else {
+                bool langMatch = languages.count(ext.lang) > 0 ||
+                                ext.lang == "multi" ||
+                                ext.lang == "all";
+                // Also check base language (e.g., "zh" matches "zh-Hans")
+                if (!langMatch) {
+                    size_t dashPos = ext.lang.find('-');
+                    if (dashPos != std::string::npos) {
+                        std::string baseLang = ext.lang.substr(0, dashPos);
+                        langMatch = languages.count(baseLang) > 0;
+                    }
+                }
+                if (langMatch) {
+                    extensions.push_back(ext);
+                }
+            }
+        }
+    }
+    return true;
+}
+
 bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
-        mutation InstallExtension($pkgName: String!) {
-            updateExtension(input: { pkgName: $pkgName, install: true }) {
+        mutation InstallExtension($id: String!, $install: Boolean) {
+            updateExtension(input: { id: $id, patch: { install: $install } }) {
                 extension {
                     pkgName
                     isInstalled
@@ -3091,15 +3331,32 @@ bool SuwayomiClient::installExtensionGraphQL(const std::string& pkgName) {
         }
     }
 
-    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+    std::string variables = "{\"id\":\"" + escapedPkg + "\",\"install\":true}";
     std::string response = executeGraphQL(query, variables);
-    return !response.empty();
+    if (response.empty()) return false;
+
+    // Verify the installation was successful by checking isInstalled
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string updateResult = extractJsonObject(data, "updateExtension");
+    if (updateResult.empty()) return false;
+
+    std::string extension = extractJsonObject(updateResult, "extension");
+    if (extension.empty()) return false;
+
+    bool isInstalled = extractJsonBool(extension, "isInstalled");
+    if (!isInstalled) {
+        brls::Logger::warning("GraphQL: Extension install returned but isInstalled is false");
+    }
+
+    return isInstalled;
 }
 
 bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
-        mutation UpdateExtension($pkgName: String!) {
-            updateExtension(input: { pkgName: $pkgName, update: true }) {
+        mutation UpdateExtension($id: String!, $update: Boolean) {
+            updateExtension(input: { id: $id, patch: { update: $update } }) {
                 extension {
                     pkgName
                     isInstalled
@@ -3118,15 +3375,37 @@ bool SuwayomiClient::updateExtensionGraphQL(const std::string& pkgName) {
         }
     }
 
-    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+    std::string variables = "{\"id\":\"" + escapedPkg + "\",\"update\":true}";
     std::string response = executeGraphQL(query, variables);
-    return !response.empty();
+    if (response.empty()) return false;
+
+    // Verify the update was successful
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string updateResult = extractJsonObject(data, "updateExtension");
+    if (updateResult.empty()) return false;
+
+    std::string extension = extractJsonObject(updateResult, "extension");
+    if (extension.empty()) return false;
+
+    // After successful update, hasUpdate should be false and isInstalled should be true
+    bool isInstalled = extractJsonBool(extension, "isInstalled");
+    bool hasUpdate = extractJsonBool(extension, "hasUpdate");
+
+    if (!isInstalled) {
+        brls::Logger::warning("GraphQL: Extension update returned but isInstalled is false");
+        return false;
+    }
+
+    brls::Logger::debug("GraphQL: Extension updated successfully (hasUpdate: {})", hasUpdate);
+    return true;
 }
 
 bool SuwayomiClient::uninstallExtensionGraphQL(const std::string& pkgName) {
     const char* query = R"(
-        mutation UninstallExtension($pkgName: String!) {
-            updateExtension(input: { pkgName: $pkgName, uninstall: true }) {
+        mutation UninstallExtension($id: String!, $uninstall: Boolean) {
+            updateExtension(input: { id: $id, patch: { uninstall: $uninstall } }) {
                 extension {
                     pkgName
                     isInstalled
@@ -3144,9 +3423,29 @@ bool SuwayomiClient::uninstallExtensionGraphQL(const std::string& pkgName) {
         }
     }
 
-    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+    std::string variables = "{\"id\":\"" + escapedPkg + "\",\"uninstall\":true}";
     std::string response = executeGraphQL(query, variables);
-    return !response.empty();
+    if (response.empty()) return false;
+
+    // Verify the uninstallation was successful
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string updateResult = extractJsonObject(data, "updateExtension");
+    if (updateResult.empty()) return false;
+
+    std::string extension = extractJsonObject(updateResult, "extension");
+    if (extension.empty()) return false;
+
+    // After successful uninstall, isInstalled should be false
+    bool isInstalled = extractJsonBool(extension, "isInstalled");
+    if (isInstalled) {
+        brls::Logger::warning("GraphQL: Extension uninstall returned but isInstalled is still true");
+        return false;
+    }
+
+    brls::Logger::debug("GraphQL: Extension uninstalled successfully");
+    return true;
 }
 
 // ============================================================================
