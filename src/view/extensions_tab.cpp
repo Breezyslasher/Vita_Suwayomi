@@ -101,13 +101,26 @@ ExtensionsTab::ExtensionsTab() {
     // Button container for icons
     auto* buttonBox = new brls::Box();
     buttonBox->setAxis(brls::Axis::ROW);
-    buttonBox->setAlignItems(brls::AlignItems::CENTER);
+    buttonBox->setAlignItems(brls::AlignItems::FLEX_END);
 
-    // Search button with icon
+    // Search button with Start icon above
+    auto* searchContainer = new brls::Box();
+    searchContainer->setAxis(brls::Axis::COLUMN);
+    searchContainer->setAlignItems(brls::AlignItems::CENTER);
+    searchContainer->setMarginRight(10);
+
+    // Start button icon (64x16 original, scale to 80x20)
+    auto* startButtonIcon = new brls::Image();
+    startButtonIcon->setWidth(80);
+    startButtonIcon->setHeight(20);
+    startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
+    startButtonIcon->setMarginBottom(2);
+    searchContainer->addView(startButtonIcon);
+
     auto* searchBox = new brls::Box();
     searchBox->setFocusable(true);
     searchBox->setPadding(8, 8, 8, 8);
-    searchBox->setMarginRight(10);
     searchBox->setCornerRadius(4);
     searchBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
     m_searchIcon = new brls::Image();
@@ -119,7 +132,8 @@ ExtensionsTab::ExtensionsTab() {
         return true;
     });
     searchBox->addGestureRecognizer(new brls::TapGestureRecognizer(searchBox));
-    buttonBox->addView(searchBox);
+    searchContainer->addView(searchBox);
+    buttonBox->addView(searchContainer);
 
     // Refresh button with icon
     auto* refreshBox = new brls::Box();
@@ -141,6 +155,12 @@ ExtensionsTab::ExtensionsTab() {
     headerBox->addView(buttonBox);
 
     this->addView(headerBox);
+
+    // Register Start button to open search dialog
+    this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        showSearchDialog();
+        return true;
+    });
 
     // Scrolling content area
     m_scrollFrame = new brls::ScrollingFrame();
