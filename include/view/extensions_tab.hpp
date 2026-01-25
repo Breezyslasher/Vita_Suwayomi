@@ -26,6 +26,8 @@ private:
     void loadExtensions();
     // Refresh from server (clears cache and reloads)
     void refreshExtensions();
+    // Rebuild UI from cached data (safe to call after extension operations)
+    void refreshUIFromCache();
 
     void populateUnifiedList();
     brls::Box* createSectionHeader(const std::string& title, int count);
@@ -58,7 +60,7 @@ private:
     // Performance: Batched rendering
     static const int BATCH_SIZE = 8;          // Items per batch
     static const int BATCH_DELAY_MS = 16;     // ~60fps frame time
-    static const int ITEMS_PER_PAGE = 15;     // Items to show initially per section
+    static const int ITEMS_PER_PAGE = 30;     // Items to show initially per section
     int m_currentBatchIndex = 0;
     bool m_isPopulating = false;
 

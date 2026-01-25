@@ -1141,6 +1141,59 @@ void ExtensionsTab::updateExtensionItemStatus(const std::string& pkgName, bool i
     m_groupingCacheValid = false;
 }
 
+void ExtensionsTab::refreshUIFromCache() {
+    // Rebuild the categorized lists from cached data
+    // This is safe to call from any context as it doesn't clear views synchronously
+    const AppSettings& settings = Application::getInstance().getSettings();
+    std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
+    if (filterLanguages.empty()) {
+        filterLanguages.insert("en");
+    }
+
+    // Clear and rebuild extension lists from cache
+    m_extensions.clear();
+    m_updates.clear();
+    m_installed.clear();
+    m_uninstalled.clear();
+    m_groupingCacheValid = false;
+
+    for (const auto& ext : m_cachedExtensions) {
+        if (ext.installed) {
+            m_extensions.push_back(ext);
+            if (ext.hasUpdate) {
+                m_updates.push_back(ext);
+            } else {
+                m_installed.push_back(ext);
+            }
+        } else {
+            // Filter uninstalled by language
+            bool languageMatch = false;
+            if (filterLanguages.count(ext.lang) > 0) {
+                languageMatch = true;
+            } else {
+                std::string baseLang = ext.lang;
+                size_t dashPos = baseLang.find('-');
+                if (dashPos != std::string::npos) {
+                    baseLang = baseLang.substr(0, dashPos);
+                }
+                if (filterLanguages.count(baseLang) > 0) {
+                    languageMatch = true;
+                }
+            }
+            if (ext.lang == "multi" || ext.lang == "all") {
+                languageMatch = true;
+            }
+            if (languageMatch) {
+                m_extensions.push_back(ext);
+                m_uninstalled.push_back(ext);
+            }
+        }
+    }
+
+    // Rebuild UI - this clears and repopulates the list safely
+    populateUnifiedList();
+}
+
 void ExtensionsTab::installExtension(const Extension& ext) {
     brls::Logger::info("Installing extension: {}", ext.name);
 
@@ -1153,8 +1206,8 @@ void ExtensionsTab::installExtension(const Extension& ext) {
                 brls::Application::notify("Installed: " + ext.name);
                 // Update local cache instead of full server refetch
                 updateExtensionItemStatus(ext.pkgName, true, false);
-                // Still need to rebuild UI but data is cached
-                loadExtensionsFast();
+                // Safely rebuild UI from cache (avoids crash from nested sync/view deletion)
+                refreshUIFromCache();
             } else {
                 brls::Application::notify("Failed to install: " + ext.name);
             }
@@ -1174,7 +1227,8 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
                 brls::Application::notify("Updated: " + ext.name);
                 // Update local cache
                 updateExtensionItemStatus(ext.pkgName, true, false);
-                loadExtensionsFast();
+                // Safely rebuild UI from cache (avoids crash from nested sync/view deletion)
+                refreshUIFromCache();
             } else {
                 brls::Application::notify("Failed to update: " + ext.name);
             }
@@ -1194,7 +1248,8 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
                 brls::Application::notify("Uninstalled: " + ext.name);
                 // Update local cache
                 updateExtensionItemStatus(ext.pkgName, false, false);
-                loadExtensionsFast();
+                // Safely rebuild UI from cache (avoids crash from nested sync/view deletion)
+                refreshUIFromCache();
             } else {
                 brls::Application::notify("Failed to uninstall: " + ext.name);
             }
