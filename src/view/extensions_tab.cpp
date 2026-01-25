@@ -403,6 +403,7 @@ brls::Box* ExtensionsTab::createSectionHeader(const std::string& title, int coun
     header->setPadding(10, 15, 10, 15);
     header->setMarginTop(5);
     header->setMarginBottom(5);
+    header->setWidthPercentage(100);  // Constrain width to parent
     header->setBackgroundColor(nvgRGBA(0, 100, 80, 255));  // Teal section header
     header->setCornerRadius(6);
     header->setFocusable(true);
@@ -436,6 +437,7 @@ brls::Box* ExtensionsTab::createLanguageHeader(const std::string& langCode, int 
     header->setMarginTop(8);
     header->setMarginBottom(3);
     header->setMarginLeft(10);
+    header->setWidthPercentage(100);  // Constrain width to parent
     header->setBackgroundColor(nvgRGBA(50, 50, 50, 255));
     header->setCornerRadius(4);
     header->setFocusable(true);
@@ -605,6 +607,7 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     container->setPadding(8, 12, 8, 12);
     container->setMarginBottom(3);
     container->setMarginLeft(ext.installed ? 0 : 20);  // Indent uninstalled items under language headers
+    container->setWidthPercentage(100);  // Constrain width to parent
     container->setFocusable(true);
 
     // Left side: icon and info
@@ -612,6 +615,7 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     leftBox->setAxis(brls::Axis::ROW);
     leftBox->setAlignItems(brls::AlignItems::CENTER);
     leftBox->setGrow(1.0f);
+    leftBox->setShrink(1.0f);  // Allow shrinking to prevent overflow
 
     // Extension icon - created but loading deferred
     auto* icon = new brls::Image();
@@ -622,6 +626,7 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     // Extension info - simplified layout
     auto* infoBox = new brls::Box();
     infoBox->setAxis(brls::Axis::COLUMN);
+    infoBox->setShrink(1.0f);  // Allow shrinking to prevent overflow
 
     auto* nameLabel = new brls::Label();
     nameLabel->setText(ext.name);
