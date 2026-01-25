@@ -1268,7 +1268,7 @@ void ExtensionsTab::scheduleDeferredUIRefresh() {
 
 void ExtensionsTab::showSearchDialog() {
     // Get user's configured language for the keyboard if available
-    brls::Swkbd::openForText([this](std::string text) {
+    brls::Application::getImeManager()->openForText([this](std::string text) {
         if (text.empty()) {
             // User cancelled or entered empty - clear search
             clearSearch();
