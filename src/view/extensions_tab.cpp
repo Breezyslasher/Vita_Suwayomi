@@ -159,6 +159,13 @@ ExtensionsTab::ExtensionsTab() {
 
 void ExtensionsTab::onFocusGained() {
     brls::Box::onFocusGained();
+
+    // Refresh UI if an extension operation was performed while away
+    if (m_needsRefresh) {
+        m_needsRefresh = false;
+        brls::Logger::debug("ExtensionsTab: Refreshing UI after extension operation");
+        refreshUIFromCache();
+    }
 }
 
 void ExtensionsTab::loadExtensionsFast() {
@@ -1254,18 +1261,6 @@ void ExtensionsTab::refreshUIFromCache() {
     populateUnifiedList();
 }
 
-void ExtensionsTab::scheduleDeferredUIRefresh() {
-    // Use brls::Application::giveFocus to a safe element first,
-    // then schedule the UI refresh for the next frame to avoid
-    // deleting the view while it's still processing the click event
-    brls::Application::giveFocus(m_titleLabel);
-
-    // Schedule the actual refresh for the next frame
-    brls::sync([this]() {
-        refreshUIFromCache();
-    });
-}
-
 void ExtensionsTab::showSearchDialog() {
     // Get user's configured language for the keyboard if available
     brls::Application::getImeManager()->openForText([this](std::string text) {
@@ -1369,10 +1364,9 @@ void ExtensionsTab::installExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Installed: " + ext.name);
-                // Update local cache instead of full server refetch
+                // Update local cache - UI will refresh when user returns to this tab
                 updateExtensionItemStatus(ext.pkgName, true, false);
-                // Use deferred refresh to avoid crash from deleting view during click
-                scheduleDeferredUIRefresh();
+                m_needsRefresh = true;
             } else {
                 brls::Application::notify("Failed to install: " + ext.name);
             }
@@ -1391,10 +1385,9 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Updated: " + ext.name);
-                // Update local cache
+                // Update local cache - UI will refresh when user returns to this tab
                 updateExtensionItemStatus(ext.pkgName, true, false);
-                // Use deferred refresh to avoid crash from deleting view during click
-                scheduleDeferredUIRefresh();
+                m_needsRefresh = true;
             } else {
                 brls::Application::notify("Failed to update: " + ext.name);
             }
@@ -1413,10 +1406,9 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Uninstalled: " + ext.name);
-                // Update local cache
+                // Update local cache - UI will refresh when user returns to this tab
                 updateExtensionItemStatus(ext.pkgName, false, false);
-                // Use deferred refresh to avoid crash from deleting view during click
-                scheduleDeferredUIRefresh();
+                m_needsRefresh = true;
             } else {
                 brls::Application::notify("Failed to uninstall: " + ext.name);
             }

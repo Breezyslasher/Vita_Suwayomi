@@ -28,8 +28,6 @@ private:
     void refreshExtensions();
     // Rebuild UI from cached data (safe to call after extension operations)
     void refreshUIFromCache();
-    // Schedule a deferred UI refresh (prevents crash from deleting views during click)
-    void scheduleDeferredUIRefresh();
     // Show search dialog to filter extensions by name
     void showSearchDialog();
     // Clear search and show all extensions
@@ -67,6 +65,7 @@ private:
     // Cache for fast mode
     std::vector<Extension> m_cachedExtensions;
     bool m_cacheLoaded = false;
+    bool m_needsRefresh = false;  // Set after install/update/uninstall, cleared on focus
 
     // Performance: Batched rendering
     static const int BATCH_SIZE = 8;          // Items per batch
