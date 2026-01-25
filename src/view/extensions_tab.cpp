@@ -1045,41 +1045,37 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     leftBox->addView(infoBox);
     container->addView(leftBox);
 
-    // Right side: action button
-    auto* actionBtn = new brls::Button();
+    // Right side: status indicator label (no button, whole row is clickable)
+    auto* statusLabel = new brls::Label();
+    statusLabel->setFontSize(11);
+    statusLabel->setMarginLeft(8);
 
     if (ext.installed) {
         if (ext.hasUpdate) {
-            actionBtn->setText("Update");
-            actionBtn->setBackgroundColor(nvgRGBA(255, 152, 0, 255));  // Orange for updates
-            actionBtn->registerClickAction([this, ext](brls::View*) {
+            statusLabel->setText("Update");
+            statusLabel->setTextColor(nvgRGB(255, 152, 0));  // Orange for updates
+            container->registerClickAction([this, ext](brls::View*) {
                 updateExtension(ext);
                 return true;
             });
         } else {
-            actionBtn->setText("Uninstall");
-            actionBtn->setBackgroundColor(nvgRGBA(100, 100, 100, 255));  // Gray for uninstall
-            actionBtn->registerClickAction([this, ext](brls::View*) {
+            statusLabel->setText("Installed");
+            statusLabel->setTextColor(nvgRGB(100, 100, 100));  // Gray for installed
+            container->registerClickAction([this, ext](brls::View*) {
                 uninstallExtension(ext);
                 return true;
             });
         }
     } else {
-        actionBtn->setText("Install");
-        actionBtn->setBackgroundColor(nvgRGBA(0, 150, 136, 255));  // Teal for install
-        actionBtn->registerClickAction([this, ext](brls::View*) {
-            installExtension(ext);
-            return true;
-        });
-
-        // Make whole row clickable to install for uninstalled extensions
+        statusLabel->setText("Install");
+        statusLabel->setTextColor(nvgRGB(0, 150, 136));  // Teal for install
         container->registerClickAction([this, ext](brls::View*) {
             installExtension(ext);
             return true;
         });
     }
 
-    container->addView(actionBtn);
+    container->addView(statusLabel);
 
     // Add touch gesture support
     container->addGestureRecognizer(new brls::TapGestureRecognizer(container));
