@@ -15,6 +15,11 @@
 
 namespace vitasuwayomi {
 
+// Static member definitions (required for ODR-use with std::min)
+const int ExtensionsTab::BATCH_SIZE;
+const int ExtensionsTab::BATCH_DELAY_MS;
+const int ExtensionsTab::ITEMS_PER_PAGE;
+
 // Language code to display name mapping
 std::string ExtensionsTab::getLanguageDisplayName(const std::string& langCode) {
     static const std::map<std::string, std::string> languageNames = {
