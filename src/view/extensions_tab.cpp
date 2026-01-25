@@ -109,10 +109,10 @@ ExtensionsTab::ExtensionsTab() {
     searchContainer->setAlignItems(brls::AlignItems::CENTER);
     searchContainer->setMarginRight(10);
 
-    // Start button icon (64x16 original, scale to 80x20)
+    // Start button icon - use actual image dimensions (64x16)
     auto* startButtonIcon = new brls::Image();
-    startButtonIcon->setWidth(80);
-    startButtonIcon->setHeight(20);
+    startButtonIcon->setWidth(64);
+    startButtonIcon->setHeight(16);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
     startButtonIcon->setMarginBottom(2);
@@ -128,7 +128,9 @@ ExtensionsTab::ExtensionsTab() {
     m_searchIcon->setImageFromFile("app0:resources/icons/search.png");
     searchBox->addView(m_searchIcon);
     searchBox->registerClickAction([this](brls::View*) {
-        showSearchDialog();
+        brls::sync([this]() {
+            showSearchDialog();
+        });
         return true;
     });
     searchBox->addGestureRecognizer(new brls::TapGestureRecognizer(searchBox));
@@ -140,10 +142,10 @@ ExtensionsTab::ExtensionsTab() {
     refreshContainer->setAxis(brls::Axis::COLUMN);
     refreshContainer->setAlignItems(brls::AlignItems::CENTER);
 
-    // Triangle button icon
+    // Triangle button icon - use actual image dimensions (64x16)
     auto* triangleButtonIcon = new brls::Image();
-    triangleButtonIcon->setWidth(80);
-    triangleButtonIcon->setHeight(20);
+    triangleButtonIcon->setWidth(64);
+    triangleButtonIcon->setHeight(16);
     triangleButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     triangleButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
     triangleButtonIcon->setMarginBottom(2);
@@ -159,7 +161,9 @@ ExtensionsTab::ExtensionsTab() {
     m_refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
     refreshBox->addView(m_refreshIcon);
     refreshBox->registerClickAction([this](brls::View*) {
-        refreshExtensions();
+        brls::sync([this]() {
+            refreshExtensions();
+        });
         return true;
     });
     refreshBox->addGestureRecognizer(new brls::TapGestureRecognizer(refreshBox));
@@ -171,14 +175,20 @@ ExtensionsTab::ExtensionsTab() {
     this->addView(headerBox);
 
     // Register Start button to open search dialog
+    // Use brls::sync to defer IME opening to avoid crash during controller input handling
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-        showSearchDialog();
+        brls::sync([this]() {
+            showSearchDialog();
+        });
         return true;
     });
 
     // Register Triangle (Y) button to refresh extensions
+    // Use brls::sync to defer refresh to avoid crash during controller input handling
     this->registerAction("Refresh", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
-        refreshExtensions();
+        brls::sync([this]() {
+            refreshExtensions();
+        });
         return true;
     });
 
@@ -192,6 +202,28 @@ ExtensionsTab::ExtensionsTab() {
     m_scrollFrame->setContentView(m_listBox);
 
     this->addView(m_scrollFrame);
+
+    // Search results page (hidden initially)
+    m_searchResultsFrame = new brls::ScrollingFrame();
+    m_searchResultsFrame->setGrow(1.0f);
+    m_searchResultsFrame->setVisibility(brls::Visibility::GONE);
+
+    m_searchResultsBox = new brls::Box();
+    m_searchResultsBox->setAxis(brls::Axis::COLUMN);
+    m_searchResultsFrame->setContentView(m_searchResultsBox);
+
+    this->addView(m_searchResultsFrame);
+
+    // Register Circle (B) button to go back from search results
+    this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+        if (m_isSearchActive) {
+            brls::sync([this]() {
+                hideSearchResults();
+            });
+            return true;
+        }
+        return false;  // Let default back behavior happen
+    });
 
     // Use fast mode for initial load (single query, client-side filtering)
     loadExtensionsFast();
@@ -1305,92 +1337,151 @@ void ExtensionsTab::showSearchDialog() {
     // Get user's configured language for the keyboard if available
     brls::Application::getImeManager()->openForText([this](std::string text) {
         if (text.empty()) {
-            // User cancelled or entered empty - clear search
-            clearSearch();
+            // User cancelled or entered empty - do nothing
             return;
         }
 
         m_searchQuery = text;
         m_isSearchActive = true;
 
-        // Convert search query to lowercase for case-insensitive search
-        std::string searchLower = m_searchQuery;
-        std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
-
-        // Filter cached extensions by name
-        brls::Application::notify("Searching: " + m_searchQuery);
-
-        // Filter and rebuild the display lists
-        const AppSettings& settings = Application::getInstance().getSettings();
-        std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
-        if (filterLanguages.empty()) {
-            filterLanguages.insert("en");
-        }
-
-        m_extensions.clear();
-        m_updates.clear();
-        m_installed.clear();
-        m_uninstalled.clear();
-        m_groupingCacheValid = false;
-
-        for (const auto& ext : m_cachedExtensions) {
-            // Check if name matches search query (case-insensitive)
-            std::string nameLower = ext.name;
-            std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
-
-            if (nameLower.find(searchLower) == std::string::npos) {
-                continue;  // Skip if name doesn't match search
-            }
-
-            if (ext.installed) {
-                m_extensions.push_back(ext);
-                if (ext.hasUpdate) {
-                    m_updates.push_back(ext);
-                } else {
-                    m_installed.push_back(ext);
-                }
-            } else {
-                // Apply language filter for uninstalled
-                bool languageMatch = false;
-                if (filterLanguages.count(ext.lang) > 0) {
-                    languageMatch = true;
-                } else {
-                    std::string baseLang = ext.lang;
-                    size_t dashPos = baseLang.find('-');
-                    if (dashPos != std::string::npos) {
-                        baseLang = baseLang.substr(0, dashPos);
-                    }
-                    if (filterLanguages.count(baseLang) > 0) {
-                        languageMatch = true;
-                    }
-                }
-                if (ext.lang == "multi" || ext.lang == "all") {
-                    languageMatch = true;
-                }
-                if (languageMatch) {
-                    m_extensions.push_back(ext);
-                    m_uninstalled.push_back(ext);
-                }
-            }
-        }
-
-        // Update title to show search is active
-        m_titleLabel->setText("Extensions: \"" + m_searchQuery + "\"");
-
-        // Rebuild UI with filtered results
-        populateUnifiedList();
+        // Show search results on a separate page
+        showSearchResults();
     }, "Search Extensions", "", 64, "");
+}
+
+void ExtensionsTab::showSearchResults() {
+    if (!m_searchResultsBox || !m_searchResultsFrame) return;
+
+    // Convert search query to lowercase for case-insensitive search
+    std::string searchLower = m_searchQuery;
+    std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
+
+    brls::Application::notify("Searching: " + m_searchQuery);
+
+    // Filter cached extensions by name
+    const AppSettings& settings = Application::getInstance().getSettings();
+    std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
+    if (filterLanguages.empty()) {
+        filterLanguages.insert("en");
+    }
+
+    // Collect matching extensions
+    std::vector<Extension> searchResults;
+    for (const auto& ext : m_cachedExtensions) {
+        // Check if name matches search query (case-insensitive)
+        std::string nameLower = ext.name;
+        std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+
+        if (nameLower.find(searchLower) == std::string::npos) {
+            continue;  // Skip if name doesn't match search
+        }
+
+        if (ext.installed) {
+            searchResults.push_back(ext);
+        } else {
+            // Apply language filter for uninstalled
+            bool languageMatch = false;
+            if (filterLanguages.count(ext.lang) > 0) {
+                languageMatch = true;
+            } else {
+                std::string baseLang = ext.lang;
+                size_t dashPos = baseLang.find('-');
+                if (dashPos != std::string::npos) {
+                    baseLang = baseLang.substr(0, dashPos);
+                }
+                if (filterLanguages.count(baseLang) > 0) {
+                    languageMatch = true;
+                }
+            }
+            if (ext.lang == "multi" || ext.lang == "all") {
+                languageMatch = true;
+            }
+            if (languageMatch) {
+                searchResults.push_back(ext);
+            }
+        }
+    }
+
+    // Sort results alphabetically
+    std::sort(searchResults.begin(), searchResults.end(),
+        [](const Extension& a, const Extension& b) { return a.name < b.name; });
+
+    // Clear and populate search results box
+    m_searchResultsBox->clearViews();
+
+    // Header with back button and search query
+    auto* headerBox = new brls::Box();
+    headerBox->setAxis(brls::Axis::ROW);
+    headerBox->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    headerBox->setAlignItems(brls::AlignItems::CENTER);
+    headerBox->setMarginBottom(15);
+
+    // Back button
+    auto* backBox = new brls::Box();
+    backBox->setFocusable(true);
+    backBox->setPadding(8, 12, 8, 12);
+    backBox->setCornerRadius(4);
+    backBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    backBox->setMarginRight(15);
+    auto* backLabel = new brls::Label();
+    backLabel->setText("< Back");
+    backLabel->setFontSize(14);
+    backBox->addView(backLabel);
+    backBox->registerClickAction([this](brls::View*) {
+        brls::sync([this]() {
+            hideSearchResults();
+        });
+        return true;
+    });
+    backBox->addGestureRecognizer(new brls::TapGestureRecognizer(backBox));
+    headerBox->addView(backBox);
+
+    // Search query title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Search: \"" + m_searchQuery + "\" (" + std::to_string(searchResults.size()) + " results)");
+    titleLabel->setFontSize(20);
+    titleLabel->setGrow(1.0f);
+    headerBox->addView(titleLabel);
+
+    m_searchResultsBox->addView(headerBox);
+
+    // Show results or empty message
+    if (searchResults.empty()) {
+        auto* emptyLabel = new brls::Label();
+        emptyLabel->setText("No extensions found matching \"" + m_searchQuery + "\"");
+        emptyLabel->setFontSize(16);
+        emptyLabel->setMargins(20, 20, 20, 20);
+        emptyLabel->setTextColor(nvgRGB(180, 180, 180));
+        m_searchResultsBox->addView(emptyLabel);
+    } else {
+        // Add each search result
+        for (const auto& ext : searchResults) {
+            auto* item = createExtensionItem(ext);
+            if (item) {
+                m_searchResultsBox->addView(item);
+            }
+        }
+    }
+
+    // Hide main list, show search results
+    m_scrollFrame->setVisibility(brls::Visibility::GONE);
+    m_searchResultsFrame->setVisibility(brls::Visibility::VISIBLE);
+    m_titleLabel->setText("Search Results");
+}
+
+void ExtensionsTab::hideSearchResults() {
+    m_isSearchActive = false;
+    m_searchQuery.clear();
+
+    // Show main list, hide search results
+    m_searchResultsFrame->setVisibility(brls::Visibility::GONE);
+    m_scrollFrame->setVisibility(brls::Visibility::VISIBLE);
+    m_titleLabel->setText("Extensions");
 }
 
 void ExtensionsTab::clearSearch() {
     if (!m_isSearchActive) return;
-
-    m_searchQuery.clear();
-    m_isSearchActive = false;
-    m_titleLabel->setText("Extensions");
-
-    // Rebuild from full cache
-    refreshUIFromCache();
+    hideSearchResults();
 }
 
 void ExtensionsTab::installExtension(const Extension& ext) {

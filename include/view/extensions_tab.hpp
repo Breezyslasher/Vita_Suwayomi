@@ -32,6 +32,10 @@ private:
     void showSearchDialog();
     // Clear search and show all extensions
     void clearSearch();
+    // Show search results on a separate page
+    void showSearchResults();
+    // Go back from search results to main list
+    void hideSearchResults();
 
     void populateUnifiedList();
     brls::Box* createSectionHeader(const std::string& title, int count);
@@ -52,6 +56,12 @@ private:
     brls::Image* m_refreshIcon = nullptr;
     brls::Image* m_searchIcon = nullptr;
     brls::ScrollingFrame* m_scrollFrame = nullptr;
+
+    // Search results view (separate page)
+    brls::ScrollingFrame* m_searchResultsFrame = nullptr;
+    brls::Box* m_searchResultsBox = nullptr;
+    brls::Box* m_searchHeaderBox = nullptr;
+    brls::Label* m_searchTitleLabel = nullptr;
 
     // Search state
     std::string m_searchQuery;

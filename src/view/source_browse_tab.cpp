@@ -80,10 +80,10 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     searchContainer->setAxis(brls::Axis::COLUMN);
     searchContainer->setAlignItems(brls::AlignItems::CENTER);
 
-    // Start button icon (64x16 original, scale to 80x20)
+    // Start button icon - use actual image dimensions (64x16)
     auto* startButtonIcon = new brls::Image();
-    startButtonIcon->setWidth(80);
-    startButtonIcon->setHeight(20);
+    startButtonIcon->setWidth(64);
+    startButtonIcon->setHeight(16);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
     startButtonIcon->setMarginBottom(2);
@@ -101,8 +101,11 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     this->addView(modeBox);
 
     // Register Start button to open search dialog
+    // Use brls::sync to defer IME opening to avoid crash during controller input handling
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-        showSearchDialog();
+        brls::sync([this]() {
+            showSearchDialog();
+        });
         return true;
     });
 
