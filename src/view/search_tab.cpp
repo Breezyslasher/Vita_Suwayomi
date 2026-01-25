@@ -10,6 +10,7 @@
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
+#include "utils/image_loader.hpp"
 
 namespace vitasuwayomi {
 
@@ -333,9 +334,9 @@ void SearchTab::showSources() {
             sourceIcon->setMarginRight(12);
             sourceIcon->setScalingType(brls::ImageScalingType::FIT);
             if (!source.iconUrl.empty()) {
-                // Load icon from server
+                // Load icon asynchronously from server
                 std::string iconUrl = Application::getInstance().getServerUrl() + source.iconUrl;
-                sourceIcon->setImageFromFile(iconUrl);
+                ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, sourceIcon);
             }
             sourceRow->addView(sourceIcon);
 
