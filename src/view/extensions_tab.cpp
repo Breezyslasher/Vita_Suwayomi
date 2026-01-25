@@ -403,7 +403,7 @@ brls::Box* ExtensionsTab::createSectionHeader(const std::string& title, int coun
     header->setPadding(10, 15, 10, 15);
     header->setMarginTop(5);
     header->setMarginBottom(5);
-    header->setWidthPercentage(100);  // Constrain width to parent
+    header->setGrow(1.0f);  // Fill available space (respects parent padding unlike setWidthPercentage)
     header->setBackgroundColor(nvgRGBA(0, 100, 80, 255));  // Teal section header
     header->setCornerRadius(6);
     header->setFocusable(true);
