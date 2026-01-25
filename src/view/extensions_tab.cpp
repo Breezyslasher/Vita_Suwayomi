@@ -1344,7 +1344,7 @@ void ExtensionsTab::showSearchDialog() {
 
         // Rebuild UI with filtered results
         populateUnifiedList();
-    }, "Search Extensions", "", 64, "", "", "");
+    }, "Search Extensions", "", 64, "");
 }
 
 void ExtensionsTab::clearSearch() {
