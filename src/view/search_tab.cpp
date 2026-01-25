@@ -268,9 +268,13 @@ void SearchTab::showSources() {
     m_backBtn->setVisibility(brls::Visibility::GONE);
     m_sourcesBtn->setVisibility(brls::Visibility::VISIBLE);
 
-    // Clear manga grid and show source list
+    // Clear manga grid, results by source, and hide search results view
     m_mangaList.clear();
+    m_resultsBySource.clear();
     m_contentGrid->setDataSource(m_mangaList);
+    if (m_searchResultsScrollView) {
+        m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
+    }
 
     // Create or clear source list box
     if (!m_sourceScrollView) {
@@ -376,9 +380,12 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_filterBtn->setVisibility(source.isConfigurable ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
 
-    // Hide source list, show content grid
+    // Hide source list and search results, show content grid
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
+    }
+    if (m_searchResultsScrollView) {
+        m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
     }
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
@@ -454,6 +461,7 @@ void SearchTab::performSearch(const std::string& query) {
     if (query.empty()) {
         m_resultsLabel->setText("");
         m_mangaList.clear();
+        m_resultsBySource.clear();
         m_contentGrid->setDataSource(m_mangaList);
         return;
     }
@@ -467,11 +475,11 @@ void SearchTab::performSearch(const std::string& query) {
     // Filter sources by language setting first
     filterSourcesByLanguage();
 
-    // Hide source list, show grid for results
+    // Hide source list and grid, will show grouped results
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
     }
-    m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
+    m_contentGrid->setVisibility(brls::Visibility::GONE);
 
     // Update UI for search mode
     m_browseMode = BrowseMode::SEARCH_RESULTS;
@@ -515,7 +523,7 @@ void SearchTab::performSearch(const std::string& query) {
         brls::Logger::info("SearchTab: Found {} results from {} sources for '{}'",
                            totalResults, resultsBySource.size(), query);
 
-        // Flatten results, sorted by source
+        // Store all results for flat list backup
         std::vector<Manga> allResults;
         for (const auto& [sourceName, mangas] : resultsBySource) {
             for (const auto& manga : mangas) {
@@ -525,15 +533,20 @@ void SearchTab::performSearch(const std::string& query) {
 
         brls::sync([this, allResults, resultsBySource]() {
             m_mangaList = allResults;
-            m_contentGrid->setDataSource(m_mangaList);
+            m_resultsBySource = resultsBySource;
 
             // Show result count with source breakdown
             if (resultsBySource.empty()) {
                 m_resultsLabel->setText("No results found");
+                m_contentGrid->setDataSource(m_mangaList);
+                m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
             } else {
                 std::string resultText = std::to_string(allResults.size()) + " results from " +
                                         std::to_string(resultsBySource.size()) + " sources";
                 m_resultsLabel->setText(resultText);
+
+                // Display results grouped by source in horizontal rows
+                populateSearchResultsBySource();
             }
         });
     });
@@ -579,6 +592,89 @@ void SearchTab::onMangaSelected(const Manga& manga) {
     // Push manga detail view
     auto* detailView = new MangaDetailView(manga);
     brls::Application::pushActivity(new brls::Activity(detailView));
+}
+
+void SearchTab::populateSearchResultsBySource() {
+    // Create or clear the search results scroll view
+    if (!m_searchResultsScrollView) {
+        m_searchResultsScrollView = new brls::ScrollingFrame();
+        m_searchResultsScrollView->setGrow(1.0f);
+
+        m_searchResultsBox = new brls::Box();
+        m_searchResultsBox->setAxis(brls::Axis::COLUMN);
+        m_searchResultsBox->setJustifyContent(brls::JustifyContent::FLEX_START);
+        m_searchResultsBox->setAlignItems(brls::AlignItems::STRETCH);
+        m_searchResultsBox->setPadding(10);
+
+        m_searchResultsScrollView->setContentView(m_searchResultsBox);
+    }
+    m_searchResultsBox->clearViews();
+
+    // Create a horizontal row for each source
+    for (const auto& [sourceName, manga] : m_resultsBySource) {
+        if (!manga.empty()) {
+            createSourceRow(sourceName, manga);
+        }
+    }
+
+    // Show search results view, hide others
+    if (m_sourceScrollView) {
+        m_sourceScrollView->setVisibility(brls::Visibility::GONE);
+    }
+    m_contentGrid->setVisibility(brls::Visibility::GONE);
+    m_searchResultsScrollView->setVisibility(brls::Visibility::VISIBLE);
+
+    // Add scroll view if not already added
+    if (m_searchResultsScrollView->getParent() == nullptr) {
+        this->addView(m_searchResultsScrollView);
+    }
+}
+
+void SearchTab::createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga) {
+    // Source header label
+    auto* sourceLabel = new brls::Label();
+    sourceLabel->setText(sourceName + " (" + std::to_string(manga.size()) + ")");
+    sourceLabel->setFontSize(18);
+    sourceLabel->setMarginTop(10);
+    sourceLabel->setMarginBottom(8);
+    sourceLabel->setTextColor(nvgRGB(100, 180, 255));
+    m_searchResultsBox->addView(sourceLabel);
+
+    // Horizontal scroll container for this source's results
+    auto* scrollContainer = new brls::ScrollingFrame();
+    scrollContainer->setHeight(195);
+    scrollContainer->setMarginBottom(10);
+
+    auto* rowBox = new brls::Box();
+    rowBox->setAxis(brls::Axis::ROW);
+    rowBox->setJustifyContent(brls::JustifyContent::FLEX_START);
+    rowBox->setAlignItems(brls::AlignItems::CENTER);
+    rowBox->setHeight(185);
+
+    // Calculate total width for horizontal scrolling
+    float totalWidth = manga.size() * 160.0f;
+    rowBox->setWidth(totalWidth);
+
+    // Create manga cells for each result
+    for (const auto& item : manga) {
+        auto* cell = new MangaItemCell();
+        cell->setManga(item);
+        cell->setWidth(150);
+        cell->setHeight(185);
+        cell->setMarginRight(10);
+
+        Manga mangaCopy = item;
+        cell->registerClickAction([this, mangaCopy](brls::View* view) {
+            onMangaSelected(mangaCopy);
+            return true;
+        });
+        cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+
+        rowBox->addView(cell);
+    }
+
+    scrollContainer->setContentView(rowBox);
+    m_searchResultsBox->addView(scrollContainer);
 }
 
 void SearchTab::loadNextPage() {
