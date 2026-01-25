@@ -11,7 +11,6 @@
     <!-- Title row with refresh button -->
     <brls:Box
         id="extensions/titleRow"
-        width="100%"
         height="40"
         axis="row"
         justifyContent="spaceBetween"
@@ -34,12 +33,11 @@
     <!-- Extensions list -->
     <brls:ScrollingFrame
         id="extensions/scroll"
-        width="100%"
         grow="1">
 
         <brls:Box
             id="extensions/list"
-            width="100%"
+            grow="1"
             axis="column"/>
 
     </brls:ScrollingFrame>
