@@ -7,6 +7,7 @@
 
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
+#include "app/application.hpp"
 #include "view/recycling_grid.hpp"
 
 namespace vitasuwayomi {
@@ -42,6 +43,8 @@ private:
     bool m_hasNextPage = false;
     std::vector<Manga> m_mangaList;
 
+    brls::Box* m_headerBox = nullptr;
+    brls::Image* m_sourceIcon = nullptr;
     brls::Label* m_titleLabel = nullptr;
     brls::Button* m_popularBtn = nullptr;
     brls::Button* m_latestBtn = nullptr;

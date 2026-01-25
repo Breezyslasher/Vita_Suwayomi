@@ -5,6 +5,7 @@
 
 #include "view/source_browse_tab.hpp"
 #include "app/suwayomi_client.hpp"
+#include "app/application.hpp"
 #include "view/media_item_cell.hpp"
 #include "utils/image_loader.hpp"
 
@@ -21,12 +22,33 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     this->setAxis(brls::Axis::COLUMN);
     this->setPadding(20, 30, 20, 30);
 
+    // Header with icon and title
+    m_headerBox = new brls::Box();
+    m_headerBox->setAxis(brls::Axis::ROW);
+    m_headerBox->setAlignItems(brls::AlignItems::CENTER);
+    m_headerBox->setMarginBottom(15);
+
+    // Source icon
+    m_sourceIcon = new brls::Image();
+    m_sourceIcon->setWidth(32);
+    m_sourceIcon->setHeight(32);
+    m_sourceIcon->setMarginRight(12);
+    m_sourceIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_headerBox->addView(m_sourceIcon);
+
+    // Load icon asynchronously
+    if (!source.iconUrl.empty()) {
+        std::string iconUrl = Application::getInstance().getServerUrl() + source.iconUrl;
+        ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, m_sourceIcon);
+    }
+
     // Title
     m_titleLabel = new brls::Label();
     m_titleLabel->setText(source.name);
     m_titleLabel->setFontSize(24);
-    m_titleLabel->setMarginBottom(15);
-    this->addView(m_titleLabel);
+    m_headerBox->addView(m_titleLabel);
+
+    this->addView(m_headerBox);
 
     // Mode buttons
     auto* modeBox = new brls::Box();
