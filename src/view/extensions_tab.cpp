@@ -583,11 +583,8 @@ void ExtensionsTab::populateBatch() {
         scheduleNextBatch();
     } else {
         m_isPopulating = false;
-        // Load remaining icons after all items are created
-        brls::sync([this]() {
-            loadVisibleIcons();
-        });
-        brls::Logger::debug("ExtensionsTab: Finished populating {} items in batches", m_extensionItems.size());
+        // Icons now load on focus/hover - no bulk loading needed
+        brls::Logger::debug("ExtensionsTab: Finished populating {} items in batches (icons load on focus)", m_extensionItems.size());
     }
 }
 
@@ -695,13 +692,17 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     itemInfo.iconLoaded = false;
     m_extensionItems.push_back(itemInfo);
 
-    // Load icon immediately for first batch (visible items), defer others
-    if (m_extensionItems.size() <= BATCH_SIZE * 2) {
-        if (!itemInfo.iconUrl.empty()) {
-            ImageLoader::loadAsync(itemInfo.iconUrl, [](brls::Image* img) {}, icon);
-            m_extensionItems.back().iconLoaded = true;
+    // Load icon on focus/hover only (not all at once)
+    size_t itemIndex = m_extensionItems.size() - 1;
+    container->setFocusListener([this, itemIndex, icon](bool focused) {
+        if (focused && itemIndex < m_extensionItems.size()) {
+            auto& item = m_extensionItems[itemIndex];
+            if (!item.iconLoaded && !item.iconUrl.empty() && item.icon) {
+                item.iconLoaded = true;
+                ImageLoader::loadAsync(item.iconUrl, [](brls::Image* img) {}, item.icon);
+            }
         }
-    }
+    });
 
     return container;
 }
