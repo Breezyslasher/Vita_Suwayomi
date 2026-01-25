@@ -437,7 +437,7 @@ brls::Box* ExtensionsTab::createLanguageHeader(const std::string& langCode, int 
     header->setMarginTop(8);
     header->setMarginBottom(3);
     header->setMarginLeft(10);
-    header->setWidthPercentage(100);  // Constrain width to parent
+    header->setGrow(1.0f);  // Fill available space (respects margins unlike setWidthPercentage)
     header->setBackgroundColor(nvgRGBA(50, 50, 50, 255));
     header->setCornerRadius(4);
     header->setFocusable(true);
@@ -607,7 +607,7 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     container->setPadding(8, 12, 8, 12);
     container->setMarginBottom(3);
     container->setMarginLeft(ext.installed ? 0 : 20);  // Indent uninstalled items under language headers
-    container->setWidthPercentage(100);  // Constrain width to parent
+    container->setGrow(1.0f);  // Fill available space (respects margins unlike setWidthPercentage)
     container->setFocusable(true);
 
     // Left side: icon and info
