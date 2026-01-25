@@ -12,6 +12,7 @@
 
 #include <borealis.hpp>
 #include <algorithm>
+#include <cctype>
 
 namespace vitasuwayomi {
 
@@ -94,16 +95,50 @@ ExtensionsTab::ExtensionsTab() {
     m_titleLabel = new brls::Label();
     m_titleLabel->setText("Extensions");
     m_titleLabel->setFontSize(24);
+    m_titleLabel->setGrow(1.0f);
     headerBox->addView(m_titleLabel);
 
-    // Refresh button
-    m_refreshBtn = new brls::Button();
-    m_refreshBtn->setText("Refresh");
-    m_refreshBtn->registerClickAction([this](brls::View*) {
+    // Button container for icons
+    auto* buttonBox = new brls::Box();
+    buttonBox->setAxis(brls::Axis::ROW);
+    buttonBox->setAlignItems(brls::AlignItems::CENTER);
+
+    // Search button with icon
+    auto* searchBox = new brls::Box();
+    searchBox->setFocusable(true);
+    searchBox->setPadding(8, 8, 8, 8);
+    searchBox->setMarginRight(10);
+    searchBox->setCornerRadius(4);
+    searchBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    m_searchIcon = new brls::Image();
+    m_searchIcon->setSize(brls::Size(24, 24));
+    m_searchIcon->setImageFromFile("app0:resources/icons/search.png");
+    searchBox->addView(m_searchIcon);
+    searchBox->registerClickAction([this](brls::View*) {
+        showSearchDialog();
+        return true;
+    });
+    searchBox->addGestureRecognizer(new brls::TapGestureRecognizer(searchBox));
+    buttonBox->addView(searchBox);
+
+    // Refresh button with icon
+    auto* refreshBox = new brls::Box();
+    refreshBox->setFocusable(true);
+    refreshBox->setPadding(8, 8, 8, 8);
+    refreshBox->setCornerRadius(4);
+    refreshBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    m_refreshIcon = new brls::Image();
+    m_refreshIcon->setSize(brls::Size(24, 24));
+    m_refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
+    refreshBox->addView(m_refreshIcon);
+    refreshBox->registerClickAction([this](brls::View*) {
         refreshExtensions();
         return true;
     });
-    headerBox->addView(m_refreshBtn);
+    refreshBox->addGestureRecognizer(new brls::TapGestureRecognizer(refreshBox));
+    buttonBox->addView(refreshBox);
+
+    headerBox->addView(buttonBox);
 
     this->addView(headerBox);
 
@@ -1089,17 +1124,26 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     itemInfo.iconLoaded = false;
     m_extensionItems.push_back(itemInfo);
 
-    // Load icon on focus/hover only (not all at once)
     size_t itemIndex = m_extensionItems.size() - 1;
-    container->getFocusEvent()->subscribe([this, itemIndex, icon](brls::View* view) {
-        if (itemIndex < m_extensionItems.size()) {
-            auto& item = m_extensionItems[itemIndex];
-            if (!item.iconLoaded && !item.iconUrl.empty() && item.icon) {
-                item.iconLoaded = true;
-                ImageLoader::loadAsync(item.iconUrl, [](brls::Image* img) {}, item.icon);
+
+    // For installed extensions, load icons immediately
+    // For uninstalled extensions, defer loading to focus/hover to save bandwidth
+    if (ext.installed && !itemInfo.iconUrl.empty()) {
+        auto& item = m_extensionItems[itemIndex];
+        item.iconLoaded = true;
+        ImageLoader::loadAsync(item.iconUrl, [](brls::Image* img) {}, item.icon);
+    } else {
+        // Load icon on focus/hover only for uninstalled extensions
+        container->getFocusEvent()->subscribe([this, itemIndex, icon](brls::View* view) {
+            if (itemIndex < m_extensionItems.size()) {
+                auto& item = m_extensionItems[itemIndex];
+                if (!item.iconLoaded && !item.iconUrl.empty() && item.icon) {
+                    item.iconLoaded = true;
+                    ImageLoader::loadAsync(item.iconUrl, [](brls::Image* img) {}, item.icon);
+                }
             }
-        }
-    });
+        });
+    }
 
     return container;
 }
@@ -1150,6 +1194,13 @@ void ExtensionsTab::refreshUIFromCache() {
         filterLanguages.insert("en");
     }
 
+    // Prepare search filter if active
+    std::string searchLower;
+    if (m_isSearchActive && !m_searchQuery.empty()) {
+        searchLower = m_searchQuery;
+        std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
+    }
+
     // Clear and rebuild extension lists from cache
     m_extensions.clear();
     m_updates.clear();
@@ -1158,6 +1209,15 @@ void ExtensionsTab::refreshUIFromCache() {
     m_groupingCacheValid = false;
 
     for (const auto& ext : m_cachedExtensions) {
+        // Apply search filter if active
+        if (!searchLower.empty()) {
+            std::string nameLower = ext.name;
+            std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+            if (nameLower.find(searchLower) == std::string::npos) {
+                continue;  // Skip if name doesn't match search
+            }
+        }
+
         if (ext.installed) {
             m_extensions.push_back(ext);
             if (ext.hasUpdate) {
@@ -1194,8 +1254,113 @@ void ExtensionsTab::refreshUIFromCache() {
     populateUnifiedList();
 }
 
+void ExtensionsTab::scheduleDeferredUIRefresh() {
+    // Use brls::Application::giveFocus to a safe element first,
+    // then schedule the UI refresh for the next frame to avoid
+    // deleting the view while it's still processing the click event
+    brls::Application::giveFocus(m_titleLabel);
+
+    // Schedule the actual refresh for the next frame
+    brls::sync([this]() {
+        refreshUIFromCache();
+    });
+}
+
+void ExtensionsTab::showSearchDialog() {
+    // Get user's configured language for the keyboard if available
+    brls::Swkbd::openForText([this](std::string text) {
+        if (text.empty()) {
+            // User cancelled or entered empty - clear search
+            clearSearch();
+            return;
+        }
+
+        m_searchQuery = text;
+        m_isSearchActive = true;
+
+        // Convert search query to lowercase for case-insensitive search
+        std::string searchLower = m_searchQuery;
+        std::transform(searchLower.begin(), searchLower.end(), searchLower.begin(), ::tolower);
+
+        // Filter cached extensions by name
+        brls::Application::notify("Searching: " + m_searchQuery);
+
+        // Filter and rebuild the display lists
+        const AppSettings& settings = Application::getInstance().getSettings();
+        std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
+        if (filterLanguages.empty()) {
+            filterLanguages.insert("en");
+        }
+
+        m_extensions.clear();
+        m_updates.clear();
+        m_installed.clear();
+        m_uninstalled.clear();
+        m_groupingCacheValid = false;
+
+        for (const auto& ext : m_cachedExtensions) {
+            // Check if name matches search query (case-insensitive)
+            std::string nameLower = ext.name;
+            std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+
+            if (nameLower.find(searchLower) == std::string::npos) {
+                continue;  // Skip if name doesn't match search
+            }
+
+            if (ext.installed) {
+                m_extensions.push_back(ext);
+                if (ext.hasUpdate) {
+                    m_updates.push_back(ext);
+                } else {
+                    m_installed.push_back(ext);
+                }
+            } else {
+                // Apply language filter for uninstalled
+                bool languageMatch = false;
+                if (filterLanguages.count(ext.lang) > 0) {
+                    languageMatch = true;
+                } else {
+                    std::string baseLang = ext.lang;
+                    size_t dashPos = baseLang.find('-');
+                    if (dashPos != std::string::npos) {
+                        baseLang = baseLang.substr(0, dashPos);
+                    }
+                    if (filterLanguages.count(baseLang) > 0) {
+                        languageMatch = true;
+                    }
+                }
+                if (ext.lang == "multi" || ext.lang == "all") {
+                    languageMatch = true;
+                }
+                if (languageMatch) {
+                    m_extensions.push_back(ext);
+                    m_uninstalled.push_back(ext);
+                }
+            }
+        }
+
+        // Update title to show search is active
+        m_titleLabel->setText("Extensions: \"" + m_searchQuery + "\"");
+
+        // Rebuild UI with filtered results
+        populateUnifiedList();
+    }, "Search Extensions", "", 64, "", "", "");
+}
+
+void ExtensionsTab::clearSearch() {
+    if (!m_isSearchActive) return;
+
+    m_searchQuery.clear();
+    m_isSearchActive = false;
+    m_titleLabel->setText("Extensions");
+
+    // Rebuild from full cache
+    refreshUIFromCache();
+}
+
 void ExtensionsTab::installExtension(const Extension& ext) {
     brls::Logger::info("Installing extension: {}", ext.name);
+    brls::Application::notify("Installing: " + ext.name);
 
     brls::async([this, ext]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -1206,8 +1371,8 @@ void ExtensionsTab::installExtension(const Extension& ext) {
                 brls::Application::notify("Installed: " + ext.name);
                 // Update local cache instead of full server refetch
                 updateExtensionItemStatus(ext.pkgName, true, false);
-                // Safely rebuild UI from cache (avoids crash from nested sync/view deletion)
-                refreshUIFromCache();
+                // Use deferred refresh to avoid crash from deleting view during click
+                scheduleDeferredUIRefresh();
             } else {
                 brls::Application::notify("Failed to install: " + ext.name);
             }
@@ -1217,6 +1382,7 @@ void ExtensionsTab::installExtension(const Extension& ext) {
 
 void ExtensionsTab::updateExtension(const Extension& ext) {
     brls::Logger::info("Updating extension: {}", ext.name);
+    brls::Application::notify("Updating: " + ext.name);
 
     brls::async([this, ext]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -1227,8 +1393,8 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
                 brls::Application::notify("Updated: " + ext.name);
                 // Update local cache
                 updateExtensionItemStatus(ext.pkgName, true, false);
-                // Safely rebuild UI from cache (avoids crash from nested sync/view deletion)
-                refreshUIFromCache();
+                // Use deferred refresh to avoid crash from deleting view during click
+                scheduleDeferredUIRefresh();
             } else {
                 brls::Application::notify("Failed to update: " + ext.name);
             }
@@ -1238,6 +1404,7 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
 
 void ExtensionsTab::uninstallExtension(const Extension& ext) {
     brls::Logger::info("Uninstalling extension: {}", ext.name);
+    brls::Application::notify("Uninstalling: " + ext.name);
 
     brls::async([this, ext]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -1248,8 +1415,8 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
                 brls::Application::notify("Uninstalled: " + ext.name);
                 // Update local cache
                 updateExtensionItemStatus(ext.pkgName, false, false);
-                // Safely rebuild UI from cache (avoids crash from nested sync/view deletion)
-                refreshUIFromCache();
+                // Use deferred refresh to avoid crash from deleting view during click
+                scheduleDeferredUIRefresh();
             } else {
                 brls::Application::notify("Failed to uninstall: " + ext.name);
             }

@@ -28,6 +28,12 @@ private:
     void refreshExtensions();
     // Rebuild UI from cached data (safe to call after extension operations)
     void refreshUIFromCache();
+    // Schedule a deferred UI refresh (prevents crash from deleting views during click)
+    void scheduleDeferredUIRefresh();
+    // Show search dialog to filter extensions by name
+    void showSearchDialog();
+    // Clear search and show all extensions
+    void clearSearch();
 
     void populateUnifiedList();
     brls::Box* createSectionHeader(const std::string& title, int count);
@@ -45,8 +51,13 @@ private:
 
     brls::Label* m_titleLabel = nullptr;
     brls::Box* m_listBox = nullptr;
-    brls::Button* m_refreshBtn = nullptr;
+    brls::Image* m_refreshIcon = nullptr;
+    brls::Image* m_searchIcon = nullptr;
     brls::ScrollingFrame* m_scrollFrame = nullptr;
+
+    // Search state
+    std::string m_searchQuery;
+    bool m_isSearchActive = false;
 
     std::vector<Extension> m_extensions;
     std::vector<Extension> m_updates;
