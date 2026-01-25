@@ -142,32 +142,32 @@ ExtensionsTab::ExtensionsTab() {
     refreshContainer->setAxis(brls::Axis::COLUMN);
     refreshContainer->setAlignItems(brls::AlignItems::CENTER);
 
-    // Triangle button icon - use actual image dimensions (64x16)
+    // Triangle button icon - use actual image dimensions (16x16)
     auto* triangleButtonIcon = new brls::Image();
-    triangleButtonIcon->setWidth(64);
+    triangleButtonIcon->setWidth(16);
     triangleButtonIcon->setHeight(16);
     triangleButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     triangleButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
     triangleButtonIcon->setMarginBottom(2);
     refreshContainer->addView(triangleButtonIcon);
 
-    auto* refreshBox = new brls::Box();
-    refreshBox->setFocusable(true);
-    refreshBox->setPadding(8, 8, 8, 8);
-    refreshBox->setCornerRadius(4);
-    refreshBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    m_refreshBox = new brls::Box();
+    m_refreshBox->setFocusable(true);
+    m_refreshBox->setPadding(8, 8, 8, 8);
+    m_refreshBox->setCornerRadius(4);
+    m_refreshBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
     m_refreshIcon = new brls::Image();
     m_refreshIcon->setSize(brls::Size(24, 24));
     m_refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
-    refreshBox->addView(m_refreshIcon);
-    refreshBox->registerClickAction([this](brls::View*) {
+    m_refreshBox->addView(m_refreshIcon);
+    m_refreshBox->registerClickAction([this](brls::View*) {
         brls::sync([this]() {
             refreshExtensions();
         });
         return true;
     });
-    refreshBox->addGestureRecognizer(new brls::TapGestureRecognizer(refreshBox));
-    refreshContainer->addView(refreshBox);
+    m_refreshBox->addGestureRecognizer(new brls::TapGestureRecognizer(m_refreshBox));
+    refreshContainer->addView(m_refreshBox);
     buttonBox->addView(refreshContainer);
 
     headerBox->addView(buttonBox);
@@ -211,6 +211,14 @@ ExtensionsTab::ExtensionsTab() {
     m_searchResultsBox = new brls::Box();
     m_searchResultsBox->setAxis(brls::Axis::COLUMN);
     m_searchResultsFrame->setContentView(m_searchResultsBox);
+
+    // Register Circle (B) button on search results box to go back
+    m_searchResultsBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        brls::sync([this]() {
+            hideSearchResults();
+        });
+        return true;
+    });
 
     this->addView(m_searchResultsFrame);
 
@@ -1416,13 +1424,26 @@ void ExtensionsTab::showSearchResults() {
     headerBox->setAlignItems(brls::AlignItems::CENTER);
     headerBox->setMarginBottom(15);
 
-    // Back button
+    // Back button with Circle icon above
+    auto* backContainer = new brls::Box();
+    backContainer->setAxis(brls::Axis::COLUMN);
+    backContainer->setAlignItems(brls::AlignItems::CENTER);
+    backContainer->setMarginRight(15);
+
+    // Circle button icon - use actual image dimensions (16x16)
+    auto* circleButtonIcon = new brls::Image();
+    circleButtonIcon->setWidth(16);
+    circleButtonIcon->setHeight(16);
+    circleButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    circleButtonIcon->setImageFromFile("app0:resources/images/circle_button.png");
+    circleButtonIcon->setMarginBottom(2);
+    backContainer->addView(circleButtonIcon);
+
     auto* backBox = new brls::Box();
     backBox->setFocusable(true);
     backBox->setPadding(8, 12, 8, 12);
     backBox->setCornerRadius(4);
     backBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
-    backBox->setMarginRight(15);
     auto* backLabel = new brls::Label();
     backLabel->setText("< Back");
     backLabel->setFontSize(14);
@@ -1434,7 +1455,15 @@ void ExtensionsTab::showSearchResults() {
         return true;
     });
     backBox->addGestureRecognizer(new brls::TapGestureRecognizer(backBox));
-    headerBox->addView(backBox);
+    // Register Circle (B) button action on the back button itself
+    backBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        brls::sync([this]() {
+            hideSearchResults();
+        });
+        return true;
+    });
+    backContainer->addView(backBox);
+    headerBox->addView(backContainer);
 
     // Search query title
     auto* titleLabel = new brls::Label();
@@ -1550,6 +1579,12 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
 void ExtensionsTab::showError(const std::string& message) {
     if (!m_listBox) return;
 
+    // Give focus to the refresh button before clearing views to avoid crash
+    // when the currently focused view gets destroyed
+    if (m_refreshBox) {
+        brls::Application::giveFocus(m_refreshBox);
+    }
+
     m_listBox->clearViews();
 
     auto* errorLabel = new brls::Label();
@@ -1562,6 +1597,12 @@ void ExtensionsTab::showError(const std::string& message) {
 
 void ExtensionsTab::showLoading(const std::string& message) {
     if (!m_listBox) return;
+
+    // Give focus to the refresh button before clearing views to avoid crash
+    // when the currently focused view gets destroyed
+    if (m_refreshBox) {
+        brls::Application::giveFocus(m_refreshBox);
+    }
 
     m_listBox->clearViews();
 

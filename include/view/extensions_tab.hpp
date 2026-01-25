@@ -53,6 +53,7 @@ private:
 
     brls::Label* m_titleLabel = nullptr;
     brls::Box* m_listBox = nullptr;
+    brls::Box* m_refreshBox = nullptr;  // Safe focus target during refresh
     brls::Image* m_refreshIcon = nullptr;
     brls::Image* m_searchIcon = nullptr;
     brls::ScrollingFrame* m_scrollFrame = nullptr;
