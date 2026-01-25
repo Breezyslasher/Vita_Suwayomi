@@ -9,6 +9,7 @@
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
 #include <map>
+#include <functional>
 
 namespace vitasuwayomi {
 
@@ -57,6 +58,7 @@ private:
     // Performance: Batched rendering
     static const int BATCH_SIZE = 8;          // Items per batch
     static const int BATCH_DELAY_MS = 16;     // ~60fps frame time
+    static const int ITEMS_PER_PAGE = 15;     // Items to show initially per section
     int m_currentBatchIndex = 0;
     bool m_isPopulating = false;
 
@@ -74,6 +76,38 @@ private:
     std::map<std::string, std::vector<Extension>> m_cachedGrouped;
     std::vector<std::string> m_cachedSortedLanguages;
     bool m_groupingCacheValid = false;
+
+    // Section identifiers for safe lambda captures
+    enum class SectionType { Updates, Installed };
+
+    // Collapsible sections state
+    struct SectionState {
+        bool expanded = false;
+        int itemsShown = 0;
+        brls::Box* contentBox = nullptr;
+        brls::Box* headerBox = nullptr;
+    };
+    SectionState m_updatesSection;
+    SectionState m_installedSection;
+    SectionState m_availableSection;
+    std::map<std::string, SectionState> m_languageSections;  // For language groups within Available
+
+    // Collapsible section helpers
+    brls::Box* createCollapsibleSectionHeader(const std::string& title, int count, SectionType sectionType);
+    brls::Box* createAvailableSectionHeader(const std::string& title, int count);  // Special handling for Available section
+    brls::Box* createCollapsibleLanguageHeader(const std::string& langCode, int count,
+                                                const std::string& langKey);
+    void toggleSection(SectionType sectionType);
+    void toggleAvailableSection();  // Special handling for Available section
+    void toggleLanguageSection(const std::string& langKey);
+    void showMoreItems(SectionType sectionType);
+    void showMoreLanguageItems(const std::string& langKey);
+    brls::Box* createShowMoreButton(SectionType sectionType);
+    brls::Box* createLanguageShowMoreButton(const std::string& langKey);
+
+    // Helper to get section state and extensions by type
+    SectionState& getSectionState(SectionType type);
+    const std::vector<Extension>& getSectionExtensions(SectionType type);
 
     // Performance: Deferred icon loading
     void loadVisibleIcons();

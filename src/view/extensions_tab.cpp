@@ -465,6 +465,430 @@ brls::Box* ExtensionsTab::createLanguageHeader(const std::string& langCode, int 
     return header;
 }
 
+ExtensionsTab::SectionState& ExtensionsTab::getSectionState(SectionType type) {
+    switch (type) {
+        case SectionType::Updates: return m_updatesSection;
+        case SectionType::Installed: return m_installedSection;
+        default: return m_updatesSection;  // Fallback
+    }
+}
+
+const std::vector<Extension>& ExtensionsTab::getSectionExtensions(SectionType type) {
+    switch (type) {
+        case SectionType::Updates: return m_updates;
+        case SectionType::Installed: return m_installed;
+        default: return m_updates;  // Fallback
+    }
+}
+
+brls::Box* ExtensionsTab::createCollapsibleSectionHeader(const std::string& title, int count,
+                                                          SectionType sectionType) {
+    auto& state = getSectionState(sectionType);
+
+    auto* header = new brls::Box();
+    header->setAxis(brls::Axis::ROW);
+    header->setJustifyContent(brls::JustifyContent::FLEX_START);
+    header->setAlignItems(brls::AlignItems::CENTER);
+    header->setPadding(10, 15, 10, 15);
+    header->setMarginTop(5);
+    header->setMarginBottom(5);
+    header->setGrow(1.0f);
+    header->setBackgroundColor(nvgRGBA(0, 100, 80, 255));  // Teal section header
+    header->setCornerRadius(6);
+    header->setFocusable(true);
+
+    // Expand/collapse arrow
+    auto* arrowLabel = new brls::Label();
+    arrowLabel->setText(state.expanded ? "v" : ">");
+    arrowLabel->setFontSize(16);
+    arrowLabel->setTextColor(nvgRGB(255, 255, 255));
+    arrowLabel->setMarginRight(10);
+    header->addView(arrowLabel);
+
+    // Section title label
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText(title);
+    titleLabel->setFontSize(18);
+    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel->setGrow(1.0f);
+    header->addView(titleLabel);
+
+    // Count label
+    auto* countLabel = new brls::Label();
+    countLabel->setText(std::to_string(count));
+    countLabel->setFontSize(14);
+    countLabel->setTextColor(nvgRGB(200, 255, 200));
+    header->addView(countLabel);
+
+    // Store reference to header for updating arrow
+    state.headerBox = header;
+
+    // Click to expand/collapse - capture by value (enum is safe to copy)
+    header->registerClickAction([this, sectionType, arrowLabel](brls::View*) {
+        toggleSection(sectionType);
+        // Update arrow
+        auto& s = getSectionState(sectionType);
+        arrowLabel->setText(s.expanded ? "v" : ">");
+        return true;
+    });
+
+    // Add touch gesture support
+    header->addGestureRecognizer(new brls::TapGestureRecognizer(header));
+
+    return header;
+}
+
+brls::Box* ExtensionsTab::createAvailableSectionHeader(const std::string& title, int count) {
+    auto* header = new brls::Box();
+    header->setAxis(brls::Axis::ROW);
+    header->setJustifyContent(brls::JustifyContent::FLEX_START);
+    header->setAlignItems(brls::AlignItems::CENTER);
+    header->setPadding(10, 15, 10, 15);
+    header->setMarginTop(5);
+    header->setMarginBottom(5);
+    header->setGrow(1.0f);
+    header->setBackgroundColor(nvgRGBA(0, 100, 80, 255));  // Teal section header
+    header->setCornerRadius(6);
+    header->setFocusable(true);
+
+    // Expand/collapse arrow
+    auto* arrowLabel = new brls::Label();
+    arrowLabel->setText(m_availableSection.expanded ? "v" : ">");
+    arrowLabel->setFontSize(16);
+    arrowLabel->setTextColor(nvgRGB(255, 255, 255));
+    arrowLabel->setMarginRight(10);
+    header->addView(arrowLabel);
+
+    // Section title label
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText(title);
+    titleLabel->setFontSize(18);
+    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel->setGrow(1.0f);
+    header->addView(titleLabel);
+
+    // Count label
+    auto* countLabel = new brls::Label();
+    countLabel->setText(std::to_string(count));
+    countLabel->setFontSize(14);
+    countLabel->setTextColor(nvgRGB(200, 255, 200));
+    header->addView(countLabel);
+
+    // Store reference to header for updating arrow
+    m_availableSection.headerBox = header;
+
+    // Click to expand/collapse
+    header->registerClickAction([this, arrowLabel](brls::View*) {
+        toggleAvailableSection();
+        arrowLabel->setText(m_availableSection.expanded ? "v" : ">");
+        return true;
+    });
+
+    // Add touch gesture support
+    header->addGestureRecognizer(new brls::TapGestureRecognizer(header));
+
+    return header;
+}
+
+void ExtensionsTab::toggleAvailableSection() {
+    m_availableSection.expanded = !m_availableSection.expanded;
+
+    if (m_availableSection.contentBox) {
+        m_availableSection.contentBox->clearViews();
+
+        if (m_availableSection.expanded) {
+            // Show language group headers only (extensions loaded on demand)
+            for (const auto& langCode : m_cachedSortedLanguages) {
+                const auto& langExtensions = m_cachedGrouped[langCode];
+                auto* langHeader = createCollapsibleLanguageHeader(langCode, langExtensions.size(), langCode);
+                m_availableSection.contentBox->addView(langHeader);
+
+                // Create content box for this language (hidden initially)
+                m_languageSections[langCode].contentBox = new brls::Box();
+                m_languageSections[langCode].contentBox->setAxis(brls::Axis::COLUMN);
+                m_availableSection.contentBox->addView(m_languageSections[langCode].contentBox);
+            }
+        }
+    }
+}
+
+brls::Box* ExtensionsTab::createCollapsibleLanguageHeader(const std::string& langCode, int count,
+                                                           const std::string& langKey) {
+    // Initialize section state if not exists
+    if (m_languageSections.find(langKey) == m_languageSections.end()) {
+        m_languageSections[langKey] = SectionState();
+    }
+    auto& state = m_languageSections[langKey];
+
+    auto* header = new brls::Box();
+    header->setAxis(brls::Axis::ROW);
+    header->setJustifyContent(brls::JustifyContent::FLEX_START);
+    header->setAlignItems(brls::AlignItems::CENTER);
+    header->setPadding(6, 12, 6, 12);
+    header->setMarginTop(8);
+    header->setMarginBottom(3);
+    header->setMarginLeft(10);
+    header->setGrow(1.0f);
+    header->setBackgroundColor(nvgRGBA(50, 50, 50, 255));
+    header->setCornerRadius(4);
+    header->setFocusable(true);
+
+    // Expand/collapse arrow
+    auto* arrowLabel = new brls::Label();
+    arrowLabel->setText(state.expanded ? "v" : ">");
+    arrowLabel->setFontSize(12);
+    arrowLabel->setTextColor(nvgRGB(180, 180, 180));
+    arrowLabel->setMarginRight(8);
+    header->addView(arrowLabel);
+
+    // Language name label
+    auto* langLabel = new brls::Label();
+    langLabel->setText(getLanguageDisplayName(langCode));
+    langLabel->setFontSize(14);
+    langLabel->setTextColor(nvgRGB(180, 180, 180));
+    langLabel->setGrow(1.0f);
+    header->addView(langLabel);
+
+    // Count label
+    auto* countLabel = new brls::Label();
+    countLabel->setText(std::to_string(count));
+    countLabel->setFontSize(11);
+    countLabel->setTextColor(nvgRGB(120, 120, 120));
+    header->addView(countLabel);
+
+    state.headerBox = header;
+
+    // Click to expand/collapse
+    header->registerClickAction([this, langKey, arrowLabel](brls::View*) {
+        toggleLanguageSection(langKey);
+        // Update arrow
+        auto& s = m_languageSections[langKey];
+        arrowLabel->setText(s.expanded ? "v" : ">");
+        return true;
+    });
+
+    // Add touch gesture support
+    header->addGestureRecognizer(new brls::TapGestureRecognizer(header));
+
+    return header;
+}
+
+void ExtensionsTab::toggleSection(SectionType sectionType) {
+    auto& state = getSectionState(sectionType);
+    const auto& extensions = getSectionExtensions(sectionType);
+
+    if (!state.contentBox) return;
+
+    state.expanded = !state.expanded;
+    state.contentBox->clearViews();
+
+    if (state.expanded) {
+        state.itemsShown = 0;
+        int itemsToShow = std::min((int)extensions.size(), ITEMS_PER_PAGE);
+
+        for (int i = 0; i < itemsToShow; i++) {
+            auto* item = createExtensionItem(extensions[i]);
+            if (item) {
+                state.contentBox->addView(item);
+                state.itemsShown++;
+            }
+        }
+
+        // Add "Show more" button if there are more items
+        if (state.itemsShown < (int)extensions.size()) {
+            auto* showMoreBtn = createShowMoreButton(sectionType);
+            state.contentBox->addView(showMoreBtn);
+        }
+    }
+}
+
+void ExtensionsTab::toggleLanguageSection(const std::string& langKey) {
+    auto it = m_languageSections.find(langKey);
+    if (it == m_languageSections.end()) return;
+
+    auto& state = it->second;
+    if (!state.contentBox) return;
+
+    state.expanded = !state.expanded;
+    state.contentBox->clearViews();
+
+    if (state.expanded) {
+        auto groupIt = m_cachedGrouped.find(langKey);
+        if (groupIt == m_cachedGrouped.end()) return;
+
+        const auto& extensions = groupIt->second;
+        state.itemsShown = 0;
+        int itemsToShow = std::min((int)extensions.size(), ITEMS_PER_PAGE);
+
+        for (int i = 0; i < itemsToShow; i++) {
+            auto* item = createExtensionItem(extensions[i]);
+            if (item) {
+                state.contentBox->addView(item);
+                state.itemsShown++;
+            }
+        }
+
+        // Add "Show more" button if there are more items
+        if (state.itemsShown < (int)extensions.size()) {
+            auto* showMoreBtn = createLanguageShowMoreButton(langKey);
+            if (showMoreBtn) {
+                state.contentBox->addView(showMoreBtn);
+            }
+        }
+    }
+}
+
+void ExtensionsTab::showMoreItems(SectionType sectionType) {
+    auto& state = getSectionState(sectionType);
+    const auto& extensions = getSectionExtensions(sectionType);
+
+    if (!state.contentBox) return;
+
+    int startIdx = state.itemsShown;
+    int endIdx = std::min(startIdx + ITEMS_PER_PAGE, (int)extensions.size());
+
+    for (int i = startIdx; i < endIdx; i++) {
+        auto* item = createExtensionItem(extensions[i]);
+        if (item) {
+            state.contentBox->addView(item);
+            state.itemsShown++;
+        }
+    }
+}
+
+brls::Box* ExtensionsTab::createShowMoreButton(SectionType sectionType) {
+    auto& state = getSectionState(sectionType);
+    const auto& extensions = getSectionExtensions(sectionType);
+
+    auto* showMoreBox = new brls::Box();
+    showMoreBox->setAxis(brls::Axis::ROW);
+    showMoreBox->setJustifyContent(brls::JustifyContent::CENTER);
+    showMoreBox->setPadding(10, 15, 10, 15);
+    showMoreBox->setMarginTop(5);
+    showMoreBox->setGrow(1.0f);
+    showMoreBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    showMoreBox->setCornerRadius(4);
+    showMoreBox->setFocusable(true);
+
+    auto* label = new brls::Label();
+    int remaining = extensions.size() - state.itemsShown;
+    label->setText("Show more (" + std::to_string(remaining) + " remaining)");
+    label->setFontSize(14);
+    label->setTextColor(nvgRGB(100, 200, 180));
+    showMoreBox->addView(label);
+
+    // Capture by value (enum is safe to copy)
+    showMoreBox->registerClickAction([this, sectionType](brls::View*) {
+        auto& state = getSectionState(sectionType);
+        const auto& extensions = getSectionExtensions(sectionType);
+
+        // Remove the show more button (last view)
+        if (state.contentBox && state.contentBox->getChildren().size() > 0) {
+            auto& children = state.contentBox->getChildren();
+            state.contentBox->removeView(children.back());
+        }
+
+        // Add more items
+        showMoreItems(sectionType);
+
+        // Add another "Show more" if still more items
+        if (state.itemsShown < (int)extensions.size()) {
+            auto* newShowMore = createShowMoreButton(sectionType);
+            state.contentBox->addView(newShowMore);
+        }
+
+        return true;
+    });
+
+    showMoreBox->addGestureRecognizer(new brls::TapGestureRecognizer(showMoreBox));
+
+    return showMoreBox;
+}
+
+void ExtensionsTab::showMoreLanguageItems(const std::string& langKey) {
+    auto it = m_languageSections.find(langKey);
+    if (it == m_languageSections.end()) return;
+
+    auto& state = it->second;
+    auto groupIt = m_cachedGrouped.find(langKey);
+    if (groupIt == m_cachedGrouped.end()) return;
+
+    const auto& extensions = groupIt->second;
+    if (!state.contentBox) return;
+
+    int startIdx = state.itemsShown;
+    int endIdx = std::min(startIdx + ITEMS_PER_PAGE, (int)extensions.size());
+
+    for (int i = startIdx; i < endIdx; i++) {
+        auto* item = createExtensionItem(extensions[i]);
+        if (item) {
+            state.contentBox->addView(item);
+            state.itemsShown++;
+        }
+    }
+}
+
+brls::Box* ExtensionsTab::createLanguageShowMoreButton(const std::string& langKey) {
+    auto& state = m_languageSections[langKey];
+    auto groupIt = m_cachedGrouped.find(langKey);
+    if (groupIt == m_cachedGrouped.end()) return nullptr;
+
+    const auto& extensions = groupIt->second;
+
+    auto* showMoreBox = new brls::Box();
+    showMoreBox->setAxis(brls::Axis::ROW);
+    showMoreBox->setJustifyContent(brls::JustifyContent::CENTER);
+    showMoreBox->setPadding(8, 12, 8, 12);
+    showMoreBox->setMarginTop(5);
+    showMoreBox->setMarginLeft(20);
+    showMoreBox->setGrow(1.0f);
+    showMoreBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    showMoreBox->setCornerRadius(4);
+    showMoreBox->setFocusable(true);
+
+    auto* label = new brls::Label();
+    int remaining = extensions.size() - state.itemsShown;
+    label->setText("Show more (" + std::to_string(remaining) + " remaining)");
+    label->setFontSize(12);
+    label->setTextColor(nvgRGB(100, 200, 180));
+    showMoreBox->addView(label);
+
+    // Capture langKey by value (string copy is safe)
+    showMoreBox->registerClickAction([this, langKey](brls::View*) {
+        auto it = m_languageSections.find(langKey);
+        if (it == m_languageSections.end()) return true;
+
+        auto& state = it->second;
+        auto groupIt = m_cachedGrouped.find(langKey);
+        if (groupIt == m_cachedGrouped.end()) return true;
+
+        const auto& extensions = groupIt->second;
+
+        // Remove the show more button (last view)
+        if (state.contentBox && state.contentBox->getChildren().size() > 0) {
+            auto& children = state.contentBox->getChildren();
+            state.contentBox->removeView(children.back());
+        }
+
+        // Add more items
+        showMoreLanguageItems(langKey);
+
+        // Add another "Show more" if still more items
+        if (state.itemsShown < (int)extensions.size()) {
+            auto* newShowMore = createLanguageShowMoreButton(langKey);
+            if (newShowMore) {
+                state.contentBox->addView(newShowMore);
+            }
+        }
+
+        return true;
+    });
+
+    showMoreBox->addGestureRecognizer(new brls::TapGestureRecognizer(showMoreBox));
+
+    return showMoreBox;
+}
+
 void ExtensionsTab::populateUnifiedList() {
     if (!m_listBox) return;
 
@@ -472,7 +896,13 @@ void ExtensionsTab::populateUnifiedList() {
     m_listBox->clearViews();
     m_extensionItems.clear();
     m_currentBatchIndex = 0;
-    m_isPopulating = true;
+    m_isPopulating = false;
+
+    // Reset section states
+    m_updatesSection = SectionState();
+    m_installedSection = SectionState();
+    m_availableSection = SectionState();
+    m_languageSections.clear();
 
     // Sort installed and updates alphabetically by name (only once)
     std::sort(m_updates.begin(), m_updates.end(),
@@ -494,112 +924,70 @@ void ExtensionsTab::populateUnifiedList() {
         emptyLabel->setFontSize(16);
         emptyLabel->setMargins(20, 20, 20, 20);
         m_listBox->addView(emptyLabel);
-        m_isPopulating = false;
         return;
     }
 
-    // Start batched population
-    populateBatch();
+    // Create collapsible sections - only headers are created initially
+    // Content is loaded only when user expands a section
+
+    // Updates section (auto-expand if small, collapse if large)
+    if (!m_updates.empty()) {
+        m_updatesSection.expanded = (m_updates.size() <= ITEMS_PER_PAGE);
+        auto* header = createCollapsibleSectionHeader("Updates Available", m_updates.size(), SectionType::Updates);
+        m_listBox->addView(header);
+
+        m_updatesSection.contentBox = new brls::Box();
+        m_updatesSection.contentBox->setAxis(brls::Axis::COLUMN);
+        m_listBox->addView(m_updatesSection.contentBox);
+
+        if (m_updatesSection.expanded) {
+            // Temporarily set to false so toggleSection will expand it
+            m_updatesSection.expanded = false;
+            toggleSection(SectionType::Updates);
+        }
+    }
+
+    // Installed section (auto-expand if small, collapse if large)
+    if (!m_installed.empty()) {
+        m_installedSection.expanded = (m_installed.size() <= ITEMS_PER_PAGE);
+        auto* header = createCollapsibleSectionHeader("Installed", m_installed.size(), SectionType::Installed);
+        m_listBox->addView(header);
+
+        m_installedSection.contentBox = new brls::Box();
+        m_installedSection.contentBox->setAxis(brls::Axis::COLUMN);
+        m_listBox->addView(m_installedSection.contentBox);
+
+        if (m_installedSection.expanded) {
+            // Temporarily set to false so toggleSection will expand it
+            m_installedSection.expanded = false;
+            toggleSection(SectionType::Installed);
+        }
+    }
+
+    // Available section - always start collapsed (this is the big one with 500+ items)
+    if (!m_uninstalled.empty()) {
+        m_availableSection.expanded = false;
+        auto* header = createAvailableSectionHeader("Available to Install", m_uninstalled.size());
+        m_listBox->addView(header);
+
+        m_availableSection.contentBox = new brls::Box();
+        m_availableSection.contentBox->setAxis(brls::Axis::COLUMN);
+        m_listBox->addView(m_availableSection.contentBox);
+    }
+
+    brls::Logger::debug("ExtensionsTab: Created collapsible sections - {} updates, {} installed, {} available",
+                        m_updates.size(), m_installed.size(), m_uninstalled.size());
 }
 
+// Legacy batched population removed - now using collapsible sections with pagination
+// See populateUnifiedList() for the new implementation
+
 void ExtensionsTab::populateBatch() {
-    if (!m_listBox || !m_isPopulating) return;
-
-    int itemsThisBatch = 0;
-
-    // Build a flat list of extensions with section markers for simpler batching
-    // Section indices: 0 = updates, 1 = installed, 2+ = uninstalled by language
-
-    // Calculate flat index ranges
-    int totalUpdates = (int)m_updates.size();
-    int totalInstalled = (int)m_installed.size();
-    int totalUninstalled = 0;
-    for (const auto& pair : m_cachedGrouped) {
-        totalUninstalled += (int)pair.second.size();
-    }
-    int totalItems = totalUpdates + totalInstalled + totalUninstalled;
-
-    // Process items based on current batch index
-    while (itemsThisBatch < BATCH_SIZE && m_currentBatchIndex < totalItems) {
-        int idx = m_currentBatchIndex;
-
-        if (idx < totalUpdates) {
-            // Updates section
-            if (idx == 0 && !m_updates.empty()) {
-                auto* header = createSectionHeader("Updates Available", totalUpdates);
-                m_listBox->addView(header);
-            }
-            auto* item = createExtensionItem(m_updates[idx]);
-            if (item) {
-                m_listBox->addView(item);
-                itemsThisBatch++;
-            }
-        } else if (idx < totalUpdates + totalInstalled) {
-            // Installed section
-            int localIdx = idx - totalUpdates;
-            if (localIdx == 0 && !m_installed.empty()) {
-                auto* header = createSectionHeader("Installed", totalInstalled);
-                m_listBox->addView(header);
-            }
-            auto* item = createExtensionItem(m_installed[localIdx]);
-            if (item) {
-                m_listBox->addView(item);
-                itemsThisBatch++;
-            }
-        } else {
-            // Uninstalled section (grouped by language)
-            int uninstalledIdx = idx - totalUpdates - totalInstalled;
-
-            if (uninstalledIdx == 0 && !m_uninstalled.empty()) {
-                auto* header = createSectionHeader("Available to Install", totalUninstalled);
-                m_listBox->addView(header);
-            }
-
-            // Find the correct language group
-            int offset = 0;
-            for (const auto& langCode : m_cachedSortedLanguages) {
-                const auto& langExtensions = m_cachedGrouped[langCode];
-                int groupSize = (int)langExtensions.size();
-
-                if (uninstalledIdx < offset + groupSize) {
-                    // Add language header if at start of group
-                    if (uninstalledIdx == offset) {
-                        auto* langHeader = createLanguageHeader(langCode, groupSize);
-                        m_listBox->addView(langHeader);
-                    }
-
-                    int localIdx = uninstalledIdx - offset;
-                    auto* item = createExtensionItem(langExtensions[localIdx]);
-                    if (item) {
-                        m_listBox->addView(item);
-                        itemsThisBatch++;
-                    }
-                    break;
-                }
-                offset += groupSize;
-            }
-        }
-
-        m_currentBatchIndex++;
-    }
-
-    // Schedule next batch if more items remain
-    if (m_currentBatchIndex < totalItems) {
-        scheduleNextBatch();
-    } else {
-        m_isPopulating = false;
-        // Icons now load on focus/hover - no bulk loading needed
-        brls::Logger::debug("ExtensionsTab: Finished populating {} items in batches (icons load on focus)", m_extensionItems.size());
-    }
+    // Not used - collapsible sections handle item loading
 }
 
 void ExtensionsTab::scheduleNextBatch() {
-    // Use sync with a frame delay for smoother UI
-    brls::sync([this]() {
-        if (m_isPopulating) {
-            populateBatch();
-        }
-    });
+    // Not used - collapsible sections handle item loading
 }
 
 brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
