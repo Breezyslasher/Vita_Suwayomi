@@ -135,7 +135,20 @@ ExtensionsTab::ExtensionsTab() {
     searchContainer->addView(searchBox);
     buttonBox->addView(searchContainer);
 
-    // Refresh button with icon
+    // Refresh button with Triangle icon above
+    auto* refreshContainer = new brls::Box();
+    refreshContainer->setAxis(brls::Axis::COLUMN);
+    refreshContainer->setAlignItems(brls::AlignItems::CENTER);
+
+    // Triangle button icon
+    auto* triangleButtonIcon = new brls::Image();
+    triangleButtonIcon->setWidth(80);
+    triangleButtonIcon->setHeight(20);
+    triangleButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    triangleButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    triangleButtonIcon->setMarginBottom(2);
+    refreshContainer->addView(triangleButtonIcon);
+
     auto* refreshBox = new brls::Box();
     refreshBox->setFocusable(true);
     refreshBox->setPadding(8, 8, 8, 8);
@@ -150,7 +163,8 @@ ExtensionsTab::ExtensionsTab() {
         return true;
     });
     refreshBox->addGestureRecognizer(new brls::TapGestureRecognizer(refreshBox));
-    buttonBox->addView(refreshBox);
+    refreshContainer->addView(refreshBox);
+    buttonBox->addView(refreshContainer);
 
     headerBox->addView(buttonBox);
 
@@ -159,6 +173,12 @@ ExtensionsTab::ExtensionsTab() {
     // Register Start button to open search dialog
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
         showSearchDialog();
+        return true;
+    });
+
+    // Register Triangle (Y) button to refresh extensions
+    this->registerAction("Refresh", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
+        refreshExtensions();
         return true;
     });
 
