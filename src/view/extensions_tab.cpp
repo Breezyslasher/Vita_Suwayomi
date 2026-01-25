@@ -694,8 +694,8 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
 
     // Load icon on focus/hover only (not all at once)
     size_t itemIndex = m_extensionItems.size() - 1;
-    container->setFocusListener([this, itemIndex, icon](bool focused) {
-        if (focused && itemIndex < m_extensionItems.size()) {
+    container->getFocusEvent()->subscribe([this, itemIndex, icon](brls::View* view) {
+        if (itemIndex < m_extensionItems.size()) {
             auto& item = m_extensionItems[itemIndex];
             if (!item.iconLoaded && !item.iconUrl.empty() && item.icon) {
                 item.iconLoaded = true;
