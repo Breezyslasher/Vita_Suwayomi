@@ -826,6 +826,9 @@ void ExtensionsTab::toggleSection(SectionType sectionType) {
             auto* showMoreBtn = createShowMoreButton(sectionType);
             state.contentBox->addView(showMoreBtn);
         }
+
+        // Update D-pad navigation for settings buttons
+        updateSettingsButtonNavigation();
     }
 }
 
@@ -862,6 +865,9 @@ void ExtensionsTab::toggleLanguageSection(const std::string& langKey) {
                 state.contentBox->addView(showMoreBtn);
             }
         }
+
+        // Update D-pad navigation for settings buttons
+        updateSettingsButtonNavigation();
     }
 }
 
@@ -923,6 +929,9 @@ brls::Box* ExtensionsTab::createShowMoreButton(SectionType sectionType) {
             auto* newShowMore = createShowMoreButton(sectionType);
             state.contentBox->addView(newShowMore);
         }
+
+        // Update D-pad navigation for settings buttons
+        updateSettingsButtonNavigation();
 
         return true;
     });
@@ -1007,6 +1016,9 @@ brls::Box* ExtensionsTab::createLanguageShowMoreButton(const std::string& langKe
                 state.contentBox->addView(newShowMore);
             }
         }
+
+        // Update D-pad navigation for settings buttons
+        updateSettingsButtonNavigation();
 
         return true;
     });
@@ -1173,8 +1185,9 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     rightBox->setAlignItems(brls::AlignItems::CENTER);
 
     // Settings icon for installed extensions (shown when source is configurable)
+    brls::Box* settingsBtn = nullptr;
     if (ext.installed) {
-        auto* settingsBtn = new brls::Box();
+        settingsBtn = new brls::Box();
         settingsBtn->setFocusable(true);
         settingsBtn->setPadding(6, 6, 6, 6);
         settingsBtn->setCornerRadius(4);
@@ -1237,6 +1250,7 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     ExtensionItemInfo itemInfo;
     itemInfo.container = container;
     itemInfo.icon = icon;
+    itemInfo.settingsBtn = settingsBtn;  // Store for D-pad navigation linking
     itemInfo.pkgName = ext.pkgName;
     itemInfo.iconUrl = ext.iconUrl.empty() ? "" : Application::getInstance().getServerUrl() + ext.iconUrl;
     itemInfo.iconLoaded = false;
@@ -1264,6 +1278,32 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     }
 
     return container;
+}
+
+void ExtensionsTab::updateSettingsButtonNavigation() {
+    // Collect all non-null settings buttons in order
+    std::vector<brls::Box*> settingsButtons;
+    for (const auto& item : m_extensionItems) {
+        if (item.settingsBtn != nullptr) {
+            settingsButtons.push_back(item.settingsBtn);
+        }
+    }
+
+    // Set up custom navigation routes between settings buttons
+    // When navigating DOWN from a settings button, go to the next settings button
+    // When navigating UP from a settings button, go to the previous settings button
+    for (size_t i = 0; i < settingsButtons.size(); i++) {
+        if (i > 0) {
+            // Link UP to previous settings button
+            settingsButtons[i]->setCustomNavigationRoute(brls::FocusDirection::UP, settingsButtons[i - 1]);
+        }
+        if (i < settingsButtons.size() - 1) {
+            // Link DOWN to next settings button
+            settingsButtons[i]->setCustomNavigationRoute(brls::FocusDirection::DOWN, settingsButtons[i + 1]);
+        }
+    }
+
+    brls::Logger::debug("ExtensionsTab: Set up navigation for {} settings buttons", settingsButtons.size());
 }
 
 void ExtensionsTab::loadVisibleIcons() {

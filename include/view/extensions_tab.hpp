@@ -91,11 +91,15 @@ private:
     struct ExtensionItemInfo {
         brls::Box* container = nullptr;
         brls::Image* icon = nullptr;
+        brls::Box* settingsBtn = nullptr;  // Settings button for D-pad navigation
         std::string pkgName;
         std::string iconUrl;
         bool iconLoaded = false;
     };
     std::vector<ExtensionItemInfo> m_extensionItems;
+
+    // D-pad navigation: Link settings buttons vertically
+    void updateSettingsButtonNavigation();
 
     // Performance: Cached grouped data
     std::map<std::string, std::vector<Extension>> m_cachedGrouped;

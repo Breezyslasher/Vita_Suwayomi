@@ -3660,22 +3660,22 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
     // Type-specific fields
     if (pref.type == SourcePreferenceType::SWITCH || pref.type == SourcePreferenceType::CHECKBOX) {
         pref.currentValue = extractJsonBool(json, "currentValue");
-        pref.defaultValue = extractJsonBool(json, "defaultValue");
+        pref.defaultValue = extractJsonBool(json, "default");
     } else if (pref.type == SourcePreferenceType::EDIT_TEXT) {
         pref.currentText = extractJsonValue(json, "currentValue");
-        pref.defaultText = extractJsonValue(json, "defaultValue");
+        pref.defaultText = extractJsonValue(json, "default");
         pref.dialogTitle = extractJsonValue(json, "dialogTitle");
         pref.dialogMessage = extractJsonValue(json, "dialogMessage");
     } else if (pref.type == SourcePreferenceType::LIST) {
         pref.entries = extractJsonStringArray(json, "entries");
         pref.entryValues = extractJsonStringArray(json, "entryValues");
         pref.selectedValue = extractJsonValue(json, "currentValue");
-        pref.defaultListValue = extractJsonValue(json, "defaultValue");
+        pref.defaultListValue = extractJsonValue(json, "default");
     } else if (pref.type == SourcePreferenceType::MULTI_SELECT_LIST) {
         pref.entries = extractJsonStringArray(json, "entries");
         pref.entryValues = extractJsonStringArray(json, "entryValues");
         pref.selectedValues = extractJsonStringArray(json, "currentValue");
-        pref.defaultMultiValues = extractJsonStringArray(json, "defaultValue");
+        pref.defaultMultiValues = extractJsonStringArray(json, "default");
     }
 
     return pref;
@@ -3694,7 +3694,7 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         visible
                         enabled
                         currentValue
-                        defaultValue
+                        default
                     }
                     ... on CheckBoxPreference {
                         key
@@ -3703,7 +3703,7 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         visible
                         enabled
                         currentValue
-                        defaultValue
+                        default
                     }
                     ... on EditTextPreference {
                         key
@@ -3712,7 +3712,7 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         visible
                         enabled
                         currentValue
-                        defaultValue
+                        default
                         dialogTitle
                         dialogMessage
                     }
@@ -3723,7 +3723,7 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         visible
                         enabled
                         currentValue
-                        defaultValue
+                        default
                         entries
                         entryValues
                     }
@@ -3734,7 +3734,7 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         visible
                         enabled
                         currentValue
-                        defaultValue
+                        default
                         entries
                         entryValues
                     }
