@@ -4,6 +4,7 @@
  */
 
 #include "view/media_detail_view.hpp"
+#include "view/tracking_search_view.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "app/downloads_manager.hpp"
@@ -1591,48 +1592,32 @@ void MangaDetailView::showTrackerSearchDialog(const Tracker& tracker) {
                 return;
             }
 
-            brls::Dialog* dialog = new brls::Dialog("Select from " + trackerName);
+            // Push visual tracking search view with cover images and titles
+            auto* searchView = new TrackingSearchView(trackerName, trackerId, mangaId, results);
 
-            // Show up to 5 results
-            size_t maxResults = std::min(results.size(), size_t(5));
-            for (size_t i = 0; i < maxResults; i++) {
-                const auto& result = results[i];
-                std::string label = result.title;
-                if (label.length() > 35) {
-                    label = label.substr(0, 32) + "...";
-                }
-                if (result.totalChapters > 0) {
-                    label += " (" + std::to_string(result.totalChapters) + " ch)";
-                }
+            // Set callback to update tracking button when result is selected
+            searchView->setOnResultSelected([this, trackerId, mangaId, trackerName](const TrackSearchResult& result) {
+                brls::Application::notify("Adding to " + trackerName + "...");
 
                 int64_t remoteId = result.remoteId;
-                dialog->addButton(label, [this, dialog, trackerId, mangaId, remoteId, trackerName]() {
-                    dialog->close();
+                asyncRun([this, trackerId, mangaId, remoteId, trackerName]() {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
 
-                    brls::Application::notify("Adding to " + trackerName + "...");
-
-                    asyncRun([this, trackerId, mangaId, remoteId, trackerName]() {
-                        SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                        if (client.bindTracker(mangaId, trackerId, remoteId)) {
-                            brls::sync([this, trackerName]() {
-                                brls::Application::notify("Added to " + trackerName);
-                                updateTrackingButtonText();
-                            });
-                        } else {
-                            brls::sync([trackerName]() {
-                                brls::Application::notify("Failed to add to " + trackerName);
-                            });
-                        }
-                    });
+                    if (client.bindTracker(mangaId, trackerId, remoteId)) {
+                        brls::sync([this, trackerName]() {
+                            brls::Application::notify("Added to " + trackerName);
+                            updateTrackingButtonText();
+                            brls::Application::popActivity();
+                        });
+                    } else {
+                        brls::sync([trackerName]() {
+                            brls::Application::notify("Failed to add to " + trackerName);
+                        });
+                    }
                 });
-            }
-
-            dialog->addButton("Cancel", [dialog]() {
-                dialog->close();
             });
 
-            dialog->open();
+            brls::Application::pushActivity(new brls::Activity(searchView));
         });
     });
 }
