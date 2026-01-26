@@ -1533,6 +1533,22 @@ void MangaDetailView::showTrackingDialog() {
                 return;
             }
 
+            // Check if only one tracker has an existing record - skip to edit dialog
+            std::vector<std::pair<Tracker, TrackRecord>> trackersWithRecords;
+            for (const auto& tracker : loggedInTrackers) {
+                for (auto& r : m_trackRecords) {
+                    if (r.trackerId == tracker.id && r.id > 0) {
+                        trackersWithRecords.push_back({tracker, r});
+                        break;
+                    }
+                }
+            }
+
+            if (trackersWithRecords.size() == 1) {
+                showTrackEditDialog(trackersWithRecords[0].second, trackersWithRecords[0].first);
+                return;
+            }
+
             // Create main tracking dialog
             brls::Dialog* dialog = new brls::Dialog("Tracking");
 
