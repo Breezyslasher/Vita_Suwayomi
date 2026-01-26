@@ -1813,9 +1813,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                 return;
             }
 
-            // Create preferences dialog
-            auto* dialog = new brls::Dialog("Source Settings");
-
+            // Create preferences dialog content
             auto* scrollFrame = new brls::ScrollingFrame();
             scrollFrame->setMinHeight(300);
             scrollFrame->setMaxHeight(450);
@@ -2124,7 +2122,9 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
             brls::Logger::info("Added {} preference UI elements to dialog", addedCount);
 
             scrollFrame->setContentView(contentBox);
-            dialog->addView(scrollFrame);
+
+            // Create dialog with scrollFrame as content view (not addView which adds to wrong parent)
+            auto* dialog = new brls::Dialog(scrollFrame);
             dialog->addButton("Close", []() {});
             dialog->open();
         });
