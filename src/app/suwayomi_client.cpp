@@ -3638,6 +3638,7 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
 
     // Determine type from __typename
     std::string typeName = extractJsonValue(json, "__typename");
+    bool knownType = true;
     if (typeName == "SwitchPreference") {
         pref.type = SourcePreferenceType::SWITCH;
     } else if (typeName == "CheckBoxPreference") {
@@ -3648,14 +3649,33 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
         pref.type = SourcePreferenceType::LIST;
     } else if (typeName == "MultiSelectListPreference") {
         pref.type = SourcePreferenceType::MULTI_SELECT_LIST;
+    } else {
+        // Unknown preference type - mark as not visible so it's skipped
+        knownType = false;
+        brls::Logger::debug("Skipping unknown preference type: {}", typeName);
     }
 
     // Common fields
     pref.key = extractJsonValue(json, "key");
     pref.title = extractJsonValue(json, "title");
     pref.summary = extractJsonValue(json, "summary");
-    pref.visible = extractJsonBool(json, "visible");
-    pref.enabled = extractJsonBool(json, "enabled");
+
+    // Only override visible/enabled if the field is present in JSON
+    // (unknown types won't have these fields in their fragment)
+    std::string visibleStr = extractJsonValue(json, "visible");
+    if (!visibleStr.empty()) {
+        pref.visible = (visibleStr == "true" || visibleStr == "1");
+    } else if (!knownType) {
+        // Unknown types without visible field should be hidden
+        pref.visible = false;
+    }
+    // else: keep default visible = true
+
+    std::string enabledStr = extractJsonValue(json, "enabled");
+    if (!enabledStr.empty()) {
+        pref.enabled = (enabledStr == "true" || enabledStr == "1");
+    }
+    // else: keep default enabled = true
 
     // Type-specific fields (using aliased field names from GraphQL query)
     if (pref.type == SourcePreferenceType::SWITCH || pref.type == SourcePreferenceType::CHECKBOX) {
