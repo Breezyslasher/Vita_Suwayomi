@@ -1598,9 +1598,8 @@ void ExtensionsTab::installExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Installed: " + ext.name);
-                // Update local cache - UI will refresh when user returns to this tab
-                updateExtensionItemStatus(ext.pkgName, true, false);
-                m_needsRefresh = true;
+                // Auto-refresh to show updated extension list
+                refreshExtensions();
             } else {
                 brls::Application::notify("Failed to install: " + ext.name);
             }
@@ -1619,9 +1618,8 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Updated: " + ext.name);
-                // Update local cache - UI will refresh when user returns to this tab
-                updateExtensionItemStatus(ext.pkgName, true, false);
-                m_needsRefresh = true;
+                // Auto-refresh to show updated extension list
+                refreshExtensions();
             } else {
                 brls::Application::notify("Failed to update: " + ext.name);
             }
@@ -1640,9 +1638,8 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Uninstalled: " + ext.name);
-                // Update local cache - UI will refresh when user returns to this tab
-                updateExtensionItemStatus(ext.pkgName, false, false);
-                m_needsRefresh = true;
+                // Auto-refresh to show updated extension list
+                refreshExtensions();
             } else {
                 brls::Application::notify("Failed to uninstall: " + ext.name);
             }
