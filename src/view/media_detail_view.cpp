@@ -11,6 +11,7 @@
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
 #include <cmath>
+#include <cstdio>
 #include <ctime>
 #include <set>
 #include <limits>
@@ -1874,9 +1875,14 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                     brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
                         if (text.empty()) return;
 
-                        // Parse YYYY-MM-DD format
-                        struct tm tm_date = {};
-                        if (strptime(text.c_str(), "%Y-%m-%d", &tm_date) != nullptr) {
+                        // Parse YYYY-MM-DD format manually
+                        int year, month, day;
+                        if (sscanf(text.c_str(), "%d-%d-%d", &year, &month, &day) == 3 &&
+                            year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                            struct tm tm_date = {};
+                            tm_date.tm_year = year - 1900;
+                            tm_date.tm_mon = month - 1;
+                            tm_date.tm_mday = day;
                             int64_t timestamp = static_cast<int64_t>(mktime(&tm_date)) * 1000;
 
                             asyncRun([recordId, timestamp, trackerName]() {
@@ -1974,9 +1980,14 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                     brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
                         if (text.empty()) return;
 
-                        // Parse YYYY-MM-DD format
-                        struct tm tm_date = {};
-                        if (strptime(text.c_str(), "%Y-%m-%d", &tm_date) != nullptr) {
+                        // Parse YYYY-MM-DD format manually
+                        int year, month, day;
+                        if (sscanf(text.c_str(), "%d-%d-%d", &year, &month, &day) == 3 &&
+                            year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                            struct tm tm_date = {};
+                            tm_date.tm_year = year - 1900;
+                            tm_date.tm_mon = month - 1;
+                            tm_date.tm_mday = day;
                             int64_t timestamp = static_cast<int64_t>(mktime(&tm_date)) * 1000;
 
                             asyncRun([recordId, timestamp, trackerName]() {
