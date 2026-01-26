@@ -13,8 +13,8 @@
 namespace vitasuwayomi {
 
 /**
- * A cell for displaying tracking search results with cover image and title
- * Similar to MangaItemCell but for TrackSearchResult
+ * A list item cell for displaying tracking search results
+ * Shows cover image on left, title beside it, with description and status as subtext
  */
 class TrackingSearchResultCell : public brls::Box {
 public:
@@ -31,19 +31,20 @@ public:
 private:
     void loadCoverImage();
     void updateDisplay();
+    std::string truncateText(const std::string& text, size_t maxLen);
 
     TrackSearchResult m_result;
-    std::string m_originalTitle;
     bool m_coverLoaded = false;
 
     brls::Image* m_coverImage = nullptr;
     brls::Label* m_titleLabel = nullptr;
-    brls::Label* m_subtitleLabel = nullptr;
+    brls::Label* m_descriptionLabel = nullptr;
+    brls::Label* m_statusLabel = nullptr;
 };
 
 /**
- * A view for displaying tracking search results in a grid
- * Similar to browse tab search results
+ * A view for displaying tracking search results in a list
+ * Shows cover, title, description, and status for each result
  */
 class TrackingSearchView : public brls::Box {
 public:
@@ -65,13 +66,14 @@ private:
 
     brls::Label* m_titleLabel = nullptr;
     brls::ScrollingFrame* m_scrollView = nullptr;
-    brls::Box* m_gridBox = nullptr;
+    brls::Box* m_listBox = nullptr;
     std::vector<TrackingSearchResultCell*> m_cells;
 
-    int m_columns = 5;
-    int m_cellWidth = 160;
-    int m_cellHeight = 220;
-    int m_cellMargin = 12;
+    // List item dimensions
+    int m_coverWidth = 80;
+    int m_coverHeight = 120;
+    int m_itemHeight = 140;
+    int m_itemMargin = 10;
 };
 
 } // namespace vitasuwayomi
