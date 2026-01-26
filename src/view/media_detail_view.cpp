@@ -11,6 +11,7 @@
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
 #include <cmath>
+#include <ctime>
 #include <set>
 #include <limits>
 
@@ -1709,41 +1710,42 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
         });
     });
 
-    // Update Chapter button
+    // Update Chapter button - opens IME for manual input
     dialog->addButton("Update Chapter", [this, dialog, recordId, currentChapter, trackerName]() {
         dialog->close();
 
         brls::sync([this, recordId, currentChapter, trackerName]() {
-            // For simplicity, increment chapter by 1 or set to current read chapter
-            double newChapter = currentChapter + 1.0;
+            std::string defaultValue = std::to_string(static_cast<int>(currentChapter));
 
-            // Find the latest read chapter from manga
-            double latestRead = 0;
-            for (const auto& ch : m_chapters) {
-                if (ch.read && ch.chapterNumber > latestRead) {
-                    latestRead = ch.chapterNumber;
-                }
-            }
+            brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
+                if (text.empty()) return;
 
-            if (latestRead > currentChapter) {
-                newChapter = latestRead;
-            }
+                try {
+                    double newChapter = std::stod(text);
+                    if (newChapter < 0) {
+                        brls::Application::notify("Invalid chapter number");
+                        return;
+                    }
 
-            brls::Application::notify("Updating chapter to " + std::to_string(static_cast<int>(newChapter)) + "...");
+                    brls::Application::notify("Updating chapter to " + std::to_string(static_cast<int>(newChapter)) + "...");
 
-            asyncRun([recordId, newChapter, trackerName]() {
-                SuwayomiClient& client = SuwayomiClient::getInstance();
+                    asyncRun([recordId, newChapter, trackerName]() {
+                        SuwayomiClient& client = SuwayomiClient::getInstance();
 
-                if (client.updateTrackRecord(recordId, -1, newChapter)) {
-                    brls::sync([newChapter, trackerName]() {
-                        brls::Application::notify("Chapter updated to " + std::to_string(static_cast<int>(newChapter)));
+                        if (client.updateTrackRecord(recordId, -1, newChapter)) {
+                            brls::sync([newChapter, trackerName]() {
+                                brls::Application::notify("Chapter updated to " + std::to_string(static_cast<int>(newChapter)));
+                            });
+                        } else {
+                            brls::sync([]() {
+                                brls::Application::notify("Failed to update chapter");
+                            });
+                        }
                     });
-                } else {
-                    brls::sync([]() {
-                        brls::Application::notify("Failed to update chapter");
-                    });
+                } catch (...) {
+                    brls::Application::notify("Invalid chapter number");
                 }
-            });
+            }, "Update Chapter", "Enter chapter number", 10, defaultValue);
         });
     });
 
@@ -1788,6 +1790,206 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
             });
         });
     }
+
+    // Start Date button
+    int64_t currentStartDate = record.startDate;
+    dialog->addButton("Start Date", [this, dialog, recordId, currentStartDate, trackerName]() {
+        dialog->close();
+
+        brls::sync([this, recordId, currentStartDate, trackerName]() {
+            brls::Dialog* dateDialog = new brls::Dialog("Set Start Date");
+
+            // Set to Today
+            dateDialog->addButton("Set to Today", [dateDialog, recordId, trackerName]() {
+                dateDialog->close();
+
+                // Get current time as Unix timestamp in milliseconds
+                int64_t today = static_cast<int64_t>(std::time(nullptr)) * 1000;
+
+                asyncRun([recordId, today, trackerName]() {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                    if (client.updateTrackRecord(recordId, -1, -1, "", today, -1)) {
+                        brls::sync([trackerName]() {
+                            brls::Application::notify("Start date set to today");
+                        });
+                    } else {
+                        brls::sync([]() {
+                            brls::Application::notify("Failed to update start date");
+                        });
+                    }
+                });
+            });
+
+            // Clear date
+            dateDialog->addButton("Clear", [dateDialog, recordId, trackerName]() {
+                dateDialog->close();
+
+                asyncRun([recordId, trackerName]() {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                    if (client.updateTrackRecord(recordId, -1, -1, "", 0, -1)) {
+                        brls::sync([trackerName]() {
+                            brls::Application::notify("Start date cleared");
+                        });
+                    } else {
+                        brls::sync([]() {
+                            brls::Application::notify("Failed to clear start date");
+                        });
+                    }
+                });
+            });
+
+            // Custom date input
+            dateDialog->addButton("Custom", [this, dateDialog, recordId, currentStartDate, trackerName]() {
+                dateDialog->close();
+
+                brls::sync([recordId, currentStartDate, trackerName]() {
+                    // Format current date as YYYY-MM-DD for default value
+                    std::string defaultDate = "";
+                    if (currentStartDate > 0) {
+                        time_t timestamp = static_cast<time_t>(currentStartDate / 1000);
+                        struct tm* tm_info = localtime(&timestamp);
+                        char buffer[11];
+                        strftime(buffer, 11, "%Y-%m-%d", tm_info);
+                        defaultDate = buffer;
+                    }
+
+                    brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
+                        if (text.empty()) return;
+
+                        // Parse YYYY-MM-DD format
+                        struct tm tm_date = {};
+                        if (strptime(text.c_str(), "%Y-%m-%d", &tm_date) != nullptr) {
+                            int64_t timestamp = static_cast<int64_t>(mktime(&tm_date)) * 1000;
+
+                            asyncRun([recordId, timestamp, trackerName]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                                if (client.updateTrackRecord(recordId, -1, -1, "", timestamp, -1)) {
+                                    brls::sync([trackerName]() {
+                                        brls::Application::notify("Start date updated");
+                                    });
+                                } else {
+                                    brls::sync([]() {
+                                        brls::Application::notify("Failed to update start date");
+                                    });
+                                }
+                            });
+                        } else {
+                            brls::Application::notify("Invalid date format (use YYYY-MM-DD)");
+                        }
+                    }, "Start Date", "Enter date (YYYY-MM-DD)", 10, defaultDate);
+                });
+            });
+
+            dateDialog->addButton("Cancel", [dateDialog]() {
+                dateDialog->close();
+            });
+
+            dateDialog->open();
+        });
+    });
+
+    // Finish Date button
+    int64_t currentFinishDate = record.finishDate;
+    dialog->addButton("Finish Date", [this, dialog, recordId, currentFinishDate, trackerName]() {
+        dialog->close();
+
+        brls::sync([this, recordId, currentFinishDate, trackerName]() {
+            brls::Dialog* dateDialog = new brls::Dialog("Set Finish Date");
+
+            // Set to Today
+            dateDialog->addButton("Set to Today", [dateDialog, recordId, trackerName]() {
+                dateDialog->close();
+
+                // Get current time as Unix timestamp in milliseconds
+                int64_t today = static_cast<int64_t>(std::time(nullptr)) * 1000;
+
+                asyncRun([recordId, today, trackerName]() {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                    if (client.updateTrackRecord(recordId, -1, -1, "", -1, today)) {
+                        brls::sync([trackerName]() {
+                            brls::Application::notify("Finish date set to today");
+                        });
+                    } else {
+                        brls::sync([]() {
+                            brls::Application::notify("Failed to update finish date");
+                        });
+                    }
+                });
+            });
+
+            // Clear date
+            dateDialog->addButton("Clear", [dateDialog, recordId, trackerName]() {
+                dateDialog->close();
+
+                asyncRun([recordId, trackerName]() {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                    if (client.updateTrackRecord(recordId, -1, -1, "", -1, 0)) {
+                        brls::sync([trackerName]() {
+                            brls::Application::notify("Finish date cleared");
+                        });
+                    } else {
+                        brls::sync([]() {
+                            brls::Application::notify("Failed to clear finish date");
+                        });
+                    }
+                });
+            });
+
+            // Custom date input
+            dateDialog->addButton("Custom", [this, dateDialog, recordId, currentFinishDate, trackerName]() {
+                dateDialog->close();
+
+                brls::sync([recordId, currentFinishDate, trackerName]() {
+                    // Format current date as YYYY-MM-DD for default value
+                    std::string defaultDate = "";
+                    if (currentFinishDate > 0) {
+                        time_t timestamp = static_cast<time_t>(currentFinishDate / 1000);
+                        struct tm* tm_info = localtime(&timestamp);
+                        char buffer[11];
+                        strftime(buffer, 11, "%Y-%m-%d", tm_info);
+                        defaultDate = buffer;
+                    }
+
+                    brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
+                        if (text.empty()) return;
+
+                        // Parse YYYY-MM-DD format
+                        struct tm tm_date = {};
+                        if (strptime(text.c_str(), "%Y-%m-%d", &tm_date) != nullptr) {
+                            int64_t timestamp = static_cast<int64_t>(mktime(&tm_date)) * 1000;
+
+                            asyncRun([recordId, timestamp, trackerName]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                                if (client.updateTrackRecord(recordId, -1, -1, "", -1, timestamp)) {
+                                    brls::sync([trackerName]() {
+                                        brls::Application::notify("Finish date updated");
+                                    });
+                                } else {
+                                    brls::sync([]() {
+                                        brls::Application::notify("Failed to update finish date");
+                                    });
+                                }
+                            });
+                        } else {
+                            brls::Application::notify("Invalid date format (use YYYY-MM-DD)");
+                        }
+                    }, "Finish Date", "Enter date (YYYY-MM-DD)", 10, defaultDate);
+                });
+            });
+
+            dateDialog->addButton("Cancel", [dateDialog]() {
+                dateDialog->close();
+            });
+
+            dateDialog->open();
+        });
+    });
 
     // Remove tracking button
     dialog->addButton("Remove Tracking", [this, dialog, recordId, trackerName]() {
