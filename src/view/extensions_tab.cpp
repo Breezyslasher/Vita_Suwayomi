@@ -1187,9 +1187,9 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     rightBox->setAxis(brls::Axis::ROW);
     rightBox->setAlignItems(brls::AlignItems::CENTER);
 
-    // Settings icon for installed extensions (shown when source is configurable)
+    // Settings icon for installed extensions (only shown when extension has configurable sources)
     brls::Box* settingsBtn = nullptr;
-    if (ext.installed) {
+    if (ext.installed && ext.hasConfigurableSources) {
         settingsBtn = new brls::Box();
         settingsBtn->setFocusable(true);
         settingsBtn->setPadding(6, 6, 6, 6);

@@ -59,6 +59,7 @@ struct Extension {
     bool hasUpdate = false;
     bool obsolete = false;
     bool isNsfw = false;
+    bool hasConfigurableSources = false;  // True if any source has settings
 };
 
 // Category for organizing manga library

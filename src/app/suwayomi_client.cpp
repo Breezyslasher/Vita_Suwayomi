@@ -3124,6 +3124,7 @@ bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extension
 
 bool SuwayomiClient::fetchInstalledExtensionsGraphQL(std::vector<Extension>& extensions) {
     // Server-side filtered query for installed extensions only
+    // Include source.nodes with isConfigurable to determine if settings icon should be shown
     const char* query = R"(
         query {
             extensions(condition: { isInstalled: true }) {
@@ -3139,6 +3140,11 @@ bool SuwayomiClient::fetchInstalledExtensionsGraphQL(std::vector<Extension>& ext
                     isObsolete
                     isNsfw
                     repo
+                    source {
+                        nodes {
+                            isConfigurable
+                        }
+                    }
                 }
             }
         }
@@ -3161,6 +3167,22 @@ bool SuwayomiClient::fetchInstalledExtensionsGraphQL(std::vector<Extension>& ext
     std::vector<std::string> items = splitJsonArray(nodesJson);
     for (const auto& item : items) {
         Extension ext = parseExtensionFromGraphQL(item);
+
+        // Check if any source is configurable
+        std::string sourceObj = extractJsonObject(item, "source");
+        if (!sourceObj.empty()) {
+            std::string sourceNodes = extractJsonArray(sourceObj, "nodes");
+            if (!sourceNodes.empty()) {
+                std::vector<std::string> sources = splitJsonArray(sourceNodes);
+                for (const auto& srcJson : sources) {
+                    if (extractJsonBool(srcJson, "isConfigurable")) {
+                        ext.hasConfigurableSources = true;
+                        break;
+                    }
+                }
+            }
+        }
+
         if (seenPkgNames.find(ext.pkgName) == seenPkgNames.end()) {
             seenPkgNames.insert(ext.pkgName);
             extensions.push_back(ext);
