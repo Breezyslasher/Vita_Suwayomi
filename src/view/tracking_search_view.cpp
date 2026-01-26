@@ -47,20 +47,20 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     m_titleLabel->setMarginBottom(6);
     textBox->addView(m_titleLabel);
 
-    // Description label (subtext)
-    m_descriptionLabel = new brls::Label();
-    m_descriptionLabel->setFontSize(13);
-    m_descriptionLabel->setTextColor(nvgRGB(180, 180, 180));
-    m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
-    m_descriptionLabel->setMarginBottom(6);
-    textBox->addView(m_descriptionLabel);
-
     // Status label (publishing status, chapters, type)
     m_statusLabel = new brls::Label();
     m_statusLabel->setFontSize(12);
     m_statusLabel->setTextColor(nvgRGB(130, 200, 130));
     m_statusLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
+    m_statusLabel->setMarginBottom(6);
     textBox->addView(m_statusLabel);
+
+    // Description label (subtext)
+    m_descriptionLabel = new brls::Label();
+    m_descriptionLabel->setFontSize(13);
+    m_descriptionLabel->setTextColor(nvgRGB(180, 180, 180));
+    m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
+    textBox->addView(m_descriptionLabel);
 
     this->addView(textBox);
 }
