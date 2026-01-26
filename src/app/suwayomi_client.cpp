@@ -3657,31 +3657,33 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
     pref.visible = extractJsonBool(json, "visible");
     pref.enabled = extractJsonBool(json, "enabled");
 
-    // Type-specific fields
+    // Type-specific fields (using aliased field names from GraphQL query)
     if (pref.type == SourcePreferenceType::SWITCH || pref.type == SourcePreferenceType::CHECKBOX) {
-        pref.currentValue = extractJsonBool(json, "currentValue");
-        pref.defaultValue = extractJsonBool(json, "default");
+        pref.currentValue = extractJsonBool(json, "boolValue");
+        pref.defaultValue = extractJsonBool(json, "boolDefault");
     } else if (pref.type == SourcePreferenceType::EDIT_TEXT) {
-        pref.currentText = extractJsonValue(json, "currentValue");
-        pref.defaultText = extractJsonValue(json, "default");
+        pref.currentText = extractJsonValue(json, "stringValue");
+        pref.defaultText = extractJsonValue(json, "stringDefault");
         pref.dialogTitle = extractJsonValue(json, "dialogTitle");
         pref.dialogMessage = extractJsonValue(json, "dialogMessage");
     } else if (pref.type == SourcePreferenceType::LIST) {
         pref.entries = extractJsonStringArray(json, "entries");
         pref.entryValues = extractJsonStringArray(json, "entryValues");
-        pref.selectedValue = extractJsonValue(json, "currentValue");
-        pref.defaultListValue = extractJsonValue(json, "default");
+        pref.selectedValue = extractJsonValue(json, "stringValue");
+        pref.defaultListValue = extractJsonValue(json, "stringDefault");
     } else if (pref.type == SourcePreferenceType::MULTI_SELECT_LIST) {
         pref.entries = extractJsonStringArray(json, "entries");
         pref.entryValues = extractJsonStringArray(json, "entryValues");
-        pref.selectedValues = extractJsonStringArray(json, "currentValue");
-        pref.defaultMultiValues = extractJsonStringArray(json, "default");
+        pref.selectedValues = extractJsonStringArray(json, "stringListValue");
+        pref.defaultMultiValues = extractJsonStringArray(json, "stringListDefault");
     }
 
     return pref;
 }
 
 bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector<SourcePreference>& preferences) {
+    // Use field aliases to avoid GraphQL type conflict error:
+    // currentValue returns Boolean for Switch/CheckBox, String for List/EditText, [String] for MultiSelect
     const char* query = R"(
         query GetSourcePreferences($id: LongString!) {
             source(id: $id) {
@@ -3693,8 +3695,8 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         summary
                         visible
                         enabled
-                        currentValue
-                        default
+                        boolValue: currentValue
+                        boolDefault: default
                     }
                     ... on CheckBoxPreference {
                         key
@@ -3702,8 +3704,8 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         summary
                         visible
                         enabled
-                        currentValue
-                        default
+                        boolValue: currentValue
+                        boolDefault: default
                     }
                     ... on EditTextPreference {
                         key
@@ -3711,8 +3713,8 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         summary
                         visible
                         enabled
-                        currentValue
-                        default
+                        stringValue: currentValue
+                        stringDefault: default
                         dialogTitle
                         dialogMessage
                     }
@@ -3722,8 +3724,8 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         summary
                         visible
                         enabled
-                        currentValue
-                        default
+                        stringValue: currentValue
+                        stringDefault: default
                         entries
                         entryValues
                     }
@@ -3733,8 +3735,8 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
                         summary
                         visible
                         enabled
-                        currentValue
-                        default
+                        stringListValue: currentValue
+                        stringListDefault: default
                         entries
                         entryValues
                     }

@@ -1663,16 +1663,56 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
                 return;
             }
 
-            // Filter to only configurable sources
+            // Get enabled languages from settings
+            const AppSettings& settings = Application::getInstance().getSettings();
+            std::set<std::string> enabledLanguages = settings.enabledSourceLanguages;
+
+            // Default to English if no languages configured
+            if (enabledLanguages.empty()) {
+                enabledLanguages.insert("en");
+            }
+
+            // Filter to only configurable sources that match enabled languages
             std::vector<Source> configurableSources;
             for (const auto& src : sources) {
-                if (src.isConfigurable) {
+                if (!src.isConfigurable) continue;
+
+                // Check if source language matches enabled languages
+                bool languageMatch = false;
+
+                // Always show "multi" and "all" language sources
+                if (src.lang == "multi" || src.lang == "all") {
+                    languageMatch = true;
+                } else if (enabledLanguages.count(src.lang) > 0) {
+                    // Exact match
+                    languageMatch = true;
+                } else {
+                    // Check for base language match (e.g., "zh" matches "zh-Hans", "zh-Hant")
+                    for (const auto& lang : enabledLanguages) {
+                        // Check if source lang starts with enabled lang (e.g., "zh-Hans" starts with "zh")
+                        if (src.lang.length() > lang.length() &&
+                            src.lang.substr(0, lang.length()) == lang &&
+                            src.lang[lang.length()] == '-') {
+                            languageMatch = true;
+                            break;
+                        }
+                        // Check if enabled lang starts with source lang
+                        if (lang.length() > src.lang.length() &&
+                            lang.substr(0, src.lang.length()) == src.lang &&
+                            lang[src.lang.length()] == '-') {
+                            languageMatch = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (languageMatch) {
                     configurableSources.push_back(src);
                 }
             }
 
             if (configurableSources.empty()) {
-                brls::Application::notify("No settings available for this extension");
+                brls::Application::notify("No settings available for enabled languages");
                 return;
             }
 
