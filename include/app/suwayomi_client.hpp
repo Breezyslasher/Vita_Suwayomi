@@ -266,19 +266,34 @@ struct SourceFilter {
     std::vector<SourceFilter> filters;     // For GROUP type
 };
 
+// Track search result (from tracker search)
+struct TrackSearchResult {
+    int64_t remoteId = 0;
+    std::string title;
+    std::string coverUrl;
+    std::string summary;
+    std::string publishingStatus;
+    std::string publishingType;
+    std::string startDate;  // String format from API
+    int totalChapters = 0;
+};
+
 // Track item for external tracking services
 struct TrackRecord {
     int id = 0;
     int mangaId = 0;
     int trackerId = 0;
     std::string trackerName;
-    std::string remoteId;
+    int64_t remoteId = 0;
+    std::string remoteUrl;
     std::string title;
-    int lastChapterRead = 0;
+    double lastChapterRead = 0.0;
     int totalChapters = 0;
-    int score = 0;
+    double score = 0.0;
     int status = 0;
     std::string displayScore;
+    int64_t startDate = 0;
+    int64_t finishDate = 0;
 };
 
 // Tracker service
@@ -287,8 +302,10 @@ struct Tracker {
     std::string name;
     std::string iconUrl;
     bool isLoggedIn = false;
-    std::vector<std::string> statusList;
-    std::vector<std::string> scoreFormat;
+    bool isTokenExpired = false;
+    std::vector<std::string> statuses;    // Status options (e.g., "Reading", "Completed")
+    std::vector<std::string> scores;       // Score format options
+    bool supportsTrackDeletion = false;
 };
 
 // Source preference types (matches Suwayomi preference types)
@@ -452,12 +469,21 @@ public:
 
     // Tracking
     bool fetchTrackers(std::vector<Tracker>& trackers);
-    bool loginTracker(int trackerId, const std::string& username, const std::string& password);
+    bool fetchTracker(int trackerId, Tracker& tracker);
+    bool loginTrackerCredentials(int trackerId, const std::string& username, const std::string& password);
+    bool loginTrackerOAuth(int trackerId, const std::string& callbackUrl, std::string& oauthUrl);
     bool logoutTracker(int trackerId);
-    bool searchTracker(int trackerId, const std::string& query, std::vector<TrackRecord>& results);
+    bool searchTracker(int trackerId, const std::string& query, std::vector<TrackSearchResult>& results);
+    bool bindTracker(int mangaId, int trackerId, int64_t remoteId);
+    bool unbindTracker(int recordId, bool deleteRemoteTrack = false);
+    bool updateTrackRecord(int recordId, int status = -1, double lastChapterRead = -1,
+                          const std::string& scoreString = "", int64_t startDate = -1, int64_t finishDate = -1);
+    bool fetchMangaTracking(int mangaId, std::vector<TrackRecord>& records);
+
+    // Legacy compatibility
+    bool loginTracker(int trackerId, const std::string& username, const std::string& password);
     bool bindTracker(int mangaId, int trackerId, int remoteId);
     bool updateTracking(int mangaId, int trackerId, const TrackRecord& record);
-    bool fetchMangaTracking(int mangaId, std::vector<TrackRecord>& records);
 
     // Reading History (Continue Reading)
     bool fetchReadingHistory(int offset, int limit, std::vector<ReadingHistoryItem>& history);
@@ -548,6 +574,18 @@ private:
     // Single source GraphQL
     bool fetchSourceGraphQL(int64_t sourceId, Source& source);
 
+    // Tracking GraphQL methods
+    bool fetchTrackersGraphQL(std::vector<Tracker>& trackers);
+    bool fetchTrackerGraphQL(int trackerId, Tracker& tracker);
+    bool fetchMangaTrackingGraphQL(int mangaId, std::vector<TrackRecord>& records);
+    bool searchTrackerGraphQL(int trackerId, const std::string& query, std::vector<TrackSearchResult>& results);
+    bool bindTrackerGraphQL(int mangaId, int trackerId, int64_t remoteId);
+    bool unbindTrackerGraphQL(int recordId, bool deleteRemoteTrack);
+    bool updateTrackRecordGraphQL(int recordId, int status, double lastChapterRead,
+                                  const std::string& scoreString, int64_t startDate, int64_t finishDate);
+    bool loginTrackerCredentialsGraphQL(int trackerId, const std::string& username, const std::string& password);
+    bool logoutTrackerGraphQL(int trackerId);
+
     // Source Preferences GraphQL
     bool fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector<SourcePreference>& preferences);
     bool updateSourcePreferenceGraphQL(int64_t sourceId, const SourcePreferenceChange& change);
@@ -585,7 +623,10 @@ private:
     Category parseCategory(const std::string& json);
     Page parsePage(const std::string& json);
     Tracker parseTracker(const std::string& json);
+    Tracker parseTrackerFromGraphQL(const std::string& json);
     TrackRecord parseTrackRecord(const std::string& json);
+    TrackRecord parseTrackRecordFromGraphQL(const std::string& json);
+    TrackSearchResult parseTrackSearchResultFromGraphQL(const std::string& json);
 
     // Split array helper
     std::vector<std::string> splitJsonArray(const std::string& arrayJson);

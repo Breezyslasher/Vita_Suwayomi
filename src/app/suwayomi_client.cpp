@@ -447,13 +447,16 @@ TrackRecord SuwayomiClient::parseTrackRecord(const std::string& json) {
     record.id = extractJsonInt(json, "id");
     record.mangaId = extractJsonInt(json, "mangaId");
     record.trackerId = extractJsonInt(json, "trackerId");
-    record.remoteId = extractJsonValue(json, "remoteId");
+    record.remoteId = extractJsonInt64(json, "remoteId");
+    record.remoteUrl = extractJsonValue(json, "remoteUrl");
     record.title = extractJsonValue(json, "title");
-    record.lastChapterRead = extractJsonInt(json, "lastChapterRead");
+    record.lastChapterRead = extractJsonFloat(json, "lastChapterRead");
     record.totalChapters = extractJsonInt(json, "totalChapters");
-    record.score = extractJsonInt(json, "score");
+    record.score = extractJsonFloat(json, "score");
     record.status = extractJsonInt(json, "status");
     record.displayScore = extractJsonValue(json, "displayScore");
+    record.startDate = extractJsonInt64(json, "startDate");
+    record.finishDate = extractJsonInt64(json, "finishDate");
 
     return record;
 }
@@ -2931,104 +2934,621 @@ bool SuwayomiClient::validateBackup(const std::string& filePath) {
 // Tracking
 // ============================================================================
 
-bool SuwayomiClient::fetchTrackers(std::vector<Tracker>& trackers) {
-    vitasuwayomi::HttpClient http = createHttpClient();
+Tracker SuwayomiClient::parseTrackerFromGraphQL(const std::string& json) {
+    Tracker tracker;
 
-    std::string url = buildApiUrl("/track/list");
-    vitasuwayomi::HttpResponse response = http.get(url);
+    tracker.id = extractJsonInt(json, "id");
+    tracker.name = extractJsonValue(json, "name");
+    tracker.iconUrl = extractJsonValue(json, "icon");
+    tracker.isLoggedIn = extractJsonBool(json, "isLoggedIn");
+    tracker.isTokenExpired = extractJsonBool(json, "isTokenExpired");
+    tracker.supportsTrackDeletion = extractJsonBool(json, "supportsTrackDeletion");
 
-    if (!response.success || response.statusCode != 200) {
+    // Parse statuses array
+    std::string statusesJson = extractJsonArray(json, "statuses");
+    if (!statusesJson.empty()) {
+        std::vector<std::string> statusItems = splitJsonArray(statusesJson);
+        for (const auto& item : statusItems) {
+            std::string value = extractJsonValue(item, "value");
+            if (!value.empty()) {
+                tracker.statuses.push_back(value);
+            }
+        }
+    }
+
+    // Parse scores array
+    std::string scoresJson = extractJsonArray(json, "scores");
+    if (!scoresJson.empty()) {
+        std::vector<std::string> scoreItems = splitJsonArray(scoresJson);
+        for (const auto& item : scoreItems) {
+            // Scores are usually just strings in the array
+            std::string trimmed = item;
+            // Remove quotes if present
+            if (trimmed.size() >= 2 && trimmed.front() == '"' && trimmed.back() == '"') {
+                trimmed = trimmed.substr(1, trimmed.size() - 2);
+            }
+            if (!trimmed.empty()) {
+                tracker.scores.push_back(trimmed);
+            }
+        }
+    }
+
+    return tracker;
+}
+
+TrackRecord SuwayomiClient::parseTrackRecordFromGraphQL(const std::string& json) {
+    TrackRecord record;
+
+    record.id = extractJsonInt(json, "id");
+    record.mangaId = extractJsonInt(json, "mangaId");
+    record.trackerId = extractJsonInt(json, "trackerId");
+    record.remoteId = extractJsonInt64(json, "remoteId");
+    record.remoteUrl = extractJsonValue(json, "remoteUrl");
+    record.title = extractJsonValue(json, "title");
+    record.lastChapterRead = extractJsonFloat(json, "lastChapterRead");
+    record.totalChapters = extractJsonInt(json, "totalChapters");
+    record.score = extractJsonFloat(json, "score");
+    record.status = extractJsonInt(json, "status");
+    record.displayScore = extractJsonValue(json, "displayScore");
+    record.startDate = extractJsonInt64(json, "startDate");
+    record.finishDate = extractJsonInt64(json, "finishDate");
+
+    // Get tracker name from nested tracker object if available
+    std::string trackerObj = extractJsonObject(json, "tracker");
+    if (!trackerObj.empty()) {
+        record.trackerName = extractJsonValue(trackerObj, "name");
+    }
+
+    return record;
+}
+
+TrackSearchResult SuwayomiClient::parseTrackSearchResultFromGraphQL(const std::string& json) {
+    TrackSearchResult result;
+
+    result.remoteId = extractJsonInt64(json, "remoteId");
+    result.title = extractJsonValue(json, "title");
+    result.coverUrl = extractJsonValue(json, "coverUrl");
+    result.summary = extractJsonValue(json, "summary");
+    result.publishingStatus = extractJsonValue(json, "publishingStatus");
+    result.publishingType = extractJsonValue(json, "publishingType");
+    result.startDate = extractJsonValue(json, "startDate");  // String from API
+    result.totalChapters = extractJsonInt(json, "totalChapters");
+
+    return result;
+}
+
+bool SuwayomiClient::fetchTrackersGraphQL(std::vector<Tracker>& trackers) {
+    const char* query = R"(
+        query GetTrackers {
+            trackers {
+                nodes {
+                    id
+                    name
+                    icon
+                    isLoggedIn
+                    isTokenExpired
+                    supportsTrackDeletion
+                    statuses {
+                        value
+                    }
+                    scores
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: fetchTrackers - empty response");
         return false;
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        brls::Logger::error("GraphQL: fetchTrackers - no data in response");
+        return false;
+    }
+
+    std::string trackersObj = extractJsonObject(data, "trackers");
+    if (trackersObj.empty()) {
+        brls::Logger::error("GraphQL: fetchTrackers - no trackers object");
+        return false;
+    }
+
+    std::string nodesJson = extractJsonArray(trackersObj, "nodes");
+    if (nodesJson.empty()) {
+        brls::Logger::debug("GraphQL: fetchTrackers - no tracker nodes (may be empty)");
+        trackers.clear();
+        return true;
     }
 
     trackers.clear();
-    std::vector<std::string> items = splitJsonArray(response.body);
+    std::vector<std::string> items = splitJsonArray(nodesJson);
     for (const auto& item : items) {
-        trackers.push_back(parseTracker(item));
+        trackers.push_back(parseTrackerFromGraphQL(item));
     }
 
+    brls::Logger::info("GraphQL: Fetched {} trackers", trackers.size());
     return true;
 }
 
-bool SuwayomiClient::loginTracker(int trackerId, const std::string& username, const std::string& password) {
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
-
-    std::string url = buildApiUrl("/track/login");
-    std::string body = "{\"trackerId\":" + std::to_string(trackerId) +
-                       ",\"username\":\"" + username + "\"" +
-                       ",\"password\":\"" + password + "\"}";
-
-    vitasuwayomi::HttpResponse response = http.post(url, body);
-    return response.success && response.statusCode == 200;
+bool SuwayomiClient::fetchTrackers(std::vector<Tracker>& trackers) {
+    return fetchTrackersGraphQL(trackers);
 }
 
-bool SuwayomiClient::logoutTracker(int trackerId) {
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
+bool SuwayomiClient::fetchTrackerGraphQL(int trackerId, Tracker& tracker) {
+    const char* query = R"(
+        query GetTracker($id: Int!) {
+            tracker(id: $id) {
+                id
+                name
+                icon
+                isLoggedIn
+                isTokenExpired
+                supportsTrackDeletion
+                statuses {
+                    value
+                }
+                scores
+            }
+        }
+    )";
 
-    std::string url = buildApiUrl("/track/logout");
-    std::string body = "{\"trackerId\":" + std::to_string(trackerId) + "}";
+    std::string variables = "{\"id\":" + std::to_string(trackerId) + "}";
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
 
-    vitasuwayomi::HttpResponse response = http.post(url, body);
-    return response.success && response.statusCode == 200;
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string trackerObj = extractJsonObject(data, "tracker");
+    if (trackerObj.empty()) return false;
+
+    tracker = parseTrackerFromGraphQL(trackerObj);
+    return true;
 }
 
-bool SuwayomiClient::searchTracker(int trackerId, const std::string& query, std::vector<TrackRecord>& results) {
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
+bool SuwayomiClient::fetchTracker(int trackerId, Tracker& tracker) {
+    return fetchTrackerGraphQL(trackerId, tracker);
+}
 
-    std::string url = buildApiUrl("/track/search");
-    std::string body = "{\"trackerId\":" + std::to_string(trackerId) +
-                       ",\"query\":\"" + query + "\"}";
+bool SuwayomiClient::fetchMangaTrackingGraphQL(int mangaId, std::vector<TrackRecord>& records) {
+    const char* query = R"(
+        query GetMangaTracking($mangaId: Int!) {
+            trackRecords(condition: { mangaId: $mangaId }) {
+                nodes {
+                    id
+                    mangaId
+                    trackerId
+                    remoteId
+                    remoteUrl
+                    title
+                    lastChapterRead
+                    totalChapters
+                    score
+                    status
+                    displayScore
+                    startDate
+                    finishDate
+                    tracker {
+                        id
+                        name
+                        icon
+                        isLoggedIn
+                        statuses {
+                            value
+                        }
+                        scores
+                    }
+                }
+            }
+        }
+    )";
 
-    vitasuwayomi::HttpResponse response = http.post(url, body);
-
-    if (!response.success || response.statusCode != 200) {
+    std::string variables = "{\"mangaId\":" + std::to_string(mangaId) + "}";
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: fetchMangaTracking - empty response");
         return false;
     }
 
-    results.clear();
-    std::vector<std::string> items = splitJsonArray(response.body);
-    for (const auto& item : items) {
-        results.push_back(parseTrackRecord(item));
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        brls::Logger::error("GraphQL: fetchMangaTracking - no data");
+        return false;
     }
 
+    std::string trackRecordsObj = extractJsonObject(data, "trackRecords");
+    if (trackRecordsObj.empty()) {
+        records.clear();
+        return true;
+    }
+
+    std::string nodesJson = extractJsonArray(trackRecordsObj, "nodes");
+    if (nodesJson.empty()) {
+        records.clear();
+        return true;
+    }
+
+    records.clear();
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        records.push_back(parseTrackRecordFromGraphQL(item));
+    }
+
+    brls::Logger::info("GraphQL: Fetched {} track records for manga {}", records.size(), mangaId);
     return true;
-}
-
-bool SuwayomiClient::bindTracker(int mangaId, int trackerId, int remoteId) {
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
-
-    std::string url = buildApiUrl("/track/bind");
-    std::string body = "{\"mangaId\":" + std::to_string(mangaId) +
-                       ",\"trackerId\":" + std::to_string(trackerId) +
-                       ",\"remoteId\":" + std::to_string(remoteId) + "}";
-
-    vitasuwayomi::HttpResponse response = http.post(url, body);
-    return response.success && response.statusCode == 200;
-}
-
-bool SuwayomiClient::updateTracking(int mangaId, int trackerId, const TrackRecord& record) {
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
-
-    std::string url = buildApiUrl("/track/update");
-    std::string body = "{\"mangaId\":" + std::to_string(mangaId) +
-                       ",\"trackerId\":" + std::to_string(trackerId) +
-                       ",\"lastChapterRead\":" + std::to_string(record.lastChapterRead) +
-                       ",\"score\":" + std::to_string(record.score) +
-                       ",\"status\":" + std::to_string(record.status) + "}";
-
-    vitasuwayomi::HttpResponse response = http.post(url, body);
-    return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::fetchMangaTracking(int mangaId, std::vector<TrackRecord>& records) {
-    // Note: Tracking info is typically included in manga details
-    records.clear();
+    return fetchMangaTrackingGraphQL(mangaId, records);
+}
+
+bool SuwayomiClient::searchTrackerGraphQL(int trackerId, const std::string& query, std::vector<TrackSearchResult>& results) {
+    const char* gqlQuery = R"(
+        query SearchTracker($trackerId: Int!, $query: String!) {
+            searchTracker(input: { trackerId: $trackerId, query: $query }) {
+                trackSearches {
+                    remoteId
+                    title
+                    coverUrl
+                    summary
+                    publishingStatus
+                    publishingType
+                    startDate
+                    totalChapters
+                }
+            }
+        }
+    )";
+
+    // Escape query string
+    std::string escapedQuery;
+    for (char c : query) {
+        switch (c) {
+            case '"': escapedQuery += "\\\""; break;
+            case '\\': escapedQuery += "\\\\"; break;
+            case '\n': escapedQuery += "\\n"; break;
+            case '\r': escapedQuery += "\\r"; break;
+            case '\t': escapedQuery += "\\t"; break;
+            default: escapedQuery += c; break;
+        }
+    }
+
+    std::string variables = "{\"trackerId\":" + std::to_string(trackerId) +
+                           ",\"query\":\"" + escapedQuery + "\"}";
+
+    std::string response = executeGraphQL(gqlQuery, variables);
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: searchTracker - empty response");
+        return false;
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        brls::Logger::error("GraphQL: searchTracker - no data");
+        return false;
+    }
+
+    std::string searchResult = extractJsonObject(data, "searchTracker");
+    if (searchResult.empty()) {
+        results.clear();
+        return true;
+    }
+
+    std::string searchesJson = extractJsonArray(searchResult, "trackSearches");
+    if (searchesJson.empty()) {
+        results.clear();
+        return true;
+    }
+
+    results.clear();
+    std::vector<std::string> items = splitJsonArray(searchesJson);
+    for (const auto& item : items) {
+        results.push_back(parseTrackSearchResultFromGraphQL(item));
+    }
+
+    brls::Logger::info("GraphQL: Found {} tracker search results", results.size());
     return true;
+}
+
+bool SuwayomiClient::searchTracker(int trackerId, const std::string& query, std::vector<TrackSearchResult>& results) {
+    return searchTrackerGraphQL(trackerId, query, results);
+}
+
+bool SuwayomiClient::bindTrackerGraphQL(int mangaId, int trackerId, int64_t remoteId) {
+    const char* query = R"(
+        mutation BindTracker($mangaId: Int!, $trackerId: Int!, $remoteId: LongString!) {
+            bindTrack(input: { mangaId: $mangaId, trackerId: $trackerId, remoteId: $remoteId }) {
+                trackRecord {
+                    id
+                    mangaId
+                    trackerId
+                    remoteId
+                    title
+                    lastChapterRead
+                    status
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"mangaId\":" + std::to_string(mangaId) +
+                           ",\"trackerId\":" + std::to_string(trackerId) +
+                           ",\"remoteId\":\"" + std::to_string(remoteId) + "\"}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: bindTracker - empty response");
+        return false;
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        // Check for errors
+        std::string errors = extractJsonArray(response, "errors");
+        if (!errors.empty()) {
+            brls::Logger::error("GraphQL: bindTracker - error: {}", errors);
+        }
+        return false;
+    }
+
+    std::string bindResult = extractJsonObject(data, "bindTrack");
+    if (bindResult.empty()) return false;
+
+    brls::Logger::info("GraphQL: Successfully bound tracker {} to manga {}", trackerId, mangaId);
+    return true;
+}
+
+bool SuwayomiClient::bindTracker(int mangaId, int trackerId, int64_t remoteId) {
+    return bindTrackerGraphQL(mangaId, trackerId, remoteId);
+}
+
+// Legacy overload
+bool SuwayomiClient::bindTracker(int mangaId, int trackerId, int remoteId) {
+    return bindTrackerGraphQL(mangaId, trackerId, static_cast<int64_t>(remoteId));
+}
+
+bool SuwayomiClient::unbindTrackerGraphQL(int recordId, bool deleteRemoteTrack) {
+    const char* query = R"(
+        mutation UnbindTracker($recordId: Int!, $deleteRemote: Boolean) {
+            unbindTrack(input: { recordId: $recordId, deleteRemoteTrack: $deleteRemote }) {
+                trackRecord {
+                    id
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"recordId\":" + std::to_string(recordId) +
+                           ",\"deleteRemote\":" + (deleteRemoteTrack ? "true" : "false") + "}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: unbindTracker - empty response");
+        return false;
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    brls::Logger::info("GraphQL: Successfully unbound track record {}", recordId);
+    return true;
+}
+
+bool SuwayomiClient::unbindTracker(int recordId, bool deleteRemoteTrack) {
+    return unbindTrackerGraphQL(recordId, deleteRemoteTrack);
+}
+
+bool SuwayomiClient::updateTrackRecordGraphQL(int recordId, int status, double lastChapterRead,
+                                              const std::string& scoreString, int64_t startDate, int64_t finishDate) {
+    // Build optional parameters
+    std::string optionalParams;
+
+    if (status >= 0) {
+        optionalParams += ", status: " + std::to_string(status);
+    }
+    if (lastChapterRead >= 0) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.1f", lastChapterRead);
+        optionalParams += ", lastChapterRead: " + std::string(buf);
+    }
+    if (!scoreString.empty()) {
+        optionalParams += ", scoreString: \"" + scoreString + "\"";
+    }
+    if (startDate >= 0) {
+        optionalParams += ", startDate: " + std::to_string(startDate);
+    }
+    if (finishDate >= 0) {
+        optionalParams += ", finishDate: " + std::to_string(finishDate);
+    }
+
+    std::string query = R"(
+        mutation UpdateTrack($recordId: Int!) {
+            updateTrack(input: { recordId: $recordId)" + optionalParams + R"( }) {
+                trackRecord {
+                    id
+                    status
+                    lastChapterRead
+                    score
+                    displayScore
+                    startDate
+                    finishDate
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"recordId\":" + std::to_string(recordId) + "}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: updateTrackRecord - empty response");
+        return false;
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        std::string errors = extractJsonArray(response, "errors");
+        if (!errors.empty()) {
+            brls::Logger::error("GraphQL: updateTrackRecord - error: {}", errors);
+        }
+        return false;
+    }
+
+    brls::Logger::info("GraphQL: Successfully updated track record {}", recordId);
+    return true;
+}
+
+bool SuwayomiClient::updateTrackRecord(int recordId, int status, double lastChapterRead,
+                                       const std::string& scoreString, int64_t startDate, int64_t finishDate) {
+    return updateTrackRecordGraphQL(recordId, status, lastChapterRead, scoreString, startDate, finishDate);
+}
+
+// Legacy compatibility method
+bool SuwayomiClient::updateTracking(int mangaId, int trackerId, const TrackRecord& record) {
+    // First fetch the actual record ID for this manga/tracker combination
+    std::vector<TrackRecord> records;
+    if (!fetchMangaTracking(mangaId, records)) {
+        return false;
+    }
+
+    for (const auto& r : records) {
+        if (r.trackerId == trackerId) {
+            return updateTrackRecord(r.id, record.status, record.lastChapterRead,
+                                    record.displayScore, record.startDate, record.finishDate);
+        }
+    }
+    return false;
+}
+
+bool SuwayomiClient::loginTrackerCredentialsGraphQL(int trackerId, const std::string& username, const std::string& password) {
+    const char* query = R"(
+        mutation LoginTracker($trackerId: Int!, $username: String!, $password: String!) {
+            loginTrackerCredentials(input: { trackerId: $trackerId, username: $username, password: $password }) {
+                isLoggedIn
+                tracker {
+                    id
+                    name
+                    isLoggedIn
+                }
+            }
+        }
+    )";
+
+    // Escape credentials
+    std::string escapedUser, escapedPass;
+    for (char c : username) {
+        switch (c) {
+            case '"': escapedUser += "\\\""; break;
+            case '\\': escapedUser += "\\\\"; break;
+            default: escapedUser += c; break;
+        }
+    }
+    for (char c : password) {
+        switch (c) {
+            case '"': escapedPass += "\\\""; break;
+            case '\\': escapedPass += "\\\\"; break;
+            default: escapedPass += c; break;
+        }
+    }
+
+    std::string variables = "{\"trackerId\":" + std::to_string(trackerId) +
+                           ",\"username\":\"" + escapedUser + "\"" +
+                           ",\"password\":\"" + escapedPass + "\"}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: loginTrackerCredentials - empty response");
+        return false;
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        std::string errors = extractJsonArray(response, "errors");
+        if (!errors.empty()) {
+            brls::Logger::error("GraphQL: loginTrackerCredentials - error: {}", errors);
+        }
+        return false;
+    }
+
+    std::string loginResult = extractJsonObject(data, "loginTrackerCredentials");
+    if (loginResult.empty()) return false;
+
+    bool isLoggedIn = extractJsonBool(loginResult, "isLoggedIn");
+    brls::Logger::info("GraphQL: Tracker login result: {}", isLoggedIn ? "success" : "failed");
+    return isLoggedIn;
+}
+
+bool SuwayomiClient::loginTrackerCredentials(int trackerId, const std::string& username, const std::string& password) {
+    return loginTrackerCredentialsGraphQL(trackerId, username, password);
+}
+
+// Legacy compatibility
+bool SuwayomiClient::loginTracker(int trackerId, const std::string& username, const std::string& password) {
+    return loginTrackerCredentials(trackerId, username, password);
+}
+
+bool SuwayomiClient::loginTrackerOAuth(int trackerId, const std::string& callbackUrl, std::string& oauthUrl) {
+    const char* query = R"(
+        mutation LoginTrackerOAuth($trackerId: Int!, $callbackUrl: String!) {
+            loginTrackerOAuth(input: { trackerId: $trackerId, callbackUrl: $callbackUrl }) {
+                isLoggedIn
+                tracker {
+                    id
+                    name
+                    isLoggedIn
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"trackerId\":" + std::to_string(trackerId) +
+                           ",\"callbackUrl\":\"" + callbackUrl + "\"}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    // OAuth typically requires opening a browser, which we can't do on Vita
+    // This method is here for API completeness but may not be usable
+    brls::Logger::warning("OAuth login not supported on this platform");
+    return false;
+}
+
+bool SuwayomiClient::logoutTrackerGraphQL(int trackerId) {
+    const char* query = R"(
+        mutation LogoutTracker($trackerId: Int!) {
+            logoutTracker(input: { trackerId: $trackerId }) {
+                isLoggedIn
+                tracker {
+                    id
+                    name
+                    isLoggedIn
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"trackerId\":" + std::to_string(trackerId) + "}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: logoutTracker - empty response");
+        return false;
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    brls::Logger::info("GraphQL: Successfully logged out from tracker {}", trackerId);
+    return true;
+}
+
+bool SuwayomiClient::logoutTracker(int trackerId) {
+    return logoutTrackerGraphQL(trackerId);
 }
 
 // ============================================================================

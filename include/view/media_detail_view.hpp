@@ -52,12 +52,18 @@ private:
 
     // Tracking
     void showTrackingDialog();
+    void showTrackerSearchDialog(const Tracker& tracker);
+    void showTrackEditDialog(const TrackRecord& record, const Tracker& tracker);
+    void showTrackerLoginDialog(const Tracker& tracker);
+    void loadTrackingData();
+    void updateTrackingButtonText();
     void updateTracking();
 
     Manga m_manga;
     std::vector<Chapter> m_chapters;
     std::vector<Category> m_categories;
     std::vector<TrackRecord> m_trackRecords;
+    std::vector<Tracker> m_trackers;
 
     // Main layout
     brls::ScrollingFrame* m_scrollView = nullptr;

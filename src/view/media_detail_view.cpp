@@ -117,6 +117,21 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         leftPanel->addView(m_libraryButton);
     }
 
+    // Tracking button (for MAL, AniList, etc.)
+    m_trackingButton = new brls::Button();
+    m_trackingButton->setWidth(220);
+    m_trackingButton->setHeight(44);
+    m_trackingButton->setMarginBottom(10);
+    m_trackingButton->setCornerRadius(22);  // Pill-shaped
+    m_trackingButton->setBackgroundColor(nvgRGBA(103, 58, 183, 255));  // Purple for tracking
+    m_trackingButton->setText("Tracking");
+    m_trackingButton->registerClickAction([this](brls::View* view) {
+        showTrackingDialog();
+        return true;
+    });
+    m_trackingButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_trackingButton));
+    leftPanel->addView(m_trackingButton);
+
     this->addView(leftPanel);
 
     // ========== RIGHT PANEL: Info + Chapters (grows to fill) ==========
@@ -369,6 +384,9 @@ void MangaDetailView::loadDetails() {
 
     // Load chapters
     loadChapters();
+
+    // Load tracking data
+    loadTrackingData();
 }
 
 void MangaDetailView::loadCover() {
@@ -1459,11 +1477,382 @@ void MangaDetailView::showCategoryDialog() {
 }
 
 void MangaDetailView::showTrackingDialog() {
-    brls::Application::notify("Tracking not yet implemented");
+    brls::Logger::info("MangaDetailView: Opening tracking dialog for manga {}", m_manga.id);
+
+    // Load tracking data asynchronously
+    int mangaId = m_manga.id;
+    asyncRun([this, mangaId]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        std::vector<Tracker> trackers;
+        std::vector<TrackRecord> records;
+
+        bool trackersOk = client.fetchTrackers(trackers);
+        bool recordsOk = client.fetchMangaTracking(mangaId, records);
+
+        brls::sync([this, trackers, records, trackersOk, recordsOk]() {
+            if (!trackersOk) {
+                brls::Application::notify("Failed to load trackers");
+                return;
+            }
+
+            m_trackers = trackers;
+            m_trackRecords = records;
+
+            // Filter to show only logged-in trackers
+            std::vector<Tracker> loggedInTrackers;
+            for (const auto& t : m_trackers) {
+                if (t.isLoggedIn) {
+                    loggedInTrackers.push_back(t);
+                }
+            }
+
+            if (loggedInTrackers.empty()) {
+                brls::Application::notify("No trackers logged in. Configure in server settings.");
+                return;
+            }
+
+            // Create main tracking dialog
+            brls::Dialog* dialog = new brls::Dialog("Tracking");
+
+            // Add buttons for each logged-in tracker
+            for (const auto& tracker : loggedInTrackers) {
+                // Check if this tracker already has a record for this manga
+                TrackRecord* existingRecord = nullptr;
+                for (auto& r : m_trackRecords) {
+                    if (r.trackerId == tracker.id) {
+                        existingRecord = &r;
+                        break;
+                    }
+                }
+
+                std::string buttonLabel = tracker.name;
+                if (existingRecord) {
+                    // Show current status
+                    if (!existingRecord->title.empty()) {
+                        buttonLabel += " - " + existingRecord->title.substr(0, 20);
+                        if (existingRecord->title.length() > 20) buttonLabel += "...";
+                    }
+                }
+
+                Tracker capturedTracker = tracker;
+                TrackRecord capturedRecord = existingRecord ? *existingRecord : TrackRecord();
+                bool hasRecord = (existingRecord != nullptr);
+
+                dialog->addButton(buttonLabel, [this, dialog, capturedTracker, capturedRecord, hasRecord]() {
+                    dialog->close();
+
+                    brls::sync([this, capturedTracker, capturedRecord, hasRecord]() {
+                        if (hasRecord && capturedRecord.id > 0) {
+                            // Show edit dialog for existing track
+                            showTrackEditDialog(capturedRecord, capturedTracker);
+                        } else {
+                            // Show search dialog to add tracking
+                            showTrackerSearchDialog(capturedTracker);
+                        }
+                    });
+                });
+            }
+
+            dialog->addButton("Cancel", [dialog]() {
+                dialog->close();
+            });
+
+            dialog->open();
+        });
+    });
+}
+
+void MangaDetailView::showTrackerSearchDialog(const Tracker& tracker) {
+    brls::Logger::info("MangaDetailView: Opening search dialog for tracker {}", tracker.name);
+
+    // Use manga title as search query
+    std::string searchQuery = m_manga.title;
+    int trackerId = tracker.id;
+    int mangaId = m_manga.id;
+    std::string trackerName = tracker.name;
+
+    brls::Application::notify("Searching " + trackerName + "...");
+
+    asyncRun([this, trackerId, mangaId, searchQuery, trackerName]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<TrackSearchResult> results;
+
+        if (!client.searchTracker(trackerId, searchQuery, results)) {
+            brls::sync([trackerName]() {
+                brls::Application::notify("Search failed for " + trackerName);
+            });
+            return;
+        }
+
+        brls::sync([this, results, trackerId, mangaId, trackerName]() {
+            if (results.empty()) {
+                brls::Application::notify("No results found on " + trackerName);
+                return;
+            }
+
+            brls::Dialog* dialog = new brls::Dialog("Select from " + trackerName);
+
+            // Show up to 5 results
+            size_t maxResults = std::min(results.size(), size_t(5));
+            for (size_t i = 0; i < maxResults; i++) {
+                const auto& result = results[i];
+                std::string label = result.title;
+                if (label.length() > 35) {
+                    label = label.substr(0, 32) + "...";
+                }
+                if (result.totalChapters > 0) {
+                    label += " (" + std::to_string(result.totalChapters) + " ch)";
+                }
+
+                int64_t remoteId = result.remoteId;
+                dialog->addButton(label, [this, dialog, trackerId, mangaId, remoteId, trackerName]() {
+                    dialog->close();
+
+                    brls::Application::notify("Adding to " + trackerName + "...");
+
+                    asyncRun([this, trackerId, mangaId, remoteId, trackerName]() {
+                        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                        if (client.bindTracker(mangaId, trackerId, remoteId)) {
+                            brls::sync([this, trackerName]() {
+                                brls::Application::notify("Added to " + trackerName);
+                                updateTrackingButtonText();
+                            });
+                        } else {
+                            brls::sync([trackerName]() {
+                                brls::Application::notify("Failed to add to " + trackerName);
+                            });
+                        }
+                    });
+                });
+            }
+
+            dialog->addButton("Cancel", [dialog]() {
+                dialog->close();
+            });
+
+            dialog->open();
+        });
+    });
+}
+
+void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Tracker& tracker) {
+    brls::Logger::info("MangaDetailView: Opening edit dialog for track record {}", record.id);
+
+    brls::Dialog* dialog = new brls::Dialog(tracker.name + ": " + record.title);
+
+    int recordId = record.id;
+    int currentStatus = record.status;
+    double currentChapter = record.lastChapterRead;
+    std::string currentScore = record.displayScore;
+    std::string trackerName = tracker.name;
+
+    // Show current status
+    std::string statusText = "Status: ";
+    if (currentStatus >= 0 && currentStatus < static_cast<int>(tracker.statuses.size())) {
+        statusText += tracker.statuses[currentStatus];
+    } else {
+        statusText += "Unknown";
+    }
+
+    // Update Status button
+    std::vector<std::string> statuses = tracker.statuses;
+    dialog->addButton("Update Status", [this, dialog, recordId, statuses, trackerName]() {
+        dialog->close();
+
+        brls::sync([this, recordId, statuses, trackerName]() {
+            brls::Dialog* statusDialog = new brls::Dialog("Select Status");
+
+            for (size_t i = 0; i < statuses.size() && i < 6; i++) {
+                int statusIdx = static_cast<int>(i);
+                std::string statusName = statuses[i];
+
+                statusDialog->addButton(statusName, [this, statusDialog, recordId, statusIdx, trackerName]() {
+                    statusDialog->close();
+
+                    asyncRun([this, recordId, statusIdx, trackerName]() {
+                        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                        if (client.updateTrackRecord(recordId, statusIdx)) {
+                            brls::sync([trackerName]() {
+                                brls::Application::notify("Status updated on " + trackerName);
+                            });
+                        } else {
+                            brls::sync([]() {
+                                brls::Application::notify("Failed to update status");
+                            });
+                        }
+                    });
+                });
+            }
+
+            statusDialog->addButton("Cancel", [statusDialog]() {
+                statusDialog->close();
+            });
+
+            statusDialog->open();
+        });
+    });
+
+    // Update Chapter button
+    dialog->addButton("Update Chapter", [this, dialog, recordId, currentChapter, trackerName]() {
+        dialog->close();
+
+        brls::sync([this, recordId, currentChapter, trackerName]() {
+            // For simplicity, increment chapter by 1 or set to current read chapter
+            double newChapter = currentChapter + 1.0;
+
+            // Find the latest read chapter from manga
+            double latestRead = 0;
+            for (const auto& ch : m_chapters) {
+                if (ch.read && ch.chapterNumber > latestRead) {
+                    latestRead = ch.chapterNumber;
+                }
+            }
+
+            if (latestRead > currentChapter) {
+                newChapter = latestRead;
+            }
+
+            brls::Application::notify("Updating chapter to " + std::to_string(static_cast<int>(newChapter)) + "...");
+
+            asyncRun([recordId, newChapter, trackerName]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                if (client.updateTrackRecord(recordId, -1, newChapter)) {
+                    brls::sync([newChapter, trackerName]() {
+                        brls::Application::notify("Chapter updated to " + std::to_string(static_cast<int>(newChapter)));
+                    });
+                } else {
+                    brls::sync([]() {
+                        brls::Application::notify("Failed to update chapter");
+                    });
+                }
+            });
+        });
+    });
+
+    // Update Score button
+    std::vector<std::string> scores = tracker.scores;
+    if (!scores.empty()) {
+        dialog->addButton("Update Score", [this, dialog, recordId, scores, trackerName]() {
+            dialog->close();
+
+            brls::sync([this, recordId, scores, trackerName]() {
+                brls::Dialog* scoreDialog = new brls::Dialog("Select Score");
+
+                // Show up to 10 score options
+                size_t maxScores = std::min(scores.size(), size_t(10));
+                for (size_t i = 0; i < maxScores; i++) {
+                    std::string scoreValue = scores[i];
+
+                    scoreDialog->addButton(scoreValue, [this, scoreDialog, recordId, scoreValue, trackerName]() {
+                        scoreDialog->close();
+
+                        asyncRun([recordId, scoreValue, trackerName]() {
+                            SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                            if (client.updateTrackRecord(recordId, -1, -1, scoreValue)) {
+                                brls::sync([trackerName]() {
+                                    brls::Application::notify("Score updated on " + trackerName);
+                                });
+                            } else {
+                                brls::sync([]() {
+                                    brls::Application::notify("Failed to update score");
+                                });
+                            }
+                        });
+                    });
+                }
+
+                scoreDialog->addButton("Cancel", [scoreDialog]() {
+                    scoreDialog->close();
+                });
+
+                scoreDialog->open();
+            });
+        });
+    }
+
+    // Remove tracking button
+    dialog->addButton("Remove Tracking", [this, dialog, recordId, trackerName]() {
+        dialog->close();
+
+        brls::sync([this, recordId, trackerName]() {
+            brls::Dialog* confirmDialog = new brls::Dialog("Remove from " + trackerName + "?");
+
+            confirmDialog->addButton("Remove", [this, confirmDialog, recordId, trackerName]() {
+                confirmDialog->close();
+
+                asyncRun([this, recordId, trackerName]() {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                    if (client.unbindTracker(recordId, false)) {
+                        brls::sync([this, trackerName]() {
+                            brls::Application::notify("Removed from " + trackerName);
+                            updateTrackingButtonText();
+                        });
+                    } else {
+                        brls::sync([]() {
+                            brls::Application::notify("Failed to remove tracking");
+                        });
+                    }
+                });
+            });
+
+            confirmDialog->addButton("Cancel", [confirmDialog]() {
+                confirmDialog->close();
+            });
+
+            confirmDialog->open();
+        });
+    });
+
+    dialog->addButton("Close", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->open();
+}
+
+void MangaDetailView::showTrackerLoginDialog(const Tracker& tracker) {
+    // OAuth-based trackers (MAL, AniList) require browser login
+    // which isn't practical on PS Vita. Users should configure
+    // tracking in the Suwayomi server's web interface.
+    brls::Application::notify("Configure " + tracker.name + " login in server settings");
+}
+
+void MangaDetailView::loadTrackingData() {
+    int mangaId = m_manga.id;
+    asyncRun([this, mangaId]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<TrackRecord> records;
+
+        if (client.fetchMangaTracking(mangaId, records)) {
+            brls::sync([this, records]() {
+                m_trackRecords = records;
+                updateTrackingButtonText();
+            });
+        }
+    });
+}
+
+void MangaDetailView::updateTrackingButtonText() {
+    if (!m_trackingButton) return;
+
+    // Update button text based on active track records
+    if (m_trackRecords.empty()) {
+        m_trackingButton->setText("Tracking");
+    } else if (m_trackRecords.size() == 1) {
+        m_trackingButton->setText("Tracking (1)");
+    } else {
+        m_trackingButton->setText("Tracking (" + std::to_string(m_trackRecords.size()) + ")");
+    }
 }
 
 void MangaDetailView::updateTracking() {
-    // TODO: Implement tracking update
+    loadTrackingData();
 }
 
 void MangaDetailView::updateSortIcon() {
