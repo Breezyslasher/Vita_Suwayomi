@@ -1210,6 +1210,10 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
         });
         settingsBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsBtn));
 
+        // Set up LEFT/RIGHT navigation between container and settings button
+        container->setCustomNavigationRoute(brls::FocusDirection::RIGHT, settingsBtn);
+        settingsBtn->setCustomNavigationRoute(brls::FocusDirection::LEFT, container);
+
         rightBox->addView(settingsBtn);
     }
 
@@ -1737,6 +1741,7 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
             auto* dialog = new brls::Dialog(contentBox);
 
             // Create source selection list
+            brls::Box* lastSourceBox = nullptr;
             for (const auto& src : configurableSources) {
                 auto* sourceBox = new brls::Box();
                 sourceBox->setAxis(brls::Axis::ROW);
@@ -1769,9 +1774,16 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
                 sourceBox->addGestureRecognizer(new brls::TapGestureRecognizer(sourceBox));
 
                 contentBox->addView(sourceBox);
+                lastSourceBox = sourceBox;
             }
 
             dialog->addButton("Cancel", []() {});
+
+            // Set up navigation from last item to Cancel button
+            if (lastSourceBox) {
+                lastSourceBox->setCustomNavigationRoute(brls::FocusDirection::DOWN, "brls/dialog/button1");
+            }
+
             dialog->open();
         });
     });
@@ -1831,6 +1843,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
             // Add each preference
             int position = 0;
             int addedCount = 0;
+            brls::Box* lastPrefBox = nullptr;
             for (const auto& pref : preferences) {
                 brls::Logger::debug("Preference[{}]: type={}, title='{}', visible={}, enabled={}",
                     position, static_cast<int>(pref.type), pref.title, pref.visible, pref.enabled);
@@ -1985,6 +1998,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                             // Use Dialog(Box*) constructor to properly add content to container
                             auto* listDialog = new brls::Dialog(listBox);
 
+                            brls::Box* lastEntryBox = nullptr;
                             for (size_t i = 0; i < pref.entries.size() && i < pref.entryValues.size(); i++) {
                                 auto* entryBox = new brls::Box();
                                 entryBox->setFocusable(true);
@@ -2026,9 +2040,16 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                                 entryBox->addGestureRecognizer(new brls::TapGestureRecognizer(entryBox));
 
                                 listBox->addView(entryBox);
+                                lastEntryBox = entryBox;
                             }
 
                             listDialog->addButton("Cancel", []() {});
+
+                            // Set up navigation from last item to Cancel button
+                            if (lastEntryBox) {
+                                lastEntryBox->setCustomNavigationRoute(brls::FocusDirection::DOWN, "brls/dialog/button1");
+                            }
+
                             listDialog->open();
                             return true;
                         });
@@ -2061,6 +2082,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                             // Use Dialog(Box*) constructor to properly add content to container
                             auto* multiDialog = new brls::Dialog(multiBox);
 
+                            brls::Box* lastEntryBox = nullptr;
                             for (size_t i = 0; i < pref.entries.size() && i < pref.entryValues.size(); i++) {
                                 auto* entryBox = new brls::Box();
                                 entryBox->setFocusable(true);
@@ -2098,6 +2120,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                                 entryBox->addGestureRecognizer(new brls::TapGestureRecognizer(entryBox));
 
                                 multiBox->addView(entryBox);
+                                lastEntryBox = entryBox;
                             }
 
                             multiDialog->addButton("Save", [this, multiDialog, currentPosition, sourceId, selectedCopy, source]() {
@@ -2120,6 +2143,12 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                                 });
                             });
                             multiDialog->addButton("Cancel", []() {});
+
+                            // Set up navigation from last item to Save button
+                            if (lastEntryBox) {
+                                lastEntryBox->setCustomNavigationRoute(brls::FocusDirection::DOWN, "brls/dialog/button1");
+                            }
+
                             multiDialog->open();
                             return true;
                         });
@@ -2129,6 +2158,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 
                 prefBox->addGestureRecognizer(new brls::TapGestureRecognizer(prefBox));
                 contentBox->addView(prefBox);
+                lastPrefBox = prefBox;
                 addedCount++;
                 position++;
             }
@@ -2140,6 +2170,12 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
             // Create dialog with scrollFrame as content view (not addView which adds to wrong parent)
             auto* dialog = new brls::Dialog(scrollFrame);
             dialog->addButton("Close", []() {});
+
+            // Set up navigation from last item to Close button
+            if (lastPrefBox) {
+                lastPrefBox->setCustomNavigationRoute(brls::FocusDirection::DOWN, "brls/dialog/button1");
+            }
+
             dialog->open();
         });
     });
