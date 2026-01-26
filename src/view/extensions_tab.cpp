@@ -1167,7 +1167,37 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
     leftBox->addView(infoBox);
     container->addView(leftBox);
 
-    // Right side: status indicator label (no button, whole row is clickable)
+    // Right side box to hold settings icon and status label
+    auto* rightBox = new brls::Box();
+    rightBox->setAxis(brls::Axis::ROW);
+    rightBox->setAlignItems(brls::AlignItems::CENTER);
+
+    // Settings icon for installed extensions (shown when source is configurable)
+    if (ext.installed) {
+        auto* settingsBtn = new brls::Box();
+        settingsBtn->setFocusable(true);
+        settingsBtn->setPadding(6, 6, 6, 6);
+        settingsBtn->setCornerRadius(4);
+        settingsBtn->setMarginRight(8);
+
+        auto* settingsIcon = new brls::Image();
+        settingsIcon->setSize(brls::Size(20, 20));
+        settingsIcon->setImageFromFile("app0:resources/icons/options.png");
+        settingsBtn->addView(settingsIcon);
+
+        // Show settings dialog when clicked
+        settingsBtn->registerClickAction([this, ext](brls::View*) {
+            brls::sync([this, ext]() {
+                showSourceSettings(ext);
+            });
+            return true;
+        });
+        settingsBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsBtn));
+
+        rightBox->addView(settingsBtn);
+    }
+
+    // Status indicator label
     auto* statusLabel = new brls::Label();
     statusLabel->setFontSize(11);
     statusLabel->setMarginLeft(8);
@@ -1197,7 +1227,8 @@ brls::Box* ExtensionsTab::createExtensionItem(const Extension& ext) {
         });
     }
 
-    container->addView(statusLabel);
+    rightBox->addView(statusLabel);
+    container->addView(rightBox);
 
     // Add touch gesture support
     container->addGestureRecognizer(new brls::TapGestureRecognizer(container));
@@ -1572,6 +1603,427 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
             } else {
                 brls::Application::notify("Failed to uninstall: " + ext.name);
             }
+        });
+    });
+}
+
+void ExtensionsTab::showSourceSettings(const Extension& ext) {
+    brls::Logger::info("Opening settings for extension: {}", ext.name);
+    brls::Application::notify("Loading settings...");
+
+    brls::async([this, ext]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Source> sources;
+
+        bool success = client.fetchSourcesForExtension(ext.pkgName, sources);
+
+        brls::sync([this, success, ext, sources]() {
+            if (!success || sources.empty()) {
+                brls::Application::notify("No configurable sources found");
+                return;
+            }
+
+            // Filter to only configurable sources
+            std::vector<Source> configurableSources;
+            for (const auto& src : sources) {
+                if (src.isConfigurable) {
+                    configurableSources.push_back(src);
+                }
+            }
+
+            if (configurableSources.empty()) {
+                brls::Application::notify("No settings available for this extension");
+                return;
+            }
+
+            // If only one configurable source, open it directly
+            if (configurableSources.size() == 1) {
+                showSourcePreferencesDialog(configurableSources[0]);
+                return;
+            }
+
+            // Multiple sources - show selection dialog
+            auto* dialog = new brls::Dialog("Select Source");
+
+            auto* contentBox = new brls::Box();
+            contentBox->setAxis(brls::Axis::COLUMN);
+            contentBox->setPadding(10, 20, 10, 20);
+
+            auto* titleLabel = new brls::Label();
+            titleLabel->setText(ext.name + " - Select Source");
+            titleLabel->setFontSize(18);
+            titleLabel->setMarginBottom(15);
+            contentBox->addView(titleLabel);
+
+            // Create source selection list
+            for (const auto& src : configurableSources) {
+                auto* sourceBox = new brls::Box();
+                sourceBox->setAxis(brls::Axis::ROW);
+                sourceBox->setAlignItems(brls::AlignItems::CENTER);
+                sourceBox->setFocusable(true);
+                sourceBox->setPadding(10, 15, 10, 15);
+                sourceBox->setMarginBottom(5);
+                sourceBox->setCornerRadius(4);
+                sourceBox->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+
+                auto* sourceLabel = new brls::Label();
+                sourceLabel->setText(src.name + " (" + getLanguageDisplayName(src.lang) + ")");
+                sourceLabel->setFontSize(14);
+                sourceLabel->setGrow(1.0f);
+                sourceBox->addView(sourceLabel);
+
+                auto* arrowLabel = new brls::Label();
+                arrowLabel->setText(">");
+                arrowLabel->setFontSize(14);
+                arrowLabel->setTextColor(nvgRGB(150, 150, 150));
+                sourceBox->addView(arrowLabel);
+
+                sourceBox->registerClickAction([this, src, dialog](brls::View*) {
+                    dialog->dismiss();
+                    brls::sync([this, src]() {
+                        showSourcePreferencesDialog(src);
+                    });
+                    return true;
+                });
+                sourceBox->addGestureRecognizer(new brls::TapGestureRecognizer(sourceBox));
+
+                contentBox->addView(sourceBox);
+            }
+
+            dialog->addView(contentBox);
+            dialog->addButton("Cancel", []() {});
+            dialog->open();
+        });
+    });
+}
+
+void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
+    brls::Logger::info("Opening preferences for source: {} (id: {})", source.name, source.id);
+
+    brls::async([this, source]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<SourcePreference> preferences;
+
+        bool success = client.fetchSourcePreferences(source.id, preferences);
+
+        brls::sync([this, success, source, preferences]() {
+            if (!success) {
+                brls::Application::notify("Failed to load preferences");
+                return;
+            }
+
+            if (preferences.empty()) {
+                brls::Application::notify("No preferences available");
+                return;
+            }
+
+            // Create preferences dialog
+            auto* dialog = new brls::Dialog("Source Settings");
+
+            auto* scrollFrame = new brls::ScrollingFrame();
+            scrollFrame->setMinHeight(300);
+            scrollFrame->setMaxHeight(450);
+
+            auto* contentBox = new brls::Box();
+            contentBox->setAxis(brls::Axis::COLUMN);
+            contentBox->setPadding(10, 20, 10, 20);
+
+            auto* titleLabel = new brls::Label();
+            titleLabel->setText(source.name + " Settings");
+            titleLabel->setFontSize(18);
+            titleLabel->setMarginBottom(15);
+            contentBox->addView(titleLabel);
+
+            // Add each preference
+            int position = 0;
+            for (const auto& pref : preferences) {
+                if (!pref.visible) {
+                    position++;
+                    continue;
+                }
+
+                auto* prefBox = new brls::Box();
+                prefBox->setAxis(brls::Axis::ROW);
+                prefBox->setAlignItems(brls::AlignItems::CENTER);
+                prefBox->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+                prefBox->setFocusable(true);
+                prefBox->setPadding(10, 15, 10, 15);
+                prefBox->setMarginBottom(5);
+                prefBox->setCornerRadius(4);
+                prefBox->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
+
+                // Left side: title and summary
+                auto* textBox = new brls::Box();
+                textBox->setAxis(brls::Axis::COLUMN);
+                textBox->setGrow(1.0f);
+                textBox->setShrink(1.0f);
+
+                auto* titleLbl = new brls::Label();
+                titleLbl->setText(pref.title);
+                titleLbl->setFontSize(14);
+                textBox->addView(titleLbl);
+
+                if (!pref.summary.empty()) {
+                    auto* summaryLbl = new brls::Label();
+                    summaryLbl->setText(pref.summary);
+                    summaryLbl->setFontSize(10);
+                    summaryLbl->setTextColor(nvgRGB(150, 150, 150));
+                    textBox->addView(summaryLbl);
+                }
+
+                prefBox->addView(textBox);
+
+                // Right side: value/control based on type
+                int currentPosition = position;
+                int64_t sourceId = source.id;
+
+                switch (pref.type) {
+                    case SourcePreferenceType::SWITCH:
+                    case SourcePreferenceType::CHECKBOX: {
+                        auto* valueLabel = new brls::Label();
+                        valueLabel->setText(pref.currentValue ? "ON" : "OFF");
+                        valueLabel->setFontSize(12);
+                        valueLabel->setTextColor(pref.currentValue ? nvgRGB(0, 200, 150) : nvgRGB(150, 150, 150));
+                        prefBox->addView(valueLabel);
+
+                        // Toggle on click
+                        prefBox->registerClickAction([this, currentPosition, sourceId, pref, source](brls::View*) {
+                            SourcePreferenceChange change;
+                            change.position = currentPosition;
+                            if (pref.type == SourcePreferenceType::SWITCH) {
+                                change.hasSwitchState = true;
+                                change.switchState = !pref.currentValue;
+                            } else {
+                                change.hasCheckBoxState = true;
+                                change.checkBoxState = !pref.currentValue;
+                            }
+
+                            brls::async([this, sourceId, change, source]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                bool success = client.updateSourcePreference(sourceId, change);
+                                brls::sync([this, success, source]() {
+                                    if (success) {
+                                        brls::Application::notify("Setting updated");
+                                        // Refresh dialog
+                                        showSourcePreferencesDialog(source);
+                                    } else {
+                                        brls::Application::notify("Failed to update setting");
+                                    }
+                                });
+                            });
+                            return true;
+                        });
+                        break;
+                    }
+                    case SourcePreferenceType::EDIT_TEXT: {
+                        auto* valueLabel = new brls::Label();
+                        std::string displayText = pref.currentText.empty() ? "(empty)" : pref.currentText;
+                        if (displayText.length() > 20) {
+                            displayText = displayText.substr(0, 17) + "...";
+                        }
+                        valueLabel->setText(displayText);
+                        valueLabel->setFontSize(12);
+                        valueLabel->setTextColor(nvgRGB(150, 200, 255));
+                        prefBox->addView(valueLabel);
+
+                        // Open IME on click
+                        prefBox->registerClickAction([this, currentPosition, sourceId, pref, source](brls::View*) {
+                            std::string dialogTitle = pref.dialogTitle.empty() ? pref.title : pref.dialogTitle;
+                            brls::Application::getImeManager()->openForText([this, currentPosition, sourceId, source](std::string text) {
+                                SourcePreferenceChange change;
+                                change.position = currentPosition;
+                                change.hasEditTextState = true;
+                                change.editTextState = text;
+
+                                brls::async([this, sourceId, change, source]() {
+                                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                                    bool success = client.updateSourcePreference(sourceId, change);
+                                    brls::sync([this, success, source]() {
+                                        if (success) {
+                                            brls::Application::notify("Setting updated");
+                                            showSourcePreferencesDialog(source);
+                                        } else {
+                                            brls::Application::notify("Failed to update setting");
+                                        }
+                                    });
+                                });
+                            }, dialogTitle, pref.currentText, 256, "");
+                            return true;
+                        });
+                        break;
+                    }
+                    case SourcePreferenceType::LIST: {
+                        // Find current entry name
+                        std::string currentEntry = pref.selectedValue;
+                        for (size_t i = 0; i < pref.entryValues.size(); i++) {
+                            if (pref.entryValues[i] == pref.selectedValue && i < pref.entries.size()) {
+                                currentEntry = pref.entries[i];
+                                break;
+                            }
+                        }
+
+                        auto* valueLabel = new brls::Label();
+                        if (currentEntry.length() > 20) {
+                            currentEntry = currentEntry.substr(0, 17) + "...";
+                        }
+                        valueLabel->setText(currentEntry);
+                        valueLabel->setFontSize(12);
+                        valueLabel->setTextColor(nvgRGB(255, 200, 100));
+                        prefBox->addView(valueLabel);
+
+                        // Open selection dialog on click
+                        prefBox->registerClickAction([this, currentPosition, sourceId, pref, source](brls::View*) {
+                            auto* listDialog = new brls::Dialog(pref.title);
+
+                            auto* listBox = new brls::Box();
+                            listBox->setAxis(brls::Axis::COLUMN);
+                            listBox->setPadding(10, 20, 10, 20);
+
+                            for (size_t i = 0; i < pref.entries.size() && i < pref.entryValues.size(); i++) {
+                                auto* entryBox = new brls::Box();
+                                entryBox->setFocusable(true);
+                                entryBox->setPadding(10, 15, 10, 15);
+                                entryBox->setMarginBottom(3);
+                                entryBox->setCornerRadius(4);
+
+                                bool isSelected = (pref.entryValues[i] == pref.selectedValue);
+                                entryBox->setBackgroundColor(isSelected ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(60, 60, 60, 200));
+
+                                auto* entryLabel = new brls::Label();
+                                entryLabel->setText(pref.entries[i]);
+                                entryLabel->setFontSize(14);
+                                entryBox->addView(entryLabel);
+
+                                std::string entryValue = pref.entryValues[i];
+                                entryBox->registerClickAction([this, listDialog, currentPosition, sourceId, entryValue, source](brls::View*) {
+                                    listDialog->dismiss();
+
+                                    SourcePreferenceChange change;
+                                    change.position = currentPosition;
+                                    change.hasListState = true;
+                                    change.listState = entryValue;
+
+                                    brls::async([this, sourceId, change, source]() {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                        bool success = client.updateSourcePreference(sourceId, change);
+                                        brls::sync([this, success, source]() {
+                                            if (success) {
+                                                brls::Application::notify("Setting updated");
+                                                showSourcePreferencesDialog(source);
+                                            } else {
+                                                brls::Application::notify("Failed to update setting");
+                                            }
+                                        });
+                                    });
+                                    return true;
+                                });
+                                entryBox->addGestureRecognizer(new brls::TapGestureRecognizer(entryBox));
+
+                                listBox->addView(entryBox);
+                            }
+
+                            listDialog->addView(listBox);
+                            listDialog->addButton("Cancel", []() {});
+                            listDialog->open();
+                            return true;
+                        });
+                        break;
+                    }
+                    case SourcePreferenceType::MULTI_SELECT_LIST: {
+                        auto* valueLabel = new brls::Label();
+                        std::string selectedStr = std::to_string(pref.selectedValues.size()) + " selected";
+                        valueLabel->setText(selectedStr);
+                        valueLabel->setFontSize(12);
+                        valueLabel->setTextColor(nvgRGB(200, 150, 255));
+                        prefBox->addView(valueLabel);
+
+                        // Open multi-select dialog on click
+                        prefBox->registerClickAction([this, currentPosition, sourceId, pref, source](brls::View*) {
+                            // Create a shared copy of selected values (shared_ptr for safe lambda capture)
+                            auto selectedCopy = std::make_shared<std::vector<std::string>>(pref.selectedValues);
+
+                            auto* multiDialog = new brls::Dialog(pref.title);
+
+                            auto* multiBox = new brls::Box();
+                            multiBox->setAxis(brls::Axis::COLUMN);
+                            multiBox->setPadding(10, 20, 10, 20);
+
+                            for (size_t i = 0; i < pref.entries.size() && i < pref.entryValues.size(); i++) {
+                                auto* entryBox = new brls::Box();
+                                entryBox->setFocusable(true);
+                                entryBox->setPadding(10, 15, 10, 15);
+                                entryBox->setMarginBottom(3);
+                                entryBox->setCornerRadius(4);
+
+                                bool isSelected = std::find(selectedCopy->begin(), selectedCopy->end(), pref.entryValues[i]) != selectedCopy->end();
+                                entryBox->setBackgroundColor(isSelected ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(60, 60, 60, 200));
+
+                                auto* checkLabel = new brls::Label();
+                                checkLabel->setText(isSelected ? "[X] " : "[ ] ");
+                                checkLabel->setFontSize(14);
+                                entryBox->addView(checkLabel);
+
+                                auto* entryLabel = new brls::Label();
+                                entryLabel->setText(pref.entries[i]);
+                                entryLabel->setFontSize(14);
+                                entryBox->addView(entryLabel);
+
+                                std::string entryValue = pref.entryValues[i];
+                                entryBox->registerClickAction([entryBox, checkLabel, entryValue, selectedCopy](brls::View*) {
+                                    auto it = std::find(selectedCopy->begin(), selectedCopy->end(), entryValue);
+                                    if (it != selectedCopy->end()) {
+                                        selectedCopy->erase(it);
+                                        entryBox->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+                                        checkLabel->setText("[ ] ");
+                                    } else {
+                                        selectedCopy->push_back(entryValue);
+                                        entryBox->setBackgroundColor(nvgRGBA(0, 100, 80, 200));
+                                        checkLabel->setText("[X] ");
+                                    }
+                                    return true;
+                                });
+                                entryBox->addGestureRecognizer(new brls::TapGestureRecognizer(entryBox));
+
+                                multiBox->addView(entryBox);
+                            }
+
+                            multiDialog->addView(multiBox);
+                            multiDialog->addButton("Save", [this, multiDialog, currentPosition, sourceId, selectedCopy, source]() {
+                                SourcePreferenceChange change;
+                                change.position = currentPosition;
+                                change.hasMultiSelectState = true;
+                                change.multiSelectState = *selectedCopy;
+
+                                brls::async([this, sourceId, change, source]() {
+                                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                                    bool success = client.updateSourcePreference(sourceId, change);
+                                    brls::sync([this, success, source]() {
+                                        if (success) {
+                                            brls::Application::notify("Setting updated");
+                                            showSourcePreferencesDialog(source);
+                                        } else {
+                                            brls::Application::notify("Failed to update setting");
+                                        }
+                                    });
+                                });
+                            });
+                            multiDialog->addButton("Cancel", []() {});
+                            multiDialog->open();
+                            return true;
+                        });
+                        break;
+                    }
+                }
+
+                prefBox->addGestureRecognizer(new brls::TapGestureRecognizer(prefBox));
+                contentBox->addView(prefBox);
+                position++;
+            }
+
+            scrollFrame->setContentView(contentBox);
+            dialog->addView(scrollFrame);
+            dialog->addButton("Close", []() {});
+            dialog->open();
         });
     });
 }

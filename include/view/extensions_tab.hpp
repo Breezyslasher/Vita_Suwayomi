@@ -44,6 +44,8 @@ private:
     void installExtension(const Extension& ext);
     void updateExtension(const Extension& ext);
     void uninstallExtension(const Extension& ext);
+    void showSourceSettings(const Extension& ext);
+    void showSourcePreferencesDialog(const Source& source);
     void showError(const std::string& message);
     void showLoading(const std::string& message);
     std::vector<Extension> getFilteredExtensions(const std::vector<Extension>& extensions, bool forceLanguageFilter = false);

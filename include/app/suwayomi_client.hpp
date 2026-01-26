@@ -290,6 +290,64 @@ struct Tracker {
     std::vector<std::string> scoreFormat;
 };
 
+// Source preference types (matches Suwayomi preference types)
+enum class SourcePreferenceType {
+    SWITCH,
+    CHECKBOX,
+    EDIT_TEXT,
+    LIST,
+    MULTI_SELECT_LIST
+};
+
+// Source preference (for source settings/configuration)
+struct SourcePreference {
+    SourcePreferenceType type = SourcePreferenceType::SWITCH;
+    std::string key;
+    std::string title;
+    std::string summary;
+    bool visible = true;
+    bool enabled = true;
+
+    // For Switch/CheckBox preferences
+    bool currentValue = false;
+    bool defaultValue = false;
+
+    // For EditText preferences
+    std::string currentText;
+    std::string defaultText;
+    std::string dialogTitle;
+    std::string dialogMessage;
+
+    // For List preferences (single select)
+    std::vector<std::string> entries;      // Display names
+    std::vector<std::string> entryValues;  // Actual values
+    std::string selectedValue;
+    std::string defaultListValue;
+
+    // For MultiSelectList preferences
+    std::vector<std::string> selectedValues;
+    std::vector<std::string> defaultMultiValues;
+};
+
+// Source preference change (for updating preferences)
+struct SourcePreferenceChange {
+    int position = 0;  // Position in preferences list
+
+    // Only one of these should be set based on preference type
+    bool switchState = false;
+    bool checkBoxState = false;
+    std::string editTextState;
+    std::string listState;
+    std::vector<std::string> multiSelectState;
+
+    // Which field is set
+    bool hasSwitchState = false;
+    bool hasCheckBoxState = false;
+    bool hasEditTextState = false;
+    bool hasListState = false;
+    bool hasMultiSelectState = false;
+};
+
 /**
  * Suwayomi Server API Client singleton
  */
@@ -316,6 +374,17 @@ public:
     bool fetchSource(int64_t sourceId, Source& source);
     bool fetchSourceFilters(int64_t sourceId, std::vector<SourceFilter>& filters);
     bool setSourceFilters(int64_t sourceId, const std::vector<SourceFilter>& filters);
+
+    // Source Preferences (for configurable sources)
+    bool fetchSourcePreferences(int64_t sourceId, std::vector<SourcePreference>& preferences);
+    bool updateSourcePreference(int64_t sourceId, const SourcePreferenceChange& change);
+
+    // Source Metadata
+    bool setSourceMeta(int64_t sourceId, const std::string& key, const std::string& value);
+    bool deleteSourceMeta(int64_t sourceId, const std::string& key);
+
+    // Get sources for an extension (by package name)
+    bool fetchSourcesForExtension(const std::string& pkgName, std::vector<Source>& sources);
 
     // Source Browsing
     bool fetchPopularManga(int64_t sourceId, int page, std::vector<Manga>& manga, bool& hasNextPage);
@@ -477,6 +546,16 @@ private:
 
     // Single source GraphQL
     bool fetchSourceGraphQL(int64_t sourceId, Source& source);
+
+    // Source Preferences GraphQL
+    bool fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector<SourcePreference>& preferences);
+    bool updateSourcePreferenceGraphQL(int64_t sourceId, const SourcePreferenceChange& change);
+    bool setSourceMetaGraphQL(int64_t sourceId, const std::string& key, const std::string& value);
+    bool deleteSourceMetaGraphQL(int64_t sourceId, const std::string& key);
+    bool fetchSourcesForExtensionGraphQL(const std::string& pkgName, std::vector<Source>& sources);
+
+    // Parse source preference from GraphQL
+    SourcePreference parseSourcePreferenceFromGraphQL(const std::string& json);
 
     // Parse extension from GraphQL
     Extension parseExtensionFromGraphQL(const std::string& json);
