@@ -1791,12 +1791,28 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 
         brls::sync([this, success, source, preferences]() {
             if (!success) {
+                brls::Logger::error("Failed to load preferences for source {}", source.name);
                 brls::Application::notify("Failed to load preferences");
                 return;
             }
 
+            // Count visible preferences
+            int visibleCount = 0;
+            for (const auto& pref : preferences) {
+                if (pref.visible) visibleCount++;
+            }
+            brls::Logger::info("Loaded {} preferences ({} visible) for source {}",
+                              preferences.size(), visibleCount, source.name);
+
             if (preferences.empty()) {
                 brls::Application::notify("No preferences available");
+                return;
+            }
+
+            // If we have preferences but none are visible, show a message
+            if (visibleCount == 0) {
+                brls::Logger::warning("All {} preferences are marked as not visible", preferences.size());
+                brls::Application::notify("No visible preferences");
                 return;
             }
 
@@ -1819,7 +1835,11 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 
             // Add each preference
             int position = 0;
+            int addedCount = 0;
             for (const auto& pref : preferences) {
+                brls::Logger::debug("Preference[{}]: type={}, title='{}', visible={}, enabled={}",
+                    position, static_cast<int>(pref.type), pref.title, pref.visible, pref.enabled);
+
                 if (!pref.visible) {
                     position++;
                     continue;
@@ -2100,8 +2120,11 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 
                 prefBox->addGestureRecognizer(new brls::TapGestureRecognizer(prefBox));
                 contentBox->addView(prefBox);
+                addedCount++;
                 position++;
             }
+
+            brls::Logger::info("Added {} preference UI elements to dialog", addedCount);
 
             scrollFrame->setContentView(contentBox);
             dialog->addView(scrollFrame);

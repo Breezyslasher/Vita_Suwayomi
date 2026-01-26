@@ -3682,6 +3682,8 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
 
     // Determine type from __typename
     std::string typeName = extractJsonValue(json, "__typename");
+    brls::Logger::info("Parsing preference with __typename: '{}'", typeName);
+
     bool knownType = true;
     if (typeName == "SwitchPreference") {
         pref.type = SourcePreferenceType::SWITCH;
@@ -3696,7 +3698,7 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
     } else {
         // Unknown preference type - mark as not visible so it's skipped
         knownType = false;
-        brls::Logger::debug("Skipping unknown preference type: {}", typeName);
+        brls::Logger::warning("Unknown preference type: '{}', JSON snippet: {}", typeName, json.substr(0, std::min(json.size(), (size_t)200)));
     }
 
     // Common fields
@@ -3704,9 +3706,13 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
     pref.title = extractJsonValue(json, "title");
     pref.summary = extractJsonValue(json, "summary");
 
+    brls::Logger::debug("  key='{}', title='{}', knownType={}", pref.key, pref.title, knownType);
+
     // Only override visible/enabled if the field is present in JSON
     // (unknown types won't have these fields in their fragment)
     std::string visibleStr = extractJsonValue(json, "visible");
+    brls::Logger::debug("  visibleStr='{}' (empty={})", visibleStr, visibleStr.empty());
+
     if (!visibleStr.empty()) {
         pref.visible = (visibleStr == "true" || visibleStr == "1");
     } else if (!knownType) {
@@ -3714,6 +3720,8 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
         pref.visible = false;
     }
     // else: keep default visible = true
+
+    brls::Logger::debug("  Final visible={}", pref.visible);
 
     std::string enabledStr = extractJsonValue(json, "enabled");
     if (!enabledStr.empty()) {
@@ -3811,28 +3819,51 @@ bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector
 
     std::string variables = "{\"id\":\"" + std::to_string(sourceId) + "\"}";
 
+    brls::Logger::info("Fetching source preferences for sourceId: {}", sourceId);
+
     std::string response = executeGraphQL(query, variables);
-    if (response.empty()) return false;
+    if (response.empty()) {
+        brls::Logger::error("GraphQL response is empty for source preferences");
+        return false;
+    }
+
+    brls::Logger::debug("GraphQL response length: {} chars", response.size());
 
     std::string data = extractJsonObject(response, "data");
-    if (data.empty()) return false;
+    if (data.empty()) {
+        brls::Logger::error("No 'data' in GraphQL response. Response: {}", response.substr(0, std::min(response.size(), (size_t)500)));
+        return false;
+    }
 
     std::string sourceJson = extractJsonObject(data, "source");
-    if (sourceJson.empty()) return false;
+    if (sourceJson.empty()) {
+        brls::Logger::error("No 'source' in data. Data: {}", data.substr(0, std::min(data.size(), (size_t)500)));
+        return false;
+    }
 
     std::string prefsJson = extractJsonArray(sourceJson, "preferences");
     if (prefsJson.empty()) {
+        brls::Logger::info("No preferences array found or empty for source");
         preferences.clear();
         return true;  // Source might not have preferences
     }
 
+    brls::Logger::info("Preferences JSON length: {} chars", prefsJson.size());
+
     preferences.clear();
     std::vector<std::string> items = splitJsonArray(prefsJson);
+    brls::Logger::info("Split into {} preference items", items.size());
+
+    // Log first item for debugging
+    if (!items.empty()) {
+        brls::Logger::info("First preference item JSON: {}", items[0].substr(0, std::min(items[0].size(), (size_t)500)));
+    }
+
     for (const auto& item : items) {
         preferences.push_back(parseSourcePreferenceFromGraphQL(item));
     }
 
-    brls::Logger::debug("GraphQL: Fetched {} source preferences", preferences.size());
+    brls::Logger::info("GraphQL: Fetched {} source preferences", preferences.size());
     return true;
 }
 
