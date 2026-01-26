@@ -34,7 +34,20 @@ SearchTab::SearchTab() {
     m_titleLabel->setFontSize(28);
     m_headerBox->addView(m_titleLabel);
 
-    // Global search button with search icon
+    // Global search button with Start icon above
+    auto* searchContainer = new brls::Box();
+    searchContainer->setAxis(brls::Axis::COLUMN);
+    searchContainer->setAlignItems(brls::AlignItems::CENTER);
+
+    // Start button icon - use actual image dimensions (64x16)
+    auto* startButtonIcon = new brls::Image();
+    startButtonIcon->setWidth(64);
+    startButtonIcon->setHeight(16);
+    startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
+    startButtonIcon->setMarginBottom(2);
+    searchContainer->addView(startButtonIcon);
+
     m_globalSearchBtn = new brls::Button();
     m_globalSearchBtn->setWidth(44);
     m_globalSearchBtn->setHeight(44);
@@ -50,13 +63,25 @@ SearchTab::SearchTab() {
     m_globalSearchBtn->addView(searchIcon);
 
     m_globalSearchBtn->registerClickAction([this](brls::View* view) {
-        showGlobalSearchDialog();
+        brls::sync([this]() {
+            showGlobalSearchDialog();
+        });
         return true;
     });
     m_globalSearchBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_globalSearchBtn));
-    m_headerBox->addView(m_globalSearchBtn);
+    searchContainer->addView(m_globalSearchBtn);
+    m_headerBox->addView(searchContainer);
 
     this->addView(m_headerBox);
+
+    // Register Start button to open global search dialog
+    // Use brls::sync to defer IME opening to avoid crash during controller input handling
+    this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        brls::sync([this]() {
+            showGlobalSearchDialog();
+        });
+        return true;
+    });
 
     // Hidden search label (used for source-specific search)
     m_searchLabel = new brls::Label();

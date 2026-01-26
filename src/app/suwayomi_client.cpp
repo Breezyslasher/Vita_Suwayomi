@@ -536,6 +536,7 @@ Source SuwayomiClient::parseSourceFromGraphQL(const std::string& json) {
     src.lang = extractJsonValue(json, "lang");
     src.iconUrl = extractJsonValue(json, "iconUrl");
     src.supportsLatest = extractJsonBool(json, "supportsLatest");
+    src.isConfigurable = extractJsonBool(json, "isConfigurable");
     src.isNsfw = extractJsonBool(json, "isNsfw");
 
     return src;
@@ -601,6 +602,7 @@ bool SuwayomiClient::fetchSourceListGraphQL(std::vector<Source>& sources) {
                     iconUrl
                     isNsfw
                     supportsLatest
+                    isConfigurable
                 }
             }
         }
@@ -3072,6 +3074,7 @@ Extension SuwayomiClient::parseExtensionFromGraphQL(const std::string& json) {
 }
 
 bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extensions) {
+    // Include source.nodes with isConfigurable to determine if settings icon should be shown
     const char* query = R"(
         query {
             extensions {
@@ -3087,6 +3090,11 @@ bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extension
                     isObsolete
                     isNsfw
                     repo
+                    source {
+                        nodes {
+                            isConfigurable
+                        }
+                    }
                 }
             }
         }
@@ -3109,6 +3117,22 @@ bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extension
     std::vector<std::string> items = splitJsonArray(nodesJson);
     for (const auto& item : items) {
         Extension ext = parseExtensionFromGraphQL(item);
+
+        // Check if any source is configurable (for settings icon)
+        std::string sourceObj = extractJsonObject(item, "source");
+        if (!sourceObj.empty()) {
+            std::string sourceNodes = extractJsonArray(sourceObj, "nodes");
+            if (!sourceNodes.empty()) {
+                std::vector<std::string> sources = splitJsonArray(sourceNodes);
+                for (const auto& srcJson : sources) {
+                    if (extractJsonBool(srcJson, "isConfigurable")) {
+                        ext.hasConfigurableSources = true;
+                        break;
+                    }
+                }
+            }
+        }
+
         // Skip duplicates based on pkgName
         if (seenPkgNames.find(ext.pkgName) == seenPkgNames.end()) {
             seenPkgNames.insert(ext.pkgName);
@@ -3122,6 +3146,7 @@ bool SuwayomiClient::fetchExtensionListGraphQL(std::vector<Extension>& extension
 
 bool SuwayomiClient::fetchInstalledExtensionsGraphQL(std::vector<Extension>& extensions) {
     // Server-side filtered query for installed extensions only
+    // Include source.nodes with isConfigurable to determine if settings icon should be shown
     const char* query = R"(
         query {
             extensions(condition: { isInstalled: true }) {
@@ -3137,6 +3162,11 @@ bool SuwayomiClient::fetchInstalledExtensionsGraphQL(std::vector<Extension>& ext
                     isObsolete
                     isNsfw
                     repo
+                    source {
+                        nodes {
+                            isConfigurable
+                        }
+                    }
                 }
             }
         }
@@ -3159,6 +3189,22 @@ bool SuwayomiClient::fetchInstalledExtensionsGraphQL(std::vector<Extension>& ext
     std::vector<std::string> items = splitJsonArray(nodesJson);
     for (const auto& item : items) {
         Extension ext = parseExtensionFromGraphQL(item);
+
+        // Check if any source is configurable
+        std::string sourceObj = extractJsonObject(item, "source");
+        if (!sourceObj.empty()) {
+            std::string sourceNodes = extractJsonArray(sourceObj, "nodes");
+            if (!sourceNodes.empty()) {
+                std::vector<std::string> sources = splitJsonArray(sourceNodes);
+                for (const auto& srcJson : sources) {
+                    if (extractJsonBool(srcJson, "isConfigurable")) {
+                        ext.hasConfigurableSources = true;
+                        break;
+                    }
+                }
+            }
+        }
+
         if (seenPkgNames.find(ext.pkgName) == seenPkgNames.end()) {
             seenPkgNames.insert(ext.pkgName);
             extensions.push_back(ext);
@@ -3607,6 +3653,7 @@ bool SuwayomiClient::fetchSourceGraphQL(int64_t sourceId, Source& source) {
                 iconUrl
                 isNsfw
                 supportsLatest
+                isConfigurable
             }
         }
     )";
@@ -3624,6 +3671,439 @@ bool SuwayomiClient::fetchSourceGraphQL(int64_t sourceId, Source& source) {
 
     source = parseSourceFromGraphQL(sourceJson);
     return true;
+}
+
+// ============================================================================
+// GraphQL Source Preferences
+// ============================================================================
+
+SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::string& json) {
+    SourcePreference pref;
+
+    // Determine type from __typename
+    std::string typeName = extractJsonValue(json, "__typename");
+    brls::Logger::info("Parsing preference with __typename: '{}'", typeName);
+
+    bool knownType = true;
+    if (typeName == "SwitchPreference") {
+        pref.type = SourcePreferenceType::SWITCH;
+    } else if (typeName == "CheckBoxPreference") {
+        pref.type = SourcePreferenceType::CHECKBOX;
+    } else if (typeName == "EditTextPreference") {
+        pref.type = SourcePreferenceType::EDIT_TEXT;
+    } else if (typeName == "ListPreference") {
+        pref.type = SourcePreferenceType::LIST;
+    } else if (typeName == "MultiSelectListPreference") {
+        pref.type = SourcePreferenceType::MULTI_SELECT_LIST;
+    } else {
+        // Unknown preference type - mark as not visible so it's skipped
+        knownType = false;
+        brls::Logger::warning("Unknown preference type: '{}', JSON snippet: {}", typeName, json.substr(0, std::min(json.size(), (size_t)200)));
+    }
+
+    // Common fields
+    pref.key = extractJsonValue(json, "key");
+    pref.title = extractJsonValue(json, "title");
+    pref.summary = extractJsonValue(json, "summary");
+
+    brls::Logger::debug("  key='{}', title='{}', knownType={}", pref.key, pref.title, knownType);
+
+    // Only override visible/enabled if the field is present in JSON
+    // (unknown types won't have these fields in their fragment)
+    std::string visibleStr = extractJsonValue(json, "visible");
+    brls::Logger::debug("  visibleStr='{}' (empty={})", visibleStr, visibleStr.empty());
+
+    if (!visibleStr.empty()) {
+        pref.visible = (visibleStr == "true" || visibleStr == "1");
+    } else if (!knownType) {
+        // Unknown types without visible field should be hidden
+        pref.visible = false;
+    }
+    // else: keep default visible = true
+
+    brls::Logger::debug("  Final visible={}", pref.visible);
+
+    std::string enabledStr = extractJsonValue(json, "enabled");
+    if (!enabledStr.empty()) {
+        pref.enabled = (enabledStr == "true" || enabledStr == "1");
+    }
+    // else: keep default enabled = true
+
+    // Type-specific fields (using aliased field names from GraphQL query)
+    if (pref.type == SourcePreferenceType::SWITCH || pref.type == SourcePreferenceType::CHECKBOX) {
+        pref.currentValue = extractJsonBool(json, "boolValue");
+        pref.defaultValue = extractJsonBool(json, "boolDefault");
+    } else if (pref.type == SourcePreferenceType::EDIT_TEXT) {
+        pref.currentText = extractJsonValue(json, "stringValue");
+        pref.defaultText = extractJsonValue(json, "stringDefault");
+        pref.dialogTitle = extractJsonValue(json, "dialogTitle");
+        pref.dialogMessage = extractJsonValue(json, "dialogMessage");
+    } else if (pref.type == SourcePreferenceType::LIST) {
+        pref.entries = extractJsonStringArray(json, "entries");
+        pref.entryValues = extractJsonStringArray(json, "entryValues");
+        pref.selectedValue = extractJsonValue(json, "stringValue");
+        pref.defaultListValue = extractJsonValue(json, "stringDefault");
+    } else if (pref.type == SourcePreferenceType::MULTI_SELECT_LIST) {
+        pref.entries = extractJsonStringArray(json, "entries");
+        pref.entryValues = extractJsonStringArray(json, "entryValues");
+        pref.selectedValues = extractJsonStringArray(json, "stringListValue");
+        pref.defaultMultiValues = extractJsonStringArray(json, "stringListDefault");
+    }
+
+    return pref;
+}
+
+bool SuwayomiClient::fetchSourcePreferencesGraphQL(int64_t sourceId, std::vector<SourcePreference>& preferences) {
+    // Use field aliases to avoid GraphQL type conflict error:
+    // currentValue returns Boolean for Switch/CheckBox, String for List/EditText, [String] for MultiSelect
+    const char* query = R"(
+        query GetSourcePreferences($id: LongString!) {
+            source(id: $id) {
+                preferences {
+                    __typename
+                    ... on SwitchPreference {
+                        key
+                        title
+                        summary
+                        visible
+                        enabled
+                        boolValue: currentValue
+                        boolDefault: default
+                    }
+                    ... on CheckBoxPreference {
+                        key
+                        title
+                        summary
+                        visible
+                        enabled
+                        boolValue: currentValue
+                        boolDefault: default
+                    }
+                    ... on EditTextPreference {
+                        key
+                        title
+                        summary
+                        visible
+                        enabled
+                        stringValue: currentValue
+                        stringDefault: default
+                        dialogTitle
+                        dialogMessage
+                    }
+                    ... on ListPreference {
+                        key
+                        title
+                        summary
+                        visible
+                        enabled
+                        stringValue: currentValue
+                        stringDefault: default
+                        entries
+                        entryValues
+                    }
+                    ... on MultiSelectListPreference {
+                        key
+                        title
+                        summary
+                        visible
+                        enabled
+                        stringListValue: currentValue
+                        stringListDefault: default
+                        entries
+                        entryValues
+                    }
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":\"" + std::to_string(sourceId) + "\"}";
+
+    brls::Logger::info("Fetching source preferences for sourceId: {}", sourceId);
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("GraphQL response is empty for source preferences");
+        return false;
+    }
+
+    brls::Logger::debug("GraphQL response length: {} chars", response.size());
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        brls::Logger::error("No 'data' in GraphQL response. Response: {}", response.substr(0, std::min(response.size(), (size_t)500)));
+        return false;
+    }
+
+    std::string sourceJson = extractJsonObject(data, "source");
+    if (sourceJson.empty()) {
+        brls::Logger::error("No 'source' in data. Data: {}", data.substr(0, std::min(data.size(), (size_t)500)));
+        return false;
+    }
+
+    std::string prefsJson = extractJsonArray(sourceJson, "preferences");
+    if (prefsJson.empty()) {
+        brls::Logger::info("No preferences array found or empty for source");
+        preferences.clear();
+        return true;  // Source might not have preferences
+    }
+
+    brls::Logger::info("Preferences JSON length: {} chars", prefsJson.size());
+
+    preferences.clear();
+    std::vector<std::string> items = splitJsonArray(prefsJson);
+    brls::Logger::info("Split into {} preference items", items.size());
+
+    // Log first item for debugging
+    if (!items.empty()) {
+        brls::Logger::info("First preference item JSON: {}", items[0].substr(0, std::min(items[0].size(), (size_t)500)));
+    }
+
+    for (const auto& item : items) {
+        preferences.push_back(parseSourcePreferenceFromGraphQL(item));
+    }
+
+    brls::Logger::info("GraphQL: Fetched {} source preferences", preferences.size());
+    return true;
+}
+
+bool SuwayomiClient::updateSourcePreferenceGraphQL(int64_t sourceId, const SourcePreferenceChange& change) {
+    const char* query = R"(
+        mutation UpdateSourcePreference($sourceId: LongString!, $change: SourcePreferenceChangeInput!) {
+            updateSourcePreference(input: { source: $sourceId, change: $change }) {
+                source {
+                    id
+                }
+            }
+        }
+    )";
+
+    // Build the change object based on which field is set
+    std::string changeJson = "{\"position\":" + std::to_string(change.position);
+
+    if (change.hasSwitchState) {
+        changeJson += ",\"switchState\":" + std::string(change.switchState ? "true" : "false");
+    } else if (change.hasCheckBoxState) {
+        changeJson += ",\"checkBoxState\":" + std::string(change.checkBoxState ? "true" : "false");
+    } else if (change.hasEditTextState) {
+        // Escape the text value
+        std::string escaped;
+        for (char c : change.editTextState) {
+            switch (c) {
+                case '"': escaped += "\\\""; break;
+                case '\\': escaped += "\\\\"; break;
+                case '\n': escaped += "\\n"; break;
+                case '\r': escaped += "\\r"; break;
+                case '\t': escaped += "\\t"; break;
+                default: escaped += c; break;
+            }
+        }
+        changeJson += ",\"editTextState\":\"" + escaped + "\"";
+    } else if (change.hasListState) {
+        // Escape the value
+        std::string escaped;
+        for (char c : change.listState) {
+            switch (c) {
+                case '"': escaped += "\\\""; break;
+                case '\\': escaped += "\\\\"; break;
+                default: escaped += c; break;
+            }
+        }
+        changeJson += ",\"listState\":\"" + escaped + "\"";
+    } else if (change.hasMultiSelectState) {
+        changeJson += ",\"multiSelectState\":[";
+        for (size_t i = 0; i < change.multiSelectState.size(); i++) {
+            if (i > 0) changeJson += ",";
+            // Escape each value
+            std::string escaped;
+            for (char c : change.multiSelectState[i]) {
+                switch (c) {
+                    case '"': escaped += "\\\""; break;
+                    case '\\': escaped += "\\\\"; break;
+                    default: escaped += c; break;
+                }
+            }
+            changeJson += "\"" + escaped + "\"";
+        }
+        changeJson += "]";
+    }
+
+    changeJson += "}";
+
+    std::string variables = "{\"sourceId\":\"" + std::to_string(sourceId) + "\",\"change\":" + changeJson + "}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("Failed to update source preference");
+        return false;
+    }
+
+    brls::Logger::debug("GraphQL: Updated source preference at position {}", change.position);
+    return true;
+}
+
+bool SuwayomiClient::setSourceMetaGraphQL(int64_t sourceId, const std::string& key, const std::string& value) {
+    const char* query = R"(
+        mutation SetSourceMeta($sourceId: LongString!, $key: String!, $value: String!) {
+            setSourceMeta(input: { meta: { sourceId: $sourceId, key: $key, value: $value } }) {
+                meta {
+                    key
+                    value
+                }
+            }
+        }
+    )";
+
+    // Escape key and value
+    std::string escapedKey, escapedValue;
+    for (char c : key) {
+        switch (c) {
+            case '"': escapedKey += "\\\""; break;
+            case '\\': escapedKey += "\\\\"; break;
+            default: escapedKey += c; break;
+        }
+    }
+    for (char c : value) {
+        switch (c) {
+            case '"': escapedValue += "\\\""; break;
+            case '\\': escapedValue += "\\\\"; break;
+            case '\n': escapedValue += "\\n"; break;
+            case '\r': escapedValue += "\\r"; break;
+            case '\t': escapedValue += "\\t"; break;
+            default: escapedValue += c; break;
+        }
+    }
+
+    std::string variables = "{\"sourceId\":\"" + std::to_string(sourceId) +
+                            "\",\"key\":\"" + escapedKey +
+                            "\",\"value\":\"" + escapedValue + "\"}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("Failed to set source meta: {} = {}", key, value);
+        return false;
+    }
+
+    brls::Logger::debug("GraphQL: Set source meta {} = {}", key, value);
+    return true;
+}
+
+bool SuwayomiClient::deleteSourceMetaGraphQL(int64_t sourceId, const std::string& key) {
+    const char* query = R"(
+        mutation DeleteSourceMeta($sourceId: LongString!, $key: String!) {
+            deleteSourceMeta(input: { sourceId: $sourceId, key: $key }) {
+                source {
+                    id
+                }
+            }
+        }
+    )";
+
+    // Escape key
+    std::string escapedKey;
+    for (char c : key) {
+        switch (c) {
+            case '"': escapedKey += "\\\""; break;
+            case '\\': escapedKey += "\\\\"; break;
+            default: escapedKey += c; break;
+        }
+    }
+
+    std::string variables = "{\"sourceId\":\"" + std::to_string(sourceId) +
+                            "\",\"key\":\"" + escapedKey + "\"}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("Failed to delete source meta: {}", key);
+        return false;
+    }
+
+    brls::Logger::debug("GraphQL: Deleted source meta {}", key);
+    return true;
+}
+
+bool SuwayomiClient::fetchSourcesForExtensionGraphQL(const std::string& pkgName, std::vector<Source>& sources) {
+    const char* query = R"(
+        query GetExtensionSources($pkgName: String!) {
+            extension(pkgName: $pkgName) {
+                source {
+                    nodes {
+                        id
+                        name
+                        displayName
+                        lang
+                        iconUrl
+                        isNsfw
+                        supportsLatest
+                        isConfigurable
+                    }
+                }
+            }
+        }
+    )";
+
+    // Escape pkgName
+    std::string escapedPkg;
+    for (char c : pkgName) {
+        switch (c) {
+            case '"': escapedPkg += "\\\""; break;
+            case '\\': escapedPkg += "\\\\"; break;
+            default: escapedPkg += c; break;
+        }
+    }
+
+    std::string variables = "{\"pkgName\":\"" + escapedPkg + "\"}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string extJson = extractJsonObject(data, "extension");
+    if (extJson.empty()) return false;
+
+    std::string sourceObj = extractJsonObject(extJson, "source");
+    if (sourceObj.empty()) return false;
+
+    std::string nodesJson = extractJsonArray(sourceObj, "nodes");
+    if (nodesJson.empty()) {
+        sources.clear();
+        return true;  // Extension might not have sources yet
+    }
+
+    sources.clear();
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        sources.push_back(parseSourceFromGraphQL(item));
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} sources for extension {}", sources.size(), pkgName);
+    return true;
+}
+
+// ============================================================================
+// Public Source Preferences API
+// ============================================================================
+
+bool SuwayomiClient::fetchSourcePreferences(int64_t sourceId, std::vector<SourcePreference>& preferences) {
+    return fetchSourcePreferencesGraphQL(sourceId, preferences);
+}
+
+bool SuwayomiClient::updateSourcePreference(int64_t sourceId, const SourcePreferenceChange& change) {
+    return updateSourcePreferenceGraphQL(sourceId, change);
+}
+
+bool SuwayomiClient::setSourceMeta(int64_t sourceId, const std::string& key, const std::string& value) {
+    return setSourceMetaGraphQL(sourceId, key, value);
+}
+
+bool SuwayomiClient::deleteSourceMeta(int64_t sourceId, const std::string& key) {
+    return deleteSourceMetaGraphQL(sourceId, key);
+}
+
+bool SuwayomiClient::fetchSourcesForExtension(const std::string& pkgName, std::vector<Source>& sources) {
+    return fetchSourcesForExtensionGraphQL(pkgName, sources);
 }
 
 } // namespace vitasuwayomi

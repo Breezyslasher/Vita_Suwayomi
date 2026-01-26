@@ -75,15 +75,39 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
         modeBox->addView(m_latestBtn);
     }
 
+    // Search button with Start icon above
+    auto* searchContainer = new brls::Box();
+    searchContainer->setAxis(brls::Axis::COLUMN);
+    searchContainer->setAlignItems(brls::AlignItems::CENTER);
+
+    // Start button icon - use actual image dimensions (64x16)
+    auto* startButtonIcon = new brls::Image();
+    startButtonIcon->setWidth(64);
+    startButtonIcon->setHeight(16);
+    startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
+    startButtonIcon->setMarginBottom(2);
+    searchContainer->addView(startButtonIcon);
+
     m_searchBtn = new brls::Button();
     m_searchBtn->setText("Search");
     m_searchBtn->registerClickAction([this](brls::View*) {
         showSearchDialog();
         return true;
     });
-    modeBox->addView(m_searchBtn);
+    searchContainer->addView(m_searchBtn);
+    modeBox->addView(searchContainer);
 
     this->addView(modeBox);
+
+    // Register Start button to open search dialog
+    // Use brls::sync to defer IME opening to avoid crash during controller input handling
+    this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        brls::sync([this]() {
+            showSearchDialog();
+        });
+        return true;
+    });
 
     // Content grid
     m_contentGrid = new RecyclingGrid();

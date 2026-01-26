@@ -184,6 +184,20 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     FILE ${BOREALIS_DIR}/resources/i18n/en-US/hints.json resources/i18n/en-US/hints.json
     FILE resources/i18n/en-US/main.json resources/i18n/en-US/main.json
 
+    # Borealis system images (for Dialog widgets)
+    FILE ${BOREALIS_DIR}/resources/img/sys/battery_back_dark.png resources/img/sys/battery_back_dark.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/battery_back_light.png resources/img/sys/battery_back_light.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/wifi_0_dark.png resources/img/sys/wifi_0_dark.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/wifi_0_light.png resources/img/sys/wifi_0_light.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/wifi_1_dark.png resources/img/sys/wifi_1_dark.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/wifi_1_light.png resources/img/sys/wifi_1_light.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/wifi_2_dark.png resources/img/sys/wifi_2_dark.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/wifi_2_light.png resources/img/sys/wifi_2_light.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/wifi_3_dark.png resources/img/sys/wifi_3_dark.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/wifi_3_light.png resources/img/sys/wifi_3_light.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/ethernet_dark.png resources/img/sys/ethernet_dark.png
+    FILE ${BOREALIS_DIR}/resources/img/sys/ethernet_light.png resources/img/sys/ethernet_light.png
+
     # App resources
     FILE resources/xml/activity/main.xml resources/xml/activity/main.xml
     FILE resources/xml/activity/login.xml resources/xml/activity/login.xml

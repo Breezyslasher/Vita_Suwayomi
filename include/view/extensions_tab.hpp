@@ -32,6 +32,10 @@ private:
     void showSearchDialog();
     // Clear search and show all extensions
     void clearSearch();
+    // Show search results on a separate page
+    void showSearchResults();
+    // Go back from search results to main list
+    void hideSearchResults();
 
     void populateUnifiedList();
     brls::Box* createSectionHeader(const std::string& title, int count);
@@ -40,6 +44,8 @@ private:
     void installExtension(const Extension& ext);
     void updateExtension(const Extension& ext);
     void uninstallExtension(const Extension& ext);
+    void showSourceSettings(const Extension& ext);
+    void showSourcePreferencesDialog(const Source& source);
     void showError(const std::string& message);
     void showLoading(const std::string& message);
     std::vector<Extension> getFilteredExtensions(const std::vector<Extension>& extensions, bool forceLanguageFilter = false);
@@ -49,9 +55,16 @@ private:
 
     brls::Label* m_titleLabel = nullptr;
     brls::Box* m_listBox = nullptr;
+    brls::Box* m_refreshBox = nullptr;  // Safe focus target during refresh
     brls::Image* m_refreshIcon = nullptr;
     brls::Image* m_searchIcon = nullptr;
     brls::ScrollingFrame* m_scrollFrame = nullptr;
+
+    // Search results view (separate page)
+    brls::ScrollingFrame* m_searchResultsFrame = nullptr;
+    brls::Box* m_searchResultsBox = nullptr;
+    brls::Box* m_searchHeaderBox = nullptr;
+    brls::Label* m_searchTitleLabel = nullptr;
 
     // Search state
     std::string m_searchQuery;
@@ -78,11 +91,15 @@ private:
     struct ExtensionItemInfo {
         brls::Box* container = nullptr;
         brls::Image* icon = nullptr;
+        brls::Box* settingsBtn = nullptr;  // Settings button for D-pad navigation
         std::string pkgName;
         std::string iconUrl;
         bool iconLoaded = false;
     };
     std::vector<ExtensionItemInfo> m_extensionItems;
+
+    // D-pad navigation: Link settings buttons vertically
+    void updateSettingsButtonNavigation();
 
     // Performance: Cached grouped data
     std::map<std::string, std::vector<Extension>> m_cachedGrouped;
