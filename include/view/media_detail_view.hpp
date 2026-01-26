@@ -52,7 +52,8 @@ private:
 
     // Tracking
     void showTrackingDialog();
-    void showTrackerSearchDialog(const Tracker& tracker);
+    void showTrackerSearchInputDialog(const Tracker& tracker);
+    void showTrackerSearchDialog(const Tracker& tracker, const std::string& searchQuery);
     void showTrackEditDialog(const TrackRecord& record, const Tracker& tracker);
     void showTrackerLoginDialog(const Tracker& tracker);
     void loadTrackingData();

@@ -1513,6 +1513,25 @@ void MangaDetailView::showTrackingDialog() {
                 return;
             }
 
+            // If only one tracker is logged in, skip directly to search input or edit dialog
+            if (loggedInTrackers.size() == 1) {
+                const Tracker& tracker = loggedInTrackers[0];
+                TrackRecord* existingRecord = nullptr;
+                for (auto& r : m_trackRecords) {
+                    if (r.trackerId == tracker.id) {
+                        existingRecord = &r;
+                        break;
+                    }
+                }
+
+                if (existingRecord && existingRecord->id > 0) {
+                    showTrackEditDialog(*existingRecord, tracker);
+                } else {
+                    showTrackerSearchInputDialog(tracker);
+                }
+                return;
+            }
+
             // Create main tracking dialog
             brls::Dialog* dialog = new brls::Dialog("Tracking");
 
@@ -1548,8 +1567,8 @@ void MangaDetailView::showTrackingDialog() {
                             // Show edit dialog for existing track
                             showTrackEditDialog(capturedRecord, capturedTracker);
                         } else {
-                            // Show search dialog to add tracking
-                            showTrackerSearchDialog(capturedTracker);
+                            // Show search input dialog to customize search query
+                            showTrackerSearchInputDialog(capturedTracker);
                         }
                     });
                 });
@@ -1564,11 +1583,21 @@ void MangaDetailView::showTrackingDialog() {
     });
 }
 
-void MangaDetailView::showTrackerSearchDialog(const Tracker& tracker) {
+void MangaDetailView::showTrackerSearchInputDialog(const Tracker& tracker) {
+    brls::Logger::info("MangaDetailView: Opening search input dialog for tracker {}", tracker.name);
+
+    Tracker capturedTracker = tracker;
+    std::string defaultQuery = m_manga.title;
+
+    brls::Application::getImeManager()->openForText([this, capturedTracker](std::string text) {
+        if (text.empty()) return;
+        showTrackerSearchDialog(capturedTracker, text);
+    }, "Search " + tracker.name, "Enter manga title to search", 256, defaultQuery);
+}
+
+void MangaDetailView::showTrackerSearchDialog(const Tracker& tracker, const std::string& searchQuery) {
     brls::Logger::info("MangaDetailView: Opening search dialog for tracker {}", tracker.name);
 
-    // Use manga title as search query
-    std::string searchQuery = m_manga.title;
     int trackerId = tracker.id;
     int mangaId = m_manga.id;
     std::string trackerName = tracker.name;
