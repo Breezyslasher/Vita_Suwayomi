@@ -195,6 +195,8 @@ ExtensionsTab::ExtensionsTab() {
     // Scrolling content area
     m_scrollFrame = new brls::ScrollingFrame();
     m_scrollFrame->setGrow(1.0f);
+    // Use CENTERED scrolling to respect custom navigation routes on settings buttons
+    m_scrollFrame->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
 
     // Content box inside scroll frame
     m_listBox = new brls::Box();
@@ -206,6 +208,7 @@ ExtensionsTab::ExtensionsTab() {
     // Search results page (hidden initially)
     m_searchResultsFrame = new brls::ScrollingFrame();
     m_searchResultsFrame->setGrow(1.0f);
+    m_searchResultsFrame->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
     m_searchResultsFrame->setVisibility(brls::Visibility::GONE);
 
     m_searchResultsBox = new brls::Box();
