@@ -1723,8 +1723,6 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
             }
 
             // Multiple sources - show selection dialog
-            auto* dialog = new brls::Dialog("Select Source");
-
             auto* contentBox = new brls::Box();
             contentBox->setAxis(brls::Axis::COLUMN);
             contentBox->setPadding(10, 20, 10, 20);
@@ -1734,6 +1732,9 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
             titleLabel->setFontSize(18);
             titleLabel->setMarginBottom(15);
             contentBox->addView(titleLabel);
+
+            // Use Dialog(Box*) constructor to properly add content to container
+            auto* dialog = new brls::Dialog(contentBox);
 
             // Create source selection list
             for (const auto& src : configurableSources) {
@@ -1770,7 +1771,6 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
                 contentBox->addView(sourceBox);
             }
 
-            dialog->addView(contentBox);
             dialog->addButton("Cancel", []() {});
             dialog->open();
         });
@@ -1971,11 +1971,19 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 
                         // Open selection dialog on click
                         prefBox->registerClickAction([this, currentPosition, sourceId, pref, source](brls::View*) {
-                            auto* listDialog = new brls::Dialog(pref.title);
-
                             auto* listBox = new brls::Box();
                             listBox->setAxis(brls::Axis::COLUMN);
                             listBox->setPadding(10, 20, 10, 20);
+
+                            // Add title label inside the box
+                            auto* titleLabel = new brls::Label();
+                            titleLabel->setText(pref.title);
+                            titleLabel->setFontSize(18);
+                            titleLabel->setMarginBottom(15);
+                            listBox->addView(titleLabel);
+
+                            // Use Dialog(Box*) constructor to properly add content to container
+                            auto* listDialog = new brls::Dialog(listBox);
 
                             for (size_t i = 0; i < pref.entries.size() && i < pref.entryValues.size(); i++) {
                                 auto* entryBox = new brls::Box();
@@ -2020,7 +2028,6 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                                 listBox->addView(entryBox);
                             }
 
-                            listDialog->addView(listBox);
                             listDialog->addButton("Cancel", []() {});
                             listDialog->open();
                             return true;
@@ -2040,11 +2047,19 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                             // Create a shared copy of selected values (shared_ptr for safe lambda capture)
                             auto selectedCopy = std::make_shared<std::vector<std::string>>(pref.selectedValues);
 
-                            auto* multiDialog = new brls::Dialog(pref.title);
-
                             auto* multiBox = new brls::Box();
                             multiBox->setAxis(brls::Axis::COLUMN);
                             multiBox->setPadding(10, 20, 10, 20);
+
+                            // Add title label inside the box
+                            auto* titleLabel = new brls::Label();
+                            titleLabel->setText(pref.title);
+                            titleLabel->setFontSize(18);
+                            titleLabel->setMarginBottom(15);
+                            multiBox->addView(titleLabel);
+
+                            // Use Dialog(Box*) constructor to properly add content to container
+                            auto* multiDialog = new brls::Dialog(multiBox);
 
                             for (size_t i = 0; i < pref.entries.size() && i < pref.entryValues.size(); i++) {
                                 auto* entryBox = new brls::Box();
@@ -2085,7 +2100,6 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                                 multiBox->addView(entryBox);
                             }
 
-                            multiDialog->addView(multiBox);
                             multiDialog->addButton("Save", [this, multiDialog, currentPosition, sourceId, selectedCopy, source]() {
                                 SourcePreferenceChange change;
                                 change.position = currentPosition;
