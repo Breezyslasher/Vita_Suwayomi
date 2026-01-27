@@ -1671,6 +1671,8 @@ void MangaDetailView::showTrackerSearchDialog(const Tracker& tracker, const std:
 
 void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Tracker& tracker) {
     brls::Logger::info("MangaDetailView: Opening edit dialog for track record {}", record.id);
+    brls::Logger::info("MangaDetailView: Tracker has {} statuses, {} scores",
+                       tracker.statuses.size(), tracker.scores.size());
 
     brls::Dialog* dialog = new brls::Dialog(tracker.name + ": " + record.title);
 
@@ -1680,17 +1682,18 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
     std::string currentScore = record.displayScore;
     std::string trackerName = tracker.name;
 
-    // Show current status
-    std::string statusText = "Status: ";
+    // Get current status text for button label
+    std::string currentStatusText;
     if (currentStatus >= 0 && currentStatus < static_cast<int>(tracker.statuses.size())) {
-        statusText += tracker.statuses[currentStatus];
+        currentStatusText = tracker.statuses[currentStatus];
     } else {
-        statusText += "Unknown";
+        currentStatusText = "Unknown";
     }
 
-    // Update Status button
+    // Update Status button - shows current status
     std::vector<std::string> statuses = tracker.statuses;
-    dialog->addButton("Update Status", [this, dialog, recordId, statuses, trackerName]() {
+    std::string statusButtonLabel = "Status: " + currentStatusText;
+    dialog->addButton(statusButtonLabel, [this, dialog, recordId, statuses, trackerName]() {
         dialog->close();
 
         brls::sync([this, recordId, statuses, trackerName]() {
@@ -1727,8 +1730,9 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
         });
     });
 
-    // Update Chapter button - opens IME for manual input
-    dialog->addButton("Update Chapter", [this, dialog, recordId, currentChapter, trackerName]() {
+    // Update Chapter button - shows current chapter and opens IME for input
+    std::string chapterButtonLabel = "Chapter: " + std::to_string(static_cast<int>(currentChapter));
+    dialog->addButton(chapterButtonLabel, [this, dialog, recordId, currentChapter, trackerName]() {
         dialog->close();
 
         brls::sync([this, recordId, currentChapter, trackerName]() {
@@ -1766,27 +1770,53 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
         });
     });
 
-    // Update Score button
+    // Update Score button - shows current score and allows custom input
     std::vector<std::string> scores = tracker.scores;
-    if (!scores.empty()) {
-        dialog->addButton("Update Score", [this, dialog, recordId, scores, trackerName]() {
-            dialog->close();
+    std::string scoreButtonLabel = "Score: " + (currentScore.empty() ? "Not set" : currentScore);
+    dialog->addButton(scoreButtonLabel, [this, dialog, recordId, scores, currentScore, trackerName]() {
+        dialog->close();
 
-            brls::sync([this, recordId, scores, trackerName]() {
-                brls::Dialog* scoreDialog = new brls::Dialog("Select Score");
+        brls::sync([this, recordId, scores, currentScore, trackerName]() {
+            brls::Dialog* scoreDialog = new brls::Dialog("Select Score");
 
-                // Show up to 10 score options
-                size_t maxScores = std::min(scores.size(), size_t(10));
-                for (size_t i = 0; i < maxScores; i++) {
-                    std::string scoreValue = scores[i];
+            // Show available score options (up to 6 to leave room for Custom and Cancel)
+            size_t maxScores = std::min(scores.size(), size_t(5));
+            for (size_t i = 0; i < maxScores; i++) {
+                std::string scoreValue = scores[i];
 
-                    scoreDialog->addButton(scoreValue, [this, scoreDialog, recordId, scoreValue, trackerName]() {
-                        scoreDialog->close();
+                scoreDialog->addButton(scoreValue, [this, scoreDialog, recordId, scoreValue, trackerName]() {
+                    scoreDialog->close();
 
-                        asyncRun([recordId, scoreValue, trackerName]() {
+                    asyncRun([recordId, scoreValue, trackerName]() {
+                        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                        if (client.updateTrackRecord(recordId, -1, -1, scoreValue)) {
+                            brls::sync([trackerName]() {
+                                brls::Application::notify("Score updated on " + trackerName);
+                            });
+                        } else {
+                            brls::sync([]() {
+                                brls::Application::notify("Failed to update score");
+                            });
+                        }
+                    });
+                });
+            }
+
+            // Add Custom option for entering decimal scores (e.g., 5.5)
+            scoreDialog->addButton("Custom...", [this, scoreDialog, recordId, currentScore, trackerName]() {
+                scoreDialog->close();
+
+                brls::sync([recordId, currentScore, trackerName]() {
+                    brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
+                        if (text.empty()) return;
+
+                        brls::Application::notify("Updating score to " + text + "...");
+
+                        asyncRun([recordId, text, trackerName]() {
                             SuwayomiClient& client = SuwayomiClient::getInstance();
 
-                            if (client.updateTrackRecord(recordId, -1, -1, scoreValue)) {
+                            if (client.updateTrackRecord(recordId, -1, -1, text)) {
                                 brls::sync([trackerName]() {
                                     brls::Application::notify("Score updated on " + trackerName);
                                 });
@@ -1796,17 +1826,17 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                                 });
                             }
                         });
-                    });
-                }
-
-                scoreDialog->addButton("Cancel", [scoreDialog]() {
-                    scoreDialog->close();
+                    }, "Enter Score", "Score (e.g., 8 or 7.5)", 10, currentScore);
                 });
-
-                scoreDialog->open();
             });
+
+            scoreDialog->addButton("Cancel", [scoreDialog]() {
+                scoreDialog->close();
+            });
+
+            scoreDialog->open();
         });
-    }
+    });
 
     // Start Date button
     int64_t currentStartDate = record.startDate;

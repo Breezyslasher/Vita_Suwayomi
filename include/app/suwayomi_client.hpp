@@ -511,6 +511,10 @@ public:
     // Check if client is connected
     bool isConnected() const { return !m_serverUrl.empty() && m_isConnected; }
 
+    // Build a proxied URL for external images (tracker covers, etc.)
+    // Returns the URL as-is if it's already a server URL or if proxy isn't available
+    std::string buildProxiedImageUrl(const std::string& externalUrl) const;
+
     // Get update summary
     bool fetchUpdateSummary(int& pendingUpdates, int& runningJobs, bool& isUpdating);
 

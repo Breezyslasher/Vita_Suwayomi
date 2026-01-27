@@ -2944,14 +2944,21 @@ Tracker SuwayomiClient::parseTrackerFromGraphQL(const std::string& json) {
     tracker.isTokenExpired = extractJsonBool(json, "isTokenExpired");
     tracker.supportsTrackDeletion = extractJsonBool(json, "supportsTrackDeletion");
 
-    // Parse statuses array
+    // Parse statuses array - use 'name' for display text (not 'value' which is numeric)
     std::string statusesJson = extractJsonArray(json, "statuses");
     if (!statusesJson.empty()) {
         std::vector<std::string> statusItems = splitJsonArray(statusesJson);
         for (const auto& item : statusItems) {
-            std::string value = extractJsonValue(item, "value");
-            if (!value.empty()) {
-                tracker.statuses.push_back(value);
+            // Prefer 'name' (display text) over 'value' (numeric status code)
+            std::string name = extractJsonValue(item, "name");
+            if (!name.empty()) {
+                tracker.statuses.push_back(name);
+            } else {
+                // Fallback to value if name is not present
+                std::string value = extractJsonValue(item, "value");
+                if (!value.empty()) {
+                    tracker.statuses.push_back(value);
+                }
             }
         }
     }
@@ -3029,6 +3036,7 @@ bool SuwayomiClient::fetchTrackersGraphQL(std::vector<Tracker>& trackers) {
                     isTokenExpired
                     supportsTrackDeletion
                     statuses {
+                        name
                         value
                     }
                     scores
@@ -3087,6 +3095,7 @@ bool SuwayomiClient::fetchTrackerGraphQL(int trackerId, Tracker& tracker) {
                 isTokenExpired
                 supportsTrackDeletion
                 statuses {
+                    name
                     value
                 }
                 scores
@@ -3136,6 +3145,7 @@ bool SuwayomiClient::fetchMangaTrackingGraphQL(int mangaId, std::vector<TrackRec
                         icon
                         isLoggedIn
                         statuses {
+                            name
                             value
                         }
                         scores
@@ -4624,6 +4634,47 @@ bool SuwayomiClient::deleteSourceMeta(int64_t sourceId, const std::string& key) 
 
 bool SuwayomiClient::fetchSourcesForExtension(const std::string& pkgName, std::vector<Source>& sources) {
     return fetchSourcesForExtensionGraphQL(pkgName, sources);
+}
+
+// ============================================================================
+// Image URL helpers
+// ============================================================================
+
+std::string SuwayomiClient::buildProxiedImageUrl(const std::string& externalUrl) const {
+    if (externalUrl.empty()) {
+        return externalUrl;
+    }
+
+    // Check if it's already a server URL (starts with server URL or is relative)
+    if (externalUrl[0] == '/' ||
+        (!m_serverUrl.empty() && externalUrl.find(m_serverUrl) == 0)) {
+        // Already a server URL, return as-is (with server prefix if relative)
+        if (externalUrl[0] == '/') {
+            return m_serverUrl + externalUrl;
+        }
+        return externalUrl;
+    }
+
+    // Check if it's an external URL (http:// or https://)
+    if (externalUrl.find("http://") != 0 && externalUrl.find("https://") != 0) {
+        // Not a valid URL, return as-is
+        return externalUrl;
+    }
+
+    // URL-encode the external URL for the proxy endpoint
+    // Suwayomi Server uses /api/v1/imageUrl/fetch?url=<encoded-url> for proxying
+    std::string encoded;
+    for (char c : externalUrl) {
+        if (isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded += c;
+        } else {
+            char hex[4];
+            snprintf(hex, sizeof(hex), "%%%02X", static_cast<unsigned char>(c));
+            encoded += hex;
+        }
+    }
+
+    return m_serverUrl + "/api/v1/imageUrl/fetch?url=" + encoded;
 }
 
 } // namespace vitasuwayomi

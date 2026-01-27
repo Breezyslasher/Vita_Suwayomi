@@ -144,7 +144,13 @@ void TrackingSearchResultCell::loadCoverImage() {
 
     if (m_result.coverUrl.empty()) return;
 
-    ImageLoader::loadAsync(m_result.coverUrl, nullptr, m_coverImage);
+    // Tracker cover URLs are external URLs (MAL, AniList CDN, etc.)
+    // Proxy them through the Suwayomi server to avoid HTTPS/CORS issues on Vita
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::string proxiedUrl = client.buildProxiedImageUrl(m_result.coverUrl);
+
+    brls::Logger::debug("TrackingSearchResultCell: Loading cover from {}", proxiedUrl);
+    ImageLoader::loadAsync(proxiedUrl, nullptr, m_coverImage);
 }
 
 void TrackingSearchResultCell::onFocusGained() {
