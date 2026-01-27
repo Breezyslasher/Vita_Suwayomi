@@ -1697,19 +1697,16 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
         dialog->close();
 
         brls::sync([this, recordId, statuses, trackerName]() {
-            brls::Dialog* statusDialog = new brls::Dialog("Select Status");
+            // Use Dropdown instead of Dialog to show all status options
+            brls::Dropdown* dropdown = new brls::Dropdown(
+                "Select Status", statuses,
+                [this, recordId, trackerName](int selected) {
+                    if (selected < 0) return;  // Cancelled
 
-            for (size_t i = 0; i < statuses.size() && i < 6; i++) {
-                int statusIdx = static_cast<int>(i);
-                std::string statusName = statuses[i];
-
-                statusDialog->addButton(statusName, [this, statusDialog, recordId, statusIdx, trackerName]() {
-                    statusDialog->close();
-
-                    asyncRun([this, recordId, statusIdx, trackerName]() {
+                    asyncRun([this, recordId, selected, trackerName]() {
                         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-                        if (client.updateTrackRecord(recordId, statusIdx)) {
+                        if (client.updateTrackRecord(recordId, selected)) {
                             brls::sync([trackerName]() {
                                 brls::Application::notify("Status updated on " + trackerName);
                             });
@@ -1719,14 +1716,8 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                             });
                         }
                     });
-                });
-            }
-
-            statusDialog->addButton("Cancel", [statusDialog]() {
-                statusDialog->close();
-            });
-
-            statusDialog->open();
+                }, 0);
+            brls::Application::pushActivity(new brls::Activity(dropdown));
         });
     });
 
@@ -1777,46 +1768,47 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
         dialog->close();
 
         brls::sync([this, recordId, scores, currentScore, trackerName]() {
-            brls::Dialog* scoreDialog = new brls::Dialog("Select Score");
+            // Build score options list with "Custom..." at the end
+            std::vector<std::string> scoreOptions = scores;
+            scoreOptions.push_back("Custom...");
 
-            // Show available score options (up to 6 to leave room for Custom and Cancel)
-            size_t maxScores = std::min(scores.size(), size_t(5));
-            for (size_t i = 0; i < maxScores; i++) {
-                std::string scoreValue = scores[i];
+            // Use Dropdown instead of Dialog to show all score options
+            brls::Dropdown* dropdown = new brls::Dropdown(
+                "Select Score", scoreOptions,
+                [this, recordId, scores, currentScore, trackerName](int selected) {
+                    if (selected < 0) return;  // Cancelled
 
-                scoreDialog->addButton(scoreValue, [this, scoreDialog, recordId, scoreValue, trackerName]() {
-                    scoreDialog->close();
+                    // Check if "Custom..." was selected (last option)
+                    if (selected == static_cast<int>(scores.size())) {
+                        // Open IME for custom score input
+                        brls::sync([recordId, currentScore, trackerName]() {
+                            brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
+                                if (text.empty()) return;
 
-                    asyncRun([recordId, scoreValue, trackerName]() {
-                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                brls::Application::notify("Updating score to " + text + "...");
 
-                        if (client.updateTrackRecord(recordId, -1, -1, scoreValue)) {
-                            brls::sync([trackerName]() {
-                                brls::Application::notify("Score updated on " + trackerName);
-                            });
-                        } else {
-                            brls::sync([]() {
-                                brls::Application::notify("Failed to update score");
-                            });
-                        }
-                    });
-                });
-            }
+                                asyncRun([recordId, text, trackerName]() {
+                                    SuwayomiClient& client = SuwayomiClient::getInstance();
 
-            // Add Custom option for entering decimal scores (e.g., 5.5)
-            scoreDialog->addButton("Custom...", [this, scoreDialog, recordId, currentScore, trackerName]() {
-                scoreDialog->close();
-
-                brls::sync([recordId, currentScore, trackerName]() {
-                    brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
-                        if (text.empty()) return;
-
-                        brls::Application::notify("Updating score to " + text + "...");
-
-                        asyncRun([recordId, text, trackerName]() {
+                                    if (client.updateTrackRecord(recordId, -1, -1, text)) {
+                                        brls::sync([trackerName]() {
+                                            brls::Application::notify("Score updated on " + trackerName);
+                                        });
+                                    } else {
+                                        brls::sync([]() {
+                                            brls::Application::notify("Failed to update score");
+                                        });
+                                    }
+                                });
+                            }, "Enter Score", "Score (e.g., 8 or 7.5)", 10, currentScore);
+                        });
+                    } else {
+                        // Selected a predefined score
+                        std::string scoreValue = scores[selected];
+                        asyncRun([recordId, scoreValue, trackerName]() {
                             SuwayomiClient& client = SuwayomiClient::getInstance();
 
-                            if (client.updateTrackRecord(recordId, -1, -1, text)) {
+                            if (client.updateTrackRecord(recordId, -1, -1, scoreValue)) {
                                 brls::sync([trackerName]() {
                                     brls::Application::notify("Score updated on " + trackerName);
                                 });
@@ -1826,15 +1818,9 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                                 });
                             }
                         });
-                    }, "Enter Score", "Score (e.g., 8 or 7.5)", 10, currentScore);
-                });
-            });
-
-            scoreDialog->addButton("Cancel", [scoreDialog]() {
-                scoreDialog->close();
-            });
-
-            scoreDialog->open();
+                    }
+                }, 0);
+            brls::Application::pushActivity(new brls::Activity(dropdown));
         });
     });
 
