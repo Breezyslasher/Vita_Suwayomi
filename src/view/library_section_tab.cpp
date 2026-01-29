@@ -13,6 +13,7 @@
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
 #include "utils/library_cache.hpp"
+#include "view/migrate_search_view.hpp"
 
 namespace vitasuwayomi {
 
@@ -903,129 +904,8 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
 }
 
 void LibrarySectionTab::showMigrateSourceMenu(const Manga& manga) {
-    brls::Application::notify("Loading sources...");
-
-    std::weak_ptr<bool> aliveWeak = m_alive;
-    Manga capturedManga = manga;
-
-    asyncRun([this, capturedManga, aliveWeak]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
-        std::vector<Source> sources;
-        client.fetchSourceList(sources);
-
-        brls::sync([this, capturedManga, sources, aliveWeak]() {
-            auto alive = aliveWeak.lock();
-            if (!alive || !*alive) return;
-
-            if (sources.empty()) {
-                brls::Application::notify("No sources available");
-                return;
-            }
-
-            // Filter out current source and apply language/NSFW settings
-            const AppSettings& settings = Application::getInstance().getSettings();
-            std::vector<std::string> sourceNames;
-            std::vector<int64_t> sourceIds;
-            for (const auto& src : sources) {
-                if (src.id == capturedManga.sourceId) continue;
-                if (src.isNsfw && !settings.showNsfwSources) continue;
-                if (!settings.enabledSourceLanguages.empty()) {
-                    bool langMatch = settings.enabledSourceLanguages.count(src.lang) > 0;
-                    if (!langMatch) {
-                        // Check base language (e.g. "zh" matches "zh-Hans")
-                        std::string baseLang = src.lang;
-                        size_t dashPos = baseLang.find('-');
-                        if (dashPos != std::string::npos) {
-                            baseLang = baseLang.substr(0, dashPos);
-                            langMatch = settings.enabledSourceLanguages.count(baseLang) > 0;
-                        }
-                    }
-                    if (!langMatch && src.lang != "multi" && src.lang != "all") continue;
-                }
-                std::string label = src.name;
-                if (!src.lang.empty()) label += " (" + src.lang + ")";
-                sourceNames.push_back(label);
-                sourceIds.push_back(src.id);
-            }
-
-            if (sourceNames.empty()) {
-                brls::Application::notify("No other sources available");
-                return;
-            }
-
-            auto* dropdown = new brls::Dropdown(
-                "Migrate: " + capturedManga.title,
-                sourceNames,
-                [this, capturedManga, sourceIds, aliveWeak](int selected) {
-                    if (selected < 0 || selected >= (int)sourceIds.size()) return;
-                    int64_t targetSourceId = sourceIds[selected];
-
-                    brls::Application::notify("Searching for manga in new source...");
-
-                    Manga asyncManga = capturedManga;
-                    asyncRun([this, asyncManga, targetSourceId, aliveWeak]() {
-                        SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                        // Search for the manga in the target source
-                        std::vector<Manga> results;
-                        bool hasNext = false;
-                        client.searchManga(targetSourceId, asyncManga.title, 1, results, hasNext);
-
-                        brls::sync([this, results, asyncManga, aliveWeak]() {
-                            auto alive = aliveWeak.lock();
-                            if (!alive || !*alive) return;
-
-                            if (results.empty()) {
-                                brls::Application::notify("No matches found in target source");
-                                return;
-                            }
-
-                            // Show search results to pick from
-                            std::vector<std::string> titles;
-                            for (const auto& r : results) {
-                                titles.push_back(r.title);
-                            }
-
-                            auto* resultDropdown = new brls::Dropdown(
-                                "Select Replacement",
-                                titles,
-                                [this, results, asyncManga, aliveWeak](int sel) {
-                                    if (sel < 0 || sel >= (int)results.size()) return;
-                                    Manga newManga = results[sel];
-                                    Manga oldManga = asyncManga;
-
-                                    brls::Application::notify("Migrating...");
-
-                                    asyncRun([oldManga, newManga, aliveWeak]() {
-                                        SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                                        // Add new manga to library
-                                        client.addMangaToLibrary(newManga.id);
-
-                                        // Copy categories from old manga
-                                        if (!oldManga.categoryIds.empty()) {
-                                            client.setMangaCategories(newManga.id, oldManga.categoryIds);
-                                        }
-
-                                        // Remove old manga from library
-                                        client.removeMangaFromLibrary(oldManga.id);
-
-                                        brls::sync([aliveWeak]() {
-                                            auto alive = aliveWeak.lock();
-                                            if (!alive || !*alive) return;
-                                            brls::Application::notify("Migration complete");
-                                        });
-                                    });
-                                }
-                            );
-                            brls::Application::pushActivity(new brls::Activity(resultDropdown));
-                        });
-                    });
-                }
-            );
-            brls::Application::pushActivity(new brls::Activity(dropdown));
-        });
-    });
+    auto* migrateView = new MigrateSearchView(manga);
+    brls::Application::pushActivity(new brls::Activity(migrateView));
 }
 
 void LibrarySectionTab::enterSelectionMode(int initialIndex) {
