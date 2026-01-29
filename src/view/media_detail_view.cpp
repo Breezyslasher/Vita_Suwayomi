@@ -782,129 +782,132 @@ void MangaDetailView::populateChaptersList() {
 }
 
 void MangaDetailView::showMangaMenu() {
-    brls::Dialog* dialog = new brls::Dialog("Options");
-
-    // Collect data before creating dialog callbacks to avoid capturing 'this' unsafely
+    // Collect data before creating dropdown callbacks to avoid capturing 'this' unsafely
     int mangaId = m_manga.id;
     std::string mangaTitle = m_manga.title;
 
     // Copy chapters data for the callbacks
     std::vector<Chapter> chapters = m_chapters;
 
-    dialog->addButton("Download all chapters", [this, dialog]() {
-        dialog->close();
-        // Defer to avoid dialog nesting issues
-        brls::sync([this]() {
-            downloadAllChapters();
-        });
-    });
+    std::vector<std::string> options = {
+        "Download all chapters",
+        "Remove all chapters",
+        "Cancel downloading chapters",
+        "Reset cover"
+    };
 
-    dialog->addButton("Remove all chapters", [mangaId, chapters, dialog]() {
-        dialog->close();
-        // Defer and don't open nested dialog - just delete directly
-        brls::sync([mangaId, chapters]() {
-            // Get download mode setting
-            DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
-            brls::Logger::debug("Remove all chapters: downloadMode = {} (0=Server, 1=Local, 2=Both)",
-                               static_cast<int>(downloadMode));
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Options", options,
+        [this, mangaId, chapters](int selected) {
+            if (selected < 0) return;  // Cancelled
 
-            // Collect server-downloaded chapter IDs and indexes (from chapter data)
-            std::vector<int> serverChapterIds;
-            std::vector<int> serverChapterIndexes;
-            if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
-                for (const auto& ch : chapters) {
-                    if (ch.downloaded) {
-                        serverChapterIds.push_back(ch.id);
-                        serverChapterIndexes.push_back(ch.index);
-                    }
-                }
-            }
+            switch (selected) {
+                case 0:  // Download all chapters
+                    brls::sync([this]() {
+                        downloadAllChapters();
+                    });
+                    break;
+                case 1: {  // Remove all chapters
+                    brls::sync([mangaId, chapters]() {
+                        // Get download mode setting
+                        DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+                        brls::Logger::debug("Remove all chapters: downloadMode = {} (0=Server, 1=Local, 2=Both)",
+                                           static_cast<int>(downloadMode));
 
-            // Collect locally-downloaded chapter indexes from DownloadsManager
-            DownloadsManager& dm = DownloadsManager::getInstance();
-            std::vector<int> localChapterIndexes;
-            if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
-                for (const auto& ch : chapters) {
-                    if (dm.isChapterDownloaded(mangaId, ch.index)) {
-                        localChapterIndexes.push_back(ch.index);
-                    }
-                }
-            }
-
-            if (serverChapterIndexes.empty() && localChapterIndexes.empty()) {
-                brls::Application::notify("No downloads to delete");
-                return;
-            }
-
-            int totalToDelete = 0;
-            if (downloadMode == DownloadMode::SERVER_ONLY) {
-                totalToDelete = serverChapterIndexes.size();
-            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
-                totalToDelete = localChapterIndexes.size();
-            } else {
-                // BOTH - count unique chapters (some may be in both)
-                std::set<int> uniqueIndexes(serverChapterIndexes.begin(), serverChapterIndexes.end());
-                uniqueIndexes.insert(localChapterIndexes.begin(), localChapterIndexes.end());
-                totalToDelete = uniqueIndexes.size();
-            }
-
-            brls::Application::notify("Deleting " + std::to_string(totalToDelete) + " downloads...");
-
-            // Run delete in async without capturing 'this'
-            asyncRun([downloadMode, mangaId, serverChapterIds, serverChapterIndexes, localChapterIndexes]() {
-                int serverDeletedCount = 0;
-                int localDeletedCount = 0;
-
-                // Delete from server if applicable
-                if (!serverChapterIds.empty() &&
-                    (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
-                    SuwayomiClient& client = SuwayomiClient::getInstance();
-                    if (client.deleteChapterDownloads(serverChapterIds, mangaId, serverChapterIndexes)) {
-                        serverDeletedCount = serverChapterIds.size();
-                    }
-                }
-
-                // Delete from local if applicable
-                if (!localChapterIndexes.empty() &&
-                    (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
-                    DownloadsManager& dm = DownloadsManager::getInstance();
-                    for (int chapterIndex : localChapterIndexes) {
-                        if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
-                            localDeletedCount++;
+                        // Collect server-downloaded chapter IDs and indexes (from chapter data)
+                        std::vector<int> serverChapterIds;
+                        std::vector<int> serverChapterIndexes;
+                        if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
+                            for (const auto& ch : chapters) {
+                                if (ch.downloaded) {
+                                    serverChapterIds.push_back(ch.id);
+                                    serverChapterIndexes.push_back(ch.index);
+                                }
+                            }
                         }
-                    }
+
+                        // Collect locally-downloaded chapter indexes from DownloadsManager
+                        DownloadsManager& dm = DownloadsManager::getInstance();
+                        std::vector<int> localChapterIndexes;
+                        if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
+                            for (const auto& ch : chapters) {
+                                if (dm.isChapterDownloaded(mangaId, ch.index)) {
+                                    localChapterIndexes.push_back(ch.index);
+                                }
+                            }
+                        }
+
+                        if (serverChapterIndexes.empty() && localChapterIndexes.empty()) {
+                            brls::Application::notify("No downloads to delete");
+                            return;
+                        }
+
+                        int totalToDelete = 0;
+                        if (downloadMode == DownloadMode::SERVER_ONLY) {
+                            totalToDelete = serverChapterIndexes.size();
+                        } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                            totalToDelete = localChapterIndexes.size();
+                        } else {
+                            // BOTH - count unique chapters (some may be in both)
+                            std::set<int> uniqueIndexes(serverChapterIndexes.begin(), serverChapterIndexes.end());
+                            uniqueIndexes.insert(localChapterIndexes.begin(), localChapterIndexes.end());
+                            totalToDelete = uniqueIndexes.size();
+                        }
+
+                        brls::Application::notify("Deleting " + std::to_string(totalToDelete) + " downloads...");
+
+                        // Run delete in async without capturing 'this'
+                        asyncRun([downloadMode, mangaId, serverChapterIds, serverChapterIndexes, localChapterIndexes]() {
+                            int serverDeletedCount = 0;
+                            int localDeletedCount = 0;
+
+                            // Delete from server if applicable
+                            if (!serverChapterIds.empty() &&
+                                (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                if (client.deleteChapterDownloads(serverChapterIds, mangaId, serverChapterIndexes)) {
+                                    serverDeletedCount = serverChapterIds.size();
+                                }
+                            }
+
+                            // Delete from local if applicable
+                            if (!localChapterIndexes.empty() &&
+                                (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
+                                DownloadsManager& dm = DownloadsManager::getInstance();
+                                for (int chapterIndex : localChapterIndexes) {
+                                    if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+                                        localDeletedCount++;
+                                    }
+                                }
+                            }
+
+                            brls::sync([downloadMode, serverDeletedCount, localDeletedCount]() {
+                                if (downloadMode == DownloadMode::SERVER_ONLY) {
+                                    brls::Application::notify("Deleted " + std::to_string(serverDeletedCount) + " server downloads");
+                                } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                                    brls::Application::notify("Deleted " + std::to_string(localDeletedCount) + " local downloads");
+                                } else {
+                                    brls::Application::notify("Deleted " + std::to_string(serverDeletedCount) + " server + " +
+                                                             std::to_string(localDeletedCount) + " local downloads");
+                                }
+                            });
+                        });
+                    });
+                    break;
                 }
-
-                brls::sync([downloadMode, serverDeletedCount, localDeletedCount]() {
-                    if (downloadMode == DownloadMode::SERVER_ONLY) {
-                        brls::Application::notify("Deleted " + std::to_string(serverDeletedCount) + " server downloads");
-                    } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
-                        brls::Application::notify("Deleted " + std::to_string(localDeletedCount) + " local downloads");
-                    } else {
-                        brls::Application::notify("Deleted " + std::to_string(serverDeletedCount) + " server + " +
-                                                 std::to_string(localDeletedCount) + " local downloads");
-                    }
-                });
-            });
-        });
-    });
-
-    dialog->addButton("Cancel downloading chapters", [this, dialog]() {
-        dialog->close();
-        // Defer to avoid issues
-        brls::sync([this]() {
-            cancelAllDownloading();
-        });
-    });
-
-    dialog->addButton("Reset cover", [this, dialog]() {
-        dialog->close();
-        brls::sync([this]() {
-            resetCover();
-        });
-    });
-
-    dialog->open();
+                case 2:  // Cancel downloading chapters
+                    brls::sync([this]() {
+                        cancelAllDownloading();
+                    });
+                    break;
+                case 3:  // Reset cover
+                    brls::sync([this]() {
+                        resetCover();
+                    });
+                    break;
+            }
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
 }
 
 void MangaDetailView::onChapterSelected(const Chapter& chapter) {
@@ -1352,65 +1355,61 @@ void MangaDetailView::onDeleteDownloads() {
 }
 
 void MangaDetailView::showChapterMenu(const Chapter& chapter) {
-    brls::Dialog* dialog = new brls::Dialog(chapter.name);
-
     // Collect data before creating callbacks to avoid unsafe 'this' capture
     int mangaId = m_manga.id;
     int chapterId = chapter.id;
     int chapterIndex = chapter.index;
+    bool isRead = chapter.read;
+    bool isDownloaded = chapter.downloaded;
 
-    dialog->addButton("Read", [this, chapter, dialog]() {
-        dialog->close();
-        brls::sync([this, chapter]() {
-            onChapterSelected(chapter);
-        });
-    });
+    std::vector<std::string> options = {
+        "Read",
+        isRead ? "Mark Unread" : "Mark Read",
+        isDownloaded ? "Delete Download" : "Download"
+    };
 
-    if (chapter.read) {
-        dialog->addButton("Mark Unread", [mangaId, chapterIndex, dialog]() {
-            dialog->close();
-            // Don't capture 'this' - just mark and notify
-            asyncRun([mangaId, chapterIndex]() {
-                SuwayomiClient::getInstance().markChapterUnread(mangaId, chapterIndex);
-                brls::sync([]() {
-                    brls::Application::notify("Marked as unread");
-                });
-            });
-        });
-    } else {
-        dialog->addButton("Mark Read", [mangaId, chapterIndex, dialog]() {
-            dialog->close();
-            // Don't capture 'this' - just mark and notify
-            asyncRun([mangaId, chapterIndex]() {
-                SuwayomiClient::getInstance().markChapterRead(mangaId, chapterIndex);
-                brls::sync([]() {
-                    brls::Application::notify("Marked as read");
-                });
-            });
-        });
-    }
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        chapter.name, options,
+        [this, chapter, mangaId, chapterIndex, isRead, isDownloaded](int selected) {
+            if (selected < 0) return;  // Cancelled
 
-    if (chapter.downloaded) {
-        dialog->addButton("Delete Download", [this, chapter, dialog]() {
-            dialog->close();
-            brls::sync([this, chapter]() {
-                deleteChapterDownload(chapter);
-            });
-        });
-    } else {
-        dialog->addButton("Download", [this, chapter, dialog]() {
-            dialog->close();
-            brls::sync([this, chapter]() {
-                downloadChapter(chapter);
-            });
-        });
-    }
-
-    dialog->addButton("Close", [dialog]() {
-        dialog->close();
-    });
-
-    dialog->open();
+            switch (selected) {
+                case 0:  // Read
+                    brls::sync([this, chapter]() {
+                        onChapterSelected(chapter);
+                    });
+                    break;
+                case 1:  // Mark Read/Unread
+                    if (isRead) {
+                        asyncRun([mangaId, chapterIndex]() {
+                            SuwayomiClient::getInstance().markChapterUnread(mangaId, chapterIndex);
+                            brls::sync([]() {
+                                brls::Application::notify("Marked as unread");
+                            });
+                        });
+                    } else {
+                        asyncRun([mangaId, chapterIndex]() {
+                            SuwayomiClient::getInstance().markChapterRead(mangaId, chapterIndex);
+                            brls::sync([]() {
+                                brls::Application::notify("Marked as read");
+                            });
+                        });
+                    }
+                    break;
+                case 2:  // Download/Delete
+                    if (isDownloaded) {
+                        brls::sync([this, chapter]() {
+                            deleteChapterDownload(chapter);
+                        });
+                    } else {
+                        brls::sync([this, chapter]() {
+                            downloadChapter(chapter);
+                        });
+                    }
+                    break;
+            }
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
 }
 
 void MangaDetailView::markChapterRead(const Chapter& chapter) {
@@ -1550,12 +1549,13 @@ void MangaDetailView::showTrackingDialog() {
                 return;
             }
 
-            // Create main tracking dialog
-            brls::Dialog* dialog = new brls::Dialog("Tracking");
+            // Build tracker options for dropdown
+            std::vector<std::string> trackerOptions;
+            std::vector<Tracker> capturedTrackers;
+            std::vector<TrackRecord> capturedRecords;
+            std::vector<bool> hasRecords;
 
-            // Add buttons for each logged-in tracker
             for (const auto& tracker : loggedInTrackers) {
-                // Check if this tracker already has a record for this manga
                 TrackRecord* existingRecord = nullptr;
                 for (auto& r : m_trackRecords) {
                     if (r.trackerId == tracker.id) {
@@ -1564,39 +1564,38 @@ void MangaDetailView::showTrackingDialog() {
                     }
                 }
 
-                std::string buttonLabel = tracker.name;
+                std::string label = tracker.name;
                 if (existingRecord) {
-                    // Show current status
                     if (!existingRecord->title.empty()) {
-                        buttonLabel += " - " + existingRecord->title.substr(0, 20);
-                        if (existingRecord->title.length() > 20) buttonLabel += "...";
+                        label += " - " + existingRecord->title.substr(0, 20);
+                        if (existingRecord->title.length() > 20) label += "...";
                     }
                 }
 
-                Tracker capturedTracker = tracker;
-                TrackRecord capturedRecord = existingRecord ? *existingRecord : TrackRecord();
-                bool hasRecord = (existingRecord != nullptr);
-
-                dialog->addButton(buttonLabel, [this, dialog, capturedTracker, capturedRecord, hasRecord]() {
-                    dialog->close();
-
-                    brls::sync([this, capturedTracker, capturedRecord, hasRecord]() {
-                        if (hasRecord && capturedRecord.id > 0) {
-                            // Show edit dialog for existing track
-                            showTrackEditDialog(capturedRecord, capturedTracker);
-                        } else {
-                            // Show search input dialog to customize search query
-                            showTrackerSearchInputDialog(capturedTracker);
-                        }
-                    });
-                });
+                trackerOptions.push_back(label);
+                capturedTrackers.push_back(tracker);
+                capturedRecords.push_back(existingRecord ? *existingRecord : TrackRecord());
+                hasRecords.push_back(existingRecord != nullptr);
             }
 
-            dialog->addButton("Cancel", [dialog]() {
-                dialog->close();
-            });
+            brls::Dropdown* dropdown = new brls::Dropdown(
+                "Tracking", trackerOptions,
+                [this, capturedTrackers, capturedRecords, hasRecords](int selected) {
+                    if (selected < 0 || selected >= static_cast<int>(capturedTrackers.size())) return;
 
-            dialog->open();
+                    Tracker selectedTracker = capturedTrackers[selected];
+                    TrackRecord selectedRecord = capturedRecords[selected];
+                    bool hasRecord = hasRecords[selected];
+
+                    brls::sync([this, selectedTracker, selectedRecord, hasRecord]() {
+                        if (hasRecord && selectedRecord.id > 0) {
+                            showTrackEditDialog(selectedRecord, selectedTracker);
+                        } else {
+                            showTrackerSearchInputDialog(selectedTracker);
+                        }
+                    });
+                }, 0);
+            brls::Application::pushActivity(new brls::Activity(dropdown));
         });
     });
 }
@@ -1674,15 +1673,13 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
     brls::Logger::info("MangaDetailView: Tracker has {} statuses, {} scores",
                        tracker.statuses.size(), tracker.scores.size());
 
-    brls::Dialog* dialog = new brls::Dialog(tracker.name + ": " + record.title);
-
     int recordId = record.id;
     int currentStatus = record.status;
     double currentChapter = record.lastChapterRead;
     std::string currentScore = record.displayScore;
     std::string trackerName = tracker.name;
 
-    // Get current status text for button label
+    // Get current status text for display
     std::string currentStatusText;
     if (currentStatus >= 0 && currentStatus < static_cast<int>(tracker.statuses.size())) {
         currentStatusText = tracker.statuses[currentStatus];
@@ -1690,389 +1687,242 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
         currentStatusText = "Unknown";
     }
 
-    // Update Status button - shows current status
     std::vector<std::string> statuses = tracker.statuses;
-    std::string statusButtonLabel = "Status: " + currentStatusText;
-    dialog->addButton(statusButtonLabel, [this, dialog, recordId, statuses, trackerName]() {
-        dialog->close();
-
-        brls::sync([this, recordId, statuses, trackerName]() {
-            // Use Dropdown instead of Dialog to show all status options
-            brls::Dropdown* dropdown = new brls::Dropdown(
-                "Select Status", statuses,
-                [this, recordId, trackerName](int selected) {
-                    if (selected < 0) return;  // Cancelled
-
-                    asyncRun([this, recordId, selected, trackerName]() {
-                        SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                        if (client.updateTrackRecord(recordId, selected)) {
-                            brls::sync([trackerName]() {
-                                brls::Application::notify("Status updated on " + trackerName);
-                            });
-                        } else {
-                            brls::sync([]() {
-                                brls::Application::notify("Failed to update status");
-                            });
-                        }
-                    });
-                }, 0);
-            brls::Application::pushActivity(new brls::Activity(dropdown));
-        });
-    });
-
-    // Update Chapter button - shows current chapter and opens IME for input
-    std::string chapterButtonLabel = "Chapter: " + std::to_string(static_cast<int>(currentChapter));
-    dialog->addButton(chapterButtonLabel, [this, dialog, recordId, currentChapter, trackerName]() {
-        dialog->close();
-
-        brls::sync([this, recordId, currentChapter, trackerName]() {
-            std::string defaultValue = std::to_string(static_cast<int>(currentChapter));
-
-            brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
-                if (text.empty()) return;
-
-                try {
-                    double newChapter = std::stod(text);
-                    if (newChapter < 0) {
-                        brls::Application::notify("Invalid chapter number");
-                        return;
-                    }
-
-                    brls::Application::notify("Updating chapter to " + std::to_string(static_cast<int>(newChapter)) + "...");
-
-                    asyncRun([recordId, newChapter, trackerName]() {
-                        SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                        if (client.updateTrackRecord(recordId, -1, newChapter)) {
-                            brls::sync([newChapter, trackerName]() {
-                                brls::Application::notify("Chapter updated to " + std::to_string(static_cast<int>(newChapter)));
-                            });
-                        } else {
-                            brls::sync([]() {
-                                brls::Application::notify("Failed to update chapter");
-                            });
-                        }
-                    });
-                } catch (...) {
-                    brls::Application::notify("Invalid chapter number");
-                }
-            }, "Update Chapter", "Enter chapter number", 10, defaultValue);
-        });
-    });
-
-    // Update Score button - shows current score and allows custom input
     std::vector<std::string> scores = tracker.scores;
-    std::string scoreButtonLabel = "Score: " + (currentScore.empty() ? "Not set" : currentScore);
-    dialog->addButton(scoreButtonLabel, [this, dialog, recordId, scores, currentScore, trackerName]() {
-        dialog->close();
+    int64_t currentStartDate = record.startDate;
+    int64_t currentFinishDate = record.finishDate;
 
-        brls::sync([this, recordId, scores, currentScore, trackerName]() {
-            // Build score options list with "Custom..." at the end
-            std::vector<std::string> scoreOptions = scores;
-            scoreOptions.push_back("Custom...");
+    std::vector<std::string> options = {
+        "Status: " + currentStatusText,
+        "Chapter: " + std::to_string(static_cast<int>(currentChapter)),
+        "Score: " + (currentScore.empty() ? "Not set" : currentScore),
+        "Start Date",
+        "Finish Date",
+        "Remove Tracking"
+    };
 
-            // Use Dropdown instead of Dialog to show all score options
-            brls::Dropdown* dropdown = new brls::Dropdown(
-                "Select Score", scoreOptions,
-                [this, recordId, scores, currentScore, trackerName](int selected) {
-                    if (selected < 0) return;  // Cancelled
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        tracker.name + ": " + record.title, options,
+        [this, recordId, statuses, scores, currentChapter, currentScore, trackerName,
+         currentStartDate, currentFinishDate](int selected) {
+            if (selected < 0) return;  // Cancelled
 
-                    // Check if "Custom..." was selected (last option)
-                    if (selected == static_cast<int>(scores.size())) {
-                        // Open IME for custom score input
-                        brls::sync([recordId, currentScore, trackerName]() {
-                            brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
-                                if (text.empty()) return;
-
-                                brls::Application::notify("Updating score to " + text + "...");
-
-                                asyncRun([recordId, text, trackerName]() {
+            switch (selected) {
+                case 0: {  // Status
+                    brls::sync([this, recordId, statuses, trackerName]() {
+                        brls::Dropdown* statusDropdown = new brls::Dropdown(
+                            "Select Status", statuses,
+                            [this, recordId, trackerName](int sel) {
+                                if (sel < 0) return;
+                                asyncRun([this, recordId, sel, trackerName]() {
                                     SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                                    if (client.updateTrackRecord(recordId, -1, -1, text)) {
+                                    if (client.updateTrackRecord(recordId, sel)) {
                                         brls::sync([trackerName]() {
-                                            brls::Application::notify("Score updated on " + trackerName);
+                                            brls::Application::notify("Status updated on " + trackerName);
                                         });
                                     } else {
                                         brls::sync([]() {
-                                            brls::Application::notify("Failed to update score");
+                                            brls::Application::notify("Failed to update status");
                                         });
                                     }
                                 });
-                            }, "Enter Score", "Score (e.g., 8 or 7.5)", 10, currentScore);
-                        });
-                    } else {
-                        // Selected a predefined score
-                        std::string scoreValue = scores[selected];
-                        asyncRun([recordId, scoreValue, trackerName]() {
-                            SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                            if (client.updateTrackRecord(recordId, -1, -1, scoreValue)) {
-                                brls::sync([trackerName]() {
-                                    brls::Application::notify("Score updated on " + trackerName);
+                            }, 0);
+                        brls::Application::pushActivity(new brls::Activity(statusDropdown));
+                    });
+                    break;
+                }
+                case 1: {  // Chapter
+                    brls::sync([this, recordId, currentChapter, trackerName]() {
+                        std::string defaultValue = std::to_string(static_cast<int>(currentChapter));
+                        brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
+                            if (text.empty()) return;
+                            try {
+                                double newChapter = std::stod(text);
+                                if (newChapter < 0) {
+                                    brls::Application::notify("Invalid chapter number");
+                                    return;
+                                }
+                                brls::Application::notify("Updating chapter to " + std::to_string(static_cast<int>(newChapter)) + "...");
+                                asyncRun([recordId, newChapter, trackerName]() {
+                                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                                    if (client.updateTrackRecord(recordId, -1, newChapter)) {
+                                        brls::sync([newChapter, trackerName]() {
+                                            brls::Application::notify("Chapter updated to " + std::to_string(static_cast<int>(newChapter)));
+                                        });
+                                    } else {
+                                        brls::sync([]() {
+                                            brls::Application::notify("Failed to update chapter");
+                                        });
+                                    }
                                 });
-                            } else {
-                                brls::sync([]() {
-                                    brls::Application::notify("Failed to update score");
-                                });
+                            } catch (...) {
+                                brls::Application::notify("Invalid chapter number");
                             }
-                        });
-                    }
-                }, 0);
-            brls::Application::pushActivity(new brls::Activity(dropdown));
-        });
-    });
+                        }, "Update Chapter", "Enter chapter number", 10, defaultValue);
+                    });
+                    break;
+                }
+                case 2: {  // Score
+                    brls::sync([this, recordId, scores, currentScore, trackerName]() {
+                        std::vector<std::string> scoreOptions = scores;
+                        scoreOptions.push_back("Custom...");
+                        brls::Dropdown* scoreDropdown = new brls::Dropdown(
+                            "Select Score", scoreOptions,
+                            [this, recordId, scores, currentScore, trackerName](int sel) {
+                                if (sel < 0) return;
+                                if (sel == static_cast<int>(scores.size())) {
+                                    brls::sync([recordId, currentScore, trackerName]() {
+                                        brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
+                                            if (text.empty()) return;
+                                            brls::Application::notify("Updating score to " + text + "...");
+                                            asyncRun([recordId, text, trackerName]() {
+                                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                                if (client.updateTrackRecord(recordId, -1, -1, text)) {
+                                                    brls::sync([trackerName]() {
+                                                        brls::Application::notify("Score updated on " + trackerName);
+                                                    });
+                                                } else {
+                                                    brls::sync([]() {
+                                                        brls::Application::notify("Failed to update score");
+                                                    });
+                                                }
+                                            });
+                                        }, "Enter Score", "Score (e.g., 8 or 7.5)", 10, currentScore);
+                                    });
+                                } else {
+                                    std::string scoreValue = scores[sel];
+                                    asyncRun([recordId, scoreValue, trackerName]() {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                        if (client.updateTrackRecord(recordId, -1, -1, scoreValue)) {
+                                            brls::sync([trackerName]() {
+                                                brls::Application::notify("Score updated on " + trackerName);
+                                            });
+                                        } else {
+                                            brls::sync([]() {
+                                                brls::Application::notify("Failed to update score");
+                                            });
+                                        }
+                                    });
+                                }
+                            }, 0);
+                        brls::Application::pushActivity(new brls::Activity(scoreDropdown));
+                    });
+                    break;
+                }
+                case 3: {  // Start Date
+                    brls::sync([this, recordId, currentStartDate, trackerName]() {
+                        std::vector<std::string> dateOptions = {"Set to Today", "Clear"};
+                        brls::Dropdown* dateDropdown = new brls::Dropdown(
+                            "Set Start Date", dateOptions,
+                            [this, recordId, trackerName](int sel) {
+                                if (sel < 0) return;
+                                if (sel == 0) {  // Set to Today
+                                    int64_t today = static_cast<int64_t>(std::time(nullptr)) * 1000;
+                                    asyncRun([recordId, today, trackerName]() {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                        if (client.updateTrackRecord(recordId, -1, -1, "", today, -1)) {
+                                            brls::sync([trackerName]() {
+                                                brls::Application::notify("Start date set to today");
+                                            });
+                                        } else {
+                                            brls::sync([]() {
+                                                brls::Application::notify("Failed to update start date");
+                                            });
+                                        }
+                                    });
+                                } else {  // Clear
+                                    asyncRun([recordId, trackerName]() {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                        if (client.updateTrackRecord(recordId, -1, -1, "", 0, -1)) {
+                                            brls::sync([trackerName]() {
+                                                brls::Application::notify("Start date cleared");
+                                            });
+                                        } else {
+                                            brls::sync([]() {
+                                                brls::Application::notify("Failed to clear start date");
+                                            });
+                                        }
+                                    });
+                                }
+                            }, 0);
+                        brls::Application::pushActivity(new brls::Activity(dateDropdown));
+                    });
+                    break;
+                }
+                case 4: {  // Finish Date
+                    brls::sync([this, recordId, currentFinishDate, trackerName]() {
+                        std::vector<std::string> dateOptions = {"Set to Today", "Clear"};
+                        brls::Dropdown* dateDropdown = new brls::Dropdown(
+                            "Set Finish Date", dateOptions,
+                            [this, recordId, trackerName](int sel) {
+                                if (sel < 0) return;
+                                if (sel == 0) {  // Set to Today
+                                    int64_t today = static_cast<int64_t>(std::time(nullptr)) * 1000;
+                                    asyncRun([recordId, today, trackerName]() {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                        if (client.updateTrackRecord(recordId, -1, -1, "", -1, today)) {
+                                            brls::sync([trackerName]() {
+                                                brls::Application::notify("Finish date set to today");
+                                            });
+                                        } else {
+                                            brls::sync([]() {
+                                                brls::Application::notify("Failed to update finish date");
+                                            });
+                                        }
+                                    });
+                                } else {  // Clear
+                                    asyncRun([recordId, trackerName]() {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                        if (client.updateTrackRecord(recordId, -1, -1, "", -1, 0)) {
+                                            brls::sync([trackerName]() {
+                                                brls::Application::notify("Finish date cleared");
+                                            });
+                                        } else {
+                                            brls::sync([]() {
+                                                brls::Application::notify("Failed to clear finish date");
+                                            });
+                                        }
+                                    });
+                                }
+                            }, 0);
+                        brls::Application::pushActivity(new brls::Activity(dateDropdown));
+                    });
+                    break;
+                }
+                case 5: {  // Remove Tracking
+                    brls::sync([this, recordId, trackerName]() {
+                        brls::Dialog* confirmDialog = new brls::Dialog("Remove from " + trackerName + "?");
 
-    // Start Date button
-    int64_t currentStartDate = record.startDate;
-    dialog->addButton("Start Date", [this, dialog, recordId, currentStartDate, trackerName]() {
-        dialog->close();
+                        confirmDialog->addButton("Remove", [this, confirmDialog, recordId, trackerName]() {
+                            confirmDialog->close();
 
-        brls::sync([this, recordId, currentStartDate, trackerName]() {
-            brls::Dialog* dateDialog = new brls::Dialog("Set Start Date");
-
-            // Set to Today
-            dateDialog->addButton("Set to Today", [dateDialog, recordId, trackerName]() {
-                dateDialog->close();
-
-                // Get current time as Unix timestamp in milliseconds
-                int64_t today = static_cast<int64_t>(std::time(nullptr)) * 1000;
-
-                asyncRun([recordId, today, trackerName]() {
-                    SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                    if (client.updateTrackRecord(recordId, -1, -1, "", today, -1)) {
-                        brls::sync([trackerName]() {
-                            brls::Application::notify("Start date set to today");
-                        });
-                    } else {
-                        brls::sync([]() {
-                            brls::Application::notify("Failed to update start date");
-                        });
-                    }
-                });
-            });
-
-            // Clear date
-            dateDialog->addButton("Clear", [dateDialog, recordId, trackerName]() {
-                dateDialog->close();
-
-                asyncRun([recordId, trackerName]() {
-                    SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                    if (client.updateTrackRecord(recordId, -1, -1, "", 0, -1)) {
-                        brls::sync([trackerName]() {
-                            brls::Application::notify("Start date cleared");
-                        });
-                    } else {
-                        brls::sync([]() {
-                            brls::Application::notify("Failed to clear start date");
-                        });
-                    }
-                });
-            });
-
-            // Custom date input
-            dateDialog->addButton("Custom", [this, dateDialog, recordId, currentStartDate, trackerName]() {
-                dateDialog->close();
-
-                brls::sync([recordId, currentStartDate, trackerName]() {
-                    // Format current date as YYYY-MM-DD for default value
-                    std::string defaultDate = "";
-                    if (currentStartDate > 0) {
-                        time_t timestamp = static_cast<time_t>(currentStartDate / 1000);
-                        struct tm* tm_info = localtime(&timestamp);
-                        char buffer[11];
-                        strftime(buffer, 11, "%Y-%m-%d", tm_info);
-                        defaultDate = buffer;
-                    }
-
-                    brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
-                        if (text.empty()) return;
-
-                        // Parse YYYY-MM-DD format manually
-                        int year, month, day;
-                        if (sscanf(text.c_str(), "%d-%d-%d", &year, &month, &day) == 3 &&
-                            year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                            struct tm tm_date = {};
-                            tm_date.tm_year = year - 1900;
-                            tm_date.tm_mon = month - 1;
-                            tm_date.tm_mday = day;
-                            int64_t timestamp = static_cast<int64_t>(mktime(&tm_date)) * 1000;
-
-                            asyncRun([recordId, timestamp, trackerName]() {
+                            asyncRun([this, recordId, trackerName]() {
                                 SuwayomiClient& client = SuwayomiClient::getInstance();
 
-                                if (client.updateTrackRecord(recordId, -1, -1, "", timestamp, -1)) {
-                                    brls::sync([trackerName]() {
-                                        brls::Application::notify("Start date updated");
+                                if (client.unbindTracker(recordId, false)) {
+                                    brls::sync([this, trackerName]() {
+                                        brls::Application::notify("Removed from " + trackerName);
+                                        updateTrackingButtonText();
                                     });
                                 } else {
                                     brls::sync([]() {
-                                        brls::Application::notify("Failed to update start date");
+                                        brls::Application::notify("Failed to remove tracking");
                                     });
                                 }
                             });
-                        } else {
-                            brls::Application::notify("Invalid date format (use YYYY-MM-DD)");
-                        }
-                    }, "Start Date", "Enter date (YYYY-MM-DD)", 10, defaultDate);
-                });
-            });
-
-            dateDialog->addButton("Cancel", [dateDialog]() {
-                dateDialog->close();
-            });
-
-            dateDialog->open();
-        });
-    });
-
-    // Finish Date button
-    int64_t currentFinishDate = record.finishDate;
-    dialog->addButton("Finish Date", [this, dialog, recordId, currentFinishDate, trackerName]() {
-        dialog->close();
-
-        brls::sync([this, recordId, currentFinishDate, trackerName]() {
-            brls::Dialog* dateDialog = new brls::Dialog("Set Finish Date");
-
-            // Set to Today
-            dateDialog->addButton("Set to Today", [dateDialog, recordId, trackerName]() {
-                dateDialog->close();
-
-                // Get current time as Unix timestamp in milliseconds
-                int64_t today = static_cast<int64_t>(std::time(nullptr)) * 1000;
-
-                asyncRun([recordId, today, trackerName]() {
-                    SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                    if (client.updateTrackRecord(recordId, -1, -1, "", -1, today)) {
-                        brls::sync([trackerName]() {
-                            brls::Application::notify("Finish date set to today");
                         });
-                    } else {
-                        brls::sync([]() {
-                            brls::Application::notify("Failed to update finish date");
+
+                        confirmDialog->addButton("Cancel", [confirmDialog]() {
+                            confirmDialog->close();
                         });
-                    }
-                });
-            });
 
-            // Clear date
-            dateDialog->addButton("Clear", [dateDialog, recordId, trackerName]() {
-                dateDialog->close();
-
-                asyncRun([recordId, trackerName]() {
-                    SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                    if (client.updateTrackRecord(recordId, -1, -1, "", -1, 0)) {
-                        brls::sync([trackerName]() {
-                            brls::Application::notify("Finish date cleared");
-                        });
-                    } else {
-                        brls::sync([]() {
-                            brls::Application::notify("Failed to clear finish date");
-                        });
-                    }
-                });
-            });
-
-            // Custom date input
-            dateDialog->addButton("Custom", [this, dateDialog, recordId, currentFinishDate, trackerName]() {
-                dateDialog->close();
-
-                brls::sync([recordId, currentFinishDate, trackerName]() {
-                    // Format current date as YYYY-MM-DD for default value
-                    std::string defaultDate = "";
-                    if (currentFinishDate > 0) {
-                        time_t timestamp = static_cast<time_t>(currentFinishDate / 1000);
-                        struct tm* tm_info = localtime(&timestamp);
-                        char buffer[11];
-                        strftime(buffer, 11, "%Y-%m-%d", tm_info);
-                        defaultDate = buffer;
-                    }
-
-                    brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
-                        if (text.empty()) return;
-
-                        // Parse YYYY-MM-DD format manually
-                        int year, month, day;
-                        if (sscanf(text.c_str(), "%d-%d-%d", &year, &month, &day) == 3 &&
-                            year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                            struct tm tm_date = {};
-                            tm_date.tm_year = year - 1900;
-                            tm_date.tm_mon = month - 1;
-                            tm_date.tm_mday = day;
-                            int64_t timestamp = static_cast<int64_t>(mktime(&tm_date)) * 1000;
-
-                            asyncRun([recordId, timestamp, trackerName]() {
-                                SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                                if (client.updateTrackRecord(recordId, -1, -1, "", -1, timestamp)) {
-                                    brls::sync([trackerName]() {
-                                        brls::Application::notify("Finish date updated");
-                                    });
-                                } else {
-                                    brls::sync([]() {
-                                        brls::Application::notify("Failed to update finish date");
-                                    });
-                                }
-                            });
-                        } else {
-                            brls::Application::notify("Invalid date format (use YYYY-MM-DD)");
-                        }
-                    }, "Finish Date", "Enter date (YYYY-MM-DD)", 10, defaultDate);
-                });
-            });
-
-            dateDialog->addButton("Cancel", [dateDialog]() {
-                dateDialog->close();
-            });
-
-            dateDialog->open();
-        });
-    });
-
-    // Remove tracking button
-    dialog->addButton("Remove Tracking", [this, dialog, recordId, trackerName]() {
-        dialog->close();
-
-        brls::sync([this, recordId, trackerName]() {
-            brls::Dialog* confirmDialog = new brls::Dialog("Remove from " + trackerName + "?");
-
-            confirmDialog->addButton("Remove", [this, confirmDialog, recordId, trackerName]() {
-                confirmDialog->close();
-
-                asyncRun([this, recordId, trackerName]() {
-                    SuwayomiClient& client = SuwayomiClient::getInstance();
-
-                    if (client.unbindTracker(recordId, false)) {
-                        brls::sync([this, trackerName]() {
-                            brls::Application::notify("Removed from " + trackerName);
-                            updateTrackingButtonText();
-                        });
-                    } else {
-                        brls::sync([]() {
-                            brls::Application::notify("Failed to remove tracking");
-                        });
-                    }
-                });
-            });
-
-            confirmDialog->addButton("Cancel", [confirmDialog]() {
-                confirmDialog->close();
-            });
-
-            confirmDialog->open();
-        });
-    });
-
-    dialog->addButton("Close", [dialog]() {
-        dialog->close();
-    });
-
-    dialog->open();
+                        confirmDialog->open();
+                    });
+                    break;
+                }
+            }
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
 }
 
 void MangaDetailView::showTrackerLoginDialog(const Tracker& tracker) {
