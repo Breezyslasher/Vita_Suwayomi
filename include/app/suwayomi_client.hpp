@@ -427,6 +427,8 @@ public:
     bool markChapterUnread(int mangaId, int chapterIndex);
     bool markChaptersRead(int mangaId, const std::vector<int>& chapterIndexes);
     bool markChaptersUnread(int mangaId, const std::vector<int>& chapterIndexes);
+    bool markAllChaptersRead(int mangaId);
+    bool markAllChaptersUnread(int mangaId);
     bool updateChapterProgress(int mangaId, int chapterIndex, int lastPageRead);
 
     // Page Operations

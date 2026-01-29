@@ -2222,6 +2222,78 @@ bool SuwayomiClient::markChaptersUnread(int mangaId, const std::vector<int>& cha
     return response.success && response.statusCode == 200;
 }
 
+bool SuwayomiClient::markAllChaptersRead(int mangaId) {
+    // Fetch all chapters, then mark them all read via GraphQL
+    std::vector<Chapter> chapters;
+    if (!fetchChapters(mangaId, chapters)) return false;
+
+    std::vector<int> chapterIds;
+    for (const auto& ch : chapters) {
+        if (!ch.read) {
+            chapterIds.push_back(ch.id);
+        }
+    }
+    if (chapterIds.empty()) return true;
+
+    // Use GraphQL batch update
+    const char* query = R"(
+        mutation UpdateChapters($ids: [Int!]!, $isRead: Boolean!) {
+            updateChapters(input: { ids: $ids, patch: { isRead: $isRead } }) {
+                chapters {
+                    id
+                    isRead
+                }
+            }
+        }
+    )";
+
+    std::string idList = "[";
+    for (size_t i = 0; i < chapterIds.size(); i++) {
+        if (i > 0) idList += ",";
+        idList += std::to_string(chapterIds[i]);
+    }
+    idList += "]";
+
+    std::string variables = "{\"ids\":" + idList + ",\"isRead\":true}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
+bool SuwayomiClient::markAllChaptersUnread(int mangaId) {
+    std::vector<Chapter> chapters;
+    if (!fetchChapters(mangaId, chapters)) return false;
+
+    std::vector<int> chapterIds;
+    for (const auto& ch : chapters) {
+        if (ch.read) {
+            chapterIds.push_back(ch.id);
+        }
+    }
+    if (chapterIds.empty()) return true;
+
+    const char* query = R"(
+        mutation UpdateChapters($ids: [Int!]!, $isRead: Boolean!) {
+            updateChapters(input: { ids: $ids, patch: { isRead: $isRead } }) {
+                chapters {
+                    id
+                    isRead
+                }
+            }
+        }
+    )";
+
+    std::string idList = "[";
+    for (size_t i = 0; i < chapterIds.size(); i++) {
+        if (i > 0) idList += ",";
+        idList += std::to_string(chapterIds[i]);
+    }
+    idList += "]";
+
+    std::string variables = "{\"ids\":" + idList + ",\"isRead\":false}";
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty();
+}
+
 bool SuwayomiClient::updateChapterProgress(int mangaId, int chapterId, int lastPageRead) {
     // Try GraphQL first (uses chapter ID correctly)
     if (updateChapterProgressGraphQL(chapterId, lastPageRead)) {

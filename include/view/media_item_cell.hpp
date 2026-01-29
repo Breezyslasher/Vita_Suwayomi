@@ -22,12 +22,19 @@ public:
     void onFocusGained() override;
     void onFocusLost() override;
 
+    // Selection mode
+    void setSelected(bool selected);
+    bool isSelected() const { return m_selected; }
+
     static brls::View* create();
 
 private:
     void loadThumbnail();
     void updateFocusInfo(bool focused);
     void updateDisplay();
+    void updateSelectionVisual();
+
+    bool m_selected = false;
 
     Manga m_manga;
     std::string m_originalTitle;

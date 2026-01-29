@@ -31,6 +31,10 @@ void RecyclingGrid::setOnItemSelected(std::function<void(const Manga&)> callback
     m_onItemSelected = callback;
 }
 
+void RecyclingGrid::setOnItemLongPressed(std::function<void(const Manga&, int index)> callback) {
+    m_onItemLongPressed = callback;
+}
+
 void RecyclingGrid::clearViews() {
     m_items.clear();
     m_rows.clear();
@@ -88,6 +92,11 @@ void RecyclingGrid::setupGrid() {
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
 
+            // Track focused index
+            cell->getFocusEvent()->subscribe([this, index](brls::View*) {
+                m_focusedIndex = index;
+            });
+
             rowBox->addView(cell);
             m_cells.push_back(cell);
         }
@@ -131,10 +140,65 @@ void RecyclingGrid::updateVisibleCells() {
 void RecyclingGrid::onItemClicked(int index) {
     brls::Logger::debug("RecyclingGrid::onItemClicked index={}", index);
     if (index >= 0 && index < (int)m_items.size()) {
-        if (m_onItemSelected) {
+        if (m_selectionMode) {
+            toggleSelection(index);
+        } else if (m_onItemSelected) {
             m_onItemSelected(m_items[index]);
         }
     }
+}
+
+void RecyclingGrid::setSelectionMode(bool enabled) {
+    m_selectionMode = enabled;
+    if (!enabled) {
+        clearSelection();
+    }
+}
+
+void RecyclingGrid::toggleSelection(int index) {
+    if (index < 0 || index >= (int)m_cells.size()) return;
+
+    if (m_selectedIndices.count(index)) {
+        m_selectedIndices.erase(index);
+        m_cells[index]->setSelected(false);
+    } else {
+        m_selectedIndices.insert(index);
+        m_cells[index]->setSelected(true);
+    }
+}
+
+void RecyclingGrid::clearSelection() {
+    for (int idx : m_selectedIndices) {
+        if (idx >= 0 && idx < (int)m_cells.size()) {
+            m_cells[idx]->setSelected(false);
+        }
+    }
+    m_selectedIndices.clear();
+}
+
+std::vector<int> RecyclingGrid::getSelectedIndices() const {
+    return std::vector<int>(m_selectedIndices.begin(), m_selectedIndices.end());
+}
+
+std::vector<Manga> RecyclingGrid::getSelectedManga() const {
+    std::vector<Manga> result;
+    for (int idx : m_selectedIndices) {
+        if (idx >= 0 && idx < (int)m_items.size()) {
+            result.push_back(m_items[idx]);
+        }
+    }
+    return result;
+}
+
+int RecyclingGrid::getSelectionCount() const {
+    return static_cast<int>(m_selectedIndices.size());
+}
+
+const Manga* RecyclingGrid::getItem(int index) const {
+    if (index >= 0 && index < (int)m_items.size()) {
+        return &m_items[index];
+    }
+    return nullptr;
 }
 
 brls::View* RecyclingGrid::create() {

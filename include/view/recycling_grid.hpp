@@ -9,6 +9,7 @@
 #include "app/suwayomi_client.hpp"
 #include <functional>
 #include <vector>
+#include <set>
 
 namespace vitasuwayomi {
 
@@ -20,7 +21,22 @@ public:
 
     void setDataSource(const std::vector<Manga>& items);
     void setOnItemSelected(std::function<void(const Manga&)> callback);
+    void setOnItemLongPressed(std::function<void(const Manga&, int index)> callback);
     void clearViews();
+
+    // Selection mode
+    void setSelectionMode(bool enabled);
+    bool isSelectionMode() const { return m_selectionMode; }
+    void toggleSelection(int index);
+    void clearSelection();
+    std::vector<int> getSelectedIndices() const;
+    std::vector<Manga> getSelectedManga() const;
+    int getSelectionCount() const;
+
+    // Get item at index
+    const Manga* getItem(int index) const;
+    int getItemCount() const { return static_cast<int>(m_items.size()); }
+    int getFocusedIndex() const { return m_focusedIndex; }
 
     static brls::View* create();
 
@@ -31,6 +47,12 @@ private:
 
     std::vector<Manga> m_items;
     std::function<void(const Manga&)> m_onItemSelected;
+    std::function<void(const Manga&, int index)> m_onItemLongPressed;
+
+    // Selection mode
+    bool m_selectionMode = false;
+    std::set<int> m_selectedIndices;
+    int m_focusedIndex = -1;
 
     brls::Box* m_contentBox = nullptr;
     std::vector<brls::Box*> m_rows;

@@ -242,6 +242,21 @@ void MangaItemCell::onFocusLost() {
     updateFocusInfo(false);
 }
 
+void MangaItemCell::setSelected(bool selected) {
+    m_selected = selected;
+    updateSelectionVisual();
+}
+
+void MangaItemCell::updateSelectionVisual() {
+    if (m_selected) {
+        this->setBorderColor(nvgRGBA(0, 150, 136, 255));  // Teal border
+        this->setBorderThickness(3.0f);
+    } else {
+        this->setBorderColor(nvgRGBA(0, 0, 0, 0));
+        this->setBorderThickness(0.0f);
+    }
+}
+
 void MangaItemCell::updateFocusInfo(bool focused) {
     if (!m_titleLabel || !m_descriptionLabel) return;
 
