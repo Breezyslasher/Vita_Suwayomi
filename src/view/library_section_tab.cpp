@@ -88,6 +88,11 @@ LibrarySectionTab::LibrarySectionTab() {
     });
     buttonBox->addView(m_sortBtn);
 
+    // Load saved sort mode
+    auto& app = Application::getInstance();
+    int savedSort = app.getSettings().librarySortMode;
+    m_sortMode = static_cast<LibrarySortMode>(savedSort);
+
     // Initialize sort icon
     updateSortButtonText();
 
@@ -580,6 +585,11 @@ void LibrarySectionTab::cycleSortMode() {
 
     updateSortButtonText();
     sortMangaList();
+
+    // Persist sort mode
+    auto& app = Application::getInstance();
+    app.getSettings().librarySortMode = static_cast<int>(m_sortMode);
+    app.saveSettings();
 }
 
 void LibrarySectionTab::updateSortButtonText() {

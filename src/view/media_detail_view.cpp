@@ -35,11 +35,19 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         return true;
     }, false, false, brls::Sound::SOUND_BACK);
 
+    // Load saved chapter sort order
+    m_sortDescending = Application::getInstance().getSettings().chapterSortDescending;
+
     // Register R trigger for sort toggle
     this->registerAction("Sort", brls::ControllerButton::BUTTON_RB, [this](brls::View* view) {
         m_sortDescending = !m_sortDescending;
         updateSortIcon();
         populateChaptersList();
+
+        // Persist chapter sort order
+        auto& app = Application::getInstance();
+        app.getSettings().chapterSortDescending = m_sortDescending;
+        app.saveSettings();
         return true;
     });
 
