@@ -915,16 +915,30 @@ void LibrarySectionTab::showMigrateSourceMenu(const Manga& manga) {
                 return;
             }
 
-            // Filter out current source
+            // Filter out current source and apply language/NSFW settings
+            const AppSettings& settings = Application::getInstance().getSettings();
             std::vector<std::string> sourceNames;
             std::vector<int64_t> sourceIds;
             for (const auto& src : sources) {
-                if (src.id != capturedManga.sourceId) {
-                    std::string label = src.name;
-                    if (!src.lang.empty()) label += " (" + src.lang + ")";
-                    sourceNames.push_back(label);
-                    sourceIds.push_back(src.id);
+                if (src.id == capturedManga.sourceId) continue;
+                if (src.isNsfw && !settings.showNsfwSources) continue;
+                if (!settings.enabledSourceLanguages.empty()) {
+                    bool langMatch = settings.enabledSourceLanguages.count(src.lang) > 0;
+                    if (!langMatch) {
+                        // Check base language (e.g. "zh" matches "zh-Hans")
+                        std::string baseLang = src.lang;
+                        size_t dashPos = baseLang.find('-');
+                        if (dashPos != std::string::npos) {
+                            baseLang = baseLang.substr(0, dashPos);
+                            langMatch = settings.enabledSourceLanguages.count(baseLang) > 0;
+                        }
+                    }
+                    if (!langMatch && src.lang != "multi" && src.lang != "all") continue;
                 }
+                std::string label = src.name;
+                if (!src.lang.empty()) label += " (" + src.lang + ")";
+                sourceNames.push_back(label);
+                sourceIds.push_back(src.id);
             }
 
             if (sourceNames.empty()) {
