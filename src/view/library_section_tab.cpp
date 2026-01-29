@@ -727,6 +727,12 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
         m_selectionMode ? "Actions (" + std::to_string(m_contentGrid->getSelectionCount()) + " selected)" : manga.title,
         options,
         [this, manga, index](int selected) {
+            if (selected < 0) return; // Cancelled
+            // Defer all actions to next frame so the dropdown fully pops first.
+            // Without this, pushing a new activity (submenu) gets immediately
+            // popped by the dropdown's own popActivity call, and UI mutations
+            // while the dropdown is still tearing down can crash.
+            brls::sync([this, manga, index, selected]() {
             if (m_selectionMode) {
                 // Selection mode menu
                 switch (selected) {
@@ -810,6 +816,7 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
                         break;
                 }
             }
+            }); // end brls::sync
         }
     );
     brls::Application::pushActivity(new brls::Activity(dropdown));

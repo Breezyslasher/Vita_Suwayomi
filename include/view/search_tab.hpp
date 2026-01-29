@@ -35,6 +35,7 @@ private:
     void onSourceSelected(const Source& source);
     void onMangaSelected(const Manga& manga);
     void showSources();
+    void showSearchHome();
     void showSourceBrowser(const Source& source);
     void loadNextPage();
     void updateModeButtons();
@@ -43,9 +44,11 @@ private:
     brls::Label* m_searchLabel = nullptr;
     brls::Label* m_resultsLabel = nullptr;
 
-    // Header row with title and search icon
+    // Header row with title
     brls::Box* m_headerBox = nullptr;
-    brls::Button* m_globalSearchBtn = nullptr;
+
+    // Search prompt box (tappable search bar)
+    brls::Box* m_searchPromptBox = nullptr;
 
     // Mode selector buttons
     brls::Box* m_modeBox = nullptr;
