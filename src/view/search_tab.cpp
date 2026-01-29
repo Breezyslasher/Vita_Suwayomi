@@ -21,7 +21,7 @@ SearchTab::SearchTab() {
     this->setPadding(20);
     this->setGrow(1.0f);
 
-    // Header row with title
+    // Header row with title and search icon
     m_headerBox = new brls::Box();
     m_headerBox->setAxis(brls::Axis::ROW);
     m_headerBox->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -30,13 +30,52 @@ SearchTab::SearchTab() {
 
     // Title
     m_titleLabel = new brls::Label();
-    m_titleLabel->setText("Search");
+    m_titleLabel->setText("Browse");
     m_titleLabel->setFontSize(28);
     m_headerBox->addView(m_titleLabel);
+
+    // Global search button with Start icon above
+    auto* searchContainer = new brls::Box();
+    searchContainer->setAxis(brls::Axis::COLUMN);
+    searchContainer->setAlignItems(brls::AlignItems::CENTER);
+
+    // Start button icon - use actual image dimensions (64x16)
+    auto* startButtonIcon = new brls::Image();
+    startButtonIcon->setWidth(64);
+    startButtonIcon->setHeight(16);
+    startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
+    startButtonIcon->setMarginBottom(2);
+    searchContainer->addView(startButtonIcon);
+
+    m_globalSearchBtn = new brls::Button();
+    m_globalSearchBtn->setWidth(44);
+    m_globalSearchBtn->setHeight(44);
+    m_globalSearchBtn->setCornerRadius(8);
+    m_globalSearchBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_globalSearchBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* searchIcon = new brls::Image();
+    searchIcon->setWidth(24);
+    searchIcon->setHeight(24);
+    searchIcon->setScalingType(brls::ImageScalingType::FIT);
+    searchIcon->setImageFromFile("app0:resources/icons/search.png");
+    m_globalSearchBtn->addView(searchIcon);
+
+    m_globalSearchBtn->registerClickAction([this](brls::View* view) {
+        brls::sync([this]() {
+            showGlobalSearchDialog();
+        });
+        return true;
+    });
+    m_globalSearchBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_globalSearchBtn));
+    searchContainer->addView(m_globalSearchBtn);
+    m_headerBox->addView(searchContainer);
 
     this->addView(m_headerBox);
 
     // Register Start button to open global search dialog
+    // Use brls::sync to defer IME opening to avoid crash during controller input handling
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
         brls::sync([this]() {
             showGlobalSearchDialog();
@@ -59,9 +98,9 @@ SearchTab::SearchTab() {
     m_modeBox->setAlignItems(brls::AlignItems::CENTER);
     m_modeBox->setMarginBottom(10);
 
-    // Browse Sources button (secondary action)
+    // Sources button
     m_sourcesBtn = new brls::Button();
-    m_sourcesBtn->setText("Browse Sources");
+    m_sourcesBtn->setText("Sources");
     m_sourcesBtn->setMarginRight(10);
     m_sourcesBtn->registerClickAction([this](brls::View* view) {
         showSources();
@@ -124,7 +163,7 @@ SearchTab::SearchTab() {
     m_backBtn->setText("< Back");
     m_backBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->registerClickAction([this](brls::View* view) {
-        showSearchHome();
+        showSources();
         return true;
     });
     m_modeBox->addView(m_backBtn);
@@ -138,59 +177,21 @@ SearchTab::SearchTab() {
     m_resultsLabel->setMarginBottom(10);
     this->addView(m_resultsLabel);
 
-    // Search prompt - large tappable search bar
-    m_searchPromptBox = new brls::Box();
-    m_searchPromptBox->setAxis(brls::Axis::ROW);
-    m_searchPromptBox->setAlignItems(brls::AlignItems::CENTER);
-    m_searchPromptBox->setJustifyContent(brls::JustifyContent::CENTER);
-    m_searchPromptBox->setPadding(15);
-    m_searchPromptBox->setMarginTop(20);
-    m_searchPromptBox->setMarginBottom(20);
-    m_searchPromptBox->setCornerRadius(12);
-    m_searchPromptBox->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
-    m_searchPromptBox->setFocusable(true);
-
-    auto* searchIcon = new brls::Image();
-    searchIcon->setWidth(24);
-    searchIcon->setHeight(24);
-    searchIcon->setScalingType(brls::ImageScalingType::FIT);
-    searchIcon->setImageFromFile("app0:resources/icons/search.png");
-    searchIcon->setMarginRight(12);
-    m_searchPromptBox->addView(searchIcon);
-
-    auto* searchPromptLabel = new brls::Label();
-    searchPromptLabel->setText("Search all sources...");
-    searchPromptLabel->setFontSize(20);
-    searchPromptLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
-    m_searchPromptBox->addView(searchPromptLabel);
-
-    m_searchPromptBox->registerClickAction([this](brls::View* view) {
-        brls::sync([this]() {
-            showGlobalSearchDialog();
-        });
-        return true;
-    });
-    m_searchPromptBox->addGestureRecognizer(new brls::TapGestureRecognizer(m_searchPromptBox));
-
-    this->addView(m_searchPromptBox);
-
     // Content grid
     m_contentGrid = new RecyclingGrid();
     m_contentGrid->setGrow(1.0f);
-    m_contentGrid->setVisibility(brls::Visibility::GONE);
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
     this->addView(m_contentGrid);
 
-    // Load sources in background for global search
+    // Load sources initially
     loadSources();
 }
 
 void SearchTab::onFocusGained() {
     brls::Box::onFocusGained();
 
-    // Reload sources in background if not yet loaded
     if (m_sources.empty()) {
         loadSources();
     }
@@ -198,6 +199,7 @@ void SearchTab::onFocusGained() {
 
 void SearchTab::loadSources() {
     brls::Logger::debug("SearchTab: Loading sources");
+    m_browseMode = BrowseMode::SOURCES;
 
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -208,10 +210,13 @@ void SearchTab::loadSources() {
 
             brls::sync([this, sources]() {
                 m_sources = sources;
-                filterSourcesByLanguage();
+                showSources();
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch sources");
+            brls::sync([this]() {
+                m_resultsLabel->setText("Failed to load sources");
+            });
         }
     });
 }
@@ -269,62 +274,31 @@ void SearchTab::showGlobalSearchDialog() {
         if (text.empty()) return;
 
         m_searchQuery = text;
-        m_currentSourceId = 0; // Search all sources
         m_titleLabel->setText("Search: " + text);
         performSearch(text);
-    }, "Search", "Search across all sources", 256, m_searchQuery);
-}
-
-void SearchTab::showSearchHome() {
-    m_browseMode = BrowseMode::SOURCES;
-    m_titleLabel->setText("Search");
-    m_searchLabel->setVisibility(brls::Visibility::GONE);
-    m_resultsLabel->setText("");
-
-    // Show search prompt and browse sources button
-    m_searchPromptBox->setVisibility(brls::Visibility::VISIBLE);
-    m_sourcesBtn->setVisibility(brls::Visibility::VISIBLE);
-    m_popularBtn->setVisibility(brls::Visibility::GONE);
-    m_latestBtn->setVisibility(brls::Visibility::GONE);
-    m_filterBtn->setVisibility(brls::Visibility::GONE);
-    m_backBtn->setVisibility(brls::Visibility::GONE);
-
-    // Hide everything else
-    m_mangaList.clear();
-    m_resultsBySource.clear();
-    m_contentGrid->setVisibility(brls::Visibility::GONE);
-    if (m_sourceScrollView) {
-        m_sourceScrollView->setVisibility(brls::Visibility::GONE);
-    }
-    if (m_searchResultsScrollView) {
-        m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
-    }
-
-    m_currentSourceId = 0;
-    m_currentSourceName.clear();
+    }, "Global Search", "Search across all sources", 256, m_searchQuery);
 }
 
 void SearchTab::showSources() {
     m_browseMode = BrowseMode::SOURCES;
-    m_titleLabel->setText("Browse Sources");
+    m_titleLabel->setText("Browse");
     m_searchLabel->setVisibility(brls::Visibility::GONE);
 
     // Filter sources by language setting
     filterSourcesByLanguage();
     m_resultsLabel->setText(std::to_string(m_filteredSources.size()) + " sources");
 
-    // Hide search prompt, show back button
-    m_searchPromptBox->setVisibility(brls::Visibility::GONE);
+    // Hide source-specific buttons
     m_popularBtn->setVisibility(brls::Visibility::GONE);
     m_latestBtn->setVisibility(brls::Visibility::GONE);
     m_filterBtn->setVisibility(brls::Visibility::GONE);
-    m_backBtn->setVisibility(brls::Visibility::VISIBLE);
-    m_sourcesBtn->setVisibility(brls::Visibility::GONE);
+    m_backBtn->setVisibility(brls::Visibility::GONE);
+    m_sourcesBtn->setVisibility(brls::Visibility::VISIBLE);
 
     // Clear manga grid, results by source, and hide search results view
     m_mangaList.clear();
     m_resultsBySource.clear();
-    m_contentGrid->setVisibility(brls::Visibility::GONE);
+    m_contentGrid->setDataSource(m_mangaList);
     if (m_searchResultsScrollView) {
         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
     }
@@ -410,7 +384,8 @@ void SearchTab::showSources() {
         }
     }
 
-    // Show source scroll view
+    // Show source scroll view, hide content grid
+    m_contentGrid->setVisibility(brls::Visibility::GONE);
     m_sourceScrollView->setVisibility(brls::Visibility::VISIBLE);
 
     // Add scroll view if not already added
@@ -425,8 +400,7 @@ void SearchTab::showSourceBrowser(const Source& source) {
 
     m_titleLabel->setText(source.name);
 
-    // Hide search prompt, show source-specific buttons
-    m_searchPromptBox->setVisibility(brls::Visibility::GONE);
+    // Show source-specific buttons
     m_sourcesBtn->setVisibility(brls::Visibility::GONE);
     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
@@ -528,12 +502,11 @@ void SearchTab::performSearch(const std::string& query) {
     // Filter sources by language setting first
     filterSourcesByLanguage();
 
-    // Hide source list, grid, and search prompt
+    // Hide source list and grid, will show grouped results
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
     }
     m_contentGrid->setVisibility(brls::Visibility::GONE);
-    m_searchPromptBox->setVisibility(brls::Visibility::GONE);
 
     // Update UI for search mode
     m_browseMode = BrowseMode::SEARCH_RESULTS;
@@ -757,6 +730,8 @@ void SearchTab::loadNextPage() {
 }
 
 void SearchTab::updateModeButtons() {
+    // Highlight active mode button (in a real app, you'd change button style)
+    // For now, just ensure visibility is correct
     if (m_browseMode == BrowseMode::SOURCES) {
         m_sourcesBtn->setVisibility(brls::Visibility::VISIBLE);
         m_popularBtn->setVisibility(brls::Visibility::GONE);
