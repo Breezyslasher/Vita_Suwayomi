@@ -1046,9 +1046,15 @@ void LibrarySectionTab::downloadChapters(const std::vector<Manga>& mangaList, co
     std::vector<Manga> asyncList = mangaList;
     std::string asyncMode = mode;
 
-    asyncRun([asyncList, asyncMode, aliveWeak]() {
+    DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+
+    asyncRun([asyncList, asyncMode, aliveWeak, downloadMode]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        int totalQueued = 0;
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+        localMgr.init();
+
+        int totalServerQueued = 0;
+        int totalLocalQueued = 0;
 
         for (const auto& manga : asyncList) {
             std::vector<Chapter> chapters;
@@ -1057,15 +1063,26 @@ void LibrarySectionTab::downloadChapters(const std::vector<Manga>& mangaList, co
             // Chapters come sorted DESC by sourceOrder, reverse for ascending
             std::reverse(chapters.begin(), chapters.end());
 
-            std::vector<int> chapterIds;
+            std::vector<int> serverChapterIds;
+            std::vector<std::pair<int, int>> localChapterPairs;
+
+            auto collectChapter = [&](const Chapter& ch) {
+                if ((downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) && !ch.downloaded) {
+                    serverChapterIds.push_back(ch.id);
+                }
+                if ((downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) &&
+                    !localMgr.isChapterDownloaded(manga.id, ch.index)) {
+                    localChapterPairs.push_back({ch.id, ch.index});
+                }
+            };
 
             if (asyncMode == "all") {
                 for (const auto& ch : chapters) {
-                    if (!ch.downloaded) chapterIds.push_back(ch.id);
+                    collectChapter(ch);
                 }
             } else if (asyncMode == "unread") {
                 for (const auto& ch : chapters) {
-                    if (!ch.read && !ch.downloaded) chapterIds.push_back(ch.id);
+                    if (!ch.read) collectChapter(ch);
                 }
             } else {
                 // next N chapters - find first unread, then take N from there
@@ -1076,30 +1093,51 @@ void LibrarySectionTab::downloadChapters(const std::vector<Manga>& mangaList, co
 
                 int added = 0;
                 for (const auto& ch : chapters) {
-                    if (!ch.read && !ch.downloaded) {
-                        chapterIds.push_back(ch.id);
+                    if (!ch.read) {
+                        collectChapter(ch);
                         added++;
                         if (added >= count) break;
                     }
                 }
             }
 
-            if (!chapterIds.empty()) {
-                if (client.queueChapterDownloads(chapterIds)) {
-                    totalQueued += static_cast<int>(chapterIds.size());
+            if (!serverChapterIds.empty()) {
+                if (client.queueChapterDownloads(serverChapterIds)) {
+                    totalServerQueued += static_cast<int>(serverChapterIds.size());
+                }
+            }
+
+            if (!localChapterPairs.empty()) {
+                if (localMgr.queueChaptersDownload(manga.id, localChapterPairs, manga.title)) {
+                    totalLocalQueued += static_cast<int>(localChapterPairs.size());
                 }
             }
         }
 
         // Start downloads
-        if (totalQueued > 0) {
+        if (totalServerQueued > 0) {
             client.startDownloads();
         }
+        if (totalLocalQueued > 0) {
+            localMgr.startDownloads();
+        }
 
-        brls::sync([totalQueued, aliveWeak]() {
+        brls::sync([totalServerQueued, totalLocalQueued, downloadMode, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
-            brls::Application::notify("Queued " + std::to_string(totalQueued) + " chapters for download");
+
+            std::string msg;
+            if (downloadMode == DownloadMode::SERVER_ONLY) {
+                msg = "Queued " + std::to_string(totalServerQueued) + " chapters to server";
+            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                msg = "Queued " + std::to_string(totalLocalQueued) + " chapters locally";
+            } else {
+                msg = "Queued ";
+                if (totalServerQueued > 0) msg += std::to_string(totalServerQueued) + " to server";
+                if (totalServerQueued > 0 && totalLocalQueued > 0) msg += ", ";
+                if (totalLocalQueued > 0) msg += std::to_string(totalLocalQueued) + " locally";
+            }
+            brls::Application::notify(msg);
         });
     });
 }
