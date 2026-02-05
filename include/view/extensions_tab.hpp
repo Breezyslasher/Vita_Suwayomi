@@ -22,6 +22,10 @@ public:
     static ExtensionCell* create();
     void prepareForReuse() override;
 
+    // Override navigation for settings button
+    brls::View* getNextFocus(brls::FocusDirection direction, brls::View* currentView) override;
+    brls::View* getDefaultFocus() override;
+
     // Public members for data binding
     brls::Image* icon = nullptr;
     brls::Label* nameLabel = nullptr;
@@ -32,6 +36,9 @@ public:
     // Track which extension this cell represents
     std::string pkgName;
     bool iconLoaded = false;
+
+    // Track if settings button should be preferred focus (for D-pad navigation)
+    static bool s_preferSettingsFocus;
 };
 
 // Section header cell
@@ -143,6 +150,10 @@ private:
 
     // Trigger recycler refresh
     void reloadRecycler();
+
+    // Save/restore focus position for expand/collapse
+    int getFocusedRowIndex() const;
+    void restoreFocusToRow(int rowIndex);
 
     // UI elements
     brls::Label* m_titleLabel = nullptr;

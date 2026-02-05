@@ -15,6 +15,9 @@
 
 namespace vitasuwayomi {
 
+// Static member for tracking if settings button should be preferred focus
+bool ExtensionCell::s_preferSettingsFocus = false;
+
 // ============================================================================
 // ExtensionCell Implementation
 // ============================================================================
@@ -101,6 +104,50 @@ void ExtensionCell::prepareForReuse() {
     statusLabel->setText("");
     settingsBtn->setVisibility(brls::Visibility::GONE);
     this->setMarginLeft(0);
+}
+
+brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::View* currentView) {
+    // Check if the settings button is visible
+    bool settingsVisible = settingsBtn->getVisibility() == brls::Visibility::VISIBLE;
+
+    // If pressing LEFT and settings button is visible, go to settings button
+    if (direction == brls::FocusDirection::LEFT && settingsVisible) {
+        // If focus is on the cell itself, move to settings button
+        if (currentView == this) {
+            s_preferSettingsFocus = true;
+            return settingsBtn;
+        }
+    }
+
+    // If pressing RIGHT and currently on settings button, go back to cell
+    if (direction == brls::FocusDirection::RIGHT && currentView == settingsBtn) {
+        s_preferSettingsFocus = false;
+        return this;
+    }
+
+    // If pressing UP or DOWN while on settings button, navigate to parent
+    // and let the recycler handle finding the next cell
+    if ((direction == brls::FocusDirection::UP || direction == brls::FocusDirection::DOWN) &&
+        currentView == settingsBtn) {
+        // Keep the preference for settings focus
+        s_preferSettingsFocus = true;
+        // Delegate to parent (the recycler content box)
+        if (hasParent()) {
+            return getParent()->getNextFocus(direction, this);
+        }
+    }
+
+    // Default behavior for other cases
+    return brls::RecyclerCell::getNextFocus(direction, currentView);
+}
+
+brls::View* ExtensionCell::getDefaultFocus() {
+    // If we should prefer settings focus and settings button is visible, return it
+    if (s_preferSettingsFocus && settingsBtn->getVisibility() == brls::Visibility::VISIBLE) {
+        return settingsBtn;
+    }
+    // Otherwise return the cell itself (default behavior)
+    return this;
 }
 
 // ============================================================================
@@ -744,6 +791,37 @@ void ExtensionsTab::reloadRecycler() {
     }
 }
 
+int ExtensionsTab::getFocusedRowIndex() const {
+    // Get the currently focused view
+    brls::View* focused = brls::Application::getCurrentFocus();
+    if (!focused) return -1;
+
+    // Walk up to find if it's inside our recycler
+    brls::View* current = focused;
+    while (current) {
+        // Check if this is a RecyclerCell in our recycler
+        auto* cell = dynamic_cast<brls::RecyclerCell*>(current);
+        if (cell) {
+            // Get the index from parent user data
+            void* userData = cell->getParentUserData();
+            if (userData) {
+                return static_cast<int>(*reinterpret_cast<size_t*>(userData));
+            }
+        }
+        current = current->getParent();
+    }
+    return -1;
+}
+
+void ExtensionsTab::restoreFocusToRow(int rowIndex) {
+    if (rowIndex < 0) return;
+
+    // Use selectRowAt to scroll to and focus the row
+    // The row index in our flat list corresponds to section 0
+    brls::IndexPath indexPath(0, rowIndex);
+    m_recycler->selectRowAt(indexPath, false);
+}
+
 void ExtensionsTab::showLoading(const std::string& message) {
     // For now just log - recycler handles its own state
     brls::Logger::debug("Loading: {}", message);
@@ -785,6 +863,9 @@ std::vector<std::string> ExtensionsTab::getSortedLanguageKeys(
 // ============================================================================
 
 void ExtensionsTab::onSectionHeaderClicked(const std::string& sectionId) {
+    // Save the focused row index before making changes
+    int focusedRow = getFocusedRowIndex();
+
     if (sectionId == "updates") {
         m_updatesExpanded = !m_updatesExpanded;
     } else if (sectionId == "installed") {
@@ -792,12 +873,24 @@ void ExtensionsTab::onSectionHeaderClicked(const std::string& sectionId) {
     } else if (sectionId == "available") {
         m_availableExpanded = !m_availableExpanded;
     }
+
     reloadRecycler();
+
+    // Restore focus to the same row (the header that was clicked)
+    // The header itself should still be at approximately the same index
+    restoreFocusToRow(focusedRow);
 }
 
 void ExtensionsTab::onLanguageHeaderClicked(const std::string& langCode) {
+    // Save the focused row index before making changes
+    int focusedRow = getFocusedRowIndex();
+
     m_languageExpanded[langCode] = !isLanguageExpanded(langCode);
+
     reloadRecycler();
+
+    // Restore focus to the same row (the header that was clicked)
+    restoreFocusToRow(focusedRow);
 }
 
 void ExtensionsTab::onExtensionClicked(const Extension& ext) {
