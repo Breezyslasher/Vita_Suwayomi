@@ -1375,6 +1375,22 @@ void ExtensionsTab::updateSectionHeaderCount(SectionState& section, int delta) {
     }
 }
 
+void ExtensionsTab::cleanupTouchStateRecursive(brls::View* view) {
+    if (!view) return;
+
+    // Clean up this view's touch/gesture state
+    view->interruptGestures(false);
+    brls::Application::tryDeinitFirstResponder(view);
+
+    // Recursively clean up children if this is a Box
+    auto* box = dynamic_cast<brls::Box*>(view);
+    if (box) {
+        for (auto* child : box->getChildren()) {
+            cleanupTouchStateRecursive(child);
+        }
+    }
+}
+
 void ExtensionsTab::liveUpdateExtensionItem(const Extension& ext, bool newInstalled, bool newHasUpdate) {
     // Find the existing item
     auto* itemInfo = findExtensionItem(ext.pkgName);
@@ -1476,19 +1492,28 @@ void ExtensionsTab::liveUpdateExtensionItem(const Extension& ext, bool newInstal
     // The View destructor handles this, but it only runs when the deletion pool is processed
     // at the end of the frame. We need to do it now to avoid crashes during the rest of this function.
     brls::View* currentFocus = brls::Application::getCurrentFocus();
-    if (currentFocus == oldContainer || currentFocus == oldSettingsBtn) {
-        // Transfer focus away from the view being deleted
-        brls::Application::giveFocus(nullptr);
+    if (currentFocus) {
+        // Check if focus is on container or any of its descendants
+        brls::View* focusCheck = currentFocus;
+        bool focusInContainer = false;
+        while (focusCheck) {
+            if (focusCheck == oldContainer) {
+                focusInContainer = true;
+                break;
+            }
+            focusCheck = focusCheck->getParent();
+        }
+        if (focusInContainer) {
+            // Transfer focus away from the view being deleted
+            brls::Application::giveFocus(nullptr);
+        }
     }
 
-    // Interrupt any active gestures on the container before removal
-    oldContainer->interruptGestures(false);
-
-    // Clean up touch/mouse state referencing the container or its children
-    brls::Application::tryDeinitFirstResponder(oldContainer);
-    if (oldSettingsBtn) {
-        brls::Application::tryDeinitFirstResponder(oldSettingsBtn);
-    }
+    // Clean up touch/gesture state for container and ALL descendants recursively.
+    // This is critical because touch state might be stored on child views (e.g., buttons),
+    // not just the container itself. The tryDeinitFirstResponder function only clears
+    // state for exact pointer matches, so we must clean up each descendant individually.
+    cleanupTouchStateRecursive(oldContainer);
 
     // Remove old container from parent
     parent->removeView(oldContainer);

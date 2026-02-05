@@ -150,6 +150,9 @@ private:
     // Live UI updates (replace item in place without full refresh)
     void liveUpdateExtensionItem(const Extension& ext, bool newInstalled, bool newHasUpdate);
     void updateSectionHeaderCount(SectionState& section, int delta);
+
+    // Helper to recursively clean up touch/gesture state for a view and all descendants
+    void cleanupTouchStateRecursive(brls::View* view);
 };
 
 } // namespace vitasuwayomi
