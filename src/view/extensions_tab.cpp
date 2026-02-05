@@ -1472,6 +1472,24 @@ void ExtensionsTab::liveUpdateExtensionItem(const Extension& ext, bool newInstal
         }
     }
 
+    // IMPORTANT: Clean up focus and gesture state BEFORE removing the view.
+    // The View destructor handles this, but it only runs when the deletion pool is processed
+    // at the end of the frame. We need to do it now to avoid crashes during the rest of this function.
+    brls::View* currentFocus = brls::Application::getCurrentFocus();
+    if (currentFocus == oldContainer || currentFocus == oldSettingsBtn) {
+        // Transfer focus away from the view being deleted
+        brls::Application::giveFocus(nullptr);
+    }
+
+    // Interrupt any active gestures on the container before removal
+    oldContainer->interruptGestures(false);
+
+    // Clean up touch/mouse state referencing the container or its children
+    brls::Application::tryDeinitFirstResponder(oldContainer);
+    if (oldSettingsBtn) {
+        brls::Application::tryDeinitFirstResponder(oldSettingsBtn);
+    }
+
     // Remove old container from parent
     parent->removeView(oldContainer);
 
