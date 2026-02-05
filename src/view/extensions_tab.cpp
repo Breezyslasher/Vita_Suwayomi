@@ -1350,6 +1350,115 @@ void ExtensionsTab::updateExtensionItemStatus(const std::string& pkgName, bool i
     m_groupingCacheValid = false;
 }
 
+void ExtensionsTab::updateSectionHeaderCount(SectionState& section, int delta) {
+    if (!section.headerBox) return;
+
+    // The count label is the last child in the header
+    auto& children = section.headerBox->getChildren();
+    if (children.size() >= 2) {
+        auto* countLabel = dynamic_cast<brls::Label*>(children.back());
+        if (countLabel) {
+            // Parse current count, apply delta, update
+            int currentCount = std::stoi(countLabel->getText());
+            int newCount = std::max(0, currentCount + delta);
+            countLabel->setText(std::to_string(newCount));
+        }
+    }
+}
+
+void ExtensionsTab::liveUpdateExtensionItem(const Extension& ext, bool newInstalled, bool newHasUpdate) {
+    // Find the existing item
+    auto* itemInfo = findExtensionItem(ext.pkgName);
+    if (!itemInfo || !itemInfo->container) {
+        brls::Logger::warning("liveUpdateExtensionItem: Could not find item for {}", ext.pkgName);
+        return;
+    }
+
+    brls::Box* oldContainer = itemInfo->container;
+    brls::Box* parent = dynamic_cast<brls::Box*>(oldContainer->getParent());
+    if (!parent) {
+        brls::Logger::warning("liveUpdateExtensionItem: Parent not found for {}", ext.pkgName);
+        return;
+    }
+
+    // Find position in parent
+    auto& children = parent->getChildren();
+    int index = -1;
+    for (size_t i = 0; i < children.size(); i++) {
+        if (children[i] == oldContainer) {
+            index = static_cast<int>(i);
+            break;
+        }
+    }
+
+    if (index < 0) {
+        brls::Logger::warning("liveUpdateExtensionItem: Could not find index for {}", ext.pkgName);
+        return;
+    }
+
+    // Create updated extension data
+    Extension updatedExt = ext;
+    updatedExt.installed = newInstalled;
+    updatedExt.hasUpdate = newHasUpdate;
+
+    // Update cache first
+    updateExtensionItemStatus(ext.pkgName, newInstalled, newHasUpdate);
+
+    // Remove old item from tracking
+    for (auto it = m_extensionItems.begin(); it != m_extensionItems.end(); ++it) {
+        if (it->pkgName == ext.pkgName) {
+            m_extensionItems.erase(it);
+            break;
+        }
+    }
+
+    // Remove old container from parent (don't delete yet, let borealis handle it)
+    parent->removeView(oldContainer);
+
+    // Create new item with updated state
+    auto* newItem = createExtensionItem(updatedExt);
+    if (newItem) {
+        // Insert at same position
+        parent->addView(newItem, index);
+        brls::Logger::info("liveUpdateExtensionItem: Replaced {} at index {}", ext.pkgName, index);
+    }
+
+    // Update D-pad navigation
+    updateSettingsButtonNavigation();
+
+    // Update section header counts based on state change
+    bool wasInstalled = ext.installed;
+    bool hadUpdate = ext.hasUpdate;
+
+    if (!wasInstalled && newInstalled) {
+        // Install: Available -1, Installed +1
+        updateSectionHeaderCount(m_availableSection, -1);
+        updateSectionHeaderCount(m_installedSection, 1);
+        // Also update language section if applicable
+        auto langIt = m_languageSections.find(ext.lang);
+        if (langIt != m_languageSections.end()) {
+            updateSectionHeaderCount(langIt->second, -1);
+        }
+    } else if (wasInstalled && !newInstalled) {
+        // Uninstall: Installed/Updates -1, Available +1
+        if (hadUpdate) {
+            updateSectionHeaderCount(m_updatesSection, -1);
+        } else {
+            updateSectionHeaderCount(m_installedSection, -1);
+        }
+        updateSectionHeaderCount(m_availableSection, 1);
+        // Also update language section if applicable
+        auto langIt = m_languageSections.find(ext.lang);
+        if (langIt != m_languageSections.end()) {
+            updateSectionHeaderCount(langIt->second, 1);
+        }
+    } else if (wasInstalled && hadUpdate && newInstalled && !newHasUpdate) {
+        // Update: Updates -1, Installed +1
+        updateSectionHeaderCount(m_updatesSection, -1);
+        updateSectionHeaderCount(m_installedSection, 1);
+    }
+}
+
 void ExtensionsTab::refreshUIFromCache() {
     // Rebuild the categorized lists from cached data
     // This is safe to call from any context as it doesn't clear views synchronously
@@ -1602,8 +1711,8 @@ void ExtensionsTab::installExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Installed: " + ext.name);
-                // Auto-refresh to show updated extension list
-                refreshExtensions();
+                // Live update the item in place (installed=true, hasUpdate=false)
+                liveUpdateExtensionItem(ext, true, false);
             } else {
                 brls::Application::notify("Failed to install: " + ext.name);
             }
@@ -1622,8 +1731,8 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Updated: " + ext.name);
-                // Auto-refresh to show updated extension list
-                refreshExtensions();
+                // Live update the item in place (installed=true, hasUpdate=false after update)
+                liveUpdateExtensionItem(ext, true, false);
             } else {
                 brls::Application::notify("Failed to update: " + ext.name);
             }
@@ -1642,8 +1751,8 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
         brls::sync([this, success, ext]() {
             if (success) {
                 brls::Application::notify("Uninstalled: " + ext.name);
-                // Auto-refresh to show updated extension list
-                refreshExtensions();
+                // Live update the item in place (installed=false, hasUpdate=false)
+                liveUpdateExtensionItem(ext, false, false);
             } else {
                 brls::Application::notify("Failed to uninstall: " + ext.name);
             }

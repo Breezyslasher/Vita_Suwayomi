@@ -146,6 +146,10 @@ private:
     // Performance: Incremental updates
     void updateExtensionItemStatus(const std::string& pkgName, bool installed, bool hasUpdate);
     ExtensionItemInfo* findExtensionItem(const std::string& pkgName);
+
+    // Live UI updates (replace item in place without full refresh)
+    void liveUpdateExtensionItem(const Extension& ext, bool newInstalled, bool newHasUpdate);
+    void updateSectionHeaderCount(SectionState& section, int delta);
 };
 
 } // namespace vitasuwayomi
