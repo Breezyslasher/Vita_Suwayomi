@@ -1122,6 +1122,33 @@ void SettingsTab::showCategoryManagementDialog() {
     closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
     dialogBox->addView(closeBtn);
 
+    // Register circle button to close the dialog
+    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
+    // Set up navigation: first category should go up to createBtn, last category should go down to closeBtn
+    auto& catChildren = catList->getChildren();
+    if (!catChildren.empty()) {
+        // First category row -> up goes to createBtn
+        catChildren.front()->setCustomNavigationRoute(brls::FocusDirection::UP, createBtn);
+        // Last category row -> down goes to closeBtn
+        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
+    }
+    // createBtn -> down goes to first category (or closeBtn if no categories)
+    if (!catChildren.empty()) {
+        createBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, catChildren.front());
+    } else {
+        createBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
+    }
+    // closeBtn -> up goes to last category (or createBtn if no categories)
+    if (!catChildren.empty()) {
+        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+    } else {
+        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, createBtn);
+    }
+
     // Push as new activity
     brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
