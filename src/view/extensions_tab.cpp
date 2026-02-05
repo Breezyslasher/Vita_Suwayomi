@@ -941,7 +941,7 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         std::vector<Source> sources;
-        bool success = client.fetchExtensionSources(ext.pkgName, sources);
+        bool success = client.fetchSourcesForExtension(ext.pkgName, sources);
 
         if (!success || sources.empty()) {
             brls::sync([this]() {
@@ -1058,12 +1058,14 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                 auto* valueLabel = new brls::Label();
                 valueLabel->setFontSize(13);
 
-                if (pref.type == "CheckBoxPreference" || pref.type == "SwitchPreferenceCompat") {
-                    valueLabel->setText(pref.currentValue == "true" ? "Enabled" : "Disabled");
-                } else if (pref.type == "ListPreference") {
-                    valueLabel->setText(pref.currentValue);
+                if (pref.type == SourcePreferenceType::CHECKBOX || pref.type == SourcePreferenceType::SWITCH) {
+                    valueLabel->setText(pref.currentValue ? "Enabled" : "Disabled");
+                } else if (pref.type == SourcePreferenceType::LIST) {
+                    valueLabel->setText(pref.selectedValue);
+                } else if (pref.type == SourcePreferenceType::EDIT_TEXT) {
+                    valueLabel->setText(pref.currentText);
                 } else {
-                    valueLabel->setText(pref.currentValue);
+                    valueLabel->setText(pref.key);
                 }
 
                 valueBox->addView(valueLabel);
@@ -1086,7 +1088,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 // ============================================================================
 
 void ExtensionsTab::showSearchDialog() {
-    brls::Swkbd::openForText([this](std::string text) {
+    brls::Application::getImeManager()->openForText([this](std::string text) {
         if (text.empty()) {
             clearSearch();
             return;
@@ -1098,7 +1100,7 @@ void ExtensionsTab::showSearchDialog() {
 
         brls::Application::notify("Searching for: " + text);
         showSearchResults();
-    }, "Search Extensions", "", 64, "", 0, "Search", "");
+    }, "Search Extensions", "", 64);
 }
 
 void ExtensionsTab::clearSearch() {
