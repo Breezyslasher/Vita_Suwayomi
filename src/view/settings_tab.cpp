@@ -920,6 +920,16 @@ void SettingsTab::showCategoryManagementDialog() {
     createBtn->addGestureRecognizer(new brls::TapGestureRecognizer(createBtn));
     dialogBox->addView(createBtn);
 
+    // Create close button early so it can be captured in lambdas (added to dialog later)
+    auto* closeBtn = new brls::Button();
+    closeBtn->setText("Close");
+    closeBtn->setMarginTop(15);
+    closeBtn->registerClickAction([](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    });
+    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
+
     // Scrollable category list
     auto* scrollView = new brls::ScrollingFrame();
     scrollView->setGrow(1.0f);
@@ -978,7 +988,7 @@ void SettingsTab::showCategoryManagementDialog() {
         int catId = cat.id;
 
         // Register L button to move up
-        catRow->registerAction("Move Up", brls::ControllerButton::BUTTON_LB, [catList, catId](brls::View* view) {
+        catRow->registerAction("Move Up", brls::ControllerButton::BUTTON_LB, [catList, catId, createBtn, closeBtn](brls::View* view) {
             // Find current UI position
             auto& children = catList->getChildren();
             int uiIndex = -1;
@@ -1016,6 +1026,15 @@ void SettingsTab::showCategoryManagementDialog() {
                         auto* label = dynamic_cast<brls::Label*>(prevBox->getChildren()[1]);
                         if (label) label->setText("#" + std::to_string(uiIndex + 1));
                     }
+
+                    // Update navigation routes after move
+                    auto& updatedChildren = catList->getChildren();
+                    if (!updatedChildren.empty()) {
+                        updatedChildren.front()->setCustomNavigationRoute(brls::FocusDirection::UP, createBtn);
+                        updatedChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
+                        createBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, updatedChildren.front());
+                        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, updatedChildren.back());
+                    }
                 } else {
                     brls::Application::notify("Failed to move category");
                 }
@@ -1024,7 +1043,7 @@ void SettingsTab::showCategoryManagementDialog() {
         });
 
         // Register R button to move down
-        catRow->registerAction("Move Down", brls::ControllerButton::BUTTON_RB, [catList, catId](brls::View* view) {
+        catRow->registerAction("Move Down", brls::ControllerButton::BUTTON_RB, [catList, catId, createBtn, closeBtn](brls::View* view) {
             // Find current UI position
             auto& children = catList->getChildren();
             int uiIndex = -1;
@@ -1061,6 +1080,15 @@ void SettingsTab::showCategoryManagementDialog() {
                     if (nextBox && nextBox->getChildren().size() >= 2) {
                         auto* label = dynamic_cast<brls::Label*>(nextBox->getChildren()[1]);
                         if (label) label->setText("#" + std::to_string(uiIndex + 1));
+                    }
+
+                    // Update navigation routes after move
+                    auto& updatedChildren = catList->getChildren();
+                    if (!updatedChildren.empty()) {
+                        updatedChildren.front()->setCustomNavigationRoute(brls::FocusDirection::UP, createBtn);
+                        updatedChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
+                        createBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, updatedChildren.front());
+                        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, updatedChildren.back());
                     }
                 } else {
                     brls::Application::notify("Failed to move category");
@@ -1107,15 +1135,7 @@ void SettingsTab::showCategoryManagementDialog() {
     scrollView->setContentView(catList);
     dialogBox->addView(scrollView);
 
-    // Close button
-    auto* closeBtn = new brls::Button();
-    closeBtn->setText("Close");
-    closeBtn->setMarginTop(15);
-    closeBtn->registerClickAction([](brls::View* view) {
-        brls::Application::popActivity();
-        return true;
-    });
-    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
+    // Add close button to dialog (created earlier to allow capture in lambdas)
     dialogBox->addView(closeBtn);
 
     // Register circle button to close the dialog
