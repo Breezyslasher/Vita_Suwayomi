@@ -124,6 +124,16 @@ void SettingsTab::createLibrarySection() {
     header->setTitle("Library");
     m_contentBox->addView(header);
 
+    // Manage Categories cell
+    auto* manageCategoriesCell = new brls::DetailCell();
+    manageCategoriesCell->setText("Manage Categories");
+    manageCategoriesCell->setDetailText("Create, edit, delete, reorder");
+    manageCategoriesCell->registerClickAction([this](brls::View* view) {
+        showCategoryManagementDialog();
+        return true;
+    });
+    m_contentBox->addView(manageCategoriesCell);
+
     // Hide categories cell
     m_hideCategoriesCell = new brls::DetailCell();
     m_hideCategoriesCell->setText("Hidden Categories");
@@ -854,6 +864,325 @@ void SettingsTab::onThemeChanged(int index) {
     settings.theme = static_cast<AppTheme>(index);
     app.applyTheme();
     app.saveSettings();
+}
+
+void SettingsTab::showCategoryManagementDialog() {
+    // Fetch categories from server
+    brls::Application::notify("Loading categories...");
+
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::vector<Category> categories;
+
+    if (!client.fetchCategories(categories)) {
+        brls::Application::notify("Failed to load categories");
+        return;
+    }
+
+    // Sort by order
+    std::sort(categories.begin(), categories.end(),
+        [](const Category& a, const Category& b) {
+            return a.order < b.order;
+        });
+
+    // Create dialog box
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(550);
+    dialogBox->setHeight(450);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setCornerRadius(12);
+
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Manage Categories");
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(10);
+    dialogBox->addView(titleLabel);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Use L/R to move, X to edit, Y to delete");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setMarginBottom(15);
+    dialogBox->addView(infoLabel);
+
+    // Create New Category button
+    auto* createBtn = new brls::Button();
+    createBtn->setText("+ Create New Category");
+    createBtn->setMarginBottom(15);
+    createBtn->registerClickAction([this](brls::View* view) {
+        brls::Application::popActivity();
+        showCreateCategoryDialog();
+        return true;
+    });
+    createBtn->addGestureRecognizer(new brls::TapGestureRecognizer(createBtn));
+    dialogBox->addView(createBtn);
+
+    // Scrollable category list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
+
+    auto* catList = new brls::Box();
+    catList->setAxis(brls::Axis::COLUMN);
+
+    for (size_t i = 0; i < categories.size(); i++) {
+        const auto& cat = categories[i];
+
+        // Skip the default category (id 0) - it can't be modified
+        if (cat.id == 0) continue;
+
+        auto* catRow = new brls::Box();
+        catRow->setAxis(brls::Axis::ROW);
+        catRow->setAlignItems(brls::AlignItems::CENTER);
+        catRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+        catRow->setPadding(10, 12, 10, 12);
+        catRow->setMarginBottom(6);
+        catRow->setCornerRadius(8);
+        catRow->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
+        catRow->setFocusable(true);
+
+        // Category info box
+        auto* infoBox = new brls::Box();
+        infoBox->setAxis(brls::Axis::COLUMN);
+        infoBox->setGrow(1.0f);
+
+        auto* nameLabel = new brls::Label();
+        std::string displayName = cat.name;
+        if (displayName.length() > 20) {
+            displayName = displayName.substr(0, 18) + "..";
+        }
+        nameLabel->setText(displayName);
+        nameLabel->setFontSize(16);
+        infoBox->addView(nameLabel);
+
+        auto* countLabel = new brls::Label();
+        countLabel->setText(std::to_string(cat.mangaCount) + " manga");
+        countLabel->setFontSize(12);
+        countLabel->setTextColor(nvgRGB(120, 120, 120));
+        infoBox->addView(countLabel);
+
+        catRow->addView(infoBox);
+
+        // Order indicator
+        auto* orderLabel = new brls::Label();
+        orderLabel->setText("#" + std::to_string(i + 1));
+        orderLabel->setFontSize(14);
+        orderLabel->setTextColor(nvgRGB(100, 100, 100));
+        orderLabel->setMarginRight(10);
+        catRow->addView(orderLabel);
+
+        // Store category data for actions
+        int catId = cat.id;
+        std::string catName = cat.name;
+        int catOrder = static_cast<int>(i);
+        int totalCats = static_cast<int>(categories.size());
+
+        // Register L button to move up
+        catRow->registerAction("Move Up", brls::ControllerButton::BUTTON_LB, [catId, catOrder](brls::View*) {
+            if (catOrder > 0) {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                if (client.moveCategoryOrder(catId, catOrder - 1)) {
+                    brls::Application::notify("Category moved up");
+                    brls::Application::popActivity();
+                } else {
+                    brls::Application::notify("Failed to move category");
+                }
+            }
+            return true;
+        });
+
+        // Register R button to move down
+        catRow->registerAction("Move Down", brls::ControllerButton::BUTTON_RB, [catId, catOrder, totalCats](brls::View*) {
+            if (catOrder < totalCats - 1) {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                if (client.moveCategoryOrder(catId, catOrder + 1)) {
+                    brls::Application::notify("Category moved down");
+                    brls::Application::popActivity();
+                } else {
+                    brls::Application::notify("Failed to move category");
+                }
+            }
+            return true;
+        });
+
+        // Register X button to edit
+        Category catCopy = cat;
+        catRow->registerAction("Edit", brls::ControllerButton::BUTTON_X, [this, catCopy](brls::View*) {
+            brls::Application::popActivity();
+            showEditCategoryDialog(catCopy);
+            return true;
+        });
+
+        // Register Y button to delete
+        catRow->registerAction("Delete", brls::ControllerButton::BUTTON_Y, [this, catCopy](brls::View*) {
+            brls::Application::popActivity();
+            showDeleteCategoryConfirmation(catCopy);
+            return true;
+        });
+
+        // Click to edit
+        catRow->registerClickAction([this, catCopy](brls::View* view) {
+            brls::Application::popActivity();
+            showEditCategoryDialog(catCopy);
+            return true;
+        });
+        catRow->addGestureRecognizer(new brls::TapGestureRecognizer(catRow));
+
+        catList->addView(catRow);
+    }
+
+    // If no editable categories
+    if (categories.empty() || (categories.size() == 1 && categories[0].id == 0)) {
+        auto* label = new brls::Label();
+        label->setText("No categories found. Create one!");
+        label->setFontSize(16);
+        label->setMarginTop(20);
+        catList->addView(label);
+    }
+
+    scrollView->setContentView(catList);
+    dialogBox->addView(scrollView);
+
+    // Close button
+    auto* closeBtn = new brls::Button();
+    closeBtn->setText("Close");
+    closeBtn->setMarginTop(15);
+    closeBtn->registerClickAction([](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    });
+    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
+    dialogBox->addView(closeBtn);
+
+    // Push as new activity
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
+}
+
+void SettingsTab::showCreateCategoryDialog() {
+    brls::Dialog* dialog = new brls::Dialog("Create New Category");
+
+    auto* contentBox = new brls::Box();
+    contentBox->setAxis(brls::Axis::COLUMN);
+    contentBox->setPadding(20);
+    contentBox->setWidth(400);
+
+    auto* inputLabel = new brls::Label();
+    inputLabel->setText("Enter category name:");
+    inputLabel->setFontSize(16);
+    inputLabel->setMarginBottom(10);
+    contentBox->addView(inputLabel);
+
+    // Note: Borealis doesn't have a native text input, so we'll use a workaround
+    // with the software keyboard or a preset name approach
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Press A to open keyboard");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    contentBox->addView(infoLabel);
+
+    dialog->addView(contentBox);
+
+    dialog->addButton("Cancel", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->addButton("Create", [dialog]() {
+        // Open software keyboard for input
+        brls::Swkbd::openForText([dialog](std::string text) {
+            if (text.empty()) {
+                brls::Application::notify("Category name cannot be empty");
+                return;
+            }
+
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            if (client.createCategory(text)) {
+                brls::Application::notify("Category created: " + text);
+                dialog->close();
+            } else {
+                brls::Application::notify("Failed to create category");
+            }
+        }, "Enter category name", "", 50, "", 0, "");
+    });
+
+    dialog->open();
+}
+
+void SettingsTab::showEditCategoryDialog(const Category& category) {
+    brls::Dialog* dialog = new brls::Dialog("Edit Category: " + category.name);
+
+    auto* contentBox = new brls::Box();
+    contentBox->setAxis(brls::Axis::COLUMN);
+    contentBox->setPadding(20);
+    contentBox->setWidth(400);
+
+    auto* inputLabel = new brls::Label();
+    inputLabel->setText("Current name: " + category.name);
+    inputLabel->setFontSize(16);
+    inputLabel->setMarginBottom(10);
+    contentBox->addView(inputLabel);
+
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Press 'Rename' to change the name");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    contentBox->addView(infoLabel);
+
+    dialog->addView(contentBox);
+
+    int catId = category.id;
+    bool isDefault = category.isDefault;
+
+    dialog->addButton("Cancel", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->addButton("Rename", [dialog, catId, isDefault]() {
+        brls::Swkbd::openForText([dialog, catId, isDefault](std::string text) {
+            if (text.empty()) {
+                brls::Application::notify("Category name cannot be empty");
+                return;
+            }
+
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            if (client.updateCategory(catId, text, isDefault)) {
+                brls::Application::notify("Category renamed to: " + text);
+                dialog->close();
+            } else {
+                brls::Application::notify("Failed to rename category");
+            }
+        }, "Enter new category name", "", 50, "", 0, "");
+    });
+
+    dialog->open();
+}
+
+void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
+    std::string message = "Delete category '" + category.name + "'?\n\n"
+                         "This will remove " + std::to_string(category.mangaCount) +
+                         " manga from this category.\nThe manga will remain in your library.";
+
+    brls::Dialog* dialog = new brls::Dialog(message);
+
+    int catId = category.id;
+
+    dialog->addButton("Cancel", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->addButton("Delete", [dialog, catId]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        if (client.deleteCategory(catId)) {
+            brls::Application::notify("Category deleted");
+            dialog->close();
+        } else {
+            brls::Application::notify("Failed to delete category");
+            dialog->close();
+        }
+    });
+
+    dialog->open();
 }
 
 } // namespace vitasuwayomi

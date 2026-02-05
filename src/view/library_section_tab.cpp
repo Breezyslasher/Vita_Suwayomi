@@ -129,6 +129,9 @@ LibrarySectionTab::LibrarySectionTab() {
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
+    m_contentGrid->setOnPullToRefresh([this]() {
+        triggerLibraryUpdate();
+    });
     this->addView(m_contentGrid);
 
     brls::Logger::debug("LibrarySectionTab: Created");
@@ -152,6 +155,12 @@ LibrarySectionTab::LibrarySectionTab() {
         if (manga) {
             showMangaContextMenu(*manga, idx);
         }
+        return true;
+    });
+
+    // Register Select button to refresh/update current category
+    this->registerAction("Update Category", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
+        triggerLibraryUpdate();
         return true;
     });
 
@@ -516,13 +525,18 @@ void LibrarySectionTab::triggerLibraryUpdate() {
     brls::Logger::info("LibrarySectionTab: Triggering update for category {} ({})",
                       m_currentCategoryId, m_currentCategoryName);
 
-    std::string message = "Updating " + m_currentCategoryName + "...";
+    std::string categoryName = m_currentCategoryName;
+    if (categoryName.empty() || m_currentCategoryId == 0) {
+        categoryName = "all manga";
+    }
+
+    std::string message = "Checking for new chapters in " + categoryName + "...";
     brls::Application::notify(message);
 
     std::weak_ptr<bool> aliveWeak = m_alive;
     int categoryId = m_currentCategoryId;
 
-    asyncRun([categoryId, aliveWeak]() {
+    asyncRun([categoryId, categoryName, aliveWeak]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         bool success = false;
@@ -534,12 +548,12 @@ void LibrarySectionTab::triggerLibraryUpdate() {
             success = client.triggerLibraryUpdate(categoryId);
         }
 
-        brls::sync([success, aliveWeak]() {
+        brls::sync([success, categoryName, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
             if (success) {
-                brls::Application::notify("Update started");
+                brls::Application::notify("Update started for " + categoryName);
             } else {
                 brls::Application::notify("Failed to start update");
             }

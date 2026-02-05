@@ -19,6 +19,16 @@ RecyclingGrid::RecyclingGrid() {
 
     // PS Vita screen: 960x544, use 6 columns
     m_columns = 6;
+
+    // Register action for pull-to-refresh when at top
+    // When user is at top and presses up on D-pad, trigger refresh
+    this->registerAction("Refresh", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
+        // Back/Select button triggers refresh when in this view
+        if (m_onPullToRefresh) {
+            m_onPullToRefresh();
+        }
+        return true;
+    });
 }
 
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
@@ -33,6 +43,10 @@ void RecyclingGrid::setOnItemSelected(std::function<void(const Manga&)> callback
 
 void RecyclingGrid::setOnItemLongPressed(std::function<void(const Manga&, int index)> callback) {
     m_onItemLongPressed = callback;
+}
+
+void RecyclingGrid::setOnPullToRefresh(std::function<void()> callback) {
+    m_onPullToRefresh = callback;
 }
 
 void RecyclingGrid::clearViews() {

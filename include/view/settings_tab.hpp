@@ -6,6 +6,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
 
@@ -26,6 +27,10 @@ private:
     void showLanguageFilterDialog();
     void onThemeChanged(int index);
     void showCategoryVisibilityDialog();
+    void showCategoryManagementDialog();
+    void showCreateCategoryDialog();
+    void showEditCategoryDialog(const Category& category);
+    void showDeleteCategoryConfirmation(const Category& category);
 
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;

@@ -2401,6 +2401,13 @@ bool SuwayomiClient::fetchCategories(std::vector<Category>& categories) {
 }
 
 bool SuwayomiClient::createCategory(const std::string& name) {
+    // Try GraphQL first (primary API)
+    if (createCategoryGraphQL(name)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for createCategory, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
     http.setDefaultHeader("Content-Type", "application/json");
 
@@ -2412,6 +2419,13 @@ bool SuwayomiClient::createCategory(const std::string& name) {
 }
 
 bool SuwayomiClient::deleteCategory(int categoryId) {
+    // Try GraphQL first (primary API)
+    if (deleteCategoryGraphQL(categoryId)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for deleteCategory, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
     std::string url = buildApiUrl("/category/" + std::to_string(categoryId));
@@ -2421,6 +2435,13 @@ bool SuwayomiClient::deleteCategory(int categoryId) {
 }
 
 bool SuwayomiClient::updateCategory(int categoryId, const std::string& name, bool isDefault) {
+    // Try GraphQL first (primary API)
+    if (updateCategoryGraphQL(categoryId, name, isDefault)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for updateCategory, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
     http.setDefaultHeader("Content-Type", "application/json");
 
@@ -2460,6 +2481,60 @@ bool SuwayomiClient::reorderCategories(const std::vector<int>& categoryIds) {
 
     vitasuwayomi::HttpResponse response = http.request(req);
     return response.success && response.statusCode == 200;
+}
+
+bool SuwayomiClient::moveCategoryOrder(int categoryId, int newPosition) {
+    // Try GraphQL first (primary API)
+    if (updateCategoryOrderGraphQL(categoryId, newPosition)) {
+        return true;
+    }
+
+    // REST fallback - reorder by fetching all categories and rebuilding the order
+    brls::Logger::info("GraphQL failed for moveCategoryOrder, falling back to REST...");
+
+    // Fetch current categories
+    std::vector<Category> categories;
+    if (!fetchCategories(categories)) {
+        return false;
+    }
+
+    // Sort by current order
+    std::sort(categories.begin(), categories.end(),
+              [](const Category& a, const Category& b) { return a.order < b.order; });
+
+    // Find the category to move
+    int currentIndex = -1;
+    for (size_t i = 0; i < categories.size(); i++) {
+        if (categories[i].id == categoryId) {
+            currentIndex = static_cast<int>(i);
+            break;
+        }
+    }
+
+    if (currentIndex < 0) {
+        brls::Logger::error("moveCategoryOrder: Category {} not found", categoryId);
+        return false;
+    }
+
+    // Clamp newPosition
+    newPosition = std::max(0, std::min(newPosition, static_cast<int>(categories.size()) - 1));
+
+    if (currentIndex == newPosition) {
+        return true;  // Already in position
+    }
+
+    // Move the category
+    Category cat = categories[currentIndex];
+    categories.erase(categories.begin() + currentIndex);
+    categories.insert(categories.begin() + newPosition, cat);
+
+    // Build new order
+    std::vector<int> newOrder;
+    for (const auto& c : categories) {
+        newOrder.push_back(c.id);
+    }
+
+    return reorderCategories(newOrder);
 }
 
 bool SuwayomiClient::addMangaToCategory(int mangaId, int categoryId) {
@@ -2532,6 +2607,13 @@ bool SuwayomiClient::fetchLibraryMangaByCategory(int categoryId, std::vector<Man
 }
 
 bool SuwayomiClient::triggerLibraryUpdate() {
+    // Try GraphQL first (primary API)
+    if (triggerLibraryUpdateGraphQL()) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for triggerLibraryUpdate, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
     http.setDefaultHeader("Content-Type", "application/json");
 
@@ -2542,6 +2624,13 @@ bool SuwayomiClient::triggerLibraryUpdate() {
 }
 
 bool SuwayomiClient::triggerLibraryUpdate(int categoryId) {
+    // Try GraphQL first (primary API)
+    if (triggerCategoryUpdateGraphQL(categoryId)) {
+        return true;
+    }
+
+    // REST fallback
+    brls::Logger::info("GraphQL failed for triggerCategoryUpdate, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
     http.setDefaultHeader("Content-Type", "application/json");
 
@@ -4747,6 +4836,179 @@ std::string SuwayomiClient::buildProxiedImageUrl(const std::string& externalUrl)
     }
 
     return m_serverUrl + "/api/v1/imageUrl/fetch?url=" + encoded;
+}
+
+// ============================================================================
+// GraphQL Category Operations
+// ============================================================================
+
+bool SuwayomiClient::createCategoryGraphQL(const std::string& name) {
+    const char* query = R"(
+        mutation CreateCategory($name: String!) {
+            createCategory(input: { name: $name }) {
+                category {
+                    id
+                    name
+                    order
+                }
+            }
+        }
+    )";
+
+    // Escape the name for JSON
+    std::string escapedName;
+    for (char c : name) {
+        if (c == '"' || c == '\\') {
+            escapedName += '\\';
+        }
+        escapedName += c;
+    }
+
+    std::string variables = "{\"name\":\"" + escapedName + "\"}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: createCategory - empty response");
+        return false;
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        brls::Logger::error("GraphQL: createCategory - no data in response");
+        return false;
+    }
+
+    brls::Logger::info("GraphQL: Successfully created category '{}'", name);
+    return true;
+}
+
+bool SuwayomiClient::deleteCategoryGraphQL(int categoryId) {
+    const char* query = R"(
+        mutation DeleteCategory($id: Int!) {
+            deleteCategory(input: { categoryId: $id }) {
+                category {
+                    id
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(categoryId) + "}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: deleteCategory - empty response");
+        return false;
+    }
+
+    brls::Logger::info("GraphQL: Successfully deleted category {}", categoryId);
+    return true;
+}
+
+bool SuwayomiClient::updateCategoryGraphQL(int categoryId, const std::string& name, bool isDefault) {
+    const char* query = R"(
+        mutation UpdateCategory($id: Int!, $name: String, $default: Boolean) {
+            updateCategory(input: { id: $id, patch: { name: $name, default: $default } }) {
+                category {
+                    id
+                    name
+                    order
+                }
+            }
+        }
+    )";
+
+    // Escape the name for JSON
+    std::string escapedName;
+    for (char c : name) {
+        if (c == '"' || c == '\\') {
+            escapedName += '\\';
+        }
+        escapedName += c;
+    }
+
+    std::string variables = "{\"id\":" + std::to_string(categoryId) +
+                            ",\"name\":\"" + escapedName + "\"" +
+                            ",\"default\":" + (isDefault ? "true" : "false") + "}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: updateCategory - empty response");
+        return false;
+    }
+
+    brls::Logger::info("GraphQL: Successfully updated category {}", categoryId);
+    return true;
+}
+
+bool SuwayomiClient::updateCategoryOrderGraphQL(int categoryId, int newPosition) {
+    const char* query = R"(
+        mutation UpdateCategoryOrder($id: Int!, $position: Int!) {
+            updateCategoryOrder(input: { id: $id, position: $position }) {
+                categories {
+                    id
+                    order
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(categoryId) +
+                            ",\"position\":" + std::to_string(newPosition) + "}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: updateCategoryOrder - empty response");
+        return false;
+    }
+
+    brls::Logger::info("GraphQL: Successfully reordered category {} to position {}", categoryId, newPosition);
+    return true;
+}
+
+bool SuwayomiClient::triggerCategoryUpdateGraphQL(int categoryId) {
+    const char* query = R"(
+        mutation UpdateLibraryManga($categoryIds: [Int!]) {
+            updateLibraryManga(input: { categoryIds: $categoryIds }) {
+                updateStatus {
+                    isRunning
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"categoryIds\":[" + std::to_string(categoryId) + "]}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: triggerCategoryUpdate - empty response");
+        return false;
+    }
+
+    brls::Logger::info("GraphQL: Successfully triggered update for category {}", categoryId);
+    return true;
+}
+
+bool SuwayomiClient::triggerLibraryUpdateGraphQL() {
+    const char* query = R"(
+        mutation UpdateLibraryManga {
+            updateLibraryManga(input: {}) {
+                updateStatus {
+                    isRunning
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+
+    if (response.empty()) {
+        brls::Logger::error("GraphQL: triggerLibraryUpdate - empty response");
+        return false;
+    }
+
+    brls::Logger::info("GraphQL: Successfully triggered library update");
+    return true;
 }
 
 } // namespace vitasuwayomi

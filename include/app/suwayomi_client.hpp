@@ -441,6 +441,7 @@ public:
     bool deleteCategory(int categoryId);
     bool updateCategory(int categoryId, const std::string& name, bool isDefault);
     bool reorderCategories(const std::vector<int>& categoryIds);
+    bool moveCategoryOrder(int categoryId, int newPosition);  // Move category to new position (0-indexed)
     bool addMangaToCategory(int mangaId, int categoryId);
     bool removeMangaFromCategory(int mangaId, int categoryId);
     bool fetchCategoryManga(int categoryId, std::vector<Manga>& manga);
@@ -553,6 +554,14 @@ private:
     bool setMangaCategoriesGraphQL(int mangaId, const std::vector<int>& categoryIds);
     bool fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga);
     bool fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga);
+
+    // Category Management GraphQL methods
+    bool createCategoryGraphQL(const std::string& name);
+    bool deleteCategoryGraphQL(int categoryId);
+    bool updateCategoryGraphQL(int categoryId, const std::string& name, bool isDefault);
+    bool updateCategoryOrderGraphQL(int categoryId, int newPosition);
+    bool triggerCategoryUpdateGraphQL(int categoryId);
+    bool triggerLibraryUpdateGraphQL();
 
     // Manga Meta GraphQL methods
     bool fetchMangaMetaGraphQL(int mangaId, std::map<std::string, std::string>& meta);

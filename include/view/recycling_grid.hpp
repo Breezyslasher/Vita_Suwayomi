@@ -22,6 +22,7 @@ public:
     void setDataSource(const std::vector<Manga>& items);
     void setOnItemSelected(std::function<void(const Manga&)> callback);
     void setOnItemLongPressed(std::function<void(const Manga&, int index)> callback);
+    void setOnPullToRefresh(std::function<void()> callback);
     void clearViews();
 
     // Selection mode
@@ -48,6 +49,12 @@ private:
     std::vector<Manga> m_items;
     std::function<void(const Manga&)> m_onItemSelected;
     std::function<void(const Manga&, int index)> m_onItemLongPressed;
+    std::function<void()> m_onPullToRefresh;
+
+    // Pull-to-refresh state
+    bool m_isPulling = false;
+    float m_pullDistance = 0.0f;
+    static constexpr float PULL_THRESHOLD = 80.0f;  // Pixels to pull before triggering refresh
 
     // Selection mode
     bool m_selectionMode = false;
