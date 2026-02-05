@@ -46,7 +46,7 @@ RecyclingGrid::RecyclingGrid() {
                 float dy = status.position.y - touchStart.y;
 
                 // Only consider vertical swipes downward when near top of scroll
-                float scrollY = this->getScrollingY();
+                float scrollY = this->getContentOffsetY();
                 if (dy > 0 && std::abs(dy) > std::abs(dx) * 1.5f && scrollY <= 5.0f) {
                     isValidPull = true;
                     m_isPulling = true;
