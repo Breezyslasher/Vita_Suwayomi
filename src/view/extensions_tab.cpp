@@ -1443,11 +1443,32 @@ void ExtensionsTab::liveUpdateExtensionItem(const Extension& ext, bool newInstal
             [](const Extension& a, const Extension& b) { return a.name < b.name; });
     }
 
+    // Get the old settingsBtn pointer before removing from tracking
+    brls::Box* oldSettingsBtn = itemInfo->settingsBtn;
+
     // Remove old item from tracking
     for (auto it = m_extensionItems.begin(); it != m_extensionItems.end(); ++it) {
         if (it->pkgName == ext.pkgName) {
             m_extensionItems.erase(it);
             break;
+        }
+    }
+
+    // IMPORTANT: Clear navigation routes that point to the old settingsBtn BEFORE removing
+    // the view. Other settings buttons may have UP/DOWN routes pointing to it, and if those
+    // dangling pointers are followed during layout/focus operations, we crash.
+    if (oldSettingsBtn) {
+        for (auto& item : m_extensionItems) {
+            if (item.settingsBtn) {
+                // Clear UP route if it points to the old button
+                if (item.settingsBtn->getCustomNavigationRoutePtr(brls::FocusDirection::UP) == oldSettingsBtn) {
+                    item.settingsBtn->setCustomNavigationRoute(brls::FocusDirection::UP, static_cast<brls::View*>(nullptr));
+                }
+                // Clear DOWN route if it points to the old button
+                if (item.settingsBtn->getCustomNavigationRoutePtr(brls::FocusDirection::DOWN) == oldSettingsBtn) {
+                    item.settingsBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, static_cast<brls::View*>(nullptr));
+                }
+            }
         }
     }
 
