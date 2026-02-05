@@ -965,9 +965,10 @@ void SettingsTab::showCategoryManagementDialog() {
 
         catRow->addView(infoBox);
 
-        // Order indicator
+        // Order indicator (use UI row index, 1-indexed)
         auto* orderLabel = new brls::Label();
-        orderLabel->setText("#" + std::to_string(i + 1));
+        size_t uiRowIndex = catList->getChildren().size();  // 0-indexed position before adding
+        orderLabel->setText("#" + std::to_string(uiRowIndex + 1));
         orderLabel->setFontSize(14);
         orderLabel->setTextColor(nvgRGB(100, 100, 100));
         orderLabel->setMarginRight(10);
@@ -975,16 +976,48 @@ void SettingsTab::showCategoryManagementDialog() {
 
         // Store category data for actions
         int catId = cat.id;
-        std::string catName = cat.name;
-        int catOrder = static_cast<int>(i);
-        int totalCats = static_cast<int>(categories.size());
 
         // Register L button to move up
-        catRow->registerAction("Move Up", brls::ControllerButton::BUTTON_LB, [catId, catOrder](brls::View*) {
-            if (catOrder > 0) {
+        catRow->registerAction("Move Up", brls::ControllerButton::BUTTON_LB, [catList, catId](brls::View* view) {
+            // Find current UI position
+            auto& children = catList->getChildren();
+            int uiIndex = -1;
+            for (size_t i = 0; i < children.size(); i++) {
+                if (children[i] == view) {
+                    uiIndex = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            if (uiIndex > 0) {
+                // Server order = UI index + 1 (default category at order 0 is skipped in UI)
+                int newServerOrder = uiIndex;  // Moving up: new order = current UI index
+
                 SuwayomiClient& client = SuwayomiClient::getInstance();
-                if (client.moveCategoryOrder(catId, catOrder - 1)) {
+                if (client.moveCategoryOrder(catId, newServerOrder)) {
                     brls::Application::notify("Category moved up");
+
+                    // Visual swap
+                    brls::View* currentRow = children[uiIndex];
+                    brls::View* prevRow = children[uiIndex - 1];
+
+                    catList->removeView(currentRow, false);
+                    catList->removeView(prevRow, false);
+
+                    catList->addView(currentRow, uiIndex - 1);
+                    catList->addView(prevRow, uiIndex);
+
+                    // Update order labels for swapped rows
+                    auto* currentBox = dynamic_cast<brls::Box*>(currentRow);
+                    auto* prevBox = dynamic_cast<brls::Box*>(prevRow);
+                    if (currentBox && currentBox->getChildren().size() >= 2) {
+                        auto* label = dynamic_cast<brls::Label*>(currentBox->getChildren()[1]);
+                        if (label) label->setText("#" + std::to_string(uiIndex));
+                    }
+                    if (prevBox && prevBox->getChildren().size() >= 2) {
+                        auto* label = dynamic_cast<brls::Label*>(prevBox->getChildren()[1]);
+                        if (label) label->setText("#" + std::to_string(uiIndex + 1));
+                    }
                 } else {
                     brls::Application::notify("Failed to move category");
                 }
@@ -993,11 +1026,46 @@ void SettingsTab::showCategoryManagementDialog() {
         });
 
         // Register R button to move down
-        catRow->registerAction("Move Down", brls::ControllerButton::BUTTON_RB, [catId, catOrder, totalCats](brls::View*) {
-            if (catOrder < totalCats - 1) {
+        catRow->registerAction("Move Down", brls::ControllerButton::BUTTON_RB, [catList, catId](brls::View* view) {
+            // Find current UI position
+            auto& children = catList->getChildren();
+            int uiIndex = -1;
+            for (size_t i = 0; i < children.size(); i++) {
+                if (children[i] == view) {
+                    uiIndex = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            if (uiIndex >= 0 && uiIndex < static_cast<int>(children.size()) - 1) {
+                // Server order = UI index + 1, moving down: new order = current order + 1
+                int newServerOrder = uiIndex + 2;  // UI index + 1 (current) + 1 (move down)
+
                 SuwayomiClient& client = SuwayomiClient::getInstance();
-                if (client.moveCategoryOrder(catId, catOrder + 1)) {
+                if (client.moveCategoryOrder(catId, newServerOrder)) {
                     brls::Application::notify("Category moved down");
+
+                    // Visual swap
+                    brls::View* currentRow = children[uiIndex];
+                    brls::View* nextRow = children[uiIndex + 1];
+
+                    catList->removeView(nextRow, false);
+                    catList->removeView(currentRow, false);
+
+                    catList->addView(nextRow, uiIndex);
+                    catList->addView(currentRow, uiIndex + 1);
+
+                    // Update order labels for swapped rows
+                    auto* currentBox = dynamic_cast<brls::Box*>(currentRow);
+                    auto* nextBox = dynamic_cast<brls::Box*>(nextRow);
+                    if (currentBox && currentBox->getChildren().size() >= 2) {
+                        auto* label = dynamic_cast<brls::Label*>(currentBox->getChildren()[1]);
+                        if (label) label->setText("#" + std::to_string(uiIndex + 2));
+                    }
+                    if (nextBox && nextBox->getChildren().size() >= 2) {
+                        auto* label = dynamic_cast<brls::Label*>(nextBox->getChildren()[1]);
+                        if (label) label->setText("#" + std::to_string(uiIndex + 1));
+                    }
                 } else {
                     brls::Application::notify("Failed to move category");
                 }
