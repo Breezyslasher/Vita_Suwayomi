@@ -1381,28 +1381,58 @@ void ExtensionsTab::liveUpdateExtensionItem(const Extension& ext, bool newInstal
         return;
     }
 
-    // Find position in parent
-    auto& children = parent->getChildren();
-    int index = -1;
-    for (size_t i = 0; i < children.size(); i++) {
-        if (children[i] == oldContainer) {
-            index = static_cast<int>(i);
-            break;
-        }
-    }
-
-    if (index < 0) {
-        brls::Logger::warning("liveUpdateExtensionItem: Could not find index for {}", ext.pkgName);
-        return;
-    }
-
     // Create updated extension data
     Extension updatedExt = ext;
     updatedExt.installed = newInstalled;
     updatedExt.hasUpdate = newHasUpdate;
 
+    // Determine state change
+    bool wasInstalled = ext.installed;
+    bool hadUpdate = ext.hasUpdate;
+
     // Update cache first
     updateExtensionItemStatus(ext.pkgName, newInstalled, newHasUpdate);
+
+    // Update the data lists (m_installed, m_updates, m_uninstalled, m_cachedGrouped)
+    if (!wasInstalled && newInstalled) {
+        // Install: move from uninstalled to installed
+        // Remove from m_uninstalled
+        m_uninstalled.erase(std::remove_if(m_uninstalled.begin(), m_uninstalled.end(),
+            [&ext](const Extension& e) { return e.pkgName == ext.pkgName; }), m_uninstalled.end());
+        // Remove from grouped cache
+        auto groupIt = m_cachedGrouped.find(ext.lang);
+        if (groupIt != m_cachedGrouped.end()) {
+            groupIt->second.erase(std::remove_if(groupIt->second.begin(), groupIt->second.end(),
+                [&ext](const Extension& e) { return e.pkgName == ext.pkgName; }), groupIt->second.end());
+        }
+        // Add to m_installed
+        m_installed.push_back(updatedExt);
+        // Sort m_installed alphabetically
+        std::sort(m_installed.begin(), m_installed.end(),
+            [](const Extension& a, const Extension& b) { return a.name < b.name; });
+    } else if (wasInstalled && !newInstalled) {
+        // Uninstall: move from installed/updates to uninstalled
+        if (hadUpdate) {
+            m_updates.erase(std::remove_if(m_updates.begin(), m_updates.end(),
+                [&ext](const Extension& e) { return e.pkgName == ext.pkgName; }), m_updates.end());
+        } else {
+            m_installed.erase(std::remove_if(m_installed.begin(), m_installed.end(),
+                [&ext](const Extension& e) { return e.pkgName == ext.pkgName; }), m_installed.end());
+        }
+        // Add to m_uninstalled and grouped cache
+        m_uninstalled.push_back(updatedExt);
+        m_cachedGrouped[ext.lang].push_back(updatedExt);
+        // Sort the language group alphabetically
+        std::sort(m_cachedGrouped[ext.lang].begin(), m_cachedGrouped[ext.lang].end(),
+            [](const Extension& a, const Extension& b) { return a.name < b.name; });
+    } else if (wasInstalled && hadUpdate && newInstalled && !newHasUpdate) {
+        // Update: move from updates to installed
+        m_updates.erase(std::remove_if(m_updates.begin(), m_updates.end(),
+            [&ext](const Extension& e) { return e.pkgName == ext.pkgName; }), m_updates.end());
+        m_installed.push_back(updatedExt);
+        std::sort(m_installed.begin(), m_installed.end(),
+            [](const Extension& a, const Extension& b) { return a.name < b.name; });
+    }
 
     // Remove old item from tracking
     for (auto it = m_extensionItems.begin(); it != m_extensionItems.end(); ++it) {
@@ -1412,24 +1442,121 @@ void ExtensionsTab::liveUpdateExtensionItem(const Extension& ext, bool newInstal
         }
     }
 
-    // Remove old container from parent (don't delete yet, let borealis handle it)
+    // Remove old container from parent
     parent->removeView(oldContainer);
 
-    // Create new item with updated state
-    auto* newItem = createExtensionItem(updatedExt);
-    if (newItem) {
-        // Insert at same position
-        parent->addView(newItem, index);
-        brls::Logger::info("liveUpdateExtensionItem: Replaced {} at index {}", ext.pkgName, index);
+    // Determine target section and add the new item there
+    brls::Box* targetContentBox = nullptr;
+    int insertPosition = -1; // -1 means append at end
+
+    if (!wasInstalled && newInstalled) {
+        // Install: add to installed section
+        if (m_installedSection.expanded && m_installedSection.contentBox) {
+            targetContentBox = m_installedSection.contentBox;
+            // Find alphabetical position
+            for (size_t i = 0; i < m_installed.size(); i++) {
+                if (m_installed[i].pkgName == ext.pkgName) {
+                    insertPosition = static_cast<int>(i);
+                    // Clamp to itemsShown if needed
+                    if (insertPosition > m_installedSection.itemsShown) {
+                        insertPosition = m_installedSection.itemsShown;
+                    }
+                    break;
+                }
+            }
+        }
+    } else if (wasInstalled && !newInstalled) {
+        // Uninstall: add to language section if expanded
+        auto langIt = m_languageSections.find(ext.lang);
+        if (langIt != m_languageSections.end() && langIt->second.expanded && langIt->second.contentBox) {
+            targetContentBox = langIt->second.contentBox;
+            // Find alphabetical position
+            auto groupIt = m_cachedGrouped.find(ext.lang);
+            if (groupIt != m_cachedGrouped.end()) {
+                for (size_t i = 0; i < groupIt->second.size(); i++) {
+                    if (groupIt->second[i].pkgName == ext.pkgName) {
+                        insertPosition = static_cast<int>(i);
+                        // Clamp to itemsShown if needed
+                        if (insertPosition > langIt->second.itemsShown) {
+                            insertPosition = langIt->second.itemsShown;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    } else if (wasInstalled && hadUpdate && newInstalled && !newHasUpdate) {
+        // Update: add to installed section
+        if (m_installedSection.expanded && m_installedSection.contentBox) {
+            targetContentBox = m_installedSection.contentBox;
+            // Find alphabetical position
+            for (size_t i = 0; i < m_installed.size(); i++) {
+                if (m_installed[i].pkgName == ext.pkgName) {
+                    insertPosition = static_cast<int>(i);
+                    // Clamp to itemsShown if needed
+                    if (insertPosition > m_installedSection.itemsShown) {
+                        insertPosition = m_installedSection.itemsShown;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    // Create and add new item to target section
+    if (targetContentBox) {
+        auto* newItem = createExtensionItem(updatedExt);
+        if (newItem) {
+            if (insertPosition >= 0) {
+                targetContentBox->addView(newItem, insertPosition);
+            } else {
+                targetContentBox->addView(newItem);
+            }
+            brls::Logger::info("liveUpdateExtensionItem: Moved {} to new section at position {}",
+                ext.pkgName, insertPosition);
+
+            // Update itemsShown count for target section
+            if (!wasInstalled && newInstalled) {
+                m_installedSection.itemsShown++;
+            } else if (wasInstalled && !newInstalled) {
+                auto langIt = m_languageSections.find(ext.lang);
+                if (langIt != m_languageSections.end()) {
+                    langIt->second.itemsShown++;
+                }
+            } else if (wasInstalled && hadUpdate && newInstalled && !newHasUpdate) {
+                m_installedSection.itemsShown++;
+            }
+        }
+    } else {
+        brls::Logger::info("liveUpdateExtensionItem: Target section not expanded, item {} will appear on expand",
+            ext.pkgName);
+    }
+
+    // Update source section itemsShown
+    if (!wasInstalled && newInstalled) {
+        // Source was a language section
+        auto langIt = m_languageSections.find(ext.lang);
+        if (langIt != m_languageSections.end() && langIt->second.itemsShown > 0) {
+            langIt->second.itemsShown--;
+        }
+    } else if (wasInstalled && !newInstalled) {
+        // Source was installed or updates section
+        if (hadUpdate && m_updatesSection.itemsShown > 0) {
+            m_updatesSection.itemsShown--;
+        } else if (!hadUpdate && m_installedSection.itemsShown > 0) {
+            m_installedSection.itemsShown--;
+        }
+    } else if (wasInstalled && hadUpdate && newInstalled && !newHasUpdate) {
+        // Source was updates section
+        if (m_updatesSection.itemsShown > 0) {
+            m_updatesSection.itemsShown--;
+        }
     }
 
     // Update D-pad navigation
     updateSettingsButtonNavigation();
 
-    // Update section header counts based on state change
-    bool wasInstalled = ext.installed;
-    bool hadUpdate = ext.hasUpdate;
-
+    // Update section header counts
     if (!wasInstalled && newInstalled) {
         // Install: Available -1, Installed +1
         updateSectionHeaderCount(m_availableSection, -1);
