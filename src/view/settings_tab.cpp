@@ -980,13 +980,11 @@ void SettingsTab::showCategoryManagementDialog() {
         int totalCats = static_cast<int>(categories.size());
 
         // Register L button to move up
-        catRow->registerAction("Move Up", brls::ControllerButton::BUTTON_LB, [this, catId, catOrder](brls::View*) {
+        catRow->registerAction("Move Up", brls::ControllerButton::BUTTON_LB, [catId, catOrder](brls::View*) {
             if (catOrder > 0) {
                 SuwayomiClient& client = SuwayomiClient::getInstance();
                 if (client.moveCategoryOrder(catId, catOrder - 1)) {
                     brls::Application::notify("Category moved up");
-                    brls::Application::popActivity();
-                    showCategoryManagementDialog();
                 } else {
                     brls::Application::notify("Failed to move category");
                 }
@@ -995,13 +993,11 @@ void SettingsTab::showCategoryManagementDialog() {
         });
 
         // Register R button to move down
-        catRow->registerAction("Move Down", brls::ControllerButton::BUTTON_RB, [this, catId, catOrder, totalCats](brls::View*) {
+        catRow->registerAction("Move Down", brls::ControllerButton::BUTTON_RB, [catId, catOrder, totalCats](brls::View*) {
             if (catOrder < totalCats - 1) {
                 SuwayomiClient& client = SuwayomiClient::getInstance();
                 if (client.moveCategoryOrder(catId, catOrder + 1)) {
                     brls::Application::notify("Category moved down");
-                    brls::Application::popActivity();
-                    showCategoryManagementDialog();
                 } else {
                     brls::Application::notify("Failed to move category");
                 }
