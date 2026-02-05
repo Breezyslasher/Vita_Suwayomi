@@ -29,6 +29,44 @@ RecyclingGrid::RecyclingGrid() {
         }
         return true;
     });
+
+    // Add swipe-down gesture for pull-to-refresh (touchscreen support)
+    this->addGestureRecognizer(new brls::PanGestureRecognizer(
+        [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            static brls::Point touchStart;
+            static bool isValidPull = false;
+
+            if (status.state == brls::GestureState::START) {
+                touchStart = status.position;
+                isValidPull = false;
+                m_isPulling = false;
+                m_pullDistance = 0.0f;
+            } else if (status.state == brls::GestureState::STAY) {
+                float dx = status.position.x - touchStart.x;
+                float dy = status.position.y - touchStart.y;
+
+                // Only consider vertical swipes downward when near top of scroll
+                float scrollY = this->getScrollingY();
+                if (dy > 0 && std::abs(dy) > std::abs(dx) * 1.5f && scrollY <= 5.0f) {
+                    isValidPull = true;
+                    m_isPulling = true;
+                    m_pullDistance = dy;
+                }
+            } else if (status.state == brls::GestureState::END) {
+                float dy = status.position.y - touchStart.y;
+
+                // Trigger refresh if pulled down past threshold
+                if (isValidPull && dy > PULL_THRESHOLD && m_onPullToRefresh) {
+                    m_onPullToRefresh();
+                }
+
+                // Reset state
+                m_isPulling = false;
+                m_pullDistance = 0.0f;
+                isValidPull = false;
+            }
+        },
+        brls::PanAxis::VERTICAL));
 }
 
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
