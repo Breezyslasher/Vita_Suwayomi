@@ -1090,7 +1090,7 @@ void SettingsTab::showCreateCategoryDialog() {
 
     dialog->addButton("Create", [dialog]() {
         // Open software keyboard for input
-        brls::Swkbd::openForText([dialog](std::string text) {
+        brls::Application::getImeManager()->openForText([dialog](std::string text) {
             if (text.empty()) {
                 brls::Application::notify("Category name cannot be empty");
                 return;
@@ -1103,7 +1103,7 @@ void SettingsTab::showCreateCategoryDialog() {
             } else {
                 brls::Application::notify("Failed to create category");
             }
-        }, "Enter category name", "", 50, "", 0, "");
+        }, "Enter category name", "", 50, "", 0);
     });
 
     dialog->open();
@@ -1139,7 +1139,7 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
     });
 
     dialog->addButton("Rename", [dialog, catId, isDefault]() {
-        brls::Swkbd::openForText([dialog, catId, isDefault](std::string text) {
+        brls::Application::getImeManager()->openForText([dialog, catId, isDefault](std::string text) {
             if (text.empty()) {
                 brls::Application::notify("Category name cannot be empty");
                 return;
@@ -1152,7 +1152,7 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
             } else {
                 brls::Application::notify("Failed to rename category");
             }
-        }, "Enter new category name", "", 50, "", 0, "");
+        }, "Enter new category name", "", 50, "", 0);
     });
 
     dialog->open();
