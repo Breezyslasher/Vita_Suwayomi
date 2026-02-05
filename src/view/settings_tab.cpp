@@ -1133,13 +1133,16 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
 
     int catId = category.id;
     bool isDefault = category.isDefault;
+    std::string catName = category.name;
 
-    dialog->addButton("Cancel", [dialog]() {
+    dialog->addButton("Cancel", [this, dialog]() {
         dialog->close();
+        // Re-open category management dialog
+        showCategoryManagementDialog();
     });
 
-    dialog->addButton("Rename", [dialog, catId, isDefault]() {
-        brls::Application::getImeManager()->openForText([dialog, catId, isDefault](std::string text) {
+    dialog->addButton("Rename", [this, dialog, catId, isDefault, catName]() {
+        brls::Application::getImeManager()->openForText([this, dialog, catId, isDefault](std::string text) {
             if (text.empty()) {
                 brls::Application::notify("Category name cannot be empty");
                 return;
@@ -1149,10 +1152,12 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
             if (client.updateCategory(catId, text, isDefault)) {
                 brls::Application::notify("Category renamed to: " + text);
                 dialog->close();
+                // Re-open category management dialog to show updated list
+                showCategoryManagementDialog();
             } else {
                 brls::Application::notify("Failed to rename category");
             }
-        }, "Enter new category name", "", 50, "", 0);
+        }, "Enter new category name", "", 50, catName, 0);
     });
 
     dialog->open();
@@ -1167,18 +1172,23 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
 
     int catId = category.id;
 
-    dialog->addButton("Cancel", [dialog]() {
+    dialog->addButton("Cancel", [this, dialog]() {
         dialog->close();
+        // Re-open category management dialog
+        showCategoryManagementDialog();
     });
 
-    dialog->addButton("Delete", [dialog, catId]() {
+    dialog->addButton("Delete", [this, dialog, catId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         if (client.deleteCategory(catId)) {
             brls::Application::notify("Category deleted");
             dialog->close();
+            // Re-open category management dialog to show updated list
+            showCategoryManagementDialog();
         } else {
             brls::Application::notify("Failed to delete category");
             dialog->close();
+            showCategoryManagementDialog();
         }
     });
 
