@@ -995,8 +995,6 @@ void SettingsTab::showCategoryManagementDialog() {
 
                 SuwayomiClient& client = SuwayomiClient::getInstance();
                 if (client.moveCategoryOrder(catId, newServerOrder)) {
-                    brls::Application::notify("Category moved up");
-
                     // Visual swap
                     brls::View* currentRow = children[uiIndex];
                     brls::View* prevRow = children[uiIndex - 1];
@@ -1043,8 +1041,6 @@ void SettingsTab::showCategoryManagementDialog() {
 
                 SuwayomiClient& client = SuwayomiClient::getInstance();
                 if (client.moveCategoryOrder(catId, newServerOrder)) {
-                    brls::Application::notify("Category moved down");
-
                     // Visual swap
                     brls::View* currentRow = children[uiIndex];
                     brls::View* nextRow = children[uiIndex + 1];
