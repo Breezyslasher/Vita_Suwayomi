@@ -87,6 +87,8 @@ set(APP_SOURCES
     src/view/extensions_tab.cpp
     src/view/source_browse_tab.cpp
     src/view/horizontal_scroll_row.cpp
+    src/view/tracking_search_view.cpp
+    src/view/migrate_search_view.cpp
 
     # Utils
     src/utils/http_client.cpp

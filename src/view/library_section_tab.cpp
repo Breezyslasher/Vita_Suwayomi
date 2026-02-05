@@ -13,6 +13,7 @@
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
 #include "utils/library_cache.hpp"
+#include "view/migrate_search_view.hpp"
 
 namespace vitasuwayomi {
 
@@ -88,6 +89,11 @@ LibrarySectionTab::LibrarySectionTab() {
     });
     buttonBox->addView(m_sortBtn);
 
+    // Load saved sort mode
+    auto& app = Application::getInstance();
+    int savedSort = app.getSettings().librarySortMode;
+    m_sortMode = static_cast<LibrarySortMode>(savedSort);
+
     // Initialize sort icon
     updateSortButtonText();
 
@@ -123,6 +129,9 @@ LibrarySectionTab::LibrarySectionTab() {
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
+    m_contentGrid->setOnPullToRefresh([this]() {
+        triggerLibraryUpdate();
+    });
     this->addView(m_contentGrid);
 
     brls::Logger::debug("LibrarySectionTab: Created");
@@ -135,6 +144,23 @@ LibrarySectionTab::LibrarySectionTab() {
 
     this->registerAction("Next Category", brls::ControllerButton::BUTTON_RB, [this](brls::View*) {
         navigateToNextCategory();
+        return true;
+    });
+
+    // Register Start button for context menu on focused manga
+    this->registerAction("Menu", brls::ControllerButton::BUTTON_START, [this](brls::View*) {
+        if (!m_contentGrid) return true;
+        int idx = m_contentGrid->getFocusedIndex();
+        const Manga* manga = m_contentGrid->getItem(idx);
+        if (manga) {
+            showMangaContextMenu(*manga, idx);
+        }
+        return true;
+    });
+
+    // Register Select button to refresh/update current category
+    this->registerAction("Update Category", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
+        triggerLibraryUpdate();
         return true;
     });
 
@@ -499,13 +525,18 @@ void LibrarySectionTab::triggerLibraryUpdate() {
     brls::Logger::info("LibrarySectionTab: Triggering update for category {} ({})",
                       m_currentCategoryId, m_currentCategoryName);
 
-    std::string message = "Updating " + m_currentCategoryName + "...";
+    std::string categoryName = m_currentCategoryName;
+    if (categoryName.empty() || m_currentCategoryId == 0) {
+        categoryName = "all manga";
+    }
+
+    std::string message = "Checking for new chapters in " + categoryName + "...";
     brls::Application::notify(message);
 
     std::weak_ptr<bool> aliveWeak = m_alive;
     int categoryId = m_currentCategoryId;
 
-    asyncRun([categoryId, aliveWeak]() {
+    asyncRun([categoryId, categoryName, aliveWeak]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         bool success = false;
@@ -517,12 +548,12 @@ void LibrarySectionTab::triggerLibraryUpdate() {
             success = client.triggerLibraryUpdate(categoryId);
         }
 
-        brls::sync([success, aliveWeak]() {
+        brls::sync([success, categoryName, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
             if (success) {
-                brls::Application::notify("Update started");
+                brls::Application::notify("Update started for " + categoryName);
             } else {
                 brls::Application::notify("Failed to start update");
             }
@@ -580,6 +611,11 @@ void LibrarySectionTab::cycleSortMode() {
 
     updateSortButtonText();
     sortMangaList();
+
+    // Persist sort mode
+    auto& app = Application::getInstance();
+    app.getSettings().librarySortMode = static_cast<int>(m_sortMode);
+    app.saveSettings();
 }
 
 void LibrarySectionTab::updateSortButtonText() {
@@ -684,6 +720,417 @@ void LibrarySectionTab::scrollToCategoryIndex(int index) {
 
     // Apply the scroll offset
     m_categoryScrollContainer->setTranslationX(m_categoryScrollOffset);
+}
+
+// ============================================================================
+// Context Menu & Selection Mode
+// ============================================================================
+
+void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
+    brls::Logger::debug("LibrarySectionTab: Context menu for '{}' (id={})", manga.title, manga.id);
+
+    std::vector<std::string> options;
+    if (m_selectionMode) {
+        options = {"Select / Deselect", "Download", "Mark as Read", "Mark as Unread",
+                   "Change Categories", "Remove from Library", "Cancel Selection"};
+    } else {
+        options = {"Select", "Download", "Track", "Mark as Read", "Mark as Unread",
+                   "Change Categories", "Remove from Library", "Migrate Source"};
+    }
+
+    auto* dropdown = new brls::Dropdown(
+        m_selectionMode ? "Actions (" + std::to_string(m_contentGrid->getSelectionCount()) + " selected)" : manga.title,
+        options,
+        [this, manga, index](int selected) {
+            if (selected < 0) return; // Cancelled
+            // Defer all actions to next frame so the dropdown fully pops first.
+            // Without this, pushing a new activity (submenu) gets immediately
+            // popped by the dropdown's own popActivity call, and UI mutations
+            // while the dropdown is still tearing down can crash.
+            brls::sync([this, manga, index, selected]() {
+            if (m_selectionMode) {
+                // Selection mode menu
+                switch (selected) {
+                    case 0: // Select / Deselect
+                        m_contentGrid->toggleSelection(index);
+                        updateSelectionTitle();
+                        break;
+                    case 1: { // Download
+                        auto selectedManga = m_contentGrid->getSelectedManga();
+                        if (selectedManga.empty()) selectedManga.push_back(manga);
+                        showDownloadSubmenu(selectedManga);
+                        break;
+                    }
+                    case 2: { // Mark as Read
+                        auto selectedManga = m_contentGrid->getSelectedManga();
+                        if (selectedManga.empty()) selectedManga.push_back(manga);
+                        markMangaRead(selectedManga);
+                        exitSelectionMode();
+                        break;
+                    }
+                    case 3: { // Mark as Unread
+                        auto selectedManga = m_contentGrid->getSelectedManga();
+                        if (selectedManga.empty()) selectedManga.push_back(manga);
+                        markMangaUnread(selectedManga);
+                        exitSelectionMode();
+                        break;
+                    }
+                    case 4: { // Change Categories
+                        auto selectedManga = m_contentGrid->getSelectedManga();
+                        if (selectedManga.empty()) selectedManga.push_back(manga);
+                        showChangeCategoryDialog(selectedManga);
+                        break;
+                    }
+                    case 5: { // Remove from Library
+                        auto selectedManga = m_contentGrid->getSelectedManga();
+                        if (selectedManga.empty()) selectedManga.push_back(manga);
+                        removeFromLibrary(selectedManga);
+                        exitSelectionMode();
+                        break;
+                    }
+                    case 6: // Cancel Selection
+                        exitSelectionMode();
+                        break;
+                }
+            } else {
+                // Normal mode menu
+                switch (selected) {
+                    case 0: // Select
+                        enterSelectionMode(index);
+                        break;
+                    case 1: { // Download
+                        std::vector<Manga> list = {manga};
+                        showDownloadSubmenu(list);
+                        break;
+                    }
+                    case 2: // Track
+                        openTracking(manga);
+                        break;
+                    case 3: { // Mark as Read
+                        std::vector<Manga> list = {manga};
+                        markMangaRead(list);
+                        break;
+                    }
+                    case 4: { // Mark as Unread
+                        std::vector<Manga> list = {manga};
+                        markMangaUnread(list);
+                        break;
+                    }
+                    case 5: { // Change Categories
+                        std::vector<Manga> list = {manga};
+                        showChangeCategoryDialog(list);
+                        break;
+                    }
+                    case 6: { // Remove from Library
+                        std::vector<Manga> list = {manga};
+                        removeFromLibrary(list);
+                        break;
+                    }
+                    case 7: // Migrate Source
+                        showMigrateSourceMenu(manga);
+                        break;
+                }
+            }
+            }); // end brls::sync
+        }
+    );
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void LibrarySectionTab::showDownloadSubmenu(const std::vector<Manga>& mangaList) {
+    std::vector<std::string> options = {
+        "All Chapters", "Unread Chapters", "Next Chapter",
+        "Next 5 Chapters", "Next 10 Chapters", "Next 25 Chapters"
+    };
+
+    // Capture by value for async safety
+    std::vector<Manga> capturedList = mangaList;
+
+    auto* dropdown = new brls::Dropdown(
+        "Download",
+        options,
+        [this, capturedList](int selected) {
+            std::string mode;
+            switch (selected) {
+                case 0: mode = "all"; break;
+                case 1: mode = "unread"; break;
+                case 2: mode = "next1"; break;
+                case 3: mode = "next5"; break;
+                case 4: mode = "next10"; break;
+                case 5: mode = "next25"; break;
+                default: return;
+            }
+            downloadChapters(capturedList, mode);
+            if (m_selectionMode) exitSelectionMode();
+        }
+    );
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& mangaList) {
+    if (m_categories.empty()) {
+        brls::Application::notify("No categories available");
+        return;
+    }
+
+    std::vector<std::string> catNames;
+    for (const auto& cat : m_categories) {
+        catNames.push_back(cat.name);
+    }
+
+    std::vector<Manga> capturedList = mangaList;
+
+    auto* dropdown = new brls::Dropdown(
+        "Move to Category",
+        catNames,
+        [this, capturedList](int selected) {
+            if (selected < 0 || selected >= (int)m_categories.size()) return;
+            int categoryId = m_categories[selected].id;
+            std::string catName = m_categories[selected].name;
+
+            std::weak_ptr<bool> aliveWeak = m_alive;
+            std::vector<Manga> asyncList = capturedList;
+
+            brls::Application::notify("Moving to " + catName + "...");
+
+            asyncRun([asyncList, categoryId, catName, aliveWeak]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                int successCount = 0;
+                for (const auto& manga : asyncList) {
+                    std::vector<int> catIds = {categoryId};
+                    if (client.setMangaCategories(manga.id, catIds)) {
+                        successCount++;
+                    }
+                }
+
+                brls::sync([successCount, asyncList, catName, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    brls::Application::notify("Moved " + std::to_string(successCount) +
+                                              " manga to " + catName);
+                });
+            });
+
+            if (m_selectionMode) exitSelectionMode();
+        }
+    );
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void LibrarySectionTab::showMigrateSourceMenu(const Manga& manga) {
+    auto* migrateView = new MigrateSearchView(manga);
+    brls::Application::pushActivity(new brls::Activity(migrateView));
+}
+
+void LibrarySectionTab::enterSelectionMode(int initialIndex) {
+    m_selectionMode = true;
+    if (m_contentGrid) {
+        m_contentGrid->setSelectionMode(true);
+        m_contentGrid->toggleSelection(initialIndex);
+    }
+    updateSelectionTitle();
+    brls::Logger::info("LibrarySectionTab: Entered selection mode");
+}
+
+void LibrarySectionTab::exitSelectionMode() {
+    m_selectionMode = false;
+    if (m_contentGrid) {
+        m_contentGrid->setSelectionMode(false);
+    }
+    if (m_titleLabel) {
+        m_titleLabel->setText(m_currentCategoryName);
+    }
+    brls::Logger::info("LibrarySectionTab: Exited selection mode");
+}
+
+void LibrarySectionTab::updateSelectionTitle() {
+    if (m_titleLabel && m_contentGrid) {
+        int count = m_contentGrid->getSelectionCount();
+        m_titleLabel->setText(std::to_string(count) + " selected");
+    }
+}
+
+// ============================================================================
+// Batch Actions
+// ============================================================================
+
+void LibrarySectionTab::downloadChapters(const std::vector<Manga>& mangaList, const std::string& mode) {
+    brls::Application::notify("Queuing downloads...");
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    std::vector<Manga> asyncList = mangaList;
+    std::string asyncMode = mode;
+
+    DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+
+    asyncRun([asyncList, asyncMode, aliveWeak, downloadMode]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+        localMgr.init();
+
+        int totalServerQueued = 0;
+        int totalLocalQueued = 0;
+
+        for (const auto& manga : asyncList) {
+            std::vector<Chapter> chapters;
+            if (!client.fetchChapters(manga.id, chapters)) continue;
+
+            // Chapters come sorted DESC by sourceOrder, reverse for ascending
+            std::reverse(chapters.begin(), chapters.end());
+
+            std::vector<int> serverChapterIds;
+            std::vector<std::pair<int, int>> localChapterPairs;
+
+            auto collectChapter = [&](const Chapter& ch) {
+                if ((downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) && !ch.downloaded) {
+                    serverChapterIds.push_back(ch.id);
+                }
+                if ((downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) &&
+                    !localMgr.isChapterDownloaded(manga.id, ch.index)) {
+                    localChapterPairs.push_back({ch.id, ch.index});
+                }
+            };
+
+            if (asyncMode == "all") {
+                for (const auto& ch : chapters) {
+                    collectChapter(ch);
+                }
+            } else if (asyncMode == "unread") {
+                for (const auto& ch : chapters) {
+                    if (!ch.read) collectChapter(ch);
+                }
+            } else {
+                // next N chapters - find first unread, then take N from there
+                int count = 1;
+                if (asyncMode == "next5") count = 5;
+                else if (asyncMode == "next10") count = 10;
+                else if (asyncMode == "next25") count = 25;
+
+                int added = 0;
+                for (const auto& ch : chapters) {
+                    if (!ch.read) {
+                        collectChapter(ch);
+                        added++;
+                        if (added >= count) break;
+                    }
+                }
+            }
+
+            if (!serverChapterIds.empty()) {
+                if (client.queueChapterDownloads(serverChapterIds)) {
+                    totalServerQueued += static_cast<int>(serverChapterIds.size());
+                }
+            }
+
+            if (!localChapterPairs.empty()) {
+                if (localMgr.queueChaptersDownload(manga.id, localChapterPairs, manga.title)) {
+                    totalLocalQueued += static_cast<int>(localChapterPairs.size());
+                }
+            }
+        }
+
+        // Start downloads
+        if (totalServerQueued > 0) {
+            client.startDownloads();
+        }
+        if (totalLocalQueued > 0) {
+            localMgr.startDownloads();
+        }
+
+        brls::sync([totalServerQueued, totalLocalQueued, downloadMode, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            std::string msg;
+            if (downloadMode == DownloadMode::SERVER_ONLY) {
+                msg = "Queued " + std::to_string(totalServerQueued) + " chapters to server";
+            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                msg = "Queued " + std::to_string(totalLocalQueued) + " chapters locally";
+            } else {
+                msg = "Queued ";
+                if (totalServerQueued > 0) msg += std::to_string(totalServerQueued) + " to server";
+                if (totalServerQueued > 0 && totalLocalQueued > 0) msg += ", ";
+                if (totalLocalQueued > 0) msg += std::to_string(totalLocalQueued) + " locally";
+            }
+            brls::Application::notify(msg);
+        });
+    });
+}
+
+void LibrarySectionTab::markMangaRead(const std::vector<Manga>& mangaList) {
+    brls::Application::notify("Marking as read...");
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    std::vector<Manga> asyncList = mangaList;
+    int categoryId = m_currentCategoryId;
+
+    asyncRun([this, asyncList, aliveWeak, categoryId]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        int count = 0;
+        for (const auto& manga : asyncList) {
+            if (client.markAllChaptersRead(manga.id)) count++;
+        }
+
+        brls::sync([this, count, aliveWeak, categoryId]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            brls::Application::notify("Marked " + std::to_string(count) + " manga as read");
+            // Refresh the current view
+            loadCategoryManga(categoryId);
+        });
+    });
+}
+
+void LibrarySectionTab::markMangaUnread(const std::vector<Manga>& mangaList) {
+    brls::Application::notify("Marking as unread...");
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    std::vector<Manga> asyncList = mangaList;
+    int categoryId = m_currentCategoryId;
+
+    asyncRun([this, asyncList, aliveWeak, categoryId]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        int count = 0;
+        for (const auto& manga : asyncList) {
+            if (client.markAllChaptersUnread(manga.id)) count++;
+        }
+
+        brls::sync([this, count, aliveWeak, categoryId]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            brls::Application::notify("Marked " + std::to_string(count) + " manga as unread");
+            loadCategoryManga(categoryId);
+        });
+    });
+}
+
+void LibrarySectionTab::removeFromLibrary(const std::vector<Manga>& mangaList) {
+    brls::Application::notify("Removing from library...");
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    std::vector<Manga> asyncList = mangaList;
+    int categoryId = m_currentCategoryId;
+
+    asyncRun([this, asyncList, aliveWeak, categoryId]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        int count = 0;
+        for (const auto& manga : asyncList) {
+            if (client.removeMangaFromLibrary(manga.id)) count++;
+        }
+
+        brls::sync([this, count, aliveWeak, categoryId]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            brls::Application::notify("Removed " + std::to_string(count) + " manga");
+            loadCategoryManga(categoryId);
+        });
+    });
+}
+
+void LibrarySectionTab::openTracking(const Manga& manga) {
+    // Push the manga detail view which has full tracking support
+    auto* detailView = new MangaDetailView(manga);
+    brls::Application::pushActivity(new brls::Activity(detailView));
 }
 
 } // namespace vitasuwayomi

@@ -124,6 +124,16 @@ void SettingsTab::createLibrarySection() {
     header->setTitle("Library");
     m_contentBox->addView(header);
 
+    // Manage Categories cell
+    auto* manageCategoriesCell = new brls::DetailCell();
+    manageCategoriesCell->setText("Manage Categories");
+    manageCategoriesCell->setDetailText("Create, edit, delete, reorder");
+    manageCategoriesCell->registerClickAction([this](brls::View* view) {
+        showCategoryManagementDialog();
+        return true;
+    });
+    m_contentBox->addView(manageCategoriesCell);
+
     // Hide categories cell
     m_hideCategoriesCell = new brls::DetailCell();
     m_hideCategoriesCell->setText("Hidden Categories");
@@ -854,6 +864,424 @@ void SettingsTab::onThemeChanged(int index) {
     settings.theme = static_cast<AppTheme>(index);
     app.applyTheme();
     app.saveSettings();
+}
+
+void SettingsTab::showCategoryManagementDialog() {
+    // Fetch categories from server
+    brls::Application::notify("Loading categories...");
+
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::vector<Category> categories;
+
+    if (!client.fetchCategories(categories)) {
+        brls::Application::notify("Failed to load categories");
+        return;
+    }
+
+    // Sort by order
+    std::sort(categories.begin(), categories.end(),
+        [](const Category& a, const Category& b) {
+            return a.order < b.order;
+        });
+
+    // Create dialog box
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(550);
+    dialogBox->setHeight(450);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setCornerRadius(12);
+
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Manage Categories");
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(10);
+    dialogBox->addView(titleLabel);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Use L/R to move, X to edit, Triangle to delete");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setMarginBottom(15);
+    dialogBox->addView(infoLabel);
+
+    // Create New Category button
+    auto* createBtn = new brls::Button();
+    createBtn->setText("+ Create New Category");
+    createBtn->setMarginBottom(15);
+    createBtn->registerClickAction([this](brls::View* view) {
+        brls::Application::popActivity();
+        showCreateCategoryDialog();
+        return true;
+    });
+    createBtn->addGestureRecognizer(new brls::TapGestureRecognizer(createBtn));
+    dialogBox->addView(createBtn);
+
+    // Scrollable category list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
+
+    auto* catList = new brls::Box();
+    catList->setAxis(brls::Axis::COLUMN);
+
+    for (size_t i = 0; i < categories.size(); i++) {
+        const auto& cat = categories[i];
+
+        // Skip the default category (id 0) - it can't be modified
+        if (cat.id == 0) continue;
+
+        auto* catRow = new brls::Box();
+        catRow->setAxis(brls::Axis::ROW);
+        catRow->setAlignItems(brls::AlignItems::CENTER);
+        catRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+        catRow->setPadding(10, 12, 10, 12);
+        catRow->setMarginBottom(6);
+        catRow->setCornerRadius(8);
+        catRow->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
+        catRow->setFocusable(true);
+
+        // Category info box
+        auto* infoBox = new brls::Box();
+        infoBox->setAxis(brls::Axis::COLUMN);
+        infoBox->setGrow(1.0f);
+
+        auto* nameLabel = new brls::Label();
+        std::string displayName = cat.name;
+        if (displayName.length() > 20) {
+            displayName = displayName.substr(0, 18) + "..";
+        }
+        nameLabel->setText(displayName);
+        nameLabel->setFontSize(16);
+        infoBox->addView(nameLabel);
+
+        auto* countLabel = new brls::Label();
+        countLabel->setText(std::to_string(cat.mangaCount) + " manga");
+        countLabel->setFontSize(12);
+        countLabel->setTextColor(nvgRGB(120, 120, 120));
+        infoBox->addView(countLabel);
+
+        catRow->addView(infoBox);
+
+        // Order indicator (use UI row index, 1-indexed)
+        auto* orderLabel = new brls::Label();
+        size_t uiRowIndex = catList->getChildren().size();  // 0-indexed position before adding
+        orderLabel->setText("#" + std::to_string(uiRowIndex + 1));
+        orderLabel->setFontSize(14);
+        orderLabel->setTextColor(nvgRGB(100, 100, 100));
+        orderLabel->setMarginRight(10);
+        catRow->addView(orderLabel);
+
+        // Store category data for actions
+        int catId = cat.id;
+
+        // Register L button to move up
+        catRow->registerAction("Move Up", brls::ControllerButton::BUTTON_LB, [catList, catId](brls::View* view) {
+            // Find current UI position
+            auto& children = catList->getChildren();
+            int uiIndex = -1;
+            for (size_t i = 0; i < children.size(); i++) {
+                if (children[i] == view) {
+                    uiIndex = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            if (uiIndex > 0) {
+                // Server order = UI index + 1 (default category at order 0 is skipped in UI)
+                int newServerOrder = uiIndex;  // Moving up: new order = current UI index
+
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                if (client.moveCategoryOrder(catId, newServerOrder)) {
+                    // Visual swap
+                    brls::View* currentRow = children[uiIndex];
+                    brls::View* prevRow = children[uiIndex - 1];
+
+                    catList->removeView(currentRow, false);
+                    catList->removeView(prevRow, false);
+
+                    catList->addView(currentRow, uiIndex - 1);
+                    catList->addView(prevRow, uiIndex);
+
+                    // Update order labels for swapped rows
+                    auto* currentBox = dynamic_cast<brls::Box*>(currentRow);
+                    auto* prevBox = dynamic_cast<brls::Box*>(prevRow);
+                    if (currentBox && currentBox->getChildren().size() >= 2) {
+                        auto* label = dynamic_cast<brls::Label*>(currentBox->getChildren()[1]);
+                        if (label) label->setText("#" + std::to_string(uiIndex));
+                    }
+                    if (prevBox && prevBox->getChildren().size() >= 2) {
+                        auto* label = dynamic_cast<brls::Label*>(prevBox->getChildren()[1]);
+                        if (label) label->setText("#" + std::to_string(uiIndex + 1));
+                    }
+                } else {
+                    brls::Application::notify("Failed to move category");
+                }
+            }
+            return true;
+        });
+
+        // Register R button to move down
+        catRow->registerAction("Move Down", brls::ControllerButton::BUTTON_RB, [catList, catId](brls::View* view) {
+            // Find current UI position
+            auto& children = catList->getChildren();
+            int uiIndex = -1;
+            for (size_t i = 0; i < children.size(); i++) {
+                if (children[i] == view) {
+                    uiIndex = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            if (uiIndex >= 0 && uiIndex < static_cast<int>(children.size()) - 1) {
+                // Server order = UI index + 1, moving down: new order = current order + 1
+                int newServerOrder = uiIndex + 2;  // UI index + 1 (current) + 1 (move down)
+
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                if (client.moveCategoryOrder(catId, newServerOrder)) {
+                    // Visual swap
+                    brls::View* currentRow = children[uiIndex];
+                    brls::View* nextRow = children[uiIndex + 1];
+
+                    catList->removeView(nextRow, false);
+                    catList->removeView(currentRow, false);
+
+                    catList->addView(nextRow, uiIndex);
+                    catList->addView(currentRow, uiIndex + 1);
+
+                    // Update order labels for swapped rows
+                    auto* currentBox = dynamic_cast<brls::Box*>(currentRow);
+                    auto* nextBox = dynamic_cast<brls::Box*>(nextRow);
+                    if (currentBox && currentBox->getChildren().size() >= 2) {
+                        auto* label = dynamic_cast<brls::Label*>(currentBox->getChildren()[1]);
+                        if (label) label->setText("#" + std::to_string(uiIndex + 2));
+                    }
+                    if (nextBox && nextBox->getChildren().size() >= 2) {
+                        auto* label = dynamic_cast<brls::Label*>(nextBox->getChildren()[1]);
+                        if (label) label->setText("#" + std::to_string(uiIndex + 1));
+                    }
+                } else {
+                    brls::Application::notify("Failed to move category");
+                }
+            }
+            return true;
+        });
+
+        // Register X button to edit
+        Category catCopy = cat;
+        catRow->registerAction("Edit", brls::ControllerButton::BUTTON_X, [this, catCopy](brls::View*) {
+            brls::Application::popActivity();
+            showEditCategoryDialog(catCopy);
+            return true;
+        });
+
+        // Register Y button to delete
+        catRow->registerAction("Delete", brls::ControllerButton::BUTTON_Y, [this, catCopy](brls::View*) {
+            brls::Application::popActivity();
+            showDeleteCategoryConfirmation(catCopy);
+            return true;
+        });
+
+        // Click to edit
+        catRow->registerClickAction([this, catCopy](brls::View* view) {
+            brls::Application::popActivity();
+            showEditCategoryDialog(catCopy);
+            return true;
+        });
+        catRow->addGestureRecognizer(new brls::TapGestureRecognizer(catRow));
+
+        catList->addView(catRow);
+    }
+
+    // If no editable categories
+    if (categories.empty() || (categories.size() == 1 && categories[0].id == 0)) {
+        auto* label = new brls::Label();
+        label->setText("No categories found. Create one!");
+        label->setFontSize(16);
+        label->setMarginTop(20);
+        catList->addView(label);
+    }
+
+    scrollView->setContentView(catList);
+    dialogBox->addView(scrollView);
+
+    // Close button
+    auto* closeBtn = new brls::Button();
+    closeBtn->setText("Close");
+    closeBtn->setMarginTop(15);
+    closeBtn->registerClickAction([](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    });
+    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
+    dialogBox->addView(closeBtn);
+
+    // Register circle button to close the dialog
+    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
+    // Set up navigation: first category should go up to createBtn, last category should go down to closeBtn
+    auto& catChildren = catList->getChildren();
+    if (!catChildren.empty()) {
+        // First category row -> up goes to createBtn
+        catChildren.front()->setCustomNavigationRoute(brls::FocusDirection::UP, createBtn);
+        // Last category row -> down goes to closeBtn
+        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
+    }
+    // createBtn -> down goes to first category (or closeBtn if no categories)
+    if (!catChildren.empty()) {
+        createBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, catChildren.front());
+    } else {
+        createBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
+    }
+    // closeBtn -> up goes to last category (or createBtn if no categories)
+    if (!catChildren.empty()) {
+        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+    } else {
+        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, createBtn);
+    }
+
+    // Push as new activity
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
+}
+
+void SettingsTab::showCreateCategoryDialog() {
+    brls::Dialog* dialog = new brls::Dialog("Create New Category");
+
+    auto* contentBox = new brls::Box();
+    contentBox->setAxis(brls::Axis::COLUMN);
+    contentBox->setPadding(20);
+    contentBox->setWidth(400);
+
+    auto* inputLabel = new brls::Label();
+    inputLabel->setText("Enter category name:");
+    inputLabel->setFontSize(16);
+    inputLabel->setMarginBottom(10);
+    contentBox->addView(inputLabel);
+
+    // Note: Borealis doesn't have a native text input, so we'll use a workaround
+    // with the software keyboard or a preset name approach
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Press A to open keyboard");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    contentBox->addView(infoLabel);
+
+    dialog->addView(contentBox);
+
+    dialog->addButton("Cancel", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->addButton("Create", [dialog]() {
+        // Open software keyboard for input
+        brls::Application::getImeManager()->openForText([dialog](std::string text) {
+            if (text.empty()) {
+                brls::Application::notify("Category name cannot be empty");
+                return;
+            }
+
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            if (client.createCategory(text)) {
+                brls::Application::notify("Category created: " + text);
+                dialog->close();
+            } else {
+                brls::Application::notify("Failed to create category");
+            }
+        }, "Enter category name", "", 50, "", 0);
+    });
+
+    dialog->open();
+}
+
+void SettingsTab::showEditCategoryDialog(const Category& category) {
+    brls::Dialog* dialog = new brls::Dialog("Edit Category: " + category.name);
+
+    auto* contentBox = new brls::Box();
+    contentBox->setAxis(brls::Axis::COLUMN);
+    contentBox->setPadding(20);
+    contentBox->setWidth(400);
+
+    auto* inputLabel = new brls::Label();
+    inputLabel->setText("Current name: " + category.name);
+    inputLabel->setFontSize(16);
+    inputLabel->setMarginBottom(10);
+    contentBox->addView(inputLabel);
+
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Press 'Rename' to change the name");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    contentBox->addView(infoLabel);
+
+    dialog->addView(contentBox);
+
+    int catId = category.id;
+    bool isDefault = category.isDefault;
+    std::string catName = category.name;
+
+    dialog->addButton("Cancel", [this, dialog]() {
+        dialog->close();
+        // Re-open category management dialog
+        showCategoryManagementDialog();
+    });
+
+    dialog->addButton("Rename", [this, dialog, catId, isDefault, catName]() {
+        brls::Application::getImeManager()->openForText([this, dialog, catId, isDefault](std::string text) {
+            if (text.empty()) {
+                brls::Application::notify("Category name cannot be empty");
+                return;
+            }
+
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            if (client.updateCategory(catId, text, isDefault)) {
+                brls::Application::notify("Category renamed to: " + text);
+                dialog->close();
+                // Re-open category management dialog to show updated list
+                showCategoryManagementDialog();
+            } else {
+                brls::Application::notify("Failed to rename category");
+            }
+        }, "Enter new category name", "", 50, catName, 0);
+    });
+
+    dialog->open();
+}
+
+void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
+    std::string message = "Delete category '" + category.name + "'?\n\n"
+                         "This will remove " + std::to_string(category.mangaCount) +
+                         " manga from this category.\nThe manga will remain in your library.";
+
+    brls::Dialog* dialog = new brls::Dialog(message);
+
+    int catId = category.id;
+
+    dialog->addButton("Cancel", [this, dialog]() {
+        dialog->close();
+        // Re-open category management dialog
+        showCategoryManagementDialog();
+    });
+
+    dialog->addButton("Delete", [this, dialog, catId]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        if (client.deleteCategory(catId)) {
+            brls::Application::notify("Category deleted");
+            dialog->close();
+            // Re-open category management dialog to show updated list
+            showCategoryManagementDialog();
+        } else {
+            brls::Application::notify("Failed to delete category");
+            dialog->close();
+            showCategoryManagementDialog();
+        }
+    });
+
+    dialog->open();
 }
 
 } // namespace vitasuwayomi

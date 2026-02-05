@@ -47,6 +47,26 @@ private:
     void scrollToCategoryIndex(int index);
     void updateCategoryButtonTexts();
 
+    // Context menu (Start button / long-press)
+    void showMangaContextMenu(const Manga& manga, int index);
+    void showDownloadSubmenu(const std::vector<Manga>& mangaList);
+    void showChangeCategoryDialog(const std::vector<Manga>& mangaList);
+    void showMigrateSourceMenu(const Manga& manga);
+
+    // Selection mode
+    void enterSelectionMode(int initialIndex);
+    void exitSelectionMode();
+    void updateSelectionTitle();
+
+    // Batch actions
+    void downloadChapters(const std::vector<Manga>& mangaList, const std::string& mode);
+    void markMangaRead(const std::vector<Manga>& mangaList);
+    void markMangaUnread(const std::vector<Manga>& mangaList);
+    void removeFromLibrary(const std::vector<Manga>& mangaList);
+    void openTracking(const Manga& manga);
+
+    bool m_selectionMode = false;
+
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
 
