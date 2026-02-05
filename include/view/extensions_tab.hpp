@@ -1,7 +1,7 @@
 /**
  * VitaSuwayomi - Extensions Tab
  * Manage Suwayomi extensions (install, update, uninstall)
- * Shows unified list: updates first, then installed, then uninstalled (sorted by language)
+ * Uses RecyclerFrame for stable, efficient list rendering
  */
 
 #pragma once
@@ -13,56 +13,146 @@
 
 namespace vitasuwayomi {
 
+class ExtensionsTab;
+
+// Custom cell for extension items
+class ExtensionCell : public brls::RecyclerCell {
+public:
+    ExtensionCell();
+    static ExtensionCell* create();
+    void prepareForReuse() override;
+
+    // Public members for data binding
+    brls::Image* icon = nullptr;
+    brls::Label* nameLabel = nullptr;
+    brls::Label* detailLabel = nullptr;
+    brls::Label* statusLabel = nullptr;
+    brls::Box* settingsBtn = nullptr;
+
+    // Track which extension this cell represents
+    std::string pkgName;
+    bool iconLoaded = false;
+};
+
+// Section header cell
+class ExtensionSectionHeader : public brls::RecyclerCell {
+public:
+    ExtensionSectionHeader();
+    static ExtensionSectionHeader* create();
+
+    brls::Label* titleLabel = nullptr;
+    brls::Label* countLabel = nullptr;
+    brls::Label* arrowLabel = nullptr;
+    bool expanded = false;
+};
+
+// Row item type for the flat list
+struct ExtensionRow {
+    enum class Type {
+        SectionHeader,      // Updates Available, Installed, Available to Install
+        LanguageHeader,     // English, Japanese, etc (under Available)
+        ExtensionItem       // Actual extension
+    };
+
+    Type type;
+    std::string sectionId;      // For headers: "updates", "installed", "available"
+    std::string languageCode;   // For language headers
+    Extension extension;        // For extension items
+    int count = 0;              // For headers: item count
+    bool expanded = false;      // For collapsible headers
+};
+
+// Data source for RecyclerFrame
+class ExtensionsDataSource : public brls::RecyclerDataSource {
+public:
+    ExtensionsDataSource(ExtensionsTab* tab);
+
+    int numberOfSections(brls::RecyclerFrame* recycler) override;
+    int numberOfRows(brls::RecyclerFrame* recycler, int section) override;
+    brls::RecyclerCell* cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override;
+    void didSelectRowAt(brls::RecyclerFrame* recycler, brls::IndexPath indexPath) override;
+    float heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override;
+
+    // Rebuild the flat list from current data
+    void rebuildRows();
+
+private:
+    ExtensionsTab* m_tab;
+    std::vector<ExtensionRow> m_rows;
+
+    void addExtensionRows(const std::vector<Extension>& extensions, bool indent);
+};
+
 class ExtensionsTab : public brls::Box {
 public:
     ExtensionsTab();
 
     void onFocusGained() override;
 
+    // Called by data source
+    void onExtensionClicked(const Extension& ext);
+    void onSectionHeaderClicked(const std::string& sectionId);
+    void onLanguageHeaderClicked(const std::string& langCode);
+    void onSettingsClicked(const Extension& ext);
+
+    // Getters for data source
+    const std::vector<Extension>& getUpdates() const { return m_updates; }
+    const std::vector<Extension>& getInstalled() const { return m_installed; }
+    const std::vector<Extension>& getUninstalled() const { return m_uninstalled; }
+    const std::map<std::string, std::vector<Extension>>& getGroupedByLanguage() const { return m_cachedGrouped; }
+    const std::vector<std::string>& getSortedLanguages() const { return m_cachedSortedLanguages; }
+
+    // Section expansion state
+    bool isUpdatesExpanded() const { return m_updatesExpanded; }
+    bool isInstalledExpanded() const { return m_installedExpanded; }
+    bool isAvailableExpanded() const { return m_availableExpanded; }
+    bool isLanguageExpanded(const std::string& lang) const;
+
+    void setUpdatesExpanded(bool e) { m_updatesExpanded = e; }
+    void setInstalledExpanded(bool e) { m_installedExpanded = e; }
+    void setAvailableExpanded(bool e) { m_availableExpanded = e; }
+    void setLanguageExpanded(const std::string& lang, bool e) { m_languageExpanded[lang] = e; }
+
+    // Language name helper (used by data source)
+    std::string getLanguageDisplayName(const std::string& langCode);
+
 private:
-    // Fast mode: single query, client-side filtering (like Kodi addon)
+    // Data loading
     void loadExtensionsFast();
-    // Standard mode: two queries with server-side filtering
-    void loadExtensions();
-    // Refresh from server (clears cache and reloads)
     void refreshExtensions();
-    // Rebuild UI from cached data (safe to call after extension operations)
     void refreshUIFromCache();
-    // Show search dialog to filter extensions by name
+
+    // Search
     void showSearchDialog();
-    // Clear search and show all extensions
     void clearSearch();
-    // Show search results on a separate page
     void showSearchResults();
-    // Go back from search results to main list
     void hideSearchResults();
 
-    void populateUnifiedList();
-    brls::Box* createSectionHeader(const std::string& title, int count);
-    brls::Box* createLanguageHeader(const std::string& langCode, int extensionCount);
-    brls::Box* createExtensionItem(const Extension& ext);
+    // Extension operations
     void installExtension(const Extension& ext);
     void updateExtension(const Extension& ext);
     void uninstallExtension(const Extension& ext);
     void showSourceSettings(const Extension& ext);
     void showSourcePreferencesDialog(const Source& source);
+
+    // Helpers
     void showError(const std::string& message);
     void showLoading(const std::string& message);
-    std::vector<Extension> getFilteredExtensions(const std::vector<Extension>& extensions, bool forceLanguageFilter = false);
     std::map<std::string, std::vector<Extension>> groupExtensionsByLanguage(const std::vector<Extension>& extensions);
-    std::vector<std::string> getSortedLanguages(const std::map<std::string, std::vector<Extension>>& grouped);
-    std::string getLanguageDisplayName(const std::string& langCode);
+    std::vector<std::string> getSortedLanguageKeys(const std::map<std::string, std::vector<Extension>>& grouped);
 
+    // Trigger recycler refresh
+    void reloadRecycler();
+
+    // UI elements
     brls::Label* m_titleLabel = nullptr;
-    brls::Box* m_listBox = nullptr;
-    brls::Box* m_refreshBox = nullptr;  // Safe focus target during refresh
+    brls::RecyclerFrame* m_recycler = nullptr;
+    brls::Box* m_refreshBox = nullptr;
     brls::Image* m_refreshIcon = nullptr;
     brls::Image* m_searchIcon = nullptr;
-    brls::ScrollingFrame* m_scrollFrame = nullptr;
 
-    // Search results view (separate page)
-    brls::ScrollingFrame* m_searchResultsFrame = nullptr;
-    brls::Box* m_searchResultsBox = nullptr;
+    // Search results (separate recycler)
+    brls::RecyclerFrame* m_searchRecycler = nullptr;
     brls::Box* m_searchHeaderBox = nullptr;
     brls::Label* m_searchTitleLabel = nullptr;
 
@@ -70,89 +160,26 @@ private:
     std::string m_searchQuery;
     bool m_isSearchActive = false;
 
-    std::vector<Extension> m_extensions;
+    // Extension data
     std::vector<Extension> m_updates;
     std::vector<Extension> m_installed;
     std::vector<Extension> m_uninstalled;
 
-    // Cache for fast mode
+    // Cache
     std::vector<Extension> m_cachedExtensions;
-    bool m_cacheLoaded = false;
-    bool m_needsRefresh = false;  // Set after install/update/uninstall, cleared on focus
-
-    // Performance: Batched rendering
-    static const int BATCH_SIZE = 8;          // Items per batch
-    static const int BATCH_DELAY_MS = 16;     // ~60fps frame time
-    static const int ITEMS_PER_PAGE = 30;     // Items to show initially per section
-    int m_currentBatchIndex = 0;
-    bool m_isPopulating = false;
-
-    // Performance: Track extension items for incremental updates
-    struct ExtensionItemInfo {
-        brls::Box* container = nullptr;
-        brls::Image* icon = nullptr;
-        brls::Box* settingsBtn = nullptr;  // Settings button for D-pad navigation
-        std::string pkgName;
-        std::string iconUrl;
-        bool iconLoaded = false;
-    };
-    std::vector<ExtensionItemInfo> m_extensionItems;
-
-    // D-pad navigation: Link settings buttons vertically
-    void updateSettingsButtonNavigation();
-
-    // Performance: Cached grouped data
     std::map<std::string, std::vector<Extension>> m_cachedGrouped;
     std::vector<std::string> m_cachedSortedLanguages;
-    bool m_groupingCacheValid = false;
+    bool m_cacheLoaded = false;
+    bool m_needsRefresh = false;
 
-    // Section identifiers for safe lambda captures
-    enum class SectionType { Updates, Installed };
+    // Section expansion state
+    bool m_updatesExpanded = true;
+    bool m_installedExpanded = true;
+    bool m_availableExpanded = false;
+    std::map<std::string, bool> m_languageExpanded;
 
-    // Collapsible sections state
-    struct SectionState {
-        bool expanded = false;
-        int itemsShown = 0;
-        brls::Box* contentBox = nullptr;
-        brls::Box* headerBox = nullptr;
-    };
-    SectionState m_updatesSection;
-    SectionState m_installedSection;
-    SectionState m_availableSection;
-    std::map<std::string, SectionState> m_languageSections;  // For language groups within Available
-
-    // Collapsible section helpers
-    brls::Box* createCollapsibleSectionHeader(const std::string& title, int count, SectionType sectionType);
-    brls::Box* createAvailableSectionHeader(const std::string& title, int count);  // Special handling for Available section
-    brls::Box* createCollapsibleLanguageHeader(const std::string& langCode, int count,
-                                                const std::string& langKey);
-    void toggleSection(SectionType sectionType);
-    void toggleAvailableSection();  // Special handling for Available section
-    void toggleLanguageSection(const std::string& langKey);
-    void showMoreItems(SectionType sectionType);
-    void showMoreLanguageItems(const std::string& langKey);
-    brls::Box* createShowMoreButton(SectionType sectionType);
-    brls::Box* createLanguageShowMoreButton(const std::string& langKey);
-
-    // Helper to get section state and extensions by type
-    SectionState& getSectionState(SectionType type);
-    const std::vector<Extension>& getSectionExtensions(SectionType type);
-
-    // Performance: Deferred icon loading
-    void loadVisibleIcons();
-    void scheduleNextBatch();
-    void populateBatch();
-
-    // Performance: Incremental updates
-    void updateExtensionItemStatus(const std::string& pkgName, bool installed, bool hasUpdate);
-    ExtensionItemInfo* findExtensionItem(const std::string& pkgName);
-
-    // Live UI updates (replace item in place without full refresh)
-    void liveUpdateExtensionItem(const Extension& ext, bool newInstalled, bool newHasUpdate);
-    void updateSectionHeaderCount(SectionState& section, int delta);
-
-    // Helper to recursively clean up touch/gesture state for a view and all descendants
-    void cleanupTouchStateRecursive(brls::View* view);
+    // Data source (owned by recycler, but we need to trigger rebuilds)
+    ExtensionsDataSource* m_dataSource = nullptr;
 };
 
 } // namespace vitasuwayomi
