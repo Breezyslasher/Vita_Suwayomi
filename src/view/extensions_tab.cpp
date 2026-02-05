@@ -1359,7 +1359,7 @@ void ExtensionsTab::updateSectionHeaderCount(SectionState& section, int delta) {
         auto* countLabel = dynamic_cast<brls::Label*>(children.back());
         if (countLabel) {
             // Parse current count, apply delta, update
-            int currentCount = std::stoi(countLabel->getText());
+            int currentCount = std::stoi(countLabel->getFullText());
             int newCount = std::max(0, currentCount + delta);
             countLabel->setText(std::to_string(newCount));
         }
