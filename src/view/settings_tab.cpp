@@ -902,7 +902,7 @@ void SettingsTab::showCategoryManagementDialog() {
 
     // Info label
     auto* infoLabel = new brls::Label();
-    infoLabel->setText("Use L/R to move, Square to edit, Triangle to delete");
+    infoLabel->setText("Use L/R to move, X to edit, Triangle to delete");
     infoLabel->setFontSize(14);
     infoLabel->setTextColor(nvgRGB(150, 150, 150));
     infoLabel->setMarginBottom(15);
