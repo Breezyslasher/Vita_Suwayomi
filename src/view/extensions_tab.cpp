@@ -1359,7 +1359,16 @@ void ExtensionsTab::updateSectionHeaderCount(SectionState& section, int delta) {
         auto* countLabel = dynamic_cast<brls::Label*>(children.back());
         if (countLabel) {
             // Parse current count, apply delta, update
-            int currentCount = std::stoi(countLabel->getFullText());
+            int currentCount = 0;
+            std::string labelText = countLabel->getFullText();
+            if (!labelText.empty()) {
+                try {
+                    currentCount = std::stoi(labelText);
+                } catch (const std::exception& e) {
+                    brls::Logger::warning("updateSectionHeaderCount: Failed to parse count '{}': {}", labelText, e.what());
+                    currentCount = 0;
+                }
+            }
             int newCount = std::max(0, currentCount + delta);
             countLabel->setText(std::to_string(newCount));
         }
