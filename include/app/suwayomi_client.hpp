@@ -38,15 +38,16 @@ enum class DownloadState {
 
 // Reading history item
 struct ReadingHistoryItem {
+    int chapterId = 0;
     int mangaId = 0;
     std::string mangaTitle;
     std::string mangaThumbnail;
-    int chapterId = 0;
-    float chapterNumber = 0.0f;
     std::string chapterName;
+    float chapterNumber = 0.0f;
     int lastPageRead = 0;
     int pageCount = 0;
     int64_t lastReadAt = 0;  // Unix timestamp in milliseconds
+    std::string sourceName;
 };
 
 // Extension/Source info
@@ -210,20 +211,6 @@ struct Page {
 struct RecentUpdate {
     Manga manga;
     Chapter chapter;
-};
-
-// Reading history item (for continue reading)
-struct ReadingHistoryItem {
-    int chapterId = 0;
-    int mangaId = 0;
-    std::string mangaTitle;
-    std::string mangaThumbnail;
-    std::string chapterName;
-    float chapterNumber = 0.0f;
-    int lastPageRead = 0;
-    int pageCount = 0;
-    int64_t lastReadAt = 0;  // Unix timestamp
-    std::string sourceName;
 };
 
 // Global search result
