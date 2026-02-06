@@ -1,388 +1,329 @@
-# VitaSuwayomi
+# VitaSuwayomi Complete Feature Testing Checklist
 
-A feature-rich manga reader for the PlayStation Vita that connects to a [Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) server. Read your manga library on the go with full offline support, tracking integration, and extensive customization options.
+## Status Legend
 
----
-
-## Table of Contents
-
-- [Features Overview](#features-overview)
-- [Library Management](#library-management)
-- [Reading Experience](#reading-experience)
-- [Downloads & Offline Reading](#downloads--offline-reading)
-- [Search & Browse](#search--browse)
-- [Extensions & Sources](#extensions--sources)
-- [Tracking Integration](#tracking-integration)
-- [Settings & Customization](#settings--customization)
-- [Additional Features](#additional-features)
-- [Building from Source](#building-from-source)
-- [Server Requirements](#server-requirements)
+| Symbol | Status |
+|--------|--------|
+| ✓ | Working |
+| X | Broken |
+| _(no symbol)_ | Untested |
 
 ---
 
-## Features Overview
+## Authentication & Connection
 
-### Main Navigation
-The app is organized into intuitive tabs for easy navigation:
+- [ ] Connect to Suwayomi server with URL
+- [ ] Login with username/password (Basic Auth)
+- [ ] Credentials persist after app restart
+- [ ] App handles invalid credentials gracefully
+- [ ] App handles server offline gracefully
+- [ ] Connection status shows correctly
 
-- **Home** - Continue reading recent manga and view new chapter updates
-- **Library** - Browse your organized manga collection by categories
-- **Search** - Find manga across all your installed sources
-- **Extensions** - Manage Suwayomi extensions (install, update, remove)
-- **Downloads** - Monitor and manage your download queue
-- **History** - View and resume from your reading history
-- **Settings** - Configure all aspects of the application
+## Library Browsing
 
-### Quick Highlights
-- Full offline reading support with local downloads
-- Multiple reading modes (RTL, LTR, Vertical, Webtoon)
-- MyAnimeList and AniList tracking integration
-- Batch operations for library management
-- Auto-detection for webtoon/manhwa formats
-- Customizable color filters and display options
-- Per-manga reader settings
+- [ ] All user categories appear as tabs
+- [ ] Category tabs scroll horizontally
+- [ ] Selected category is highlighted
+- [ ] Empty categories are hidden
+- [ ] Manga covers load properly
+- [ ] Manga titles display correctly
+- [ ] Unread badge shows on items with unread chapters
+- [ ] Scroll through manga grid works smoothly
+- [ ] Clicking manga opens detail view
 
----
+## Category Management
 
-## Library Management
+- [ ] Categories load from server
+- [ ] Categories sorted by order
+- [ ] Update button triggers category-specific update
+- [ ] Update notification shows correctly
+- [ ] Refresh reloads categories and manga
 
-### Category System
-- **Category Tabs** - Navigate between categories with horizontal scrolling tabs
-- **Category Visibility** - Hide empty or unwanted categories from view
-- **Category Sorting** - Categories sorted by custom order from server
-- **Update by Category** - Trigger chapter updates for specific categories
+## Browse Sources
 
-### Library Display Options
-- **Grid View** - Standard view with covers and titles
-- **Compact Grid** - Covers only for maximum density
-- **List View** - Detailed view with additional information
-- **Grid Size** - Choose between 4, 6, or 8 columns
+- [ ] Sources tab shows installed sources
+- [ ] Source icons load properly
+- [ ] Clicking source opens source browser
+- [ ] Popular manga loads for source
+- [ ] Latest manga loads for source
+- [ ] Search within source works
+- [ ] Pagination works (load more)
 
-### Sorting Options
-- Title (A-Z or Z-A)
-- Unread Count (most or least first)
-- Recently Added
+## Search
 
-### Badge Indicators
-- **Unread Badge** - Shows number of unread chapters
-- **Downloaded Badge** - Indicates locally available content
+- [ ] Search tab opens correctly
+- [ ] Search returns results from sources
+- [ ] Search results show covers and titles
+- [ ] Clicking search result opens detail view
+- [ ] Global search across sources works
 
-### Batch Operations (Selection Mode)
-- Multi-select manga with selection mode
-- Download chapters for multiple manga at once
-- Mark multiple manga as read/unread
-- Remove multiple manga from library
-- Download next N chapters from selected manga
-- Move multiple manga to different categories
+## Manga Detail View
 
----
+- [ ] Cover image displays
+- [ ] Title displays correctly
+- [ ] Author/Artist displays correctly
+- [ ] Status shows (Ongoing/Completed/etc.)
+- [ ] Genre tags display
+- [ ] Description/summary displays
+- [ ] Add to library button works
+- [ ] Remove from library button works
+- [ ] Chapter list loads and displays
 
-## Reading Experience
+## Chapter List
 
-### Reading Modes
-- **Right-to-Left (RTL)** - Traditional manga reading direction
-- **Left-to-Right (LTR)** - Western comic style
-- **Vertical** - Top-to-bottom scrolling
-- **Webtoon Mode** - Continuous vertical scroll for long-strip content
+- [ ] Chapters load correctly
+- [ ] Chapter names display properly
+- [ ] Read chapters marked differently
+- [ ] Chapter numbers display
+- [ ] Scanlator shows if available
+- [ ] Upload date shows
+- [ ] Clicking chapter opens reader
+- [ ] Mark as read works
+- [ ] Mark as unread works
+- [ ] Download chapter works
 
-### Page Scaling
-- **Fit Screen** - Display entire page within screen bounds
-- **Fit Width** - Fill screen width, scroll vertically if needed
-- **Fit Height** - Fill screen height, scroll horizontally if needed
-- **Original Size** - Display at native resolution (1:1)
+## Reader - Basic Controls
 
-### Image Controls
-- **Rotation** - Rotate pages (0°, 90°, 180°, 270°)
-- **Auto-Crop Borders** - Remove white/black borders automatically
-- **Zoom** - Double-tap or pinch-to-zoom for detailed viewing
+- [ ] Pages load correctly
+- [ ] Page counter shows current/total
+- [ ] Tap anywhere to show/hide controls
+- [ ] Exit reader returns to detail view
+- [ ] Progress saves when exiting
+- [ ] Top bar shows manga title
+- [ ] Bottom bar shows chapter progress
 
-### Color Filters
-- **Filter Types** - None, Sepia, Night Mode, Blue Light Filter
-- **Brightness Control** - Adjustable from 0-100%
-- **Filter Intensity** - Fine-tune filter strength (0-100%)
+## Reader - Navigation
 
-### Navigation Methods
-- **Touch Gestures**
-  - Swipe left/right for page navigation with preview animation
-  - Tap to toggle UI controls
-  - Double-tap to zoom
-  - Long-press for context menus
-- **Button Controls**
-  - D-pad left/right for pages
-  - L/R shoulder buttons for pages
-  - Quick chapter navigation
-- **Page Slider** - Jump to any page quickly
-- **Jump to Page** - Direct page number input
+- [ ] D-pad left/right changes pages
+- [ ] L/R shoulder buttons change pages
+- [ ] First page reached shows indicator
+- [ ] Last page reached shows indicator
+- [ ] Go to next chapter works
+- [ ] Go to previous chapter works
+- [ ] Page slider navigation works
 
-### Reader UI
-- Collapsible top/bottom control bars
-- Page counter with current/total display
-- Chapter progress indicator
-- Quick settings overlay panel
-- Manga title and chapter name display
+## Reader - Swipe Gestures
 
-### Webtoon-Specific Features
-- **Auto-Detection** - Automatically detects webtoon/manhwa based on genre tags and source
-- **Seamless Scrolling** - Continuous page flow without breaks
-- **Side Padding** - Adjustable padding (0-20%) for comfortable reading
-- **Tall Page Splitting** - Long images split into manageable segments
+- [ ] Swipe left/right to change pages
+- [ ] Swipe shows preview of next/previous page
+- [ ] Swipe animation completes page turn
+- [ ] Partial swipe snaps back to current page
+- [ ] Swipe direction respects rotation setting
+- [ ] Swipe works in RTL mode (swipe left = next page)
+- [ ] Swipe works in LTR mode (swipe right = next page)
+- [ ] Swipe works in vertical mode (swipe up = next page)
 
-### Chapter Navigation
-- Previous/Next chapter buttons
-- Auto-advance to next chapter (configurable delay)
-- Resume from last read position
-- Chapter completion marking
+## Reader - Settings Persistence
 
-### Per-Manga Settings
-Override global defaults for individual manga:
-- Reading mode
-- Page scale
-- Image rotation
-- Crop borders
-- Webtoon settings
+- [ ] Reader settings menu opens (Settings button)
+- [ ] Reading direction changes (RTL/LTR/Vertical)
+- [ ] Image rotation changes (0/90/180/270 degrees)
+- [ ] Scale mode changes (Fit Screen/Width/Height/Original)
+- [ ] Settings persist after closing reader
+- [ ] Settings persist after app restart
+- [ ] Per-manga settings override global defaults
+- [ ] Different manga can have different settings
 
----
+## Reader - Server Sync
 
-## Downloads & Offline Reading
+- [ ] Settings save to Suwayomi server (meta keys)
+- [ ] Settings load from server on chapter open
+- [ ] Server settings take priority over local cache
+- [ ] Settings sync works with Tachiyomi/Mihon clients
+- [ ] Meta keys used: readerMode, rotation, scaleType, cropBorders, webtoonSidePadding
 
-### Download Locations
-- **Server Downloads** - Store on Suwayomi server
-- **Local Downloads** - Store on Vita for offline reading
-- **Both** - Download to both locations
+## Reader - Progress
 
-### Queue Management
-- View active download queue
-- Pause/Resume downloads
-- Reorder queue items
-- Cancel individual or all downloads
-- Download progress tracking
+- [ ] Last page read saves to server
+- [ ] Resume at last read page works
+- [ ] Finishing chapter marks as read
+- [ ] Progress syncs correctly
 
-### Download Options
-- **Concurrent Downloads** - Set 1-4 simultaneous downloads
-- **WiFi-Only** - Restrict downloads to WiFi connections
-- **Auto-Download** - Automatically download new chapters
-- **Auto-Resume** - Resume incomplete downloads on app start
-- **Delete After Reading** - Automatically clean up read chapters
+## Reader - Webtoon Mode
 
-### Storage Management
-- View total storage usage
-- Per-manga storage breakdown
-- Delete specific manga downloads
-- Delete only read chapters
-- Clear all downloads
-- Cache management
+- [ ] Webtoon auto-detection works (genre/source based)
+- [ ] Auto-detected webtoons use vertical mode
+- [ ] Auto-detected webtoons use fit-width scale
+- [ ] Crop borders setting applies to pages
+- [ ] Side padding applies correctly
+- [ ] Manual override of auto-detected settings works
+- [ ] Webtoon settings save per-manga
 
----
+## Extensions Management
 
-## Search & Browse
+- [ ] Extensions tab shows available extensions
+- [ ] Installed extensions marked
+- [ ] Extension icons load
+- [ ] Install extension works
+- [ ] Update extension works
+- [ ] Uninstall extension works
+- [ ] Extensions filter by language
 
-### Source Search
-- Search within specific sources
-- Browse Popular manga
-- Browse Latest updates
-- Pagination with "Load More"
+## Downloads
 
-### Global Search
-- Search across all installed sources simultaneously
-- Results grouped by source
-- Cover thumbnails for all results
-- Quick access to manga details
+- [ ] Queue chapter download works
+- [ ] Download progress shows
+- [ ] Download completes successfully
+- [ ] Downloaded chapters marked
+- [ ] Downloads tab shows queue
+- [ ] Cancel download works
+- [ ] Start/Stop download queue works
+- [ ] Downloaded chapters read offline
 
-### Search History
-- Automatic history tracking
-- Quick access to previous searches
-- Configurable history limit (default: 20)
-- Clear history option
+## Settings - Connection
 
-### Browse Filters
-- Filter sources by language
-- NSFW content toggle
-- Source-specific filters and preferences
+- [ ] Server URL setting persists
+- [ ] Username setting persists
+- [ ] Password setting persists
+- [ ] Test connection button works
+- [ ] Clear cache option works
 
----
+## Settings - Reader Defaults
 
-## Extensions & Sources
+- [ ] Default reading direction setting works (RTL/LTR/Vertical/Webtoon)
+- [ ] Default page scale mode setting works
+- [ ] Default image rotation setting works (0/90/180/270)
+- [ ] Reader background color setting works (Black/White/Gray)
+- [ ] Keep screen on setting works
+- [ ] Show page number setting works
+- [ ] Tap to navigate setting works
+- [ ] Default settings apply to new manga without custom settings
 
-### Extension Management
-- **Install** - Add new sources from available extensions
-- **Update** - Keep extensions up to date with update indicators
-- **Uninstall** - Remove unwanted extensions
-- **Search** - Find extensions by name
+## Settings - Webtoon / Long Strip
 
-### Extension Browser
-- Updates Available section with badges
-- Installed extensions section
-- Available extensions grouped by language
-- Expandable/collapsible sections
+- [ ] Crop borders toggle works
+- [ ] Auto-detect webtoon toggle works
+- [ ] Side padding selector works (None/5%/10%/15%/20%)
+- [ ] Webtoon settings persist after restart
+- [ ] Disabling auto-detect uses user defaults for all manga
+- [ ] Enabling auto-detect applies webtoon defaults to detected webtoons
 
-### Source Configuration
-- Per-source preferences and settings
-- Multiple setting types (switches, text, lists, etc.)
-- Source filter customization
-- Language-based source filtering
+## Settings - Webtoon Detection
 
----
+Webtoon auto-detection checks for:
+- [ ] Genre tags: "Long Strip", "Webtoon", "Web Comic", "Manhwa", "Manhua", "Full Color"
+- [ ] Sources: Webtoon, Tapas, Tappytoon, Lezhin, Toomics, Bilibili, Asura, Reaper, Flame
 
-## Tracking Integration
+## Navigation & UI
 
-### Supported Trackers
-- **MyAnimeList** - Full MAL integration
-- **AniList** - Complete AniList support
-- Additional trackers (extensible)
+- [ ] D-pad navigation works throughout app
+- [ ] Tab switching works
+- [ ] Back button returns to previous screen
+- [ ] Scrolling works smoothly
+- [ ] Focus indicators visible
+- [ ] Loading indicators show during fetches
 
-### Tracking Features
-- OAuth authentication
-- Search tracker databases
-- Bind manga to tracker entries
-- Sync reading progress automatically
-- Update reading status (Reading, Completed, On Hold, Dropped, Plan to Read)
-- Set scores and ratings
-- Record start/finish dates
-- View all tracked items
+## Error Handling
 
-### Tracker Search
-- Visual search results with covers
-- Title and description display
-- Status and publishing information
-- Easy binding to library manga
+- [ ] Network errors show user-friendly message
+- [ ] Empty states handled gracefully
+- [ ] Failed image loads show placeholder
+- [ ] Server errors reported appropriately
 
 ---
 
-## Settings & Customization
+## Smoke Test (Quick Validation ~10 minutes)
 
-### Connection Settings
-- Local server URL (LAN)
-- Remote server URL (WAN)
-- Toggle between local/remote connections
-- Auto-switch on connection failure
-- Connection timeout configuration
-- Basic Auth support (username/password)
+### Basic Functionality
+1. [ ] App launches successfully
+2. [ ] Connect to Suwayomi server
+3. [ ] Library categories load and display
+4. [ ] Select a category and view manga
+5. [ ] Open manga detail view
+6. [ ] Load chapter list
+7. [ ] Open reader and view pages
+8. [ ] Navigate pages with buttons
+9. [ ] Exit reader, progress saved
+10. [ ] Browse a source
+11. [ ] Search for manga
+12. [ ] Check extensions tab
+13. [ ] Check downloads tab
 
-### UI Settings
-- **Theme** - System, Light, or Dark mode
-- **Show Clock** - Display system time
-- **Enable Animations** - Toggle UI animations
-- **Debug Logging** - Enable detailed logging
+### Reader Settings (New Features)
+14. [ ] Open reader settings in chapter
+15. [ ] Change reading direction, verify it applies
+16. [ ] Change rotation, verify it applies
+17. [ ] Close reader and reopen same manga - settings preserved
+18. [ ] Open different manga - uses default settings
+19. [ ] Swipe to change pages - verify animation works
+20. [ ] Swipe in rotated view - direction is correct
 
-### Reader Defaults
-- Default reading direction
-- Default page scale mode
-- Default image rotation
-- Background color (Black, White, Gray)
-- Keep screen on during reading
-- Show page numbers
-- Tap-to-navigate zones
+### Webtoon Detection (New Features)
+21. [ ] Open a known webtoon/manhwa manga
+22. [ ] Verify auto-detection applies vertical mode + fit-width
+23. [ ] Open a regular manga - uses default RTL mode
+24. [ ] Check Settings > Webtoon section exists
+25. [ ] Toggle "Auto-Detect Webtoon" off
+26. [ ] Open webtoon again - now uses user defaults
 
-### Auto-Chapter Advance
-- Enable/disable auto-advance
-- Configurable delay (0-10 seconds)
-- Show countdown before advancing
-
-### Webtoon Settings
-- Crop borders toggle
-- Auto-detect webtoon format
-- Side padding adjustment (0-20%)
-
-### Library Settings
-- Display mode selection
-- Grid size configuration
-- Library data caching
-- Cover image caching
-- Default sort mode
-- Chapter sort order
-
-### Download Settings
-- Download location preference
-- Auto-download new chapters
-- WiFi-only restriction
-- Max concurrent downloads
-- Delete after reading
-- Resume on startup
-
-### Browse Settings
-- Language filter configuration
-- NSFW source visibility
+### Settings Persistence
+27. [ ] Change default reader settings in Settings tab
+28. [ ] Restart app - settings persist
+29. [ ] Open new manga - default settings applied
+30. [ ] Per-manga settings still preserved after restart
 
 ---
 
-## Additional Features
+## Regression Tests (Edge Cases)
 
-### Manga Detail View
-- Cover image display
-- Full metadata (title, author, artist, status)
-- Expandable description
-- Genre tags
-- Chapter count and source info
-- Add/remove from library
-- Full chapter list with filtering
+### Swipe Navigation Edge Cases
+- [ ] Swipe at first page - no previous page preview, snaps back
+- [ ] Swipe at last page - shows next chapter or end indicator
+- [ ] Quick successive swipes don't break animation
+- [ ] Swipe during page load - handles gracefully
+- [ ] Swipe with 90° rotation - horizontal swipe moves vertically
+- [ ] Swipe with 180° rotation - directions inverted correctly
+- [ ] Swipe with 270° rotation - horizontal swipe moves vertically (opposite)
 
-### Chapter List Features
-- Sort by newest/oldest
-- Filter by status (Downloaded, Unread, Bookmarked)
-- Filter by scanlator group
-- Multi-select for batch operations
-- Range selection
-- Quick action icons
+### Settings Priority Edge Cases
+- [ ] Server has settings, local cache has different settings - server wins
+- [ ] Server unreachable - falls back to local cache
+- [ ] No server settings, no local cache - uses global defaults
+- [ ] Webtoon detected but has server settings - server settings win
+- [ ] Clear local cache - server settings still load correctly
 
-### Reading History
-- Chronological reading history
-- Relative timestamps ("2 days ago")
-- Quick resume functionality
-- Remove individual entries
-- Clear entire history
+### Webtoon Detection Edge Cases
+- [ ] Manga with "Manhwa" genre but from non-webtoon source - detected as webtoon
+- [ ] Manga from "Webtoon" source but no genre tags - detected as webtoon
+- [ ] Manga with "Full Color" tag only - detected as webtoon
+- [ ] Regular manga with no webtoon indicators - uses normal defaults
+- [ ] User manually changes detected webtoon settings - custom settings saved
 
-### Reading Statistics
-- Total chapters read
-- Manga completed count
-- Current reading streak
-- Longest reading streak
-- Total reading time
-- Reset statistics option
+### Chapter Navigation Edge Cases
+- [ ] Last chapter, swipe to next - shows end indicator or loops
+- [ ] First chapter, go to previous - shows start indicator
+- [ ] Chapter with single page - navigation still works
+- [ ] Chapter with 100+ pages - performance acceptable
+- [ ] Navigate chapters rapidly - no crashes
 
-### Backup & Restore
-- Export library backup
-- Import from backup file
-- Automatic backup naming with timestamps
-
-### Manga Migration
-- Search for manga across all sources
-- Compare source options
-- Migrate between sources
-- Preserve reading progress
-
-### Server Information
-- View connected server details
-- Server version and build info
-- GitHub and Discord links
+### Settings Sync Edge Cases
+- [ ] Change settings while offline - saves locally, syncs when online
+- [ ] Multiple rapid setting changes - all saved correctly
+- [ ] Server returns error on save - local cache preserved
+- [ ] Corrupt server meta data - handled gracefully, uses defaults
 
 ---
 
-## Building from Source
+## Build Instructions
 
 ### Prerequisites
+
 - VitaSDK installed and configured
 - CMake 3.10+
 - Git
 
-### Build Steps
+### Building
 
 ```bash
-# Clone the repository
-git clone https://github.com/YourUsername/VitaSuwayomi.git
-cd VitaSuwayomi
-
-# Create build directory
 mkdir build && cd build
-
-# Configure and build
 cmake ..
 make
 ```
 
 ### Installing on Vita
 
-1. Build produces a `.vpk` file
-2. Transfer to Vita via USB or FTP
+1. Build the VPK file
+2. Transfer to Vita via USB/FTP
 3. Install using VitaShell
 4. Launch from LiveArea
 
@@ -390,50 +331,6 @@ make
 
 ## Server Requirements
 
-- [Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server) running and accessible
+- Suwayomi-Server running and accessible
 - Network connectivity between Vita and server
 - Basic Auth enabled if using authentication
-- Recommended: Both local (LAN) and remote (WAN) URLs configured for failover
-
----
-
-## Controls Reference
-
-### General Navigation
-| Button | Action |
-|--------|--------|
-| D-Pad | Navigate UI |
-| X | Select/Confirm |
-| O | Back/Cancel |
-| L/R | Switch tabs / Navigate categories |
-| Start | Context menu |
-
-### Reader Controls
-| Button | Action |
-|--------|--------|
-| D-Pad Left/Right | Previous/Next page |
-| L/R | Previous/Next page |
-| X | Toggle UI |
-| O | Exit reader |
-| Triangle | Reader settings |
-
-### Touch Gestures
-| Gesture | Action |
-|---------|--------|
-| Swipe Left/Right | Navigate pages |
-| Single Tap | Toggle UI controls |
-| Double Tap | Zoom in/out |
-| Pinch | Manual zoom |
-| Long Press | Context menu |
-
----
-
-## License
-
-This project is open source. See the LICENSE file for details.
-
-## Acknowledgments
-
-- [Suwayomi](https://github.com/Suwayomi/Suwayomi-Server) - The server powering this app
-- [Borealis](https://github.com/natinusala/borealis) - UI framework
-- All extension developers and contributors
