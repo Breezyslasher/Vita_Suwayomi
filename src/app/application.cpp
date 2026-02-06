@@ -386,13 +386,15 @@ bool Application::loadSettings() {
     m_settings.localServerUrl = extractString("localServerUrl");
     m_settings.remoteServerUrl = extractString("remoteServerUrl");
     m_settings.useRemoteUrl = extractBool("useRemoteUrl", false);
+    m_settings.autoSwitchOnFailure = extractBool("autoSwitchOnFailure", false);
     m_settings.connectionTimeout = extractInt("connectionTimeout");
     if (m_settings.connectionTimeout <= 0) m_settings.connectionTimeout = 30;
 
-    brls::Logger::info("loadSettings: localUrl={}, remoteUrl={}, useRemote={}",
+    brls::Logger::info("loadSettings: localUrl={}, remoteUrl={}, useRemote={}, autoSwitch={}",
                        m_settings.localServerUrl.empty() ? "(empty)" : m_settings.localServerUrl,
                        m_settings.remoteServerUrl.empty() ? "(empty)" : m_settings.remoteServerUrl,
-                       m_settings.useRemoteUrl ? "true" : "false");
+                       m_settings.useRemoteUrl ? "true" : "false",
+                       m_settings.autoSwitchOnFailure ? "true" : "false");
 
     // Load display settings
     m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
@@ -616,6 +618,7 @@ bool Application::saveSettings() {
     json += "  \"localServerUrl\": \"" + m_settings.localServerUrl + "\",\n";
     json += "  \"remoteServerUrl\": \"" + m_settings.remoteServerUrl + "\",\n";
     json += "  \"useRemoteUrl\": " + std::string(m_settings.useRemoteUrl ? "true" : "false") + ",\n";
+    json += "  \"autoSwitchOnFailure\": " + std::string(m_settings.autoSwitchOnFailure ? "true" : "false") + ",\n";
     json += "  \"connectionTimeout\": " + std::to_string(m_settings.connectionTimeout) + ",\n";
 
     // Display settings
@@ -681,6 +684,58 @@ std::string Application::getActiveServerUrl() const {
     }
     // Fall back to current server URL if no local/remote configured
     return m_serverUrl;
+}
+
+std::string Application::getAlternateServerUrl() const {
+    // Return the URL that is NOT currently active
+    if (m_settings.useRemoteUrl) {
+        // Currently using remote, so alternate is local
+        return m_settings.localServerUrl;
+    } else {
+        // Currently using local, so alternate is remote
+        return m_settings.remoteServerUrl;
+    }
+}
+
+bool Application::tryAlternateUrl() {
+    // Only try if auto-switch is enabled and both URLs are configured
+    if (!m_settings.autoSwitchOnFailure || !hasBothUrls()) {
+        return false;
+    }
+
+    std::string alternateUrl = getAlternateServerUrl();
+    if (alternateUrl.empty()) {
+        return false;
+    }
+
+    brls::Logger::info("Auto-switch: Trying alternate URL: {}", alternateUrl);
+
+    // Test the alternate URL
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::string originalUrl = client.getServerUrl();
+    client.setServerUrl(alternateUrl);
+
+    if (client.testConnection()) {
+        // Alternate URL works - switch to it
+        if (m_settings.useRemoteUrl) {
+            // Was using remote, now switch to local
+            m_settings.useRemoteUrl = false;
+            m_serverUrl = m_settings.localServerUrl;
+            brls::Logger::info("Auto-switch: Switched to local URL");
+        } else {
+            // Was using local, now switch to remote
+            m_settings.useRemoteUrl = true;
+            m_serverUrl = m_settings.remoteServerUrl;
+            brls::Logger::info("Auto-switch: Switched to remote URL");
+        }
+        saveSettings();
+        return true;
+    }
+
+    // Alternate URL also failed - restore original
+    client.setServerUrl(originalUrl);
+    brls::Logger::warning("Auto-switch: Alternate URL also failed");
+    return false;
 }
 
 void Application::switchToLocalUrl() {

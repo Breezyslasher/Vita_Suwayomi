@@ -3,6 +3,7 @@
  */
 
 #include "app/suwayomi_client.hpp"
+#include "app/application.hpp"
 #include "utils/http_client.hpp"
 #include "utils/image_loader.hpp"
 
@@ -1571,6 +1572,23 @@ bool SuwayomiClient::connectToServer(const std::string& url) {
         m_serverInfo = info;
         brls::Logger::info("Connected to Suwayomi {} ({})", info.version, info.buildType);
         return true;
+    }
+
+    // Connection failed - try auto-switch if enabled
+    Application& app = Application::getInstance();
+    if (app.tryAlternateUrl()) {
+        // Successfully switched to alternate URL, update our server URL
+        m_serverUrl = app.getActiveServerUrl();
+        brls::Logger::info("Auto-switched to: {}", m_serverUrl);
+
+        // Try connection with new URL
+        if (fetchServerInfo(info)) {
+            m_isConnected = true;
+            m_serverInfo = info;
+            brls::Logger::info("Connected to Suwayomi {} ({}) via auto-switch", info.version, info.buildType);
+            brls::Application::notify("Auto-switched to " + std::string(app.getSettings().useRemoteUrl ? "remote" : "local") + " URL");
+            return true;
+        }
     }
 
     m_isConnected = false;

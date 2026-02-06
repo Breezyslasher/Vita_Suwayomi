@@ -122,6 +122,17 @@ void SettingsTab::createAccountSection() {
         });
     m_contentBox->addView(m_urlModeSelector);
 
+    // Auto-switch on failure toggle
+    auto* autoSwitchToggle = new brls::BooleanCell();
+    autoSwitchToggle->init("Auto-Switch on Failure", settings.autoSwitchOnFailure,
+        [](bool value) {
+            Application::getInstance().getSettings().autoSwitchOnFailure = value;
+            Application::getInstance().saveSettings();
+            brls::Application::notify(value ? "Auto-switch enabled" : "Auto-switch disabled");
+        });
+    autoSwitchToggle->setDetailText("Try alternate URL if connection fails");
+    m_contentBox->addView(autoSwitchToggle);
+
     // Disconnect button
     auto* disconnectCell = new brls::DetailCell();
     disconnectCell->setText("Disconnect");

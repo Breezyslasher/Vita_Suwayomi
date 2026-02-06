@@ -169,6 +169,7 @@ struct AppSettings {
     std::string localServerUrl;        // Local network URL (e.g., http://192.168.1.100:4567)
     std::string remoteServerUrl;       // Remote/external URL (e.g., https://myserver.com:4567)
     bool useRemoteUrl = false;         // true = use remote URL, false = use local URL
+    bool autoSwitchOnFailure = false;  // Auto-switch to alternate URL if connection fails
     int connectionTimeout = 30;        // seconds
 
     // Display Settings
@@ -208,10 +209,13 @@ public:
 
     // Local/Remote URL switching
     std::string getActiveServerUrl() const;  // Returns local or remote URL based on setting
+    std::string getAlternateServerUrl() const;  // Returns the URL not currently in use
     void switchToLocalUrl();
     void switchToRemoteUrl();
     bool hasLocalUrl() const { return !m_settings.localServerUrl.empty(); }
     bool hasRemoteUrl() const { return !m_settings.remoteServerUrl.empty(); }
+    bool hasBothUrls() const { return hasLocalUrl() && hasRemoteUrl(); }
+    bool tryAlternateUrl();  // Try alternate URL on failure (returns true if switched successfully)
 
     // Auth credentials
     const std::string& getAuthUsername() const { return m_authUsername; }
