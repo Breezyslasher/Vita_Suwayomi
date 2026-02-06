@@ -676,9 +676,10 @@ void MangaDetailView::populateChaptersList() {
         int chapterId = capturedChapter.id;
         std::string mangaTitle = m_manga.title;
         std::string chapterName = capturedChapter.name;
+        bool serverDownloaded = capturedChapter.downloaded;
 
         chapterRow->addGestureRecognizer(new brls::PanGestureRecognizer(
-            [this, chapterRow, mangaId, chapterIndex, chapterId, chapterRead, localDownloaded, localQueued, localDownloading, mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            [this, chapterRow, mangaId, chapterIndex, chapterId, chapterRead, localDownloaded, localQueued, localDownloading, serverDownloaded, mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 static brls::Point touchStart;
                 static bool isValidSwipe = false;
                 // Original background color for chapter rows
@@ -703,7 +704,7 @@ void MangaDetailView::populateChaptersList() {
                             chapterRow->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
                         } else if (dx > SWIPE_THRESHOLD * 0.5f) {
                             // Swiping right - download/delete/cancel (green/red tint)
-                            if (localDownloaded || localQueued || localDownloading) {
+                            if (localDownloaded || serverDownloaded || localQueued || localDownloading) {
                                 chapterRow->setBackgroundColor(nvgRGBA(231, 76, 60, 100));  // Red for delete/cancel
                             } else {
                                 chapterRow->setBackgroundColor(nvgRGBA(46, 204, 113, 100));  // Green for download
@@ -743,8 +744,11 @@ void MangaDetailView::populateChaptersList() {
                             }
                         } else {
                             // Right swipe - download, delete, or cancel
+                            // Get download mode setting
+                            DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+
                             if (localQueued || localDownloading) {
-                                // Cancel queued/downloading chapter
+                                // Cancel queued/downloading chapter (local only - server queue managed separately)
                                 asyncRun([this, mangaId, chapterIndex]() {
                                     DownloadsManager& dm = DownloadsManager::getInstance();
                                     if (dm.cancelChapterDownload(mangaId, chapterIndex)) {
@@ -754,27 +758,87 @@ void MangaDetailView::populateChaptersList() {
                                         });
                                     }
                                 });
-                            } else if (localDownloaded) {
-                                // Delete download
-                                asyncRun([mangaId, chapterIndex]() {
-                                    DownloadsManager& dm = DownloadsManager::getInstance();
-                                    if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
-                                        brls::sync([]() {
-                                            brls::Application::notify("Download deleted");
-                                        });
+                            } else if (localDownloaded || serverDownloaded) {
+                                // Delete download - respect downloadMode setting
+                                asyncRun([mangaId, chapterId, chapterIndex, downloadMode, serverDownloaded, localDownloaded]() {
+                                    int serverDeleted = 0;
+                                    int localDeleted = 0;
+
+                                    // Delete from server if applicable
+                                    if (serverDownloaded &&
+                                        (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                        std::vector<int> chapterIds = {chapterId};
+                                        std::vector<int> chapterIndexes = {chapterIndex};
+                                        if (client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes)) {
+                                            serverDeleted = 1;
+                                        }
                                     }
+
+                                    // Delete from local if applicable
+                                    if (localDownloaded &&
+                                        (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
+                                        DownloadsManager& dm = DownloadsManager::getInstance();
+                                        if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+                                            localDeleted = 1;
+                                        }
+                                    }
+
+                                    brls::sync([downloadMode, serverDeleted, localDeleted]() {
+                                        if (serverDeleted > 0 || localDeleted > 0) {
+                                            std::string msg = "Download deleted";
+                                            if (downloadMode == DownloadMode::BOTH && serverDeleted > 0 && localDeleted > 0) {
+                                                msg = "Deleted server + local";
+                                            } else if (downloadMode == DownloadMode::SERVER_ONLY || (downloadMode == DownloadMode::BOTH && serverDeleted > 0)) {
+                                                msg = "Server download deleted";
+                                            } else if (downloadMode == DownloadMode::LOCAL_ONLY || (downloadMode == DownloadMode::BOTH && localDeleted > 0)) {
+                                                msg = "Local download deleted";
+                                            }
+                                            brls::Application::notify(msg);
+                                        }
+                                    });
                                 });
                             } else {
-                                // Start download
-                                asyncRun([mangaId, chapterId, chapterIndex, mangaTitle, chapterName]() {
+                                // Start download - respect downloadMode setting
+                                asyncRun([mangaId, chapterId, chapterIndex, mangaTitle, chapterName, downloadMode]() {
+                                    SuwayomiClient& client = SuwayomiClient::getInstance();
                                     DownloadsManager& dm = DownloadsManager::getInstance();
-                                    dm.init();
-                                    if (dm.queueChapterDownload(mangaId, chapterId, chapterIndex, mangaTitle, chapterName)) {
-                                        dm.startDownloads();
-                                        brls::sync([]() {
-                                            brls::Application::notify("Download queued");
-                                        });
+                                    bool serverQueued = false;
+                                    bool localQueued = false;
+
+                                    // Queue to server if applicable
+                                    if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
+                                        std::vector<int> chapterIds = {chapterId};
+                                        serverQueued = client.queueChapterDownloads(chapterIds);
                                     }
+
+                                    // Queue to local if applicable
+                                    if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
+                                        dm.init();
+                                        localQueued = dm.queueChapterDownload(mangaId, chapterId, chapterIndex, mangaTitle, chapterName);
+                                        if (localQueued) {
+                                            dm.startDownloads();
+                                        }
+                                    }
+
+                                    brls::sync([downloadMode, serverQueued, localQueued]() {
+                                        if (downloadMode == DownloadMode::SERVER_ONLY) {
+                                            brls::Application::notify(serverQueued ? "Queued to server" : "Failed to queue");
+                                        } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                                            brls::Application::notify(localQueued ? "Queued locally" : "Failed to queue");
+                                        } else {
+                                            // BOTH mode
+                                            if (serverQueued || localQueued) {
+                                                std::string msg = "Queued";
+                                                if (serverQueued) msg += " server";
+                                                if (serverQueued && localQueued) msg += " +";
+                                                if (localQueued) msg += " local";
+                                                brls::Application::notify(msg);
+                                            } else {
+                                                brls::Application::notify("Failed to queue");
+                                            }
+                                        }
+                                    });
                                 });
                             }
                         }
@@ -1464,21 +1528,69 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
 void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
     // Collect data before async to avoid capturing 'this'
     int mangaId = m_manga.id;
+    int chapterId = chapter.id;
     int chapterIndex = chapter.index;
+    bool serverDownloaded = chapter.downloaded;
+
+    // Get download mode setting
+    DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+
+    // Check if locally downloaded
+    DownloadsManager& dm = DownloadsManager::getInstance();
+    bool localDownloaded = dm.isChapterDownloaded(mangaId, chapterIndex);
 
     // Don't capture 'this' - use only copied data
-    asyncRun([mangaId, chapterIndex]() {
-        DownloadsManager& dm = DownloadsManager::getInstance();
+    asyncRun([mangaId, chapterId, chapterIndex, downloadMode, serverDownloaded, localDownloaded]() {
+        int serverDeleted = 0;
+        int localDeleted = 0;
 
-        if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
-            brls::sync([]() {
-                brls::Application::notify("Local download deleted");
-            });
-        } else {
-            brls::sync([]() {
-                brls::Application::notify("Failed to delete download");
-            });
+        // Delete from server if applicable
+        if (serverDownloaded &&
+            (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            std::vector<int> chapterIds = {chapterId};
+            std::vector<int> chapterIndexes = {chapterIndex};
+            if (client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes)) {
+                serverDeleted = 1;
+            }
         }
+
+        // Delete from local if applicable
+        if (localDownloaded &&
+            (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+                localDeleted = 1;
+            }
+        }
+
+        brls::sync([downloadMode, serverDeleted, localDeleted]() {
+            if (downloadMode == DownloadMode::SERVER_ONLY) {
+                if (serverDeleted > 0) {
+                    brls::Application::notify("Server download deleted");
+                } else {
+                    brls::Application::notify("Failed to delete server download");
+                }
+            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                if (localDeleted > 0) {
+                    brls::Application::notify("Local download deleted");
+                } else {
+                    brls::Application::notify("Failed to delete local download");
+                }
+            } else {
+                // BOTH mode
+                if (serverDeleted > 0 || localDeleted > 0) {
+                    std::string msg = "Deleted";
+                    if (serverDeleted > 0) msg += " server";
+                    if (serverDeleted > 0 && localDeleted > 0) msg += " +";
+                    if (localDeleted > 0) msg += " local";
+                    msg += " download";
+                    brls::Application::notify(msg);
+                } else {
+                    brls::Application::notify("Failed to delete download");
+                }
+            }
+        });
     });
 }
 
