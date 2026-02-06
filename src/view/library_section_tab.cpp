@@ -40,7 +40,7 @@ LibrarySectionTab::LibrarySectionTab() {
     topRow->setJustifyContent(brls::JustifyContent::FLEX_START);
     topRow->setAlignItems(brls::AlignItems::CENTER);
     topRow->setMarginBottom(15);
-    topRow->setHeight(45);
+    topRow->setHeight(50);
 
     // Category tabs container - outer box clips, inner box scrolls
     m_categoryTabsBox = new brls::Box();
@@ -325,8 +325,8 @@ void LibrarySectionTab::createCategoryTabs() {
         auto* btn = new brls::Button();
         btn->setText("Library");
         btn->setMarginRight(10);
-        btn->setWidth(100);
-        btn->setHeight(35);
+        btn->setWidth(120);
+        btn->setHeight(40);
         btn->registerClickAction([this](brls::View* view) {
             selectCategory(0);
             return true;
@@ -352,12 +352,12 @@ void LibrarySectionTab::createCategoryTabs() {
 
         btn->setText(catName);
         btn->setMarginRight(8);
-        btn->setHeight(35);
+        btn->setHeight(40);
 
-        // Calculate width based on text length
-        int textWidth = static_cast<int>(catName.length()) * 9 + 30;
-        if (textWidth < 60) textWidth = 60;
-        if (textWidth > 250) textWidth = 250;
+        // Calculate width based on text length - use wider multiplier for better text fit
+        int textWidth = static_cast<int>(catName.length()) * 12 + 40;
+        if (textWidth < 80) textWidth = 80;
+        if (textWidth > 300) textWidth = 300;
         btn->setWidth(textWidth);
 
         // Click handler
