@@ -124,7 +124,6 @@ MangaItemCell::MangaItemCell() {
     m_newBadge->setText("NEW");
     m_newBadge->setTextColor(nvgRGB(255, 255, 255));
     m_newBadge->setBackgroundColor(nvgRGBA(231, 76, 60, 255)); // Red badge
-    m_newBadge->setPadding(2, 4, 2, 4);
     m_newBadge->setPositionType(brls::PositionType::ABSOLUTE);
     m_newBadge->setPositionTop(26);  // Below download badge
     m_newBadge->setPositionLeft(0);
