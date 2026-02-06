@@ -58,6 +58,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryScrollContainer->setJustifyContent(brls::JustifyContent::FLEX_START);
     m_categoryScrollContainer->setAlignItems(brls::AlignItems::CENTER);
     m_categoryScrollContainer->setPaddingLeft(5);  // Prevent first button cutoff
+    m_categoryScrollContainer->setShrink(0);  // Don't shrink - allow scrolling beyond visible area
     m_categoryTabsBox->addView(m_categoryScrollContainer);
 
     topRow->addView(m_categoryTabsBox);
@@ -339,12 +340,14 @@ void LibrarySectionTab::createCategoryTabs() {
         return;
     }
 
-    // Create a button for each category
+    // Calculate total width needed for all buttons first
+    // This ensures the scroll container has enough width for proper layout of all buttons
+    float totalWidth = 5.0f; // Initial left padding
+    std::vector<int> buttonWidths;
+    std::vector<std::string> buttonNames;
+
     for (size_t i = 0; i < visibleCategories.size(); i++) {
         const auto& category = visibleCategories[i];
-        auto* btn = new brls::Button();
-
-        // Get category name, truncate if too long
         std::string catName = category.name;
         if (catName.empty()) {
             catName = "Cat " + std::to_string(category.id);
@@ -352,24 +355,36 @@ void LibrarySectionTab::createCategoryTabs() {
         if (catName.length() > 25) {
             catName = catName.substr(0, 23) + "..";
         }
+        buttonNames.push_back(catName);
+
+        int textWidth = static_cast<int>(catName.length()) * 10 + 50;
+        if (textWidth < 90) textWidth = 90;
+        if (textWidth > 310) textWidth = 310;
+        buttonWidths.push_back(textWidth);
+        totalWidth += textWidth + 8.0f; // button width + margin
+    }
+
+    // Set minimum width on scroll container to fit all buttons
+    // This ensures off-screen buttons get proper layout
+    m_categoryScrollContainer->setWidth(totalWidth);
+
+    // Create a button for each category
+    for (size_t i = 0; i < visibleCategories.size(); i++) {
+        const auto& category = visibleCategories[i];
+        auto* btn = new brls::Button();
+
+        std::string catName = buttonNames[i];
+        int textWidth = buttonWidths[i];
 
         btn->setMarginRight(8);
         btn->setHeight(35);
         btn->setCornerRadius(6);
         btn->setJustifyContent(brls::JustifyContent::CENTER);
         btn->setAlignItems(brls::AlignItems::CENTER);
-
-        // Calculate width based on text length - 10px per character plus padding
-        int textWidth = static_cast<int>(catName.length()) * 10 + 50;
-        if (textWidth < 90) textWidth = 90;
-        if (textWidth > 310) textWidth = 310;
         btn->setWidth(textWidth);
 
         // Set text after sizing is configured to ensure proper layout
         btn->setText(catName);
-
-        // Force the button to update its internal label layout
-        btn->invalidate();
 
         // Click handler
         int catId = category.id;
@@ -387,6 +402,9 @@ void LibrarySectionTab::createCategoryTabs() {
         m_categoryScrollContainer->addView(btn);
         m_categoryButtons.push_back(btn);
     }
+
+    // Force layout calculation for all buttons now that container has proper width
+    m_categoryScrollContainer->invalidate();
 
     updateCategoryButtonStyles();
 }
