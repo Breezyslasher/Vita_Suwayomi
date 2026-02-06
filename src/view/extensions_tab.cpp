@@ -15,8 +15,10 @@
 
 namespace vitasuwayomi {
 
-// Static member for tracking if settings button should be preferred focus
+// Static members for ExtensionCell
 bool ExtensionCell::s_preferSettingsFocus = false;
+brls::RecyclerFrame* ExtensionCell::s_recycler = nullptr;
+ExtensionsDataSource* ExtensionCell::s_dataSource = nullptr;
 
 // ============================================================================
 // ExtensionCell Implementation
@@ -98,6 +100,7 @@ void ExtensionCell::prepareForReuse() {
     brls::RecyclerCell::prepareForReuse();
     pkgName.clear();
     iconLoaded = false;
+    rowIndex = -1;
     icon->clear();
     nameLabel->setText("");
     detailLabel->setText("");
@@ -125,13 +128,48 @@ brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::Vi
         return this;
     }
 
-    // If pressing UP or DOWN while on settings button, navigate to parent
-    // and let the recycler handle finding the next cell
+    // If pressing UP or DOWN while on settings button, skip to next/previous settings button
     if ((direction == brls::FocusDirection::UP || direction == brls::FocusDirection::DOWN) &&
         currentView == settingsBtn) {
-        // Keep the preference for settings focus
         s_preferSettingsFocus = true;
-        // Delegate to parent (the recycler content box)
+
+        // Try to find the next row with a settings button
+        if (s_dataSource && s_recycler && rowIndex >= 0) {
+            bool searchDown = (direction == brls::FocusDirection::DOWN);
+            int targetRow = s_dataSource->findNextSettingsRow(rowIndex, searchDown);
+
+            if (targetRow >= 0 && targetRow != rowIndex) {
+                // Navigate to the target row
+                brls::IndexPath targetPath(0, targetRow);
+                s_recycler->selectRowAt(targetPath, false);
+
+                // After selectRowAt, we need to find the cell and return its settings button
+                // Use sync to defer focus setting after the recycler has updated
+                brls::sync([targetRow]() {
+                    // The cell should now be visible, find it and focus on settings button
+                    if (s_recycler) {
+                        // Get focus on the selected row's settings button via getDefaultFocus
+                        brls::View* focused = brls::Application::getCurrentFocus();
+                        if (focused) {
+                            ExtensionCell* cell = dynamic_cast<ExtensionCell*>(focused);
+                            if (!cell) {
+                                // Focus might be on the cell, check parent
+                                cell = dynamic_cast<ExtensionCell*>(focused->getParent());
+                            }
+                            if (cell && cell->settingsBtn->getVisibility() == brls::Visibility::VISIBLE) {
+                                brls::Application::giveFocus(cell->settingsBtn);
+                            }
+                        }
+                    }
+                });
+
+                // Return current view to prevent default navigation
+                // The deferred sync will handle the actual focus change
+                return settingsBtn;
+            }
+        }
+
+        // Fallback: delegate to parent for normal navigation
         if (hasParent()) {
             return getParent()->getNextFocus(direction, this);
         }
@@ -295,6 +333,12 @@ brls::RecyclerCell* ExtensionsDataSource::cellForRow(brls::RecyclerFrame* recycl
 
             const auto& ext = row.extension;
             cell->pkgName = ext.pkgName;
+            cell->rowIndex = index.row;
+
+            // Set static pointers for settings button navigation
+            ExtensionCell::s_recycler = recycler;
+            ExtensionCell::s_dataSource = this;
+
             cell->nameLabel->setText(ext.name);
 
             // Detail text
@@ -525,6 +569,40 @@ void ExtensionsDataSource::rebuildRows() {
     }
 
     brls::Logger::debug("ExtensionsDataSource: Rebuilt with {} rows", m_rows.size());
+}
+
+bool ExtensionsDataSource::rowHasSettingsButton(int row) const {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) {
+        return false;
+    }
+
+    const auto& rowData = m_rows[row];
+    if (rowData.type != ExtensionRow::Type::ExtensionItem) {
+        return false;
+    }
+
+    // Extension has settings button if installed and has configurable sources
+    return rowData.extension.installed && rowData.extension.hasConfigurableSources;
+}
+
+int ExtensionsDataSource::findNextSettingsRow(int currentRow, bool searchDown) const {
+    if (m_rows.empty()) {
+        return -1;
+    }
+
+    int step = searchDown ? 1 : -1;
+    int row = currentRow + step;
+
+    // Search in the specified direction
+    while (row >= 0 && row < static_cast<int>(m_rows.size())) {
+        if (rowHasSettingsButton(row)) {
+            return row;
+        }
+        row += step;
+    }
+
+    // Not found
+    return -1;
 }
 
 // ============================================================================

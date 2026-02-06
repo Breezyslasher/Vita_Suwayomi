@@ -15,6 +15,8 @@ namespace vitasuwayomi {
 
 class ExtensionsTab;
 
+class ExtensionsDataSource;
+
 // Custom cell for extension items
 class ExtensionCell : public brls::RecyclerCell {
 public:
@@ -37,8 +39,15 @@ public:
     std::string pkgName;
     bool iconLoaded = false;
 
+    // Track row index for navigation
+    int rowIndex = -1;
+
     // Track if settings button should be preferred focus (for D-pad navigation)
     static bool s_preferSettingsFocus;
+
+    // Static pointers for settings icon navigation
+    static brls::RecyclerFrame* s_recycler;
+    static ExtensionsDataSource* s_dataSource;
 };
 
 // Section header cell
@@ -83,6 +92,13 @@ public:
 
     // Rebuild the flat list from current data
     void rebuildRows();
+
+    // Find next/previous row with a settings button (installed extension with configurable sources)
+    // Returns -1 if not found
+    int findNextSettingsRow(int currentRow, bool searchDown) const;
+
+    // Check if a row has a settings button
+    bool rowHasSettingsButton(int row) const;
 
 private:
     ExtensionsTab* m_tab;
