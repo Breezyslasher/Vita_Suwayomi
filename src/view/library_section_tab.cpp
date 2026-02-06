@@ -324,8 +324,8 @@ void LibrarySectionTab::createCategoryTabs() {
     // If no visible categories, show a "Library" tab that loads all manga
     if (visibleCategories.empty()) {
         auto* btn = new brls::Button();
-        btn->setMarginRight(10);
-        btn->setWidth(130);  // 10px wider
+        btn->setMarginRight(8);
+        btn->setWidth(80);
         btn->setHeight(35);
         btn->setCornerRadius(6);
         btn->setJustifyContent(brls::JustifyContent::CENTER);
@@ -357,9 +357,9 @@ void LibrarySectionTab::createCategoryTabs() {
         }
         buttonNames.push_back(catName);
 
-        int textWidth = static_cast<int>(catName.length()) * 10 + 50;
-        if (textWidth < 90) textWidth = 90;
-        if (textWidth > 310) textWidth = 310;
+        int textWidth = static_cast<int>(catName.length()) * 9 + 24;
+        if (textWidth < 60) textWidth = 60;
+        if (textWidth > 280) textWidth = 280;
         buttonWidths.push_back(textWidth);
         totalWidth += textWidth + 8.0f; // button width + margin
     }
