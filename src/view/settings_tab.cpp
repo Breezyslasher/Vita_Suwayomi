@@ -56,19 +56,71 @@ SettingsTab::SettingsTab() {
 
 void SettingsTab::createAccountSection() {
     Application& app = Application::getInstance();
+    AppSettings& settings = app.getSettings();
 
     // Section header
     auto* header = new brls::Header();
     header->setTitle("Server");
     m_contentBox->addView(header);
 
-    // Server info cell
+    // Current server info
     m_serverLabel = new brls::Label();
-    m_serverLabel->setText("Server: " + (app.getServerUrl().empty() ? "Not connected" : app.getServerUrl()));
+    m_serverLabel->setText("Active: " + (app.getServerUrl().empty() ? "Not connected" : app.getServerUrl()));
     m_serverLabel->setFontSize(18);
     m_serverLabel->setMarginLeft(16);
-    m_serverLabel->setMarginBottom(16);
+    m_serverLabel->setMarginBottom(8);
     m_contentBox->addView(m_serverLabel);
+
+    // Local URL configuration
+    auto* localUrlCell = new brls::DetailCell();
+    localUrlCell->setText("Local URL");
+    localUrlCell->setDetailText(settings.localServerUrl.empty() ? "Not set" : settings.localServerUrl);
+    localUrlCell->registerClickAction([this, localUrlCell](brls::View* view) {
+        showUrlInputDialog("Local Server URL", "Enter local network URL (e.g., http://192.168.1.100:4567)",
+            Application::getInstance().getSettings().localServerUrl,
+            [this, localUrlCell](const std::string& url) {
+                Application::getInstance().getSettings().localServerUrl = url;
+                localUrlCell->setDetailText(url.empty() ? "Not set" : url);
+                Application::getInstance().saveSettings();
+                updateServerLabel();
+            });
+        return true;
+    });
+    m_contentBox->addView(localUrlCell);
+
+    // Remote URL configuration
+    auto* remoteUrlCell = new brls::DetailCell();
+    remoteUrlCell->setText("Remote URL");
+    remoteUrlCell->setDetailText(settings.remoteServerUrl.empty() ? "Not set" : settings.remoteServerUrl);
+    remoteUrlCell->registerClickAction([this, remoteUrlCell](brls::View* view) {
+        showUrlInputDialog("Remote Server URL", "Enter remote URL (e.g., https://myserver.com:4567)",
+            Application::getInstance().getSettings().remoteServerUrl,
+            [this, remoteUrlCell](const std::string& url) {
+                Application::getInstance().getSettings().remoteServerUrl = url;
+                remoteUrlCell->setDetailText(url.empty() ? "Not set" : url);
+                Application::getInstance().saveSettings();
+                updateServerLabel();
+            });
+        return true;
+    });
+    m_contentBox->addView(remoteUrlCell);
+
+    // Toggle between local and remote
+    m_urlModeSelector = new brls::SelectorCell();
+    std::vector<std::string> urlModes = {"Local", "Remote"};
+    int currentMode = settings.useRemoteUrl ? 1 : 0;
+    m_urlModeSelector->init("Active Connection", urlModes, currentMode,
+        [this](int index) {
+            Application& app = Application::getInstance();
+            if (index == 0) {
+                app.switchToLocalUrl();
+            } else {
+                app.switchToRemoteUrl();
+            }
+            updateServerLabel();
+            brls::Application::notify(index == 0 ? "Switched to Local URL" : "Switched to Remote URL");
+        });
+    m_contentBox->addView(m_urlModeSelector);
 
     // Disconnect button
     auto* disconnectCell = new brls::DetailCell();
@@ -974,6 +1026,86 @@ void SettingsTab::onThemeChanged(int index) {
     settings.theme = static_cast<AppTheme>(index);
     app.applyTheme();
     app.saveSettings();
+}
+
+void SettingsTab::showUrlInputDialog(const std::string& title, const std::string& hint,
+                                      const std::string& currentValue,
+                                      std::function<void(const std::string&)> callback) {
+    // Create a simple input dialog for URL entry
+    brls::Dialog* dialog = new brls::Dialog(title);
+
+    // Input field container
+    auto* inputBox = new brls::Box();
+    inputBox->setAxis(brls::Axis::COLUMN);
+    inputBox->setPadding(16);
+
+    // Hint label
+    auto* hintLabel = new brls::Label();
+    hintLabel->setText(hint);
+    hintLabel->setFontSize(14);
+    hintLabel->setTextColor(nvgRGB(180, 180, 180));
+    hintLabel->setMarginBottom(12);
+    inputBox->addView(hintLabel);
+
+    // Current value display
+    auto* currentLabel = new brls::Label();
+    currentLabel->setText("Current: " + (currentValue.empty() ? "(not set)" : currentValue));
+    currentLabel->setFontSize(16);
+    currentLabel->setMarginBottom(16);
+    inputBox->addView(currentLabel);
+
+    // Note about input
+    auto* noteLabel = new brls::Label();
+    noteLabel->setText("URL can be HTTP or HTTPS");
+    noteLabel->setFontSize(12);
+    noteLabel->setTextColor(nvgRGB(0, 150, 136));
+    inputBox->addView(noteLabel);
+
+    dialog->addView(inputBox);
+
+    // Use the current value or prompt for new one via keyboard
+    dialog->addButton("Cancel", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->addButton("Edit", [dialog, callback, currentValue]() {
+        dialog->close();
+        // Open on-screen keyboard for input
+        brls::Swkbd::openForText([callback](std::string text) {
+            // Validate URL format
+            if (!text.empty()) {
+                // Remove trailing slashes
+                while (!text.empty() && text.back() == '/') {
+                    text.pop_back();
+                }
+                // Basic URL validation - should start with http:// or https://
+                if (text.find("http://") != 0 && text.find("https://") != 0) {
+                    brls::Application::notify("URL must start with http:// or https://");
+                    return;
+                }
+            }
+            callback(text);
+        }, "Enter Server URL", "", 256, currentValue, 0);
+    });
+
+    dialog->addButton("Clear", [dialog, callback]() {
+        dialog->close();
+        callback("");
+        brls::Application::notify("URL cleared");
+    });
+
+    dialog->open();
+}
+
+void SettingsTab::updateServerLabel() {
+    if (m_serverLabel) {
+        Application& app = Application::getInstance();
+        std::string activeUrl = app.getServerUrl();
+        if (activeUrl.empty()) {
+            activeUrl = app.getActiveServerUrl();
+        }
+        m_serverLabel->setText("Active: " + (activeUrl.empty() ? "Not connected" : activeUrl));
+    }
 }
 
 void SettingsTab::showCategoryManagementDialog() {

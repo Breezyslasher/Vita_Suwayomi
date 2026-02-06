@@ -6,6 +6,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <functional>
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
@@ -37,12 +38,17 @@ private:
     void showStatisticsView();
     void exportBackup();
     void importBackup();
+    void showUrlInputDialog(const std::string& title, const std::string& hint,
+                            const std::string& currentValue,
+                            std::function<void(const std::string&)> callback);
+    void updateServerLabel();
 
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;
 
     // Account/Server section
     brls::Label* m_serverLabel = nullptr;
+    brls::SelectorCell* m_urlModeSelector = nullptr;
 
     // UI section
     brls::SelectorCell* m_themeSelector = nullptr;

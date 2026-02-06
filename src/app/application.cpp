@@ -383,8 +383,16 @@ bool Application::loadSettings() {
     brls::Logger::info("loadSettings: enabledSourceLanguages count = {}", m_settings.enabledSourceLanguages.size());
 
     // Load network settings
+    m_settings.localServerUrl = extractString("localServerUrl");
+    m_settings.remoteServerUrl = extractString("remoteServerUrl");
+    m_settings.useRemoteUrl = extractBool("useRemoteUrl", false);
     m_settings.connectionTimeout = extractInt("connectionTimeout");
     if (m_settings.connectionTimeout <= 0) m_settings.connectionTimeout = 30;
+
+    brls::Logger::info("loadSettings: localUrl={}, remoteUrl={}, useRemote={}",
+                       m_settings.localServerUrl.empty() ? "(empty)" : m_settings.localServerUrl,
+                       m_settings.remoteServerUrl.empty() ? "(empty)" : m_settings.remoteServerUrl,
+                       m_settings.useRemoteUrl ? "true" : "false");
 
     // Load display settings
     m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
@@ -605,6 +613,9 @@ bool Application::saveSettings() {
     json += "],\n";
 
     // Network settings
+    json += "  \"localServerUrl\": \"" + m_settings.localServerUrl + "\",\n";
+    json += "  \"remoteServerUrl\": \"" + m_settings.remoteServerUrl + "\",\n";
+    json += "  \"useRemoteUrl\": " + std::string(m_settings.useRemoteUrl ? "true" : "false") + ",\n";
     json += "  \"connectionTimeout\": " + std::to_string(m_settings.connectionTimeout) + ",\n";
 
     // Display settings
@@ -659,6 +670,37 @@ bool Application::saveSettings() {
     brls::Logger::info("Settings saved successfully ({} bytes)", json.length());
     return true;
 #endif
+}
+
+std::string Application::getActiveServerUrl() const {
+    if (m_settings.useRemoteUrl && !m_settings.remoteServerUrl.empty()) {
+        return m_settings.remoteServerUrl;
+    }
+    if (!m_settings.localServerUrl.empty()) {
+        return m_settings.localServerUrl;
+    }
+    // Fall back to current server URL if no local/remote configured
+    return m_serverUrl;
+}
+
+void Application::switchToLocalUrl() {
+    if (!m_settings.localServerUrl.empty()) {
+        m_settings.useRemoteUrl = false;
+        m_serverUrl = m_settings.localServerUrl;
+        SuwayomiClient::getInstance().setServerUrl(m_serverUrl);
+        brls::Logger::info("Switched to local URL: {}", m_serverUrl);
+        saveSettings();
+    }
+}
+
+void Application::switchToRemoteUrl() {
+    if (!m_settings.remoteServerUrl.empty()) {
+        m_settings.useRemoteUrl = true;
+        m_serverUrl = m_settings.remoteServerUrl;
+        SuwayomiClient::getInstance().setServerUrl(m_serverUrl);
+        brls::Logger::info("Switched to remote URL: {}", m_serverUrl);
+        saveSettings();
+    }
 }
 
 } // namespace vitasuwayomi

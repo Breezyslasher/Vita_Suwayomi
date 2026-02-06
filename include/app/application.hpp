@@ -166,6 +166,9 @@ struct AppSettings {
     bool showNsfwSources = false;
 
     // Network Settings
+    std::string localServerUrl;        // Local network URL (e.g., http://192.168.1.100:4567)
+    std::string remoteServerUrl;       // Remote/external URL (e.g., https://myserver.com:4567)
+    bool useRemoteUrl = false;         // true = use remote URL, false = use local URL
     int connectionTimeout = 30;        // seconds
 
     // Display Settings
@@ -202,6 +205,13 @@ public:
     const std::string& getServerUrl() const { return m_serverUrl; }
     void setServerUrl(const std::string& url) { m_serverUrl = url; }
     void setConnected(bool connected) { m_isConnected = connected; }
+
+    // Local/Remote URL switching
+    std::string getActiveServerUrl() const;  // Returns local or remote URL based on setting
+    void switchToLocalUrl();
+    void switchToRemoteUrl();
+    bool hasLocalUrl() const { return !m_settings.localServerUrl.empty(); }
+    bool hasRemoteUrl() const { return !m_settings.remoteServerUrl.empty(); }
 
     // Auth credentials
     const std::string& getAuthUsername() const { return m_authUsername; }
