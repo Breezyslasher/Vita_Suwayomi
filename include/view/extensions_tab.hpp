@@ -58,7 +58,8 @@ struct ExtensionRow {
     enum class Type {
         SectionHeader,      // Updates Available, Installed, Available to Install
         LanguageHeader,     // English, Japanese, etc (under Available)
-        ExtensionItem       // Actual extension
+        ExtensionItem,      // Actual extension
+        SearchHeader        // "Clear Search" header when search is active
     };
 
     Type type;
@@ -101,6 +102,7 @@ public:
     void onSectionHeaderClicked(const std::string& sectionId);
     void onLanguageHeaderClicked(const std::string& langCode);
     void onSettingsClicked(const Extension& ext);
+    void onSearchHeaderClicked();
 
     // Getters for data source
     const std::vector<Extension>& getUpdates() const { return m_updates; }
@@ -119,6 +121,10 @@ public:
     void setInstalledExpanded(bool e) { m_installedExpanded = e; }
     void setAvailableExpanded(bool e) { m_availableExpanded = e; }
     void setLanguageExpanded(const std::string& lang, bool e) { m_languageExpanded[lang] = e; }
+
+    // Search state (used by data source)
+    bool isSearchActive() const { return m_isSearchActive; }
+    const std::string& getSearchQuery() const { return m_searchQuery; }
 
     // Language name helper (used by data source)
     std::string getLanguageDisplayName(const std::string& langCode);

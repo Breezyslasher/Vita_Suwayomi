@@ -211,6 +211,8 @@ float ExtensionsDataSource::heightForRow(brls::RecyclerFrame* recycler, brls::In
 
     const auto& row = m_rows[index.row];
     switch (row.type) {
+        case ExtensionRow::Type::SearchHeader:
+            return 48;
         case ExtensionRow::Type::SectionHeader:
             return 48;
         case ExtensionRow::Type::LanguageHeader:
@@ -227,6 +229,26 @@ brls::RecyclerCell* ExtensionsDataSource::cellForRow(brls::RecyclerFrame* recycl
     const auto& row = m_rows[index.row];
 
     switch (row.type) {
+        case ExtensionRow::Type::SearchHeader: {
+            // "Clear Search" header for search results
+            auto* header = dynamic_cast<ExtensionSectionHeader*>(
+                recycler->dequeueReusableCell("Header"));
+            if (!header) {
+                header = ExtensionSectionHeader::create();
+                header->reuseIdentifier = "Header";
+            }
+
+            header->expanded = false;
+            header->arrowLabel->setText("✕");  // X symbol for clear
+            header->titleLabel->setText("Clear Search");
+            header->countLabel->setText("(" + std::to_string(row.count) + " results)");
+            header->setBackgroundColor(nvgRGB(120, 60, 60));  // Red-ish color
+            header->setMarginTop(0);
+            header->setMarginLeft(0);
+
+            return header;
+        }
+
         case ExtensionRow::Type::SectionHeader:
         case ExtensionRow::Type::LanguageHeader: {
             auto* header = dynamic_cast<ExtensionSectionHeader*>(
@@ -336,6 +358,12 @@ void ExtensionsDataSource::didSelectRowAt(brls::RecyclerFrame* recycler, brls::I
     const auto& row = m_rows[indexPath.row];
 
     switch (row.type) {
+        case ExtensionRow::Type::SearchHeader:
+            brls::sync([this]() {
+                m_tab->onSearchHeaderClicked();
+            });
+            break;
+
         case ExtensionRow::Type::SectionHeader:
             brls::sync([this, row]() {
                 m_tab->onSectionHeaderClicked(row.sectionId);
@@ -363,6 +391,62 @@ void ExtensionsDataSource::rebuildRows() {
     const auto& installed = m_tab->getInstalled();
     const auto& grouped = m_tab->getGroupedByLanguage();
     const auto& sortedLangs = m_tab->getSortedLanguages();
+
+    // Check if search is active
+    if (m_tab->isSearchActive()) {
+        const std::string& query = m_tab->getSearchQuery();
+
+        // Helper lambda to check if extension matches search query
+        auto matchesSearch = [&query](const Extension& ext) {
+            std::string nameLower = ext.name;
+            std::transform(nameLower.begin(), nameLower.end(), nameLower.begin(), ::tolower);
+            return nameLower.find(query) != std::string::npos;
+        };
+
+        // Collect all matching extensions from all categories
+        std::vector<Extension> results;
+
+        for (const auto& ext : updates) {
+            if (matchesSearch(ext)) {
+                results.push_back(ext);
+            }
+        }
+        for (const auto& ext : installed) {
+            if (matchesSearch(ext)) {
+                results.push_back(ext);
+            }
+        }
+        for (const auto& pair : grouped) {
+            for (const auto& ext : pair.second) {
+                if (matchesSearch(ext)) {
+                    results.push_back(ext);
+                }
+            }
+        }
+
+        // Sort results by name
+        std::sort(results.begin(), results.end(),
+            [](const Extension& a, const Extension& b) { return a.name < b.name; });
+
+        // Add "Clear Search" header at the top
+        ExtensionRow searchHeader;
+        searchHeader.type = ExtensionRow::Type::SearchHeader;
+        searchHeader.count = static_cast<int>(results.size());
+        m_rows.push_back(searchHeader);
+
+        // Add all results as a flat list
+        for (const auto& ext : results) {
+            ExtensionRow item;
+            item.type = ExtensionRow::Type::ExtensionItem;
+            item.extension = ext;
+            m_rows.push_back(item);
+        }
+
+        brls::Logger::debug("ExtensionsDataSource: Search found {} results", results.size());
+        return;
+    }
+
+    // Normal view (not searching)
 
     // Updates section
     if (!updates.empty()) {
@@ -909,6 +993,10 @@ void ExtensionsTab::onSettingsClicked(const Extension& ext) {
     showSourceSettings(ext);
 }
 
+void ExtensionsTab::onSearchHeaderClicked() {
+    hideSearchResults();
+}
+
 // ============================================================================
 // Extension Operations
 // ============================================================================
@@ -1183,7 +1271,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 void ExtensionsTab::showSearchDialog() {
     brls::Application::getImeManager()->openForText([this](std::string text) {
         if (text.empty()) {
-            clearSearch();
+            hideSearchResults();
             return;
         }
 
@@ -1191,25 +1279,27 @@ void ExtensionsTab::showSearchDialog() {
         std::transform(m_searchQuery.begin(), m_searchQuery.end(), m_searchQuery.begin(), ::tolower);
         m_isSearchActive = true;
 
+        // Update title to show search query
+        m_titleLabel->setText("Search: " + text);
+
         brls::Application::notify("Searching for: " + text);
-        showSearchResults();
+        reloadRecycler();
     }, "Search Extensions", "", 64);
 }
 
 void ExtensionsTab::clearSearch() {
     m_searchQuery.clear();
     m_isSearchActive = false;
+    m_titleLabel->setText("Extensions");
 }
 
 void ExtensionsTab::showSearchResults() {
-    // For now, just filter and reload
-    // A more complete implementation would use a separate data source
-    refreshUIFromCache();
+    reloadRecycler();
 }
 
 void ExtensionsTab::hideSearchResults() {
     clearSearch();
-    refreshUIFromCache();
+    reloadRecycler();
 }
 
 } // namespace vitasuwayomi
