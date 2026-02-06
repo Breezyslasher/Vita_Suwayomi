@@ -1082,7 +1082,7 @@ void SettingsTab::showUrlInputDialog(const std::string& title, const std::string
     dialog->addButton("Edit", [dialog, callback, currentValue]() {
         dialog->close();
         // Open on-screen keyboard for input
-        brls::Swkbd::openForText([callback](std::string text) {
+        brls::Application::getImeManager()->openForText([callback](std::string text) {
             // Validate URL format
             if (!text.empty()) {
                 // Remove trailing slashes
