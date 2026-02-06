@@ -12,6 +12,12 @@
 #include <ctime>
 #include <algorithm>
 #include <set>
+#include <fstream>
+#include <sstream>
+
+#ifdef __vita__
+#include <psp2/io/fcntl.h>
+#endif
 
 namespace vitasuwayomi {
 
@@ -3091,22 +3097,135 @@ bool SuwayomiClient::exportBackup(const std::string& savePath) {
     vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
+        brls::Logger::error("SuwayomiClient: backup export failed - status {}", response.statusCode);
+        return false;
+    }
+
+    if (response.body.empty()) {
+        brls::Logger::error("SuwayomiClient: backup response is empty");
         return false;
     }
 
     // Save response body to file
-    // TODO: Implement file save
+#ifdef __vita__
+    SceUID fd = sceIoOpen(savePath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd < 0) {
+        brls::Logger::error("SuwayomiClient: failed to open backup file for writing: {}", savePath);
+        return false;
+    }
+
+    sceIoWrite(fd, response.body.c_str(), response.body.size());
+    sceIoClose(fd);
+#else
+    // Non-Vita platforms: use standard C++ file operations
+    std::ofstream outFile(savePath, std::ios::binary);
+    if (!outFile.is_open()) {
+        brls::Logger::error("SuwayomiClient: failed to open backup file for writing: {}", savePath);
+        return false;
+    }
+    outFile.write(response.body.c_str(), response.body.size());
+    outFile.close();
+#endif
+
+    brls::Logger::info("SuwayomiClient: backup saved to {}", savePath);
     return true;
 }
 
 bool SuwayomiClient::importBackup(const std::string& filePath) {
-    // TODO: Implement file upload
-    return false;
+    // Read the backup file
+    std::string fileContent;
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(filePath.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) {
+        brls::Logger::error("SuwayomiClient: failed to open backup file for reading: {}", filePath);
+        return false;
+    }
+
+    // Get file size
+    SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+    if (fileSize <= 0 || fileSize > 50 * 1024 * 1024) { // Max 50MB
+        sceIoClose(fd);
+        brls::Logger::error("SuwayomiClient: backup file size invalid: {}", fileSize);
+        return false;
+    }
+
+    fileContent.resize(static_cast<size_t>(fileSize));
+    sceIoRead(fd, &fileContent[0], static_cast<SceSize>(fileSize));
+    sceIoClose(fd);
+#else
+    // Non-Vita platforms: use standard C++ file operations
+    std::ifstream inFile(filePath, std::ios::binary);
+    if (!inFile.is_open()) {
+        brls::Logger::error("SuwayomiClient: failed to open backup file for reading: {}", filePath);
+        return false;
+    }
+    std::stringstream buffer;
+    buffer << inFile.rdbuf();
+    fileContent = buffer.str();
+    inFile.close();
+#endif
+
+    if (fileContent.empty()) {
+        brls::Logger::error("SuwayomiClient: backup file is empty");
+        return false;
+    }
+
+    // Upload backup to server via multipart form
+    vitasuwayomi::HttpClient http = createHttpClient();
+    std::string url = buildApiUrl("/backup/import/file");
+
+    // Build multipart form data
+    std::string boundary = "----VitaSuwayomiBackup" + std::to_string(time(nullptr));
+    std::string body;
+    body += "--" + boundary + "\r\n";
+    body += "Content-Disposition: form-data; name=\"backup.proto.gz\"; filename=\"backup.proto.gz\"\r\n";
+    body += "Content-Type: application/octet-stream\r\n\r\n";
+    body += fileContent;
+    body += "\r\n--" + boundary + "--\r\n";
+
+    vitasuwayomi::HttpRequest request;
+    request.url = url;
+    request.method = "POST";
+    request.body = body;
+    request.headers["Content-Type"] = "multipart/form-data; boundary=" + boundary;
+
+    vitasuwayomi::HttpResponse response = http.request(request);
+
+    if (!response.success || (response.statusCode != 200 && response.statusCode != 201)) {
+        brls::Logger::error("SuwayomiClient: backup import failed - status {}", response.statusCode);
+        return false;
+    }
+
+    brls::Logger::info("SuwayomiClient: backup imported successfully");
+    return true;
 }
 
 bool SuwayomiClient::validateBackup(const std::string& filePath) {
-    // TODO: Implement backup validation
-    return false;
+    // Check if file exists and is readable
+#ifdef __vita__
+    SceUID fd = sceIoOpen(filePath.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) {
+        return false;
+    }
+
+    // Get file size - backup should be at least a few bytes
+    SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoClose(fd);
+
+    return fileSize > 10; // Basic validation - file exists and has content
+#else
+    std::ifstream inFile(filePath, std::ios::binary);
+    if (!inFile.is_open()) {
+        return false;
+    }
+    inFile.seekg(0, std::ios::end);
+    auto size = inFile.tellg();
+    inFile.close();
+    return size > 10;
+#endif
 }
 
 // ============================================================================

@@ -243,6 +243,10 @@ public:
     // Apply log level based on settings
     void applyLogLevel();
 
+    // Reading statistics management
+    void updateReadingStatistics(bool chapterCompleted = false, bool mangaCompleted = false);
+    void syncStatisticsFromServer();
+
     // Get string for display
     static std::string getThemeString(AppTheme theme);
     static std::string getReadingModeString(ReadingMode mode);

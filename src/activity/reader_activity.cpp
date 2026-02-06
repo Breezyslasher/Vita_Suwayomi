@@ -5,6 +5,7 @@
 
 #include "activity/reader_activity.hpp"
 #include "view/rotatable_label.hpp"
+#include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
@@ -1032,9 +1033,20 @@ void ReaderActivity::previousChapter() {
 }
 
 void ReaderActivity::markChapterAsRead() {
-    vitasuwayomi::asyncRun([this]() {
+    int mangaId = m_mangaId;
+    int chapterIndex = m_chapterIndex;
+    int totalChapters = m_totalChapters;
+
+    vitasuwayomi::asyncRun([mangaId, chapterIndex, totalChapters]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        client.markChapterRead(m_mangaId, m_chapterIndex);
+        if (client.markChapterRead(mangaId, chapterIndex)) {
+            // Update reading statistics on the main thread
+            brls::sync([chapterIndex, totalChapters]() {
+                // Check if this was the last unread chapter (manga completed)
+                bool mangaCompleted = (chapterIndex == totalChapters - 1);
+                Application::getInstance().updateReadingStatistics(true, mangaCompleted);
+            });
+        }
     });
 }
 

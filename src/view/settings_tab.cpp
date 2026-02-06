@@ -133,6 +133,23 @@ void SettingsTab::createAccountSection() {
     autoSwitchToggle->setDetailText("Try alternate URL if connection fails");
     m_contentBox->addView(autoSwitchToggle);
 
+    // Connection timeout selector
+    auto* timeoutSelector = new brls::SelectorCell();
+    int timeoutIndex = 1; // default to 30s
+    if (settings.connectionTimeout <= 10) timeoutIndex = 0;
+    else if (settings.connectionTimeout <= 30) timeoutIndex = 1;
+    else if (settings.connectionTimeout <= 60) timeoutIndex = 2;
+    else timeoutIndex = 3;
+    timeoutSelector->init("Connection Timeout",
+        {"10 seconds", "30 seconds", "60 seconds", "120 seconds"},
+        timeoutIndex,
+        [](int index) {
+            int timeouts[] = {10, 30, 60, 120};
+            Application::getInstance().getSettings().connectionTimeout = timeouts[index];
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(timeoutSelector);
+
     // Disconnect button
     auto* disconnectCell = new brls::DetailCell();
     disconnectCell->setText("Disconnect");
@@ -160,14 +177,6 @@ void SettingsTab::createUISection() {
             onThemeChanged(index);
         });
     m_contentBox->addView(m_themeSelector);
-
-    // Show clock toggle
-    m_clockToggle = new brls::BooleanCell();
-    m_clockToggle->init("Show Clock", settings.showClock, [&settings](bool value) {
-        settings.showClock = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(m_clockToggle);
 
     // Animations toggle
     m_animationsToggle = new brls::BooleanCell();
@@ -274,6 +283,57 @@ void SettingsTab::createLibrarySection() {
     cacheInfoLabel->setMarginLeft(16);
     cacheInfoLabel->setMarginTop(4);
     m_contentBox->addView(cacheInfoLabel);
+
+    // Library Updates header
+    auto* updatesHeader = new brls::Header();
+    updatesHeader->setTitle("Library Updates");
+    m_contentBox->addView(updatesHeader);
+
+    // Update on start toggle
+    auto* updateOnStartToggle = new brls::BooleanCell();
+    updateOnStartToggle->init("Update Library on Start", settings.updateOnStart, [&settings](bool value) {
+        settings.updateOnStart = value;
+        Application::getInstance().saveSettings();
+    });
+    updateOnStartToggle->setDetailText("Automatically check for new chapters on app startup");
+    m_contentBox->addView(updateOnStartToggle);
+
+    // Default category selector
+    m_defaultCategorySelector = new brls::SelectorCell();
+    m_defaultCategorySelector->init("Default Category",
+        {"Default (All)", "Loading..."},
+        0,
+        [](int index) {
+            // Will be updated when categories are loaded
+        });
+    m_defaultCategorySelector->setDetailText("Category to show when opening library");
+    m_contentBox->addView(m_defaultCategorySelector);
+
+    // Load categories for the selector asynchronously
+    refreshDefaultCategorySelector();
+
+    // Display Badges header
+    auto* badgesHeader = new brls::Header();
+    badgesHeader->setTitle("Display Badges");
+    m_contentBox->addView(badgesHeader);
+
+    // Show unread badge toggle
+    auto* showUnreadBadgeToggle = new brls::BooleanCell();
+    showUnreadBadgeToggle->init("Show Unread Badge", settings.showUnreadBadge, [&settings](bool value) {
+        settings.showUnreadBadge = value;
+        Application::getInstance().saveSettings();
+    });
+    showUnreadBadgeToggle->setDetailText("Show unread chapter count on manga covers");
+    m_contentBox->addView(showUnreadBadgeToggle);
+
+    // Show downloaded badge toggle
+    auto* showDownloadedBadgeToggle = new brls::BooleanCell();
+    showDownloadedBadgeToggle->init("Show Downloaded Badge", settings.showDownloadedBadge, [&settings](bool value) {
+        settings.showDownloadedBadge = value;
+        Application::getInstance().saveSettings();
+    });
+    showDownloadedBadgeToggle->setDetailText("Show indicator when manga has downloaded chapters");
+    m_contentBox->addView(showDownloadedBadgeToggle);
 
     // Clear Cache button
     auto* clearCacheCell = new brls::DetailCell();
@@ -627,43 +687,6 @@ void SettingsTab::createReaderSection() {
         });
     m_contentBox->addView(intensitySelector);
 
-    // Auto-chapter advance section
-    auto* advanceHeader = new brls::Header();
-    advanceHeader->setTitle("Chapter Navigation");
-    m_contentBox->addView(advanceHeader);
-
-    // Auto-advance toggle
-    auto* autoAdvanceToggle = new brls::BooleanCell();
-    autoAdvanceToggle->init("Auto-Advance to Next Chapter", settings.autoChapterAdvance, [&settings](bool value) {
-        settings.autoChapterAdvance = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(autoAdvanceToggle);
-
-    // Show countdown toggle
-    auto* showCountdownToggle = new brls::BooleanCell();
-    showCountdownToggle->init("Show Advance Countdown", settings.showAdvanceCountdown, [&settings](bool value) {
-        settings.showAdvanceCountdown = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(showCountdownToggle);
-
-    // Auto-advance delay selector
-    auto* advanceDelaySelector = new brls::SelectorCell();
-    advanceDelaySelector->init("Advance Delay",
-        {"Instant", "1 second", "3 seconds", "5 seconds"},
-        settings.autoAdvanceDelay <= 0 ? 0 : (settings.autoAdvanceDelay <= 1 ? 1 : (settings.autoAdvanceDelay <= 3 ? 2 : 3)),
-        [&settings](int index) {
-            switch (index) {
-                case 0: settings.autoAdvanceDelay = 0; break;
-                case 1: settings.autoAdvanceDelay = 1; break;
-                case 2: settings.autoAdvanceDelay = 3; break;
-                case 3: settings.autoAdvanceDelay = 5; break;
-            }
-            Application::getInstance().saveSettings();
-        });
-    m_contentBox->addView(advanceDelaySelector);
-
     // Webtoon section header
     auto* webtoonHeader = new brls::Header();
     webtoonHeader->setTitle("Webtoon / Long Strip");
@@ -749,25 +772,6 @@ void SettingsTab::createDownloadsSection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(autoDownloadToggle);
-
-    // WiFi only toggle
-    auto* wifiOnlyToggle = new brls::BooleanCell();
-    wifiOnlyToggle->init("Download Over WiFi Only", settings.downloadOverWifiOnly, [&settings](bool value) {
-        settings.downloadOverWifiOnly = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(wifiOnlyToggle);
-
-    // Concurrent downloads selector
-    auto* concurrentSelector = new brls::SelectorCell();
-    concurrentSelector->init("Max Concurrent Downloads",
-        {"1", "2", "3"},
-        settings.maxConcurrentDownloads - 1,
-        [&settings](int index) {
-            settings.maxConcurrentDownloads = index + 1;
-            Application::getInstance().saveSettings();
-        });
-    m_contentBox->addView(concurrentSelector);
 
     // Delete after read toggle
     auto* deleteAfterReadToggle = new brls::BooleanCell();
@@ -1722,6 +1726,9 @@ void SettingsTab::showStorageManagement() {
 }
 
 void SettingsTab::showStatisticsView() {
+    // Sync stats from server first
+    Application::getInstance().syncStatisticsFromServer();
+
     Application& app = Application::getInstance();
     AppSettings& settings = app.getSettings();
 
@@ -1733,8 +1740,16 @@ void SettingsTab::showStatisticsView() {
     auto* titleLabel = new brls::Label();
     titleLabel->setText("Reading Statistics");
     titleLabel->setFontSize(24);
-    titleLabel->setMarginBottom(20);
+    titleLabel->setMarginBottom(10);
     statsBox->addView(titleLabel);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Synced from server and local reading");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(120, 120, 120));
+    infoLabel->setMarginBottom(15);
+    statsBox->addView(infoLabel);
 
     // Total chapters read
     auto* chaptersLabel = new brls::Label();
@@ -1764,6 +1779,14 @@ void SettingsTab::showStatisticsView() {
     longestLabel->setMarginBottom(10);
     statsBox->addView(longestLabel);
 
+    // Reading time note
+    auto* timeNoteLabel = new brls::Label();
+    timeNoteLabel->setText("Note: Reading time tracking is local only");
+    timeNoteLabel->setFontSize(14);
+    timeNoteLabel->setTextColor(nvgRGB(120, 120, 120));
+    timeNoteLabel->setMarginBottom(5);
+    statsBox->addView(timeNoteLabel);
+
     // Reading time
     int hours = static_cast<int>(settings.totalReadingTime / 3600);
     int minutes = static_cast<int>((settings.totalReadingTime % 3600) / 60);
@@ -1773,9 +1796,25 @@ void SettingsTab::showStatisticsView() {
     timeLabel->setMarginBottom(20);
     statsBox->addView(timeLabel);
 
+    // Sync from Server button
+    auto* syncBtn = new brls::Button();
+    syncBtn->setText("Sync from Server");
+    syncBtn->registerClickAction([chaptersLabel, completedLabel](brls::View* view) {
+        brls::Application::notify("Syncing statistics...");
+        Application::getInstance().syncStatisticsFromServer();
+        AppSettings& s = Application::getInstance().getSettings();
+        chaptersLabel->setText("Chapters Read: " + std::to_string(s.totalChaptersRead));
+        completedLabel->setText("Manga Completed: " + std::to_string(s.totalMangaCompleted));
+        brls::Application::notify("Statistics synced");
+        return true;
+    });
+    syncBtn->addGestureRecognizer(new brls::TapGestureRecognizer(syncBtn));
+    statsBox->addView(syncBtn);
+
     // Reset button
     auto* resetBtn = new brls::Button();
     resetBtn->setText("Reset Statistics");
+    resetBtn->setMarginTop(10);
     resetBtn->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Reset all reading statistics?");
         dialog->addButton("Cancel", [dialog]() { dialog->close(); });
@@ -1786,6 +1825,7 @@ void SettingsTab::showStatisticsView() {
             s.currentStreak = 0;
             s.longestStreak = 0;
             s.totalReadingTime = 0;
+            s.lastReadDate = 0;
             Application::getInstance().saveSettings();
             dialog->close();
             brls::Application::notify("Statistics reset");
@@ -1794,6 +1834,7 @@ void SettingsTab::showStatisticsView() {
         dialog->open();
         return true;
     });
+    resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
     statsBox->addView(resetBtn);
 
     // Back button
@@ -1804,6 +1845,7 @@ void SettingsTab::showStatisticsView() {
         brls::Application::popActivity();
         return true;
     });
+    backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
     statsBox->addView(backBtn);
 
     brls::Application::pushActivity(new brls::Activity(statsBox));
@@ -1948,6 +1990,58 @@ void SettingsTab::importBackup() {
     });
 
     dialog->open();
+}
+
+void SettingsTab::refreshDefaultCategorySelector() {
+    if (!m_defaultCategorySelector) return;
+
+    // Fetch categories asynchronously
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::vector<Category> categories;
+
+    if (client.fetchCategories(categories)) {
+        // Sort by order
+        std::sort(categories.begin(), categories.end(),
+            [](const Category& a, const Category& b) {
+                return a.order < b.order;
+            });
+
+        // Build category names list
+        std::vector<std::string> categoryNames;
+        std::vector<int> categoryIds;
+
+        categoryNames.push_back("Default (All)");
+        categoryIds.push_back(0);
+
+        for (const auto& cat : categories) {
+            if (cat.mangaCount > 0) {
+                categoryNames.push_back(cat.name);
+                categoryIds.push_back(cat.id);
+            }
+        }
+
+        // Find current selection index
+        int currentIndex = 0;
+        int currentId = Application::getInstance().getSettings().defaultCategoryId;
+        for (size_t i = 0; i < categoryIds.size(); i++) {
+            if (categoryIds[i] == currentId) {
+                currentIndex = static_cast<int>(i);
+                break;
+            }
+        }
+
+        // Update the selector
+        m_defaultCategorySelector->init("Default Category",
+            categoryNames,
+            currentIndex,
+            [categoryIds](int index) {
+                if (index >= 0 && index < static_cast<int>(categoryIds.size())) {
+                    Application::getInstance().getSettings().defaultCategoryId = categoryIds[index];
+                    Application::getInstance().saveSettings();
+                }
+            });
+        m_defaultCategorySelector->setDetailText("Category to show when opening library");
+    }
 }
 
 } // namespace vitasuwayomi

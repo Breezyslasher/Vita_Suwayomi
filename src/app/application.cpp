@@ -758,4 +758,84 @@ void Application::switchToRemoteUrl() {
     }
 }
 
+void Application::updateReadingStatistics(bool chapterCompleted, bool mangaCompleted) {
+    // Get current date (days since epoch for streak calculation)
+    int64_t currentTime = static_cast<int64_t>(std::time(nullptr));
+    int64_t currentDay = currentTime / (24 * 60 * 60);  // Days since epoch
+    int64_t lastDay = m_settings.lastReadDate / (24 * 60 * 60);
+
+    // Update chapter count
+    if (chapterCompleted) {
+        m_settings.totalChaptersRead++;
+        brls::Logger::info("Statistics: chapters read = {}", m_settings.totalChaptersRead);
+    }
+
+    // Update manga completed count
+    if (mangaCompleted) {
+        m_settings.totalMangaCompleted++;
+        brls::Logger::info("Statistics: manga completed = {}", m_settings.totalMangaCompleted);
+    }
+
+    // Update reading streak
+    if (m_settings.lastReadDate == 0) {
+        // First time reading
+        m_settings.currentStreak = 1;
+    } else if (currentDay == lastDay) {
+        // Same day - no streak change
+    } else if (currentDay == lastDay + 1) {
+        // Consecutive day - increment streak
+        m_settings.currentStreak++;
+    } else {
+        // Streak broken - reset to 1
+        m_settings.currentStreak = 1;
+    }
+
+    // Update longest streak
+    if (m_settings.currentStreak > m_settings.longestStreak) {
+        m_settings.longestStreak = m_settings.currentStreak;
+    }
+
+    // Update last read date
+    m_settings.lastReadDate = currentTime;
+
+    // Save settings
+    saveSettings();
+}
+
+void Application::syncStatisticsFromServer() {
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+    // Fetch library manga to count completed manga
+    std::vector<Manga> libraryManga;
+    if (client.fetchLibraryManga(libraryManga)) {
+        int chaptersRead = 0;
+        int mangaCompleted = 0;
+
+        for (const auto& manga : libraryManga) {
+            // Count chapters read (total - unread)
+            int readChapters = manga.chapterCount - manga.unreadCount;
+            if (readChapters > 0) {
+                chaptersRead += readChapters;
+            }
+
+            // Count completed manga (no unread chapters and has chapters)
+            if (manga.unreadCount == 0 && manga.chapterCount > 0) {
+                mangaCompleted++;
+            }
+        }
+
+        // Update stats if server has higher counts (don't decrease)
+        if (chaptersRead > m_settings.totalChaptersRead) {
+            m_settings.totalChaptersRead = chaptersRead;
+            brls::Logger::info("Statistics synced from server: {} chapters read", chaptersRead);
+        }
+        if (mangaCompleted > m_settings.totalMangaCompleted) {
+            m_settings.totalMangaCompleted = mangaCompleted;
+            brls::Logger::info("Statistics synced from server: {} manga completed", mangaCompleted);
+        }
+
+        saveSettings();
+    }
+}
+
 } // namespace vitasuwayomi

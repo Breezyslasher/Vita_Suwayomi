@@ -42,6 +42,7 @@ private:
                             const std::string& currentValue,
                             std::function<void(const std::string&)> callback);
     void updateServerLabel();
+    void refreshDefaultCategorySelector();
 
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;
@@ -52,12 +53,12 @@ private:
 
     // UI section
     brls::SelectorCell* m_themeSelector = nullptr;
-    brls::BooleanCell* m_clockToggle = nullptr;
     brls::BooleanCell* m_animationsToggle = nullptr;
     brls::BooleanCell* m_debugLogToggle = nullptr;
 
     // Library section
     brls::DetailCell* m_hideCategoriesCell = nullptr;
+    brls::SelectorCell* m_defaultCategorySelector = nullptr;
 
     // Reader section
     brls::SelectorCell* m_readingModeSelector = nullptr;
