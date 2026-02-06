@@ -156,9 +156,9 @@ void StorageView::loadStorageInfo() {
         for (const auto& download : downloads) {
             StorageItem item;
             item.mangaId = download.mangaId;
-            item.mangaTitle = download.mangaTitle;
-            item.coverUrl = download.coverPath;
-            item.chapterCount = static_cast<int>(download.chapterIds.size());
+            item.mangaTitle = download.title;
+            item.coverUrl = download.localCoverPath;
+            item.chapterCount = static_cast<int>(download.chapters.size());
 
             // Calculate size
             item.sizeBytes = 0;
@@ -326,7 +326,22 @@ void StorageView::deleteReadChapters() {
 
         asyncRun([this, aliveWeak]() {
             DownloadsManager& dm = DownloadsManager::getInstance();
-            int deleted = dm.deleteReadChapters();
+            int deleted = 0;
+
+            // Get all downloads and find read chapters to delete
+            auto downloads = dm.getDownloads();
+            for (const auto& manga : downloads) {
+                for (const auto& chapter : manga.chapters) {
+                    // Consider a chapter "read" if the user has read to near the end
+                    if (chapter.state == LocalDownloadState::COMPLETED &&
+                        chapter.lastPageRead > 0 &&
+                        chapter.lastPageRead >= chapter.pageCount - 1) {
+                        if (dm.deleteChapterDownload(manga.mangaId, chapter.chapterIndex)) {
+                            deleted++;
+                        }
+                    }
+                }
+            }
 
             brls::sync([this, deleted, aliveWeak]() {
                 auto alive = aliveWeak.lock();
