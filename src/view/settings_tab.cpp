@@ -9,6 +9,13 @@
 #include "app/downloads_manager.hpp"
 #include "utils/library_cache.hpp"
 #include <algorithm>
+#include <ctime>
+
+#ifdef __vita__
+#include <psp2/io/fcntl.h>
+#include <psp2/io/dirent.h>
+#include <psp2/io/stat.h>
+#endif
 
 // Version defined in CMakeLists.txt or here
 #ifndef VITA_SUWAYOMI_VERSION
@@ -39,6 +46,8 @@ SettingsTab::SettingsTab() {
     createReaderSection();
     createDownloadsSection();
     createBrowseSection();
+    createStatisticsSection();
+    createBackupSection();
     createAboutSection();
 
     m_scrollView->setContentView(m_contentBox);
@@ -156,6 +165,28 @@ void SettingsTab::createLibrarySection() {
     infoLabel->setMarginTop(4);
     infoLabel->setMarginBottom(8);
     m_contentBox->addView(infoLabel);
+
+    // Grid display mode selector
+    auto* displayModeSelector = new brls::SelectorCell();
+    displayModeSelector->init("Display Mode",
+        {"Grid (Cover + Title)", "Compact Grid (Covers Only)", "List View"},
+        static_cast<int>(settings.libraryDisplayMode),
+        [&settings](int index) {
+            settings.libraryDisplayMode = static_cast<LibraryDisplayMode>(index);
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(displayModeSelector);
+
+    // Grid size selector
+    auto* gridSizeSelector = new brls::SelectorCell();
+    gridSizeSelector->init("Grid Size",
+        {"Large (4 columns)", "Medium (6 columns)", "Small (8 columns)"},
+        static_cast<int>(settings.libraryGridSize),
+        [&settings](int index) {
+            settings.libraryGridSize = static_cast<LibraryGridSize>(index);
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(gridSizeSelector);
 
     // Cache Library Data toggle
     auto* cacheDataToggle = new brls::BooleanCell();
@@ -386,6 +417,85 @@ void SettingsTab::createReaderSection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(tapNavToggle);
+
+    // Color filter section header
+    auto* colorFilterHeader = new brls::Header();
+    colorFilterHeader->setTitle("Color Filters");
+    m_contentBox->addView(colorFilterHeader);
+
+    // Color filter mode selector
+    auto* colorFilterSelector = new brls::SelectorCell();
+    colorFilterSelector->init("Color Filter",
+        {"None", "Sepia", "Night Mode", "Blue Light Filter"},
+        static_cast<int>(settings.colorFilter),
+        [&settings](int index) {
+            settings.colorFilter = static_cast<ColorFilterMode>(index);
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(colorFilterSelector);
+
+    // Brightness selector
+    auto* brightnessSelector = new brls::SelectorCell();
+    int brightnessIdx = settings.brightness / 25;  // 0-100 in steps of 25
+    if (brightnessIdx > 4) brightnessIdx = 4;
+    brightnessSelector->init("Brightness",
+        {"25%", "50%", "75%", "100%"},
+        brightnessIdx > 0 ? brightnessIdx - 1 : 3,
+        [&settings](int index) {
+            settings.brightness = (index + 1) * 25;
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(brightnessSelector);
+
+    // Filter intensity selector
+    auto* intensitySelector = new brls::SelectorCell();
+    int intensityIdx = settings.colorFilterIntensity / 25;
+    if (intensityIdx > 4) intensityIdx = 4;
+    intensitySelector->init("Filter Intensity",
+        {"25%", "50%", "75%", "100%"},
+        intensityIdx > 0 ? intensityIdx - 1 : 1,
+        [&settings](int index) {
+            settings.colorFilterIntensity = (index + 1) * 25;
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(intensitySelector);
+
+    // Auto-chapter advance section
+    auto* advanceHeader = new brls::Header();
+    advanceHeader->setTitle("Chapter Navigation");
+    m_contentBox->addView(advanceHeader);
+
+    // Auto-advance toggle
+    auto* autoAdvanceToggle = new brls::BooleanCell();
+    autoAdvanceToggle->init("Auto-Advance to Next Chapter", settings.autoChapterAdvance, [&settings](bool value) {
+        settings.autoChapterAdvance = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(autoAdvanceToggle);
+
+    // Show countdown toggle
+    auto* showCountdownToggle = new brls::BooleanCell();
+    showCountdownToggle->init("Show Advance Countdown", settings.showAdvanceCountdown, [&settings](bool value) {
+        settings.showAdvanceCountdown = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(showCountdownToggle);
+
+    // Auto-advance delay selector
+    auto* advanceDelaySelector = new brls::SelectorCell();
+    advanceDelaySelector->init("Advance Delay",
+        {"Instant", "1 second", "3 seconds", "5 seconds"},
+        settings.autoAdvanceDelay <= 0 ? 0 : (settings.autoAdvanceDelay <= 1 ? 1 : (settings.autoAdvanceDelay <= 3 ? 2 : 3)),
+        [&settings](int index) {
+            switch (index) {
+                case 0: settings.autoAdvanceDelay = 0; break;
+                case 1: settings.autoAdvanceDelay = 1; break;
+                case 2: settings.autoAdvanceDelay = 3; break;
+                case 3: settings.autoAdvanceDelay = 5; break;
+            }
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(advanceDelaySelector);
 
     // Webtoon section header
     auto* webtoonHeader = new brls::Header();
@@ -1299,6 +1409,295 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
             dialog->close();
             showCategoryManagementDialog();
         }
+    });
+
+    dialog->open();
+}
+
+void SettingsTab::showStorageManagement() {
+    // Push storage management view
+    brls::Application::notify("Opening storage management...");
+
+    // Create storage view inline (since we may not have the full view ready)
+    auto* storageBox = new brls::Box();
+    storageBox->setAxis(brls::Axis::COLUMN);
+    storageBox->setPadding(20);
+    storageBox->setGrow(1.0f);
+
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Storage Management");
+    titleLabel->setFontSize(24);
+    titleLabel->setMarginBottom(20);
+    storageBox->addView(titleLabel);
+
+    // Get downloads info
+    auto downloads = DownloadsManager::getInstance().getDownloads();
+    int64_t totalSize = 0;
+
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Downloaded manga: " + std::to_string(downloads.size()));
+    infoLabel->setFontSize(18);
+    infoLabel->setMarginBottom(10);
+    storageBox->addView(infoLabel);
+
+    // Clear all button
+    auto* clearBtn = new brls::Button();
+    clearBtn->setText("Clear All Downloads");
+    clearBtn->setMarginTop(20);
+    clearBtn->registerClickAction([](brls::View* view) {
+        brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
+        dialog->addButton("Cancel", [dialog]() { dialog->close(); });
+        dialog->addButton("Delete", [dialog]() {
+            auto downloads = DownloadsManager::getInstance().getDownloads();
+            for (const auto& item : downloads) {
+                DownloadsManager::getInstance().deleteMangaDownload(item.mangaId);
+            }
+            dialog->close();
+            brls::Application::notify("All downloads deleted");
+            brls::Application::popActivity();
+        });
+        dialog->open();
+        return true;
+    });
+    storageBox->addView(clearBtn);
+
+    // Back button
+    auto* backBtn = new brls::Button();
+    backBtn->setText("Back");
+    backBtn->setMarginTop(20);
+    backBtn->registerClickAction([](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    });
+    storageBox->addView(backBtn);
+
+    brls::Application::pushActivity(new brls::Activity(storageBox));
+}
+
+void SettingsTab::showStatisticsView() {
+    Application& app = Application::getInstance();
+    AppSettings& settings = app.getSettings();
+
+    auto* statsBox = new brls::Box();
+    statsBox->setAxis(brls::Axis::COLUMN);
+    statsBox->setPadding(20);
+    statsBox->setGrow(1.0f);
+
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Reading Statistics");
+    titleLabel->setFontSize(24);
+    titleLabel->setMarginBottom(20);
+    statsBox->addView(titleLabel);
+
+    // Total chapters read
+    auto* chaptersLabel = new brls::Label();
+    chaptersLabel->setText("Chapters Read: " + std::to_string(settings.totalChaptersRead));
+    chaptersLabel->setFontSize(18);
+    chaptersLabel->setMarginBottom(10);
+    statsBox->addView(chaptersLabel);
+
+    // Manga completed
+    auto* completedLabel = new brls::Label();
+    completedLabel->setText("Manga Completed: " + std::to_string(settings.totalMangaCompleted));
+    completedLabel->setFontSize(18);
+    completedLabel->setMarginBottom(10);
+    statsBox->addView(completedLabel);
+
+    // Reading streak
+    auto* streakLabel = new brls::Label();
+    streakLabel->setText("Current Streak: " + std::to_string(settings.currentStreak) + " days");
+    streakLabel->setFontSize(18);
+    streakLabel->setMarginBottom(10);
+    statsBox->addView(streakLabel);
+
+    // Longest streak
+    auto* longestLabel = new brls::Label();
+    longestLabel->setText("Longest Streak: " + std::to_string(settings.longestStreak) + " days");
+    longestLabel->setFontSize(18);
+    longestLabel->setMarginBottom(10);
+    statsBox->addView(longestLabel);
+
+    // Reading time
+    int hours = static_cast<int>(settings.totalReadingTime / 3600);
+    int minutes = static_cast<int>((settings.totalReadingTime % 3600) / 60);
+    auto* timeLabel = new brls::Label();
+    timeLabel->setText("Total Reading Time: " + std::to_string(hours) + "h " + std::to_string(minutes) + "m");
+    timeLabel->setFontSize(18);
+    timeLabel->setMarginBottom(20);
+    statsBox->addView(timeLabel);
+
+    // Reset button
+    auto* resetBtn = new brls::Button();
+    resetBtn->setText("Reset Statistics");
+    resetBtn->registerClickAction([](brls::View* view) {
+        brls::Dialog* dialog = new brls::Dialog("Reset all reading statistics?");
+        dialog->addButton("Cancel", [dialog]() { dialog->close(); });
+        dialog->addButton("Reset", [dialog]() {
+            AppSettings& s = Application::getInstance().getSettings();
+            s.totalChaptersRead = 0;
+            s.totalMangaCompleted = 0;
+            s.currentStreak = 0;
+            s.longestStreak = 0;
+            s.totalReadingTime = 0;
+            Application::getInstance().saveSettings();
+            dialog->close();
+            brls::Application::notify("Statistics reset");
+            brls::Application::popActivity();
+        });
+        dialog->open();
+        return true;
+    });
+    statsBox->addView(resetBtn);
+
+    // Back button
+    auto* backBtn = new brls::Button();
+    backBtn->setText("Back");
+    backBtn->setMarginTop(20);
+    backBtn->registerClickAction([](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    });
+    statsBox->addView(backBtn);
+
+    brls::Application::pushActivity(new brls::Activity(statsBox));
+}
+
+void SettingsTab::createBackupSection() {
+    auto* header = new brls::Header();
+    header->setTitle("Backup & Restore");
+    m_contentBox->addView(header);
+
+    // Export backup
+    auto* exportCell = new brls::DetailCell();
+    exportCell->setText("Export Backup");
+    exportCell->setDetailText("Save library and settings to file");
+    exportCell->registerClickAction([this](brls::View* view) {
+        exportBackup();
+        return true;
+    });
+    m_contentBox->addView(exportCell);
+
+    // Import backup
+    auto* importCell = new brls::DetailCell();
+    importCell->setText("Import Backup");
+    importCell->setDetailText("Restore from backup file");
+    importCell->registerClickAction([this](brls::View* view) {
+        importBackup();
+        return true;
+    });
+    m_contentBox->addView(importCell);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Backups are saved to ux0:data/VitaSuwayomi/backup/");
+    infoLabel->setFontSize(14);
+    infoLabel->setMarginLeft(16);
+    infoLabel->setMarginTop(4);
+    m_contentBox->addView(infoLabel);
+}
+
+void SettingsTab::createStatisticsSection() {
+    auto* header = new brls::Header();
+    header->setTitle("Reading Statistics");
+    m_contentBox->addView(header);
+
+    // View statistics
+    auto* statsCell = new brls::DetailCell();
+    statsCell->setText("View Statistics");
+    statsCell->setDetailText("Chapters read, streaks, and more");
+    statsCell->registerClickAction([this](brls::View* view) {
+        showStatisticsView();
+        return true;
+    });
+    m_contentBox->addView(statsCell);
+
+    // Storage management
+    auto* storageCell = new brls::DetailCell();
+    storageCell->setText("Storage Management");
+    storageCell->setDetailText("View and manage downloaded content");
+    storageCell->registerClickAction([this](brls::View* view) {
+        showStorageManagement();
+        return true;
+    });
+    m_contentBox->addView(storageCell);
+}
+
+void SettingsTab::exportBackup() {
+    brls::Application::notify("Creating backup...");
+
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+#ifdef __vita__
+    // Create backup directory
+    sceIoMkdir("ux0:data/VitaSuwayomi/backup", 0777);
+
+    // Generate filename with timestamp
+    time_t now = time(nullptr);
+    struct tm* tm_info = localtime(&now);
+    char filename[64];
+    strftime(filename, sizeof(filename), "backup_%Y%m%d_%H%M%S.json", tm_info);
+
+    std::string backupPath = "ux0:data/VitaSuwayomi/backup/" + std::string(filename);
+
+    if (client.exportBackup(backupPath)) {
+        brls::Application::notify("Backup saved: " + std::string(filename));
+    } else {
+        brls::Application::notify("Failed to create backup");
+    }
+#else
+    brls::Application::notify("Backup feature requires PS Vita");
+#endif
+}
+
+void SettingsTab::importBackup() {
+    brls::Dialog* dialog = new brls::Dialog("Import backup?\n\nThis will restore your library and settings from the most recent backup file.");
+
+    dialog->addButton("Cancel", [dialog]() {
+        dialog->close();
+    });
+
+    dialog->addButton("Import", [dialog]() {
+        dialog->close();
+
+        brls::Application::notify("Importing backup...");
+
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+#ifdef __vita__
+        // Find most recent backup file
+        std::string backupDir = "ux0:data/VitaSuwayomi/backup";
+        std::string latestBackup;
+
+        SceUID dir = sceIoDopen(backupDir.c_str());
+        if (dir >= 0) {
+            SceIoDirent entry;
+            while (sceIoDread(dir, &entry) > 0) {
+                if (SCE_S_ISREG(entry.d_stat.st_mode)) {
+                    std::string name = entry.d_name;
+                    if (name.find("backup_") == 0 && name.find(".json") != std::string::npos) {
+                        if (name > latestBackup) {
+                            latestBackup = name;
+                        }
+                    }
+                }
+            }
+            sceIoDclose(dir);
+        }
+
+        if (latestBackup.empty()) {
+            brls::Application::notify("No backup file found");
+            return;
+        }
+
+        std::string backupPath = backupDir + "/" + latestBackup;
+        if (client.importBackup(backupPath)) {
+            brls::Application::notify("Backup restored: " + latestBackup);
+        } else {
+            brls::Application::notify("Failed to import backup");
+        }
+#else
+        brls::Application::notify("Backup feature requires PS Vita");
+#endif
     });
 
     dialog->open();

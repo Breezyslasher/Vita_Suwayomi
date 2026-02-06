@@ -25,6 +25,14 @@ public:
     void setOnPullToRefresh(std::function<void()> callback);
     void clearViews();
 
+    // Grid customization
+    void setGridSize(int columns);  // 4, 6, or 8 columns
+    void setCompactMode(bool compact);  // Compact mode (covers only, no titles)
+    void setListMode(bool listMode);  // List view instead of grid
+    int getGridColumns() const { return m_columns; }
+    bool isCompactMode() const { return m_compactMode; }
+    bool isListMode() const { return m_listMode; }
+
     // Selection mode
     void setSelectionMode(bool enabled);
     bool isSelectionMode() const { return m_selectionMode; }
@@ -70,6 +78,8 @@ private:
     int m_cellHeight = 180;
     int m_cellMargin = 12;
     int m_rowMargin = 10;
+    bool m_compactMode = false;
+    bool m_listMode = false;
 
     int m_visibleStartRow = 0;
     int m_lastScrollY = 0;

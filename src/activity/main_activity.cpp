@@ -5,6 +5,7 @@
 
 #include "activity/main_activity.hpp"
 #include "view/library_section_tab.hpp"
+#include "view/history_tab.hpp"
 #include "view/extensions_tab.hpp"
 #include "view/search_tab.hpp"
 #include "view/settings_tab.hpp"
@@ -46,6 +47,11 @@ void MainActivity::onContentAvailable() {
         // Add Library tab (shows manga from library with category tabs)
         tabFrame->addTab("Library", []() {
             return new LibrarySectionTab();
+        });
+
+        // Add History tab (reading history with quick resume)
+        tabFrame->addTab("History", []() {
+            return new HistoryTab();
         });
 
         // Add Browse tab (browse manga sources)

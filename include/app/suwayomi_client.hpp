@@ -36,6 +36,19 @@ enum class DownloadState {
     ERROR
 };
 
+// Reading history item
+struct ReadingHistoryItem {
+    int mangaId = 0;
+    std::string mangaTitle;
+    std::string mangaThumbnail;
+    int chapterId = 0;
+    float chapterNumber = 0.0f;
+    std::string chapterName;
+    int lastPageRead = 0;
+    int pageCount = 0;
+    int64_t lastReadAt = 0;  // Unix timestamp in milliseconds
+};
+
 // Extension/Source info
 struct Source {
     int64_t id = 0;

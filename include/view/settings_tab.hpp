@@ -21,6 +21,8 @@ private:
     void createReaderSection();
     void createDownloadsSection();
     void createBrowseSection();
+    void createBackupSection();
+    void createStatisticsSection();
     void createAboutSection();
 
     void onDisconnect();
@@ -31,6 +33,10 @@ private:
     void showCreateCategoryDialog();
     void showEditCategoryDialog(const Category& category);
     void showDeleteCategoryConfirmation(const Category& category);
+    void showStorageManagement();
+    void showStatisticsView();
+    void exportBackup();
+    void importBackup();
 
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;

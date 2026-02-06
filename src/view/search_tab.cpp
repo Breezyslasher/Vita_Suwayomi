@@ -11,6 +11,7 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
+#include <algorithm>
 
 namespace vitasuwayomi {
 
@@ -275,8 +276,76 @@ void SearchTab::showGlobalSearchDialog() {
 
         m_searchQuery = text;
         m_titleLabel->setText("Search: " + text);
+        addToSearchHistory(text);
         performSearch(text);
     }, "Global Search", "Search across all sources", 256, m_searchQuery);
+}
+
+void SearchTab::showSearchHistoryDialog() {
+    auto& settings = Application::getInstance().getSettings();
+    auto& history = settings.searchHistory;
+
+    if (history.empty()) {
+        brls::Application::notify("No search history");
+        return;
+    }
+
+    std::vector<std::string> options;
+    for (const auto& query : history) {
+        options.push_back(query);
+    }
+    options.push_back("Clear History");
+
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Search History", options,
+        [this, historySize = history.size()](int selected) {
+            if (selected < 0) return;
+
+            if (selected == static_cast<int>(historySize)) {
+                // Clear history
+                clearSearchHistory();
+            } else {
+                // Use selected search query
+                auto& history = Application::getInstance().getSettings().searchHistory;
+                if (selected < static_cast<int>(history.size())) {
+                    std::string query = history[selected];
+                    m_searchQuery = query;
+                    m_titleLabel->setText("Search: " + query);
+                    performSearch(query);
+                }
+            }
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void SearchTab::addToSearchHistory(const std::string& query) {
+    if (query.empty()) return;
+
+    auto& settings = Application::getInstance().getSettings();
+    auto& history = settings.searchHistory;
+
+    // Remove if already exists (to move to front)
+    auto it = std::find(history.begin(), history.end(), query);
+    if (it != history.end()) {
+        history.erase(it);
+    }
+
+    // Add to front
+    history.insert(history.begin(), query);
+
+    // Limit history size
+    while (history.size() > static_cast<size_t>(settings.maxSearchHistory)) {
+        history.pop_back();
+    }
+
+    Application::getInstance().saveSettings();
+}
+
+void SearchTab::clearSearchHistory() {
+    auto& settings = Application::getInstance().getSettings();
+    settings.searchHistory.clear();
+    Application::getInstance().saveSettings();
+    brls::Application::notify("Search history cleared");
 }
 
 void SearchTab::showSources() {

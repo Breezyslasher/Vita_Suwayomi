@@ -47,6 +47,7 @@ private:
     brls::Rectangle* m_progressBar = nullptr;
     brls::Label* m_unreadBadge = nullptr;
     brls::Label* m_downloadBadge = nullptr;
+    brls::Label* m_newBadge = nullptr;  // NEW indicator for recently updated
 };
 
 // Alias for backward compatibility

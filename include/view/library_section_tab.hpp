@@ -60,6 +60,7 @@ private:
 
     // Batch actions
     void downloadChapters(const std::vector<Manga>& mangaList, const std::string& mode);
+    void downloadNextChapters(const std::vector<Manga>& mangaList, int count);
     void markMangaRead(const std::vector<Manga>& mangaList);
     void markMangaUnread(const std::vector<Manga>& mangaList);
     void removeFromLibrary(const std::vector<Manga>& mangaList);

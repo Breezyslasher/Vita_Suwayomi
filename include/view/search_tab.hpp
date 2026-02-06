@@ -64,6 +64,9 @@ private:
     void filterSourcesByLanguage();
     void showGlobalSearchDialog();
     void showFilterDialog();
+    void showSearchHistoryDialog();
+    void addToSearchHistory(const std::string& query);
+    void clearSearchHistory();
 
     // Main content grid (for single source browsing)
     RecyclingGrid* m_contentGrid = nullptr;

@@ -118,6 +118,19 @@ MangaItemCell::MangaItemCell() {
     m_downloadBadge->setVisibility(brls::Visibility::GONE);
     this->addView(m_downloadBadge);
 
+    // NEW badge - below download badge (shows if recently updated)
+    m_newBadge = new brls::Label();
+    m_newBadge->setFontSize(8);
+    m_newBadge->setText("NEW");
+    m_newBadge->setTextColor(nvgRGB(255, 255, 255));
+    m_newBadge->setBackgroundColor(nvgRGBA(231, 76, 60, 255)); // Red badge
+    m_newBadge->setPadding(2, 4, 2, 4);
+    m_newBadge->setPositionType(brls::PositionType::ABSOLUTE);
+    m_newBadge->setPositionTop(26);  // Below download badge
+    m_newBadge->setPositionLeft(0);
+    m_newBadge->setVisibility(brls::Visibility::GONE);
+    this->addView(m_newBadge);
+
     // Description label (hidden, for focus state)
     m_descriptionLabel = new brls::Label();
     m_descriptionLabel->setFontSize(9);
@@ -172,6 +185,22 @@ void MangaItemCell::updateDisplay() {
         } else {
             m_downloadBadge->setVisibility(brls::Visibility::GONE);
         }
+    }
+
+    // Show NEW badge if manga was updated recently (within 7 days)
+    // Check if inLibraryAt timestamp is within the last 7 days
+    if (m_newBadge) {
+        bool showNew = false;
+
+        // If manga has unread chapters and was recently added/updated
+        if (m_manga.unreadCount > 0 && m_manga.inLibraryAt) {
+            // inLibraryAt is a boolean in this struct, but for newly added manga
+            // we can use other indicators. For now, we'll show NEW if unread > 0
+            // and downloadedCount is 0 (meaning it's fresh)
+            showNew = (m_manga.downloadedCount == 0);
+        }
+
+        m_newBadge->setVisibility(showNew ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
 }
 

@@ -318,6 +318,64 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     sortContainer->addView(m_sortBtn);
     chaptersActions->addView(sortContainer);
 
+    // Filter button with L icon above
+    auto* filterContainer = new brls::Box();
+    filterContainer->setAxis(brls::Axis::COLUMN);
+    filterContainer->setAlignItems(brls::AlignItems::CENTER);
+    filterContainer->setMarginRight(10);
+
+    auto* lButtonIcon = new brls::Image();
+    lButtonIcon->setWidth(36);
+    lButtonIcon->setHeight(24);
+    lButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    lButtonIcon->setImageFromFile("app0:resources/images/l_button.png");
+    lButtonIcon->setMarginBottom(2);
+    filterContainer->addView(lButtonIcon);
+
+    m_filterBtn = new brls::Button();
+    m_filterBtn->setWidth(44);
+    m_filterBtn->setHeight(40);
+    m_filterBtn->setCornerRadius(8);
+    m_filterBtn->setText("F");  // Filter indicator
+    m_filterBtn->setFontSize(14);
+
+    m_filterBtn->registerClickAction([this](brls::View* view) {
+        // Show filter options dialog
+        std::vector<std::string> options = {"Toggle Downloaded", "Toggle Unread", "Toggle Bookmarked", "Clear Filters"};
+        brls::Dropdown* dropdown = new brls::Dropdown(
+            "Chapter Filters", options,
+            [this](int selected) {
+                if (selected < 0) return;
+                switch (selected) {
+                    case 0:
+                        m_filterDownloaded = !m_filterDownloaded;
+                        brls::Application::notify(m_filterDownloaded ? "Filtering: Downloaded" : "Filter removed");
+                        break;
+                    case 1:
+                        m_filterUnread = !m_filterUnread;
+                        brls::Application::notify(m_filterUnread ? "Filtering: Unread" : "Filter removed");
+                        break;
+                    case 2:
+                        m_filterBookmarked = !m_filterBookmarked;
+                        brls::Application::notify(m_filterBookmarked ? "Filtering: Bookmarked" : "Filter removed");
+                        break;
+                    case 3:
+                        m_filterDownloaded = false;
+                        m_filterUnread = false;
+                        m_filterBookmarked = false;
+                        m_filterScanlator.clear();
+                        brls::Application::notify("Filters cleared");
+                        break;
+                }
+                populateChaptersList();
+            }, 0);
+        brls::Application::pushActivity(new brls::Activity(dropdown));
+        return true;
+    });
+    m_filterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_filterBtn));
+    filterContainer->addView(m_filterBtn);
+    chaptersActions->addView(filterContainer);
+
     // Menu button with Start icon above
     auto* menuContainer = new brls::Box();
     menuContainer->setAxis(brls::Axis::COLUMN);
@@ -472,6 +530,8 @@ void MangaDetailView::populateChaptersList() {
     for (const auto& chapter : sortedChapters) {
         if (m_filterDownloaded && !chapter.downloaded) continue;
         if (m_filterUnread && chapter.read) continue;
+        if (m_filterBookmarked && !chapter.bookmarked) continue;
+        if (!m_filterScanlator.empty() && chapter.scanlator != m_filterScanlator) continue;
 
         auto* chapterRow = new brls::Box();
         chapterRow->setAxis(brls::Axis::ROW);
@@ -2260,6 +2320,276 @@ void MangaDetailView::resetCover() {
             brls::Application::notify("Cover reset");
         });
     });
+}
+
+// Chapter Selection Mode implementation
+void MangaDetailView::toggleSelectionMode() {
+    m_selectionMode = !m_selectionMode;
+    m_rangeSelectStart = -1;
+
+    if (!m_selectionMode) {
+        clearSelection();
+    }
+
+    updateSelectionUI();
+    populateChaptersList();
+
+    if (m_selectionMode) {
+        brls::Application::notify("Selection mode enabled (L1 for range select)");
+    } else {
+        brls::Application::notify("Selection mode disabled");
+    }
+}
+
+void MangaDetailView::toggleChapterSelection(int chapterIndex) {
+    if (m_selectedChapters.count(chapterIndex)) {
+        m_selectedChapters.erase(chapterIndex);
+    } else {
+        m_selectedChapters.insert(chapterIndex);
+    }
+    updateSelectionUI();
+}
+
+void MangaDetailView::selectChapterRange(int startIndex, int endIndex) {
+    if (startIndex > endIndex) std::swap(startIndex, endIndex);
+
+    for (int i = startIndex; i <= endIndex; i++) {
+        m_selectedChapters.insert(i);
+    }
+    updateSelectionUI();
+    brls::Application::notify("Selected chapters " + std::to_string(startIndex + 1) +
+                              " to " + std::to_string(endIndex + 1));
+}
+
+void MangaDetailView::clearSelection() {
+    m_selectedChapters.clear();
+    m_rangeSelectStart = -1;
+    updateSelectionUI();
+}
+
+void MangaDetailView::markSelectedRead() {
+    if (m_selectedChapters.empty()) return;
+
+    std::vector<int> chapterIndexes;
+    for (int idx : m_selectedChapters) {
+        if (idx >= 0 && idx < static_cast<int>(m_chapters.size())) {
+            if (!m_chapters[idx].read) {
+                chapterIndexes.push_back(m_chapters[idx].index);
+            }
+        }
+    }
+
+    if (chapterIndexes.empty()) {
+        brls::Application::notify("Selected chapters already read");
+        return;
+    }
+
+    int mangaId = m_manga.id;
+    asyncRun([this, mangaId, chapterIndexes]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        if (client.markChaptersRead(mangaId, chapterIndexes)) {
+            brls::sync([this, count = chapterIndexes.size()]() {
+                brls::Application::notify("Marked " + std::to_string(count) + " chapters as read");
+                clearSelection();
+                loadChapters();
+            });
+        } else {
+            brls::sync([]() {
+                brls::Application::notify("Failed to mark chapters as read");
+            });
+        }
+    });
+}
+
+void MangaDetailView::markSelectedUnread() {
+    if (m_selectedChapters.empty()) return;
+
+    std::vector<int> chapterIndexes;
+    for (int idx : m_selectedChapters) {
+        if (idx >= 0 && idx < static_cast<int>(m_chapters.size())) {
+            if (m_chapters[idx].read) {
+                chapterIndexes.push_back(m_chapters[idx].index);
+            }
+        }
+    }
+
+    if (chapterIndexes.empty()) {
+        brls::Application::notify("Selected chapters already unread");
+        return;
+    }
+
+    int mangaId = m_manga.id;
+    asyncRun([this, mangaId, chapterIndexes]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        if (client.markChaptersUnread(mangaId, chapterIndexes)) {
+            brls::sync([this, count = chapterIndexes.size()]() {
+                brls::Application::notify("Marked " + std::to_string(count) + " chapters as unread");
+                clearSelection();
+                loadChapters();
+            });
+        } else {
+            brls::sync([]() {
+                brls::Application::notify("Failed to mark chapters as unread");
+            });
+        }
+    });
+}
+
+void MangaDetailView::downloadSelected() {
+    if (m_selectedChapters.empty()) return;
+
+    int mangaId = m_manga.id;
+    std::string mangaTitle = m_manga.title;
+    std::vector<int> chapterIds;
+    std::vector<std::pair<int, int>> localChapterPairs;
+
+    for (int idx : m_selectedChapters) {
+        if (idx >= 0 && idx < static_cast<int>(m_chapters.size())) {
+            const auto& ch = m_chapters[idx];
+            if (!ch.downloaded) {
+                chapterIds.push_back(ch.id);
+                localChapterPairs.push_back({ch.id, ch.index});
+            }
+        }
+    }
+
+    if (chapterIds.empty()) {
+        brls::Application::notify("Selected chapters already downloaded");
+        return;
+    }
+
+    DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+
+    asyncRun([mangaId, mangaTitle, chapterIds, localChapterPairs, downloadMode]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+
+        bool serverSuccess = true;
+        bool localSuccess = true;
+
+        if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
+            if (client.queueChapterDownloads(chapterIds)) {
+                client.startDownloads();
+            } else {
+                serverSuccess = false;
+            }
+        }
+
+        if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
+            if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
+                localMgr.startDownloads();
+            } else {
+                localSuccess = false;
+            }
+        }
+
+        brls::sync([chapterIds, serverSuccess, localSuccess]() {
+            if (serverSuccess || localSuccess) {
+                brls::Application::notify("Queued " + std::to_string(chapterIds.size()) + " chapters for download");
+            } else {
+                brls::Application::notify("Failed to queue downloads");
+            }
+        });
+    });
+
+    clearSelection();
+}
+
+void MangaDetailView::deleteSelectedDownloads() {
+    if (m_selectedChapters.empty()) return;
+
+    int mangaId = m_manga.id;
+    std::vector<int> chapterIds;
+    std::vector<int> chapterIndexes;
+
+    for (int idx : m_selectedChapters) {
+        if (idx >= 0 && idx < static_cast<int>(m_chapters.size())) {
+            const auto& ch = m_chapters[idx];
+            if (ch.downloaded) {
+                chapterIds.push_back(ch.id);
+                chapterIndexes.push_back(ch.index);
+            }
+        }
+    }
+
+    if (chapterIds.empty()) {
+        brls::Application::notify("No downloaded chapters selected");
+        return;
+    }
+
+    asyncRun([mangaId, chapterIds, chapterIndexes]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        if (client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes)) {
+            brls::sync([count = chapterIds.size()]() {
+                brls::Application::notify("Deleted " + std::to_string(count) + " downloads");
+            });
+        } else {
+            brls::sync([]() {
+                brls::Application::notify("Failed to delete downloads");
+            });
+        }
+    });
+
+    clearSelection();
+}
+
+void MangaDetailView::showSelectionActionMenu() {
+    if (m_selectedChapters.empty()) {
+        brls::Application::notify("No chapters selected");
+        return;
+    }
+
+    std::vector<std::string> options = {
+        "Mark as Read (" + std::to_string(m_selectedChapters.size()) + ")",
+        "Mark as Unread (" + std::to_string(m_selectedChapters.size()) + ")",
+        "Download (" + std::to_string(m_selectedChapters.size()) + ")",
+        "Delete Downloads",
+        "Clear Selection",
+        "Exit Selection Mode"
+    };
+
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Batch Actions", options,
+        [this](int selected) {
+            if (selected < 0) return;
+
+            switch (selected) {
+                case 0: markSelectedRead(); break;
+                case 1: markSelectedUnread(); break;
+                case 2: downloadSelected(); break;
+                case 3: deleteSelectedDownloads(); break;
+                case 4: clearSelection(); break;
+                case 5: toggleSelectionMode(); break;
+            }
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void MangaDetailView::updateSelectionUI() {
+    // Update selection count label if available
+    if (m_selectionCountLabel) {
+        if (m_selectionMode && !m_selectedChapters.empty()) {
+            m_selectionCountLabel->setText(std::to_string(m_selectedChapters.size()) + " selected");
+            m_selectionCountLabel->setVisibility(brls::Visibility::VISIBLE);
+        } else {
+            m_selectionCountLabel->setVisibility(brls::Visibility::GONE);
+        }
+    }
+
+    // Update select button text
+    if (m_selectBtn) {
+        if (m_selectionMode) {
+            m_selectBtn->setText("Exit Select");
+        } else {
+            m_selectBtn->setText("Select");
+        }
+    }
+
+    // Update chapter list to show checkboxes
+    // This is handled in populateChaptersList
 }
 
 MangaDetailView::~MangaDetailView() {

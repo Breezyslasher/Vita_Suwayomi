@@ -257,4 +257,66 @@ brls::View* RecyclingGrid::create() {
     return new RecyclingGrid();
 }
 
+void RecyclingGrid::setGridSize(int columns) {
+    if (columns < 3) columns = 3;
+    if (columns > 10) columns = 10;
+
+    m_columns = columns;
+
+    // Adjust cell dimensions based on column count
+    // PS Vita screen: 960x544, with padding
+    int availableWidth = 920;  // Account for padding
+    m_cellWidth = (availableWidth - (m_columns - 1) * m_cellMargin) / m_columns;
+
+    // Adjust height proportionally (cover ratio ~0.7)
+    if (m_listMode) {
+        m_cellHeight = 80;  // Fixed height for list mode
+    } else if (m_compactMode) {
+        m_cellHeight = static_cast<int>(m_cellWidth * 1.4);  // Taller for compact (cover only)
+    } else {
+        m_cellHeight = static_cast<int>(m_cellWidth * 1.3);  // Normal height with title
+    }
+
+    brls::Logger::info("RecyclingGrid: Grid size set to {} columns, cell {}x{}",
+                       m_columns, m_cellWidth, m_cellHeight);
+
+    // Rebuild grid if we have items
+    if (!m_items.empty()) {
+        setupGrid();
+    }
+}
+
+void RecyclingGrid::setCompactMode(bool compact) {
+    if (m_compactMode == compact) return;
+    m_compactMode = compact;
+    m_listMode = false;  // Disable list mode if enabling compact
+
+    // Recalculate dimensions
+    setGridSize(m_columns);
+}
+
+void RecyclingGrid::setListMode(bool listMode) {
+    if (m_listMode == listMode) return;
+    m_listMode = listMode;
+    m_compactMode = false;  // Disable compact mode if enabling list
+
+    if (m_listMode) {
+        // List mode: 1 column, larger cells
+        m_columns = 1;
+        m_cellWidth = 900;
+        m_cellHeight = 80;
+        m_rowMargin = 5;
+    } else {
+        // Reset to default grid
+        m_columns = 6;
+        m_rowMargin = 10;
+        setGridSize(m_columns);
+    }
+
+    // Rebuild grid if we have items
+    if (!m_items.empty()) {
+        setupGrid();
+    }
+}
+
 } // namespace vitasuwayomi
