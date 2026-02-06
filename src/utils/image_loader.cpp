@@ -45,7 +45,7 @@ std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
 std::atomic<int> ImageLoader::s_activeLoads{0};
-int ImageLoader::s_maxConcurrentLoads = 2;  // Reduced for Vita stability
+int ImageLoader::s_maxConcurrentLoads = 4;  // Increased for faster library loading
 int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
 // Flag to track if queue processor is running
@@ -418,10 +418,10 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         imageData.assign(resp.body.begin(), resp.body.end());
     }
 
-    // Cache the image in memory
+    // Cache the image in memory (larger cache for big libraries)
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.size() > 40) {
+        if (s_cache.size() > 80) {
             s_cache.clear();
         }
         s_cache[url] = imageData;
@@ -504,7 +504,7 @@ void ImageLoader::processQueue() {
             }
 
             // Small delay between starting loads to prevent overwhelming the system
-            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }).detach();
 }
@@ -532,7 +532,7 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
                 // Found in disk cache - add to memory cache and display
                 {
                     std::lock_guard<std::mutex> lock(s_cacheMutex);
-                    if (s_cache.size() > 40) {
+                    if (s_cache.size() > 80) {
                         s_cache.clear();
                     }
                     s_cache[url] = diskData;

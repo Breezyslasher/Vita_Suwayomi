@@ -439,9 +439,9 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         m_titleLabel->setText(m_currentCategoryName);
     }
 
-    // Cancel pending image loads and clear memory cache to free memory
+    // Cancel pending image loads when switching categories
+    // Keep memory cache for faster switching back to previous categories
     ImageLoader::cancelAll();
-    ImageLoader::clearCache();
 
     // Check if we have cached data (for instant loading)
     bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;

@@ -110,8 +110,8 @@ void RecyclingGrid::setupGrid() {
     brls::Logger::debug("RecyclingGrid: Creating {} rows for {} items", totalRows, m_items.size());
 
     // Create all rows and cells
-    // Load first 4 rows immediately, then stagger loading the rest
-    int maxInitialRows = 4;
+    // Load first 6 rows immediately (visible on screen), then load rest quickly
+    int maxInitialRows = 6;
 
     for (int row = 0; row < totalRows; row++) {
         auto* rowBox = new brls::Box();
@@ -157,26 +157,14 @@ void RecyclingGrid::setupGrid() {
         m_rows.push_back(rowBox);
     }
 
-    // Schedule loading of remaining covers after a short delay
+    // Load remaining covers immediately - ImageLoader handles queuing
+    // No artificial delays needed; the image loader's queue prevents overload
     if (totalRows > maxInitialRows) {
-        brls::sync([this, maxInitialRows]() {
-            // Load remaining covers in batches
-            int batchSize = 6;  // One row at a time
-            int startCell = maxInitialRows * m_columns;
-
-            for (int i = startCell; i < (int)m_cells.size(); i += batchSize) {
-                int batchEnd = std::min(i + batchSize, (int)m_cells.size());
-                int delayMs = ((i - startCell) / batchSize) * 100;  // 100ms between batches
-
-                brls::sync([this, i, batchEnd]() {
-                    for (int j = i; j < batchEnd; j++) {
-                        if (j < (int)m_cells.size()) {
-                            m_cells[j]->loadThumbnailIfNeeded();
-                        }
-                    }
-                });
-            }
-        });
+        int startCell = maxInitialRows * m_columns;
+        // Queue all remaining thumbnails at once - ImageLoader handles concurrency
+        for (int i = startCell; i < (int)m_cells.size(); i++) {
+            m_cells[i]->loadThumbnailIfNeeded();
+        }
     }
 
     brls::Logger::debug("RecyclingGrid: Grid setup complete with {} cells", m_cells.size());
