@@ -108,6 +108,12 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
     vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
+    // Apply connection timeout from settings
+    int timeout = Application::getInstance().getSettings().connectionTimeout;
+    if (timeout > 0) {
+        http.setTimeout(timeout);
+    }
+
     // Add basic auth if credentials are set
     if (!m_authUsername.empty() && !m_authPassword.empty()) {
         // Base64 encode username:password for Basic Auth

@@ -60,6 +60,7 @@ public:
 
     brls::View* createContentView() override;
     void onContentAvailable() override;
+    void willDisappear(bool resetState = false) override;
 
     // Navigation
     void nextPage();

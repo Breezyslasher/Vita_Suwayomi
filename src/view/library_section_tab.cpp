@@ -133,6 +133,37 @@ LibrarySectionTab::LibrarySectionTab() {
     m_contentGrid->setOnPullToRefresh([this]() {
         triggerLibraryUpdate();
     });
+
+    // Apply library display settings from user preferences
+    const auto& settings = Application::getInstance().getSettings();
+
+    // Apply display mode (Grid/Compact/List)
+    switch (settings.libraryDisplayMode) {
+        case LibraryDisplayMode::GRID_NORMAL:
+            m_contentGrid->setCompactMode(false);
+            m_contentGrid->setListMode(false);
+            break;
+        case LibraryDisplayMode::GRID_COMPACT:
+            m_contentGrid->setCompactMode(true);
+            break;
+        case LibraryDisplayMode::LIST:
+            m_contentGrid->setListMode(true);
+            break;
+    }
+
+    // Apply grid size (4/6/8 columns)
+    switch (settings.libraryGridSize) {
+        case LibraryGridSize::SMALL:
+            m_contentGrid->setGridSize(4);  // Large covers (4 columns)
+            break;
+        case LibraryGridSize::MEDIUM:
+            m_contentGrid->setGridSize(6);  // Medium (6 columns - default)
+            break;
+        case LibraryGridSize::LARGE:
+            m_contentGrid->setGridSize(8);  // Small covers (8 columns)
+            break;
+    }
+
     this->addView(m_contentGrid);
 
     brls::Logger::debug("LibrarySectionTab: Created");
@@ -226,8 +257,20 @@ void LibrarySectionTab::loadCategories() {
             m_categoriesLoaded = true;
             createCategoryTabs();
 
-            // Load first category from cache
-            if (!m_categories.empty()) {
+            // Load default category from settings, or first category if not found
+            int defaultId = Application::getInstance().getSettings().defaultCategoryId;
+            bool foundDefault = false;
+            if (defaultId != 0) {
+                for (const auto& cat : m_categories) {
+                    if (cat.id == defaultId) {
+                        foundDefault = true;
+                        break;
+                    }
+                }
+            }
+            if (foundDefault) {
+                selectCategory(defaultId);
+            } else if (!m_categories.empty()) {
                 selectCategory(m_categories[0].id);
             } else {
                 selectCategory(0);
@@ -262,8 +305,20 @@ void LibrarySectionTab::loadCategories() {
                 m_categoriesLoaded = true;
                 createCategoryTabs();
 
-                // Load the first category (or default if none)
-                if (!m_categories.empty()) {
+                // Load default category from settings, or first category if not found
+                int defaultId = Application::getInstance().getSettings().defaultCategoryId;
+                bool foundDefault = false;
+                if (defaultId != 0) {
+                    for (const auto& cat : m_categories) {
+                        if (cat.id == defaultId) {
+                            foundDefault = true;
+                            break;
+                        }
+                    }
+                }
+                if (foundDefault) {
+                    selectCategory(defaultId);
+                } else if (!m_categories.empty()) {
                     selectCategory(m_categories[0].id);
                 } else {
                     // No categories - load all library manga

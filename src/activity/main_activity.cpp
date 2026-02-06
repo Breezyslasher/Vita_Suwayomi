@@ -85,6 +85,18 @@ void MainActivity::onContentAvailable() {
                     brls::Logger::info("MainActivity: Loaded {} categories", s_cachedCategories.size());
                 }
             });
+
+            // Check updateOnStart setting - trigger library update if enabled
+            if (Application::getInstance().getSettings().updateOnStart) {
+                brls::Logger::info("MainActivity: updateOnStart enabled, triggering library update");
+                asyncRun([&client]() {
+                    if (client.triggerLibraryUpdate()) {
+                        brls::sync([]() {
+                            brls::Application::notify("Checking for new chapters...");
+                        });
+                    }
+                });
+            }
         }
 
         brls::Logger::info("MainActivity: Tabs created, isOnline={}", isOnline);

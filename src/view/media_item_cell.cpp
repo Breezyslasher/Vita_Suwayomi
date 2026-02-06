@@ -4,6 +4,7 @@
  */
 
 #include "view/media_item_cell.hpp"
+#include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
@@ -163,9 +164,10 @@ void MangaItemCell::updateDisplay() {
         }
     }
 
-    // Show unread badge (teal, top-right)
+    // Show unread badge (teal, top-right) - respects showUnreadBadge setting
     if (m_unreadBadge) {
-        if (m_manga.unreadCount > 0) {
+        const auto& settings = Application::getInstance().getSettings();
+        if (settings.showUnreadBadge && m_manga.unreadCount > 0) {
             m_unreadBadge->setText(std::to_string(m_manga.unreadCount));
             m_unreadBadge->setVisibility(brls::Visibility::VISIBLE);
         } else {
@@ -173,12 +175,13 @@ void MangaItemCell::updateDisplay() {
         }
     }
 
-    // Show download badge if any chapters are downloaded locally
+    // Show download badge if any chapters are downloaded locally - respects showDownloadedBadge setting
     if (m_downloadBadge) {
+        const auto& settings = Application::getInstance().getSettings();
         static const std::string ICON_CHECK = "\xEE\xA1\xAC";
         DownloadsManager& dm = DownloadsManager::getInstance();
         DownloadItem* download = dm.getMangaDownload(m_manga.id);
-        if (download != nullptr) {
+        if (settings.showDownloadedBadge && download != nullptr) {
             m_downloadBadge->setText(ICON_CHECK);
             m_downloadBadge->setVisibility(brls::Visibility::VISIBLE);
         } else {

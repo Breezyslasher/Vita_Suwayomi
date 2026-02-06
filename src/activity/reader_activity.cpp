@@ -229,6 +229,13 @@ void ReaderActivity::onContentAvailable() {
                         static_cast<int>(m_settings.scaleMode),
                         m_settings.cropBorders);
 
+    // Apply keepScreenOn setting - prevent screen timeout during reading
+    m_settings.keepScreenOn = appSettings.keepScreenOn;
+    if (m_settings.keepScreenOn) {
+        brls::Application::getPlatform()->disableScreenDimming(true, "Reading manga", "VitaSuwayomi");
+        brls::Logger::info("ReaderActivity: keepScreenOn enabled, disabled screen dimming");
+    }
+
     // Set manga title in top bar
     if (mangaLabel) {
         mangaLabel->setText(m_mangaTitle);
@@ -1633,6 +1640,16 @@ void ReaderActivity::updateReaderMode() {
             pageImage->setVisibility(brls::Visibility::VISIBLE);
             loadPage(m_currentPage);
         }
+    }
+}
+
+void ReaderActivity::willDisappear(bool resetState) {
+    Activity::willDisappear(resetState);
+
+    // Restore screen dimming when leaving the reader
+    if (m_settings.keepScreenOn) {
+        brls::Application::getPlatform()->disableScreenDimming(false, "Reading manga", "VitaSuwayomi");
+        brls::Logger::info("ReaderActivity: willDisappear, restored screen dimming");
     }
 }
 
