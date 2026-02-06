@@ -323,10 +323,13 @@ void LibrarySectionTab::createCategoryTabs() {
     // If no visible categories, show a "Library" tab that loads all manga
     if (visibleCategories.empty()) {
         auto* btn = new brls::Button();
-        btn->setText("Library");
         btn->setMarginRight(10);
-        btn->setWidth(120);
-        btn->setHeight(40);
+        btn->setWidth(130);  // 10px wider
+        btn->setHeight(35);
+        btn->setCornerRadius(6);
+        btn->setJustifyContent(brls::JustifyContent::CENTER);
+        btn->setAlignItems(brls::AlignItems::CENTER);
+        btn->setText("Library");
         btn->registerClickAction([this](brls::View* view) {
             selectCategory(0);
             return true;
@@ -350,15 +353,23 @@ void LibrarySectionTab::createCategoryTabs() {
             catName = catName.substr(0, 23) + "..";
         }
 
-        btn->setText(catName);
         btn->setMarginRight(8);
-        btn->setHeight(40);
+        btn->setHeight(35);
+        btn->setCornerRadius(6);
+        btn->setJustifyContent(brls::JustifyContent::CENTER);
+        btn->setAlignItems(brls::AlignItems::CENTER);
 
-        // Calculate width based on text length - use wider multiplier for better text fit
-        int textWidth = static_cast<int>(catName.length()) * 12 + 40;
-        if (textWidth < 80) textWidth = 80;
-        if (textWidth > 300) textWidth = 300;
+        // Calculate width based on text length - 10px per character plus padding
+        int textWidth = static_cast<int>(catName.length()) * 10 + 50;
+        if (textWidth < 90) textWidth = 90;
+        if (textWidth > 310) textWidth = 310;
         btn->setWidth(textWidth);
+
+        // Set text after sizing is configured to ensure proper layout
+        btn->setText(catName);
+
+        // Force the button to update its internal label layout
+        btn->invalidate();
 
         // Click handler
         int catId = category.id;
@@ -698,7 +709,7 @@ void LibrarySectionTab::scrollToCategoryIndex(int index) {
     for (int i = 0; i <= index; i++) {
         if (i < static_cast<int>(m_categoryButtons.size())) {
             buttonWidth = m_categoryButtons[i]->getWidth();
-            if (buttonWidth <= 0) buttonWidth = 80.0f;
+            if (buttonWidth <= 0) buttonWidth = 90.0f;
             if (i < index) {
                 buttonX += buttonWidth + 8.0f;
             }
