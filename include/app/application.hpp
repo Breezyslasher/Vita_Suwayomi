@@ -56,14 +56,6 @@ enum class ReaderBackground {
     GRAY = 2
 };
 
-// Reader color filter modes
-enum class ColorFilterMode {
-    NONE = 0,
-    SEPIA = 1,
-    NIGHT = 2,       // Dim/dark mode
-    BLUE_LIGHT = 3   // Blue light filter (warm)
-};
-
 // Library display mode
 enum class LibraryDisplayMode {
     GRID_NORMAL = 0,   // Standard grid with covers and titles
@@ -100,7 +92,6 @@ struct AppSettings {
     // UI Settings
     AppTheme theme = AppTheme::DARK;
     bool showClock = true;
-    bool animationsEnabled = true;
     bool debugLogging = false;
 
     // Reader Settings
@@ -116,11 +107,6 @@ struct AppSettings {
     bool cropBorders = false;           // Auto-crop white/black borders from pages
     bool webtoonDetection = true;       // Auto-detect webtoon format (aspect ratio based)
     int webtoonSidePadding = 0;         // Side padding percentage (0-20%)
-
-    // Reader Color Filters
-    ColorFilterMode colorFilter = ColorFilterMode::NONE;
-    int brightness = 100;               // Brightness level (0-100%)
-    int colorFilterIntensity = 50;      // Filter intensity (0-100%)
 
     // Auto-Chapter Advance
     bool autoChapterAdvance = false;    // Automatically advance to next chapter

@@ -178,14 +178,6 @@ void SettingsTab::createUISection() {
         });
     m_contentBox->addView(m_themeSelector);
 
-    // Animations toggle
-    m_animationsToggle = new brls::BooleanCell();
-    m_animationsToggle->init("Enable Animations", settings.animationsEnabled, [&settings](bool value) {
-        settings.animationsEnabled = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(m_animationsToggle);
-
     // Debug logging toggle
     m_debugLogToggle = new brls::BooleanCell();
     m_debugLogToggle->init("Debug Logging", settings.debugLogging, [&settings](bool value) {
@@ -644,48 +636,6 @@ void SettingsTab::createReaderSection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(tapNavToggle);
-
-    // Color filter section header
-    auto* colorFilterHeader = new brls::Header();
-    colorFilterHeader->setTitle("Color Filters");
-    m_contentBox->addView(colorFilterHeader);
-
-    // Color filter mode selector
-    auto* colorFilterSelector = new brls::SelectorCell();
-    colorFilterSelector->init("Color Filter",
-        {"None", "Sepia", "Night Mode", "Blue Light Filter"},
-        static_cast<int>(settings.colorFilter),
-        [&settings](int index) {
-            settings.colorFilter = static_cast<ColorFilterMode>(index);
-            Application::getInstance().saveSettings();
-        });
-    m_contentBox->addView(colorFilterSelector);
-
-    // Brightness selector
-    auto* brightnessSelector = new brls::SelectorCell();
-    int brightnessIdx = settings.brightness / 25;  // 0-100 in steps of 25
-    if (brightnessIdx > 4) brightnessIdx = 4;
-    brightnessSelector->init("Brightness",
-        {"25%", "50%", "75%", "100%"},
-        brightnessIdx > 0 ? brightnessIdx - 1 : 3,
-        [&settings](int index) {
-            settings.brightness = (index + 1) * 25;
-            Application::getInstance().saveSettings();
-        });
-    m_contentBox->addView(brightnessSelector);
-
-    // Filter intensity selector
-    auto* intensitySelector = new brls::SelectorCell();
-    int intensityIdx = settings.colorFilterIntensity / 25;
-    if (intensityIdx > 4) intensityIdx = 4;
-    intensitySelector->init("Filter Intensity",
-        {"25%", "50%", "75%", "100%"},
-        intensityIdx > 0 ? intensityIdx - 1 : 1,
-        [&settings](int index) {
-            settings.colorFilterIntensity = (index + 1) * 25;
-            Application::getInstance().saveSettings();
-        });
-    m_contentBox->addView(intensitySelector);
 
     // Webtoon section header
     auto* webtoonHeader = new brls::Header();

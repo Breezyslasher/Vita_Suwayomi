@@ -53,7 +53,6 @@ private:
 
     // UI section
     brls::SelectorCell* m_themeSelector = nullptr;
-    brls::BooleanCell* m_animationsToggle = nullptr;
     brls::BooleanCell* m_debugLogToggle = nullptr;
 
     // Library section
