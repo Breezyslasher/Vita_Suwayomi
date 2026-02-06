@@ -1053,6 +1053,34 @@ void ReaderActivity::markChapterAsRead() {
                 bool mangaCompleted = (chapterIndex == totalChapters - 1);
                 Application::getInstance().updateReadingStatistics(true, mangaCompleted);
             });
+
+            // Delete downloaded chapter if deleteAfterRead is enabled
+            if (Application::getInstance().getSettings().deleteAfterRead) {
+                brls::Logger::info("ReaderActivity: deleteAfterRead enabled, removing chapter download");
+
+                // Delete from local downloads
+                DownloadsManager& dm = DownloadsManager::getInstance();
+                if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+                    brls::Logger::info("ReaderActivity: Deleted local chapter download (manga={}, chapter={})",
+                                      mangaId, chapterIndex);
+                }
+
+                // Also delete from server download queue if applicable
+                // Get chapter ID from pages if available
+                std::vector<Chapter> chapters;
+                if (client.fetchChapters(mangaId, chapters)) {
+                    for (const auto& ch : chapters) {
+                        if (ch.chapterNumber == chapterIndex || ch.index == chapterIndex) {
+                            std::vector<int> chapterIds = {ch.id};
+                            std::vector<int> chapterIndexes = {chapterIndex};
+                            client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes);
+                            brls::Logger::info("ReaderActivity: Requested server to delete chapter download (id={})",
+                                              ch.id);
+                            break;
+                        }
+                    }
+                }
+            }
         }
     });
 }

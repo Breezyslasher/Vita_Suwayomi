@@ -481,7 +481,27 @@ void MangaDetailView::loadChapters() {
         if (client.fetchChapters(m_manga.id, chapters)) {
             brls::Logger::info("MangaDetailView: Got {} chapters", chapters.size());
 
-            brls::sync([this, chapters]() {
+            // Check if autoDownloadChapters is enabled
+            bool autoDownload = Application::getInstance().getSettings().autoDownloadChapters;
+            std::vector<int> chaptersToDownload;
+
+            if (autoDownload) {
+                // Find unread chapters that are not yet downloaded
+                for (const auto& ch : chapters) {
+                    if (!ch.read && !ch.downloaded) {
+                        chaptersToDownload.push_back(ch.id);
+                    }
+                }
+
+                // Queue chapters for download if any found
+                if (!chaptersToDownload.empty()) {
+                    brls::Logger::info("MangaDetailView: autoDownloadChapters - queuing {} unread chapters",
+                                      chaptersToDownload.size());
+                    client.queueChapterDownloads(chaptersToDownload);
+                }
+            }
+
+            brls::sync([this, chapters, chaptersToDownload]() {
                 m_chapters = chapters;
                 populateChaptersList();
 
@@ -500,6 +520,12 @@ void MangaDetailView::loadChapters() {
 
                 // Update the read button text based on reading progress
                 updateReadButtonText();
+
+                // Notify user if auto-download was triggered
+                if (!chaptersToDownload.empty()) {
+                    brls::Application::notify("Auto-downloading " +
+                        std::to_string(chaptersToDownload.size()) + " new chapters");
+                }
             });
         } else {
             brls::Logger::error("MangaDetailView: Failed to fetch chapters");
