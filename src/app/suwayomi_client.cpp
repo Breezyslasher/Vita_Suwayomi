@@ -1065,14 +1065,14 @@ bool SuwayomiClient::fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& 
 }
 
 bool SuwayomiClient::fetchReadingHistoryGraphQL(int offset, int limit, std::vector<ReadingHistoryItem>& history) {
+    // Use newer order syntax for better compatibility with latest Suwayomi-Server
     const char* query = R"(
         query GetHistory($offset: Int!, $limit: Int!) {
             chapters(
                 offset: $offset
                 first: $limit
                 filter: { lastReadAt: { greaterThan: 0 } }
-                orderBy: LAST_READ_AT
-                orderByType: DESC
+                order: [{ by: LAST_READ_AT, byType: DESC }]
             ) {
                 nodes {
                     id

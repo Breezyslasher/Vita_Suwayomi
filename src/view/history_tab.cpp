@@ -127,11 +127,21 @@ void HistoryTab::loadHistory() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
-            m_historyItems = history;
             m_loaded = true;
 
             // Update UI
             m_contentBox->clearViews();
+
+            // Handle load failure (offline or server error)
+            if (!success) {
+                m_scrollView->setVisibility(brls::Visibility::GONE);
+                m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
+                m_titleLabel->setText("Reading History");
+                brls::Application::notify("Failed to load history - check connection");
+                return;
+            }
+
+            m_historyItems = history;
 
             if (m_historyItems.empty()) {
                 m_scrollView->setVisibility(brls::Visibility::GONE);
@@ -265,13 +275,13 @@ void HistoryTab::loadHistory() {
 }
 
 void HistoryTab::onHistoryItemSelected(const ReadingHistoryItem& item) {
-    brls::Logger::info("HistoryTab: Resume reading '{}' chapter {} at page {}",
-                       item.mangaTitle, item.chapterNumber, item.lastPageRead);
+    brls::Logger::info("HistoryTab: Resume reading '{}' chapter {} (id={}) at page {}",
+                       item.mangaTitle, item.chapterNumber, item.chapterId, item.lastPageRead);
 
-    // Resume reading from last page
+    // Resume reading from last page using chapter ID (not chapter number)
     Application::getInstance().pushReaderActivityAtPage(
         item.mangaId,
-        static_cast<int>(item.chapterNumber),  // Using chapter number as index
+        item.chapterId,  // Use chapter ID for proper chapter identification
         item.lastPageRead,
         item.mangaTitle
     );
