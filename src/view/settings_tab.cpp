@@ -317,71 +317,175 @@ void SettingsTab::showCategoryVisibilityDialog() {
             return a.order < b.order;
         });
 
-    // Create dialog
-    brls::Dialog* dialog = new brls::Dialog("Category Visibility");
-
-    auto* scrollView = new brls::ScrollingFrame();
-    scrollView->setWidth(450);
-    scrollView->setHeight(350);
-
-    auto* contentBox = new brls::Box();
-    contentBox->setAxis(brls::Axis::COLUMN);
-    contentBox->setPadding(10);
-
     auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
 
-    // Add toggle for each category
-    for (const auto& cat : categories) {
-        // Skip empty categories
-        if (cat.mangaCount <= 0) continue;
+    // Create dialog box (matching Manage Categories design)
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(550);
+    dialogBox->setHeight(450);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setCornerRadius(12);
 
-        auto* toggle = new brls::BooleanCell();
-        std::string catName = cat.name;
-        if (catName.length() > 18) {
-            catName = catName.substr(0, 16) + "..";
-        }
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Hidden Categories");
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(10);
+    dialogBox->addView(titleLabel);
 
-        // Category is visible if NOT in hidden list
-        bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Tap to toggle visibility in library");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setMarginBottom(15);
+    dialogBox->addView(infoLabel);
 
-        int catId = cat.id;
-        toggle->init(catName + " (" + std::to_string(cat.mangaCount) + ")", isVisible,
-            [catId](bool value) {
-                auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
-                if (value) {
-                    // Show category (remove from hidden)
-                    hidden.erase(catId);
-                } else {
-                    // Hide category (add to hidden)
-                    hidden.insert(catId);
-                }
-                Application::getInstance().saveSettings();
-            });
-
-        contentBox->addView(toggle);
-    }
-
-    // If no categories with manga
-    if (categories.empty()) {
-        auto* label = new brls::Label();
-        label->setText("No categories found");
-        label->setFontSize(16);
-        contentBox->addView(label);
-    }
-
-    scrollView->setContentView(contentBox);
-    dialog->addView(scrollView);
-
-    dialog->addButton("Done", [dialog, this]() {
-        dialog->close();
-        // Update the cell detail text
+    // Create close button early so it can be captured in lambdas
+    auto* closeBtn = new brls::Button();
+    closeBtn->setText("Done");
+    closeBtn->setMarginTop(15);
+    closeBtn->registerClickAction([this](brls::View* view) {
+        // Update the cell detail text before closing
         if (m_hideCategoriesCell) {
             size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
             m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
         }
+        brls::Application::popActivity();
+        return true;
     });
+    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
 
-    dialog->open();
+    // Scrollable category list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
+
+    auto* catList = new brls::Box();
+    catList->setAxis(brls::Axis::COLUMN);
+
+    // Filter to only show categories with manga
+    std::vector<Category> visibleCategories;
+    for (const auto& cat : categories) {
+        if (cat.mangaCount > 0) {
+            visibleCategories.push_back(cat);
+        }
+    }
+
+    for (size_t i = 0; i < visibleCategories.size(); i++) {
+        const auto& cat = visibleCategories[i];
+
+        auto* catRow = new brls::Box();
+        catRow->setAxis(brls::Axis::ROW);
+        catRow->setAlignItems(brls::AlignItems::CENTER);
+        catRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+        catRow->setPadding(10, 12, 10, 12);
+        catRow->setMarginBottom(6);
+        catRow->setCornerRadius(8);
+        catRow->setFocusable(true);
+
+        // Category is visible if NOT in hidden list
+        bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
+        catRow->setBackgroundColor(isVisible ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+
+        // Category info box
+        auto* infoBox = new brls::Box();
+        infoBox->setAxis(brls::Axis::COLUMN);
+        infoBox->setGrow(1.0f);
+
+        auto* nameLabel = new brls::Label();
+        std::string displayName = cat.name;
+        if (displayName.length() > 20) {
+            displayName = displayName.substr(0, 18) + "..";
+        }
+        nameLabel->setText(displayName);
+        nameLabel->setFontSize(16);
+        infoBox->addView(nameLabel);
+
+        auto* countLabel = new brls::Label();
+        countLabel->setText(std::to_string(cat.mangaCount) + " manga");
+        countLabel->setFontSize(12);
+        countLabel->setTextColor(nvgRGB(120, 120, 120));
+        infoBox->addView(countLabel);
+
+        catRow->addView(infoBox);
+
+        // Status indicator
+        auto* statusLabel = new brls::Label();
+        statusLabel->setText(isVisible ? "Visible" : "Hidden");
+        statusLabel->setFontSize(14);
+        statusLabel->setTextColor(isVisible ? nvgRGB(100, 200, 150) : nvgRGB(150, 100, 100));
+        statusLabel->setMarginRight(10);
+        catRow->addView(statusLabel);
+
+        // Store category id for toggle action
+        int catId = cat.id;
+
+        // Click to toggle visibility
+        catRow->registerClickAction([catRow, catId, statusLabel](brls::View* view) {
+            auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
+            bool currentlyHidden = (hidden.find(catId) != hidden.end());
+
+            if (currentlyHidden) {
+                // Show category (remove from hidden)
+                hidden.erase(catId);
+                catRow->setBackgroundColor(nvgRGBA(0, 100, 80, 200));
+                statusLabel->setText("Visible");
+                statusLabel->setTextColor(nvgRGB(100, 200, 150));
+            } else {
+                // Hide category (add to hidden)
+                hidden.insert(catId);
+                catRow->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
+                statusLabel->setText("Hidden");
+                statusLabel->setTextColor(nvgRGB(150, 100, 100));
+            }
+
+            Application::getInstance().saveSettings();
+            return true;
+        });
+        catRow->addGestureRecognizer(new brls::TapGestureRecognizer(catRow));
+
+        catList->addView(catRow);
+    }
+
+    // If no categories with manga
+    if (visibleCategories.empty()) {
+        auto* label = new brls::Label();
+        label->setText("No categories with manga found");
+        label->setFontSize(16);
+        label->setMarginTop(20);
+        catList->addView(label);
+    }
+
+    scrollView->setContentView(catList);
+    dialogBox->addView(scrollView);
+
+    // Add close button to dialog
+    dialogBox->addView(closeBtn);
+
+    // Register circle button to close the dialog
+    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
+        // Update the cell detail text before closing
+        if (m_hideCategoriesCell) {
+            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
+            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
+        }
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
+    // Set up navigation
+    auto& catChildren = catList->getChildren();
+    if (!catChildren.empty()) {
+        // Last category row -> down goes to closeBtn
+        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
+        // closeBtn -> up goes to last category
+        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+    }
+
+    // Push as new activity
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
 
 void SettingsTab::createReaderSection() {
