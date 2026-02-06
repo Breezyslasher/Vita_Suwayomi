@@ -768,6 +768,15 @@ ExtensionsTab::ExtensionsTab() {
         return true;
     });
 
+    // Circle button (B) - exit search if active, otherwise default behavior
+    this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (m_isSearchActive) {
+            brls::sync([this]() { hideSearchResults(); });
+            return true;  // Consume the event
+        }
+        return false;  // Let default behavior handle it (go back)
+    });
+
     // RecyclerFrame for main list
     m_recycler = new brls::RecyclerFrame();
     m_recycler->setGrow(1.0f);
