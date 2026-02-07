@@ -130,6 +130,13 @@ void RecyclingGrid::setupGrid() {
             cell->setHeight(m_cellHeight);
             cell->setMarginRight(m_cellMargin);
 
+            // Apply display mode to cell
+            if (m_listMode) {
+                cell->setListMode(true);
+            } else if (m_compactMode) {
+                cell->setCompactMode(true);
+            }
+
             // Load first rows immediately, defer rest for staggered loading
             if (row < maxInitialRows) {
                 cell->setManga(m_items[i]);

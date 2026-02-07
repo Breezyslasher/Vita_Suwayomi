@@ -102,6 +102,16 @@ MangaItemCell::MangaItemCell() {
 
     this->addView(m_titleOverlay);
 
+    // List mode info box (horizontal layout - initially hidden)
+    m_listInfoBox = new brls::Box();
+    m_listInfoBox->setAxis(brls::Axis::COLUMN);
+    m_listInfoBox->setJustifyContent(brls::JustifyContent::CENTER);
+    m_listInfoBox->setAlignItems(brls::AlignItems::FLEX_START);
+    m_listInfoBox->setPadding(8, 12, 8, 12);
+    m_listInfoBox->setGrow(1.0f);
+    m_listInfoBox->setVisibility(brls::Visibility::GONE);
+    this->addView(m_listInfoBox);
+
     // Unread badge - top right corner
     m_unreadBadge = new brls::Label();
     m_unreadBadge->setFontSize(10);
@@ -324,6 +334,177 @@ void MangaItemCell::updateFocusInfo(bool focused) {
         // Restore truncated title
         m_titleLabel->setText(m_originalTitle);
         m_descriptionLabel->setVisibility(brls::Visibility::GONE);
+    }
+}
+
+void MangaItemCell::setCompactMode(bool compact) {
+    if (m_compactMode == compact) return;
+    m_compactMode = compact;
+    m_listMode = false;  // Mutually exclusive
+    applyDisplayMode();
+}
+
+void MangaItemCell::setListMode(bool listMode) {
+    if (m_listMode == listMode) return;
+    m_listMode = listMode;
+    m_compactMode = false;  // Mutually exclusive
+    applyDisplayMode();
+}
+
+void MangaItemCell::applyDisplayMode() {
+    if (m_listMode) {
+        // List mode: horizontal layout with cover on left, info on right
+        this->setAxis(brls::Axis::ROW);
+        this->setJustifyContent(brls::JustifyContent::FLEX_START);
+        this->setAlignItems(brls::AlignItems::STRETCH);
+
+        // Thumbnail - fixed size on left (no absolute positioning)
+        if (m_thumbnailImage) {
+            m_thumbnailImage->setPositionType(brls::PositionType::RELATIVE);
+            m_thumbnailImage->setWidth(55);
+            m_thumbnailImage->setHeight(brls::View::AUTO);
+            m_thumbnailImage->setGrow(0.0f);
+            m_thumbnailImage->setCornerRadius(4);
+        }
+
+        // Hide grid title overlay
+        if (m_titleOverlay) {
+            m_titleOverlay->setVisibility(brls::Visibility::GONE);
+        }
+
+        // Show and populate list info box
+        if (m_listInfoBox) {
+            m_listInfoBox->setVisibility(brls::Visibility::VISIBLE);
+            m_listInfoBox->clearViews();
+
+            // Title for list mode
+            auto* listTitle = new brls::Label();
+            listTitle->setFontSize(14);
+            listTitle->setTextColor(nvgRGB(255, 255, 255));
+            std::string title = m_manga.title;
+            if (title.length() > 45) {
+                title = title.substr(0, 43) + "..";
+            }
+            listTitle->setText(title);
+            m_listInfoBox->addView(listTitle);
+
+            // Subtitle for list mode
+            auto* listSubtitle = new brls::Label();
+            listSubtitle->setFontSize(11);
+            listSubtitle->setTextColor(nvgRGB(180, 180, 180));
+            std::string subtitle;
+            if (!m_manga.author.empty()) {
+                subtitle = m_manga.author;
+            }
+            if (m_manga.chapterCount > 0) {
+                if (!subtitle.empty()) subtitle += " • ";
+                subtitle += std::to_string(m_manga.chapterCount) + " ch";
+            }
+            if (m_manga.unreadCount > 0) {
+                if (!subtitle.empty()) subtitle += " • ";
+                subtitle += std::to_string(m_manga.unreadCount) + " unread";
+            }
+            if (!subtitle.empty()) {
+                listSubtitle->setText(subtitle);
+                m_listInfoBox->addView(listSubtitle);
+            }
+        }
+
+        // Position badges for list mode
+        if (m_unreadBadge) {
+            m_unreadBadge->setPositionTop(4);
+            m_unreadBadge->setPositionRight(8);
+        }
+        if (m_downloadBadge) {
+            m_downloadBadge->setPositionTop(4);
+            m_downloadBadge->setPositionLeft(4);
+        }
+        if (m_newBadge) {
+            m_newBadge->setPositionTop(22);
+            m_newBadge->setPositionLeft(4);
+        }
+
+    } else if (m_compactMode) {
+        // Compact mode: grid with covers only (no title overlay)
+        this->setAxis(brls::Axis::COLUMN);
+        this->setJustifyContent(brls::JustifyContent::FLEX_END);
+        this->setAlignItems(brls::AlignItems::STRETCH);
+
+        // Thumbnail - fill the cell
+        if (m_thumbnailImage) {
+            m_thumbnailImage->setPositionType(brls::PositionType::ABSOLUTE);
+            m_thumbnailImage->setPositionTop(0);
+            m_thumbnailImage->setPositionLeft(0);
+            m_thumbnailImage->setPositionRight(0);
+            m_thumbnailImage->setPositionBottom(0);
+            m_thumbnailImage->setGrow(1.0f);
+            m_thumbnailImage->setCornerRadius(8);
+        }
+
+        // Hide title overlay in compact mode
+        if (m_titleOverlay) {
+            m_titleOverlay->setVisibility(brls::Visibility::GONE);
+        }
+
+        // Hide list info box
+        if (m_listInfoBox) {
+            m_listInfoBox->setVisibility(brls::Visibility::GONE);
+        }
+
+        // Restore badge positions for grid mode
+        if (m_unreadBadge) {
+            m_unreadBadge->setPositionTop(0);
+            m_unreadBadge->setPositionRight(0);
+        }
+        if (m_downloadBadge) {
+            m_downloadBadge->setPositionTop(0);
+            m_downloadBadge->setPositionLeft(0);
+        }
+        if (m_newBadge) {
+            m_newBadge->setPositionTop(26);
+            m_newBadge->setPositionLeft(0);
+        }
+
+    } else {
+        // Normal grid mode: cover + title overlay
+        this->setAxis(brls::Axis::COLUMN);
+        this->setJustifyContent(brls::JustifyContent::FLEX_END);
+        this->setAlignItems(brls::AlignItems::STRETCH);
+
+        // Thumbnail - fill the cell
+        if (m_thumbnailImage) {
+            m_thumbnailImage->setPositionType(brls::PositionType::ABSOLUTE);
+            m_thumbnailImage->setPositionTop(0);
+            m_thumbnailImage->setPositionLeft(0);
+            m_thumbnailImage->setPositionRight(0);
+            m_thumbnailImage->setPositionBottom(0);
+            m_thumbnailImage->setGrow(1.0f);
+            m_thumbnailImage->setCornerRadius(8);
+        }
+
+        // Show title overlay
+        if (m_titleOverlay) {
+            m_titleOverlay->setVisibility(brls::Visibility::VISIBLE);
+        }
+
+        // Hide list info box
+        if (m_listInfoBox) {
+            m_listInfoBox->setVisibility(brls::Visibility::GONE);
+        }
+
+        // Restore badge positions for grid mode
+        if (m_unreadBadge) {
+            m_unreadBadge->setPositionTop(0);
+            m_unreadBadge->setPositionRight(0);
+        }
+        if (m_downloadBadge) {
+            m_downloadBadge->setPositionTop(0);
+            m_downloadBadge->setPositionLeft(0);
+        }
+        if (m_newBadge) {
+            m_newBadge->setPositionTop(26);
+            m_newBadge->setPositionLeft(0);
+        }
     }
 }
 
