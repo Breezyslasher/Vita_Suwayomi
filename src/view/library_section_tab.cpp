@@ -412,7 +412,7 @@ void LibrarySectionTab::createCategoryTabs() {
         }
         buttonNames.push_back(catName);
 
-        int textWidth = static_cast<int>(catName.length()) * 12 + 24;
+        int textWidth = static_cast<int>(catName.length()) * 14 + 24;
         if (textWidth < 60) textWidth = 60;
         if (textWidth > 280) textWidth = 280;
         buttonWidths.push_back(textWidth);
