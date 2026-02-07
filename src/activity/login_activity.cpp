@@ -71,6 +71,20 @@ void LoginActivity::onContentAvailable() {
         passwordLabel->addGestureRecognizer(new brls::TapGestureRecognizer(passwordLabel));
     }
 
+    // Auth mode selector
+    if (authModeLabel) {
+        authModeLabel->setText("Auth Mode: " + getAuthModeName(m_authMode));
+        authModeLabel->registerClickAction([this](brls::View* view) {
+            // Cycle through auth modes
+            int currentMode = static_cast<int>(m_authMode);
+            currentMode = (currentMode + 1) % 4;
+            m_authMode = static_cast<AuthMode>(currentMode);
+            authModeLabel->setText("Auth Mode: " + getAuthModeName(m_authMode));
+            return true;
+        });
+        authModeLabel->addGestureRecognizer(new brls::TapGestureRecognizer(authModeLabel));
+    }
+
     // Connect button
     if (loginButton) {
         loginButton->setText("Connect");
@@ -124,21 +138,60 @@ void LoginActivity::onConnectPressed() {
 
     SuwayomiClient& client = SuwayomiClient::getInstance();
 
-    // Set authentication if provided
-    if (!m_username.empty() && !m_password.empty()) {
-        client.setAuthCredentials(m_username, m_password);
+    // Set auth mode first
+    client.setAuthMode(m_authMode);
+
+    // Set server URL
+    client.setServerUrl(m_serverUrl);
+
+    bool connected = false;
+
+    // Handle authentication based on mode
+    if (m_authMode == AuthMode::NONE) {
+        // No auth required, just test connection
+        connected = client.connectToServer(m_serverUrl);
+    } else if (m_authMode == AuthMode::BASIC_AUTH) {
+        // Basic auth - set credentials and connect
+        if (!m_username.empty() && !m_password.empty()) {
+            client.setAuthCredentials(m_username, m_password);
+        }
+        connected = client.connectToServer(m_serverUrl);
+    } else {
+        // JWT-based auth (simple_login or ui_login)
+        // First try to connect to server
+        if (client.connectToServer(m_serverUrl)) {
+            // Then attempt login if credentials are provided
+            if (!m_username.empty() && !m_password.empty()) {
+                if (statusLabel) statusLabel->setText("Authenticating...");
+                connected = client.login(m_username, m_password);
+                if (!connected) {
+                    if (statusLabel) statusLabel->setText("Authentication failed - check credentials");
+                    return;
+                }
+            } else {
+                // No credentials provided for JWT auth
+                if (statusLabel) statusLabel->setText("Username and password required for this auth mode");
+                return;
+            }
+        } else {
+            if (statusLabel) statusLabel->setText("Cannot reach server - check URL");
+            return;
+        }
     }
 
-    // Try to connect
-    if (client.connectToServer(m_serverUrl)) {
+    if (connected) {
         // Save server URL and auth credentials
         Application::getInstance().setServerUrl(m_serverUrl);
         Application::getInstance().setAuthCredentials(m_username, m_password);
         Application::getInstance().setConnected(true);
 
-        // Also save to localServerUrl in settings for proper persistence
-        // This ensures the URL is available even after restart
+        // Save auth mode and tokens
         AppSettings& settings = Application::getInstance().getSettings();
+        settings.authMode = static_cast<int>(m_authMode);
+        settings.accessToken = client.getAccessToken();
+        settings.refreshToken = client.getRefreshToken();
+
+        // Also save to localServerUrl in settings for proper persistence
         if (settings.localServerUrl.empty()) {
             settings.localServerUrl = m_serverUrl;
         }
@@ -152,6 +205,21 @@ void LoginActivity::onConnectPressed() {
         });
     } else {
         if (statusLabel) statusLabel->setText("Connection failed - check URL and server");
+    }
+}
+
+std::string LoginActivity::getAuthModeName(AuthMode mode) {
+    switch (mode) {
+        case AuthMode::NONE:
+            return "None";
+        case AuthMode::BASIC_AUTH:
+            return "Basic Auth";
+        case AuthMode::SIMPLE_LOGIN:
+            return "Simple Login";
+        case AuthMode::UI_LOGIN:
+            return "UI Login (JWT)";
+        default:
+            return "Unknown";
     }
 }
 

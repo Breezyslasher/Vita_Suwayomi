@@ -103,6 +103,24 @@ std::string SuwayomiClient::executeGraphQL(const std::string& query, const std::
     return response.body;
 }
 
+// Helper for Base64 encoding
+static std::string base64Encode(const std::string& input) {
+    static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    int val = 0, valb = -6;
+    for (unsigned char c : input) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (encoded.size() % 4) encoded.push_back('=');
+    return encoded;
+}
+
 // Helper to create an HTTP client with authentication headers
 vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
     vitasuwayomi::HttpClient http;
@@ -114,24 +132,43 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
         http.setTimeout(timeout);
     }
 
-    // Add basic auth if credentials are set
-    if (!m_authUsername.empty() && !m_authPassword.empty()) {
-        // Base64 encode username:password for Basic Auth
-        std::string credentials = m_authUsername + ":" + m_authPassword;
-        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        std::string encoded;
-        int val = 0, valb = -6;
-        for (unsigned char c : credentials) {
-            val = (val << 8) + c;
-            valb += 8;
-            while (valb >= 0) {
-                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                valb -= 6;
+    // Apply authentication based on auth mode
+    switch (m_authMode) {
+        case AuthMode::NONE:
+            // No authentication
+            break;
+
+        case AuthMode::BASIC_AUTH:
+            // HTTP Basic Access Authentication
+            if (!m_authUsername.empty() && !m_authPassword.empty()) {
+                std::string credentials = m_authUsername + ":" + m_authPassword;
+                http.setDefaultHeader("Authorization", "Basic " + base64Encode(credentials));
             }
-        }
-        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-        while (encoded.size() % 4) encoded.push_back('=');
-        http.setDefaultHeader("Authorization", "Basic " + encoded);
+            break;
+
+        case AuthMode::SIMPLE_LOGIN:
+            // Cookie-based session - use JWT token if available, otherwise try basic auth
+            if (!m_accessToken.empty()) {
+                http.setDefaultHeader("Authorization", "Bearer " + m_accessToken);
+            } else if (!m_sessionCookie.empty()) {
+                http.setDefaultHeader("Cookie", m_sessionCookie);
+            } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
+                // Fallback to basic auth for initial requests
+                std::string credentials = m_authUsername + ":" + m_authPassword;
+                http.setDefaultHeader("Authorization", "Basic " + base64Encode(credentials));
+            }
+            break;
+
+        case AuthMode::UI_LOGIN:
+            // JWT-based authentication
+            if (!m_accessToken.empty()) {
+                http.setDefaultHeader("Authorization", "Bearer " + m_accessToken);
+            } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
+                // Fallback to basic auth if no token yet
+                std::string credentials = m_authUsername + ":" + m_authPassword;
+                http.setDefaultHeader("Authorization", "Basic " + base64Encode(credentials));
+            }
+            break;
     }
 
     return http;
@@ -1679,9 +1716,223 @@ void SuwayomiClient::setAuthCredentials(const std::string& username, const std::
 void SuwayomiClient::clearAuth() {
     m_authUsername.clear();
     m_authPassword.clear();
+    m_accessToken.clear();
+    m_refreshToken.clear();
+    m_sessionCookie.clear();
 
     // Also clear image loader credentials
     ImageLoader::setAuthCredentials("", "");
+}
+
+void SuwayomiClient::setTokens(const std::string& accessToken, const std::string& refreshToken) {
+    m_accessToken = accessToken;
+    m_refreshToken = refreshToken;
+    // Also update ImageLoader with access token
+    if (!accessToken.empty()) {
+        ImageLoader::setAccessToken(accessToken);
+    }
+}
+
+void SuwayomiClient::setSessionCookie(const std::string& cookie) {
+    m_sessionCookie = cookie;
+}
+
+bool SuwayomiClient::isAuthenticated() const {
+    switch (m_authMode) {
+        case AuthMode::NONE:
+            return true;  // No auth required
+        case AuthMode::BASIC_AUTH:
+            return !m_authUsername.empty() && !m_authPassword.empty();
+        case AuthMode::SIMPLE_LOGIN:
+            return !m_sessionCookie.empty();
+        case AuthMode::UI_LOGIN:
+            return !m_accessToken.empty();
+        default:
+            return false;
+    }
+}
+
+void SuwayomiClient::logout() {
+    m_accessToken.clear();
+    m_refreshToken.clear();
+    m_sessionCookie.clear();
+    // Keep username/password for re-login if needed
+}
+
+bool SuwayomiClient::login(const std::string& username, const std::string& password) {
+    m_authUsername = username;
+    m_authPassword = password;
+
+    switch (m_authMode) {
+        case AuthMode::NONE:
+            // No login needed
+            return true;
+
+        case AuthMode::BASIC_AUTH:
+            // Basic auth just stores credentials, no login request needed
+            // Test connection to verify credentials work
+            ImageLoader::setAuthCredentials(username, password);
+            return testConnection();
+
+        case AuthMode::SIMPLE_LOGIN:
+        case AuthMode::UI_LOGIN:
+            // Both use the same GraphQL login mutation
+            // The difference is in how the tokens/cookies are used
+            ImageLoader::setAuthCredentials(username, password);
+            return loginGraphQL(username, password);
+
+        default:
+            return false;
+    }
+}
+
+bool SuwayomiClient::loginGraphQL(const std::string& username, const std::string& password) {
+    // GraphQL login mutation
+    const char* query = R"(
+        mutation Login($username: String!, $password: String!) {
+            login(input: { username: $username, password: $password }) {
+                accessToken
+                refreshToken
+            }
+        }
+    )";
+
+    // Build variables
+    std::string variables = "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}";
+
+    // Execute GraphQL - need to use a fresh client without auth for login
+    vitasuwayomi::HttpClient http;
+    http.setDefaultHeader("Accept", "application/json");
+    http.setDefaultHeader("Content-Type", "application/json");
+
+    int timeout = Application::getInstance().getSettings().connectionTimeout;
+    if (timeout > 0) {
+        http.setTimeout(timeout);
+    }
+
+    std::string url = buildGraphQLUrl();
+
+    // Escape special characters in variables for JSON
+    std::string escapedQuery = query;
+    // Remove newlines for JSON
+    size_t pos = 0;
+    while ((pos = escapedQuery.find('\n', pos)) != std::string::npos) {
+        escapedQuery.replace(pos, 1, "\\n");
+        pos += 2;
+    }
+
+    std::string body = "{\"query\":\"" + escapedQuery + "\",\"variables\":" + variables + "}";
+
+    vitasuwayomi::HttpResponse response = http.post(url, body);
+
+    if (!response.success) {
+        brls::Logger::error("Login request failed: {}", response.error);
+        return false;
+    }
+
+    // Check for errors in response
+    if (response.body.find("\"errors\"") != std::string::npos) {
+        std::string errorMsg = extractJsonValue(response.body, "message");
+        brls::Logger::error("Login failed: {}", errorMsg.empty() ? "Unknown error" : errorMsg);
+        return false;
+    }
+
+    // Extract tokens from response
+    std::string data = extractJsonObject(response.body, "data");
+    std::string loginData = extractJsonObject(data, "login");
+
+    m_accessToken = extractJsonValue(loginData, "accessToken");
+    m_refreshToken = extractJsonValue(loginData, "refreshToken");
+
+    if (m_accessToken.empty()) {
+        brls::Logger::error("Login failed: No access token received");
+        return false;
+    }
+
+    brls::Logger::info("Login successful, received tokens");
+
+    // Update image loader with auth info and access token
+    ImageLoader::setAuthCredentials(username, password);
+    ImageLoader::setAccessToken(m_accessToken);
+
+    return true;
+}
+
+bool SuwayomiClient::refreshToken() {
+    if (m_authMode != AuthMode::UI_LOGIN && m_authMode != AuthMode::SIMPLE_LOGIN) {
+        return true;  // No token refresh needed for basic auth or no auth
+    }
+
+    if (m_refreshToken.empty()) {
+        brls::Logger::error("Cannot refresh token: No refresh token available");
+        return false;
+    }
+
+    return refreshTokenGraphQL();
+}
+
+bool SuwayomiClient::refreshTokenGraphQL() {
+    const char* query = R"(
+        mutation RefreshToken($refreshToken: String!) {
+            refresh(input: { refreshToken: $refreshToken }) {
+                accessToken
+            }
+        }
+    )";
+
+    std::string variables = "{\"refreshToken\":\"" + m_refreshToken + "\"}";
+
+    // Use fresh HTTP client without existing auth
+    vitasuwayomi::HttpClient http;
+    http.setDefaultHeader("Accept", "application/json");
+    http.setDefaultHeader("Content-Type", "application/json");
+
+    int timeout = Application::getInstance().getSettings().connectionTimeout;
+    if (timeout > 0) {
+        http.setTimeout(timeout);
+    }
+
+    std::string url = buildGraphQLUrl();
+
+    std::string escapedQuery = query;
+    size_t pos = 0;
+    while ((pos = escapedQuery.find('\n', pos)) != std::string::npos) {
+        escapedQuery.replace(pos, 1, "\\n");
+        pos += 2;
+    }
+
+    std::string body = "{\"query\":\"" + escapedQuery + "\",\"variables\":" + variables + "}";
+
+    vitasuwayomi::HttpResponse response = http.post(url, body);
+
+    if (!response.success) {
+        brls::Logger::error("Token refresh request failed: {}", response.error);
+        return false;
+    }
+
+    // Check for errors
+    if (response.body.find("\"errors\"") != std::string::npos) {
+        std::string errorMsg = extractJsonValue(response.body, "message");
+        brls::Logger::error("Token refresh failed: {}", errorMsg.empty() ? "Unknown error" : errorMsg);
+        return false;
+    }
+
+    // Extract new access token
+    std::string data = extractJsonObject(response.body, "data");
+    std::string refreshData = extractJsonObject(data, "refresh");
+
+    std::string newAccessToken = extractJsonValue(refreshData, "accessToken");
+
+    if (newAccessToken.empty()) {
+        brls::Logger::error("Token refresh failed: No access token received");
+        return false;
+    }
+
+    m_accessToken = newAccessToken;
+    ImageLoader::setAccessToken(m_accessToken);
+    brls::Logger::info("Token refreshed successfully");
+
+    return true;
 }
 
 // ============================================================================

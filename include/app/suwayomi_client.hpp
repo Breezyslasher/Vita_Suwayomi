@@ -36,6 +36,14 @@ enum class DownloadState {
     ERROR
 };
 
+// Authentication mode (matches Suwayomi-Server authMode)
+enum class AuthMode {
+    NONE = 0,        // No authentication
+    BASIC_AUTH = 1,  // HTTP Basic Access Authentication
+    SIMPLE_LOGIN = 2, // Cookie-based session (custom login page)
+    UI_LOGIN = 3     // JWT-based authentication (v2.1.1894+)
+};
+
 // Reading history item
 struct ReadingHistoryItem {
     int chapterId = 0;
@@ -511,6 +519,26 @@ public:
     void setAuthCredentials(const std::string& username, const std::string& password);
     void clearAuth();
 
+    // Authentication mode
+    void setAuthMode(AuthMode mode) { m_authMode = mode; }
+    AuthMode getAuthMode() const { return m_authMode; }
+
+    // Login methods for different auth modes
+    // Returns true if login successful, false otherwise
+    bool login(const std::string& username, const std::string& password);
+    bool refreshToken();  // Refresh JWT access token using refresh token
+    bool isAuthenticated() const;
+    void logout();
+
+    // Get stored tokens (for persistence)
+    const std::string& getAccessToken() const { return m_accessToken; }
+    const std::string& getRefreshToken() const { return m_refreshToken; }
+    const std::string& getSessionCookie() const { return m_sessionCookie; }
+
+    // Set tokens (for restoring from persistence)
+    void setTokens(const std::string& accessToken, const std::string& refreshToken);
+    void setSessionCookie(const std::string& cookie);
+
     // Check if client is connected
     bool isConnected() const { return !m_serverUrl.empty() && m_isConnected; }
 
@@ -651,6 +679,16 @@ private:
     std::string m_authPassword;
     bool m_isConnected = false;
     ServerInfo m_serverInfo;
+
+    // Authentication state
+    AuthMode m_authMode = AuthMode::NONE;
+    std::string m_accessToken;       // JWT access token (ui_login)
+    std::string m_refreshToken;      // JWT refresh token (ui_login)
+    std::string m_sessionCookie;     // Session cookie (simple_login)
+
+    // Login GraphQL methods
+    bool loginGraphQL(const std::string& username, const std::string& password);
+    bool refreshTokenGraphQL();
 };
 
 } // namespace vitasuwayomi

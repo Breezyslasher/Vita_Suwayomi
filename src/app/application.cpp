@@ -613,11 +613,23 @@ bool Application::loadSettings() {
     // Load auth credentials (stored separately for security)
     m_authUsername = extractString("authUsername");
     m_authPassword = extractString("authPassword");
+    m_settings.authMode = extractInt("authMode");
+    m_settings.accessToken = extractString("accessToken");
+    m_settings.refreshToken = extractString("refreshToken");
 
-    // Apply auth credentials to SuwayomiClient if we have them
+    // Apply auth credentials and mode to SuwayomiClient
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    client.setAuthMode(static_cast<AuthMode>(m_settings.authMode));
+
     if (!m_authUsername.empty() && !m_authPassword.empty()) {
-        SuwayomiClient::getInstance().setAuthCredentials(m_authUsername, m_authPassword);
+        client.setAuthCredentials(m_authUsername, m_authPassword);
         brls::Logger::info("Restored auth credentials for user: {}", m_authUsername);
+    }
+
+    // Restore tokens for JWT-based auth
+    if (!m_settings.accessToken.empty() || !m_settings.refreshToken.empty()) {
+        client.setTokens(m_settings.accessToken, m_settings.refreshToken);
+        brls::Logger::info("Restored auth tokens");
     }
 
     brls::Logger::info("Settings loaded successfully");
@@ -639,6 +651,9 @@ bool Application::saveSettings() {
     // Auth credentials (stored for persistence)
     json += "  \"authUsername\": \"" + m_authUsername + "\",\n";
     json += "  \"authPassword\": \"" + m_authPassword + "\",\n";
+    json += "  \"authMode\": " + std::to_string(m_settings.authMode) + ",\n";
+    json += "  \"accessToken\": \"" + m_settings.accessToken + "\",\n";
+    json += "  \"refreshToken\": \"" + m_settings.refreshToken + "\",\n";
 
     // UI settings
     json += "  \"theme\": " + std::to_string(static_cast<int>(m_settings.theme)) + ",\n";

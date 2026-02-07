@@ -158,6 +158,12 @@ struct AppSettings {
     bool autoSwitchOnFailure = false;  // Auto-switch to alternate URL if connection fails
     int connectionTimeout = 30;        // seconds
 
+    // Authentication Settings
+    // authMode: 0=none, 1=basic_auth, 2=simple_login, 3=ui_login
+    int authMode = 0;
+    std::string accessToken;           // JWT access token (for ui_login/simple_login)
+    std::string refreshToken;          // JWT refresh token (for ui_login/simple_login)
+
     // Display Settings
     bool showUnreadBadge = true;
     bool showDownloadedBadge = true;
