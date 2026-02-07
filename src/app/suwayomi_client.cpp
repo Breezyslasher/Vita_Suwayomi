@@ -55,6 +55,10 @@ std::string SuwayomiClient::buildGraphQLUrl() {
 }
 
 std::string SuwayomiClient::executeGraphQL(const std::string& query, const std::string& variables) {
+    return executeGraphQLInternal(query, variables, true);
+}
+
+std::string SuwayomiClient::executeGraphQLInternal(const std::string& query, const std::string& variables, bool allowRetry) {
     vitasuwayomi::HttpClient http = createHttpClient();
     http.setDefaultHeader("Content-Type", "application/json");
 
@@ -86,6 +90,18 @@ std::string SuwayomiClient::executeGraphQL(const std::string& query, const std::
     brls::Logger::debug("GraphQL request to {}: {}", url, body.substr(0, 200));
 
     vitasuwayomi::HttpResponse response = http.post(url, body);
+
+    // Handle 401 Unauthorized - try to refresh token and retry
+    if (response.statusCode == 401 && allowRetry) {
+        brls::Logger::info("Got 401 Unauthorized, attempting token refresh...");
+        if (refreshToken()) {
+            brls::Logger::info("Token refreshed successfully, retrying request");
+            return executeGraphQLInternal(query, variables, false);  // Retry once
+        } else {
+            brls::Logger::warning("Token refresh failed");
+            return "";
+        }
+    }
 
     if (!response.success || response.statusCode != 200) {
         brls::Logger::warning("GraphQL request failed: {} ({})", response.error, response.statusCode);

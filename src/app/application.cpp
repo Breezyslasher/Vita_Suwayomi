@@ -71,15 +71,31 @@ void Application::run() {
     // Check if we have saved server connection
     if (!m_serverUrl.empty()) {
         brls::Logger::info("Restoring saved connection...");
-        SuwayomiClient::getInstance().setServerUrl(m_serverUrl);
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        client.setServerUrl(m_serverUrl);
+
+        // If we have JWT tokens, try to refresh them first (they may be expired)
+        AuthMode authMode = client.getAuthMode();
+        if ((authMode == AuthMode::SIMPLE_LOGIN || authMode == AuthMode::UI_LOGIN) &&
+            !client.getRefreshToken().empty()) {
+            brls::Logger::info("Attempting to refresh JWT tokens...");
+            if (client.refreshToken()) {
+                brls::Logger::info("Token refresh successful");
+                // Update stored tokens
+                m_settings.accessToken = client.getAccessToken();
+                m_settings.refreshToken = client.getRefreshToken();
+            } else {
+                brls::Logger::warning("Token refresh failed, will try basic connection test");
+            }
+        }
 
         // Test connection before proceeding
-        if (SuwayomiClient::getInstance().testConnection()) {
+        if (client.testConnection()) {
             brls::Logger::info("Connection restored successfully");
             m_isConnected = true;
             pushMainActivity();
         } else {
-            // Connection failed - could be offline
+            // Connection failed - could be offline or auth expired
             // Check if we have downloads, if so go to main activity (offline mode)
             auto downloads = DownloadsManager::getInstance().getDownloads();
             if (!downloads.empty()) {

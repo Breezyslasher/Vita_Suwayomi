@@ -562,6 +562,9 @@ private:
     // GraphQL query executor - returns response body or empty string on failure
     std::string executeGraphQL(const std::string& query, const std::string& variables = "");
 
+    // Internal GraphQL executor with retry control (for token refresh)
+    std::string executeGraphQLInternal(const std::string& query, const std::string& variables, bool allowRetry);
+
     // GraphQL-based implementations (primary API)
     bool fetchSourceListGraphQL(std::vector<Source>& sources);
     bool fetchPopularMangaGraphQL(int64_t sourceId, int page, std::vector<Manga>& manga, bool& hasNextPage);
