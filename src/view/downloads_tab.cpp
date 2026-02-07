@@ -75,11 +75,13 @@ DownloadsTab::DownloadsTab() {
     auto titleBox = new brls::Box();
     titleBox->setAxis(brls::Axis::ROW);
     titleBox->setAlignItems(brls::AlignItems::CENTER);
+    titleBox->setShrink(0);  // Prevent title from shrinking
     headerRow->addView(titleBox);
 
     auto header = new brls::Label();
     header->setText("Downloads");
     header->setFontSize(24);
+    header->setSingleLine(true);  // Prevent text wrapping
     titleBox->addView(header);
 
     // Download status label (shows "Downloading" / "Stopped")
@@ -98,18 +100,18 @@ DownloadsTab::DownloadsTab() {
 
     // Start/Stop toggle button
     m_startStopBtn = new brls::Button();
-    m_startStopBtn->setWidth(100);
-    m_startStopBtn->setHeight(36);
-    m_startStopBtn->setCornerRadius(8);
-    m_startStopBtn->setMarginRight(10);
-    m_startStopBtn->setPaddingLeft(12);
-    m_startStopBtn->setPaddingRight(12);
+    m_startStopBtn->setWidth(70);
+    m_startStopBtn->setHeight(32);
+    m_startStopBtn->setCornerRadius(6);
+    m_startStopBtn->setMarginRight(8);
+    m_startStopBtn->setPaddingLeft(8);
+    m_startStopBtn->setPaddingRight(8);
     m_startStopBtn->setJustifyContent(brls::JustifyContent::CENTER);
     m_startStopBtn->setAlignItems(brls::AlignItems::CENTER);
 
     m_startStopLabel = new brls::Label();
     m_startStopLabel->setText("Start");
-    m_startStopLabel->setFontSize(14);
+    m_startStopLabel->setFontSize(12);
     m_startStopBtn->addView(m_startStopLabel);
 
     // Start/Stop button tap action - toggle downloader state
@@ -133,18 +135,18 @@ DownloadsTab::DownloadsTab() {
 
     // Stop/Pause button (stop current downloads)
     auto* pauseBtn = new brls::Button();
-    pauseBtn->setWidth(100);
-    pauseBtn->setHeight(36);
-    pauseBtn->setCornerRadius(8);
-    pauseBtn->setMarginRight(10);
-    pauseBtn->setPaddingLeft(12);
-    pauseBtn->setPaddingRight(12);
+    pauseBtn->setWidth(60);
+    pauseBtn->setHeight(32);
+    pauseBtn->setCornerRadius(6);
+    pauseBtn->setMarginRight(8);
+    pauseBtn->setPaddingLeft(8);
+    pauseBtn->setPaddingRight(8);
     pauseBtn->setJustifyContent(brls::JustifyContent::CENTER);
     pauseBtn->setAlignItems(brls::AlignItems::CENTER);
 
     auto* pauseLabel = new brls::Label();
     pauseLabel->setText("Stop");
-    pauseLabel->setFontSize(14);
+    pauseLabel->setFontSize(12);
     pauseBtn->addView(pauseLabel);
 
     // Pause button tap action - stop server downloads
@@ -155,25 +157,25 @@ DownloadsTab::DownloadsTab() {
 
     // Clear button
     auto* clearBtn = new brls::Button();
-    clearBtn->setWidth(110);
-    clearBtn->setHeight(36);
-    clearBtn->setCornerRadius(8);
-    clearBtn->setPaddingLeft(12);
-    clearBtn->setPaddingRight(12);
+    clearBtn->setWidth(70);
+    clearBtn->setHeight(32);
+    clearBtn->setCornerRadius(6);
+    clearBtn->setPaddingLeft(8);
+    clearBtn->setPaddingRight(8);
     clearBtn->setJustifyContent(brls::JustifyContent::CENTER);
     clearBtn->setAlignItems(brls::AlignItems::CENTER);
 
     m_clearIcon = new brls::Image();
-    m_clearIcon->setWidth(20);
-    m_clearIcon->setHeight(20);
+    m_clearIcon->setWidth(16);
+    m_clearIcon->setHeight(16);
     m_clearIcon->setScalingType(brls::ImageScalingType::FIT);
     m_clearIcon->setImageFromFile("app0:resources/icons/delete.png");
-    m_clearIcon->setMarginRight(6);
+    m_clearIcon->setMarginRight(4);
     clearBtn->addView(m_clearIcon);
 
     auto* clearLabel = new brls::Label();
     clearLabel->setText("Clear");
-    clearLabel->setFontSize(14);
+    clearLabel->setFontSize(12);
     clearBtn->addView(clearLabel);
 
     // Clear button tap action - clear server download queue
@@ -268,9 +270,8 @@ void DownloadsTab::refreshQueue() {
 
         if (!client.fetchDownloadQueue(queue)) {
             brls::sync([this]() {
-                // Show empty state on fetch failure
-                m_queueEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
-                m_queueScroll->setVisibility(brls::Visibility::GONE);
+                // Hide entire section on fetch failure or empty
+                m_queueSection->setVisibility(brls::Visibility::GONE);
                 m_downloadStatusLabel->setText("");
                 m_lastServerQueue.clear();
                 // Clear container
@@ -338,10 +339,9 @@ void DownloadsTab::refreshQueue() {
                 }
             }
 
-            // Show empty state if queue is empty
+            // Hide entire section if queue is empty
             if (queue.empty()) {
-                m_queueEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
-                m_queueScroll->setVisibility(brls::Visibility::GONE);
+                m_queueSection->setVisibility(brls::Visibility::GONE);
                 // Clear container if there were items before
                 while (m_queueContainer->getChildren().size() > 0) {
                     m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
@@ -349,7 +349,8 @@ void DownloadsTab::refreshQueue() {
                 return;
             }
 
-            // Hide empty label and show scroll when there are items
+            // Show section and scroll when there are items
+            m_queueSection->setVisibility(brls::Visibility::VISIBLE);
             m_queueEmptyLabel->setVisibility(brls::Visibility::GONE);
             m_queueScroll->setVisibility(brls::Visibility::VISIBLE);
 
@@ -612,10 +613,9 @@ void DownloadsTab::refreshLocalDownloads() {
     // Update cache
     m_lastLocalQueue = newCache;
 
-    // Show empty state if no active downloads
+    // Hide entire section if no active downloads
     if (newCache.empty()) {
-        m_localEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
-        m_localScroll->setVisibility(brls::Visibility::GONE);
+        m_localSection->setVisibility(brls::Visibility::GONE);
         // Clear container if there were items before
         while (m_localContainer->getChildren().size() > 0) {
             m_localContainer->removeView(m_localContainer->getChildren()[0]);
@@ -623,7 +623,8 @@ void DownloadsTab::refreshLocalDownloads() {
         return;
     }
 
-    // Hide empty label and show scroll when there are items
+    // Show section and scroll when there are items
+    m_localSection->setVisibility(brls::Visibility::VISIBLE);
     m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
     m_localScroll->setVisibility(brls::Visibility::VISIBLE);
 
