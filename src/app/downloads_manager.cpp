@@ -1118,25 +1118,30 @@ std::string DownloadsManager::downloadCoverImage(int mangaId, const std::string&
     // Download cover using authenticated HTTP client (same approach as ImageLoader)
     HttpClient http;
 
-    // Add authentication if credentials are set
-    const std::string& authUser = ImageLoader::getAuthUsername();
-    const std::string& authPass = ImageLoader::getAuthPassword();
-    if (!authUser.empty() && !authPass.empty()) {
-        std::string credentials = authUser + ":" + authPass;
-        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        std::string encoded;
-        int val = 0, valb = -6;
-        for (unsigned char c : credentials) {
-            val = (val << 8) + c;
-            valb += 8;
-            while (valb >= 0) {
-                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                valb -= 6;
+    // Add authentication - prefer Bearer token if available, fall back to Basic auth
+    const std::string& accessToken = ImageLoader::getAccessToken();
+    if (!accessToken.empty()) {
+        http.setDefaultHeader("Authorization", "Bearer " + accessToken);
+    } else {
+        const std::string& authUser = ImageLoader::getAuthUsername();
+        const std::string& authPass = ImageLoader::getAuthPassword();
+        if (!authUser.empty() && !authPass.empty()) {
+            std::string credentials = authUser + ":" + authPass;
+            static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            std::string encoded;
+            int val = 0, valb = -6;
+            for (unsigned char c : credentials) {
+                val = (val << 8) + c;
+                valb += 8;
+                while (valb >= 0) {
+                    encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                    valb -= 6;
+                }
             }
+            if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+            while (encoded.size() % 4) encoded.push_back('=');
+            http.setDefaultHeader("Authorization", "Basic " + encoded);
         }
-        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-        while (encoded.size() % 4) encoded.push_back('=');
-        http.setDefaultHeader("Authorization", "Basic " + encoded);
     }
 
     HttpResponse resp = http.get(coverUrl);
@@ -1433,25 +1438,30 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
     // Create HTTP client with authentication (same approach as ImageLoader)
     HttpClient http;
 
-    // Add authentication if credentials are set
-    const std::string& authUser = ImageLoader::getAuthUsername();
-    const std::string& authPass = ImageLoader::getAuthPassword();
-    if (!authUser.empty() && !authPass.empty()) {
-        std::string credentials = authUser + ":" + authPass;
-        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        std::string encoded;
-        int val = 0, valb = -6;
-        for (unsigned char c : credentials) {
-            val = (val << 8) + c;
-            valb += 8;
-            while (valb >= 0) {
-                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                valb -= 6;
+    // Add authentication - prefer Bearer token if available, fall back to Basic auth
+    const std::string& accessToken = ImageLoader::getAccessToken();
+    if (!accessToken.empty()) {
+        http.setDefaultHeader("Authorization", "Bearer " + accessToken);
+    } else {
+        const std::string& authUser = ImageLoader::getAuthUsername();
+        const std::string& authPass = ImageLoader::getAuthPassword();
+        if (!authUser.empty() && !authPass.empty()) {
+            std::string credentials = authUser + ":" + authPass;
+            static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            std::string encoded;
+            int val = 0, valb = -6;
+            for (unsigned char c : credentials) {
+                val = (val << 8) + c;
+                valb += 8;
+                while (valb >= 0) {
+                    encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                    valb -= 6;
+                }
             }
+            if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+            while (encoded.size() % 4) encoded.push_back('=');
+            http.setDefaultHeader("Authorization", "Basic " + encoded);
         }
-        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-        while (encoded.size() % 4) encoded.push_back('=');
-        http.setDefaultHeader("Authorization", "Basic " + encoded);
     }
 
     // Stream directly to file - no memory buffering (like NOBORU does)
