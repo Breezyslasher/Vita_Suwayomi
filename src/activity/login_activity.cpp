@@ -135,6 +135,14 @@ void LoginActivity::onConnectPressed() {
         Application::getInstance().setServerUrl(m_serverUrl);
         Application::getInstance().setAuthCredentials(m_username, m_password);
         Application::getInstance().setConnected(true);
+
+        // Also save to localServerUrl in settings for proper persistence
+        // This ensures the URL is available even after restart
+        AppSettings& settings = Application::getInstance().getSettings();
+        if (settings.localServerUrl.empty()) {
+            settings.localServerUrl = m_serverUrl;
+        }
+
         Application::getInstance().saveSettings();
 
         if (statusLabel) statusLabel->setText("Connected!");

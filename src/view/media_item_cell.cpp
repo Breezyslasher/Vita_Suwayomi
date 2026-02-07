@@ -61,39 +61,46 @@ MangaItemCell::MangaItemCell() {
     this->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
     this->setClipsToBounds(true);
 
-    // Cover image - fills the card
+    // Cover image - fills the card (no fixed size, uses parent dimensions)
     m_thumbnailImage = new brls::Image();
-    m_thumbnailImage->setSize(brls::Size(140, 180));
     m_thumbnailImage->setScalingType(brls::ImageScalingType::FILL);
     m_thumbnailImage->setCornerRadius(8);
+    m_thumbnailImage->setGrow(1.0f);  // Fill available space
+    m_thumbnailImage->setPositionType(brls::PositionType::ABSOLUTE);
+    m_thumbnailImage->setPositionTop(0);
+    m_thumbnailImage->setPositionLeft(0);
+    m_thumbnailImage->setPositionRight(0);
+    m_thumbnailImage->setPositionBottom(0);
     this->addView(m_thumbnailImage);
 
     // Bottom overlay for title (gradient effect simulated with solid color)
-    auto* titleOverlay = new brls::Box();
-    titleOverlay->setAxis(brls::Axis::COLUMN);
-    titleOverlay->setJustifyContent(brls::JustifyContent::FLEX_END);
-    titleOverlay->setAlignItems(brls::AlignItems::STRETCH);
-    titleOverlay->setBackgroundColor(nvgRGBA(0, 0, 0, 180));
-    titleOverlay->setPadding(6, 6, 4, 6);
-    titleOverlay->setPositionType(brls::PositionType::ABSOLUTE);
-    titleOverlay->setPositionBottom(0);
-    titleOverlay->setWidth(140);
+    // Use percentage width to match parent
+    m_titleOverlay = new brls::Box();
+    m_titleOverlay->setAxis(brls::Axis::COLUMN);
+    m_titleOverlay->setJustifyContent(brls::JustifyContent::FLEX_END);
+    m_titleOverlay->setAlignItems(brls::AlignItems::STRETCH);
+    m_titleOverlay->setBackgroundColor(nvgRGBA(0, 0, 0, 180));
+    m_titleOverlay->setPadding(6, 6, 4, 6);
+    m_titleOverlay->setPositionType(brls::PositionType::ABSOLUTE);
+    m_titleOverlay->setPositionBottom(0);
+    m_titleOverlay->setPositionLeft(0);
+    m_titleOverlay->setPositionRight(0);  // Stretch to fill width
 
     // Title label - at bottom of card
     m_titleLabel = new brls::Label();
     m_titleLabel->setFontSize(11);
     m_titleLabel->setTextColor(nvgRGB(255, 255, 255));
     m_titleLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
-    titleOverlay->addView(m_titleLabel);
+    m_titleOverlay->addView(m_titleLabel);
 
     // Subtitle (author) - smaller, below title
     m_subtitleLabel = new brls::Label();
     m_subtitleLabel->setFontSize(9);
     m_subtitleLabel->setTextColor(nvgRGB(180, 180, 180));
     m_subtitleLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
-    titleOverlay->addView(m_subtitleLabel);
+    m_titleOverlay->addView(m_subtitleLabel);
 
-    this->addView(titleOverlay);
+    this->addView(m_titleOverlay);
 
     // Unread badge - top right corner
     m_unreadBadge = new brls::Label();

@@ -41,6 +41,7 @@ private:
     bool m_thumbnailLoaded = false;
 
     brls::Image* m_thumbnailImage = nullptr;
+    brls::Box* m_titleOverlay = nullptr;  // Title overlay container
     brls::Label* m_titleLabel = nullptr;
     brls::Label* m_subtitleLabel = nullptr;
     brls::Label* m_descriptionLabel = nullptr;

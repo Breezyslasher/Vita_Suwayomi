@@ -317,6 +317,14 @@ bool Application::loadSettings() {
         m_settings.webtoonSidePadding = 0;
     }
 
+    // Load auto-chapter advance settings
+    m_settings.autoChapterAdvance = extractBool("autoChapterAdvance", false);
+    m_settings.autoAdvanceDelay = extractInt("autoAdvanceDelay");
+    if (m_settings.autoAdvanceDelay < 0 || m_settings.autoAdvanceDelay > 10) {
+        m_settings.autoAdvanceDelay = 3;
+    }
+    m_settings.showAdvanceCountdown = extractBool("showAdvanceCountdown", true);
+
     // Load library settings
     m_settings.updateOnStart = extractBool("updateOnStart", false);
     m_settings.updateOnlyWifi = extractBool("updateOnlyWifi", true);
@@ -398,6 +406,85 @@ bool Application::loadSettings() {
     // Load display settings
     m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
     m_settings.showDownloadedBadge = extractBool("showDownloadedBadge", true);
+
+    // Load library grid customization
+    int displayModeInt = extractInt("libraryDisplayMode");
+    if (displayModeInt >= 0 && displayModeInt <= 2) {
+        m_settings.libraryDisplayMode = static_cast<LibraryDisplayMode>(displayModeInt);
+    }
+    int gridSizeInt = extractInt("libraryGridSize");
+    if (gridSizeInt >= 0 && gridSizeInt <= 2) {
+        m_settings.libraryGridSize = static_cast<LibraryGridSize>(gridSizeInt);
+    }
+    brls::Logger::info("loadSettings: libraryDisplayMode={}, libraryGridSize={}",
+                       displayModeInt, gridSizeInt);
+
+    // Load search history settings
+    m_settings.maxSearchHistory = extractInt("maxSearchHistory");
+    if (m_settings.maxSearchHistory <= 0 || m_settings.maxSearchHistory > 100) {
+        m_settings.maxSearchHistory = 20;
+    }
+    m_settings.searchHistory.clear();
+    size_t histArrayPos = content.find("\"searchHistory\"");
+    if (histArrayPos != std::string::npos) {
+        size_t arrayStart = content.find('[', histArrayPos);
+        size_t arrayEnd = content.find(']', arrayStart);
+        if (arrayStart != std::string::npos && arrayEnd != std::string::npos) {
+            std::string histArray = content.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
+            // Parse search queries
+            size_t pos = 0;
+            while (pos < histArray.length()) {
+                size_t quoteStart = histArray.find('"', pos);
+                if (quoteStart == std::string::npos) break;
+                // Find end quote, accounting for escaped quotes
+                size_t quoteEnd = quoteStart + 1;
+                while (quoteEnd < histArray.length()) {
+                    if (histArray[quoteEnd] == '"' && histArray[quoteEnd - 1] != '\\') break;
+                    quoteEnd++;
+                }
+                if (quoteEnd >= histArray.length()) break;
+                std::string query = histArray.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+                // Unescape
+                std::string unescaped;
+                for (size_t i = 0; i < query.length(); i++) {
+                    if (query[i] == '\\' && i + 1 < query.length()) {
+                        if (query[i + 1] == '"' || query[i + 1] == '\\') {
+                            unescaped += query[i + 1];
+                            i++;
+                            continue;
+                        }
+                    }
+                    unescaped += query[i];
+                }
+                if (!unescaped.empty()) {
+                    m_settings.searchHistory.push_back(unescaped);
+                }
+                pos = quoteEnd + 1;
+            }
+        }
+    }
+    brls::Logger::debug("Loaded {} search history entries", m_settings.searchHistory.size());
+
+    // Load reading statistics
+    m_settings.totalChaptersRead = extractInt("totalChaptersRead");
+    m_settings.totalMangaCompleted = extractInt("totalMangaCompleted");
+    m_settings.currentStreak = extractInt("currentStreak");
+    m_settings.longestStreak = extractInt("longestStreak");
+
+    // Extract int64 for timestamps - need special handling
+    auto extractInt64 = [&content](const std::string& key) -> int64_t {
+        std::string search = "\"" + key + "\":";
+        size_t pos = content.find(search);
+        if (pos == std::string::npos) return 0;
+        pos += search.length();
+        while (pos < content.length() && (content[pos] == ' ' || content[pos] == '\t')) pos++;
+        size_t end = content.find_first_of(",}\n", pos);
+        if (end == std::string::npos) return 0;
+        return std::stoll(content.substr(pos, end - pos));
+    };
+
+    m_settings.lastReadDate = extractInt64("lastReadDate");
+    m_settings.totalReadingTime = extractInt64("totalReadingTime");
 
     // Load per-manga reader settings
     m_settings.mangaReaderSettings.clear();
@@ -572,6 +659,11 @@ bool Application::saveSettings() {
     json += "  \"webtoonDetection\": " + std::string(m_settings.webtoonDetection ? "true" : "false") + ",\n";
     json += "  \"webtoonSidePadding\": " + std::to_string(m_settings.webtoonSidePadding) + ",\n";
 
+    // Auto-chapter advance settings
+    json += "  \"autoChapterAdvance\": " + std::string(m_settings.autoChapterAdvance ? "true" : "false") + ",\n";
+    json += "  \"autoAdvanceDelay\": " + std::to_string(m_settings.autoAdvanceDelay) + ",\n";
+    json += "  \"showAdvanceCountdown\": " + std::string(m_settings.showAdvanceCountdown ? "true" : "false") + ",\n";
+
     // Library settings
     json += "  \"updateOnStart\": " + std::string(m_settings.updateOnStart ? "true" : "false") + ",\n";
     json += "  \"updateOnlyWifi\": " + std::string(m_settings.updateOnlyWifi ? "true" : "false") + ",\n";
@@ -622,6 +714,38 @@ bool Application::saveSettings() {
     // Display settings
     json += "  \"showUnreadBadge\": " + std::string(m_settings.showUnreadBadge ? "true" : "false") + ",\n";
     json += "  \"showDownloadedBadge\": " + std::string(m_settings.showDownloadedBadge ? "true" : "false") + ",\n";
+
+    // Library grid customization
+    json += "  \"libraryDisplayMode\": " + std::to_string(static_cast<int>(m_settings.libraryDisplayMode)) + ",\n";
+    json += "  \"libraryGridSize\": " + std::to_string(static_cast<int>(m_settings.libraryGridSize)) + ",\n";
+
+    // Search history
+    json += "  \"maxSearchHistory\": " + std::to_string(m_settings.maxSearchHistory) + ",\n";
+    json += "  \"searchHistory\": [";
+    {
+        bool first = true;
+        for (const auto& query : m_settings.searchHistory) {
+            if (!first) json += ", ";
+            first = false;
+            // Escape any quotes in search queries
+            std::string escaped;
+            for (char c : query) {
+                if (c == '"') escaped += "\\\"";
+                else if (c == '\\') escaped += "\\\\";
+                else escaped += c;
+            }
+            json += "\"" + escaped + "\"";
+        }
+    }
+    json += "],\n";
+
+    // Reading statistics
+    json += "  \"totalChaptersRead\": " + std::to_string(m_settings.totalChaptersRead) + ",\n";
+    json += "  \"totalMangaCompleted\": " + std::to_string(m_settings.totalMangaCompleted) + ",\n";
+    json += "  \"currentStreak\": " + std::to_string(m_settings.currentStreak) + ",\n";
+    json += "  \"longestStreak\": " + std::to_string(m_settings.longestStreak) + ",\n";
+    json += "  \"lastReadDate\": " + std::to_string(m_settings.lastReadDate) + ",\n";
+    json += "  \"totalReadingTime\": " + std::to_string(m_settings.totalReadingTime) + ",\n";
 
     // Per-manga reader settings
     json += "  \"mangaReaderSettings\": {";
