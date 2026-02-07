@@ -353,18 +353,14 @@ void MangaItemCell::setListMode(bool listMode) {
 
 void MangaItemCell::applyDisplayMode() {
     if (m_listMode) {
-        // List mode: horizontal layout with cover on left, info on right
+        // List mode: simple horizontal layout with title only (no cover)
         this->setAxis(brls::Axis::ROW);
         this->setJustifyContent(brls::JustifyContent::FLEX_START);
-        this->setAlignItems(brls::AlignItems::STRETCH);
+        this->setAlignItems(brls::AlignItems::CENTER);
 
-        // Thumbnail - fixed size on left (no absolute positioning)
+        // Hide thumbnail in list mode - titles only
         if (m_thumbnailImage) {
-            m_thumbnailImage->setPositionType(brls::PositionType::RELATIVE);
-            m_thumbnailImage->setWidth(55);
-            m_thumbnailImage->setHeight(brls::View::AUTO);
-            m_thumbnailImage->setGrow(0.0f);
-            m_thumbnailImage->setCornerRadius(4);
+            m_thumbnailImage->setVisibility(brls::Visibility::GONE);
         }
 
         // Hide grid title overlay
@@ -372,56 +368,38 @@ void MangaItemCell::applyDisplayMode() {
             m_titleOverlay->setVisibility(brls::Visibility::GONE);
         }
 
-        // Show and populate list info box
+        // Show and populate list info box with title only
         if (m_listInfoBox) {
             m_listInfoBox->setVisibility(brls::Visibility::VISIBLE);
             m_listInfoBox->clearViews();
+            m_listInfoBox->setPadding(8, 16, 8, 16);
+            m_listInfoBox->setJustifyContent(brls::JustifyContent::CENTER);
+            m_listInfoBox->setAlignItems(brls::AlignItems::FLEX_START);
 
-            // Title for list mode
+            // Title for list mode - show full title
             auto* listTitle = new brls::Label();
             listTitle->setFontSize(14);
             listTitle->setTextColor(nvgRGB(255, 255, 255));
             std::string title = m_manga.title;
-            if (title.length() > 45) {
-                title = title.substr(0, 43) + "..";
+            if (title.length() > 60) {
+                title = title.substr(0, 58) + "..";
             }
             listTitle->setText(title);
             m_listInfoBox->addView(listTitle);
-
-            // Subtitle for list mode
-            auto* listSubtitle = new brls::Label();
-            listSubtitle->setFontSize(11);
-            listSubtitle->setTextColor(nvgRGB(180, 180, 180));
-            std::string subtitle;
-            if (!m_manga.author.empty()) {
-                subtitle = m_manga.author;
-            }
-            if (m_manga.chapterCount > 0) {
-                if (!subtitle.empty()) subtitle += " • ";
-                subtitle += std::to_string(m_manga.chapterCount) + " ch";
-            }
-            if (m_manga.unreadCount > 0) {
-                if (!subtitle.empty()) subtitle += " • ";
-                subtitle += std::to_string(m_manga.unreadCount) + " unread";
-            }
-            if (!subtitle.empty()) {
-                listSubtitle->setText(subtitle);
-                m_listInfoBox->addView(listSubtitle);
-            }
         }
 
-        // Position badges for list mode
+        // Position badges for list mode (right side)
         if (m_unreadBadge) {
             m_unreadBadge->setPositionTop(4);
             m_unreadBadge->setPositionRight(8);
         }
         if (m_downloadBadge) {
             m_downloadBadge->setPositionTop(4);
-            m_downloadBadge->setPositionLeft(4);
+            m_downloadBadge->setPositionRight(40);  // Position next to unread badge
         }
         if (m_newBadge) {
-            m_newBadge->setPositionTop(22);
-            m_newBadge->setPositionLeft(4);
+            m_newBadge->setPositionTop(4);
+            m_newBadge->setPositionRight(72);  // Position next to download badge
         }
 
     } else if (m_compactMode) {
@@ -430,8 +408,9 @@ void MangaItemCell::applyDisplayMode() {
         this->setJustifyContent(brls::JustifyContent::FLEX_END);
         this->setAlignItems(brls::AlignItems::STRETCH);
 
-        // Thumbnail - fill the cell
+        // Thumbnail - fill the cell (restore visibility if coming from list mode)
         if (m_thumbnailImage) {
+            m_thumbnailImage->setVisibility(brls::Visibility::VISIBLE);
             m_thumbnailImage->setPositionType(brls::PositionType::ABSOLUTE);
             m_thumbnailImage->setPositionTop(0);
             m_thumbnailImage->setPositionLeft(0);
@@ -471,8 +450,9 @@ void MangaItemCell::applyDisplayMode() {
         this->setJustifyContent(brls::JustifyContent::FLEX_END);
         this->setAlignItems(brls::AlignItems::STRETCH);
 
-        // Thumbnail - fill the cell
+        // Thumbnail - fill the cell (restore visibility if coming from list mode)
         if (m_thumbnailImage) {
+            m_thumbnailImage->setVisibility(brls::Visibility::VISIBLE);
             m_thumbnailImage->setPositionType(brls::PositionType::ABSOLUTE);
             m_thumbnailImage->setPositionTop(0);
             m_thumbnailImage->setPositionLeft(0);
