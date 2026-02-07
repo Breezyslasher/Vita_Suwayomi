@@ -190,9 +190,9 @@ query GetInstalledExtensions {
     }
 }
 
-# Install Extension
+# Install Extension (from repository)
 mutation InstallExtension($pkgName: String!) {
-    installExternalExtension(input: { extensionId: $pkgName }) {
+    updateExtension(input: { id: $pkgName, patch: { install: true } }) {
         extension {
             pkgName
             isInstalled
@@ -200,9 +200,19 @@ mutation InstallExtension($pkgName: String!) {
     }
 }
 
+# Install External Extension (from APK file)
+# mutation InstallExternalExtension($file: Upload!) {
+#     installExternalExtension(input: { extensionFile: $file }) {
+#         extension {
+#             pkgName
+#             isInstalled
+#         }
+#     }
+# }
+
 # Update Extension
 mutation UpdateExtension($pkgName: String!) {
-    updateExtension(input: { id: $pkgName }) {
+    updateExtension(input: { id: $pkgName, patch: { update: true } }) {
         extension {
             pkgName
             isInstalled
@@ -213,7 +223,7 @@ mutation UpdateExtension($pkgName: String!) {
 
 # Uninstall Extension
 mutation UninstallExtension($pkgName: String!) {
-    uninstallExtension(input: { id: $pkgName }) {
+    updateExtension(input: { id: $pkgName, patch: { uninstall: true } }) {
         extension {
             pkgName
             isInstalled
@@ -646,8 +656,8 @@ mutation UpdateLibrary {
     }
 }
 
-# Trigger Category Update
-mutation UpdateCategory($categoryId: Int!) {
+# Trigger Category Update (update manga in a specific category)
+mutation UpdateCategoryManga($categoryId: Int!) {
     updateCategoryManga(input: { categories: [$categoryId] }) {
         updateStatus {
             isRunning
@@ -701,25 +711,22 @@ query GetReadingHistory($offset: Int!, $limit: Int!) {
 # GLOBAL SEARCH
 # ============================================================================
 
-# Global Search (across all sources)
-mutation GlobalSearch($query: String!) {
-    fetchSourcesGlobal(input: { query: $query }) {
-        results {
-            source {
-                id
-                name
-                displayName
-                lang
-            }
-            mangas {
-                id
-                title
-                thumbnailUrl
-                author
-            }
-        }
-    }
-}
+# NOTE: There is NO global search mutation in the Suwayomi API.
+# To search across multiple sources, you must call fetchSourceManga
+# with type: SEARCH for each source individually.
+
+# Search Single Source (use this for each source in a global search)
+# mutation SearchSource($sourceId: LongString!, $query: String!, $page: Int!) {
+#     fetchSourceManga(input: { source: $sourceId, type: SEARCH, query: $query, page: $page }) {
+#         mangas {
+#             id
+#             title
+#             thumbnailUrl
+#             author
+#         }
+#         hasNextPage
+#     }
+# }
 
 # ============================================================================
 # TRACKERS
@@ -770,9 +777,9 @@ query GetMangaTracking($mangaId: Int!) {
     }
 }
 
-# Search Tracker
-mutation SearchTracker($trackerId: Int!, $query: String!) {
-    trackSearch(input: { trackerId: $trackerId, query: $query }) {
+# Search Tracker (NOTE: This is a QUERY, not a mutation)
+query SearchTracker($trackerId: Int!, $query: String!) {
+    searchTracker(input: { trackerId: $trackerId, query: $query }) {
         trackSearches {
             remoteId
             title
