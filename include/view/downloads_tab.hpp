@@ -38,12 +38,14 @@ private:
     brls::Label* m_queueHeader = nullptr;
     brls::ScrollingFrame* m_queueScroll = nullptr;
     brls::Box* m_queueContainer = nullptr;
+    brls::Label* m_queueEmptyLabel = nullptr;
 
     // Local downloads section
     brls::Box* m_localSection = nullptr;
     brls::Label* m_localHeader = nullptr;
     brls::ScrollingFrame* m_localScroll = nullptr;
     brls::Box* m_localContainer = nullptr;
+    brls::Label* m_localEmptyLabel = nullptr;
 
     // Track currently focused X button icon (like book detail view)
     brls::Image* m_currentFocusedIcon = nullptr;

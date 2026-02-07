@@ -187,7 +187,6 @@ DownloadsTab::DownloadsTab() {
     m_queueSection->setAxis(brls::Axis::COLUMN);
     m_queueSection->setGrow(1.0f);
     m_queueSection->setMargins(0, 0, 15, 0);
-    m_queueSection->setVisibility(brls::Visibility::GONE);  // Hidden by default
     this->addView(m_queueSection);
 
     m_queueHeader = new brls::Label();
@@ -196,9 +195,18 @@ DownloadsTab::DownloadsTab() {
     m_queueHeader->setMargins(0, 0, 10, 0);
     m_queueSection->addView(m_queueHeader);
 
+    // Empty state label for server downloads
+    m_queueEmptyLabel = new brls::Label();
+    m_queueEmptyLabel->setText("No server downloads");
+    m_queueEmptyLabel->setFontSize(14);
+    m_queueEmptyLabel->setTextColor(nvgRGBA(120, 120, 120, 255));
+    m_queueEmptyLabel->setMargins(10, 0, 10, 0);
+    m_queueSection->addView(m_queueEmptyLabel);
+
     // Scrollable queue container
     m_queueScroll = new brls::ScrollingFrame();
     m_queueScroll->setGrow(1.0f);  // Allow proper scrolling
+    m_queueScroll->setVisibility(brls::Visibility::GONE);  // Hidden when empty
     m_queueSection->addView(m_queueScroll);
 
     m_queueContainer = new brls::Box();
@@ -209,7 +217,6 @@ DownloadsTab::DownloadsTab() {
     m_localSection = new brls::Box();
     m_localSection->setAxis(brls::Axis::COLUMN);
     m_localSection->setGrow(1.0f);
-    m_localSection->setVisibility(brls::Visibility::GONE);  // Hidden by default
     this->addView(m_localSection);
 
     m_localHeader = new brls::Label();
@@ -218,9 +225,18 @@ DownloadsTab::DownloadsTab() {
     m_localHeader->setMargins(0, 0, 10, 0);
     m_localSection->addView(m_localHeader);
 
+    // Empty state label for local downloads
+    m_localEmptyLabel = new brls::Label();
+    m_localEmptyLabel->setText("No local downloads");
+    m_localEmptyLabel->setFontSize(14);
+    m_localEmptyLabel->setTextColor(nvgRGBA(120, 120, 120, 255));
+    m_localEmptyLabel->setMargins(10, 0, 10, 0);
+    m_localSection->addView(m_localEmptyLabel);
+
     // Scrollable local container
     m_localScroll = new brls::ScrollingFrame();
     m_localScroll->setGrow(1.0f);
+    m_localScroll->setVisibility(brls::Visibility::GONE);  // Hidden when empty
     m_localSection->addView(m_localScroll);
 
     m_localContainer = new brls::Box();
@@ -252,10 +268,15 @@ void DownloadsTab::refreshQueue() {
 
         if (!client.fetchDownloadQueue(queue)) {
             brls::sync([this]() {
-                // Hide section on fetch failure (no active downloads to show)
-                m_queueSection->setVisibility(brls::Visibility::GONE);
+                // Show empty state on fetch failure
+                m_queueEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
+                m_queueScroll->setVisibility(brls::Visibility::GONE);
                 m_downloadStatusLabel->setText("");
                 m_lastServerQueue.clear();
+                // Clear container
+                while (m_queueContainer->getChildren().size() > 0) {
+                    m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+                }
             });
             return;
         }
@@ -317,9 +338,10 @@ void DownloadsTab::refreshQueue() {
                 }
             }
 
-            // Hide section if queue is empty
+            // Show empty state if queue is empty
             if (queue.empty()) {
-                m_queueSection->setVisibility(brls::Visibility::GONE);
+                m_queueEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
+                m_queueScroll->setVisibility(brls::Visibility::GONE);
                 // Clear container if there were items before
                 while (m_queueContainer->getChildren().size() > 0) {
                     m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
@@ -327,8 +349,9 @@ void DownloadsTab::refreshQueue() {
                 return;
             }
 
-            // Show section when there are items
-            m_queueSection->setVisibility(brls::Visibility::VISIBLE);
+            // Hide empty label and show scroll when there are items
+            m_queueEmptyLabel->setVisibility(brls::Visibility::GONE);
+            m_queueScroll->setVisibility(brls::Visibility::VISIBLE);
 
             // Skip UI rebuild if nothing changed
             if (!hasChanged) {
@@ -340,7 +363,10 @@ void DownloadsTab::refreshQueue() {
                 m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
             }
 
+            int queueIndex = 0;
+            int queueSize = static_cast<int>(queue.size());
             for (const auto& item : queue) {
+                int currentIndex = queueIndex++;  // Capture current position
                 auto row = new brls::Box();
                 row->setAxis(brls::Axis::ROW);
                 row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -463,6 +489,38 @@ void DownloadsTab::refreshQueue() {
                         return true;
                     });
 
+                // Move Up action (LB button) - move to earlier position in queue
+                row->registerAction("Move Up", brls::ControllerButton::BUTTON_LB,
+                    [this, chapterId, mangaId, currentIndex](brls::View* view) {
+                        if (currentIndex > 0) {
+                            asyncRun([this, chapterId, mangaId, currentIndex]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                if (client.reorderDownload(chapterId, mangaId, 0, currentIndex - 1)) {
+                                    brls::sync([this]() {
+                                        refresh();
+                                    });
+                                }
+                            });
+                        }
+                        return true;
+                    });
+
+                // Move Down action (RB button) - move to later position in queue
+                row->registerAction("Move Down", brls::ControllerButton::BUTTON_RB,
+                    [this, chapterId, mangaId, currentIndex, queueSize](brls::View* view) {
+                        if (currentIndex < queueSize - 1) {
+                            asyncRun([this, chapterId, mangaId, currentIndex]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                if (client.reorderDownload(chapterId, mangaId, 0, currentIndex + 1)) {
+                                    brls::sync([this]() {
+                                        refresh();
+                                    });
+                                }
+                            });
+                        }
+                        return true;
+                    });
+
                 // Add swipe gesture for removal - use shared_ptr to avoid static variables
                 auto swipeState = std::make_shared<SwipeState>();
                 row->addGestureRecognizer(new brls::PanGestureRecognizer(
@@ -554,9 +612,10 @@ void DownloadsTab::refreshLocalDownloads() {
     // Update cache
     m_lastLocalQueue = newCache;
 
-    // Hide section if no active downloads
+    // Show empty state if no active downloads
     if (newCache.empty()) {
-        m_localSection->setVisibility(brls::Visibility::GONE);
+        m_localEmptyLabel->setVisibility(brls::Visibility::VISIBLE);
+        m_localScroll->setVisibility(brls::Visibility::GONE);
         // Clear container if there were items before
         while (m_localContainer->getChildren().size() > 0) {
             m_localContainer->removeView(m_localContainer->getChildren()[0]);
@@ -564,8 +623,9 @@ void DownloadsTab::refreshLocalDownloads() {
         return;
     }
 
-    // Show section when there are active downloads
-    m_localSection->setVisibility(brls::Visibility::VISIBLE);
+    // Hide empty label and show scroll when there are items
+    m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
+    m_localScroll->setVisibility(brls::Visibility::VISIBLE);
 
     // Skip UI rebuild if nothing changed
     if (!hasChanged) {
