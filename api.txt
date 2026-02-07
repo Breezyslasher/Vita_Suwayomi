@@ -35,7 +35,7 @@ mutation Login($username: String!, $password: String!) {
 
 # Refresh Token Mutation
 mutation RefreshToken($refreshToken: String!) {
-    refresh(input: { refreshToken: $refreshToken }) {
+    refreshToken(input: { refreshToken: $refreshToken }) {
         accessToken
     }
 }

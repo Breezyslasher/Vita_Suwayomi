@@ -1890,7 +1890,7 @@ bool SuwayomiClient::refreshToken() {
 bool SuwayomiClient::refreshTokenGraphQL() {
     const char* query = R"(
         mutation RefreshToken($refreshToken: String!) {
-            refresh(input: { refreshToken: $refreshToken }) {
+            refreshToken(input: { refreshToken: $refreshToken }) {
                 accessToken
             }
         }
@@ -1935,7 +1935,7 @@ bool SuwayomiClient::refreshTokenGraphQL() {
 
     // Extract new access token
     std::string data = extractJsonObject(response.body, "data");
-    std::string refreshData = extractJsonObject(data, "refresh");
+    std::string refreshData = extractJsonObject(data, "refreshToken");
 
     std::string newAccessToken = extractJsonValue(refreshData, "accessToken");
 
