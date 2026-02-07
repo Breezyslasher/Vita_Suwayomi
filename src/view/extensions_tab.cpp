@@ -1165,41 +1165,66 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
 }
 
 void ExtensionsTab::uninstallExtension(const Extension& ext) {
-    brls::Logger::info("Uninstalling extension: {}", ext.name);
-    brls::Application::notify("Uninstalling " + ext.name + "...");
+    brls::Logger::info("Requesting uninstall for extension: {}", ext.name);
 
-    brls::async([this, ext]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
+    // Show confirmation dialog
+    auto* dialog = new brls::Dialog("Uninstall " + ext.name + "?");
 
-        bool success = false;
-        int maxRetries = 3;
-        for (int attempt = 1; attempt <= maxRetries && !success; attempt++) {
-            brls::Logger::info("Uninstalling extension {} (attempt {}/{})", ext.pkgName, attempt, maxRetries);
-            success = client.uninstallExtension(ext.pkgName);
-            if (!success && attempt < maxRetries) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            }
-        }
+    auto* content = new brls::Box();
+    content->setAxis(brls::Axis::COLUMN);
+    content->setPadding(15, 20, 15, 20);
 
-        if (success) {
-            for (auto& cachedExt : m_cachedExtensions) {
-                if (cachedExt.pkgName == ext.pkgName) {
-                    cachedExt.installed = false;
-                    cachedExt.hasUpdate = false;
-                    break;
+    auto* messageLabel = new brls::Label();
+    messageLabel->setText("Are you sure you want to uninstall this extension?\nAll sources from this extension will be removed.");
+    messageLabel->setFontSize(14);
+    messageLabel->setTextColor(nvgRGB(200, 200, 200));
+    content->addView(messageLabel);
+
+    dialog->addView(content);
+
+    dialog->addButton("Cancel", []() {
+        // Do nothing, just close
+    });
+
+    dialog->addButton("Uninstall", [this, ext]() {
+        brls::Logger::info("Uninstalling extension: {}", ext.name);
+        brls::Application::notify("Uninstalling " + ext.name + "...");
+
+        brls::async([this, ext]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+
+            bool success = false;
+            int maxRetries = 3;
+            for (int attempt = 1; attempt <= maxRetries && !success; attempt++) {
+                brls::Logger::info("Uninstalling extension {} (attempt {}/{})", ext.pkgName, attempt, maxRetries);
+                success = client.uninstallExtension(ext.pkgName);
+                if (!success && attempt < maxRetries) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 }
             }
 
-            brls::sync([this, ext]() {
-                brls::Application::notify(ext.name + " uninstalled");
-                refreshUIFromCache();
-            });
-        } else {
-            brls::sync([this, ext]() {
-                brls::Application::notify("Failed to uninstall " + ext.name);
-            });
-        }
+            if (success) {
+                for (auto& cachedExt : m_cachedExtensions) {
+                    if (cachedExt.pkgName == ext.pkgName) {
+                        cachedExt.installed = false;
+                        cachedExt.hasUpdate = false;
+                        break;
+                    }
+                }
+
+                brls::sync([this, ext]() {
+                    brls::Application::notify(ext.name + " uninstalled");
+                    refreshUIFromCache();
+                });
+            } else {
+                brls::sync([this, ext]() {
+                    brls::Application::notify("Failed to uninstall " + ext.name);
+                });
+            }
+        });
     });
+
+    dialog->open();
 }
 
 void ExtensionsTab::showSourceSettings(const Extension& ext) {
