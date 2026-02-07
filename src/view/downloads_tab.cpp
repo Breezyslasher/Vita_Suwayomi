@@ -98,10 +98,12 @@ DownloadsTab::DownloadsTab() {
 
     // Start/Stop toggle button
     m_startStopBtn = new brls::Button();
-    m_startStopBtn->setWidth(80);
+    m_startStopBtn->setWidth(100);
     m_startStopBtn->setHeight(36);
     m_startStopBtn->setCornerRadius(8);
     m_startStopBtn->setMarginRight(10);
+    m_startStopBtn->setPaddingLeft(12);
+    m_startStopBtn->setPaddingRight(12);
     m_startStopBtn->setJustifyContent(brls::JustifyContent::CENTER);
     m_startStopBtn->setAlignItems(brls::AlignItems::CENTER);
 
@@ -131,10 +133,12 @@ DownloadsTab::DownloadsTab() {
 
     // Stop/Pause button (stop current downloads)
     auto* pauseBtn = new brls::Button();
-    pauseBtn->setWidth(80);
+    pauseBtn->setWidth(100);
     pauseBtn->setHeight(36);
     pauseBtn->setCornerRadius(8);
     pauseBtn->setMarginRight(10);
+    pauseBtn->setPaddingLeft(12);
+    pauseBtn->setPaddingRight(12);
     pauseBtn->setJustifyContent(brls::JustifyContent::CENTER);
     pauseBtn->setAlignItems(brls::AlignItems::CENTER);
 
@@ -151,9 +155,11 @@ DownloadsTab::DownloadsTab() {
 
     // Clear button
     auto* clearBtn = new brls::Button();
-    clearBtn->setWidth(80);
+    clearBtn->setWidth(110);
     clearBtn->setHeight(36);
     clearBtn->setCornerRadius(8);
+    clearBtn->setPaddingLeft(12);
+    clearBtn->setPaddingRight(12);
     clearBtn->setJustifyContent(brls::JustifyContent::CENTER);
     clearBtn->setAlignItems(brls::AlignItems::CENTER);
 
@@ -239,50 +245,45 @@ void DownloadsTab::refresh() {
 }
 
 void DownloadsTab::refreshQueue() {
-    // Clear existing queue items
-    while (m_queueContainer->getChildren().size() > 0) {
-        m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
-    }
-
     // Fetch download queue and status from server
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<DownloadQueueItem> queue;
-        std::string downloaderState;
 
-        // Use GraphQL to fetch download queue and status
-        const char* graphqlQuery = R"(
-            query {
-                downloadStatus {
-                    state
-                    queue {
-                        chapter {
-                            id
-                            name
-                            chapterNumber
-                            pageCount
-                            manga {
-                                id
-                                title
-                            }
-                        }
-                        progress
-                        state
-                        tries
-                    }
-                }
-            }
-        )";
-
-        // Note: We need to manually execute the query to get the state
-        // For now, use the existing method and then fetch status separately
         if (!client.fetchDownloadQueue(queue)) {
             brls::sync([this]() {
                 // Hide section on fetch failure (no active downloads to show)
                 m_queueSection->setVisibility(brls::Visibility::GONE);
                 m_downloadStatusLabel->setText("");
+                m_lastServerQueue.clear();
             });
             return;
+        }
+
+        // Build new cache and check if anything changed
+        std::vector<CachedQueueItem> newCache;
+        newCache.reserve(queue.size());
+        for (const auto& item : queue) {
+            CachedQueueItem cached;
+            cached.chapterId = item.chapterId;
+            cached.mangaId = item.mangaId;
+            cached.downloadedPages = item.downloadedPages;
+            cached.state = static_cast<int>(item.state);
+            newCache.push_back(cached);
+        }
+
+        // Compare with last state - skip UI update if nothing changed
+        bool hasChanged = (newCache.size() != m_lastServerQueue.size());
+        if (!hasChanged) {
+            for (size_t i = 0; i < newCache.size(); i++) {
+                if (newCache[i].chapterId != m_lastServerQueue[i].chapterId ||
+                    newCache[i].mangaId != m_lastServerQueue[i].mangaId ||
+                    newCache[i].downloadedPages != m_lastServerQueue[i].downloadedPages ||
+                    newCache[i].state != m_lastServerQueue[i].state) {
+                    hasChanged = true;
+                    break;
+                }
+            }
         }
 
         // Determine downloader state based on queue items
@@ -294,7 +295,9 @@ void DownloadsTab::refreshQueue() {
             }
         }
 
-        brls::sync([this, queue, isDownloading]() {
+        brls::sync([this, queue, isDownloading, hasChanged, newCache]() {
+            // Always update the cache
+            m_lastServerQueue = newCache;
             // Update downloader state
             m_downloaderRunning = isDownloading;
             if (m_startStopLabel) {
@@ -314,19 +317,28 @@ void DownloadsTab::refreshQueue() {
                 }
             }
 
-            // Clear existing items again (in case of race)
-            while (m_queueContainer->getChildren().size() > 0) {
-                m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
-            }
-
             // Hide section if queue is empty
             if (queue.empty()) {
                 m_queueSection->setVisibility(brls::Visibility::GONE);
+                // Clear container if there were items before
+                while (m_queueContainer->getChildren().size() > 0) {
+                    m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+                }
                 return;
             }
 
             // Show section when there are items
             m_queueSection->setVisibility(brls::Visibility::VISIBLE);
+
+            // Skip UI rebuild if nothing changed
+            if (!hasChanged) {
+                return;
+            }
+
+            // Clear existing items and rebuild
+            while (m_queueContainer->getChildren().size() > 0) {
+                m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+            }
 
             for (const auto& item : queue) {
                 auto row = new brls::Box();
@@ -501,37 +513,69 @@ void DownloadsTab::refreshQueue() {
 }
 
 void DownloadsTab::refreshLocalDownloads() {
-    // Clear existing local items
-    while (m_localContainer->getChildren().size() > 0) {
-        m_localContainer->removeView(m_localContainer->getChildren()[0]);
-    }
-
     // Ensure manager is initialized and state is loaded
     DownloadsManager& mgr = DownloadsManager::getInstance();
     mgr.init();
 
     auto downloads = mgr.getDownloads();
-    brls::Logger::info("DownloadsTab: Found {} local downloads", downloads.size());
 
-    // Count chapters that are actively downloading or queued
-    int activeChapterCount = 0;
+    // Build new cache and count active chapters
+    std::vector<CachedLocalItem> newCache;
     for (const auto& manga : downloads) {
         for (const auto& chapter : manga.chapters) {
             if (chapter.state == LocalDownloadState::QUEUED ||
                 chapter.state == LocalDownloadState::DOWNLOADING) {
-                activeChapterCount++;
+                CachedLocalItem cached;
+                cached.mangaId = manga.mangaId;
+                cached.chapterIndex = chapter.chapterIndex;
+                cached.downloadedPages = chapter.downloadedPages;
+                cached.pageCount = chapter.pageCount;
+                cached.state = static_cast<int>(chapter.state);
+                newCache.push_back(cached);
             }
         }
     }
 
+    // Compare with last state - skip UI update if nothing changed
+    bool hasChanged = (newCache.size() != m_lastLocalQueue.size());
+    if (!hasChanged) {
+        for (size_t i = 0; i < newCache.size(); i++) {
+            if (newCache[i].mangaId != m_lastLocalQueue[i].mangaId ||
+                newCache[i].chapterIndex != m_lastLocalQueue[i].chapterIndex ||
+                newCache[i].downloadedPages != m_lastLocalQueue[i].downloadedPages ||
+                newCache[i].pageCount != m_lastLocalQueue[i].pageCount ||
+                newCache[i].state != m_lastLocalQueue[i].state) {
+                hasChanged = true;
+                break;
+            }
+        }
+    }
+
+    // Update cache
+    m_lastLocalQueue = newCache;
+
     // Hide section if no active downloads
-    if (activeChapterCount == 0) {
+    if (newCache.empty()) {
         m_localSection->setVisibility(brls::Visibility::GONE);
+        // Clear container if there were items before
+        while (m_localContainer->getChildren().size() > 0) {
+            m_localContainer->removeView(m_localContainer->getChildren()[0]);
+        }
         return;
     }
 
     // Show section when there are active downloads
     m_localSection->setVisibility(brls::Visibility::VISIBLE);
+
+    // Skip UI rebuild if nothing changed
+    if (!hasChanged) {
+        return;
+    }
+
+    // Clear existing local items and rebuild
+    while (m_localContainer->getChildren().size() > 0) {
+        m_localContainer->removeView(m_localContainer->getChildren()[0]);
+    }
 
     // Show each chapter as a queue item (like server downloads)
     for (const auto& manga : downloads) {

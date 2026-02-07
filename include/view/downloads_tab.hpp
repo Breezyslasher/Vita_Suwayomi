@@ -6,8 +6,14 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <vector>
+#include <string>
 
 namespace vitasuwayomi {
+
+// Forward declaration of DownloadQueueItem for caching
+struct DownloadQueueItem;
+struct LocalChapterDownload;
 
 class DownloadsTab : public brls::Box {
 public:
@@ -58,6 +64,24 @@ private:
     // Auto-refresh state
     bool m_autoRefreshEnabled = false;
     bool m_autoRefreshTimerActive = false;
+
+    // Cached queue state for smart refresh (only update when data changes)
+    struct CachedQueueItem {
+        int chapterId = 0;
+        int mangaId = 0;
+        int downloadedPages = 0;
+        int state = 0;  // DownloadState as int
+    };
+    std::vector<CachedQueueItem> m_lastServerQueue;
+
+    struct CachedLocalItem {
+        int mangaId = 0;
+        int chapterIndex = 0;
+        int downloadedPages = 0;
+        int pageCount = 0;
+        int state = 0;  // LocalDownloadState as int
+    };
+    std::vector<CachedLocalItem> m_lastLocalQueue;
 
     // Swipe gesture state (avoid static variables)
     struct SwipeState {
