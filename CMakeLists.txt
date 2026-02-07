@@ -54,16 +54,6 @@ else()
     message(FATAL_ERROR "Patch file not found: ${PSV_PLATFORM_PATCH}")
 endif()
 
-# Fix: psv_input.cpp uses SCE_CTRL_L2/R2 which don't exist on Vita (only L/R)
-set(PSV_INPUT_PATCH ${CMAKE_CURRENT_SOURCE_DIR}/patches/psv_input.cpp)
-set(PSV_INPUT_TARGET ${BOREALIS_LIBRARY}/lib/platforms/psv/psv_input.cpp)
-if(EXISTS ${PSV_INPUT_PATCH})
-    message(STATUS "Applying patch: psv_input.cpp")
-    configure_file(${PSV_INPUT_PATCH} ${PSV_INPUT_TARGET} COPYONLY)
-else()
-    message(FATAL_ERROR "Patch file not found: ${PSV_INPUT_PATCH}")
-endif()
-
 # Add Borealis library subdirectory
 add_subdirectory(${BOREALIS_LIBRARY})
 
