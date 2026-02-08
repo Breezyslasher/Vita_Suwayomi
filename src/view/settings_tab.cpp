@@ -1133,6 +1133,14 @@ void SettingsTab::showUrlInputDialog(const std::string& title, const std::string
     inputBox->setAxis(brls::Axis::COLUMN);
     inputBox->setPadding(16);
 
+    // Hint/description text
+    auto* hintLabel = new brls::Label();
+    hintLabel->setText(hint);
+    hintLabel->setFontSize(14);
+    hintLabel->setTextColor(nvgRGB(180, 180, 180));
+    hintLabel->setMarginBottom(12);
+    inputBox->addView(hintLabel);
+
     // Current value display
     auto* currentLabel = new brls::Label();
     currentLabel->setText(currentValue.empty() ? "(not set)" : currentValue);

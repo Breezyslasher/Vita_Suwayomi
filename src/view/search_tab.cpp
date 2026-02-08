@@ -458,6 +458,9 @@ void SearchTab::showSources() {
         sourcesByLang[source.lang].push_back(source);
     }
 
+    // Track first source row for focus transfer
+    brls::Box* firstSourceRow = nullptr;
+
     // Create source rows with icons
     for (const auto& [lang, sources] : sourcesByLang) {
         // Language header
@@ -486,6 +489,11 @@ void SearchTab::showSources() {
             sourceRow->setCornerRadius(8);
             sourceRow->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
             sourceRow->setFocusable(true);
+
+            // Track first source row for focus transfer
+            if (!firstSourceRow) {
+                firstSourceRow = sourceRow;
+            }
 
             // Source icon
             auto* sourceIcon = new brls::Image();
@@ -527,6 +535,11 @@ void SearchTab::showSources() {
     if (m_sourceScrollView->getParent() == nullptr) {
         this->addView(m_sourceScrollView);
     }
+
+    // Transfer focus to first source row
+    if (firstSourceRow) {
+        brls::Application::giveFocus(firstSourceRow);
+    }
 }
 
 void SearchTab::showSourceBrowser(const Source& source) {
@@ -551,6 +564,9 @@ void SearchTab::showSourceBrowser(const Source& source) {
         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
     }
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
+
+    // Transfer focus to Popular button immediately (source row is now hidden)
+    brls::Application::giveFocus(m_popularBtn);
 
     // Load popular manga by default
     m_browseMode = BrowseMode::POPULAR;
@@ -583,6 +599,11 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
                 m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+
+                // Transfer focus to content grid after loading
+                if (!manga.empty()) {
+                    brls::Application::giveFocus(m_contentGrid);
+                }
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch popular manga");
@@ -613,6 +634,11 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
                 m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+
+                // Transfer focus to content grid after loading
+                if (!manga.empty()) {
+                    brls::Application::giveFocus(m_contentGrid);
+                }
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch latest manga");
@@ -753,6 +779,11 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " results");
                 m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+
+                // Transfer focus to content grid after search results load
+                if (!manga.empty()) {
+                    brls::Application::giveFocus(m_contentGrid);
+                }
             });
         } else {
             brls::Logger::error("SearchTab: Failed to search manga");
@@ -812,6 +843,11 @@ void SearchTab::populateSearchResultsBySource() {
     // Add scroll view if not already added
     if (m_searchResultsScrollView->getParent() == nullptr) {
         this->addView(m_searchResultsScrollView);
+    }
+
+    // Transfer focus to search results
+    if (!m_resultsBySource.empty()) {
+        brls::Application::giveFocus(m_searchResultsScrollView);
     }
 }
 
