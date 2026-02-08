@@ -1041,6 +1041,12 @@ void SettingsTab::showLanguageFilterDialog() {
     closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
     dialogBox->addView(closeBtn);
 
+    // Register circle button to close the dialog
+    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
     // Push as new activity
     brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
@@ -1684,6 +1690,12 @@ void SettingsTab::showStorageManagement() {
     });
     storageBox->addView(backBtn);
 
+    // Register circle button to close the dialog
+    storageBox->registerAction("Back", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
     brls::Application::pushActivity(new brls::Activity(storageBox));
 }
 
@@ -1810,6 +1822,12 @@ void SettingsTab::showStatisticsView() {
     });
     backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
     statsBox->addView(backBtn);
+
+    // Register circle button to close the dialog
+    statsBox->registerAction("Back", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
 
     brls::Application::pushActivity(new brls::Activity(statsBox));
 }
