@@ -172,6 +172,7 @@ SearchTab::SearchTab() {
         showSources();
         return true;
     });
+    m_sourcesBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_sourcesBtn));
     m_modeBox->addView(m_sourcesBtn);
 
     // Popular button
@@ -185,6 +186,7 @@ SearchTab::SearchTab() {
         updateModeButtons();
         return true;
     });
+    m_popularBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_popularBtn));
     m_modeBox->addView(m_popularBtn);
 
     // Latest button
@@ -198,6 +200,7 @@ SearchTab::SearchTab() {
         updateModeButtons();
         return true;
     });
+    m_latestBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_latestBtn));
     m_modeBox->addView(m_latestBtn);
 
     // Filter button with tag icon
@@ -295,6 +298,8 @@ void SearchTab::loadSources() {
             brls::Logger::error("SearchTab: Failed to fetch sources");
             brls::sync([this]() {
                 m_resultsLabel->setText("Failed to load sources");
+                // Focus on Sources button so user can retry
+                brls::Application::giveFocus(m_sourcesBtn);
             });
         }
     });
@@ -626,6 +631,8 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
             brls::sync([this]() {
                 m_resultsLabel->setText("Failed to load popular manga");
                 m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
+                // Focus on Popular button so user can retry
+                brls::Application::giveFocus(m_popularBtn);
             });
         }
     });
@@ -664,6 +671,8 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
             brls::sync([this]() {
                 m_resultsLabel->setText("Failed to load latest manga");
                 m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
+                // Focus on Latest button so user can retry
+                brls::Application::giveFocus(m_latestBtn);
             });
         }
     });
@@ -819,6 +828,8 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
             brls::sync([this]() {
                 m_resultsLabel->setText("Search failed");
                 m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
+                // Focus on back button so user can go back
+                brls::Application::giveFocus(m_backBtn);
             });
         }
     });
