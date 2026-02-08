@@ -1,6 +1,13 @@
 /**
  * VitaSuwayomi - Source Browse Tab
  * Browse manga from a specific source (popular, latest, search)
+ *
+ * NOTE: This is a standalone view component for browsing a single source.
+ * Currently unused - SearchTab handles source browsing inline via showSourceBrowser().
+ * This component is kept as an alternative implementation that can be pushed
+ * as a separate activity if needed:
+ *   auto* browseTab = new SourceBrowseTab(source);
+ *   brls::Application::pushActivity(new brls::Activity(browseTab));
  */
 
 #pragma once
@@ -46,6 +53,7 @@ private:
     brls::Box* m_headerBox = nullptr;
     brls::Image* m_sourceIcon = nullptr;
     brls::Label* m_titleLabel = nullptr;
+    brls::Label* m_loadingLabel = nullptr;
     brls::Button* m_popularBtn = nullptr;
     brls::Button* m_latestBtn = nullptr;
     brls::Button* m_searchBtn = nullptr;

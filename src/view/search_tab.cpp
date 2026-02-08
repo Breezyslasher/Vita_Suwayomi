@@ -35,6 +35,49 @@ SearchTab::SearchTab() {
     m_titleLabel->setFontSize(28);
     m_headerBox->addView(m_titleLabel);
 
+    // Button container for history and search buttons
+    auto* buttonContainer = new brls::Box();
+    buttonContainer->setAxis(brls::Axis::ROW);
+    buttonContainer->setAlignItems(brls::AlignItems::FLEX_END);
+
+    // Search history button with Select icon above
+    auto* historyContainer = new brls::Box();
+    historyContainer->setAxis(brls::Axis::COLUMN);
+    historyContainer->setAlignItems(brls::AlignItems::CENTER);
+    historyContainer->setMarginRight(10);
+
+    auto* selectButtonIcon = new brls::Image();
+    selectButtonIcon->setWidth(48);
+    selectButtonIcon->setHeight(16);
+    selectButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    selectButtonIcon->setImageFromFile("app0:resources/images/select_button.png");
+    selectButtonIcon->setMarginBottom(2);
+    historyContainer->addView(selectButtonIcon);
+
+    auto* historyBtn = new brls::Button();
+    historyBtn->setWidth(44);
+    historyBtn->setHeight(44);
+    historyBtn->setCornerRadius(8);
+    historyBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    historyBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* historyIcon = new brls::Image();
+    historyIcon->setWidth(24);
+    historyIcon->setHeight(24);
+    historyIcon->setScalingType(brls::ImageScalingType::FIT);
+    historyIcon->setImageFromFile("app0:resources/icons/history.png");
+    historyBtn->addView(historyIcon);
+
+    historyBtn->registerClickAction([this](brls::View* view) {
+        brls::sync([this]() {
+            showSearchHistoryDialog();
+        });
+        return true;
+    });
+    historyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(historyBtn));
+    historyContainer->addView(historyBtn);
+    buttonContainer->addView(historyContainer);
+
     // Global search button with Start icon above
     auto* searchContainer = new brls::Box();
     searchContainer->setAxis(brls::Axis::COLUMN);
@@ -71,7 +114,9 @@ SearchTab::SearchTab() {
     });
     m_globalSearchBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_globalSearchBtn));
     searchContainer->addView(m_globalSearchBtn);
-    m_headerBox->addView(searchContainer);
+    buttonContainer->addView(searchContainer);
+
+    m_headerBox->addView(buttonContainer);
 
     this->addView(m_headerBox);
 
@@ -80,6 +125,14 @@ SearchTab::SearchTab() {
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
         brls::sync([this]() {
             showGlobalSearchDialog();
+        });
+        return true;
+    });
+
+    // Register Select button to open search history
+    this->registerAction("History", brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
+        brls::sync([this]() {
+            showSearchHistoryDialog();
         });
         return true;
     });
@@ -185,6 +238,18 @@ SearchTab::SearchTab() {
         onMangaSelected(manga);
     });
     this->addView(m_contentGrid);
+
+    // Load more button (hidden initially)
+    m_loadMoreBtn = new brls::Button();
+    m_loadMoreBtn->setText("Load More");
+    m_loadMoreBtn->setMarginTop(10);
+    m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
+    m_loadMoreBtn->registerClickAction([this](brls::View*) {
+        loadNextPage();
+        return true;
+    });
+    m_loadMoreBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_loadMoreBtn));
+    this->addView(m_loadMoreBtn);
 
     // Load sources initially
     loadSources();
@@ -368,6 +433,7 @@ void SearchTab::showSources() {
     m_mangaList.clear();
     m_resultsBySource.clear();
     m_contentGrid->setDataSource(m_mangaList);
+    m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
     if (m_searchResultsScrollView) {
         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
     }
@@ -473,7 +539,8 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_sourcesBtn->setVisibility(brls::Visibility::GONE);
     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    m_filterBtn->setVisibility(source.isConfigurable ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    // Filter button hidden until source filters are implemented
+    m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
 
     // Hide source list and search results, show content grid
@@ -492,9 +559,9 @@ void SearchTab::showSourceBrowser(const Source& source) {
 }
 
 void SearchTab::showFilterDialog() {
-    // TODO: Implement source filter dialog
-    // This would show the source's configurable filters (genres, status, etc)
-    brls::Application::notify("Filters not yet implemented");
+    // Source filter dialog not yet implemented
+    // Would show configurable filters like genres, status, etc.
+    brls::Application::notify("Source filters coming soon");
 }
 
 void SearchTab::loadPopularManga(int64_t sourceId) {
@@ -515,11 +582,13 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
+                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch popular manga");
             brls::sync([this]() {
                 m_resultsLabel->setText("Failed to load popular manga");
+                m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
             });
         }
     });
@@ -543,11 +612,13 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
+                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch latest manga");
             brls::sync([this]() {
                 m_resultsLabel->setText("Failed to load latest manga");
+                m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
             });
         }
     });
@@ -595,11 +666,14 @@ void SearchTab::performSearch(const std::string& query) {
         // Map to group results by source
         std::map<std::string, std::vector<Manga>> resultsBySource;
         int totalResults = 0;
+        int failedSources = 0;
+        int searchedSources = 0;
 
         // Search each filtered source
         for (const auto& source : sourcesToSearch) {
             std::vector<Manga> results;
             bool hasNextPage = false;
+            searchedSources++;
 
             // Use searchManga which uses GraphQL API
             if (client.searchManga(source.id, query, 1, results, hasNextPage)) {
@@ -610,14 +684,17 @@ void SearchTab::performSearch(const std::string& query) {
                     resultsBySource[source.name] = results;
                     totalResults += results.size();
                 }
+            } else {
+                failedSources++;
+                brls::Logger::warning("SearchTab: Search failed for source '{}'", source.name);
             }
 
             // Limit to prevent too many requests
             if (totalResults >= 100) break;
         }
 
-        brls::Logger::info("SearchTab: Found {} results from {} sources for '{}'",
-                           totalResults, resultsBySource.size(), query);
+        brls::Logger::info("SearchTab: Found {} results from {} sources for '{}' ({} failed)",
+                           totalResults, resultsBySource.size(), query, failedSources);
 
         // Store all results for flat list backup
         std::vector<Manga> allResults;
@@ -627,18 +704,26 @@ void SearchTab::performSearch(const std::string& query) {
             }
         }
 
-        brls::sync([this, allResults, resultsBySource]() {
+        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources]() {
             m_mangaList = allResults;
             m_resultsBySource = resultsBySource;
 
             // Show result count with source breakdown
             if (resultsBySource.empty()) {
-                m_resultsLabel->setText("No results found");
+                std::string resultText = "No results found";
+                if (failedSources > 0) {
+                    resultText += " (" + std::to_string(failedSources) + " source" +
+                                  (failedSources > 1 ? "s" : "") + " failed)";
+                }
+                m_resultsLabel->setText(resultText);
                 m_contentGrid->setDataSource(m_mangaList);
                 m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
             } else {
                 std::string resultText = std::to_string(allResults.size()) + " results from " +
                                         std::to_string(resultsBySource.size()) + " sources";
+                if (failedSources > 0) {
+                    resultText += " (" + std::to_string(failedSources) + " failed)";
+                }
                 m_resultsLabel->setText(resultText);
 
                 // Display results grouped by source in horizontal rows
@@ -667,11 +752,13 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " results");
+                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
             });
         } else {
             brls::Logger::error("SearchTab: Failed to search manga");
             brls::sync([this]() {
                 m_resultsLabel->setText("Search failed");
+                m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
             });
         }
     });
@@ -770,6 +857,9 @@ void SearchTab::loadNextPage() {
     m_currentPage++;
     brls::Logger::debug("SearchTab: Loading page {}", m_currentPage);
 
+    // Show loading state on button
+    m_loadMoreBtn->setText("Loading...");
+
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
@@ -793,6 +883,12 @@ void SearchTab::loadNextPage() {
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(m_mangaList.size()) + " manga");
+                m_loadMoreBtn->setText("Load More");
+                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+            });
+        } else {
+            brls::sync([this]() {
+                m_loadMoreBtn->setText("Load More");
             });
         }
     });

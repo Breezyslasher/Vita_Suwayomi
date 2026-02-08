@@ -71,6 +71,9 @@ private:
     // Main content grid (for single source browsing)
     RecyclingGrid* m_contentGrid = nullptr;
 
+    // Load more button for pagination
+    brls::Button* m_loadMoreBtn = nullptr;
+
     // Search results by source (grouped horizontal rows)
     brls::ScrollingFrame* m_searchResultsScrollView = nullptr;
     brls::Box* m_searchResultsBox = nullptr;
