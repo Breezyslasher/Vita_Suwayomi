@@ -113,8 +113,8 @@ brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::Vi
     // Check if the settings button is visible
     bool settingsVisible = settingsBtn->getVisibility() == brls::Visibility::VISIBLE;
 
-    // If pressing LEFT and settings button is visible, go to settings button
-    if (direction == brls::FocusDirection::LEFT && settingsVisible) {
+    // If pressing RIGHT and settings button is visible, go to settings button
+    if (direction == brls::FocusDirection::RIGHT && settingsVisible) {
         // If focus is on the cell itself, move to settings button
         if (currentView == this) {
             s_preferSettingsFocus = true;
@@ -122,8 +122,8 @@ brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::Vi
         }
     }
 
-    // If pressing RIGHT and currently on settings button, go back to cell
-    if (direction == brls::FocusDirection::RIGHT && currentView == settingsBtn) {
+    // If pressing LEFT and currently on settings button, go back to cell
+    if (direction == brls::FocusDirection::LEFT && currentView == settingsBtn) {
         s_preferSettingsFocus = false;
         return this;
     }
@@ -783,6 +783,16 @@ ExtensionsTab::ExtensionsTab() {
     m_recycler->estimatedRowHeight = 50;
     m_recycler->registerCell("Extension", []() { return ExtensionCell::create(); });
     m_recycler->registerCell("Header", []() { return ExtensionSectionHeader::create(); });
+
+    // Register circle button on recycler to exit search (since focus is on recycler items)
+    m_recycler->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (m_isSearchActive) {
+            brls::sync([this]() { hideSearchResults(); });
+            return true;  // Consume the event
+        }
+        return false;  // Let default behavior handle it (go back)
+    }, true);  // Hidden action (don't show in hints)
+
     this->addView(m_recycler);
 
     // Load extensions
@@ -1169,6 +1179,7 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
 
     // Show confirmation dialog
     auto* dialog = new brls::Dialog("Uninstall " + ext.name + "?");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     auto* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
@@ -1249,6 +1260,7 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
             } else {
                 // Show source selection dialog
                 auto* dialog = new brls::Dialog("Select Source");
+                dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
                 auto* list = new brls::Box();
                 list->setAxis(brls::Axis::COLUMN);
@@ -1313,6 +1325,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 
         brls::sync([this, source, prefs]() {
             auto* dialog = new brls::Dialog(source.name + " Settings");
+            dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
             auto* scrollFrame = new brls::ScrollingFrame();
             scrollFrame->setHeight(400);
