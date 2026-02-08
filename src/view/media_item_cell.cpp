@@ -8,6 +8,7 @@
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
+#include <ctime>
 #include <fstream>
 
 #ifdef __vita__
@@ -206,17 +207,16 @@ void MangaItemCell::updateDisplay() {
         }
     }
 
-    // Show NEW badge if manga was updated recently (within 7 days)
-    // Check if inLibraryAt timestamp is within the last 7 days
+    // Show NEW badge if manga was added to library recently (within 7 days)
     if (m_newBadge) {
         bool showNew = false;
 
-        // If manga has unread chapters and was recently added/updated
-        if (m_manga.unreadCount > 0 && m_manga.inLibraryAt) {
-            // inLibraryAt is a boolean in this struct, but for newly added manga
-            // we can use other indicators. For now, we'll show NEW if unread > 0
-            // and downloadedCount is 0 (meaning it's fresh)
-            showNew = (m_manga.downloadedCount == 0);
+        // If manga has unread chapters and was recently added to library
+        if (m_manga.unreadCount > 0 && m_manga.inLibraryAt > 0) {
+            // Check if added within the last 7 days
+            int64_t now = std::time(nullptr) * 1000;  // Current time in ms
+            int64_t sevenDaysMs = 7 * 24 * 60 * 60 * 1000LL;  // 7 days in ms
+            showNew = (now - m_manga.inLibraryAt) < sevenDaysMs;
         }
 
         m_newBadge->setVisibility(showNew ? brls::Visibility::VISIBLE : brls::Visibility::GONE);

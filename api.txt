@@ -685,7 +685,7 @@ query GetUpdateStatus {
 # Get Reading History (Continue Reading)
 query GetReadingHistory($offset: Int!, $limit: Int!) {
     chapters(
-        filter: { lastReadAt: { greaterThan: 0 } }
+        filter: { lastReadAt: { greaterThan: "0" } }
         orderBy: LAST_READ_AT
         orderByType: DESC
         offset: $offset

@@ -14,6 +14,8 @@
 #include "utils/image_loader.hpp"
 #include "utils/library_cache.hpp"
 #include "view/migrate_search_view.hpp"
+#include <chrono>
+#include <thread>
 
 namespace vitasuwayomi {
 
@@ -555,7 +557,27 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
 
-        bool success = client.fetchCategoryManga(categoryId, manga);
+        // Retry with exponential backoff (1s, 2s, 4s)
+        const int maxRetries = 3;
+        const int baseDelayMs = 1000;
+        bool success = false;
+
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            // Check if we're still alive before each attempt
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            if (attempt > 0) {
+                int delayMs = baseDelayMs * (1 << (attempt - 1));  // 1s, 2s, 4s
+                brls::Logger::info("LibrarySectionTab: Retry {} for category {} in {}ms",
+                                  attempt, categoryId, delayMs);
+                std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+            }
+
+            manga.clear();
+            success = client.fetchCategoryManga(categoryId, manga);
+            if (success) break;
+        }
 
         if (success) {
             brls::Logger::info("LibrarySectionTab: Got {} manga for category {} from server",
@@ -580,8 +602,8 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
                 m_loaded = true;
             });
         } else {
-            brls::Logger::error("LibrarySectionTab: Failed to load manga for category {}",
-                               categoryId);
+            brls::Logger::error("LibrarySectionTab: Failed to load manga for category {} after {} retries",
+                               categoryId, maxRetries);
 
             brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
@@ -589,7 +611,7 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
 
                 // Only notify if we didn't have cached data
                 if (m_mangaList.empty()) {
-                    brls::Application::notify("Failed to load manga");
+                    brls::Application::notify("Failed to load manga - check connection");
                 }
                 m_loaded = true;
             });
@@ -665,7 +687,14 @@ void LibrarySectionTab::sortMangaList() {
             break;
         case LibrarySortMode::RECENTLY_ADDED:
             std::sort(m_mangaList.begin(), m_mangaList.end(),
-                [](const Manga& a, const Manga& b) { return a.id > b.id; });
+                [](const Manga& a, const Manga& b) {
+                    // Use inLibraryAt timestamp for proper "recently added" sorting
+                    // Fall back to id comparison if timestamps are equal or missing
+                    if (a.inLibraryAt != b.inLibraryAt) {
+                        return a.inLibraryAt > b.inLibraryAt;
+                    }
+                    return a.id > b.id;
+                });
             break;
     }
 

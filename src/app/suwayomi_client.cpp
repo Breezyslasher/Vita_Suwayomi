@@ -541,6 +541,7 @@ Manga SuwayomiClient::parseMangaFromGraphQL(const std::string& json) {
     manga.author = extractJsonValue(json, "author");
     manga.description = extractJsonValue(json, "description");
     manga.inLibrary = extractJsonBool(json, "inLibrary");
+    manga.inLibraryAt = extractJsonInt64(json, "inLibraryAt");
     manga.initialized = extractJsonBool(json, "initialized");
     manga.url = extractJsonValue(json, "url");
 
@@ -1137,7 +1138,7 @@ bool SuwayomiClient::fetchReadingHistoryGraphQL(int offset, int limit, std::vect
             chapters(
                 offset: $offset
                 first: $limit
-                filter: { lastReadAt: { greaterThan: 0 } }
+                filter: { lastReadAt: { greaterThan: "0" } }
                 order: [{ by: LAST_READ_AT, byType: DESC }]
             ) {
                 nodes {
@@ -1531,6 +1532,7 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
                     thumbnailUrl
                     author
                     inLibrary
+                    inLibraryAt
                     unreadCount
                 }
             }
@@ -1584,6 +1586,7 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
                         thumbnailUrl
                         author
                         inLibrary
+                        inLibraryAt
                         unreadCount
                     }
                 }

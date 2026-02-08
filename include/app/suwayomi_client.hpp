@@ -126,7 +126,7 @@ struct Manga {
     std::vector<std::string> genre;
     MangaStatus status = MangaStatus::UNKNOWN;
     bool inLibrary = false;
-    bool inLibraryAt = false;     // Timestamp when added
+    int64_t inLibraryAt = 0;      // Timestamp when added to library (Unix ms)
     bool initialized = false;
     bool freshData = false;
     int64_t realUrl = 0;
