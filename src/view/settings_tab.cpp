@@ -1137,35 +1137,15 @@ void SettingsTab::showUrlInputDialog(const std::string& title, const std::string
     inputBox->setAxis(brls::Axis::COLUMN);
     inputBox->setPadding(16);
 
-    // Hint label
-    auto* hintLabel = new brls::Label();
-    hintLabel->setText(hint);
-    hintLabel->setFontSize(14);
-    hintLabel->setTextColor(nvgRGB(180, 180, 180));
-    hintLabel->setMarginBottom(12);
-    inputBox->addView(hintLabel);
-
     // Current value display
     auto* currentLabel = new brls::Label();
-    currentLabel->setText("Current: " + (currentValue.empty() ? "(not set)" : currentValue));
+    currentLabel->setText(currentValue.empty() ? "(not set)" : currentValue);
     currentLabel->setFontSize(16);
-    currentLabel->setMarginBottom(16);
     inputBox->addView(currentLabel);
-
-    // Note about input
-    auto* noteLabel = new brls::Label();
-    noteLabel->setText("URL can be HTTP or HTTPS");
-    noteLabel->setFontSize(12);
-    noteLabel->setTextColor(nvgRGB(0, 150, 136));
-    inputBox->addView(noteLabel);
 
     dialog->addView(inputBox);
 
     // Use the current value or prompt for new one via keyboard
-    dialog->addButton("Cancel", [dialog]() {
-        dialog->close();
-    });
-
     dialog->addButton("Edit", [dialog, callback, currentValue]() {
         dialog->close();
         // Open on-screen keyboard for input
