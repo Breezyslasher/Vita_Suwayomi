@@ -350,13 +350,10 @@ void SettingsTab::createLibrarySection() {
         brls::Dialog* dialog = new brls::Dialog("Clear all cached data?");
         dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
-        dialog->addButton("Cancel", [dialog]() {
-            dialog->close();
-        });
+        dialog->addButton("Cancel", []() {});
 
-        dialog->addButton("Clear", [dialog]() {
+        dialog->addButton("Clear", []() {
             LibraryCache::getInstance().clearAllCache();
-            dialog->close();
             brls::Application::notify("Cache cleared");
         });
 
@@ -783,11 +780,9 @@ void SettingsTab::createDownloadsSection() {
         brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
         dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
-        dialog->addButton("Cancel", [dialog]() {
-            dialog->close();
-        });
+        dialog->addButton("Cancel", []() {});
 
-        dialog->addButton("Delete All", [dialog, this]() {
+        dialog->addButton("Delete All", [this]() {
             auto downloads = DownloadsManager::getInstance().getDownloads();
             for (const auto& item : downloads) {
                 DownloadsManager::getInstance().deleteMangaDownload(item.mangaId);
@@ -795,7 +790,6 @@ void SettingsTab::createDownloadsSection() {
             if (m_clearDownloadsCell) {
                 m_clearDownloadsCell->setDetailText("0 manga");
             }
-            dialog->close();
             brls::Application::notify("All downloads deleted");
         });
 
@@ -1103,13 +1097,9 @@ void SettingsTab::onDisconnect() {
     brls::Dialog* dialog = new brls::Dialog("Disconnect from server?");
     dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
-    dialog->addButton("Cancel", [dialog]() {
-        dialog->close();
-    });
+    dialog->addButton("Cancel", []() {});
 
-    dialog->addButton("Disconnect", [dialog, this]() {
-        dialog->close();
-
+    dialog->addButton("Disconnect", [this]() {
         // Clear server connection
         Application::getInstance().setServerUrl("");
         Application::getInstance().setConnected(false);
@@ -1151,15 +1141,12 @@ void SettingsTab::showUrlInputDialog(const std::string& title, const std::string
 
     dialog->addView(inputBox);
 
-    // Close button - just close without changes
-    dialog->addButton("Close", [dialog]() {
-        dialog->close();
-    });
+    // Close button - just close without changes (empty lambda, dialog auto-closes)
+    dialog->addButton("Close", []() {});
 
     // Use the current value or prompt for new one via keyboard
-    dialog->addButton("Edit", [dialog, callback, currentValue]() {
-        dialog->close();
-        // Open on-screen keyboard for input
+    dialog->addButton("Edit", [callback, currentValue]() {
+        // Open on-screen keyboard for input (dialog auto-closes before this runs)
         brls::Application::getImeManager()->openForText([callback](std::string text) {
             // Validate URL format
             if (!text.empty()) {
@@ -1177,8 +1164,8 @@ void SettingsTab::showUrlInputDialog(const std::string& title, const std::string
         }, "Enter Server URL", "", 256, currentValue, 0);
     });
 
-    dialog->addButton("Clear", [dialog, callback]() {
-        dialog->close();
+    dialog->addButton("Clear", [callback]() {
+        // Dialog auto-closes before this runs
         callback("");
         brls::Application::notify("URL cleared");
     });
@@ -1525,13 +1512,11 @@ void SettingsTab::showCreateCategoryDialog() {
 
     dialog->addView(contentBox);
 
-    dialog->addButton("Cancel", [dialog]() {
-        dialog->close();
-    });
+    dialog->addButton("Cancel", []() {});
 
-    dialog->addButton("Create", [dialog]() {
-        // Open software keyboard for input
-        brls::Application::getImeManager()->openForText([dialog](std::string text) {
+    dialog->addButton("Create", []() {
+        // Open software keyboard for input (dialog auto-closes before this runs)
+        brls::Application::getImeManager()->openForText([](std::string text) {
             if (text.empty()) {
                 brls::Application::notify("Category name cannot be empty");
                 return;
@@ -1540,7 +1525,6 @@ void SettingsTab::showCreateCategoryDialog() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             if (client.createCategory(text)) {
                 brls::Application::notify("Category created: " + text);
-                dialog->close();
             } else {
                 brls::Application::notify("Failed to create category");
             }
@@ -1571,14 +1555,13 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
     bool isDefault = category.isDefault;
     std::string catName = category.name;
 
-    dialog->addButton("Cancel", [this, dialog]() {
-        dialog->close();
+    dialog->addButton("Cancel", [this]() {
         // Re-open category management dialog
         showCategoryManagementDialog();
     });
 
-    dialog->addButton("Rename", [this, dialog, catId, isDefault, catName]() {
-        brls::Application::getImeManager()->openForText([this, dialog, catId, isDefault](std::string text) {
+    dialog->addButton("Rename", [this, catId, isDefault, catName]() {
+        brls::Application::getImeManager()->openForText([this, catId, isDefault](std::string text) {
             if (text.empty()) {
                 brls::Application::notify("Category name cannot be empty");
                 return;
@@ -1587,7 +1570,6 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             if (client.updateCategory(catId, text, isDefault)) {
                 brls::Application::notify("Category renamed to: " + text);
-                dialog->close();
                 // Re-open category management dialog to show updated list
                 showCategoryManagementDialog();
             } else {
@@ -1609,22 +1591,19 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
 
     int catId = category.id;
 
-    dialog->addButton("Cancel", [this, dialog]() {
-        dialog->close();
+    dialog->addButton("Cancel", [this]() {
         // Re-open category management dialog
         showCategoryManagementDialog();
     });
 
-    dialog->addButton("Delete", [this, dialog, catId]() {
+    dialog->addButton("Delete", [this, catId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         if (client.deleteCategory(catId)) {
             brls::Application::notify("Category deleted");
-            dialog->close();
             // Re-open category management dialog to show updated list
             showCategoryManagementDialog();
         } else {
             brls::Application::notify("Failed to delete category");
-            dialog->close();
             showCategoryManagementDialog();
         }
     });
@@ -1665,13 +1644,12 @@ void SettingsTab::showStorageManagement() {
     clearBtn->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
         dialog->setCancelable(false);  // Prevent exit dialog from appearing
-        dialog->addButton("Cancel", [dialog]() { dialog->close(); });
-        dialog->addButton("Delete", [dialog]() {
+        dialog->addButton("Cancel", []() {});
+        dialog->addButton("Delete", []() {
             auto downloads = DownloadsManager::getInstance().getDownloads();
             for (const auto& item : downloads) {
                 DownloadsManager::getInstance().deleteMangaDownload(item.mangaId);
             }
-            dialog->close();
             brls::Application::notify("All downloads deleted");
             brls::Application::popActivity();
         });
@@ -1792,8 +1770,8 @@ void SettingsTab::showStatisticsView() {
     resetBtn->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Reset all reading statistics?");
         dialog->setCancelable(false);  // Prevent exit dialog from appearing
-        dialog->addButton("Cancel", [dialog]() { dialog->close(); });
-        dialog->addButton("Reset", [dialog]() {
+        dialog->addButton("Cancel", []() {});
+        dialog->addButton("Reset", []() {
             AppSettings& s = Application::getInstance().getSettings();
             s.totalChaptersRead = 0;
             s.totalMangaCompleted = 0;
@@ -1802,7 +1780,6 @@ void SettingsTab::showStatisticsView() {
             s.totalReadingTime = 0;
             s.lastReadDate = 0;
             Application::getInstance().saveSettings();
-            dialog->close();
             brls::Application::notify("Statistics reset");
             brls::Application::popActivity();
         });
@@ -1923,13 +1900,9 @@ void SettingsTab::importBackup() {
     brls::Dialog* dialog = new brls::Dialog("Import backup?\n\nThis will restore your library and settings from the most recent backup file.");
     dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
-    dialog->addButton("Cancel", [dialog]() {
-        dialog->close();
-    });
+    dialog->addButton("Cancel", []() {});
 
-    dialog->addButton("Import", [dialog]() {
-        dialog->close();
-
+    dialog->addButton("Import", []() {
         brls::Application::notify("Importing backup...");
 
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -2159,12 +2132,9 @@ void SettingsTab::showUpdateDialog(const std::string& newVersion, const std::str
     brls::Dialog* dialog = new brls::Dialog(message);
     dialog->setCancelable(false);
 
-    dialog->addButton("Later", [dialog]() {
-        dialog->close();
-    });
+    dialog->addButton("Later", []() {});
 
-    dialog->addButton("Download & Install", [dialog, downloadUrl, newVersion, this]() {
-        dialog->close();
+    dialog->addButton("Download & Install", [downloadUrl, newVersion, this]() {
         downloadAndInstallUpdate(downloadUrl, newVersion);
     });
 
@@ -2198,9 +2168,7 @@ void SettingsTab::downloadAndInstallUpdate(const std::string& downloadUrl, const
         brls::Dialog* successDialog = new brls::Dialog(msg);
         successDialog->setCancelable(false);
 
-        successDialog->addButton("OK", [successDialog]() {
-            successDialog->close();
-        });
+        successDialog->addButton("OK", []() {});
 
         successDialog->open();
     } else {
@@ -2212,9 +2180,7 @@ void SettingsTab::downloadAndInstallUpdate(const std::string& downloadUrl, const
     // On non-Vita platforms, just show the download URL
     brls::Dialog* dialog = new brls::Dialog("Download from:\n" + downloadUrl);
     dialog->setCancelable(false);
-    dialog->addButton("OK", [dialog]() {
-        dialog->close();
-    });
+    dialog->addButton("OK", []() {});
     dialog->open();
 #endif
 }
