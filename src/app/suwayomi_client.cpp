@@ -112,6 +112,18 @@ std::string SuwayomiClient::executeGraphQLInternal(const std::string& query, con
     if (response.body.find("\"errors\"") != std::string::npos) {
         std::string errors = extractJsonArray(response.body, "errors");
         brls::Logger::warning("GraphQL errors: {}", errors.substr(0, 200));
+
+        // Check for Unauthorized errors in GraphQL response - attempt token refresh
+        if (allowRetry && (errors.find("Unauthorized") != std::string::npos ||
+                          errors.find("UnauthorizedException") != std::string::npos)) {
+            brls::Logger::info("GraphQL returned Unauthorized, attempting token refresh...");
+            if (refreshToken()) {
+                brls::Logger::info("Token refreshed successfully, retrying GraphQL request");
+                return executeGraphQLInternal(query, variables, false);  // Retry once
+            } else {
+                brls::Logger::warning("Token refresh failed for GraphQL Unauthorized error");
+            }
+        }
         return "";
     }
 
