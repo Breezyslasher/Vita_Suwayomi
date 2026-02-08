@@ -122,9 +122,13 @@ brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::Vi
         }
     }
 
-    // If pressing LEFT and currently on settings button, go back to cell
+    // If pressing LEFT and currently on settings button, go back to parent item (cell)
     if (direction == brls::FocusDirection::LEFT && currentView == settingsBtn) {
         s_preferSettingsFocus = false;
+        // Delegate to parent for proper navigation back
+        if (hasParent()) {
+            return getParent()->getNextFocus(direction, this);
+        }
         return this;
     }
 
@@ -169,10 +173,8 @@ brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::Vi
             }
         }
 
-        // Fallback: delegate to parent for normal navigation
-        if (hasParent()) {
-            return getParent()->getNextFocus(direction, this);
-        }
+        // No next settings row found - stay on current settings button
+        return settingsBtn;
     }
 
     // Default behavior for other cases
@@ -1178,24 +1180,10 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
     brls::Logger::info("Requesting uninstall for extension: {}", ext.name);
 
     // Show confirmation dialog
-    auto* dialog = new brls::Dialog("Uninstall " + ext.name + "?");
+    auto* dialog = new brls::Dialog("Uninstall " + ext.name + "?\n\nAre you sure you want to uninstall this extension?\nAll sources from this extension will be removed.");
     dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
-    auto* content = new brls::Box();
-    content->setAxis(brls::Axis::COLUMN);
-    content->setPadding(15, 20, 15, 20);
-
-    auto* messageLabel = new brls::Label();
-    messageLabel->setText("Are you sure you want to uninstall this extension?\nAll sources from this extension will be removed.");
-    messageLabel->setFontSize(14);
-    messageLabel->setTextColor(nvgRGB(200, 200, 200));
-    content->addView(messageLabel);
-
-    dialog->addView(content);
-
-    dialog->addButton("Cancel", []() {
-        // Do nothing, just close
-    });
+    dialog->addButton("Cancel", []() {});
 
     dialog->addButton("Uninstall", [this, ext]() {
         brls::Logger::info("Uninstalling extension: {}", ext.name);
