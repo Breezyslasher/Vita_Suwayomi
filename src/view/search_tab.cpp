@@ -964,10 +964,24 @@ void SearchTab::loadNextPage() {
                 m_resultsLabel->setText(std::to_string(m_mangaList.size()) + " manga");
                 m_loadMoreBtn->setText("Load More");
                 m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+
+                // Manage focus after loading
+                if (hasNextPage) {
+                    // Keep focus on Load More button for easy pagination
+                    brls::Application::giveFocus(m_loadMoreBtn);
+                } else {
+                    // No more pages, focus on first cell in content grid
+                    brls::View* firstCell = m_contentGrid->getFirstCell();
+                    if (firstCell) {
+                        brls::Application::giveFocus(firstCell);
+                    }
+                }
             });
         } else {
             brls::sync([this]() {
                 m_loadMoreBtn->setText("Load More");
+                // Keep focus on Load More button after failure
+                brls::Application::giveFocus(m_loadMoreBtn);
             });
         }
     });
