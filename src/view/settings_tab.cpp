@@ -130,8 +130,15 @@ void SettingsTab::createAccountSection() {
             Application::getInstance().saveSettings();
             brls::Application::notify(value ? "Auto-switch enabled" : "Auto-switch disabled");
         });
-    autoSwitchToggle->setDetailText("Try alternate URL if connection fails");
     m_contentBox->addView(autoSwitchToggle);
+
+    // Info label for auto-switch
+    auto* autoSwitchInfoLabel = new brls::Label();
+    autoSwitchInfoLabel->setText("Try alternate URL if connection fails");
+    autoSwitchInfoLabel->setFontSize(14);
+    autoSwitchInfoLabel->setMarginLeft(16);
+    autoSwitchInfoLabel->setMarginTop(4);
+    m_contentBox->addView(autoSwitchInfoLabel);
 
     // Connection timeout selector
     auto* timeoutSelector = new brls::SelectorCell();
@@ -284,12 +291,19 @@ void SettingsTab::createLibrarySection() {
 
     // Update on start toggle
     auto* updateOnStartToggle = new brls::BooleanCell();
-    updateOnStartToggle->init("Update Library on Start", settings.updateOnStart, [&settings](bool value) {
-        settings.updateOnStart = value;
+    updateOnStartToggle->init("Update Library on Start", settings.updateOnStart, [](bool value) {
+        Application::getInstance().getSettings().updateOnStart = value;
         Application::getInstance().saveSettings();
     });
-    updateOnStartToggle->setDetailText("Automatically check for new chapters on app startup");
     m_contentBox->addView(updateOnStartToggle);
+
+    // Info label for update on start
+    auto* updateOnStartInfoLabel = new brls::Label();
+    updateOnStartInfoLabel->setText("Automatically check for new chapters on app startup");
+    updateOnStartInfoLabel->setFontSize(14);
+    updateOnStartInfoLabel->setMarginLeft(16);
+    updateOnStartInfoLabel->setMarginTop(4);
+    m_contentBox->addView(updateOnStartInfoLabel);
 
     // Default category selector
     m_defaultCategorySelector = new brls::SelectorCell();
@@ -312,20 +326,18 @@ void SettingsTab::createLibrarySection() {
 
     // Show unread badge toggle
     auto* showUnreadBadgeToggle = new brls::BooleanCell();
-    showUnreadBadgeToggle->init("Show Unread Badge", settings.showUnreadBadge, [&settings](bool value) {
-        settings.showUnreadBadge = value;
+    showUnreadBadgeToggle->init("Show Unread Badge", settings.showUnreadBadge, [](bool value) {
+        Application::getInstance().getSettings().showUnreadBadge = value;
         Application::getInstance().saveSettings();
     });
-    showUnreadBadgeToggle->setDetailText("Show unread chapter count on manga covers");
     m_contentBox->addView(showUnreadBadgeToggle);
 
     // Show downloaded badge toggle
     auto* showDownloadedBadgeToggle = new brls::BooleanCell();
-    showDownloadedBadgeToggle->init("Show Downloaded Badge", settings.showDownloadedBadge, [&settings](bool value) {
-        settings.showDownloadedBadge = value;
+    showDownloadedBadgeToggle->init("Show Downloaded Badge", settings.showDownloadedBadge, [](bool value) {
+        Application::getInstance().getSettings().showDownloadedBadge = value;
         Application::getInstance().saveSettings();
     });
-    showDownloadedBadgeToggle->setDetailText("Show indicator when manga has downloaded chapters");
     m_contentBox->addView(showDownloadedBadgeToggle);
 
     // Clear Cache button
