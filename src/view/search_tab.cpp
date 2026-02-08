@@ -137,6 +137,18 @@ SearchTab::SearchTab() {
         return true;
     });
 
+    // Register Circle button (B) to go back in search/browse modes
+    this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+        // Only handle if we're not on the sources list
+        if (m_browseMode != BrowseMode::SOURCES) {
+            brls::sync([this]() {
+                handleBackNavigation();
+            });
+            return true;
+        }
+        return false;  // Let default handling occur (exit tab)
+    });
+
     // Hidden search label (used for source-specific search)
     m_searchLabel = new brls::Label();
     m_searchLabel->setText("");
@@ -217,9 +229,10 @@ SearchTab::SearchTab() {
     m_backBtn->setText("< Back");
     m_backBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->registerClickAction([this](brls::View* view) {
-        showSources();
+        handleBackNavigation();
         return true;
     });
+    m_backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_backBtn));
     m_modeBox->addView(m_backBtn);
 
     this->addView(m_modeBox);
@@ -661,9 +674,13 @@ void SearchTab::performSearch(const std::string& query) {
 
     // If we have a current source, search within that source
     if (m_currentSourceId != 0 && m_browseMode != BrowseMode::SOURCES) {
+        m_isGlobalSearch = false;
         performSourceSearch(m_currentSourceId, query);
         return;
     }
+
+    // This is a global search
+    m_isGlobalSearch = true;
 
     // Filter sources by language setting first
     filterSourcesByLanguage();
@@ -950,6 +967,46 @@ void SearchTab::updateModeButtons() {
                 break;
             }
         }
+    }
+}
+
+void SearchTab::handleBackNavigation() {
+    if (m_browseMode == BrowseMode::SEARCH_RESULTS) {
+        if (m_isGlobalSearch) {
+            // Global search: go back to sources list
+            showSources();
+        } else {
+            // Source-specific search: go back to source's main page (Popular)
+            // Find the current source and show its browser again
+            for (const auto& source : m_sources) {
+                if (source.id == m_currentSourceId) {
+                    m_browseMode = BrowseMode::POPULAR;
+                    m_titleLabel->setText(source.name);
+                    m_searchLabel->setVisibility(brls::Visibility::GONE);
+
+                    // Hide search results, show content grid
+                    if (m_searchResultsScrollView) {
+                        m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
+                    }
+                    m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
+
+                    // Update buttons for source browsing mode
+                    m_sourcesBtn->setVisibility(brls::Visibility::GONE);
+                    m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
+                    m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+                    m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+
+                    // Load popular manga
+                    loadPopularManga(m_currentSourceId);
+                    return;
+                }
+            }
+            // Fallback: go to sources if source not found
+            showSources();
+        }
+    } else {
+        // For POPULAR/LATEST modes: go back to sources list
+        showSources();
     }
 }
 

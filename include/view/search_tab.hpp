@@ -88,6 +88,10 @@ private:
     std::string m_searchQuery;
     int m_currentPage = 1;
     bool m_hasNextPage = false;
+    bool m_isGlobalSearch = false;  // Track if current search is global or source-specific
+
+    // Navigation helper
+    void handleBackNavigation();
 
     // Data
     std::vector<Source> m_sources;
