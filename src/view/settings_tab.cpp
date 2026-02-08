@@ -1145,6 +1145,11 @@ void SettingsTab::showUrlInputDialog(const std::string& title, const std::string
 
     dialog->addView(inputBox);
 
+    // Close button - just close without changes
+    dialog->addButton("Close", [dialog]() {
+        dialog->close();
+    });
+
     // Use the current value or prompt for new one via keyboard
     dialog->addButton("Edit", [dialog, callback, currentValue]() {
         dialog->close();

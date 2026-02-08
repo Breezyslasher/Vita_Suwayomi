@@ -1208,6 +1208,7 @@ void MangaDetailView::onRemoveFromLibrary() {
 
 void MangaDetailView::showDownloadOptions() {
     brls::Dialog* dialog = new brls::Dialog("Download");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     dialog->addButton("All", [this, dialog]() {
         dialog->close();
@@ -1499,6 +1500,7 @@ void MangaDetailView::onDownloadChapters() {
 
 void MangaDetailView::onDeleteDownloads() {
     brls::Dialog* dialog = new brls::Dialog("Delete all downloaded chapters?");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     dialog->addButton("Cancel", [dialog]() {
         dialog->close();
@@ -2098,6 +2100,7 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                 case 5: {  // Remove Tracking
                     brls::sync([this, recordId, trackerName]() {
                         brls::Dialog* confirmDialog = new brls::Dialog("Remove from " + trackerName + "?");
+                        confirmDialog->setCancelable(false);  // Prevent exit dialog from appearing
 
                         confirmDialog->addButton("Remove", [this, confirmDialog, recordId, trackerName]() {
                             confirmDialog->close();

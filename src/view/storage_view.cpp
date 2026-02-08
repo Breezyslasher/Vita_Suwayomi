@@ -312,6 +312,7 @@ void StorageView::deleteMangaDownloads(const StorageItem& item) {
 
 void StorageView::deleteReadChapters() {
     brls::Dialog* dialog = new brls::Dialog("Delete all read chapters?\n\nThis will free up space by removing chapters you've already read.");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     dialog->addButton("Cancel", [dialog]() {
         dialog->close();
@@ -358,6 +359,7 @@ void StorageView::deleteReadChapters() {
 
 void StorageView::clearCache() {
     brls::Dialog* dialog = new brls::Dialog("Clear all cached data?\n\nThis includes cached manga info and cover images.");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     dialog->addButton("Cancel", [dialog]() {
         dialog->close();
@@ -378,6 +380,7 @@ void StorageView::clearCache() {
 
 void StorageView::clearAllDownloads() {
     brls::Dialog* dialog = new brls::Dialog("Delete ALL downloaded content?\n\nThis cannot be undone!");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     dialog->addButton("Cancel", [dialog]() {
         dialog->close();
