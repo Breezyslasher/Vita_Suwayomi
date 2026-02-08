@@ -180,10 +180,11 @@ void SettingsTab::createUISection() {
 
     // Debug logging toggle
     m_debugLogToggle = new brls::BooleanCell();
-    m_debugLogToggle->init("Debug Logging", settings.debugLogging, [&settings](bool value) {
-        settings.debugLogging = value;
+    m_debugLogToggle->init("Debug Logging", settings.debugLogging, [](bool value) {
+        Application::getInstance().getSettings().debugLogging = value;
         Application::getInstance().applyLogLevel();
         Application::getInstance().saveSettings();
+        brls::Application::notify(value ? "Debug logging enabled" : "Debug logging disabled");
     });
     m_contentBox->addView(m_debugLogToggle);
 }
@@ -333,6 +334,7 @@ void SettingsTab::createLibrarySection() {
     clearCacheCell->setDetailText("Delete cached data and images");
     clearCacheCell->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Clear all cached data?");
+        dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
         dialog->addButton("Cancel", [dialog]() {
             dialog->close();
@@ -765,6 +767,7 @@ void SettingsTab::createDownloadsSection() {
     m_clearDownloadsCell->setDetailText(std::to_string(downloads.size()) + " manga");
     m_clearDownloadsCell->registerClickAction([this](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
+        dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
         dialog->addButton("Cancel", [dialog]() {
             dialog->close();
@@ -1068,6 +1071,7 @@ void SettingsTab::createAboutSection() {
 
 void SettingsTab::onDisconnect() {
     brls::Dialog* dialog = new brls::Dialog("Disconnect from server?");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     dialog->addButton("Cancel", [dialog]() {
         dialog->close();
@@ -1102,6 +1106,7 @@ void SettingsTab::showUrlInputDialog(const std::string& title, const std::string
                                       std::function<void(const std::string&)> callback) {
     // Create a simple input dialog for URL entry
     brls::Dialog* dialog = new brls::Dialog(title);
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     // Input field container
     auto* inputBox = new brls::Box();
@@ -1482,6 +1487,7 @@ void SettingsTab::showCategoryManagementDialog() {
 
 void SettingsTab::showCreateCategoryDialog() {
     brls::Dialog* dialog = new brls::Dialog("Create New Category");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     auto* contentBox = new brls::Box();
     contentBox->setAxis(brls::Axis::COLUMN);
@@ -1531,17 +1537,12 @@ void SettingsTab::showCreateCategoryDialog() {
 
 void SettingsTab::showEditCategoryDialog(const Category& category) {
     brls::Dialog* dialog = new brls::Dialog("Edit Category: " + category.name);
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     auto* contentBox = new brls::Box();
     contentBox->setAxis(brls::Axis::COLUMN);
     contentBox->setPadding(20);
     contentBox->setWidth(400);
-
-    auto* inputLabel = new brls::Label();
-    inputLabel->setText("Current name: " + category.name);
-    inputLabel->setFontSize(16);
-    inputLabel->setMarginBottom(10);
-    contentBox->addView(inputLabel);
 
     auto* infoLabel = new brls::Label();
     infoLabel->setText("Press 'Rename' to change the name");
@@ -1589,6 +1590,7 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
                          " manga from this category.\nThe manga will remain in your library.";
 
     brls::Dialog* dialog = new brls::Dialog(message);
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     int catId = category.id;
 
@@ -1647,6 +1649,7 @@ void SettingsTab::showStorageManagement() {
     clearBtn->setMarginTop(20);
     clearBtn->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
+        dialog->setCancelable(false);  // Prevent exit dialog from appearing
         dialog->addButton("Cancel", [dialog]() { dialog->close(); });
         dialog->addButton("Delete", [dialog]() {
             auto downloads = DownloadsManager::getInstance().getDownloads();
@@ -1767,6 +1770,7 @@ void SettingsTab::showStatisticsView() {
     resetBtn->setMarginTop(10);
     resetBtn->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Reset all reading statistics?");
+        dialog->setCancelable(false);  // Prevent exit dialog from appearing
         dialog->addButton("Cancel", [dialog]() { dialog->close(); });
         dialog->addButton("Reset", [dialog]() {
             AppSettings& s = Application::getInstance().getSettings();
@@ -1890,6 +1894,7 @@ void SettingsTab::exportBackup() {
 
 void SettingsTab::importBackup() {
     brls::Dialog* dialog = new brls::Dialog("Import backup?\n\nThis will restore your library and settings from the most recent backup file.");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
     dialog->addButton("Cancel", [dialog]() {
         dialog->close();
