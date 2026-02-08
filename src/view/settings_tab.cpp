@@ -348,7 +348,7 @@ void SettingsTab::createLibrarySection() {
     clearCacheCell->setDetailText("Delete cached data and images");
     clearCacheCell->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Clear all cached data?");
-        dialog->setCancelable(false);  // Prevent exit dialog from appearing
+        dialog->setCancelable(true);  // Allow back button to close dialog
 
         dialog->addButton("Cancel", []() {});
 
@@ -778,7 +778,7 @@ void SettingsTab::createDownloadsSection() {
     m_clearDownloadsCell->setDetailText(std::to_string(downloads.size()) + " manga");
     m_clearDownloadsCell->registerClickAction([this](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
-        dialog->setCancelable(false);  // Prevent exit dialog from appearing
+        dialog->setCancelable(true);  // Allow back button to close dialog
 
         dialog->addButton("Cancel", []() {});
 
@@ -1095,7 +1095,7 @@ void SettingsTab::createAboutSection() {
 
 void SettingsTab::onDisconnect() {
     brls::Dialog* dialog = new brls::Dialog("Disconnect from server?");
-    dialog->setCancelable(false);  // Prevent exit dialog from appearing
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     dialog->addButton("Cancel", []() {});
 
@@ -1126,7 +1126,7 @@ void SettingsTab::showUrlInputDialog(const std::string& title, const std::string
                                       std::function<void(const std::string&)> callback) {
     // Create a simple input dialog for URL entry
     brls::Dialog* dialog = new brls::Dialog(title);
-    dialog->setCancelable(false);  // Prevent exit dialog from appearing
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     // Input field container
     auto* inputBox = new brls::Box();
@@ -1489,7 +1489,7 @@ void SettingsTab::showCategoryManagementDialog() {
 
 void SettingsTab::showCreateCategoryDialog() {
     brls::Dialog* dialog = new brls::Dialog("Create New Category");
-    dialog->setCancelable(false);  // Prevent exit dialog from appearing
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     auto* contentBox = new brls::Box();
     contentBox->setAxis(brls::Axis::COLUMN);
@@ -1536,7 +1536,7 @@ void SettingsTab::showCreateCategoryDialog() {
 
 void SettingsTab::showEditCategoryDialog(const Category& category) {
     brls::Dialog* dialog = new brls::Dialog("Edit Category: " + category.name);
-    dialog->setCancelable(false);  // Prevent exit dialog from appearing
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     auto* contentBox = new brls::Box();
     contentBox->setAxis(brls::Axis::COLUMN);
@@ -1587,7 +1587,7 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
                          " manga from this category.\nThe manga will remain in your library.";
 
     brls::Dialog* dialog = new brls::Dialog(message);
-    dialog->setCancelable(false);  // Prevent exit dialog from appearing
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     int catId = category.id;
 
@@ -1769,7 +1769,7 @@ void SettingsTab::showStatisticsView() {
     resetBtn->setMarginTop(10);
     resetBtn->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Reset all reading statistics?");
-        dialog->setCancelable(false);  // Prevent exit dialog from appearing
+        dialog->setCancelable(true);  // Allow back button to close dialog
         dialog->addButton("Cancel", []() {});
         dialog->addButton("Reset", []() {
             AppSettings& s = Application::getInstance().getSettings();
@@ -1898,7 +1898,7 @@ void SettingsTab::exportBackup() {
 
 void SettingsTab::importBackup() {
     brls::Dialog* dialog = new brls::Dialog("Import backup?\n\nThis will restore your library and settings from the most recent backup file.");
-    dialog->setCancelable(false);  // Prevent exit dialog from appearing
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     dialog->addButton("Cancel", []() {});
 
@@ -2130,7 +2130,7 @@ void SettingsTab::showUpdateDialog(const std::string& newVersion, const std::str
     }
 
     brls::Dialog* dialog = new brls::Dialog(message);
-    dialog->setCancelable(false);
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     dialog->addButton("Later", []() {});
 
@@ -2166,7 +2166,7 @@ void SettingsTab::downloadAndInstallUpdate(const std::string& downloadUrl, const
                           "4. Restart VitaSuwayomi after installation";
 
         brls::Dialog* successDialog = new brls::Dialog(msg);
-        successDialog->setCancelable(false);
+        successDialog->setCancelable(true);  // Allow back button to close dialog
 
         successDialog->addButton("OK", []() {});
 
@@ -2179,7 +2179,7 @@ void SettingsTab::downloadAndInstallUpdate(const std::string& downloadUrl, const
 
     // On non-Vita platforms, just show the download URL
     brls::Dialog* dialog = new brls::Dialog("Download from:\n" + downloadUrl);
-    dialog->setCancelable(false);
+    dialog->setCancelable(true);  // Allow back button to close dialog
     dialog->addButton("OK", []() {});
     dialog->open();
 #endif
