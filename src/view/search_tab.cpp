@@ -706,6 +706,9 @@ void SearchTab::performSearch(const std::string& query) {
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
     m_resultsLabel->setText("Searching " + std::to_string(m_filteredSources.size()) + " sources...");
 
+    // Give focus to back button while searching so user can easily cancel
+    brls::Application::giveFocus(m_backBtn);
+
     // Copy filtered sources for async use
     std::vector<Source> sourcesToSearch = m_filteredSources;
 
