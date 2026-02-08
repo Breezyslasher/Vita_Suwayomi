@@ -613,9 +613,12 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
                 m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 
-                // Transfer focus to content grid after loading
+                // Transfer focus to first cell in content grid after loading
                 if (!manga.empty()) {
-                    brls::Application::giveFocus(m_contentGrid);
+                    brls::View* firstCell = m_contentGrid->getFirstCell();
+                    if (firstCell) {
+                        brls::Application::giveFocus(firstCell);
+                    }
                 }
             });
         } else {
@@ -648,9 +651,12 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
                 m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 
-                // Transfer focus to content grid after loading
+                // Transfer focus to first cell in content grid after loading
                 if (!manga.empty()) {
-                    brls::Application::giveFocus(m_contentGrid);
+                    brls::View* firstCell = m_contentGrid->getFirstCell();
+                    if (firstCell) {
+                        brls::Application::giveFocus(firstCell);
+                    }
                 }
             });
         } else {
@@ -797,9 +803,12 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
                 m_resultsLabel->setText(std::to_string(manga.size()) + " results");
                 m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 
-                // Transfer focus to content grid after search results load
+                // Transfer focus to first cell in content grid after search results load
                 if (!manga.empty()) {
-                    brls::Application::giveFocus(m_contentGrid);
+                    brls::View* firstCell = m_contentGrid->getFirstCell();
+                    if (firstCell) {
+                        brls::Application::giveFocus(firstCell);
+                    }
                 }
             });
         } else {
@@ -843,10 +852,16 @@ void SearchTab::populateSearchResultsBySource() {
     }
     m_searchResultsBox->clearViews();
 
+    // Track first cell for focus transfer
+    brls::View* firstCell = nullptr;
+
     // Create a horizontal row for each source
     for (const auto& [sourceName, manga] : m_resultsBySource) {
         if (!manga.empty()) {
-            createSourceRow(sourceName, manga);
+            brls::View* cell = createSourceRow(sourceName, manga);
+            if (!firstCell && cell) {
+                firstCell = cell;
+            }
         }
     }
 
@@ -862,13 +877,13 @@ void SearchTab::populateSearchResultsBySource() {
         this->addView(m_searchResultsScrollView);
     }
 
-    // Transfer focus to search results
-    if (!m_resultsBySource.empty()) {
-        brls::Application::giveFocus(m_searchResultsScrollView);
+    // Transfer focus to first manga cell in search results
+    if (firstCell) {
+        brls::Application::giveFocus(firstCell);
     }
 }
 
-void SearchTab::createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga) {
+brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga) {
     // Source header label
     auto* sourceLabel = new brls::Label();
     sourceLabel->setText(sourceName + " (" + std::to_string(manga.size()) + ")");
@@ -882,6 +897,8 @@ void SearchTab::createSourceRow(const std::string& sourceName, const std::vector
     auto* rowBox = new HorizontalScrollRow();
     rowBox->setHeight(195);
     rowBox->setMarginBottom(10);
+
+    brls::View* firstCell = nullptr;
 
     // Create manga cells for each result
     for (size_t i = 0; i < manga.size(); i++) {
@@ -898,10 +915,16 @@ void SearchTab::createSourceRow(const std::string& sourceName, const std::vector
         });
         cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
 
+        // Track first cell for focus transfer
+        if (i == 0) {
+            firstCell = cell;
+        }
+
         rowBox->addView(cell);
     }
 
     m_searchResultsBox->addView(rowBox);
+    return firstCell;
 }
 
 void SearchTab::loadNextPage() {

@@ -47,6 +47,9 @@ public:
     int getItemCount() const { return static_cast<int>(m_items.size()); }
     int getFocusedIndex() const { return m_focusedIndex; }
 
+    // Get first cell for focus transfer
+    brls::View* getFirstCell() const;
+
     static brls::View* create();
 
 private:

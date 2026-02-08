@@ -79,7 +79,7 @@ private:
     brls::Box* m_searchResultsBox = nullptr;
     std::map<std::string, std::vector<Manga>> m_resultsBySource;
     void populateSearchResultsBySource();
-    void createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga);
+    brls::View* createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga);
 
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;

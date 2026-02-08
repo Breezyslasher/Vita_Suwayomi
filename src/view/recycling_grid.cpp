@@ -314,4 +314,11 @@ void RecyclingGrid::setListMode(bool listMode) {
     }
 }
 
+brls::View* RecyclingGrid::getFirstCell() const {
+    if (m_cells.empty()) {
+        return nullptr;
+    }
+    return m_cells[0];
+}
+
 } // namespace vitasuwayomi
