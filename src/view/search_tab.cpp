@@ -54,28 +54,28 @@ SearchTab::SearchTab() {
     selectButtonIcon->setMarginBottom(2);
     historyContainer->addView(selectButtonIcon);
 
-    auto* historyBtn = new brls::Button();
-    historyBtn->setWidth(44);
-    historyBtn->setHeight(44);
-    historyBtn->setCornerRadius(8);
-    historyBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    historyBtn->setAlignItems(brls::AlignItems::CENTER);
+    m_historyBtn = new brls::Button();
+    m_historyBtn->setWidth(44);
+    m_historyBtn->setHeight(44);
+    m_historyBtn->setCornerRadius(8);
+    m_historyBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_historyBtn->setAlignItems(brls::AlignItems::CENTER);
 
     auto* historyIcon = new brls::Image();
     historyIcon->setWidth(24);
     historyIcon->setHeight(24);
     historyIcon->setScalingType(brls::ImageScalingType::FIT);
     historyIcon->setImageFromFile("app0:resources/icons/history.png");
-    historyBtn->addView(historyIcon);
+    m_historyBtn->addView(historyIcon);
 
-    historyBtn->registerClickAction([this](brls::View* view) {
+    m_historyBtn->registerClickAction([this](brls::View* view) {
         brls::sync([this]() {
             showSearchHistoryDialog();
         });
         return true;
     });
-    historyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(historyBtn));
-    historyContainer->addView(historyBtn);
+    m_historyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_historyBtn));
+    historyContainer->addView(m_historyBtn);
     buttonContainer->addView(historyContainer);
 
     // Global search button with Start icon above
@@ -253,6 +253,18 @@ SearchTab::SearchTab() {
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
+
+    // Set up B button callback for back navigation from grid cells
+    m_contentGrid->setOnBackPressed([this]() {
+        if (m_browseMode != BrowseMode::SOURCES) {
+            brls::sync([this]() {
+                handleBackNavigation();
+            });
+            return true;
+        }
+        return false;
+    });
+
     this->addView(m_contentGrid);
 
     // Load more button (hidden initially)
@@ -480,8 +492,9 @@ void SearchTab::showSources() {
         sourcesByLang[source.lang].push_back(source);
     }
 
-    // Track first source row for focus transfer
+    // Track first source row for focus transfer and navigation
     brls::Box* firstSourceRow = nullptr;
+    brls::Box* previousSourceRow = nullptr;
 
     // Create source rows with icons
     for (const auto& [lang, sources] : sourcesByLang) {
@@ -545,6 +558,20 @@ void SearchTab::showSources() {
             });
             sourceRow->addGestureRecognizer(new brls::TapGestureRecognizer(sourceRow));
 
+            // Register B button on source row to go back (exit tab in SOURCES mode)
+            // This ensures B button works when focus is on source rows
+            sourceRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+                // In SOURCES mode, let default handling exit the tab
+                return false;
+            }, true);  // hidden action
+
+            // Set up navigation from first source row to header buttons
+            if (sourceRow == firstSourceRow) {
+                // First source row - set custom UP navigation to history button
+                sourceRow->setCustomNavigationRoute(brls::FocusDirection::UP, m_historyBtn);
+            }
+
+            previousSourceRow = sourceRow;
             m_sourceListBox->addView(sourceRow);
         }
     }
@@ -556,6 +583,12 @@ void SearchTab::showSources() {
     // Add scroll view if not already added
     if (m_sourceScrollView->getParent() == nullptr) {
         this->addView(m_sourceScrollView);
+    }
+
+    // Set up navigation from header buttons down to first source row
+    if (firstSourceRow) {
+        m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
+        m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
     }
 
     // Transfer focus to first source row
@@ -879,6 +912,17 @@ void SearchTab::populateSearchResultsBySource() {
         m_searchResultsBox->setPadding(10);
 
         m_searchResultsScrollView->setContentView(m_searchResultsBox);
+
+        // Register B button on search results scroll view to handle back navigation
+        m_searchResultsScrollView->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+            if (m_browseMode != BrowseMode::SOURCES) {
+                brls::sync([this]() {
+                    handleBackNavigation();
+                });
+                return true;
+            }
+            return false;
+        }, true);  // hidden action
     }
     m_searchResultsBox->clearViews();
 
@@ -944,6 +988,17 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
             return true;
         });
         cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+
+        // Register B button on cell to handle back navigation
+        cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+            if (m_browseMode != BrowseMode::SOURCES) {
+                brls::sync([this]() {
+                    handleBackNavigation();
+                });
+                return true;
+            }
+            return false;
+        }, true);  // hidden action
 
         // Track first cell for focus transfer
         if (i == 0) {

@@ -23,6 +23,7 @@ public:
     void setOnItemSelected(std::function<void(const Manga&)> callback);
     void setOnItemLongPressed(std::function<void(const Manga&, int index)> callback);
     void setOnPullToRefresh(std::function<void()> callback);
+    void setOnBackPressed(std::function<bool()> callback);
     void clearViews();
 
     // Grid customization
@@ -61,6 +62,7 @@ private:
     std::function<void(const Manga&)> m_onItemSelected;
     std::function<void(const Manga&, int index)> m_onItemLongPressed;
     std::function<void()> m_onPullToRefresh;
+    std::function<bool()> m_onBackPressed;
 
     // Pull-to-refresh state
     bool m_isPulling = false;

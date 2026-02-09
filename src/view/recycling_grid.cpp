@@ -87,6 +87,10 @@ void RecyclingGrid::setOnPullToRefresh(std::function<void()> callback) {
     m_onPullToRefresh = callback;
 }
 
+void RecyclingGrid::setOnBackPressed(std::function<bool()> callback) {
+    m_onBackPressed = callback;
+}
+
 void RecyclingGrid::clearViews() {
     m_items.clear();
     m_rows.clear();
@@ -150,6 +154,14 @@ void RecyclingGrid::setupGrid() {
                 return true;
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+
+            // Register B button on cell to handle back navigation
+            cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+                if (m_onBackPressed) {
+                    return m_onBackPressed();
+                }
+                return false;
+            }, true);  // hidden action
 
             // Track focused index
             cell->getFocusEvent()->subscribe([this, index](brls::View*) {
