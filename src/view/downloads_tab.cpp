@@ -199,6 +199,7 @@ DownloadsTab::DownloadsTab() {
     m_queueSection->setAxis(brls::Axis::COLUMN);
     m_queueSection->setGrow(1.0f);
     m_queueSection->setMargins(0, 0, 15, 0);
+    m_queueSection->setVisibility(brls::Visibility::GONE);  // Start hidden - only show when downloads exist
     this->addView(m_queueSection);
 
     m_queueHeader = new brls::Label();
@@ -229,6 +230,7 @@ DownloadsTab::DownloadsTab() {
     m_localSection = new brls::Box();
     m_localSection->setAxis(brls::Axis::COLUMN);
     m_localSection->setGrow(1.0f);
+    m_localSection->setVisibility(brls::Visibility::GONE);  // Start hidden - only show when downloads exist
     this->addView(m_localSection);
 
     m_localHeader = new brls::Label();
@@ -259,45 +261,90 @@ DownloadsTab::DownloadsTab() {
 void DownloadsTab::willAppear(bool resetState) {
     brls::Box::willAppear(resetState);
 
+    // Initialize last progress refresh time
+    m_lastProgressRefresh = std::chrono::steady_clock::now();
+
     // Register progress callback for real-time UI updates during local downloads
+    // Throttled to avoid excessive UI refreshes (max once every 500ms)
     DownloadsManager& mgr = DownloadsManager::getInstance();
     mgr.setProgressCallback([this](int downloadedPages, int totalPages) {
-        // Schedule a refresh on the main thread
-        brls::sync([this]() {
-            refreshLocalDownloads();
-        });
+        // Check if enough time has passed since last refresh (throttle)
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastProgressRefresh).count();
+
+        // Only refresh if 500ms has passed, or if we're on the last page (chapter complete)
+        if (elapsed >= PROGRESS_REFRESH_INTERVAL_MS || downloadedPages == totalPages) {
+            m_lastProgressRefresh = now;
+            // Schedule a refresh on the main thread - check if auto-refresh still enabled
+            if (m_autoRefreshEnabled.load()) {
+                brls::sync([this]() {
+                    if (m_autoRefreshEnabled.load()) {
+                        refreshLocalDownloads();
+                    }
+                });
+            }
+        }
     });
 
-    // Register chapter completion callback for UI refresh when chapters complete
+    // Register chapter completion callback - remove completed chapter from UI directly
+    // This is more efficient than refreshing the entire list
     mgr.setChapterCompletionCallback([this](int mangaId, int chapterIndex, bool success) {
-        brls::sync([this]() {
-            // Save focus state before refresh - check if focus is on a local queue item
-            brls::View* currentFocus = brls::Application::getCurrentFocus();
-            int focusIndex = -1;
-            if (currentFocus && m_localContainer) {
-                auto& children = m_localContainer->getChildren();
-                for (size_t i = 0; i < children.size(); i++) {
-                    if (children[i] == currentFocus) {
-                        focusIndex = static_cast<int>(i);
-                        break;
-                    }
+        // Only sync if the tab is still active
+        if (!m_autoRefreshEnabled.load()) {
+            return;
+        }
+
+        brls::sync([this, mangaId, chapterIndex]() {
+            if (!m_autoRefreshEnabled.load() || !m_localContainer) {
+                return;
+            }
+
+            // Find the index of this chapter in our cache
+            int removeIndex = -1;
+            for (size_t i = 0; i < m_lastLocalQueue.size(); i++) {
+                if (m_lastLocalQueue[i].mangaId == mangaId &&
+                    m_lastLocalQueue[i].chapterIndex == chapterIndex) {
+                    removeIndex = static_cast<int>(i);
+                    break;
                 }
             }
 
-            refreshLocalDownloads();
+            if (removeIndex < 0) {
+                return;  // Chapter not found in our list (already removed or not displayed)
+            }
 
-            // Restore focus after refresh
+            // Check if focus is on the item we're removing
+            brls::View* currentFocus = brls::Application::getCurrentFocus();
+            auto& children = m_localContainer->getChildren();
+            bool hadFocusOnRemovedItem = (removeIndex < static_cast<int>(children.size()) &&
+                                          children[removeIndex] == currentFocus);
+
+            // Remove the item from the UI
+            if (removeIndex < static_cast<int>(children.size())) {
+                m_localContainer->removeView(children[removeIndex]);
+            }
+
+            // Remove from cache
+            m_lastLocalQueue.erase(m_lastLocalQueue.begin() + removeIndex);
+
+            // Handle focus and visibility after removal
             if (m_lastLocalQueue.empty()) {
-                // Queue is empty, focus on start/stop button
+                // No more local downloads - hide the section
+                m_localSection->setVisibility(brls::Visibility::GONE);
+                // Clear status if server queue is also empty
+                if (m_lastServerQueue.empty() && m_downloadStatusLabel) {
+                    m_downloadStatusLabel->setText("");
+                }
+                // Move focus to buttons
                 if (m_startStopBtn) {
                     brls::Application::giveFocus(m_startStopBtn);
                 }
-            } else if (focusIndex >= 0 && m_localContainer) {
-                // Try to restore focus to same index or nearest valid item
-                auto& children = m_localContainer->getChildren();
-                if (!children.empty()) {
-                    int newIndex = std::min(focusIndex, static_cast<int>(children.size()) - 1);
-                    brls::Application::giveFocus(children[newIndex]);
+            } else if (hadFocusOnRemovedItem) {
+                // Focus was on removed item - move to next item or previous
+                auto& newChildren = m_localContainer->getChildren();
+                if (!newChildren.empty()) {
+                    int newIndex = std::min(removeIndex, static_cast<int>(newChildren.size()) - 1);
+                    brls::Application::giveFocus(newChildren[newIndex]);
                 }
             }
         });
@@ -309,7 +356,13 @@ void DownloadsTab::willAppear(bool resetState) {
 
 void DownloadsTab::willDisappear(bool resetState) {
     brls::Box::willDisappear(resetState);
+
+    // IMPORTANT: Stop auto-refresh FIRST to signal all callbacks to stop
+    // This must happen before clearing callbacks to prevent race conditions
     stopAutoRefresh();
+
+    // Small delay to allow any pending brls::sync calls to complete
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     // Clear callbacks to avoid updates when tab is not visible
     DownloadsManager& mgr = DownloadsManager::getInstance();
@@ -994,39 +1047,43 @@ void DownloadsTab::showDownloadOptions(const std::string& ratingKey, const std::
 }
 
 void DownloadsTab::startAutoRefresh() {
-    if (m_autoRefreshTimerActive) {
+    // Use compare_exchange to atomically check and set (prevent race conditions)
+    bool expected = false;
+    if (!m_autoRefreshTimerActive.compare_exchange_strong(expected, true)) {
         return;  // Already running
     }
 
-    m_autoRefreshEnabled = true;
-    m_autoRefreshTimerActive = true;
+    m_autoRefreshEnabled.store(true);
 
     // Start auto-refresh loop in background thread
     asyncRun([this]() {
-        while (m_autoRefreshEnabled) {
+        while (m_autoRefreshEnabled.load()) {
             // Sleep for the interval
             std::this_thread::sleep_for(std::chrono::milliseconds(AUTO_REFRESH_INTERVAL_MS));
 
-            // Check if still enabled after sleep
-            if (!m_autoRefreshEnabled) {
+            // Check if still enabled after sleep (use atomic load)
+            if (!m_autoRefreshEnabled.load()) {
                 break;
             }
 
             // Trigger refresh on main thread for both server and local queues
+            // Capture enabled state check inside sync to prevent use-after-free
             brls::sync([this]() {
-                if (m_autoRefreshEnabled && this->getVisibility() == brls::Visibility::VISIBLE) {
+                if (m_autoRefreshEnabled.load() && this->getVisibility() == brls::Visibility::VISIBLE) {
                     refreshQueue();
                     refreshLocalDownloads();
                 }
             });
         }
-        m_autoRefreshTimerActive = false;
+        m_autoRefreshTimerActive.store(false);
     });
 }
 
 void DownloadsTab::stopAutoRefresh() {
-    m_autoRefreshEnabled = false;
-    // Timer will stop on next iteration
+    // Set to false - timer will stop on next iteration
+    m_autoRefreshEnabled.store(false);
+    // Note: We don't wait for the thread to stop here to avoid blocking the UI
+    // The atomic checks in the callbacks will prevent any issues
 }
 
 void DownloadsTab::pauseAllDownloads() {

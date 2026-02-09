@@ -8,6 +8,8 @@
 #include <borealis.hpp>
 #include <vector>
 #include <string>
+#include <atomic>
+#include <chrono>
 
 namespace vitasuwayomi {
 
@@ -63,9 +65,13 @@ private:
     brls::Label* m_downloadStatusLabel = nullptr;
     bool m_downloaderRunning = false;
 
-    // Auto-refresh state
-    bool m_autoRefreshEnabled = false;
-    bool m_autoRefreshTimerActive = false;
+    // Auto-refresh state (atomic for thread safety)
+    std::atomic<bool> m_autoRefreshEnabled{false};
+    std::atomic<bool> m_autoRefreshTimerActive{false};
+
+    // Throttle progress updates to avoid excessive UI refreshes
+    std::chrono::steady_clock::time_point m_lastProgressRefresh;
+    static constexpr int PROGRESS_REFRESH_INTERVAL_MS = 500;  // Only refresh UI every 500ms
 
     // Cached queue state for smart refresh (only update when data changes)
     struct CachedQueueItem {
