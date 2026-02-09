@@ -90,6 +90,12 @@ private:
         brls::Point touchStart;
         bool isValidSwipe = false;
     };
+
+    // Focus tracking for UI rebuilds
+    int m_focusedServerIndex = -1;  // Index of focused item in server queue
+    int m_focusedLocalIndex = -1;   // Index of focused item in local queue
+    bool m_hadFocusOnServerQueue = false;
+    bool m_hadFocusOnLocalQueue = false;
 };
 
 } // namespace vitasuwayomi

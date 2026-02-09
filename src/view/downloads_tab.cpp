@@ -271,10 +271,34 @@ void DownloadsTab::willAppear(bool resetState) {
     // Register chapter completion callback for UI refresh when chapters complete
     mgr.setChapterCompletionCallback([this](int mangaId, int chapterIndex, bool success) {
         brls::sync([this]() {
+            // Save focus state before refresh - check if focus is on a local queue item
+            brls::View* currentFocus = brls::Application::getCurrentFocus();
+            int focusIndex = -1;
+            if (currentFocus && m_localContainer) {
+                auto& children = m_localContainer->getChildren();
+                for (size_t i = 0; i < children.size(); i++) {
+                    if (children[i] == currentFocus) {
+                        focusIndex = static_cast<int>(i);
+                        break;
+                    }
+                }
+            }
+
             refreshLocalDownloads();
-            // Transfer focus to start/stop button if queue is now empty
-            if (m_lastLocalQueue.empty() && m_startStopBtn) {
-                brls::Application::giveFocus(m_startStopBtn);
+
+            // Restore focus after refresh
+            if (m_lastLocalQueue.empty()) {
+                // Queue is empty, focus on start/stop button
+                if (m_startStopBtn) {
+                    brls::Application::giveFocus(m_startStopBtn);
+                }
+            } else if (focusIndex >= 0 && m_localContainer) {
+                // Try to restore focus to same index or nearest valid item
+                auto& children = m_localContainer->getChildren();
+                if (!children.empty()) {
+                    int newIndex = std::min(focusIndex, static_cast<int>(children.size()) - 1);
+                    brls::Application::giveFocus(children[newIndex]);
+                }
             }
         });
     });
@@ -299,6 +323,21 @@ void DownloadsTab::refresh() {
 }
 
 void DownloadsTab::refreshQueue() {
+    // Save focus state before refresh - check if focus is on a server queue item
+    brls::View* currentFocus = brls::Application::getCurrentFocus();
+    m_focusedServerIndex = -1;
+    m_hadFocusOnServerQueue = false;
+    if (currentFocus && m_queueContainer) {
+        auto& children = m_queueContainer->getChildren();
+        for (size_t i = 0; i < children.size(); i++) {
+            if (children[i] == currentFocus) {
+                m_focusedServerIndex = static_cast<int>(i);
+                m_hadFocusOnServerQueue = true;
+                break;
+            }
+        }
+    }
+
     // Fetch download queue and status from server
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -308,11 +347,24 @@ void DownloadsTab::refreshQueue() {
             brls::sync([this]() {
                 // Hide entire section on fetch failure or empty
                 m_queueSection->setVisibility(brls::Visibility::GONE);
-                m_downloadStatusLabel->setText("");
                 m_lastServerQueue.clear();
                 // Clear container
                 while (m_queueContainer->getChildren().size() > 0) {
                     m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+                }
+
+                // Only clear status if no local downloads exist
+                if (m_lastLocalQueue.empty()) {
+                    m_downloadStatusLabel->setText("");
+                }
+
+                // If focus was on server queue, try to move to local queue or buttons
+                if (m_hadFocusOnServerQueue) {
+                    if (m_localContainer && !m_localContainer->getChildren().empty()) {
+                        brls::Application::giveFocus(m_localContainer->getChildren()[0]);
+                    } else if (m_startStopBtn) {
+                        brls::Application::giveFocus(m_startStopBtn);
+                    }
                 }
             });
             return;
@@ -358,14 +410,19 @@ void DownloadsTab::refreshQueue() {
             m_lastServerQueue = newCache;
             // Update downloader state
             m_downloaderRunning = isDownloading;
-            if (m_startStopLabel) {
+            // Only update button label if no local downloads exist
+            // (refreshLocalDownloads will set correct label based on local state)
+            if (m_startStopLabel && m_lastLocalQueue.empty()) {
                 m_startStopLabel->setText(m_downloaderRunning ? "Pause" : "Start");
             }
 
             // Update status label
             if (m_downloadStatusLabel) {
                 if (queue.empty()) {
-                    m_downloadStatusLabel->setText("");
+                    // Only clear if no local downloads exist (local refresh will set proper status)
+                    if (m_lastLocalQueue.empty()) {
+                        m_downloadStatusLabel->setText("");
+                    }
                 } else if (m_downloaderRunning) {
                     m_downloadStatusLabel->setText("• Downloading");
                     m_downloadStatusLabel->setTextColor(nvgRGBA(100, 200, 100, 255));
@@ -382,8 +439,14 @@ void DownloadsTab::refreshQueue() {
                 while (m_queueContainer->getChildren().size() > 0) {
                     m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
                 }
-                // Transfer focus to start/stop button when queue becomes empty
-                if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
+                // Transfer focus when server queue becomes empty
+                if (m_hadFocusOnServerQueue) {
+                    if (m_localContainer && !m_localContainer->getChildren().empty()) {
+                        brls::Application::giveFocus(m_localContainer->getChildren()[0]);
+                    } else if (m_startStopBtn) {
+                        brls::Application::giveFocus(m_startStopBtn);
+                    }
+                } else if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
                     brls::Application::giveFocus(m_startStopBtn);
                 }
                 return;
@@ -607,11 +670,36 @@ void DownloadsTab::refreshQueue() {
                 // Add row
                 m_queueContainer->addView(row);
             }
+
+            // Restore focus after rebuild if we had focus on server queue
+            if (m_hadFocusOnServerQueue && m_focusedServerIndex >= 0) {
+                auto& children = m_queueContainer->getChildren();
+                if (!children.empty()) {
+                    int newIndex = std::min(m_focusedServerIndex, static_cast<int>(children.size()) - 1);
+                    brls::Application::giveFocus(children[newIndex]);
+                }
+                m_hadFocusOnServerQueue = false;
+            }
         });
     });
 }
 
 void DownloadsTab::refreshLocalDownloads() {
+    // Save focus state before refresh - check if focus is on a local queue item
+    brls::View* currentFocus = brls::Application::getCurrentFocus();
+    m_focusedLocalIndex = -1;
+    m_hadFocusOnLocalQueue = false;
+    if (currentFocus && m_localContainer) {
+        auto& children = m_localContainer->getChildren();
+        for (size_t i = 0; i < children.size(); i++) {
+            if (children[i] == currentFocus) {
+                m_focusedLocalIndex = static_cast<int>(i);
+                m_hadFocusOnLocalQueue = true;
+                break;
+            }
+        }
+    }
+
     // Ensure manager is initialized and state is loaded
     DownloadsManager& mgr = DownloadsManager::getInstance();
     mgr.init();
@@ -661,9 +749,11 @@ void DownloadsTab::refreshLocalDownloads() {
             m_localContainer->removeView(m_localContainer->getChildren()[0]);
         }
         // Transfer focus to start/stop button when queue becomes empty
-        if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
+        // Check if focus was on local queue or is now null
+        if (m_startStopBtn && (m_hadFocusOnLocalQueue || brls::Application::getCurrentFocus() == nullptr)) {
             brls::Application::giveFocus(m_startStopBtn);
         }
+        m_hadFocusOnLocalQueue = false;
         return;
     }
 
@@ -671,6 +761,30 @@ void DownloadsTab::refreshLocalDownloads() {
     m_localSection->setVisibility(brls::Visibility::VISIBLE);
     m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
     m_localScroll->setVisibility(brls::Visibility::VISIBLE);
+
+    // Update status label for local downloads if server queue is empty
+    bool localDownloading = false;
+    for (const auto& item : newCache) {
+        if (item.state == static_cast<int>(LocalDownloadState::DOWNLOADING)) {
+            localDownloading = true;
+            break;
+        }
+    }
+
+    // If server queue is empty but local downloads exist, update status
+    if (m_lastServerQueue.empty() && m_downloadStatusLabel) {
+        if (localDownloading) {
+            m_downloadStatusLabel->setText("• Downloading (Local)");
+            m_downloadStatusLabel->setTextColor(nvgRGBA(100, 200, 100, 255));
+            m_downloaderRunning = true;
+            if (m_startStopLabel) {
+                m_startStopLabel->setText("Pause");
+            }
+        } else if (!newCache.empty()) {
+            m_downloadStatusLabel->setText("• Queued (Local)");
+            m_downloadStatusLabel->setTextColor(nvgRGBA(200, 150, 100, 255));
+        }
+    }
 
     // Skip UI rebuild if nothing changed
     if (!hasChanged) {
@@ -862,6 +976,16 @@ void DownloadsTab::refreshLocalDownloads() {
             // Add row
             m_localContainer->addView(row);
         }
+    }
+
+    // Restore focus after rebuild if we had focus on local queue
+    if (m_hadFocusOnLocalQueue && m_focusedLocalIndex >= 0) {
+        auto& children = m_localContainer->getChildren();
+        if (!children.empty()) {
+            int newIndex = std::min(m_focusedLocalIndex, static_cast<int>(children.size()) - 1);
+            brls::Application::giveFocus(children[newIndex]);
+        }
+        m_hadFocusOnLocalQueue = false;
     }
 }
 
