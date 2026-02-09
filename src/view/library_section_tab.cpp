@@ -7,6 +7,7 @@
 #include "view/library_section_tab.hpp"
 #include "view/manga_item_cell.hpp"
 #include "view/manga_detail_view.hpp"
+#include "view/tracking_search_view.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
@@ -1293,9 +1294,189 @@ void LibrarySectionTab::removeFromLibrary(const std::vector<Manga>& mangaList) {
 }
 
 void LibrarySectionTab::openTracking(const Manga& manga) {
-    // Push the manga detail view which has full tracking support
-    auto* detailView = new MangaDetailView(manga);
-    brls::Application::pushActivity(new brls::Activity(detailView));
+    brls::Logger::info("LibrarySectionTab: Opening tracking for manga {}", manga.id);
+
+    // Capture manga data for async operations
+    Manga capturedManga = manga;
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    // Fetch trackers asynchronously
+    asyncRun([capturedManga, aliveWeak]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        std::vector<Tracker> trackers;
+        std::vector<TrackRecord> records;
+
+        bool trackersOk = client.fetchTrackers(trackers);
+        bool recordsOk = client.fetchMangaTracking(capturedManga.id, records);
+
+        brls::sync([capturedManga, trackers, records, trackersOk, recordsOk, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            if (!trackersOk) {
+                brls::Application::notify("Failed to load trackers");
+                return;
+            }
+
+            // Filter to show only logged-in trackers
+            std::vector<Tracker> loggedInTrackers;
+            for (const auto& t : trackers) {
+                if (t.isLoggedIn) {
+                    loggedInTrackers.push_back(t);
+                }
+            }
+
+            if (loggedInTrackers.empty()) {
+                brls::Application::notify("No trackers logged in. Configure in server settings.");
+                return;
+            }
+
+            // Build tracker options - show existing tracking status
+            std::vector<std::string> trackerOptions;
+            std::vector<Tracker> capturedTrackers;
+            std::vector<TrackRecord> capturedRecords;
+            std::vector<bool> hasRecords;
+
+            for (const auto& tracker : loggedInTrackers) {
+                TrackRecord* existingRecord = nullptr;
+                for (const auto& r : records) {
+                    if (r.trackerId == tracker.id) {
+                        existingRecord = const_cast<TrackRecord*>(&r);
+                        break;
+                    }
+                }
+
+                std::string label = tracker.name;
+                if (existingRecord && existingRecord->id > 0) {
+                    label += " - Tracked";
+                    if (!existingRecord->title.empty()) {
+                        std::string trackTitle = existingRecord->title;
+                        if (trackTitle.length() > 15) {
+                            trackTitle = trackTitle.substr(0, 13) + "..";
+                        }
+                        label += " (" + trackTitle + ")";
+                    }
+                } else {
+                    label += " - Not tracked";
+                }
+
+                trackerOptions.push_back(label);
+                capturedTrackers.push_back(tracker);
+                capturedRecords.push_back(existingRecord ? *existingRecord : TrackRecord());
+                hasRecords.push_back(existingRecord != nullptr && existingRecord->id > 0);
+            }
+
+            // Show tracker selection dropdown
+            brls::Dropdown* dropdown = new brls::Dropdown(
+                "Track: " + capturedManga.title,
+                trackerOptions,
+                [capturedManga, capturedTrackers, capturedRecords, hasRecords, aliveWeak](int selected) {
+                    if (selected < 0 || selected >= static_cast<int>(capturedTrackers.size())) return;
+
+                    Tracker selectedTracker = capturedTrackers[selected];
+                    TrackRecord selectedRecord = capturedRecords[selected];
+                    bool hasRecord = hasRecords[selected];
+
+                    brls::sync([capturedManga, selectedTracker, selectedRecord, hasRecord, aliveWeak]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
+
+                        if (hasRecord) {
+                            // Already tracked - show info and offer to remove
+                            std::vector<std::string> options = {"View Details", "Remove Tracking"};
+                            brls::Dropdown* actionDropdown = new brls::Dropdown(
+                                selectedTracker.name + ": " + selectedRecord.title,
+                                options,
+                                [capturedManga, selectedTracker, selectedRecord, aliveWeak](int action) {
+                                    if (action == 0) {
+                                        // View details - show tracking info
+                                        std::string info = "Status: " + selectedRecord.status;
+                                        if (selectedRecord.lastChapterRead > 0) {
+                                            info += "\nProgress: Ch. " + std::to_string(selectedRecord.lastChapterRead);
+                                        }
+                                        if (selectedRecord.score > 0) {
+                                            info += "\nScore: " + std::to_string(selectedRecord.score);
+                                        }
+                                        brls::Application::notify(info);
+                                    } else if (action == 1) {
+                                        // Remove tracking
+                                        brls::Application::notify("Removing from " + selectedTracker.name + "...");
+                                        int recordId = selectedRecord.id;
+                                        std::string trackerNameCopy = selectedTracker.name;
+                                        asyncRun([recordId, trackerNameCopy, aliveWeak]() {
+                                            SuwayomiClient& client = SuwayomiClient::getInstance();
+                                            bool success = client.unbindTracker(recordId, false);
+                                            brls::sync([success, aliveWeak]() {
+                                                auto alive = aliveWeak.lock();
+                                                if (!alive || !*alive) return;
+                                                if (success) {
+                                                    brls::Application::notify("Tracking removed");
+                                                } else {
+                                                    brls::Application::notify("Failed to remove tracking");
+                                                }
+                                            });
+                                        });
+                                    }
+                                }, 0);
+                            brls::Application::pushActivity(new brls::Activity(actionDropdown));
+                        } else {
+                            // Not tracked - open search to add
+                            std::string defaultQuery = capturedManga.title;
+                            Tracker tracker = selectedTracker;
+                            Manga manga = capturedManga;
+
+                            brls::Application::getImeManager()->openForText(
+                                [tracker, manga, aliveWeak](std::string text) {
+                                    if (text.empty()) return;
+
+                                    auto alive = aliveWeak.lock();
+                                    if (!alive || !*alive) return;
+
+                                    brls::Application::notify("Searching " + tracker.name + "...");
+
+                                    int trackerId = tracker.id;
+                                    int mangaId = manga.id;
+                                    std::string trackerName = tracker.name;
+                                    std::string searchQuery = text;
+
+                                    asyncRun([trackerId, mangaId, searchQuery, trackerName, aliveWeak]() {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                        std::vector<TrackSearchResult> results;
+
+                                        if (!client.searchTracker(trackerId, searchQuery, results)) {
+                                            brls::sync([trackerName]() {
+                                                brls::Application::notify("Search failed for " + trackerName);
+                                            });
+                                            return;
+                                        }
+
+                                        brls::sync([trackerId, mangaId, trackerName, results, aliveWeak]() {
+                                            auto alive = aliveWeak.lock();
+                                            if (!alive || !*alive) return;
+
+                                            if (results.empty()) {
+                                                brls::Application::notify("No results found on " + trackerName);
+                                                return;
+                                            }
+
+                                            // Show tracking search view
+                                            auto* searchView = new TrackingSearchView(trackerName, trackerId, mangaId, results);
+                                            brls::Application::pushActivity(new brls::Activity(searchView));
+                                        });
+                                    });
+                                },
+                                "Search " + tracker.name,
+                                "Enter manga title to search",
+                                256,
+                                defaultQuery
+                            );
+                        }
+                    });
+                }, 0);
+            brls::Application::pushActivity(new brls::Activity(dropdown));
+        });
+    });
 }
 
 } // namespace vitasuwayomi
