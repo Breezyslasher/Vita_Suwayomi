@@ -51,9 +51,19 @@ HistoryTab::HistoryTab() {
     refreshContainer->addView(triangleIcon);
 
     auto* refreshBtn = new brls::Button();
-    refreshBtn->setText("Refresh");
-    refreshBtn->setWidth(80);
-    refreshBtn->setHeight(35);
+    refreshBtn->setWidth(44);
+    refreshBtn->setHeight(44);
+    refreshBtn->setCornerRadius(8);
+    refreshBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    refreshBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* refreshIcon = new brls::Image();
+    refreshIcon->setWidth(24);
+    refreshIcon->setHeight(24);
+    refreshIcon->setScalingType(brls::ImageScalingType::FIT);
+    refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
+    refreshBtn->addView(refreshIcon);
+
     refreshBtn->registerClickAction([this](brls::View* view) {
         refresh();
         return true;
@@ -114,6 +124,9 @@ HistoryTab::HistoryTab() {
     });
 
     brls::Logger::debug("HistoryTab: Created");
+
+    // Load history immediately on construction
+    loadHistory();
 }
 
 HistoryTab::~HistoryTab() {

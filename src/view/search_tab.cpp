@@ -589,6 +589,10 @@ void SearchTab::showSources() {
     if (firstSourceRow) {
         m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
         m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
+    } else {
+        // No source rows - clear navigation routes to prevent crash
+        m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+        m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
     }
 
     // Transfer focus to first source row
@@ -627,6 +631,10 @@ void SearchTab::showSourceBrowser(const Source& source) {
         m_searchResultsBox->clearViews();
     }
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
+
+    // Set up navigation from header buttons down to mode buttons (source list is now hidden)
+    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
+    m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
 
     // Transfer focus to Popular button immediately (source row is now hidden)
     brls::Application::giveFocus(m_popularBtn);
@@ -950,6 +958,10 @@ void SearchTab::populateSearchResultsBySource() {
     if (m_searchResultsScrollView->getParent() == nullptr) {
         this->addView(m_searchResultsScrollView);
     }
+
+    // Set up navigation from header buttons down to back button (source list is now hidden)
+    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
+    m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
 
     // Transfer focus to first manga cell in search results
     if (firstCell) {
