@@ -455,6 +455,10 @@ void SearchTab::showSources() {
     if (m_searchResultsScrollView) {
         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
     }
+    // Clear search results to prevent ghost focus targets
+    if (m_searchResultsBox) {
+        m_searchResultsBox->clearViews();
+    }
 
     // Create or clear source list box
     if (!m_sourceScrollView) {
@@ -578,8 +582,16 @@ void SearchTab::showSourceBrowser(const Source& source) {
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
     }
+    // Clear source list to prevent ghost focus targets
+    if (m_sourceListBox) {
+        m_sourceListBox->clearViews();
+    }
     if (m_searchResultsScrollView) {
         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
+    }
+    // Clear search results to prevent ghost focus targets
+    if (m_searchResultsBox) {
+        m_searchResultsBox->clearViews();
     }
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
@@ -703,6 +715,10 @@ void SearchTab::performSearch(const std::string& query) {
     // Hide source list and grid, will show grouped results
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
+    }
+    // Clear source list to prevent ghost focus targets
+    if (m_sourceListBox) {
+        m_sourceListBox->clearViews();
     }
     m_contentGrid->setVisibility(brls::Visibility::GONE);
 
@@ -1038,6 +1054,10 @@ void SearchTab::handleBackNavigation() {
                     // Hide search results, show content grid
                     if (m_searchResultsScrollView) {
                         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
+                    }
+                    // Clear search results to prevent ghost focus targets
+                    if (m_searchResultsBox) {
+                        m_searchResultsBox->clearViews();
                     }
                     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
