@@ -5,6 +5,7 @@
 
 #include "activity/main_activity.hpp"
 #include "view/library_section_tab.hpp"
+#include "view/history_tab.hpp"
 #include "view/extensions_tab.hpp"
 #include "view/search_tab.hpp"
 #include "view/settings_tab.hpp"
@@ -48,6 +49,11 @@ void MainActivity::onContentAvailable() {
             return new LibrarySectionTab();
         });
 
+        // Add History tab (reading history with quick resume)
+        tabFrame->addTab("History", []() {
+            return new HistoryTab();
+        });
+
         // Add Browse tab (browse manga sources)
         tabFrame->addTab("Browse", []() {
             return new SearchTab();
@@ -79,6 +85,18 @@ void MainActivity::onContentAvailable() {
                     brls::Logger::info("MainActivity: Loaded {} categories", s_cachedCategories.size());
                 }
             });
+
+            // Check updateOnStart setting - trigger library update if enabled
+            if (Application::getInstance().getSettings().updateOnStart) {
+                brls::Logger::info("MainActivity: updateOnStart enabled, triggering library update");
+                asyncRun([&client]() {
+                    if (client.triggerLibraryUpdate()) {
+                        brls::sync([]() {
+                            brls::Application::notify("Checking for new chapters...");
+                        });
+                    }
+                });
+            }
         }
 
         brls::Logger::info("MainActivity: Tabs created, isOnline={}", isOnline);

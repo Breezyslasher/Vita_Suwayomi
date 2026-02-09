@@ -4,6 +4,7 @@
  */
 
 #include "view/source_browse_tab.hpp"
+#include "view/manga_detail_view.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "view/media_item_cell.hpp"
@@ -109,6 +110,15 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
         return true;
     });
 
+    // Loading label
+    m_loadingLabel = new brls::Label();
+    m_loadingLabel->setText("Loading...");
+    m_loadingLabel->setFontSize(16);
+    m_loadingLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    m_loadingLabel->setMarginTop(20);
+    m_loadingLabel->setVisibility(brls::Visibility::GONE);
+    this->addView(m_loadingLabel);
+
     // Content grid
     m_contentGrid = new RecyclingGrid();
     m_contentGrid->setGrow(1.0f);
@@ -167,6 +177,12 @@ void SourceBrowseTab::loadNextPage() {
 void SourceBrowseTab::loadManga() {
     brls::Logger::debug("Loading manga from source {} (page {})", m_source.name, m_currentPage);
 
+    // Show loading indicator for first page
+    if (m_currentPage == 1) {
+        m_loadingLabel->setVisibility(brls::Visibility::VISIBLE);
+        m_contentGrid->setVisibility(brls::Visibility::GONE);
+    }
+
     brls::async([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> newManga;
@@ -186,6 +202,10 @@ void SourceBrowseTab::loadManga() {
         }
 
         brls::sync([this, success, newManga, hasNext]() {
+            // Hide loading indicator
+            m_loadingLabel->setVisibility(brls::Visibility::GONE);
+            m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
+
             if (success) {
                 // Append new manga to list
                 for (const auto& manga : newManga) {
@@ -249,7 +269,8 @@ void SourceBrowseTab::onMangaSelected(const Manga& manga) {
     brls::Logger::info("Selected manga: {} (id: {})", manga.title, manga.id);
 
     // Push manga detail view
-    // TODO: Implement navigation to MangaDetailView
+    auto* detailView = new MangaDetailView(manga);
+    brls::Application::pushActivity(new brls::Activity(detailView));
 }
 
 } // namespace vitasuwayomi

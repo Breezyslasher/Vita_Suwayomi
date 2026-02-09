@@ -113,8 +113,8 @@ brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::Vi
     // Check if the settings button is visible
     bool settingsVisible = settingsBtn->getVisibility() == brls::Visibility::VISIBLE;
 
-    // If pressing LEFT and settings button is visible, go to settings button
-    if (direction == brls::FocusDirection::LEFT && settingsVisible) {
+    // If pressing RIGHT and settings button is visible, go to settings button
+    if (direction == brls::FocusDirection::RIGHT && settingsVisible) {
         // If focus is on the cell itself, move to settings button
         if (currentView == this) {
             s_preferSettingsFocus = true;
@@ -122,9 +122,13 @@ brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::Vi
         }
     }
 
-    // If pressing RIGHT and currently on settings button, go back to cell
-    if (direction == brls::FocusDirection::RIGHT && currentView == settingsBtn) {
+    // If pressing LEFT and currently on settings button, go back to parent item (cell)
+    if (direction == brls::FocusDirection::LEFT && currentView == settingsBtn) {
         s_preferSettingsFocus = false;
+        // Delegate to parent for proper navigation back
+        if (hasParent()) {
+            return getParent()->getNextFocus(direction, this);
+        }
         return this;
     }
 
@@ -169,10 +173,8 @@ brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::Vi
             }
         }
 
-        // Fallback: delegate to parent for normal navigation
-        if (hasParent()) {
-            return getParent()->getNextFocus(direction, this);
-        }
+        // No next settings row found - stay on current settings button
+        return settingsBtn;
     }
 
     // Default behavior for other cases
@@ -783,6 +785,16 @@ ExtensionsTab::ExtensionsTab() {
     m_recycler->estimatedRowHeight = 50;
     m_recycler->registerCell("Extension", []() { return ExtensionCell::create(); });
     m_recycler->registerCell("Header", []() { return ExtensionSectionHeader::create(); });
+
+    // Register circle button on recycler to exit search (since focus is on recycler items)
+    m_recycler->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (m_isSearchActive) {
+            brls::sync([this]() { hideSearchResults(); });
+            return true;  // Consume the event
+        }
+        return false;  // Let default behavior handle it (go back)
+    }, true);  // Hidden action (don't show in hints)
+
     this->addView(m_recycler);
 
     // Load extensions
@@ -1165,41 +1177,53 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
 }
 
 void ExtensionsTab::uninstallExtension(const Extension& ext) {
-    brls::Logger::info("Uninstalling extension: {}", ext.name);
-    brls::Application::notify("Uninstalling " + ext.name + "...");
+    brls::Logger::info("Requesting uninstall for extension: {}", ext.name);
 
-    brls::async([this, ext]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
+    // Show confirmation dialog
+    auto* dialog = new brls::Dialog("Uninstall " + ext.name + "?\n\nAre you sure you want to uninstall this extension?\nAll sources from this extension will be removed.");
+    dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
-        bool success = false;
-        int maxRetries = 3;
-        for (int attempt = 1; attempt <= maxRetries && !success; attempt++) {
-            brls::Logger::info("Uninstalling extension {} (attempt {}/{})", ext.pkgName, attempt, maxRetries);
-            success = client.uninstallExtension(ext.pkgName);
-            if (!success && attempt < maxRetries) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            }
-        }
+    dialog->addButton("Cancel", []() {});
 
-        if (success) {
-            for (auto& cachedExt : m_cachedExtensions) {
-                if (cachedExt.pkgName == ext.pkgName) {
-                    cachedExt.installed = false;
-                    cachedExt.hasUpdate = false;
-                    break;
+    dialog->addButton("Uninstall", [this, ext]() {
+        brls::Logger::info("Uninstalling extension: {}", ext.name);
+        brls::Application::notify("Uninstalling " + ext.name + "...");
+
+        brls::async([this, ext]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+
+            bool success = false;
+            int maxRetries = 3;
+            for (int attempt = 1; attempt <= maxRetries && !success; attempt++) {
+                brls::Logger::info("Uninstalling extension {} (attempt {}/{})", ext.pkgName, attempt, maxRetries);
+                success = client.uninstallExtension(ext.pkgName);
+                if (!success && attempt < maxRetries) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
                 }
             }
 
-            brls::sync([this, ext]() {
-                brls::Application::notify(ext.name + " uninstalled");
-                refreshUIFromCache();
-            });
-        } else {
-            brls::sync([this, ext]() {
-                brls::Application::notify("Failed to uninstall " + ext.name);
-            });
-        }
+            if (success) {
+                for (auto& cachedExt : m_cachedExtensions) {
+                    if (cachedExt.pkgName == ext.pkgName) {
+                        cachedExt.installed = false;
+                        cachedExt.hasUpdate = false;
+                        break;
+                    }
+                }
+
+                brls::sync([this, ext]() {
+                    brls::Application::notify(ext.name + " uninstalled");
+                    refreshUIFromCache();
+                });
+            } else {
+                brls::sync([this, ext]() {
+                    brls::Application::notify("Failed to uninstall " + ext.name);
+                });
+            }
+        });
     });
+
+    dialog->open();
 }
 
 void ExtensionsTab::showSourceSettings(const Extension& ext) {
@@ -1224,6 +1248,7 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
             } else {
                 // Show source selection dialog
                 auto* dialog = new brls::Dialog("Select Source");
+                dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
                 auto* list = new brls::Box();
                 list->setAxis(brls::Axis::COLUMN);
@@ -1288,6 +1313,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 
         brls::sync([this, source, prefs]() {
             auto* dialog = new brls::Dialog(source.name + " Settings");
+            dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
             auto* scrollFrame = new brls::ScrollingFrame();
             scrollFrame->setHeight(400);

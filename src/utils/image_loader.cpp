@@ -41,11 +41,12 @@ std::map<std::string, std::vector<uint8_t>> ImageLoader::s_cache;
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
+std::string ImageLoader::s_accessToken;
 std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
 std::atomic<int> ImageLoader::s_activeLoads{0};
-int ImageLoader::s_maxConcurrentLoads = 2;  // Reduced for Vita stability
+int ImageLoader::s_maxConcurrentLoads = 4;  // Increased for faster library loading
 int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
 // Flag to track if queue processor is running
@@ -336,6 +337,35 @@ void ImageLoader::setAuthCredentials(const std::string& username, const std::str
     s_authPassword = password;
 }
 
+void ImageLoader::setAccessToken(const std::string& token) {
+    s_accessToken = token;
+}
+
+// Helper to apply authentication headers to HTTP client
+static void applyAuthHeaders(HttpClient& client) {
+    // Prefer JWT Bearer auth if access token is available
+    if (!ImageLoader::getAccessToken().empty()) {
+        client.setDefaultHeader("Authorization", "Bearer " + ImageLoader::getAccessToken());
+    } else if (!ImageLoader::getAuthUsername().empty() && !ImageLoader::getAuthPassword().empty()) {
+        // Fall back to Basic Auth
+        std::string credentials = ImageLoader::getAuthUsername() + ":" + ImageLoader::getAuthPassword();
+        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        std::string encoded;
+        int val = 0, valb = -6;
+        for (unsigned char c : credentials) {
+            val = (val << 8) + c;
+            valb += 8;
+            while (valb >= 0) {
+                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+                valb -= 6;
+            }
+        }
+        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+        while (encoded.size() % 4) encoded.push_back('=');
+        client.setDefaultHeader("Authorization", "Basic " + encoded);
+    }
+}
+
 void ImageLoader::setMaxConcurrentLoads(int max) {
     s_maxConcurrentLoads = std::max(1, std::min(max, 4));
 }
@@ -352,23 +382,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     HttpClient client;
 
     // Add authentication if needed
-    if (!s_authUsername.empty() && !s_authPassword.empty()) {
-        std::string credentials = s_authUsername + ":" + s_authPassword;
-        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        std::string encoded;
-        int val = 0, valb = -6;
-        for (unsigned char c : credentials) {
-            val = (val << 8) + c;
-            valb += 8;
-            while (valb >= 0) {
-                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                valb -= 6;
-            }
-        }
-        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-        while (encoded.size() % 4) encoded.push_back('=');
-        client.setDefaultHeader("Authorization", "Basic " + encoded);
-    }
+    applyAuthHeaders(client);
 
     HttpResponse resp = client.get(url);
 
@@ -418,10 +432,10 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         imageData.assign(resp.body.begin(), resp.body.end());
     }
 
-    // Cache the image in memory
+    // Cache the image in memory (larger cache for big libraries)
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.size() > 40) {
+        if (s_cache.size() > 80) {
             s_cache.clear();
         }
         s_cache[url] = imageData;
@@ -504,7 +518,7 @@ void ImageLoader::processQueue() {
             }
 
             // Small delay between starting loads to prevent overwhelming the system
-            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }).detach();
 }
@@ -532,7 +546,7 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
                 // Found in disk cache - add to memory cache and display
                 {
                     std::lock_guard<std::mutex> lock(s_cacheMutex);
-                    if (s_cache.size() > 40) {
+                    if (s_cache.size() > 80) {
                         s_cache.clear();
                     }
                     s_cache[url] = diskData;
@@ -606,24 +620,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         // Load from HTTP
         HttpClient client;
 
-        // Add authentication if credentials are set
-        if (!s_authUsername.empty() && !s_authPassword.empty()) {
-            std::string credentials = s_authUsername + ":" + s_authPassword;
-            static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-            std::string encoded;
-            int val = 0, valb = -6;
-            for (unsigned char c : credentials) {
-                val = (val << 8) + c;
-                valb += 8;
-                while (valb >= 0) {
-                    encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                    valb -= 6;
-                }
-            }
-            if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-            while (encoded.size() % 4) encoded.push_back('=');
-            client.setDefaultHeader("Authorization", "Basic " + encoded);
-        }
+        // Add authentication if needed
+        applyAuthHeaders(client);
 
         HttpResponse resp = client.get(url);
         if (resp.success && !resp.body.empty()) {
@@ -869,23 +867,7 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
         HttpClient client;
 
         // Add authentication if needed
-        if (!s_authUsername.empty() && !s_authPassword.empty()) {
-            std::string credentials = s_authUsername + ":" + s_authPassword;
-            static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-            std::string encoded;
-            int val = 0, valb = -6;
-            for (unsigned char c : credentials) {
-                val = (val << 8) + c;
-                valb += 8;
-                while (valb >= 0) {
-                    encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                    valb -= 6;
-                }
-            }
-            if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-            while (encoded.size() % 4) encoded.push_back('=');
-            client.setDefaultHeader("Authorization", "Basic " + encoded);
-        }
+        applyAuthHeaders(client);
 
         HttpResponse resp = client.get(url);
         if (resp.success && !resp.body.empty()) {

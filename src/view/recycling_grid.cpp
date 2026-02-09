@@ -87,6 +87,10 @@ void RecyclingGrid::setOnPullToRefresh(std::function<void()> callback) {
     m_onPullToRefresh = callback;
 }
 
+void RecyclingGrid::setOnBackPressed(std::function<bool()> callback) {
+    m_onBackPressed = callback;
+}
+
 void RecyclingGrid::clearViews() {
     m_items.clear();
     m_rows.clear();
@@ -110,8 +114,8 @@ void RecyclingGrid::setupGrid() {
     brls::Logger::debug("RecyclingGrid: Creating {} rows for {} items", totalRows, m_items.size());
 
     // Create all rows and cells
-    // Load first 4 rows immediately, then stagger loading the rest
-    int maxInitialRows = 4;
+    // Load first 6 rows immediately (visible on screen), then load rest quickly
+    int maxInitialRows = 6;
 
     for (int row = 0; row < totalRows; row++) {
         auto* rowBox = new brls::Box();
@@ -130,6 +134,13 @@ void RecyclingGrid::setupGrid() {
             cell->setHeight(m_cellHeight);
             cell->setMarginRight(m_cellMargin);
 
+            // Apply display mode to cell
+            if (m_listMode) {
+                cell->setListMode(true);
+            } else if (m_compactMode) {
+                cell->setCompactMode(true);
+            }
+
             // Load first rows immediately, defer rest for staggered loading
             if (row < maxInitialRows) {
                 cell->setManga(m_items[i]);
@@ -144,6 +155,14 @@ void RecyclingGrid::setupGrid() {
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
 
+            // Register B button on cell to handle back navigation
+            cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+                if (m_onBackPressed) {
+                    return m_onBackPressed();
+                }
+                return false;
+            }, true);  // hidden action
+
             // Track focused index
             cell->getFocusEvent()->subscribe([this, index](brls::View*) {
                 m_focusedIndex = index;
@@ -157,26 +176,14 @@ void RecyclingGrid::setupGrid() {
         m_rows.push_back(rowBox);
     }
 
-    // Schedule loading of remaining covers after a short delay
+    // Load remaining covers immediately - ImageLoader handles queuing
+    // No artificial delays needed; the image loader's queue prevents overload
     if (totalRows > maxInitialRows) {
-        brls::sync([this, maxInitialRows]() {
-            // Load remaining covers in batches
-            int batchSize = 6;  // One row at a time
-            int startCell = maxInitialRows * m_columns;
-
-            for (int i = startCell; i < (int)m_cells.size(); i += batchSize) {
-                int batchEnd = std::min(i + batchSize, (int)m_cells.size());
-                int delayMs = ((i - startCell) / batchSize) * 100;  // 100ms between batches
-
-                brls::sync([this, i, batchEnd]() {
-                    for (int j = i; j < batchEnd; j++) {
-                        if (j < (int)m_cells.size()) {
-                            m_cells[j]->loadThumbnailIfNeeded();
-                        }
-                    }
-                });
-            }
-        });
+        int startCell = maxInitialRows * m_columns;
+        // Queue all remaining thumbnails at once - ImageLoader handles concurrency
+        for (int i = startCell; i < (int)m_cells.size(); i++) {
+            m_cells[i]->loadThumbnailIfNeeded();
+        }
     }
 
     brls::Logger::debug("RecyclingGrid: Grid setup complete with {} cells", m_cells.size());
@@ -255,6 +262,86 @@ const Manga* RecyclingGrid::getItem(int index) const {
 
 brls::View* RecyclingGrid::create() {
     return new RecyclingGrid();
+}
+
+void RecyclingGrid::setGridSize(int columns) {
+    if (columns < 3) columns = 3;
+    if (columns > 10) columns = 10;
+
+    m_columns = columns;
+
+    // Adjust cell dimensions based on column count
+    // PS Vita screen: 960x544, with padding
+    int availableWidth = 920;  // Account for padding
+    m_cellWidth = (availableWidth - (m_columns - 1) * m_cellMargin) / m_columns;
+
+    // Adjust height proportionally (cover ratio ~0.7)
+    if (m_listMode) {
+        m_cellHeight = 80;  // Fixed height for list mode
+    } else if (m_compactMode) {
+        m_cellHeight = static_cast<int>(m_cellWidth * 1.4);  // Taller for compact (cover only)
+    } else {
+        m_cellHeight = static_cast<int>(m_cellWidth * 1.3);  // Normal height with title
+    }
+
+    brls::Logger::info("RecyclingGrid: Grid size set to {} columns, cell {}x{}",
+                       m_columns, m_cellWidth, m_cellHeight);
+
+    // Rebuild grid if we have items
+    if (!m_items.empty()) {
+        setupGrid();
+    }
+}
+
+void RecyclingGrid::setCompactMode(bool compact) {
+    if (m_compactMode == compact) return;
+    m_compactMode = compact;
+    m_listMode = false;  // Disable list mode if enabling compact
+
+    // Recalculate dimensions
+    setGridSize(m_columns);
+}
+
+void RecyclingGrid::setListMode(bool listMode) {
+    if (m_listMode == listMode) return;
+    m_listMode = listMode;
+    m_compactMode = false;  // Disable compact mode if enabling list
+
+    if (m_listMode) {
+        // List mode: 1 column, larger cells
+        m_columns = 1;
+        m_cellWidth = 900;
+        m_cellHeight = 80;
+        m_rowMargin = 5;
+    } else {
+        // Reset to default grid
+        m_columns = 6;
+        m_rowMargin = 10;
+        setGridSize(m_columns);
+    }
+
+    // Rebuild grid if we have items
+    if (!m_items.empty()) {
+        setupGrid();
+    }
+}
+
+brls::View* RecyclingGrid::getFirstCell() const {
+    if (m_cells.empty()) {
+        return nullptr;
+    }
+    return m_cells[0];
+}
+
+void RecyclingGrid::focusIndex(int index) {
+    if (index >= 0 && index < static_cast<int>(m_cells.size())) {
+        brls::Application::giveFocus(m_cells[index]);
+        m_focusedIndex = index;
+    } else if (!m_cells.empty()) {
+        // Fall back to first cell if index is out of range
+        brls::Application::giveFocus(m_cells[0]);
+        m_focusedIndex = 0;
+    }
 }
 
 } // namespace vitasuwayomi

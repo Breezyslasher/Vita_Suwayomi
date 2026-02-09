@@ -6,6 +6,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <set>
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
@@ -42,6 +43,18 @@ private:
     void downloadUnreadChapters();
     void deleteAllDownloads();
     void showChapterMenu(const Chapter& chapter);
+
+    // Chapter selection mode
+    void toggleSelectionMode();
+    void toggleChapterSelection(int chapterIndex);
+    void selectChapterRange(int startIndex, int endIndex);
+    void clearSelection();
+    void markSelectedRead();
+    void markSelectedUnread();
+    void downloadSelected();
+    void deleteSelectedDownloads();
+    void showSelectionActionMenu();
+    void updateSelectionUI();
 
     // Chapter list display
     void populateChaptersList();
@@ -100,6 +113,16 @@ private:
     bool m_sortDescending = true;  // Default: newest first
     bool m_filterDownloaded = false;
     bool m_filterUnread = false;
+    bool m_filterBookmarked = false;
+    std::string m_filterScanlator;
+
+    // Chapter selection mode
+    bool m_selectionMode = false;
+    std::set<int> m_selectedChapters;
+    brls::Button* m_selectBtn = nullptr;
+    brls::Label* m_selectionCountLabel = nullptr;
+    brls::Box* m_selectionBar = nullptr;
+    int m_rangeSelectStart = -1;  // For range selection
 
     // Currently visible chapter action icon (shown on focused row)
     brls::Image* m_currentFocusedIcon = nullptr;

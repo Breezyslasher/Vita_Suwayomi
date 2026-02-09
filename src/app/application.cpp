@@ -71,15 +71,31 @@ void Application::run() {
     // Check if we have saved server connection
     if (!m_serverUrl.empty()) {
         brls::Logger::info("Restoring saved connection...");
-        SuwayomiClient::getInstance().setServerUrl(m_serverUrl);
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        client.setServerUrl(m_serverUrl);
+
+        // If we have JWT tokens, try to refresh them first (they may be expired)
+        AuthMode authMode = client.getAuthMode();
+        if ((authMode == AuthMode::SIMPLE_LOGIN || authMode == AuthMode::UI_LOGIN) &&
+            !client.getRefreshToken().empty()) {
+            brls::Logger::info("Attempting to refresh JWT tokens...");
+            if (client.refreshToken()) {
+                brls::Logger::info("Token refresh successful");
+                // Update stored tokens
+                m_settings.accessToken = client.getAccessToken();
+                m_settings.refreshToken = client.getRefreshToken();
+            } else {
+                brls::Logger::warning("Token refresh failed, will try basic connection test");
+            }
+        }
 
         // Test connection before proceeding
-        if (SuwayomiClient::getInstance().testConnection()) {
+        if (client.testConnection()) {
             brls::Logger::info("Connection restored successfully");
             m_isConnected = true;
             pushMainActivity();
         } else {
-            // Connection failed - could be offline
+            // Connection failed - could be offline or auth expired
             // Check if we have downloads, if so go to main activity (offline mode)
             auto downloads = DownloadsManager::getInstance().getDownloads();
             if (!downloads.empty()) {
@@ -293,7 +309,6 @@ bool Application::loadSettings() {
     // Load UI settings
     m_settings.theme = static_cast<AppTheme>(extractInt("theme"));
     m_settings.showClock = extractBool("showClock", true);
-    m_settings.animationsEnabled = extractBool("animationsEnabled", true);
     m_settings.debugLogging = extractBool("debugLogging", false);
 
     // Load reader settings
@@ -317,6 +332,14 @@ bool Application::loadSettings() {
     if (m_settings.webtoonSidePadding < 0 || m_settings.webtoonSidePadding > 20) {
         m_settings.webtoonSidePadding = 0;
     }
+
+    // Load auto-chapter advance settings
+    m_settings.autoChapterAdvance = extractBool("autoChapterAdvance", false);
+    m_settings.autoAdvanceDelay = extractInt("autoAdvanceDelay");
+    if (m_settings.autoAdvanceDelay < 0 || m_settings.autoAdvanceDelay > 10) {
+        m_settings.autoAdvanceDelay = 3;
+    }
+    m_settings.showAdvanceCountdown = extractBool("showAdvanceCountdown", true);
 
     // Load library settings
     m_settings.updateOnStart = extractBool("updateOnStart", false);
@@ -383,12 +406,101 @@ bool Application::loadSettings() {
     brls::Logger::info("loadSettings: enabledSourceLanguages count = {}", m_settings.enabledSourceLanguages.size());
 
     // Load network settings
+    m_settings.localServerUrl = extractString("localServerUrl");
+    m_settings.remoteServerUrl = extractString("remoteServerUrl");
+    m_settings.useRemoteUrl = extractBool("useRemoteUrl", false);
+    m_settings.autoSwitchOnFailure = extractBool("autoSwitchOnFailure", false);
     m_settings.connectionTimeout = extractInt("connectionTimeout");
     if (m_settings.connectionTimeout <= 0) m_settings.connectionTimeout = 30;
+
+    brls::Logger::info("loadSettings: localUrl={}, remoteUrl={}, useRemote={}, autoSwitch={}",
+                       m_settings.localServerUrl.empty() ? "(empty)" : m_settings.localServerUrl,
+                       m_settings.remoteServerUrl.empty() ? "(empty)" : m_settings.remoteServerUrl,
+                       m_settings.useRemoteUrl ? "true" : "false",
+                       m_settings.autoSwitchOnFailure ? "true" : "false");
 
     // Load display settings
     m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
     m_settings.showDownloadedBadge = extractBool("showDownloadedBadge", true);
+
+    // Load library grid customization
+    int displayModeInt = extractInt("libraryDisplayMode");
+    if (displayModeInt >= 0 && displayModeInt <= 2) {
+        m_settings.libraryDisplayMode = static_cast<LibraryDisplayMode>(displayModeInt);
+    }
+    int gridSizeInt = extractInt("libraryGridSize");
+    if (gridSizeInt >= 0 && gridSizeInt <= 2) {
+        m_settings.libraryGridSize = static_cast<LibraryGridSize>(gridSizeInt);
+    }
+    brls::Logger::info("loadSettings: libraryDisplayMode={}, libraryGridSize={}",
+                       displayModeInt, gridSizeInt);
+
+    // Load search history settings
+    m_settings.maxSearchHistory = extractInt("maxSearchHistory");
+    if (m_settings.maxSearchHistory <= 0 || m_settings.maxSearchHistory > 100) {
+        m_settings.maxSearchHistory = 20;
+    }
+    m_settings.searchHistory.clear();
+    size_t histArrayPos = content.find("\"searchHistory\"");
+    if (histArrayPos != std::string::npos) {
+        size_t arrayStart = content.find('[', histArrayPos);
+        size_t arrayEnd = content.find(']', arrayStart);
+        if (arrayStart != std::string::npos && arrayEnd != std::string::npos) {
+            std::string histArray = content.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
+            // Parse search queries
+            size_t pos = 0;
+            while (pos < histArray.length()) {
+                size_t quoteStart = histArray.find('"', pos);
+                if (quoteStart == std::string::npos) break;
+                // Find end quote, accounting for escaped quotes
+                size_t quoteEnd = quoteStart + 1;
+                while (quoteEnd < histArray.length()) {
+                    if (histArray[quoteEnd] == '"' && histArray[quoteEnd - 1] != '\\') break;
+                    quoteEnd++;
+                }
+                if (quoteEnd >= histArray.length()) break;
+                std::string query = histArray.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+                // Unescape
+                std::string unescaped;
+                for (size_t i = 0; i < query.length(); i++) {
+                    if (query[i] == '\\' && i + 1 < query.length()) {
+                        if (query[i + 1] == '"' || query[i + 1] == '\\') {
+                            unescaped += query[i + 1];
+                            i++;
+                            continue;
+                        }
+                    }
+                    unescaped += query[i];
+                }
+                if (!unescaped.empty()) {
+                    m_settings.searchHistory.push_back(unescaped);
+                }
+                pos = quoteEnd + 1;
+            }
+        }
+    }
+    brls::Logger::debug("Loaded {} search history entries", m_settings.searchHistory.size());
+
+    // Load reading statistics
+    m_settings.totalChaptersRead = extractInt("totalChaptersRead");
+    m_settings.totalMangaCompleted = extractInt("totalMangaCompleted");
+    m_settings.currentStreak = extractInt("currentStreak");
+    m_settings.longestStreak = extractInt("longestStreak");
+
+    // Extract int64 for timestamps - need special handling
+    auto extractInt64 = [&content](const std::string& key) -> int64_t {
+        std::string search = "\"" + key + "\":";
+        size_t pos = content.find(search);
+        if (pos == std::string::npos) return 0;
+        pos += search.length();
+        while (pos < content.length() && (content[pos] == ' ' || content[pos] == '\t')) pos++;
+        size_t end = content.find_first_of(",}\n", pos);
+        if (end == std::string::npos) return 0;
+        return std::stoll(content.substr(pos, end - pos));
+    };
+
+    m_settings.lastReadDate = extractInt64("lastReadDate");
+    m_settings.totalReadingTime = extractInt64("totalReadingTime");
 
     // Load per-manga reader settings
     m_settings.mangaReaderSettings.clear();
@@ -517,11 +629,23 @@ bool Application::loadSettings() {
     // Load auth credentials (stored separately for security)
     m_authUsername = extractString("authUsername");
     m_authPassword = extractString("authPassword");
+    m_settings.authMode = extractInt("authMode");
+    m_settings.accessToken = extractString("accessToken");
+    m_settings.refreshToken = extractString("refreshToken");
 
-    // Apply auth credentials to SuwayomiClient if we have them
+    // Apply auth credentials and mode to SuwayomiClient
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    client.setAuthMode(static_cast<AuthMode>(m_settings.authMode));
+
     if (!m_authUsername.empty() && !m_authPassword.empty()) {
-        SuwayomiClient::getInstance().setAuthCredentials(m_authUsername, m_authPassword);
+        client.setAuthCredentials(m_authUsername, m_authPassword);
         brls::Logger::info("Restored auth credentials for user: {}", m_authUsername);
+    }
+
+    // Restore tokens for JWT-based auth
+    if (!m_settings.accessToken.empty() || !m_settings.refreshToken.empty()) {
+        client.setTokens(m_settings.accessToken, m_settings.refreshToken);
+        brls::Logger::info("Restored auth tokens");
     }
 
     brls::Logger::info("Settings loaded successfully");
@@ -543,11 +667,13 @@ bool Application::saveSettings() {
     // Auth credentials (stored for persistence)
     json += "  \"authUsername\": \"" + m_authUsername + "\",\n";
     json += "  \"authPassword\": \"" + m_authPassword + "\",\n";
+    json += "  \"authMode\": " + std::to_string(m_settings.authMode) + ",\n";
+    json += "  \"accessToken\": \"" + m_settings.accessToken + "\",\n";
+    json += "  \"refreshToken\": \"" + m_settings.refreshToken + "\",\n";
 
     // UI settings
     json += "  \"theme\": " + std::to_string(static_cast<int>(m_settings.theme)) + ",\n";
     json += "  \"showClock\": " + std::string(m_settings.showClock ? "true" : "false") + ",\n";
-    json += "  \"animationsEnabled\": " + std::string(m_settings.animationsEnabled ? "true" : "false") + ",\n";
     json += "  \"debugLogging\": " + std::string(m_settings.debugLogging ? "true" : "false") + ",\n";
 
     // Reader settings
@@ -563,6 +689,11 @@ bool Application::saveSettings() {
     json += "  \"cropBorders\": " + std::string(m_settings.cropBorders ? "true" : "false") + ",\n";
     json += "  \"webtoonDetection\": " + std::string(m_settings.webtoonDetection ? "true" : "false") + ",\n";
     json += "  \"webtoonSidePadding\": " + std::to_string(m_settings.webtoonSidePadding) + ",\n";
+
+    // Auto-chapter advance settings
+    json += "  \"autoChapterAdvance\": " + std::string(m_settings.autoChapterAdvance ? "true" : "false") + ",\n";
+    json += "  \"autoAdvanceDelay\": " + std::to_string(m_settings.autoAdvanceDelay) + ",\n";
+    json += "  \"showAdvanceCountdown\": " + std::string(m_settings.showAdvanceCountdown ? "true" : "false") + ",\n";
 
     // Library settings
     json += "  \"updateOnStart\": " + std::string(m_settings.updateOnStart ? "true" : "false") + ",\n";
@@ -605,11 +736,47 @@ bool Application::saveSettings() {
     json += "],\n";
 
     // Network settings
+    json += "  \"localServerUrl\": \"" + m_settings.localServerUrl + "\",\n";
+    json += "  \"remoteServerUrl\": \"" + m_settings.remoteServerUrl + "\",\n";
+    json += "  \"useRemoteUrl\": " + std::string(m_settings.useRemoteUrl ? "true" : "false") + ",\n";
+    json += "  \"autoSwitchOnFailure\": " + std::string(m_settings.autoSwitchOnFailure ? "true" : "false") + ",\n";
     json += "  \"connectionTimeout\": " + std::to_string(m_settings.connectionTimeout) + ",\n";
 
     // Display settings
     json += "  \"showUnreadBadge\": " + std::string(m_settings.showUnreadBadge ? "true" : "false") + ",\n";
     json += "  \"showDownloadedBadge\": " + std::string(m_settings.showDownloadedBadge ? "true" : "false") + ",\n";
+
+    // Library grid customization
+    json += "  \"libraryDisplayMode\": " + std::to_string(static_cast<int>(m_settings.libraryDisplayMode)) + ",\n";
+    json += "  \"libraryGridSize\": " + std::to_string(static_cast<int>(m_settings.libraryGridSize)) + ",\n";
+
+    // Search history
+    json += "  \"maxSearchHistory\": " + std::to_string(m_settings.maxSearchHistory) + ",\n";
+    json += "  \"searchHistory\": [";
+    {
+        bool first = true;
+        for (const auto& query : m_settings.searchHistory) {
+            if (!first) json += ", ";
+            first = false;
+            // Escape any quotes in search queries
+            std::string escaped;
+            for (char c : query) {
+                if (c == '"') escaped += "\\\"";
+                else if (c == '\\') escaped += "\\\\";
+                else escaped += c;
+            }
+            json += "\"" + escaped + "\"";
+        }
+    }
+    json += "],\n";
+
+    // Reading statistics
+    json += "  \"totalChaptersRead\": " + std::to_string(m_settings.totalChaptersRead) + ",\n";
+    json += "  \"totalMangaCompleted\": " + std::to_string(m_settings.totalMangaCompleted) + ",\n";
+    json += "  \"currentStreak\": " + std::to_string(m_settings.currentStreak) + ",\n";
+    json += "  \"longestStreak\": " + std::to_string(m_settings.longestStreak) + ",\n";
+    json += "  \"lastReadDate\": " + std::to_string(m_settings.lastReadDate) + ",\n";
+    json += "  \"totalReadingTime\": " + std::to_string(m_settings.totalReadingTime) + ",\n";
 
     // Per-manga reader settings
     json += "  \"mangaReaderSettings\": {";
@@ -659,6 +826,169 @@ bool Application::saveSettings() {
     brls::Logger::info("Settings saved successfully ({} bytes)", json.length());
     return true;
 #endif
+}
+
+std::string Application::getActiveServerUrl() const {
+    if (m_settings.useRemoteUrl && !m_settings.remoteServerUrl.empty()) {
+        return m_settings.remoteServerUrl;
+    }
+    if (!m_settings.localServerUrl.empty()) {
+        return m_settings.localServerUrl;
+    }
+    // Fall back to current server URL if no local/remote configured
+    return m_serverUrl;
+}
+
+std::string Application::getAlternateServerUrl() const {
+    // Return the URL that is NOT currently active
+    if (m_settings.useRemoteUrl) {
+        // Currently using remote, so alternate is local
+        return m_settings.localServerUrl;
+    } else {
+        // Currently using local, so alternate is remote
+        return m_settings.remoteServerUrl;
+    }
+}
+
+bool Application::tryAlternateUrl() {
+    // Only try if auto-switch is enabled and both URLs are configured
+    if (!m_settings.autoSwitchOnFailure || !hasBothUrls()) {
+        return false;
+    }
+
+    std::string alternateUrl = getAlternateServerUrl();
+    if (alternateUrl.empty()) {
+        return false;
+    }
+
+    brls::Logger::info("Auto-switch: Trying alternate URL: {}", alternateUrl);
+
+    // Test the alternate URL
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::string originalUrl = client.getServerUrl();
+    client.setServerUrl(alternateUrl);
+
+    if (client.testConnection()) {
+        // Alternate URL works - switch to it
+        if (m_settings.useRemoteUrl) {
+            // Was using remote, now switch to local
+            m_settings.useRemoteUrl = false;
+            m_serverUrl = m_settings.localServerUrl;
+            brls::Logger::info("Auto-switch: Switched to local URL");
+        } else {
+            // Was using local, now switch to remote
+            m_settings.useRemoteUrl = true;
+            m_serverUrl = m_settings.remoteServerUrl;
+            brls::Logger::info("Auto-switch: Switched to remote URL");
+        }
+        saveSettings();
+        return true;
+    }
+
+    // Alternate URL also failed - restore original
+    client.setServerUrl(originalUrl);
+    brls::Logger::warning("Auto-switch: Alternate URL also failed");
+    return false;
+}
+
+void Application::switchToLocalUrl() {
+    if (!m_settings.localServerUrl.empty()) {
+        m_settings.useRemoteUrl = false;
+        m_serverUrl = m_settings.localServerUrl;
+        SuwayomiClient::getInstance().setServerUrl(m_serverUrl);
+        brls::Logger::info("Switched to local URL: {}", m_serverUrl);
+        saveSettings();
+    }
+}
+
+void Application::switchToRemoteUrl() {
+    if (!m_settings.remoteServerUrl.empty()) {
+        m_settings.useRemoteUrl = true;
+        m_serverUrl = m_settings.remoteServerUrl;
+        SuwayomiClient::getInstance().setServerUrl(m_serverUrl);
+        brls::Logger::info("Switched to remote URL: {}", m_serverUrl);
+        saveSettings();
+    }
+}
+
+void Application::updateReadingStatistics(bool chapterCompleted, bool mangaCompleted) {
+    // Get current date (days since epoch for streak calculation)
+    int64_t currentTime = static_cast<int64_t>(std::time(nullptr));
+    int64_t currentDay = currentTime / (24 * 60 * 60);  // Days since epoch
+    int64_t lastDay = m_settings.lastReadDate / (24 * 60 * 60);
+
+    // Update chapter count
+    if (chapterCompleted) {
+        m_settings.totalChaptersRead++;
+        brls::Logger::info("Statistics: chapters read = {}", m_settings.totalChaptersRead);
+    }
+
+    // Update manga completed count
+    if (mangaCompleted) {
+        m_settings.totalMangaCompleted++;
+        brls::Logger::info("Statistics: manga completed = {}", m_settings.totalMangaCompleted);
+    }
+
+    // Update reading streak
+    if (m_settings.lastReadDate == 0) {
+        // First time reading
+        m_settings.currentStreak = 1;
+    } else if (currentDay == lastDay) {
+        // Same day - no streak change
+    } else if (currentDay == lastDay + 1) {
+        // Consecutive day - increment streak
+        m_settings.currentStreak++;
+    } else {
+        // Streak broken - reset to 1
+        m_settings.currentStreak = 1;
+    }
+
+    // Update longest streak
+    if (m_settings.currentStreak > m_settings.longestStreak) {
+        m_settings.longestStreak = m_settings.currentStreak;
+    }
+
+    // Update last read date
+    m_settings.lastReadDate = currentTime;
+
+    // Save settings
+    saveSettings();
+}
+
+void Application::syncStatisticsFromServer() {
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+    // Fetch library manga to count completed manga
+    std::vector<Manga> libraryManga;
+    if (client.fetchLibraryManga(libraryManga)) {
+        int chaptersRead = 0;
+        int mangaCompleted = 0;
+
+        for (const auto& manga : libraryManga) {
+            // Count chapters read (total - unread)
+            int readChapters = manga.chapterCount - manga.unreadCount;
+            if (readChapters > 0) {
+                chaptersRead += readChapters;
+            }
+
+            // Count completed manga (no unread chapters and has chapters)
+            if (manga.unreadCount == 0 && manga.chapterCount > 0) {
+                mangaCompleted++;
+            }
+        }
+
+        // Update stats if server has higher counts (don't decrease)
+        if (chaptersRead > m_settings.totalChaptersRead) {
+            m_settings.totalChaptersRead = chaptersRead;
+            brls::Logger::info("Statistics synced from server: {} chapters read", chaptersRead);
+        }
+        if (mangaCompleted > m_settings.totalMangaCompleted) {
+            m_settings.totalMangaCompleted = mangaCompleted;
+            brls::Logger::info("Statistics synced from server: {} manga completed", mangaCompleted);
+        }
+
+        saveSettings();
+    }
 }
 
 } // namespace vitasuwayomi

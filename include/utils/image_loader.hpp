@@ -24,9 +24,13 @@ public:
     // Set authentication credentials for image loading
     static void setAuthCredentials(const std::string& username, const std::string& password);
 
+    // Set JWT access token for Bearer auth
+    static void setAccessToken(const std::string& token);
+
     // Get authentication credentials (for other components that need to download)
     static const std::string& getAuthUsername() { return s_authUsername; }
     static const std::string& getAuthPassword() { return s_authPassword; }
+    static const std::string& getAccessToken() { return s_accessToken; }
 
     // Load image asynchronously from URL (with thumbnail downscaling) - for brls::Image
     static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target);
@@ -91,6 +95,7 @@ private:
     static std::mutex s_cacheMutex;
     static std::string s_authUsername;
     static std::string s_authPassword;
+    static std::string s_accessToken;  // JWT access token for Bearer auth
 
     // Concurrent load limiting
     static std::queue<LoadRequest> s_loadQueue;

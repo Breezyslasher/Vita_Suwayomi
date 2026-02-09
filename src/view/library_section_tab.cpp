@@ -7,6 +7,7 @@
 #include "view/library_section_tab.hpp"
 #include "view/manga_item_cell.hpp"
 #include "view/manga_detail_view.hpp"
+#include "view/tracking_search_view.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
@@ -14,6 +15,8 @@
 #include "utils/image_loader.hpp"
 #include "utils/library_cache.hpp"
 #include "view/migrate_search_view.hpp"
+#include <chrono>
+#include <thread>
 
 namespace vitasuwayomi {
 
@@ -40,7 +43,7 @@ LibrarySectionTab::LibrarySectionTab() {
     topRow->setJustifyContent(brls::JustifyContent::FLEX_START);
     topRow->setAlignItems(brls::AlignItems::CENTER);
     topRow->setMarginBottom(15);
-    topRow->setHeight(45);
+    topRow->setHeight(50);
 
     // Category tabs container - outer box clips, inner box scrolls
     m_categoryTabsBox = new brls::Box();
@@ -58,6 +61,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryScrollContainer->setJustifyContent(brls::JustifyContent::FLEX_START);
     m_categoryScrollContainer->setAlignItems(brls::AlignItems::CENTER);
     m_categoryScrollContainer->setPaddingLeft(5);  // Prevent first button cutoff
+    m_categoryScrollContainer->setShrink(0);  // Don't shrink - allow scrolling beyond visible area
     m_categoryTabsBox->addView(m_categoryScrollContainer);
 
     topRow->addView(m_categoryTabsBox);
@@ -65,12 +69,24 @@ LibrarySectionTab::LibrarySectionTab() {
     // Button container for Sort and Update
     auto* buttonBox = new brls::Box();
     buttonBox->setAxis(brls::Axis::ROW);
-    buttonBox->setAlignItems(brls::AlignItems::CENTER);
+    buttonBox->setAlignItems(brls::AlignItems::FLEX_END);
     buttonBox->setShrink(0.0f);  // Don't shrink buttons
 
-    // Sort button with icon
+    // Sort button container with Y button hint
+    auto* sortContainer = new brls::Box();
+    sortContainer->setAxis(brls::Axis::COLUMN);
+    sortContainer->setAlignItems(brls::AlignItems::CENTER);
+    sortContainer->setMarginLeft(10);
+
+    auto* sortHintIcon = new brls::Image();
+    sortHintIcon->setWidth(64);
+    sortHintIcon->setHeight(16);
+    sortHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    sortHintIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    sortHintIcon->setMarginBottom(2);
+    sortContainer->addView(sortHintIcon);
+
     m_sortBtn = new brls::Button();
-    m_sortBtn->setMarginLeft(10);
     m_sortBtn->setWidth(44);
     m_sortBtn->setHeight(40);
     m_sortBtn->setCornerRadius(8);
@@ -87,7 +103,8 @@ LibrarySectionTab::LibrarySectionTab() {
         cycleSortMode();
         return true;
     });
-    buttonBox->addView(m_sortBtn);
+    sortContainer->addView(m_sortBtn);
+    buttonBox->addView(sortContainer);
 
     // Load saved sort mode
     auto& app = Application::getInstance();
@@ -97,9 +114,21 @@ LibrarySectionTab::LibrarySectionTab() {
     // Initialize sort icon
     updateSortButtonText();
 
-    // Update button with refresh icon
+    // Update button container with Select button hint
+    auto* updateContainer = new brls::Box();
+    updateContainer->setAxis(brls::Axis::COLUMN);
+    updateContainer->setAlignItems(brls::AlignItems::CENTER);
+    updateContainer->setMarginLeft(8);
+
+    auto* updateHintIcon = new brls::Image();
+    updateHintIcon->setWidth(64);
+    updateHintIcon->setHeight(16);
+    updateHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    updateHintIcon->setImageFromFile("app0:resources/images/select_button.png");
+    updateHintIcon->setMarginBottom(2);
+    updateContainer->addView(updateHintIcon);
+
     m_updateBtn = new brls::Button();
-    m_updateBtn->setMarginLeft(8);
     m_updateBtn->setWidth(44);
     m_updateBtn->setHeight(40);
     m_updateBtn->setCornerRadius(8);
@@ -117,7 +146,8 @@ LibrarySectionTab::LibrarySectionTab() {
         triggerLibraryUpdate();
         return true;
     });
-    buttonBox->addView(m_updateBtn);
+    updateContainer->addView(m_updateBtn);
+    buttonBox->addView(updateContainer);
 
     topRow->addView(buttonBox);
 
@@ -132,6 +162,37 @@ LibrarySectionTab::LibrarySectionTab() {
     m_contentGrid->setOnPullToRefresh([this]() {
         triggerLibraryUpdate();
     });
+
+    // Apply library display settings from user preferences
+    const auto& settings = Application::getInstance().getSettings();
+
+    // Apply display mode (Grid/Compact/List)
+    switch (settings.libraryDisplayMode) {
+        case LibraryDisplayMode::GRID_NORMAL:
+            m_contentGrid->setCompactMode(false);
+            m_contentGrid->setListMode(false);
+            break;
+        case LibraryDisplayMode::GRID_COMPACT:
+            m_contentGrid->setCompactMode(true);
+            break;
+        case LibraryDisplayMode::LIST:
+            m_contentGrid->setListMode(true);
+            break;
+    }
+
+    // Apply grid size (4/6/8 columns)
+    switch (settings.libraryGridSize) {
+        case LibraryGridSize::SMALL:
+            m_contentGrid->setGridSize(4);  // Large covers (4 columns)
+            break;
+        case LibraryGridSize::MEDIUM:
+            m_contentGrid->setGridSize(6);  // Medium (6 columns - default)
+            break;
+        case LibraryGridSize::LARGE:
+            m_contentGrid->setGridSize(8);  // Small covers (8 columns)
+            break;
+    }
+
     this->addView(m_contentGrid);
 
     brls::Logger::debug("LibrarySectionTab: Created");
@@ -161,6 +222,12 @@ LibrarySectionTab::LibrarySectionTab() {
     // Register Select button to refresh/update current category
     this->registerAction("Update Category", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
         triggerLibraryUpdate();
+        return true;
+    });
+
+    // Register Y button (triangle) to cycle sort mode
+    this->registerAction("Sort", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
+        cycleSortMode();
         return true;
     });
 
@@ -225,8 +292,20 @@ void LibrarySectionTab::loadCategories() {
             m_categoriesLoaded = true;
             createCategoryTabs();
 
-            // Load first category from cache
-            if (!m_categories.empty()) {
+            // Load default category from settings, or first category if not found
+            int defaultId = Application::getInstance().getSettings().defaultCategoryId;
+            bool foundDefault = false;
+            if (defaultId != 0) {
+                for (const auto& cat : m_categories) {
+                    if (cat.id == defaultId) {
+                        foundDefault = true;
+                        break;
+                    }
+                }
+            }
+            if (foundDefault) {
+                selectCategory(defaultId);
+            } else if (!m_categories.empty()) {
                 selectCategory(m_categories[0].id);
             } else {
                 selectCategory(0);
@@ -261,8 +340,20 @@ void LibrarySectionTab::loadCategories() {
                 m_categoriesLoaded = true;
                 createCategoryTabs();
 
-                // Load the first category (or default if none)
-                if (!m_categories.empty()) {
+                // Load default category from settings, or first category if not found
+                int defaultId = Application::getInstance().getSettings().defaultCategoryId;
+                bool foundDefault = false;
+                if (defaultId != 0) {
+                    for (const auto& cat : m_categories) {
+                        if (cat.id == defaultId) {
+                            foundDefault = true;
+                            break;
+                        }
+                    }
+                }
+                if (foundDefault) {
+                    selectCategory(defaultId);
+                } else if (!m_categories.empty()) {
                     selectCategory(m_categories[0].id);
                 } else {
                     // No categories - load all library manga
@@ -323,10 +414,13 @@ void LibrarySectionTab::createCategoryTabs() {
     // If no visible categories, show a "Library" tab that loads all manga
     if (visibleCategories.empty()) {
         auto* btn = new brls::Button();
-        btn->setText("Library");
-        btn->setMarginRight(10);
-        btn->setWidth(100);
+        btn->setMarginRight(8);
+        btn->setWidth(80);
         btn->setHeight(35);
+        btn->setCornerRadius(6);
+        btn->setJustifyContent(brls::JustifyContent::CENTER);
+        btn->setAlignItems(brls::AlignItems::CENTER);
+        btn->setText("Library");
         btn->registerClickAction([this](brls::View* view) {
             selectCategory(0);
             return true;
@@ -336,12 +430,14 @@ void LibrarySectionTab::createCategoryTabs() {
         return;
     }
 
-    // Create a button for each category
+    // Calculate total width needed for all buttons first
+    // This ensures the scroll container has enough width for proper layout of all buttons
+    float totalWidth = 5.0f; // Initial left padding
+    std::vector<int> buttonWidths;
+    std::vector<std::string> buttonNames;
+
     for (size_t i = 0; i < visibleCategories.size(); i++) {
         const auto& category = visibleCategories[i];
-        auto* btn = new brls::Button();
-
-        // Get category name, truncate if too long
         std::string catName = category.name;
         if (catName.empty()) {
             catName = "Cat " + std::to_string(category.id);
@@ -349,16 +445,36 @@ void LibrarySectionTab::createCategoryTabs() {
         if (catName.length() > 25) {
             catName = catName.substr(0, 23) + "..";
         }
+        buttonNames.push_back(catName);
 
-        btn->setText(catName);
+        int textWidth = static_cast<int>(catName.length()) * 14 + 24;
+        if (textWidth < 60) textWidth = 60;
+        if (textWidth > 280) textWidth = 280;
+        buttonWidths.push_back(textWidth);
+        totalWidth += textWidth + 8.0f; // button width + margin
+    }
+
+    // Set minimum width on scroll container to fit all buttons
+    // This ensures off-screen buttons get proper layout
+    m_categoryScrollContainer->setWidth(totalWidth);
+
+    // Create a button for each category
+    for (size_t i = 0; i < visibleCategories.size(); i++) {
+        const auto& category = visibleCategories[i];
+        auto* btn = new brls::Button();
+
+        std::string catName = buttonNames[i];
+        int textWidth = buttonWidths[i];
+
         btn->setMarginRight(8);
         btn->setHeight(35);
-
-        // Calculate width based on text length
-        int textWidth = static_cast<int>(catName.length()) * 9 + 30;
-        if (textWidth < 60) textWidth = 60;
-        if (textWidth > 250) textWidth = 250;
+        btn->setCornerRadius(6);
+        btn->setJustifyContent(brls::JustifyContent::CENTER);
+        btn->setAlignItems(brls::AlignItems::CENTER);
         btn->setWidth(textWidth);
+
+        // Set text after sizing is configured to ensure proper layout
+        btn->setText(catName);
 
         // Click handler
         int catId = category.id;
@@ -376,6 +492,9 @@ void LibrarySectionTab::createCategoryTabs() {
         m_categoryScrollContainer->addView(btn);
         m_categoryButtons.push_back(btn);
     }
+
+    // Force layout calculation for all buttons now that container has proper width
+    m_categoryScrollContainer->invalidate();
 
     updateCategoryButtonStyles();
 }
@@ -439,9 +558,9 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         m_titleLabel->setText(m_currentCategoryName);
     }
 
-    // Cancel pending image loads and clear memory cache to free memory
+    // Cancel pending image loads when switching categories
+    // Keep memory cache for faster switching back to previous categories
     ImageLoader::cancelAll();
-    ImageLoader::clearCache();
 
     // Check if we have cached data (for instant loading)
     bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
@@ -471,7 +590,27 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
 
-        bool success = client.fetchCategoryManga(categoryId, manga);
+        // Retry with exponential backoff (1s, 2s, 4s)
+        const int maxRetries = 3;
+        const int baseDelayMs = 1000;
+        bool success = false;
+
+        for (int attempt = 0; attempt < maxRetries; attempt++) {
+            // Check if we're still alive before each attempt
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            if (attempt > 0) {
+                int delayMs = baseDelayMs * (1 << (attempt - 1));  // 1s, 2s, 4s
+                brls::Logger::info("LibrarySectionTab: Retry {} for category {} in {}ms",
+                                  attempt, categoryId, delayMs);
+                std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+            }
+
+            manga.clear();
+            success = client.fetchCategoryManga(categoryId, manga);
+            if (success) break;
+        }
 
         if (success) {
             brls::Logger::info("LibrarySectionTab: Got {} manga for category {} from server",
@@ -496,8 +635,8 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
                 m_loaded = true;
             });
         } else {
-            brls::Logger::error("LibrarySectionTab: Failed to load manga for category {}",
-                               categoryId);
+            brls::Logger::error("LibrarySectionTab: Failed to load manga for category {} after {} retries",
+                               categoryId, maxRetries);
 
             brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
@@ -505,7 +644,7 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
 
                 // Only notify if we didn't have cached data
                 if (m_mangaList.empty()) {
-                    brls::Application::notify("Failed to load manga");
+                    brls::Application::notify("Failed to load manga - check connection");
                 }
                 m_loaded = true;
             });
@@ -562,6 +701,15 @@ void LibrarySectionTab::triggerLibraryUpdate() {
 }
 
 void LibrarySectionTab::sortMangaList() {
+    // Preserve focus: get currently focused manga ID before sorting
+    int focusedMangaId = -1;
+    if (m_contentGrid) {
+        int focusedIdx = m_contentGrid->getFocusedIndex();
+        if (focusedIdx >= 0 && focusedIdx < static_cast<int>(m_mangaList.size())) {
+            focusedMangaId = m_mangaList[focusedIdx].id;
+        }
+    }
+
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
             std::sort(m_mangaList.begin(), m_mangaList.end(),
@@ -581,13 +729,34 @@ void LibrarySectionTab::sortMangaList() {
             break;
         case LibrarySortMode::RECENTLY_ADDED:
             std::sort(m_mangaList.begin(), m_mangaList.end(),
-                [](const Manga& a, const Manga& b) { return a.id > b.id; });
+                [](const Manga& a, const Manga& b) {
+                    // Use inLibraryAt timestamp for proper "recently added" sorting
+                    // Fall back to id comparison if timestamps are equal or missing
+                    if (a.inLibraryAt != b.inLibraryAt) {
+                        return a.inLibraryAt > b.inLibraryAt;
+                    }
+                    return a.id > b.id;
+                });
             break;
     }
 
     // Update grid display
     if (m_contentGrid) {
         m_contentGrid->setDataSource(m_mangaList);
+
+        // Restore focus: find the manga's new index after sorting
+        if (focusedMangaId >= 0) {
+            int newIndex = -1;
+            for (size_t i = 0; i < m_mangaList.size(); i++) {
+                if (m_mangaList[i].id == focusedMangaId) {
+                    newIndex = static_cast<int>(i);
+                    break;
+                }
+            }
+            if (newIndex >= 0) {
+                m_contentGrid->focusIndex(newIndex);
+            }
+        }
     }
 }
 
@@ -698,7 +867,7 @@ void LibrarySectionTab::scrollToCategoryIndex(int index) {
     for (int i = 0; i <= index; i++) {
         if (i < static_cast<int>(m_categoryButtons.size())) {
             buttonWidth = m_categoryButtons[i]->getWidth();
-            if (buttonWidth <= 0) buttonWidth = 80.0f;
+            if (buttonWidth <= 0) buttonWidth = 90.0f;
             if (i < index) {
                 buttonX += buttonWidth + 8.0f;
             }
@@ -731,10 +900,10 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
 
     std::vector<std::string> options;
     if (m_selectionMode) {
-        options = {"Select / Deselect", "Download", "Mark as Read", "Mark as Unread",
+        options = {"Select / Deselect", "Download All", "Download Next 5", "Mark as Read", "Mark as Unread",
                    "Change Categories", "Remove from Library", "Cancel Selection"};
     } else {
-        options = {"Select", "Download", "Track", "Mark as Read", "Mark as Unread",
+        options = {"Select", "Download All", "Download Next 5", "Track", "Mark as Read", "Mark as Unread",
                    "Change Categories", "Remove from Library", "Migrate Source"};
     }
 
@@ -755,40 +924,47 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
                         m_contentGrid->toggleSelection(index);
                         updateSelectionTitle();
                         break;
-                    case 1: { // Download
+                    case 1: { // Download All
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         showDownloadSubmenu(selectedManga);
                         break;
                     }
-                    case 2: { // Mark as Read
+                    case 2: { // Download Next 5
+                        auto selectedManga = m_contentGrid->getSelectedManga();
+                        if (selectedManga.empty()) selectedManga.push_back(manga);
+                        downloadNextChapters(selectedManga, 5);
+                        exitSelectionMode();
+                        break;
+                    }
+                    case 3: { // Mark as Read
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         markMangaRead(selectedManga);
                         exitSelectionMode();
                         break;
                     }
-                    case 3: { // Mark as Unread
+                    case 4: { // Mark as Unread
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         markMangaUnread(selectedManga);
                         exitSelectionMode();
                         break;
                     }
-                    case 4: { // Change Categories
+                    case 5: { // Change Categories
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         showChangeCategoryDialog(selectedManga);
                         break;
                     }
-                    case 5: { // Remove from Library
+                    case 6: { // Remove from Library
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         removeFromLibrary(selectedManga);
                         exitSelectionMode();
                         break;
                     }
-                    case 6: // Cancel Selection
+                    case 7: // Cancel Selection
                         exitSelectionMode();
                         break;
                 }
@@ -798,35 +974,40 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
                     case 0: // Select
                         enterSelectionMode(index);
                         break;
-                    case 1: { // Download
+                    case 1: { // Download All
                         std::vector<Manga> list = {manga};
                         showDownloadSubmenu(list);
                         break;
                     }
-                    case 2: // Track
+                    case 2: { // Download Next 5
+                        std::vector<Manga> list = {manga};
+                        downloadNextChapters(list, 5);
+                        break;
+                    }
+                    case 3: // Track
                         openTracking(manga);
                         break;
-                    case 3: { // Mark as Read
+                    case 4: { // Mark as Read
                         std::vector<Manga> list = {manga};
                         markMangaRead(list);
                         break;
                     }
-                    case 4: { // Mark as Unread
+                    case 5: { // Mark as Unread
                         std::vector<Manga> list = {manga};
                         markMangaUnread(list);
                         break;
                     }
-                    case 5: { // Change Categories
+                    case 6: { // Change Categories
                         std::vector<Manga> list = {manga};
                         showChangeCategoryDialog(list);
                         break;
                     }
-                    case 6: { // Remove from Library
+                    case 7: { // Remove from Library
                         std::vector<Manga> list = {manga};
                         removeFromLibrary(list);
                         break;
                     }
-                    case 7: // Migrate Source
+                    case 8: // Migrate Source
                         showMigrateSourceMenu(manga);
                         break;
                 }
@@ -1057,6 +1238,14 @@ void LibrarySectionTab::downloadChapters(const std::vector<Manga>& mangaList, co
     });
 }
 
+void LibrarySectionTab::downloadNextChapters(const std::vector<Manga>& mangaList, int count) {
+    std::string mode;
+    if (count <= 5) mode = "next5";
+    else if (count <= 10) mode = "next10";
+    else mode = "next25";
+    downloadChapters(mangaList, mode);
+}
+
 void LibrarySectionTab::markMangaRead(const std::vector<Manga>& mangaList) {
     brls::Application::notify("Marking as read...");
 
@@ -1128,9 +1317,191 @@ void LibrarySectionTab::removeFromLibrary(const std::vector<Manga>& mangaList) {
 }
 
 void LibrarySectionTab::openTracking(const Manga& manga) {
-    // Push the manga detail view which has full tracking support
-    auto* detailView = new MangaDetailView(manga);
-    brls::Application::pushActivity(new brls::Activity(detailView));
+    brls::Logger::info("LibrarySectionTab: Opening tracking for manga {}", manga.id);
+
+    // Capture manga data for async operations
+    Manga capturedManga = manga;
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    // Fetch trackers asynchronously
+    asyncRun([capturedManga, aliveWeak]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        std::vector<Tracker> trackers;
+        std::vector<TrackRecord> records;
+
+        bool trackersOk = client.fetchTrackers(trackers);
+        bool recordsOk = client.fetchMangaTracking(capturedManga.id, records);
+
+        brls::sync([capturedManga, trackers, records, trackersOk, recordsOk, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            if (!trackersOk) {
+                brls::Application::notify("Failed to load trackers");
+                return;
+            }
+
+            // Filter to show only logged-in trackers
+            std::vector<Tracker> loggedInTrackers;
+            for (const auto& t : trackers) {
+                if (t.isLoggedIn) {
+                    loggedInTrackers.push_back(t);
+                }
+            }
+
+            if (loggedInTrackers.empty()) {
+                brls::Application::notify("No trackers logged in. Configure in server settings.");
+                return;
+            }
+
+            // Build tracker options - show existing tracking status
+            std::vector<std::string> trackerOptions;
+            std::vector<Tracker> capturedTrackers;
+            std::vector<TrackRecord> capturedRecords;
+            std::vector<bool> hasRecords;
+
+            for (const auto& tracker : loggedInTrackers) {
+                TrackRecord* existingRecord = nullptr;
+                for (const auto& r : records) {
+                    if (r.trackerId == tracker.id) {
+                        existingRecord = const_cast<TrackRecord*>(&r);
+                        break;
+                    }
+                }
+
+                std::string label = tracker.name;
+                if (existingRecord && existingRecord->id > 0) {
+                    label += " - Tracked";
+                    if (!existingRecord->title.empty()) {
+                        std::string trackTitle = existingRecord->title;
+                        if (trackTitle.length() > 15) {
+                            trackTitle = trackTitle.substr(0, 13) + "..";
+                        }
+                        label += " (" + trackTitle + ")";
+                    }
+                } else {
+                    label += " - Not tracked";
+                }
+
+                trackerOptions.push_back(label);
+                capturedTrackers.push_back(tracker);
+                capturedRecords.push_back(existingRecord ? *existingRecord : TrackRecord());
+                hasRecords.push_back(existingRecord != nullptr && existingRecord->id > 0);
+            }
+
+            // Lambda to handle tracker action (used for both single and multi tracker cases)
+            auto handleTrackerAction = [capturedManga, aliveWeak](Tracker selectedTracker, TrackRecord selectedRecord, bool hasRecord) {
+                if (hasRecord) {
+                    // Already tracked - show info and offer to remove
+                    std::vector<std::string> options = {"View Details", "Remove Tracking"};
+                    brls::Dropdown* actionDropdown = new brls::Dropdown(
+                        selectedTracker.name + ": " + selectedRecord.title,
+                        options,
+                        [capturedManga, selectedTracker, selectedRecord, aliveWeak](int action) {
+                            if (action == 0) {
+                                // View details - show tracking info
+                                std::string info = "Status: " + selectedRecord.status;
+                                if (selectedRecord.lastChapterRead > 0) {
+                                    info += "\nProgress: Ch. " + std::to_string(selectedRecord.lastChapterRead);
+                                }
+                                if (selectedRecord.score > 0) {
+                                    info += "\nScore: " + std::to_string(selectedRecord.score);
+                                }
+                                brls::Application::notify(info);
+                            } else if (action == 1) {
+                                // Remove tracking
+                                brls::Application::notify("Removing from " + selectedTracker.name + "...");
+                                int recordId = selectedRecord.id;
+                                std::string trackerNameCopy = selectedTracker.name;
+                                asyncRun([recordId, trackerNameCopy, aliveWeak]() {
+                                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                                    bool success = client.unbindTracker(recordId, false);
+                                    brls::sync([success, aliveWeak]() {
+                                        auto alive = aliveWeak.lock();
+                                        if (!alive || !*alive) return;
+                                        if (success) {
+                                            brls::Application::notify("Tracking removed");
+                                        } else {
+                                            brls::Application::notify("Failed to remove tracking");
+                                        }
+                                    });
+                                });
+                            }
+                        }, 0);
+                    brls::Application::pushActivity(new brls::Activity(actionDropdown));
+                } else {
+                    // Not tracked - open search to add
+                    std::string defaultQuery = capturedManga.title;
+                    Tracker tracker = selectedTracker;
+                    Manga manga = capturedManga;
+
+                    brls::Application::getImeManager()->openForText(
+                        [tracker, manga, aliveWeak](std::string text) {
+                            if (text.empty()) return;
+
+                            auto alive = aliveWeak.lock();
+                            if (!alive || !*alive) return;
+
+                            brls::Application::notify("Searching " + tracker.name + "...");
+
+                            int trackerId = tracker.id;
+                            int mangaId = manga.id;
+                            std::string trackerName = tracker.name;
+                            std::string searchQuery = text;
+
+                            asyncRun([trackerId, mangaId, searchQuery, trackerName, aliveWeak]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                std::vector<TrackSearchResult> results;
+
+                                if (!client.searchTracker(trackerId, searchQuery, results)) {
+                                    brls::sync([trackerName]() {
+                                        brls::Application::notify("Search failed for " + trackerName);
+                                    });
+                                    return;
+                                }
+
+                                brls::sync([trackerId, mangaId, trackerName, results, aliveWeak]() {
+                                    auto alive = aliveWeak.lock();
+                                    if (!alive || !*alive) return;
+
+                                    if (results.empty()) {
+                                        brls::Application::notify("No results found on " + trackerName);
+                                        return;
+                                    }
+
+                                    // Show tracking search view
+                                    auto* searchView = new TrackingSearchView(trackerName, trackerId, mangaId, results);
+                                    brls::Application::pushActivity(new brls::Activity(searchView));
+                                });
+                            });
+                        },
+                        "Search " + tracker.name,
+                        "Enter manga title to search",
+                        256,
+                        defaultQuery
+                    );
+                }
+            };
+
+            // Skip tracker selection if only one tracker is available
+            if (capturedTrackers.size() == 1) {
+                handleTrackerAction(capturedTrackers[0], capturedRecords[0], hasRecords[0]);
+                return;
+            }
+
+            // Show tracker selection dropdown (multiple trackers)
+            brls::Dropdown* dropdown = new brls::Dropdown(
+                "Track: " + capturedManga.title,
+                trackerOptions,
+                [capturedTrackers, capturedRecords, hasRecords, handleTrackerAction](int selected) {
+                    if (selected < 0 || selected >= static_cast<int>(capturedTrackers.size())) return;
+
+                    handleTrackerAction(capturedTrackers[selected], capturedRecords[selected], hasRecords[selected]);
+                }, 0);
+            brls::Application::pushActivity(new brls::Activity(dropdown));
+        });
+    });
 }
 
 } // namespace vitasuwayomi

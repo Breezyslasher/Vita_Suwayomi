@@ -23,7 +23,16 @@ public:
     void setOnItemSelected(std::function<void(const Manga&)> callback);
     void setOnItemLongPressed(std::function<void(const Manga&, int index)> callback);
     void setOnPullToRefresh(std::function<void()> callback);
+    void setOnBackPressed(std::function<bool()> callback);
     void clearViews();
+
+    // Grid customization
+    void setGridSize(int columns);  // 4, 6, or 8 columns
+    void setCompactMode(bool compact);  // Compact mode (covers only, no titles)
+    void setListMode(bool listMode);  // List view instead of grid
+    int getGridColumns() const { return m_columns; }
+    bool isCompactMode() const { return m_compactMode; }
+    bool isListMode() const { return m_listMode; }
 
     // Selection mode
     void setSelectionMode(bool enabled);
@@ -39,6 +48,12 @@ public:
     int getItemCount() const { return static_cast<int>(m_items.size()); }
     int getFocusedIndex() const { return m_focusedIndex; }
 
+    // Get first cell for focus transfer
+    brls::View* getFirstCell() const;
+
+    // Focus a specific cell by index
+    void focusIndex(int index);
+
     static brls::View* create();
 
 private:
@@ -50,6 +65,7 @@ private:
     std::function<void(const Manga&)> m_onItemSelected;
     std::function<void(const Manga&, int index)> m_onItemLongPressed;
     std::function<void()> m_onPullToRefresh;
+    std::function<bool()> m_onBackPressed;
 
     // Pull-to-refresh state
     bool m_isPulling = false;
@@ -70,6 +86,8 @@ private:
     int m_cellHeight = 180;
     int m_cellMargin = 12;
     int m_rowMargin = 10;
+    bool m_compactMode = false;
+    bool m_listMode = false;
 
     int m_visibleStartRow = 0;
     int m_lastScrollY = 0;

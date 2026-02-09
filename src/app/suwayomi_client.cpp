@@ -3,6 +3,7 @@
  */
 
 #include "app/suwayomi_client.hpp"
+#include "app/application.hpp"
 #include "utils/http_client.hpp"
 #include "utils/image_loader.hpp"
 
@@ -11,6 +12,12 @@
 #include <ctime>
 #include <algorithm>
 #include <set>
+#include <fstream>
+#include <sstream>
+
+#ifdef __vita__
+#include <psp2/io/fcntl.h>
+#endif
 
 namespace vitasuwayomi {
 
@@ -48,6 +55,10 @@ std::string SuwayomiClient::buildGraphQLUrl() {
 }
 
 std::string SuwayomiClient::executeGraphQL(const std::string& query, const std::string& variables) {
+    return executeGraphQLInternal(query, variables, true);
+}
+
+std::string SuwayomiClient::executeGraphQLInternal(const std::string& query, const std::string& variables, bool allowRetry) {
     vitasuwayomi::HttpClient http = createHttpClient();
     http.setDefaultHeader("Content-Type", "application/json");
 
@@ -80,6 +91,18 @@ std::string SuwayomiClient::executeGraphQL(const std::string& query, const std::
 
     vitasuwayomi::HttpResponse response = http.post(url, body);
 
+    // Handle 401 Unauthorized - try to refresh token and retry
+    if (response.statusCode == 401 && allowRetry) {
+        brls::Logger::info("Got 401 Unauthorized, attempting token refresh...");
+        if (refreshToken()) {
+            brls::Logger::info("Token refreshed successfully, retrying request");
+            return executeGraphQLInternal(query, variables, false);  // Retry once
+        } else {
+            brls::Logger::warning("Token refresh failed");
+            return "";
+        }
+    }
+
     if (!response.success || response.statusCode != 200) {
         brls::Logger::warning("GraphQL request failed: {} ({})", response.error, response.statusCode);
         return "";
@@ -89,6 +112,18 @@ std::string SuwayomiClient::executeGraphQL(const std::string& query, const std::
     if (response.body.find("\"errors\"") != std::string::npos) {
         std::string errors = extractJsonArray(response.body, "errors");
         brls::Logger::warning("GraphQL errors: {}", errors.substr(0, 200));
+
+        // Check for Unauthorized errors in GraphQL response - attempt token refresh
+        if (allowRetry && (errors.find("Unauthorized") != std::string::npos ||
+                          errors.find("UnauthorizedException") != std::string::npos)) {
+            brls::Logger::info("GraphQL returned Unauthorized, attempting token refresh...");
+            if (refreshToken()) {
+                brls::Logger::info("Token refreshed successfully, retrying GraphQL request");
+                return executeGraphQLInternal(query, variables, false);  // Retry once
+            } else {
+                brls::Logger::warning("Token refresh failed for GraphQL Unauthorized error");
+            }
+        }
         return "";
     }
 
@@ -96,29 +131,72 @@ std::string SuwayomiClient::executeGraphQL(const std::string& query, const std::
     return response.body;
 }
 
+// Helper for Base64 encoding
+static std::string base64Encode(const std::string& input) {
+    static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    int val = 0, valb = -6;
+    for (unsigned char c : input) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (encoded.size() % 4) encoded.push_back('=');
+    return encoded;
+}
+
 // Helper to create an HTTP client with authentication headers
 vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
     vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
-    // Add basic auth if credentials are set
-    if (!m_authUsername.empty() && !m_authPassword.empty()) {
-        // Base64 encode username:password for Basic Auth
-        std::string credentials = m_authUsername + ":" + m_authPassword;
-        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        std::string encoded;
-        int val = 0, valb = -6;
-        for (unsigned char c : credentials) {
-            val = (val << 8) + c;
-            valb += 8;
-            while (valb >= 0) {
-                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                valb -= 6;
+    // Apply connection timeout from settings
+    int timeout = Application::getInstance().getSettings().connectionTimeout;
+    if (timeout > 0) {
+        http.setTimeout(timeout);
+    }
+
+    // Apply authentication based on auth mode
+    switch (m_authMode) {
+        case AuthMode::NONE:
+            // No authentication
+            break;
+
+        case AuthMode::BASIC_AUTH:
+            // HTTP Basic Access Authentication
+            if (!m_authUsername.empty() && !m_authPassword.empty()) {
+                std::string credentials = m_authUsername + ":" + m_authPassword;
+                http.setDefaultHeader("Authorization", "Basic " + base64Encode(credentials));
             }
-        }
-        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-        while (encoded.size() % 4) encoded.push_back('=');
-        http.setDefaultHeader("Authorization", "Basic " + encoded);
+            break;
+
+        case AuthMode::SIMPLE_LOGIN:
+            // Cookie-based session - use JWT token if available, otherwise try basic auth
+            if (!m_accessToken.empty()) {
+                http.setDefaultHeader("Authorization", "Bearer " + m_accessToken);
+            } else if (!m_sessionCookie.empty()) {
+                http.setDefaultHeader("Cookie", m_sessionCookie);
+            } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
+                // Fallback to basic auth for initial requests
+                std::string credentials = m_authUsername + ":" + m_authPassword;
+                http.setDefaultHeader("Authorization", "Basic " + base64Encode(credentials));
+            }
+            break;
+
+        case AuthMode::UI_LOGIN:
+            // JWT-based authentication
+            if (!m_accessToken.empty()) {
+                http.setDefaultHeader("Authorization", "Bearer " + m_accessToken);
+            } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
+                // Fallback to basic auth if no token yet
+                std::string credentials = m_authUsername + ":" + m_authPassword;
+                http.setDefaultHeader("Authorization", "Basic " + base64Encode(credentials));
+            }
+            break;
     }
 
     return http;
@@ -475,6 +553,7 @@ Manga SuwayomiClient::parseMangaFromGraphQL(const std::string& json) {
     manga.author = extractJsonValue(json, "author");
     manga.description = extractJsonValue(json, "description");
     manga.inLibrary = extractJsonBool(json, "inLibrary");
+    manga.inLibraryAt = extractJsonInt64(json, "inLibraryAt");
     manga.initialized = extractJsonBool(json, "initialized");
     manga.url = extractJsonValue(json, "url");
 
@@ -1065,14 +1144,14 @@ bool SuwayomiClient::fetchChapterPagesGraphQL(int chapterId, std::vector<Page>& 
 }
 
 bool SuwayomiClient::fetchReadingHistoryGraphQL(int offset, int limit, std::vector<ReadingHistoryItem>& history) {
+    // Use newer order syntax for better compatibility with latest Suwayomi-Server
     const char* query = R"(
         query GetHistory($offset: Int!, $limit: Int!) {
             chapters(
                 offset: $offset
                 first: $limit
-                filter: { lastReadAt: { greaterThan: 0 } }
-                orderBy: LAST_READ_AT
-                orderByType: DESC
+                filter: { lastReadAt: { greaterThan: "0" } }
+                order: [{ by: LAST_READ_AT, byType: DESC }]
             ) {
                 nodes {
                     id
@@ -1465,6 +1544,7 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
                     thumbnailUrl
                     author
                     inLibrary
+                    inLibraryAt
                     unreadCount
                 }
             }
@@ -1518,6 +1598,7 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
                         thumbnailUrl
                         author
                         inLibrary
+                        inLibraryAt
                         unreadCount
                     }
                 }
@@ -1571,6 +1652,23 @@ bool SuwayomiClient::connectToServer(const std::string& url) {
         m_serverInfo = info;
         brls::Logger::info("Connected to Suwayomi {} ({})", info.version, info.buildType);
         return true;
+    }
+
+    // Connection failed - try auto-switch if enabled
+    Application& app = Application::getInstance();
+    if (app.tryAlternateUrl()) {
+        // Successfully switched to alternate URL, update our server URL
+        m_serverUrl = app.getActiveServerUrl();
+        brls::Logger::info("Auto-switched to: {}", m_serverUrl);
+
+        // Try connection with new URL
+        if (fetchServerInfo(info)) {
+            m_isConnected = true;
+            m_serverInfo = info;
+            brls::Logger::info("Connected to Suwayomi {} ({}) via auto-switch", info.version, info.buildType);
+            brls::Application::notify("Auto-switched to " + std::string(app.getSettings().useRemoteUrl ? "remote" : "local") + " URL");
+            return true;
+        }
     }
 
     m_isConnected = false;
@@ -1649,9 +1747,223 @@ void SuwayomiClient::setAuthCredentials(const std::string& username, const std::
 void SuwayomiClient::clearAuth() {
     m_authUsername.clear();
     m_authPassword.clear();
+    m_accessToken.clear();
+    m_refreshToken.clear();
+    m_sessionCookie.clear();
 
     // Also clear image loader credentials
     ImageLoader::setAuthCredentials("", "");
+}
+
+void SuwayomiClient::setTokens(const std::string& accessToken, const std::string& refreshToken) {
+    m_accessToken = accessToken;
+    m_refreshToken = refreshToken;
+    // Also update ImageLoader with access token
+    if (!accessToken.empty()) {
+        ImageLoader::setAccessToken(accessToken);
+    }
+}
+
+void SuwayomiClient::setSessionCookie(const std::string& cookie) {
+    m_sessionCookie = cookie;
+}
+
+bool SuwayomiClient::isAuthenticated() const {
+    switch (m_authMode) {
+        case AuthMode::NONE:
+            return true;  // No auth required
+        case AuthMode::BASIC_AUTH:
+            return !m_authUsername.empty() && !m_authPassword.empty();
+        case AuthMode::SIMPLE_LOGIN:
+            return !m_sessionCookie.empty();
+        case AuthMode::UI_LOGIN:
+            return !m_accessToken.empty();
+        default:
+            return false;
+    }
+}
+
+void SuwayomiClient::logout() {
+    m_accessToken.clear();
+    m_refreshToken.clear();
+    m_sessionCookie.clear();
+    // Keep username/password for re-login if needed
+}
+
+bool SuwayomiClient::login(const std::string& username, const std::string& password) {
+    m_authUsername = username;
+    m_authPassword = password;
+
+    switch (m_authMode) {
+        case AuthMode::NONE:
+            // No login needed
+            return true;
+
+        case AuthMode::BASIC_AUTH:
+            // Basic auth just stores credentials, no login request needed
+            // Test connection to verify credentials work
+            ImageLoader::setAuthCredentials(username, password);
+            return testConnection();
+
+        case AuthMode::SIMPLE_LOGIN:
+        case AuthMode::UI_LOGIN:
+            // Both use the same GraphQL login mutation
+            // The difference is in how the tokens/cookies are used
+            ImageLoader::setAuthCredentials(username, password);
+            return loginGraphQL(username, password);
+
+        default:
+            return false;
+    }
+}
+
+bool SuwayomiClient::loginGraphQL(const std::string& username, const std::string& password) {
+    // GraphQL login mutation
+    const char* query = R"(
+        mutation Login($username: String!, $password: String!) {
+            login(input: { username: $username, password: $password }) {
+                accessToken
+                refreshToken
+            }
+        }
+    )";
+
+    // Build variables
+    std::string variables = "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}";
+
+    // Execute GraphQL - need to use a fresh client without auth for login
+    vitasuwayomi::HttpClient http;
+    http.setDefaultHeader("Accept", "application/json");
+    http.setDefaultHeader("Content-Type", "application/json");
+
+    int timeout = Application::getInstance().getSettings().connectionTimeout;
+    if (timeout > 0) {
+        http.setTimeout(timeout);
+    }
+
+    std::string url = buildGraphQLUrl();
+
+    // Escape special characters in variables for JSON
+    std::string escapedQuery = query;
+    // Remove newlines for JSON
+    size_t pos = 0;
+    while ((pos = escapedQuery.find('\n', pos)) != std::string::npos) {
+        escapedQuery.replace(pos, 1, "\\n");
+        pos += 2;
+    }
+
+    std::string body = "{\"query\":\"" + escapedQuery + "\",\"variables\":" + variables + "}";
+
+    vitasuwayomi::HttpResponse response = http.post(url, body);
+
+    if (!response.success) {
+        brls::Logger::error("Login request failed: {}", response.error);
+        return false;
+    }
+
+    // Check for errors in response
+    if (response.body.find("\"errors\"") != std::string::npos) {
+        std::string errorMsg = extractJsonValue(response.body, "message");
+        brls::Logger::error("Login failed: {}", errorMsg.empty() ? "Unknown error" : errorMsg);
+        return false;
+    }
+
+    // Extract tokens from response
+    std::string data = extractJsonObject(response.body, "data");
+    std::string loginData = extractJsonObject(data, "login");
+
+    m_accessToken = extractJsonValue(loginData, "accessToken");
+    m_refreshToken = extractJsonValue(loginData, "refreshToken");
+
+    if (m_accessToken.empty()) {
+        brls::Logger::error("Login failed: No access token received");
+        return false;
+    }
+
+    brls::Logger::info("Login successful, received tokens");
+
+    // Update image loader with auth info and access token
+    ImageLoader::setAuthCredentials(username, password);
+    ImageLoader::setAccessToken(m_accessToken);
+
+    return true;
+}
+
+bool SuwayomiClient::refreshToken() {
+    if (m_authMode != AuthMode::UI_LOGIN && m_authMode != AuthMode::SIMPLE_LOGIN) {
+        return true;  // No token refresh needed for basic auth or no auth
+    }
+
+    if (m_refreshToken.empty()) {
+        brls::Logger::error("Cannot refresh token: No refresh token available");
+        return false;
+    }
+
+    return refreshTokenGraphQL();
+}
+
+bool SuwayomiClient::refreshTokenGraphQL() {
+    const char* query = R"(
+        mutation RefreshToken($refreshToken: String!) {
+            refreshToken(input: { refreshToken: $refreshToken }) {
+                accessToken
+            }
+        }
+    )";
+
+    std::string variables = "{\"refreshToken\":\"" + m_refreshToken + "\"}";
+
+    // Use fresh HTTP client without existing auth
+    vitasuwayomi::HttpClient http;
+    http.setDefaultHeader("Accept", "application/json");
+    http.setDefaultHeader("Content-Type", "application/json");
+
+    int timeout = Application::getInstance().getSettings().connectionTimeout;
+    if (timeout > 0) {
+        http.setTimeout(timeout);
+    }
+
+    std::string url = buildGraphQLUrl();
+
+    std::string escapedQuery = query;
+    size_t pos = 0;
+    while ((pos = escapedQuery.find('\n', pos)) != std::string::npos) {
+        escapedQuery.replace(pos, 1, "\\n");
+        pos += 2;
+    }
+
+    std::string body = "{\"query\":\"" + escapedQuery + "\",\"variables\":" + variables + "}";
+
+    vitasuwayomi::HttpResponse response = http.post(url, body);
+
+    if (!response.success) {
+        brls::Logger::error("Token refresh request failed: {}", response.error);
+        return false;
+    }
+
+    // Check for errors
+    if (response.body.find("\"errors\"") != std::string::npos) {
+        std::string errorMsg = extractJsonValue(response.body, "message");
+        brls::Logger::error("Token refresh failed: {}", errorMsg.empty() ? "Unknown error" : errorMsg);
+        return false;
+    }
+
+    // Extract new access token
+    std::string data = extractJsonObject(response.body, "data");
+    std::string refreshData = extractJsonObject(data, "refreshToken");
+
+    std::string newAccessToken = extractJsonValue(refreshData, "accessToken");
+
+    if (newAccessToken.empty()) {
+        brls::Logger::error("Token refresh failed: No access token received");
+        return false;
+    }
+
+    m_accessToken = newAccessToken;
+    ImageLoader::setAccessToken(m_accessToken);
+    brls::Logger::info("Token refreshed successfully");
+
+    return true;
 }
 
 // ============================================================================
@@ -3073,22 +3385,135 @@ bool SuwayomiClient::exportBackup(const std::string& savePath) {
     vitasuwayomi::HttpResponse response = http.get(url);
 
     if (!response.success || response.statusCode != 200) {
+        brls::Logger::error("SuwayomiClient: backup export failed - status {}", response.statusCode);
+        return false;
+    }
+
+    if (response.body.empty()) {
+        brls::Logger::error("SuwayomiClient: backup response is empty");
         return false;
     }
 
     // Save response body to file
-    // TODO: Implement file save
+#ifdef __vita__
+    SceUID fd = sceIoOpen(savePath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd < 0) {
+        brls::Logger::error("SuwayomiClient: failed to open backup file for writing: {}", savePath);
+        return false;
+    }
+
+    sceIoWrite(fd, response.body.c_str(), response.body.size());
+    sceIoClose(fd);
+#else
+    // Non-Vita platforms: use standard C++ file operations
+    std::ofstream outFile(savePath, std::ios::binary);
+    if (!outFile.is_open()) {
+        brls::Logger::error("SuwayomiClient: failed to open backup file for writing: {}", savePath);
+        return false;
+    }
+    outFile.write(response.body.c_str(), response.body.size());
+    outFile.close();
+#endif
+
+    brls::Logger::info("SuwayomiClient: backup saved to {}", savePath);
     return true;
 }
 
 bool SuwayomiClient::importBackup(const std::string& filePath) {
-    // TODO: Implement file upload
-    return false;
+    // Read the backup file
+    std::string fileContent;
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(filePath.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) {
+        brls::Logger::error("SuwayomiClient: failed to open backup file for reading: {}", filePath);
+        return false;
+    }
+
+    // Get file size
+    SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+    if (fileSize <= 0 || fileSize > 50 * 1024 * 1024) { // Max 50MB
+        sceIoClose(fd);
+        brls::Logger::error("SuwayomiClient: backup file size invalid: {}", fileSize);
+        return false;
+    }
+
+    fileContent.resize(static_cast<size_t>(fileSize));
+    sceIoRead(fd, &fileContent[0], static_cast<SceSize>(fileSize));
+    sceIoClose(fd);
+#else
+    // Non-Vita platforms: use standard C++ file operations
+    std::ifstream inFile(filePath, std::ios::binary);
+    if (!inFile.is_open()) {
+        brls::Logger::error("SuwayomiClient: failed to open backup file for reading: {}", filePath);
+        return false;
+    }
+    std::stringstream buffer;
+    buffer << inFile.rdbuf();
+    fileContent = buffer.str();
+    inFile.close();
+#endif
+
+    if (fileContent.empty()) {
+        brls::Logger::error("SuwayomiClient: backup file is empty");
+        return false;
+    }
+
+    // Upload backup to server via multipart form
+    vitasuwayomi::HttpClient http = createHttpClient();
+    std::string url = buildApiUrl("/backup/import/file");
+
+    // Build multipart form data
+    std::string boundary = "----VitaSuwayomiBackup" + std::to_string(time(nullptr));
+    std::string body;
+    body += "--" + boundary + "\r\n";
+    body += "Content-Disposition: form-data; name=\"backup.proto.gz\"; filename=\"backup.proto.gz\"\r\n";
+    body += "Content-Type: application/octet-stream\r\n\r\n";
+    body += fileContent;
+    body += "\r\n--" + boundary + "--\r\n";
+
+    vitasuwayomi::HttpRequest request;
+    request.url = url;
+    request.method = "POST";
+    request.body = body;
+    request.headers["Content-Type"] = "multipart/form-data; boundary=" + boundary;
+
+    vitasuwayomi::HttpResponse response = http.request(request);
+
+    if (!response.success || (response.statusCode != 200 && response.statusCode != 201)) {
+        brls::Logger::error("SuwayomiClient: backup import failed - status {}", response.statusCode);
+        return false;
+    }
+
+    brls::Logger::info("SuwayomiClient: backup imported successfully");
+    return true;
 }
 
 bool SuwayomiClient::validateBackup(const std::string& filePath) {
-    // TODO: Implement backup validation
-    return false;
+    // Check if file exists and is readable
+#ifdef __vita__
+    SceUID fd = sceIoOpen(filePath.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) {
+        return false;
+    }
+
+    // Get file size - backup should be at least a few bytes
+    SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoClose(fd);
+
+    return fileSize > 10; // Basic validation - file exists and has content
+#else
+    std::ifstream inFile(filePath, std::ios::binary);
+    if (!inFile.is_open()) {
+        return false;
+    }
+    inFile.seekg(0, std::ios::end);
+    auto size = inFile.tellg();
+    inFile.close();
+    return size > 10;
+#endif
 }
 
 // ============================================================================

@@ -45,6 +45,7 @@ private:
 
     // Header row with title and search icon
     brls::Box* m_headerBox = nullptr;
+    brls::Button* m_historyBtn = nullptr;
     brls::Button* m_globalSearchBtn = nullptr;
 
     // Mode selector buttons
@@ -64,16 +65,22 @@ private:
     void filterSourcesByLanguage();
     void showGlobalSearchDialog();
     void showFilterDialog();
+    void showSearchHistoryDialog();
+    void addToSearchHistory(const std::string& query);
+    void clearSearchHistory();
 
     // Main content grid (for single source browsing)
     RecyclingGrid* m_contentGrid = nullptr;
+
+    // Load more button for pagination
+    brls::Button* m_loadMoreBtn = nullptr;
 
     // Search results by source (grouped horizontal rows)
     brls::ScrollingFrame* m_searchResultsScrollView = nullptr;
     brls::Box* m_searchResultsBox = nullptr;
     std::map<std::string, std::vector<Manga>> m_resultsBySource;
     void populateSearchResultsBySource();
-    void createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga);
+    brls::View* createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga);
 
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;
@@ -82,6 +89,10 @@ private:
     std::string m_searchQuery;
     int m_currentPage = 1;
     bool m_hasNextPage = false;
+    bool m_isGlobalSearch = false;  // Track if current search is global or source-specific
+
+    // Navigation helper
+    void handleBackNavigation();
 
     // Data
     std::vector<Source> m_sources;

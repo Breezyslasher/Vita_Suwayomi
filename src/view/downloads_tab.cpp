@@ -10,10 +10,16 @@
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
 #include <fstream>
+#include <memory>
+#include <thread>
+#include <chrono>
 
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
 #endif
+
+// Auto-refresh interval in milliseconds (3 seconds)
+static const int AUTO_REFRESH_INTERVAL_MS = 3000;
 
 namespace vitasuwayomi {
 
@@ -65,88 +71,124 @@ DownloadsTab::DownloadsTab() {
     headerRow->setMargins(0, 0, 15, 0);
     this->addView(headerRow);
 
+    // Left side: title and status
+    auto titleBox = new brls::Box();
+    titleBox->setAxis(brls::Axis::ROW);
+    titleBox->setAlignItems(brls::AlignItems::CENTER);
+    titleBox->setShrink(0);  // Prevent title from shrinking
+    headerRow->addView(titleBox);
+
     auto header = new brls::Label();
     header->setText("Downloads");
     header->setFontSize(24);
-    headerRow->addView(header);
+    header->setSingleLine(true);  // Prevent text wrapping
+    titleBox->addView(header);
 
-    // Actions row with Hide (L) and Show (R) icons
+    // Download status label (shows "Downloading" / "Stopped")
+    m_downloadStatusLabel = new brls::Label();
+    m_downloadStatusLabel->setText("");
+    m_downloadStatusLabel->setFontSize(14);
+    m_downloadStatusLabel->setMarginLeft(15);
+    m_downloadStatusLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
+    titleBox->addView(m_downloadStatusLabel);
+
+    // Actions row with Start/Stop, Pause and Clear buttons
     m_actionsRow = new brls::Box();
     m_actionsRow->setAxis(brls::Axis::ROW);
     m_actionsRow->setAlignItems(brls::AlignItems::CENTER);
     headerRow->addView(m_actionsRow);
 
-    // Hide button with L icon above
-    auto* hideContainer = new brls::Box();
-    hideContainer->setAxis(brls::Axis::COLUMN);
-    hideContainer->setAlignItems(brls::AlignItems::CENTER);
-    hideContainer->setMarginRight(15);
+    // Start/Stop toggle button
+    m_startStopBtn = new brls::Button();
+    m_startStopBtn->setWidth(70);
+    m_startStopBtn->setHeight(32);
+    m_startStopBtn->setCornerRadius(6);
+    m_startStopBtn->setMarginRight(8);
+    m_startStopBtn->setPaddingLeft(8);
+    m_startStopBtn->setPaddingRight(8);
+    m_startStopBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_startStopBtn->setAlignItems(brls::AlignItems::CENTER);
 
-    // L button icon
-    auto* lButtonIcon = new brls::Image();
-    lButtonIcon->setWidth(36);
-    lButtonIcon->setHeight(24);
-    lButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    lButtonIcon->setImageFromFile("app0:resources/images/l_button.png");
-    lButtonIcon->setMarginBottom(2);
-    hideContainer->addView(lButtonIcon);
+    m_startStopLabel = new brls::Label();
+    m_startStopLabel->setText("Start");
+    m_startStopLabel->setFontSize(12);
+    m_startStopBtn->addView(m_startStopLabel);
 
-    auto* hideBtn = new brls::Button();
-    hideBtn->setWidth(44);
-    hideBtn->setHeight(40);
-    hideBtn->setCornerRadius(8);
-    hideBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    hideBtn->setAlignItems(brls::AlignItems::CENTER);
+    // Start/Stop button tap action - toggle downloader state
+    m_startStopBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_startStopBtn, [this]() {
+        asyncRun([this]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            bool success = false;
+            if (m_downloaderRunning) {
+                success = client.stopDownloads();
+            } else {
+                success = client.startDownloads();
+            }
+            if (success) {
+                brls::sync([this]() {
+                    refreshQueue();
+                });
+            }
+        });
+    }));
+    m_actionsRow->addView(m_startStopBtn);
 
-    m_hideIcon = new brls::Image();
-    m_hideIcon->setWidth(24);
-    m_hideIcon->setHeight(24);
-    m_hideIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_hideIcon->setImageFromFile("app0:resources/icons/hide.png");
-    hideBtn->addView(m_hideIcon);
+    // Stop/Pause button (stop current downloads)
+    auto* pauseBtn = new brls::Button();
+    pauseBtn->setWidth(60);
+    pauseBtn->setHeight(32);
+    pauseBtn->setCornerRadius(6);
+    pauseBtn->setMarginRight(8);
+    pauseBtn->setPaddingLeft(8);
+    pauseBtn->setPaddingRight(8);
+    pauseBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    pauseBtn->setAlignItems(brls::AlignItems::CENTER);
 
-    hideBtn->addGestureRecognizer(new brls::TapGestureRecognizer(hideBtn));
-    hideContainer->addView(hideBtn);
-    m_actionsRow->addView(hideContainer);
+    auto* pauseLabel = new brls::Label();
+    pauseLabel->setText("Stop");
+    pauseLabel->setFontSize(12);
+    pauseBtn->addView(pauseLabel);
 
-    // Show button with R icon above
-    auto* showContainer = new brls::Box();
-    showContainer->setAxis(brls::Axis::COLUMN);
-    showContainer->setAlignItems(brls::AlignItems::CENTER);
+    // Pause button tap action - stop server downloads
+    pauseBtn->addGestureRecognizer(new brls::TapGestureRecognizer(pauseBtn, [this]() {
+        pauseAllDownloads();
+    }));
+    m_actionsRow->addView(pauseBtn);
 
-    // R button icon
-    auto* rButtonIcon = new brls::Image();
-    rButtonIcon->setWidth(36);
-    rButtonIcon->setHeight(24);
-    rButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
-    rButtonIcon->setMarginBottom(2);
-    showContainer->addView(rButtonIcon);
+    // Clear button
+    auto* clearBtn = new brls::Button();
+    clearBtn->setWidth(70);
+    clearBtn->setHeight(32);
+    clearBtn->setCornerRadius(6);
+    clearBtn->setPaddingLeft(8);
+    clearBtn->setPaddingRight(8);
+    clearBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    clearBtn->setAlignItems(brls::AlignItems::CENTER);
 
-    auto* showBtn = new brls::Button();
-    showBtn->setWidth(44);
-    showBtn->setHeight(40);
-    showBtn->setCornerRadius(8);
-    showBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    showBtn->setAlignItems(brls::AlignItems::CENTER);
+    m_clearIcon = new brls::Image();
+    m_clearIcon->setWidth(16);
+    m_clearIcon->setHeight(16);
+    m_clearIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_clearIcon->setImageFromFile("app0:resources/icons/delete.png");
+    m_clearIcon->setMarginRight(4);
+    clearBtn->addView(m_clearIcon);
 
-    m_showIcon = new brls::Image();
-    m_showIcon->setWidth(24);
-    m_showIcon->setHeight(24);
-    m_showIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_showIcon->setImageFromFile("app0:resources/icons/show.png");
-    showBtn->addView(m_showIcon);
+    auto* clearLabel = new brls::Label();
+    clearLabel->setText("Clear");
+    clearLabel->setFontSize(12);
+    clearBtn->addView(clearLabel);
 
-    showBtn->addGestureRecognizer(new brls::TapGestureRecognizer(showBtn));
-    showContainer->addView(showBtn);
-    m_actionsRow->addView(showContainer);
+    // Clear button tap action - clear server download queue
+    clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn, [this]() {
+        clearAllDownloads();
+    }));
+    m_actionsRow->addView(clearBtn);
 
     // === Download Queue Section (server downloads) ===
     m_queueSection = new brls::Box();
     m_queueSection->setAxis(brls::Axis::COLUMN);
     m_queueSection->setGrow(1.0f);
     m_queueSection->setMargins(0, 0, 15, 0);
-    m_queueSection->setVisibility(brls::Visibility::GONE);  // Hidden by default
     this->addView(m_queueSection);
 
     m_queueHeader = new brls::Label();
@@ -155,28 +197,28 @@ DownloadsTab::DownloadsTab() {
     m_queueHeader->setMargins(0, 0, 10, 0);
     m_queueSection->addView(m_queueHeader);
 
+    // Empty state label for server downloads
+    m_queueEmptyLabel = new brls::Label();
+    m_queueEmptyLabel->setText("No server downloads");
+    m_queueEmptyLabel->setFontSize(14);
+    m_queueEmptyLabel->setTextColor(nvgRGBA(120, 120, 120, 255));
+    m_queueEmptyLabel->setMargins(10, 0, 10, 0);
+    m_queueSection->addView(m_queueEmptyLabel);
+
     // Scrollable queue container
     m_queueScroll = new brls::ScrollingFrame();
     m_queueScroll->setGrow(1.0f);  // Allow proper scrolling
+    m_queueScroll->setVisibility(brls::Visibility::GONE);  // Hidden when empty
     m_queueSection->addView(m_queueScroll);
 
     m_queueContainer = new brls::Box();
     m_queueContainer->setAxis(brls::Axis::COLUMN);
     m_queueScroll->setContentView(m_queueContainer);
 
-    // Queue empty label (not used when section is hidden, but kept for error states)
-    m_queueEmptyLabel = new brls::Label();
-    m_queueEmptyLabel->setText("No downloads in queue");
-    m_queueEmptyLabel->setFontSize(14);
-    m_queueEmptyLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
-    m_queueEmptyLabel->setMargins(0, 0, 10, 0);
-    m_queueEmptyLabel->setVisibility(brls::Visibility::GONE);
-
     // === Local Downloads Section ===
     m_localSection = new brls::Box();
     m_localSection->setAxis(brls::Axis::COLUMN);
     m_localSection->setGrow(1.0f);
-    m_localSection->setVisibility(brls::Visibility::GONE);  // Hidden by default
     this->addView(m_localSection);
 
     m_localHeader = new brls::Label();
@@ -185,27 +227,34 @@ DownloadsTab::DownloadsTab() {
     m_localHeader->setMargins(0, 0, 10, 0);
     m_localSection->addView(m_localHeader);
 
+    // Empty state label for local downloads
+    m_localEmptyLabel = new brls::Label();
+    m_localEmptyLabel->setText("No local downloads");
+    m_localEmptyLabel->setFontSize(14);
+    m_localEmptyLabel->setTextColor(nvgRGBA(120, 120, 120, 255));
+    m_localEmptyLabel->setMargins(10, 0, 10, 0);
+    m_localSection->addView(m_localEmptyLabel);
+
     // Scrollable local container
     m_localScroll = new brls::ScrollingFrame();
     m_localScroll->setGrow(1.0f);
+    m_localScroll->setVisibility(brls::Visibility::GONE);  // Hidden when empty
     m_localSection->addView(m_localScroll);
 
     m_localContainer = new brls::Box();
     m_localContainer->setAxis(brls::Axis::COLUMN);
     m_localScroll->setContentView(m_localContainer);
-
-    // Local empty label (not used when section is hidden)
-    m_localEmptyLabel = new brls::Label();
-    m_localEmptyLabel->setText("No downloaded manga.\nUse the download option on manga details to save for offline reading.");
-    m_localEmptyLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    m_localEmptyLabel->setFontSize(14);
-    m_localEmptyLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
-    m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
 }
 
 void DownloadsTab::willAppear(bool resetState) {
     brls::Box::willAppear(resetState);
     refresh();
+    startAutoRefresh();
+}
+
+void DownloadsTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+    stopAutoRefresh();
 }
 
 void DownloadsTab::refresh() {
@@ -214,40 +263,111 @@ void DownloadsTab::refresh() {
 }
 
 void DownloadsTab::refreshQueue() {
-    // Clear existing queue items
-    while (m_queueContainer->getChildren().size() > 0) {
-        m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
-    }
-
-    // Fetch download queue from server
+    // Fetch download queue and status from server
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<DownloadQueueItem> queue;
 
         if (!client.fetchDownloadQueue(queue)) {
             brls::sync([this]() {
-                // Hide section on fetch failure (no active downloads to show)
+                // Hide entire section on fetch failure or empty
                 m_queueSection->setVisibility(brls::Visibility::GONE);
+                m_downloadStatusLabel->setText("");
+                m_lastServerQueue.clear();
+                // Clear container
+                while (m_queueContainer->getChildren().size() > 0) {
+                    m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+                }
             });
             return;
         }
 
-        brls::sync([this, queue]() {
-            // Clear existing items again (in case of race)
+        // Build new cache and check if anything changed
+        std::vector<CachedQueueItem> newCache;
+        newCache.reserve(queue.size());
+        for (const auto& item : queue) {
+            CachedQueueItem cached;
+            cached.chapterId = item.chapterId;
+            cached.mangaId = item.mangaId;
+            cached.downloadedPages = item.downloadedPages;
+            cached.state = static_cast<int>(item.state);
+            newCache.push_back(cached);
+        }
+
+        // Compare with last state - skip UI update if nothing changed
+        bool hasChanged = (newCache.size() != m_lastServerQueue.size());
+        if (!hasChanged) {
+            for (size_t i = 0; i < newCache.size(); i++) {
+                if (newCache[i].chapterId != m_lastServerQueue[i].chapterId ||
+                    newCache[i].mangaId != m_lastServerQueue[i].mangaId ||
+                    newCache[i].downloadedPages != m_lastServerQueue[i].downloadedPages ||
+                    newCache[i].state != m_lastServerQueue[i].state) {
+                    hasChanged = true;
+                    break;
+                }
+            }
+        }
+
+        // Determine downloader state based on queue items
+        bool isDownloading = false;
+        for (const auto& item : queue) {
+            if (item.state == DownloadState::DOWNLOADING) {
+                isDownloading = true;
+                break;
+            }
+        }
+
+        brls::sync([this, queue, isDownloading, hasChanged, newCache]() {
+            // Always update the cache
+            m_lastServerQueue = newCache;
+            // Update downloader state
+            m_downloaderRunning = isDownloading;
+            if (m_startStopLabel) {
+                m_startStopLabel->setText(m_downloaderRunning ? "Pause" : "Start");
+            }
+
+            // Update status label
+            if (m_downloadStatusLabel) {
+                if (queue.empty()) {
+                    m_downloadStatusLabel->setText("");
+                } else if (m_downloaderRunning) {
+                    m_downloadStatusLabel->setText("• Downloading");
+                    m_downloadStatusLabel->setTextColor(nvgRGBA(100, 200, 100, 255));
+                } else {
+                    m_downloadStatusLabel->setText("• Stopped");
+                    m_downloadStatusLabel->setTextColor(nvgRGBA(200, 150, 100, 255));
+                }
+            }
+
+            // Hide entire section if queue is empty
+            if (queue.empty()) {
+                m_queueSection->setVisibility(brls::Visibility::GONE);
+                // Clear container if there were items before
+                while (m_queueContainer->getChildren().size() > 0) {
+                    m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+                }
+                return;
+            }
+
+            // Show section and scroll when there are items
+            m_queueSection->setVisibility(brls::Visibility::VISIBLE);
+            m_queueEmptyLabel->setVisibility(brls::Visibility::GONE);
+            m_queueScroll->setVisibility(brls::Visibility::VISIBLE);
+
+            // Skip UI rebuild if nothing changed
+            if (!hasChanged) {
+                return;
+            }
+
+            // Clear existing items and rebuild
             while (m_queueContainer->getChildren().size() > 0) {
                 m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
             }
 
-            // Hide section if queue is empty
-            if (queue.empty()) {
-                m_queueSection->setVisibility(brls::Visibility::GONE);
-                return;
-            }
-
-            // Show section when there are items
-            m_queueSection->setVisibility(brls::Visibility::VISIBLE);
-
+            int queueIndex = 0;
+            int queueSize = static_cast<int>(queue.size());
             for (const auto& item : queue) {
+                int currentIndex = queueIndex++;  // Capture current position
                 auto row = new brls::Box();
                 row->setAxis(brls::Axis::ROW);
                 row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -370,24 +490,55 @@ void DownloadsTab::refreshQueue() {
                         return true;
                     });
 
-                // Add swipe gesture for removal
+                // Move Up action (LB button) - move to earlier position in queue
+                row->registerAction("Move Up", brls::ControllerButton::BUTTON_LB,
+                    [this, chapterId, mangaId, currentIndex](brls::View* view) {
+                        if (currentIndex > 0) {
+                            asyncRun([this, chapterId, mangaId, currentIndex]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                if (client.reorderDownload(chapterId, mangaId, 0, currentIndex - 1)) {
+                                    brls::sync([this]() {
+                                        refresh();
+                                    });
+                                }
+                            });
+                        }
+                        return true;
+                    });
+
+                // Move Down action (RB button) - move to later position in queue
+                row->registerAction("Move Down", brls::ControllerButton::BUTTON_RB,
+                    [this, chapterId, mangaId, currentIndex, queueSize](brls::View* view) {
+                        if (currentIndex < queueSize - 1) {
+                            asyncRun([this, chapterId, mangaId, currentIndex]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                if (client.reorderDownload(chapterId, mangaId, 0, currentIndex + 1)) {
+                                    brls::sync([this]() {
+                                        refresh();
+                                    });
+                                }
+                            });
+                        }
+                        return true;
+                    });
+
+                // Add swipe gesture for removal - use shared_ptr to avoid static variables
+                auto swipeState = std::make_shared<SwipeState>();
                 row->addGestureRecognizer(new brls::PanGestureRecognizer(
-                    [this, row, mangaId, chapterId, originalBgColor](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-                        static brls::Point touchStart;
-                        static bool isValidSwipe = false;
+                    [this, row, mangaId, chapterId, originalBgColor, swipeState](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                         const float SWIPE_THRESHOLD = 60.0f;
                         const float TAP_THRESHOLD = 15.0f;
 
                         if (status.state == brls::GestureState::START) {
-                            touchStart = status.position;
-                            isValidSwipe = false;
+                            swipeState->touchStart = status.position;
+                            swipeState->isValidSwipe = false;
                         } else if (status.state == brls::GestureState::STAY) {
-                            float dx = status.position.x - touchStart.x;
-                            float dy = status.position.y - touchStart.y;
+                            float dx = status.position.x - swipeState->touchStart.x;
+                            float dy = status.position.y - swipeState->touchStart.y;
 
                             // Visual feedback during swipe
                             if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
-                                isValidSwipe = true;
+                                swipeState->isValidSwipe = true;
                                 if (dx < -SWIPE_THRESHOLD * 0.5f) {
                                     // Left swipe - red tint for removal
                                     row->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
@@ -398,8 +549,8 @@ void DownloadsTab::refreshQueue() {
                         } else if (status.state == brls::GestureState::END) {
                             row->setBackgroundColor(originalBgColor);
 
-                            float dx = status.position.x - touchStart.x;
-                            if (isValidSwipe && dx < -SWIPE_THRESHOLD) {
+                            float dx = status.position.x - swipeState->touchStart.x;
+                            if (swipeState->isValidSwipe && dx < -SWIPE_THRESHOLD) {
                                 // Left swipe confirmed - remove from queue
                                 asyncRun([this, mangaId, chapterId]() {
                                     SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -421,37 +572,71 @@ void DownloadsTab::refreshQueue() {
 }
 
 void DownloadsTab::refreshLocalDownloads() {
-    // Clear existing local items
-    while (m_localContainer->getChildren().size() > 0) {
-        m_localContainer->removeView(m_localContainer->getChildren()[0]);
-    }
-
     // Ensure manager is initialized and state is loaded
     DownloadsManager& mgr = DownloadsManager::getInstance();
     mgr.init();
 
     auto downloads = mgr.getDownloads();
-    brls::Logger::info("DownloadsTab: Found {} local downloads", downloads.size());
 
-    // Count chapters that are actively downloading or queued
-    int activeChapterCount = 0;
+    // Build new cache and count active chapters
+    std::vector<CachedLocalItem> newCache;
     for (const auto& manga : downloads) {
         for (const auto& chapter : manga.chapters) {
             if (chapter.state == LocalDownloadState::QUEUED ||
                 chapter.state == LocalDownloadState::DOWNLOADING) {
-                activeChapterCount++;
+                CachedLocalItem cached;
+                cached.mangaId = manga.mangaId;
+                cached.chapterIndex = chapter.chapterIndex;
+                cached.downloadedPages = chapter.downloadedPages;
+                cached.pageCount = chapter.pageCount;
+                cached.state = static_cast<int>(chapter.state);
+                newCache.push_back(cached);
             }
         }
     }
 
-    // Hide section if no active downloads
-    if (activeChapterCount == 0) {
+    // Compare with last state - skip UI update if nothing changed
+    bool hasChanged = (newCache.size() != m_lastLocalQueue.size());
+    if (!hasChanged) {
+        for (size_t i = 0; i < newCache.size(); i++) {
+            if (newCache[i].mangaId != m_lastLocalQueue[i].mangaId ||
+                newCache[i].chapterIndex != m_lastLocalQueue[i].chapterIndex ||
+                newCache[i].downloadedPages != m_lastLocalQueue[i].downloadedPages ||
+                newCache[i].pageCount != m_lastLocalQueue[i].pageCount ||
+                newCache[i].state != m_lastLocalQueue[i].state) {
+                hasChanged = true;
+                break;
+            }
+        }
+    }
+
+    // Update cache
+    m_lastLocalQueue = newCache;
+
+    // Hide entire section if no active downloads
+    if (newCache.empty()) {
         m_localSection->setVisibility(brls::Visibility::GONE);
+        // Clear container if there were items before
+        while (m_localContainer->getChildren().size() > 0) {
+            m_localContainer->removeView(m_localContainer->getChildren()[0]);
+        }
         return;
     }
 
-    // Show section when there are active downloads
+    // Show section and scroll when there are items
     m_localSection->setVisibility(brls::Visibility::VISIBLE);
+    m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
+    m_localScroll->setVisibility(brls::Visibility::VISIBLE);
+
+    // Skip UI rebuild if nothing changed
+    if (!hasChanged) {
+        return;
+    }
+
+    // Clear existing local items and rebuild
+    while (m_localContainer->getChildren().size() > 0) {
+        m_localContainer->removeView(m_localContainer->getChildren()[0]);
+    }
 
     // Show each chapter as a queue item (like server downloads)
     for (const auto& manga : downloads) {
@@ -594,23 +779,22 @@ void DownloadsTab::refreshLocalDownloads() {
                 });
 
             // Add swipe gesture for removal (horizontal only, like server downloads)
+            auto localSwipeState = std::make_shared<SwipeState>();
             row->addGestureRecognizer(new brls::PanGestureRecognizer(
-                [this, row, mangaId, chapterIndex, originalBgColor](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-                    static brls::Point touchStart;
-                    static bool isValidSwipe = false;
+                [this, row, mangaId, chapterIndex, originalBgColor, localSwipeState](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                     const float SWIPE_THRESHOLD = 60.0f;
                     const float TAP_THRESHOLD = 15.0f;
 
                     if (status.state == brls::GestureState::START) {
-                        touchStart = status.position;
-                        isValidSwipe = false;
+                        localSwipeState->touchStart = status.position;
+                        localSwipeState->isValidSwipe = false;
                     } else if (status.state == brls::GestureState::STAY) {
-                        float dx = status.position.x - touchStart.x;
-                        float dy = status.position.y - touchStart.y;
+                        float dx = status.position.x - localSwipeState->touchStart.x;
+                        float dy = status.position.y - localSwipeState->touchStart.y;
 
                         // Visual feedback during swipe
                         if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
-                            isValidSwipe = true;
+                            localSwipeState->isValidSwipe = true;
                             if (dx < -SWIPE_THRESHOLD * 0.5f) {
                                 // Left swipe - red tint for removal
                                 row->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
@@ -621,8 +805,8 @@ void DownloadsTab::refreshLocalDownloads() {
                     } else if (status.state == brls::GestureState::END) {
                         row->setBackgroundColor(originalBgColor);
 
-                        float dx = status.position.x - touchStart.x;
-                        if (isValidSwipe && dx < -SWIPE_THRESHOLD) {
+                        float dx = status.position.x - localSwipeState->touchStart.x;
+                        if (localSwipeState->isValidSwipe && dx < -SWIPE_THRESHOLD) {
                             // Left swipe confirmed - remove from queue
                             DownloadsManager& mgr = DownloadsManager::getInstance();
                             mgr.cancelChapterDownload(mangaId, chapterIndex);
@@ -639,6 +823,78 @@ void DownloadsTab::refreshLocalDownloads() {
 
 void DownloadsTab::showDownloadOptions(const std::string& ratingKey, const std::string& title) {
     // Not implemented - download options are shown from manga detail view
+}
+
+void DownloadsTab::startAutoRefresh() {
+    if (m_autoRefreshTimerActive) {
+        return;  // Already running
+    }
+
+    m_autoRefreshEnabled = true;
+    m_autoRefreshTimerActive = true;
+
+    // Start auto-refresh loop in background thread
+    asyncRun([this]() {
+        while (m_autoRefreshEnabled) {
+            // Sleep for the interval
+            std::this_thread::sleep_for(std::chrono::milliseconds(AUTO_REFRESH_INTERVAL_MS));
+
+            // Check if still enabled after sleep
+            if (!m_autoRefreshEnabled) {
+                break;
+            }
+
+            // Trigger refresh on main thread
+            brls::sync([this]() {
+                if (m_autoRefreshEnabled && this->getVisibility() == brls::Visibility::VISIBLE) {
+                    refreshQueue();
+                }
+            });
+        }
+        m_autoRefreshTimerActive = false;
+    });
+}
+
+void DownloadsTab::stopAutoRefresh() {
+    m_autoRefreshEnabled = false;
+    // Timer will stop on next iteration
+}
+
+void DownloadsTab::pauseAllDownloads() {
+    asyncRun([this]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        if (client.stopDownloads()) {
+            brls::sync([this]() {
+                m_downloaderRunning = false;
+                if (m_startStopLabel) {
+                    m_startStopLabel->setText("Start");
+                }
+                if (m_downloadStatusLabel) {
+                    m_downloadStatusLabel->setText("• Stopped");
+                    m_downloadStatusLabel->setTextColor(nvgRGBA(200, 150, 100, 255));
+                }
+                refreshQueue();
+            });
+        }
+    });
+}
+
+void DownloadsTab::clearAllDownloads() {
+    asyncRun([this]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        if (client.clearDownloadQueue()) {
+            brls::sync([this]() {
+                m_downloaderRunning = false;
+                if (m_startStopLabel) {
+                    m_startStopLabel->setText("Start");
+                }
+                if (m_downloadStatusLabel) {
+                    m_downloadStatusLabel->setText("");
+                }
+                refresh();
+            });
+        }
+    });
 }
 
 } // namespace vitasuwayomi

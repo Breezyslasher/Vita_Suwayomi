@@ -1,0 +1,945 @@
+# Suwayomi-Server GraphQL API Reference
+# VitaSuwayomi Client API Documentation
+#
+# Server: https://github.com/Suwayomi/Suwayomi-Server
+# GraphQL Endpoint: POST /api/graphql
+# GraphiQL IDE: /api/graphql (in browser)
+# REST API (legacy): /api/v1/*
+# Swagger UI: /api/swagger-ui
+
+# ============================================================================
+# AUTHENTICATION
+# ============================================================================
+
+# Server Authentication Modes (server.authMode):
+# - "none"        : No authentication required
+# - "basic_auth"  : HTTP Basic Access Authentication (Authorization: Basic base64(user:pass))
+# - "simple_login": Cookie-based session with custom login page
+# - "ui_login"    : JWT-based authentication (v2.1.1894+)
+
+# Server Configuration:
+# server.authMode = "none"
+# server.authUsername = "user"
+# server.authPassword = "pass"
+# server.jwtAudience = "suwayomi-server-api"
+# server.jwtTokenExpiry = "5m"
+# server.jwtRefreshExpiry = "60d"
+
+# Login Mutation (simple_login and ui_login)
+mutation Login($username: String!, $password: String!) {
+    login(input: { username: $username, password: $password }) {
+        accessToken
+        refreshToken
+    }
+}
+
+# Refresh Token Mutation
+mutation RefreshToken($refreshToken: String!) {
+    refreshToken(input: { refreshToken: $refreshToken }) {
+        accessToken
+    }
+}
+
+# ============================================================================
+# SERVER INFO
+# ============================================================================
+
+# Get Server Information
+query GetServerInfo {
+    aboutServer {
+        name
+        version
+        revision
+    }
+}
+
+# ============================================================================
+# SOURCES (Extensions)
+# ============================================================================
+
+# Get All Sources
+query GetSources {
+    sources {
+        nodes {
+            id
+            name
+            displayName
+            lang
+            iconUrl
+            isNsfw
+            supportsLatest
+            isConfigurable
+        }
+    }
+}
+
+# Get Single Source
+query GetSource($sourceId: LongString!) {
+    source(id: $sourceId) {
+        id
+        name
+        displayName
+        lang
+        iconUrl
+        isNsfw
+        supportsLatest
+        isConfigurable
+    }
+}
+
+# Get Source Preferences
+query GetSourcePreferences($sourceId: LongString!) {
+    source(id: $sourceId) {
+        preferences {
+            ... on SwitchPreference {
+                __typename
+                key
+                title
+                summary
+                currentValue
+                default
+            }
+            ... on CheckBoxPreference {
+                __typename
+                key
+                title
+                summary
+                currentValue
+                default
+            }
+            ... on EditTextPreference {
+                __typename
+                key
+                title
+                summary
+                currentValue
+                default
+                dialogTitle
+                dialogMessage
+            }
+            ... on ListPreference {
+                __typename
+                key
+                title
+                summary
+                currentValue
+                default
+                entries
+                entryValues
+            }
+            ... on MultiSelectListPreference {
+                __typename
+                key
+                title
+                summary
+                currentValue
+                default
+                entries
+                entryValues
+            }
+        }
+    }
+}
+
+# Update Source Preference
+mutation UpdateSourcePreference($sourceId: LongString!, $change: SourcePreferenceChangeInput!) {
+    updateSourcePreference(input: { source: $sourceId, change: $change }) {
+        source {
+            id
+        }
+    }
+}
+
+# ============================================================================
+# EXTENSIONS
+# ============================================================================
+
+# Get All Extensions
+query GetExtensions {
+    extensions {
+        nodes {
+            pkgName
+            name
+            lang
+            versionName
+            versionCode
+            isInstalled
+            hasUpdate
+            isObsolete
+            isNsfw
+            iconUrl
+        }
+    }
+}
+
+# Get Installed Extensions
+query GetInstalledExtensions {
+    extensions(condition: { isInstalled: true }) {
+        nodes {
+            pkgName
+            name
+            lang
+            versionName
+            versionCode
+            isInstalled
+            hasUpdate
+            isObsolete
+            isNsfw
+            iconUrl
+        }
+    }
+}
+
+# Install Extension (from repository)
+mutation InstallExtension($pkgName: String!) {
+    updateExtension(input: { id: $pkgName, patch: { install: true } }) {
+        extension {
+            pkgName
+            isInstalled
+        }
+    }
+}
+
+# Install External Extension (from APK file)
+# mutation InstallExternalExtension($file: Upload!) {
+#     installExternalExtension(input: { extensionFile: $file }) {
+#         extension {
+#             pkgName
+#             isInstalled
+#         }
+#     }
+# }
+
+# Update Extension
+mutation UpdateExtension($pkgName: String!) {
+    updateExtension(input: { id: $pkgName, patch: { update: true } }) {
+        extension {
+            pkgName
+            isInstalled
+            hasUpdate
+        }
+    }
+}
+
+# Uninstall Extension
+mutation UninstallExtension($pkgName: String!) {
+    updateExtension(input: { id: $pkgName, patch: { uninstall: true } }) {
+        extension {
+            pkgName
+            isInstalled
+        }
+    }
+}
+
+# ============================================================================
+# SOURCE BROWSING
+# ============================================================================
+
+# Get Popular Manga from Source
+mutation GetPopular($sourceId: LongString!, $page: Int!) {
+    fetchSourceManga(input: { source: $sourceId, type: POPULAR, page: $page }) {
+        mangas {
+            id
+            title
+            thumbnailUrl
+            author
+            artist
+            description
+            inLibrary
+        }
+        hasNextPage
+    }
+}
+
+# Get Latest Manga from Source
+mutation GetLatest($sourceId: LongString!, $page: Int!) {
+    fetchSourceManga(input: { source: $sourceId, type: LATEST, page: $page }) {
+        mangas {
+            id
+            title
+            thumbnailUrl
+            author
+            artist
+            description
+            inLibrary
+        }
+        hasNextPage
+    }
+}
+
+# Search Manga in Source
+mutation SearchManga($sourceId: LongString!, $query: String!, $page: Int!) {
+    fetchSourceManga(input: { source: $sourceId, type: SEARCH, query: $query, page: $page }) {
+        mangas {
+            id
+            title
+            thumbnailUrl
+            author
+            artist
+            description
+            inLibrary
+        }
+        hasNextPage
+    }
+}
+
+# ============================================================================
+# MANGA OPERATIONS
+# ============================================================================
+
+# Get Manga Details
+query GetManga($mangaId: Int!) {
+    manga(id: $mangaId) {
+        id
+        sourceId
+        url
+        title
+        thumbnailUrl
+        artist
+        author
+        description
+        genre
+        status
+        inLibrary
+        initialized
+        unreadCount
+        downloadCount
+        chapterCount
+        lastReadChapter {
+            id
+            chapterNumber
+        }
+        chapters {
+            nodes {
+                id
+                name
+                chapterNumber
+                isRead
+                isBookmarked
+                isDownloaded
+            }
+        }
+        meta {
+            key
+            value
+        }
+    }
+}
+
+# Refresh Manga (Fetch latest from source)
+mutation RefreshManga($mangaId: Int!) {
+    fetchManga(input: { id: $mangaId }) {
+        manga {
+            id
+            title
+            thumbnailUrl
+            description
+            initialized
+        }
+    }
+}
+
+# Add Manga to Library
+mutation AddToLibrary($mangaId: Int!) {
+    updateManga(input: { id: $mangaId, patch: { inLibrary: true } }) {
+        manga {
+            id
+            inLibrary
+        }
+    }
+}
+
+# Remove Manga from Library
+mutation RemoveFromLibrary($mangaId: Int!) {
+    updateManga(input: { id: $mangaId, patch: { inLibrary: false } }) {
+        manga {
+            id
+            inLibrary
+        }
+    }
+}
+
+# Set Manga Metadata
+mutation SetMangaMeta($mangaId: Int!, $key: String!, $value: String!) {
+    setMangaMeta(input: { meta: { mangaId: $mangaId, key: $key, value: $value } }) {
+        manga {
+            id
+            meta {
+                key
+                value
+            }
+        }
+    }
+}
+
+# Delete Manga Metadata
+mutation DeleteMangaMeta($mangaId: Int!, $key: String!) {
+    deleteMangaMeta(input: { mangaId: $mangaId, key: $key }) {
+        manga {
+            id
+        }
+    }
+}
+
+# ============================================================================
+# CHAPTERS
+# ============================================================================
+
+# Get Manga Chapters
+query GetChapters($mangaId: Int!) {
+    manga(id: $mangaId) {
+        chapters {
+            nodes {
+                id
+                url
+                name
+                scanlator
+                chapterNumber
+                uploadDate
+                isRead
+                isBookmarked
+                isDownloaded
+                lastPageRead
+                pageCount
+            }
+        }
+    }
+}
+
+# Fetch Chapter Pages
+mutation FetchChapterPages($chapterId: Int!) {
+    fetchChapterPages(input: { chapterId: $chapterId }) {
+        pages
+    }
+}
+
+# Mark Chapter as Read
+mutation MarkChapterRead($chapterId: Int!) {
+    updateChapter(input: { id: $chapterId, patch: { isRead: true } }) {
+        chapter {
+            id
+            isRead
+        }
+    }
+}
+
+# Mark Chapter as Unread
+mutation MarkChapterUnread($chapterId: Int!) {
+    updateChapter(input: { id: $chapterId, patch: { isRead: false } }) {
+        chapter {
+            id
+            isRead
+        }
+    }
+}
+
+# Update Chapter Reading Progress
+mutation UpdateChapterProgress($chapterId: Int!, $lastPageRead: Int!) {
+    updateChapter(input: { id: $chapterId, patch: { lastPageRead: $lastPageRead } }) {
+        chapter {
+            id
+            lastPageRead
+        }
+    }
+}
+
+# Bookmark Chapter
+mutation BookmarkChapter($chapterId: Int!, $bookmarked: Boolean!) {
+    updateChapter(input: { id: $chapterId, patch: { isBookmarked: $bookmarked } }) {
+        chapter {
+            id
+            isBookmarked
+        }
+    }
+}
+
+# ============================================================================
+# LIBRARY
+# ============================================================================
+
+# Get Library Manga
+query GetLibrary {
+    mangas(condition: { inLibrary: true }) {
+        nodes {
+            id
+            sourceId
+            title
+            thumbnailUrl
+            author
+            artist
+            description
+            status
+            genre
+            inLibrary
+            unreadCount
+            downloadCount
+            chapterCount
+            categories {
+                nodes {
+                    id
+                    name
+                }
+            }
+        }
+    }
+}
+
+# ============================================================================
+# CATEGORIES
+# ============================================================================
+
+# Get All Categories
+query GetCategories {
+    categories {
+        nodes {
+            id
+            name
+            order
+            default
+            mangas {
+                totalCount
+            }
+        }
+    }
+}
+
+# Get Category with Manga
+query GetCategoryManga($categoryId: Int!) {
+    category(id: $categoryId) {
+        id
+        name
+        mangas {
+            nodes {
+                id
+                title
+                thumbnailUrl
+                author
+                unreadCount
+                downloadCount
+            }
+        }
+    }
+}
+
+# Create Category
+mutation CreateCategory($name: String!) {
+    createCategory(input: { name: $name }) {
+        category {
+            id
+            name
+        }
+    }
+}
+
+# Delete Category
+mutation DeleteCategory($categoryId: Int!) {
+    deleteCategory(input: { categoryId: $categoryId }) {
+        category {
+            id
+        }
+    }
+}
+
+# Update Category
+mutation UpdateCategory($categoryId: Int!, $name: String, $default: Boolean) {
+    updateCategory(input: { id: $categoryId, patch: { name: $name, default: $default } }) {
+        category {
+            id
+            name
+            default
+        }
+    }
+}
+
+# Set Manga Categories
+mutation SetMangaCategories($mangaId: Int!, $categoryIds: [Int!]!) {
+    updateMangaCategories(input: { id: $mangaId, patch: { addToCategories: $categoryIds, clearCategories: true } }) {
+        manga {
+            id
+            categories {
+                nodes {
+                    id
+                }
+            }
+        }
+    }
+}
+
+# ============================================================================
+# DOWNLOADS
+# ============================================================================
+
+# Get Download Queue
+query GetDownloadQueue {
+    downloadStatus {
+        queue {
+            chapter {
+                id
+                name
+                chapterNumber
+                manga {
+                    id
+                    title
+                }
+            }
+            progress
+            state
+        }
+    }
+}
+
+# Enqueue Chapter Download
+mutation EnqueueDownload($chapterId: Int!) {
+    enqueueChapterDownload(input: { id: $chapterId }) {
+        downloadStatus {
+            state
+        }
+    }
+}
+
+# Dequeue Chapter Download
+mutation DequeueDownload($chapterId: Int!) {
+    dequeueChapterDownload(input: { id: $chapterId }) {
+        downloadStatus {
+            state
+        }
+    }
+}
+
+# Start Downloads
+mutation StartDownloader {
+    startDownloader(input: {}) {
+        downloadStatus {
+            state
+        }
+    }
+}
+
+# Stop Downloads
+mutation StopDownloader {
+    stopDownloader(input: {}) {
+        downloadStatus {
+            state
+        }
+    }
+}
+
+# Clear Download Queue
+mutation ClearDownloads {
+    clearDownloader(input: {}) {
+        downloadStatus {
+            state
+        }
+    }
+}
+
+# Delete Downloaded Chapter
+mutation DeleteDownload($chapterId: Int!) {
+    deleteDownloadedChapter(input: { id: $chapterId }) {
+        chapters {
+            id
+            isDownloaded
+        }
+    }
+}
+
+# ============================================================================
+# LIBRARY UPDATE
+# ============================================================================
+
+# Trigger Library Update (All Categories)
+mutation UpdateLibrary {
+    updateLibraryManga(input: {}) {
+        updateStatus {
+            isRunning
+        }
+    }
+}
+
+# Trigger Category Update (update manga in a specific category)
+mutation UpdateCategoryManga($categoryId: Int!) {
+    updateCategoryManga(input: { categories: [$categoryId] }) {
+        updateStatus {
+            isRunning
+        }
+    }
+}
+
+# Get Update Status
+query GetUpdateStatus {
+    updateStatus {
+        isRunning
+        completeJobs {
+            mangas {
+                id
+                title
+            }
+        }
+    }
+}
+
+# ============================================================================
+# READING HISTORY
+# ============================================================================
+
+# Get Reading History (Continue Reading)
+query GetReadingHistory($offset: Int!, $limit: Int!) {
+    chapters(
+        filter: { lastReadAt: { greaterThan: "0" } }
+        orderBy: LAST_READ_AT
+        orderByType: DESC
+        offset: $offset
+        first: $limit
+    ) {
+        nodes {
+            id
+            name
+            chapterNumber
+            lastPageRead
+            pageCount
+            lastReadAt
+            manga {
+                id
+                title
+                thumbnailUrl
+            }
+        }
+    }
+}
+
+# ============================================================================
+# GLOBAL SEARCH
+# ============================================================================
+
+# NOTE: There is NO global search mutation in the Suwayomi API.
+# To search across multiple sources, you must call fetchSourceManga
+# with type: SEARCH for each source individually.
+
+# Search Single Source (use this for each source in a global search)
+# mutation SearchSource($sourceId: LongString!, $query: String!, $page: Int!) {
+#     fetchSourceManga(input: { source: $sourceId, type: SEARCH, query: $query, page: $page }) {
+#         mangas {
+#             id
+#             title
+#             thumbnailUrl
+#             author
+#         }
+#         hasNextPage
+#     }
+# }
+
+# ============================================================================
+# TRACKERS
+# ============================================================================
+
+# Get All Trackers
+query GetTrackers {
+    trackers {
+        nodes {
+            id
+            name
+            icon
+            isLoggedIn
+            isTokenExpired
+            statuses {
+                value
+                name
+            }
+            scores
+        }
+    }
+}
+
+# Get Manga Tracking Info
+query GetMangaTracking($mangaId: Int!) {
+    manga(id: $mangaId) {
+        trackRecords {
+            nodes {
+                id
+                trackerId
+                remoteId
+                remoteUrl
+                title
+                status
+                lastChapterRead
+                totalChapters
+                score
+                displayScore
+                startDate
+                finishDate
+                tracker {
+                    id
+                    name
+                    icon
+                }
+            }
+        }
+    }
+}
+
+# Search Tracker (NOTE: This is a QUERY, not a mutation)
+query SearchTracker($trackerId: Int!, $query: String!) {
+    searchTracker(input: { trackerId: $trackerId, query: $query }) {
+        trackSearches {
+            remoteId
+            title
+            coverUrl
+            summary
+            publishingStatus
+            publishingType
+            startDate
+            totalChapters
+        }
+    }
+}
+
+# Bind Tracker to Manga
+mutation BindTracker($mangaId: Int!, $trackerId: Int!, $remoteId: Long!) {
+    bindTrack(input: { mangaId: $mangaId, trackerId: $trackerId, remoteId: $remoteId }) {
+        trackRecord {
+            id
+            trackerId
+            remoteId
+            title
+        }
+    }
+}
+
+# Unbind Tracker
+mutation UnbindTracker($recordId: Int!) {
+    unbindTrack(input: { recordId: $recordId }) {
+        trackRecord {
+            id
+        }
+    }
+}
+
+# Update Track Record
+mutation UpdateTrackRecord($recordId: Int!, $status: Int, $lastChapterRead: Float, $score: String, $startDate: Long, $finishDate: Long) {
+    updateTrack(input: {
+        recordId: $recordId,
+        status: $status,
+        lastChapterRead: $lastChapterRead,
+        scoreString: $score,
+        startDate: $startDate,
+        finishDate: $finishDate
+    }) {
+        trackRecord {
+            id
+            status
+            lastChapterRead
+            score
+            displayScore
+            startDate
+            finishDate
+        }
+    }
+}
+
+# Login to Tracker (credentials)
+mutation LoginTrackerCredentials($trackerId: Int!, $username: String!, $password: String!) {
+    loginTrackerCredentials(input: { trackerId: $trackerId, username: $username, password: $password }) {
+        isLoggedIn
+    }
+}
+
+# Logout from Tracker
+mutation LogoutTracker($trackerId: Int!) {
+    logoutTracker(input: { trackerId: $trackerId }) {
+        tracker {
+            id
+            isLoggedIn
+        }
+    }
+}
+
+# ============================================================================
+# BACKUP/RESTORE
+# ============================================================================
+
+# Create Backup (returns download URL)
+mutation CreateBackup {
+    createBackup(input: {}) {
+        url
+    }
+}
+
+# Restore Backup
+mutation RestoreBackup($backup: Upload!) {
+    restoreBackup(input: { backup: $backup }) {
+        status {
+            state
+        }
+    }
+}
+
+# ============================================================================
+# REST API ENDPOINTS (Legacy)
+# ============================================================================
+
+# Server Info
+# GET /api/v1/meta
+
+# Extensions
+# GET /api/v1/extension/list
+# GET /api/v1/extension/install/{pkgName}
+# GET /api/v1/extension/update/{pkgName}
+# GET /api/v1/extension/uninstall/{pkgName}
+
+# Sources
+# GET /api/v1/source/list
+# GET /api/v1/source/{sourceId}
+# GET /api/v1/source/{sourceId}/popular/{page}
+# GET /api/v1/source/{sourceId}/latest/{page}
+# GET /api/v1/source/{sourceId}/search?searchTerm={query}&pageNum={page}
+
+# Manga
+# GET /api/v1/manga/{mangaId}
+# GET /api/v1/manga/{mangaId}/full
+# GET /api/v1/manga/{mangaId}/chapters
+# GET /api/v1/manga/{mangaId}/library
+# DELETE /api/v1/manga/{mangaId}/library
+
+# Chapters
+# GET /api/v1/manga/{mangaId}/chapter/{chapterIndex}
+# GET /api/v1/manga/{mangaId}/chapter/{chapterIndex}/page/{pageIndex}
+# PATCH /api/v1/manga/{mangaId}/chapter/{chapterIndex}
+
+# Categories
+# GET /api/v1/category
+# POST /api/v1/category
+# PATCH /api/v1/category/{categoryId}
+# DELETE /api/v1/category/{categoryId}
+
+# Library
+# GET /api/v1/library
+# POST /api/v1/update
+
+# Downloads
+# GET /api/v1/downloads
+# GET /api/v1/downloads/start
+# GET /api/v1/downloads/stop
+# GET /api/v1/downloads/clear
+
+# ============================================================================
+# NOTES
+# ============================================================================
+
+# GraphQL Request Format:
+# POST /api/graphql
+# Content-Type: application/json
+#
+# {
+#   "query": "...",
+#   "variables": { ... }
+# }
+
+# Authentication Headers:
+# Basic Auth: Authorization: Basic base64(username:password)
+# JWT Auth:   Authorization: Bearer <accessToken>
+
+# Thumbnail URLs:
+# Manga: {serverUrl}/api/v1/manga/{mangaId}/thumbnail
+# Chapter Page: {serverUrl}/api/v1/manga/{mangaId}/chapter/{chapterId}/page/{pageIndex}
+# Extension Icon: {serverUrl}/api/v1/extension/icon/{pkgName}
+# Source Icon: {serverUrl}/api/v1/source/{sourceId}/icon

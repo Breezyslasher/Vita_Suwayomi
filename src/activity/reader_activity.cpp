@@ -5,6 +5,7 @@
 
 #include "activity/reader_activity.hpp"
 #include "view/rotatable_label.hpp"
+#include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
@@ -227,6 +228,13 @@ void ReaderActivity::onContentAvailable() {
                         static_cast<int>(m_settings.rotation),
                         static_cast<int>(m_settings.scaleMode),
                         m_settings.cropBorders);
+
+    // Apply keepScreenOn setting - prevent screen timeout during reading
+    m_settings.keepScreenOn = appSettings.keepScreenOn;
+    if (m_settings.keepScreenOn) {
+        brls::Application::getPlatform()->disableScreenDimming(true, "Reading manga", "VitaSuwayomi");
+        brls::Logger::info("ReaderActivity: keepScreenOn enabled, disabled screen dimming");
+    }
 
     // Set manga title in top bar
     if (mangaLabel) {
@@ -1032,9 +1040,48 @@ void ReaderActivity::previousChapter() {
 }
 
 void ReaderActivity::markChapterAsRead() {
-    vitasuwayomi::asyncRun([this]() {
+    int mangaId = m_mangaId;
+    int chapterIndex = m_chapterIndex;
+    int totalChapters = m_totalChapters;
+
+    vitasuwayomi::asyncRun([mangaId, chapterIndex, totalChapters]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        client.markChapterRead(m_mangaId, m_chapterIndex);
+        if (client.markChapterRead(mangaId, chapterIndex)) {
+            // Update reading statistics on the main thread
+            brls::sync([chapterIndex, totalChapters]() {
+                // Check if this was the last unread chapter (manga completed)
+                bool mangaCompleted = (chapterIndex == totalChapters - 1);
+                Application::getInstance().updateReadingStatistics(true, mangaCompleted);
+            });
+
+            // Delete downloaded chapter if deleteAfterRead is enabled
+            if (Application::getInstance().getSettings().deleteAfterRead) {
+                brls::Logger::info("ReaderActivity: deleteAfterRead enabled, removing chapter download");
+
+                // Delete from local downloads
+                DownloadsManager& dm = DownloadsManager::getInstance();
+                if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+                    brls::Logger::info("ReaderActivity: Deleted local chapter download (manga={}, chapter={})",
+                                      mangaId, chapterIndex);
+                }
+
+                // Also delete from server download queue if applicable
+                // Get chapter ID from pages if available
+                std::vector<Chapter> chapters;
+                if (client.fetchChapters(mangaId, chapters)) {
+                    for (const auto& ch : chapters) {
+                        if (ch.chapterNumber == chapterIndex || ch.index == chapterIndex) {
+                            std::vector<int> chapterIds = {ch.id};
+                            std::vector<int> chapterIndexes = {chapterIndex};
+                            client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes);
+                            brls::Logger::info("ReaderActivity: Requested server to delete chapter download (id={})",
+                                              ch.id);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     });
 }
 
@@ -1621,6 +1668,16 @@ void ReaderActivity::updateReaderMode() {
             pageImage->setVisibility(brls::Visibility::VISIBLE);
             loadPage(m_currentPage);
         }
+    }
+}
+
+void ReaderActivity::willDisappear(bool resetState) {
+    Activity::willDisappear(resetState);
+
+    // Restore screen dimming when leaving the reader
+    if (m_settings.keepScreenOn) {
+        brls::Application::getPlatform()->disableScreenDimming(false, "Reading manga", "VitaSuwayomi");
+        brls::Logger::info("ReaderActivity: willDisappear, restored screen dimming");
     }
 }
 

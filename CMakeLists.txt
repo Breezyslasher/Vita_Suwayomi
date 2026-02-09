@@ -75,6 +75,7 @@ set(APP_SOURCES
     # Views
     src/view/home_tab.cpp
     src/view/library_section_tab.cpp
+    src/view/history_tab.cpp
     src/view/search_tab.cpp
     src/view/settings_tab.cpp
     src/view/media_detail_view.cpp
@@ -89,6 +90,7 @@ set(APP_SOURCES
     src/view/horizontal_scroll_row.cpp
     src/view/tracking_search_view.cpp
     src/view/migrate_search_view.cpp
+    src/view/storage_view.cpp
 
     # Utils
     src/utils/http_client.cpp

@@ -10,6 +10,8 @@
 #include <mutex>
 #include <set>
 #include <map>
+#include <vector>
+#include <cstdint>
 
 // Application version
 #define VITA_SUWAYOMI_VERSION "1.0.0"
@@ -54,6 +56,20 @@ enum class ReaderBackground {
     GRAY = 2
 };
 
+// Library display mode
+enum class LibraryDisplayMode {
+    GRID_NORMAL = 0,   // Standard grid with covers and titles
+    GRID_COMPACT = 1,  // Compact grid (covers only)
+    LIST = 2           // List view with details
+};
+
+// Library grid size
+enum class LibraryGridSize {
+    SMALL = 0,    // 4 columns (larger covers)
+    MEDIUM = 1,   // 6 columns (default)
+    LARGE = 2     // 8 columns (more manga visible)
+};
+
 // Download mode options
 enum class DownloadMode {
     SERVER_ONLY = 0,    // Download to server queue only
@@ -76,7 +92,6 @@ struct AppSettings {
     // UI Settings
     AppTheme theme = AppTheme::DARK;
     bool showClock = true;
-    bool animationsEnabled = true;
     bool debugLogging = false;
 
     // Reader Settings
@@ -93,6 +108,11 @@ struct AppSettings {
     bool webtoonDetection = true;       // Auto-detect webtoon format (aspect ratio based)
     int webtoonSidePadding = 0;         // Side padding percentage (0-20%)
 
+    // Auto-Chapter Advance
+    bool autoChapterAdvance = false;    // Automatically advance to next chapter
+    int autoAdvanceDelay = 3;           // Seconds to wait before advancing (0-10)
+    bool showAdvanceCountdown = true;   // Show countdown before advancing
+
     // Library Settings
     bool updateOnStart = false;
     bool updateOnlyWifi = true;
@@ -102,6 +122,22 @@ struct AppSettings {
     bool cacheCoverImages = true;     // Cache cover images to disk
     int librarySortMode = 0;          // Library sort mode (0=A-Z, 1=Z-A, 2=Unread desc, 3=Unread asc, 4=Recently added)
     bool chapterSortDescending = true; // Chapter sort order (true=newest first)
+
+    // Library Grid Customization
+    LibraryDisplayMode libraryDisplayMode = LibraryDisplayMode::GRID_NORMAL;
+    LibraryGridSize libraryGridSize = LibraryGridSize::MEDIUM;
+
+    // Search History
+    std::vector<std::string> searchHistory;  // Recent search queries
+    int maxSearchHistory = 20;               // Max number of searches to remember
+
+    // Reading Statistics
+    int totalChaptersRead = 0;        // Total chapters read
+    int totalMangaCompleted = 0;      // Total manga completed
+    int currentStreak = 0;            // Current reading streak (days)
+    int longestStreak = 0;            // Longest reading streak
+    int64_t lastReadDate = 0;         // Last reading date (for streak calculation)
+    int64_t totalReadingTime = 0;     // Total reading time in seconds (estimated)
 
     // Download Settings
     DownloadMode downloadMode = DownloadMode::SERVER_ONLY;  // Where to download chapters
@@ -116,7 +152,17 @@ struct AppSettings {
     bool showNsfwSources = false;
 
     // Network Settings
+    std::string localServerUrl;        // Local network URL (e.g., http://192.168.1.100:4567)
+    std::string remoteServerUrl;       // Remote/external URL (e.g., https://myserver.com:4567)
+    bool useRemoteUrl = false;         // true = use remote URL, false = use local URL
+    bool autoSwitchOnFailure = false;  // Auto-switch to alternate URL if connection fails
     int connectionTimeout = 30;        // seconds
+
+    // Authentication Settings
+    // authMode: 0=none, 1=basic_auth, 2=simple_login, 3=ui_login
+    int authMode = 0;
+    std::string accessToken;           // JWT access token (for ui_login/simple_login)
+    std::string refreshToken;          // JWT refresh token (for ui_login/simple_login)
 
     // Display Settings
     bool showUnreadBadge = true;
@@ -153,6 +199,16 @@ public:
     void setServerUrl(const std::string& url) { m_serverUrl = url; }
     void setConnected(bool connected) { m_isConnected = connected; }
 
+    // Local/Remote URL switching
+    std::string getActiveServerUrl() const;  // Returns local or remote URL based on setting
+    std::string getAlternateServerUrl() const;  // Returns the URL not currently in use
+    void switchToLocalUrl();
+    void switchToRemoteUrl();
+    bool hasLocalUrl() const { return !m_settings.localServerUrl.empty(); }
+    bool hasRemoteUrl() const { return !m_settings.remoteServerUrl.empty(); }
+    bool hasBothUrls() const { return hasLocalUrl() && hasRemoteUrl(); }
+    bool tryAlternateUrl();  // Try alternate URL on failure (returns true if switched successfully)
+
     // Auth credentials
     const std::string& getAuthUsername() const { return m_authUsername; }
     const std::string& getAuthPassword() const { return m_authPassword; }
@@ -178,6 +234,10 @@ public:
 
     // Apply log level based on settings
     void applyLogLevel();
+
+    // Reading statistics management
+    void updateReadingStatistics(bool chapterCompleted = false, bool mangaCompleted = false);
+    void syncStatisticsFromServer();
 
     // Get string for display
     static std::string getThemeString(AppTheme theme);

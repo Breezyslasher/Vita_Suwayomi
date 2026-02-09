@@ -11,6 +11,7 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
+#include <algorithm>
 
 namespace vitasuwayomi {
 
@@ -33,6 +34,49 @@ SearchTab::SearchTab() {
     m_titleLabel->setText("Browse");
     m_titleLabel->setFontSize(28);
     m_headerBox->addView(m_titleLabel);
+
+    // Button container for history and search buttons
+    auto* buttonContainer = new brls::Box();
+    buttonContainer->setAxis(brls::Axis::ROW);
+    buttonContainer->setAlignItems(brls::AlignItems::FLEX_END);
+
+    // Search history button with Select icon above
+    auto* historyContainer = new brls::Box();
+    historyContainer->setAxis(brls::Axis::COLUMN);
+    historyContainer->setAlignItems(brls::AlignItems::CENTER);
+    historyContainer->setMarginRight(10);
+
+    auto* selectButtonIcon = new brls::Image();
+    selectButtonIcon->setWidth(48);
+    selectButtonIcon->setHeight(16);
+    selectButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    selectButtonIcon->setImageFromFile("app0:resources/images/select_button.png");
+    selectButtonIcon->setMarginBottom(2);
+    historyContainer->addView(selectButtonIcon);
+
+    m_historyBtn = new brls::Button();
+    m_historyBtn->setWidth(44);
+    m_historyBtn->setHeight(44);
+    m_historyBtn->setCornerRadius(8);
+    m_historyBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_historyBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* historyIcon = new brls::Image();
+    historyIcon->setWidth(24);
+    historyIcon->setHeight(24);
+    historyIcon->setScalingType(brls::ImageScalingType::FIT);
+    historyIcon->setImageFromFile("app0:resources/icons/history.png");
+    m_historyBtn->addView(historyIcon);
+
+    m_historyBtn->registerClickAction([this](brls::View* view) {
+        brls::sync([this]() {
+            showSearchHistoryDialog();
+        });
+        return true;
+    });
+    m_historyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_historyBtn));
+    historyContainer->addView(m_historyBtn);
+    buttonContainer->addView(historyContainer);
 
     // Global search button with Start icon above
     auto* searchContainer = new brls::Box();
@@ -70,7 +114,9 @@ SearchTab::SearchTab() {
     });
     m_globalSearchBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_globalSearchBtn));
     searchContainer->addView(m_globalSearchBtn);
-    m_headerBox->addView(searchContainer);
+    buttonContainer->addView(searchContainer);
+
+    m_headerBox->addView(buttonContainer);
 
     this->addView(m_headerBox);
 
@@ -81,6 +127,26 @@ SearchTab::SearchTab() {
             showGlobalSearchDialog();
         });
         return true;
+    });
+
+    // Register Select button to open search history
+    this->registerAction("History", brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
+        brls::sync([this]() {
+            showSearchHistoryDialog();
+        });
+        return true;
+    });
+
+    // Register Circle button (B) to go back in search/browse modes
+    this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+        // Only handle if we're not on the sources list
+        if (m_browseMode != BrowseMode::SOURCES) {
+            brls::sync([this]() {
+                handleBackNavigation();
+            });
+            return true;
+        }
+        return false;  // Let default handling occur (exit tab)
     });
 
     // Hidden search label (used for source-specific search)
@@ -106,6 +172,7 @@ SearchTab::SearchTab() {
         showSources();
         return true;
     });
+    m_sourcesBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_sourcesBtn));
     m_modeBox->addView(m_sourcesBtn);
 
     // Popular button
@@ -119,6 +186,7 @@ SearchTab::SearchTab() {
         updateModeButtons();
         return true;
     });
+    m_popularBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_popularBtn));
     m_modeBox->addView(m_popularBtn);
 
     // Latest button
@@ -132,6 +200,7 @@ SearchTab::SearchTab() {
         updateModeButtons();
         return true;
     });
+    m_latestBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_latestBtn));
     m_modeBox->addView(m_latestBtn);
 
     // Filter button with tag icon
@@ -163,9 +232,10 @@ SearchTab::SearchTab() {
     m_backBtn->setText("< Back");
     m_backBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->registerClickAction([this](brls::View* view) {
-        showSources();
+        handleBackNavigation();
         return true;
     });
+    m_backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_backBtn));
     m_modeBox->addView(m_backBtn);
 
     this->addView(m_modeBox);
@@ -183,7 +253,31 @@ SearchTab::SearchTab() {
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
+
+    // Set up B button callback for back navigation from grid cells
+    m_contentGrid->setOnBackPressed([this]() {
+        if (m_browseMode != BrowseMode::SOURCES) {
+            brls::sync([this]() {
+                handleBackNavigation();
+            });
+            return true;
+        }
+        return false;
+    });
+
     this->addView(m_contentGrid);
+
+    // Load more button (hidden initially)
+    m_loadMoreBtn = new brls::Button();
+    m_loadMoreBtn->setText("Load More");
+    m_loadMoreBtn->setMarginTop(10);
+    m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
+    m_loadMoreBtn->registerClickAction([this](brls::View*) {
+        loadNextPage();
+        return true;
+    });
+    m_loadMoreBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_loadMoreBtn));
+    this->addView(m_loadMoreBtn);
 
     // Load sources initially
     loadSources();
@@ -216,6 +310,8 @@ void SearchTab::loadSources() {
             brls::Logger::error("SearchTab: Failed to fetch sources");
             brls::sync([this]() {
                 m_resultsLabel->setText("Failed to load sources");
+                // Focus on Sources button so user can retry
+                brls::Application::giveFocus(m_sourcesBtn);
             });
         }
     });
@@ -275,8 +371,76 @@ void SearchTab::showGlobalSearchDialog() {
 
         m_searchQuery = text;
         m_titleLabel->setText("Search: " + text);
+        addToSearchHistory(text);
         performSearch(text);
     }, "Global Search", "Search across all sources", 256, m_searchQuery);
+}
+
+void SearchTab::showSearchHistoryDialog() {
+    auto& settings = Application::getInstance().getSettings();
+    auto& history = settings.searchHistory;
+
+    if (history.empty()) {
+        brls::Application::notify("No search history");
+        return;
+    }
+
+    std::vector<std::string> options;
+    for (const auto& query : history) {
+        options.push_back(query);
+    }
+    options.push_back("Clear History");
+
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Search History", options,
+        [this, historySize = history.size()](int selected) {
+            if (selected < 0) return;
+
+            if (selected == static_cast<int>(historySize)) {
+                // Clear history
+                clearSearchHistory();
+            } else {
+                // Use selected search query
+                auto& history = Application::getInstance().getSettings().searchHistory;
+                if (selected < static_cast<int>(history.size())) {
+                    std::string query = history[selected];
+                    m_searchQuery = query;
+                    m_titleLabel->setText("Search: " + query);
+                    performSearch(query);
+                }
+            }
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void SearchTab::addToSearchHistory(const std::string& query) {
+    if (query.empty()) return;
+
+    auto& settings = Application::getInstance().getSettings();
+    auto& history = settings.searchHistory;
+
+    // Remove if already exists (to move to front)
+    auto it = std::find(history.begin(), history.end(), query);
+    if (it != history.end()) {
+        history.erase(it);
+    }
+
+    // Add to front
+    history.insert(history.begin(), query);
+
+    // Limit history size
+    while (history.size() > static_cast<size_t>(settings.maxSearchHistory)) {
+        history.pop_back();
+    }
+
+    Application::getInstance().saveSettings();
+}
+
+void SearchTab::clearSearchHistory() {
+    auto& settings = Application::getInstance().getSettings();
+    settings.searchHistory.clear();
+    Application::getInstance().saveSettings();
+    brls::Application::notify("Search history cleared");
 }
 
 void SearchTab::showSources() {
@@ -299,8 +463,13 @@ void SearchTab::showSources() {
     m_mangaList.clear();
     m_resultsBySource.clear();
     m_contentGrid->setDataSource(m_mangaList);
+    m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
     if (m_searchResultsScrollView) {
         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
+    }
+    // Clear search results to prevent ghost focus targets
+    if (m_searchResultsBox) {
+        m_searchResultsBox->clearViews();
     }
 
     // Create or clear source list box
@@ -322,6 +491,10 @@ void SearchTab::showSources() {
     for (const auto& source : m_filteredSources) {
         sourcesByLang[source.lang].push_back(source);
     }
+
+    // Track first source row for focus transfer and navigation
+    brls::Box* firstSourceRow = nullptr;
+    brls::Box* previousSourceRow = nullptr;
 
     // Create source rows with icons
     for (const auto& [lang, sources] : sourcesByLang) {
@@ -352,6 +525,11 @@ void SearchTab::showSources() {
             sourceRow->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
             sourceRow->setFocusable(true);
 
+            // Track first source row for focus transfer
+            if (!firstSourceRow) {
+                firstSourceRow = sourceRow;
+            }
+
             // Source icon
             auto* sourceIcon = new brls::Image();
             sourceIcon->setWidth(32);
@@ -380,6 +558,20 @@ void SearchTab::showSources() {
             });
             sourceRow->addGestureRecognizer(new brls::TapGestureRecognizer(sourceRow));
 
+            // Register B button on source row to go back (exit tab in SOURCES mode)
+            // This ensures B button works when focus is on source rows
+            sourceRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+                // In SOURCES mode, let default handling exit the tab
+                return false;
+            }, true);  // hidden action
+
+            // Set up navigation from first source row to header buttons
+            if (sourceRow == firstSourceRow) {
+                // First source row - set custom UP navigation to history button
+                sourceRow->setCustomNavigationRoute(brls::FocusDirection::UP, m_historyBtn);
+            }
+
+            previousSourceRow = sourceRow;
             m_sourceListBox->addView(sourceRow);
         }
     }
@@ -391,6 +583,21 @@ void SearchTab::showSources() {
     // Add scroll view if not already added
     if (m_sourceScrollView->getParent() == nullptr) {
         this->addView(m_sourceScrollView);
+    }
+
+    // Set up navigation from header buttons down to first source row
+    if (firstSourceRow) {
+        m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
+        m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
+    } else {
+        // No source rows - clear navigation routes to prevent crash
+        m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+        m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+    }
+
+    // Transfer focus to first source row
+    if (firstSourceRow) {
+        brls::Application::giveFocus(firstSourceRow);
     }
 }
 
@@ -404,17 +611,33 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_sourcesBtn->setVisibility(brls::Visibility::GONE);
     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    m_filterBtn->setVisibility(source.isConfigurable ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    // Filter button hidden until source filters are implemented
+    m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
 
     // Hide source list and search results, show content grid
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
     }
+    // Clear source list to prevent ghost focus targets
+    if (m_sourceListBox) {
+        m_sourceListBox->clearViews();
+    }
     if (m_searchResultsScrollView) {
         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
     }
+    // Clear search results to prevent ghost focus targets
+    if (m_searchResultsBox) {
+        m_searchResultsBox->clearViews();
+    }
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
+
+    // Set up navigation from header buttons down to mode buttons (source list is now hidden)
+    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
+    m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
+
+    // Transfer focus to Popular button immediately (source row is now hidden)
+    brls::Application::giveFocus(m_popularBtn);
 
     // Load popular manga by default
     m_browseMode = BrowseMode::POPULAR;
@@ -423,9 +646,9 @@ void SearchTab::showSourceBrowser(const Source& source) {
 }
 
 void SearchTab::showFilterDialog() {
-    // TODO: Implement source filter dialog
-    // This would show the source's configurable filters (genres, status, etc)
-    brls::Application::notify("Filters not yet implemented");
+    // Source filter dialog not yet implemented
+    // Would show configurable filters like genres, status, etc.
+    brls::Application::notify("Source filters coming soon");
 }
 
 void SearchTab::loadPopularManga(int64_t sourceId) {
@@ -446,11 +669,23 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
+                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+
+                // Transfer focus to first cell in content grid after loading
+                if (!manga.empty()) {
+                    brls::View* firstCell = m_contentGrid->getFirstCell();
+                    if (firstCell) {
+                        brls::Application::giveFocus(firstCell);
+                    }
+                }
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch popular manga");
             brls::sync([this]() {
                 m_resultsLabel->setText("Failed to load popular manga");
+                m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
+                // Focus on Popular button so user can retry
+                brls::Application::giveFocus(m_popularBtn);
             });
         }
     });
@@ -474,11 +709,23 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
+                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+
+                // Transfer focus to first cell in content grid after loading
+                if (!manga.empty()) {
+                    brls::View* firstCell = m_contentGrid->getFirstCell();
+                    if (firstCell) {
+                        brls::Application::giveFocus(firstCell);
+                    }
+                }
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch latest manga");
             brls::sync([this]() {
                 m_resultsLabel->setText("Failed to load latest manga");
+                m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
+                // Focus on Latest button so user can retry
+                brls::Application::giveFocus(m_latestBtn);
             });
         }
     });
@@ -495,9 +742,13 @@ void SearchTab::performSearch(const std::string& query) {
 
     // If we have a current source, search within that source
     if (m_currentSourceId != 0 && m_browseMode != BrowseMode::SOURCES) {
+        m_isGlobalSearch = false;
         performSourceSearch(m_currentSourceId, query);
         return;
     }
+
+    // This is a global search
+    m_isGlobalSearch = true;
 
     // Filter sources by language setting first
     filterSourcesByLanguage();
@@ -505,6 +756,10 @@ void SearchTab::performSearch(const std::string& query) {
     // Hide source list and grid, will show grouped results
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
+    }
+    // Clear source list to prevent ghost focus targets
+    if (m_sourceListBox) {
+        m_sourceListBox->clearViews();
     }
     m_contentGrid->setVisibility(brls::Visibility::GONE);
 
@@ -517,6 +772,9 @@ void SearchTab::performSearch(const std::string& query) {
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
     m_resultsLabel->setText("Searching " + std::to_string(m_filteredSources.size()) + " sources...");
 
+    // Give focus to back button while searching so user can easily cancel
+    brls::Application::giveFocus(m_backBtn);
+
     // Copy filtered sources for async use
     std::vector<Source> sourcesToSearch = m_filteredSources;
 
@@ -526,11 +784,14 @@ void SearchTab::performSearch(const std::string& query) {
         // Map to group results by source
         std::map<std::string, std::vector<Manga>> resultsBySource;
         int totalResults = 0;
+        int failedSources = 0;
+        int searchedSources = 0;
 
         // Search each filtered source
         for (const auto& source : sourcesToSearch) {
             std::vector<Manga> results;
             bool hasNextPage = false;
+            searchedSources++;
 
             // Use searchManga which uses GraphQL API
             if (client.searchManga(source.id, query, 1, results, hasNextPage)) {
@@ -541,14 +802,17 @@ void SearchTab::performSearch(const std::string& query) {
                     resultsBySource[source.name] = results;
                     totalResults += results.size();
                 }
+            } else {
+                failedSources++;
+                brls::Logger::warning("SearchTab: Search failed for source '{}'", source.name);
             }
 
             // Limit to prevent too many requests
             if (totalResults >= 100) break;
         }
 
-        brls::Logger::info("SearchTab: Found {} results from {} sources for '{}'",
-                           totalResults, resultsBySource.size(), query);
+        brls::Logger::info("SearchTab: Found {} results from {} sources for '{}' ({} failed)",
+                           totalResults, resultsBySource.size(), query, failedSources);
 
         // Store all results for flat list backup
         std::vector<Manga> allResults;
@@ -558,18 +822,26 @@ void SearchTab::performSearch(const std::string& query) {
             }
         }
 
-        brls::sync([this, allResults, resultsBySource]() {
+        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources]() {
             m_mangaList = allResults;
             m_resultsBySource = resultsBySource;
 
             // Show result count with source breakdown
             if (resultsBySource.empty()) {
-                m_resultsLabel->setText("No results found");
+                std::string resultText = "No results found";
+                if (failedSources > 0) {
+                    resultText += " (" + std::to_string(failedSources) + " source" +
+                                  (failedSources > 1 ? "s" : "") + " failed)";
+                }
+                m_resultsLabel->setText(resultText);
                 m_contentGrid->setDataSource(m_mangaList);
                 m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
             } else {
                 std::string resultText = std::to_string(allResults.size()) + " results from " +
                                         std::to_string(resultsBySource.size()) + " sources";
+                if (failedSources > 0) {
+                    resultText += " (" + std::to_string(failedSources) + " failed)";
+                }
                 m_resultsLabel->setText(resultText);
 
                 // Display results grouped by source in horizontal rows
@@ -598,11 +870,23 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " results");
+                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+
+                // Transfer focus to first cell in content grid after search results load
+                if (!manga.empty()) {
+                    brls::View* firstCell = m_contentGrid->getFirstCell();
+                    if (firstCell) {
+                        brls::Application::giveFocus(firstCell);
+                    }
+                }
             });
         } else {
             brls::Logger::error("SearchTab: Failed to search manga");
             brls::sync([this]() {
                 m_resultsLabel->setText("Search failed");
+                m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
+                // Focus on back button so user can go back
+                brls::Application::giveFocus(m_backBtn);
             });
         }
     });
@@ -636,13 +920,30 @@ void SearchTab::populateSearchResultsBySource() {
         m_searchResultsBox->setPadding(10);
 
         m_searchResultsScrollView->setContentView(m_searchResultsBox);
+
+        // Register B button on search results scroll view to handle back navigation
+        m_searchResultsScrollView->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+            if (m_browseMode != BrowseMode::SOURCES) {
+                brls::sync([this]() {
+                    handleBackNavigation();
+                });
+                return true;
+            }
+            return false;
+        }, true);  // hidden action
     }
     m_searchResultsBox->clearViews();
+
+    // Track first cell for focus transfer
+    brls::View* firstCell = nullptr;
 
     // Create a horizontal row for each source
     for (const auto& [sourceName, manga] : m_resultsBySource) {
         if (!manga.empty()) {
-            createSourceRow(sourceName, manga);
+            brls::View* cell = createSourceRow(sourceName, manga);
+            if (!firstCell && cell) {
+                firstCell = cell;
+            }
         }
     }
 
@@ -657,9 +958,18 @@ void SearchTab::populateSearchResultsBySource() {
     if (m_searchResultsScrollView->getParent() == nullptr) {
         this->addView(m_searchResultsScrollView);
     }
+
+    // Set up navigation from header buttons down to back button (source list is now hidden)
+    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
+    m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
+
+    // Transfer focus to first manga cell in search results
+    if (firstCell) {
+        brls::Application::giveFocus(firstCell);
+    }
 }
 
-void SearchTab::createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga) {
+brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga) {
     // Source header label
     auto* sourceLabel = new brls::Label();
     sourceLabel->setText(sourceName + " (" + std::to_string(manga.size()) + ")");
@@ -673,6 +983,8 @@ void SearchTab::createSourceRow(const std::string& sourceName, const std::vector
     auto* rowBox = new HorizontalScrollRow();
     rowBox->setHeight(195);
     rowBox->setMarginBottom(10);
+
+    brls::View* firstCell = nullptr;
 
     // Create manga cells for each result
     for (size_t i = 0; i < manga.size(); i++) {
@@ -689,10 +1001,27 @@ void SearchTab::createSourceRow(const std::string& sourceName, const std::vector
         });
         cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
 
+        // Register B button on cell to handle back navigation
+        cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+            if (m_browseMode != BrowseMode::SOURCES) {
+                brls::sync([this]() {
+                    handleBackNavigation();
+                });
+                return true;
+            }
+            return false;
+        }, true);  // hidden action
+
+        // Track first cell for focus transfer
+        if (i == 0) {
+            firstCell = cell;
+        }
+
         rowBox->addView(cell);
     }
 
     m_searchResultsBox->addView(rowBox);
+    return firstCell;
 }
 
 void SearchTab::loadNextPage() {
@@ -700,6 +1029,9 @@ void SearchTab::loadNextPage() {
 
     m_currentPage++;
     brls::Logger::debug("SearchTab: Loading page {}", m_currentPage);
+
+    // Show loading state on button
+    m_loadMoreBtn->setText("Loading...");
 
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -724,6 +1056,26 @@ void SearchTab::loadNextPage() {
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(m_mangaList.size()) + " manga");
+                m_loadMoreBtn->setText("Load More");
+                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+
+                // Manage focus after loading
+                if (hasNextPage) {
+                    // Keep focus on Load More button for easy pagination
+                    brls::Application::giveFocus(m_loadMoreBtn);
+                } else {
+                    // No more pages, focus on first cell in content grid
+                    brls::View* firstCell = m_contentGrid->getFirstCell();
+                    if (firstCell) {
+                        brls::Application::giveFocus(firstCell);
+                    }
+                }
+            });
+        } else {
+            brls::sync([this]() {
+                m_loadMoreBtn->setText("Load More");
+                // Keep focus on Load More button after failure
+                brls::Application::giveFocus(m_loadMoreBtn);
             });
         }
     });
@@ -749,6 +1101,50 @@ void SearchTab::updateModeButtons() {
                 break;
             }
         }
+    }
+}
+
+void SearchTab::handleBackNavigation() {
+    if (m_browseMode == BrowseMode::SEARCH_RESULTS) {
+        if (m_isGlobalSearch) {
+            // Global search: go back to sources list
+            showSources();
+        } else {
+            // Source-specific search: go back to source's main page (Popular)
+            // Find the current source and show its browser again
+            for (const auto& source : m_sources) {
+                if (source.id == m_currentSourceId) {
+                    m_browseMode = BrowseMode::POPULAR;
+                    m_titleLabel->setText(source.name);
+                    m_searchLabel->setVisibility(brls::Visibility::GONE);
+
+                    // Hide search results, show content grid
+                    if (m_searchResultsScrollView) {
+                        m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
+                    }
+                    // Clear search results to prevent ghost focus targets
+                    if (m_searchResultsBox) {
+                        m_searchResultsBox->clearViews();
+                    }
+                    m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
+
+                    // Update buttons for source browsing mode
+                    m_sourcesBtn->setVisibility(brls::Visibility::GONE);
+                    m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
+                    m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+                    m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+
+                    // Load popular manga
+                    loadPopularManga(m_currentSourceId);
+                    return;
+                }
+            }
+            // Fallback: go to sources if source not found
+            showSources();
+        }
+    } else {
+        // For POPULAR/LATEST modes: go back to sources list
+        showSources();
     }
 }
 

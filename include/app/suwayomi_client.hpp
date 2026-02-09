@@ -36,6 +36,28 @@ enum class DownloadState {
     ERROR
 };
 
+// Authentication mode (matches Suwayomi-Server authMode)
+enum class AuthMode {
+    NONE = 0,        // No authentication
+    BASIC_AUTH = 1,  // HTTP Basic Access Authentication
+    SIMPLE_LOGIN = 2, // Cookie-based session (custom login page)
+    UI_LOGIN = 3     // JWT-based authentication (v2.1.1894+)
+};
+
+// Reading history item
+struct ReadingHistoryItem {
+    int chapterId = 0;
+    int mangaId = 0;
+    std::string mangaTitle;
+    std::string mangaThumbnail;
+    std::string chapterName;
+    float chapterNumber = 0.0f;
+    int lastPageRead = 0;
+    int pageCount = 0;
+    int64_t lastReadAt = 0;  // Unix timestamp in milliseconds
+    std::string sourceName;
+};
+
 // Extension/Source info
 struct Source {
     int64_t id = 0;
@@ -104,7 +126,7 @@ struct Manga {
     std::vector<std::string> genre;
     MangaStatus status = MangaStatus::UNKNOWN;
     bool inLibrary = false;
-    bool inLibraryAt = false;     // Timestamp when added
+    int64_t inLibraryAt = 0;      // Timestamp when added to library (Unix ms)
     bool initialized = false;
     bool freshData = false;
     int64_t realUrl = 0;
@@ -197,20 +219,6 @@ struct Page {
 struct RecentUpdate {
     Manga manga;
     Chapter chapter;
-};
-
-// Reading history item (for continue reading)
-struct ReadingHistoryItem {
-    int chapterId = 0;
-    int mangaId = 0;
-    std::string mangaTitle;
-    std::string mangaThumbnail;
-    std::string chapterName;
-    float chapterNumber = 0.0f;
-    int lastPageRead = 0;
-    int pageCount = 0;
-    int64_t lastReadAt = 0;  // Unix timestamp
-    std::string sourceName;
 };
 
 // Global search result
@@ -511,6 +519,26 @@ public:
     void setAuthCredentials(const std::string& username, const std::string& password);
     void clearAuth();
 
+    // Authentication mode
+    void setAuthMode(AuthMode mode) { m_authMode = mode; }
+    AuthMode getAuthMode() const { return m_authMode; }
+
+    // Login methods for different auth modes
+    // Returns true if login successful, false otherwise
+    bool login(const std::string& username, const std::string& password);
+    bool refreshToken();  // Refresh JWT access token using refresh token
+    bool isAuthenticated() const;
+    void logout();
+
+    // Get stored tokens (for persistence)
+    const std::string& getAccessToken() const { return m_accessToken; }
+    const std::string& getRefreshToken() const { return m_refreshToken; }
+    const std::string& getSessionCookie() const { return m_sessionCookie; }
+
+    // Set tokens (for restoring from persistence)
+    void setTokens(const std::string& accessToken, const std::string& refreshToken);
+    void setSessionCookie(const std::string& cookie);
+
     // Check if client is connected
     bool isConnected() const { return !m_serverUrl.empty() && m_isConnected; }
 
@@ -533,6 +561,9 @@ private:
 
     // GraphQL query executor - returns response body or empty string on failure
     std::string executeGraphQL(const std::string& query, const std::string& variables = "");
+
+    // Internal GraphQL executor with retry control (for token refresh)
+    std::string executeGraphQLInternal(const std::string& query, const std::string& variables, bool allowRetry);
 
     // GraphQL-based implementations (primary API)
     bool fetchSourceListGraphQL(std::vector<Source>& sources);
@@ -651,6 +682,16 @@ private:
     std::string m_authPassword;
     bool m_isConnected = false;
     ServerInfo m_serverInfo;
+
+    // Authentication state
+    AuthMode m_authMode = AuthMode::NONE;
+    std::string m_accessToken;       // JWT access token (ui_login)
+    std::string m_refreshToken;      // JWT refresh token (ui_login)
+    std::string m_sessionCookie;     // Session cookie (simple_login)
+
+    // Login GraphQL methods
+    bool loginGraphQL(const std::string& username, const std::string& password);
+    bool refreshTokenGraphQL();
 };
 
 } // namespace vitasuwayomi

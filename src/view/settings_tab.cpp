@@ -8,7 +8,16 @@
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/library_cache.hpp"
+#include "utils/http_client.hpp"
 #include <algorithm>
+#include <ctime>
+#include <sstream>
+
+#ifdef __vita__
+#include <psp2/io/fcntl.h>
+#include <psp2/io/dirent.h>
+#include <psp2/io/stat.h>
+#endif
 
 // Version defined in CMakeLists.txt or here
 #ifndef VITA_SUWAYOMI_VERSION
@@ -39,6 +48,8 @@ SettingsTab::SettingsTab() {
     createReaderSection();
     createDownloadsSection();
     createBrowseSection();
+    createStatisticsSection();
+    createBackupSection();
     createAboutSection();
 
     m_scrollView->setContentView(m_contentBox);
@@ -47,19 +58,106 @@ SettingsTab::SettingsTab() {
 
 void SettingsTab::createAccountSection() {
     Application& app = Application::getInstance();
+    AppSettings& settings = app.getSettings();
 
     // Section header
     auto* header = new brls::Header();
     header->setTitle("Server");
     m_contentBox->addView(header);
 
-    // Server info cell
+    // Current server info
     m_serverLabel = new brls::Label();
-    m_serverLabel->setText("Server: " + (app.getServerUrl().empty() ? "Not connected" : app.getServerUrl()));
+    m_serverLabel->setText("Active: " + (app.getServerUrl().empty() ? "Not connected" : app.getServerUrl()));
     m_serverLabel->setFontSize(18);
     m_serverLabel->setMarginLeft(16);
-    m_serverLabel->setMarginBottom(16);
+    m_serverLabel->setMarginBottom(8);
     m_contentBox->addView(m_serverLabel);
+
+    // Local URL configuration
+    auto* localUrlCell = new brls::DetailCell();
+    localUrlCell->setText("Local URL");
+    localUrlCell->setDetailText(settings.localServerUrl.empty() ? "Not set" : settings.localServerUrl);
+    localUrlCell->registerClickAction([this, localUrlCell](brls::View* view) {
+        showUrlInputDialog("Local Server URL", "Enter local network URL (e.g., http://192.168.1.100:4567)",
+            Application::getInstance().getSettings().localServerUrl,
+            [this, localUrlCell](const std::string& url) {
+                Application::getInstance().getSettings().localServerUrl = url;
+                localUrlCell->setDetailText(url.empty() ? "Not set" : url);
+                Application::getInstance().saveSettings();
+                updateServerLabel();
+            });
+        return true;
+    });
+    m_contentBox->addView(localUrlCell);
+
+    // Remote URL configuration
+    auto* remoteUrlCell = new brls::DetailCell();
+    remoteUrlCell->setText("Remote URL");
+    remoteUrlCell->setDetailText(settings.remoteServerUrl.empty() ? "Not set" : settings.remoteServerUrl);
+    remoteUrlCell->registerClickAction([this, remoteUrlCell](brls::View* view) {
+        showUrlInputDialog("Remote Server URL", "Enter remote URL (e.g., https://myserver.com:4567)",
+            Application::getInstance().getSettings().remoteServerUrl,
+            [this, remoteUrlCell](const std::string& url) {
+                Application::getInstance().getSettings().remoteServerUrl = url;
+                remoteUrlCell->setDetailText(url.empty() ? "Not set" : url);
+                Application::getInstance().saveSettings();
+                updateServerLabel();
+            });
+        return true;
+    });
+    m_contentBox->addView(remoteUrlCell);
+
+    // Toggle between local and remote
+    m_urlModeSelector = new brls::SelectorCell();
+    std::vector<std::string> urlModes = {"Local", "Remote"};
+    int currentMode = settings.useRemoteUrl ? 1 : 0;
+    m_urlModeSelector->init("Active Connection", urlModes, currentMode,
+        [this](int index) {
+            Application& app = Application::getInstance();
+            if (index == 0) {
+                app.switchToLocalUrl();
+            } else {
+                app.switchToRemoteUrl();
+            }
+            updateServerLabel();
+            brls::Application::notify(index == 0 ? "Switched to Local URL" : "Switched to Remote URL");
+        });
+    m_contentBox->addView(m_urlModeSelector);
+
+    // Auto-switch on failure toggle
+    auto* autoSwitchToggle = new brls::BooleanCell();
+    autoSwitchToggle->init("Auto-Switch on Failure", settings.autoSwitchOnFailure,
+        [](bool value) {
+            Application::getInstance().getSettings().autoSwitchOnFailure = value;
+            Application::getInstance().saveSettings();
+            brls::Application::notify(value ? "Auto-switch enabled" : "Auto-switch disabled");
+        });
+    m_contentBox->addView(autoSwitchToggle);
+
+    // Info label for auto-switch
+    auto* autoSwitchInfoLabel = new brls::Label();
+    autoSwitchInfoLabel->setText("Try alternate URL if connection fails");
+    autoSwitchInfoLabel->setFontSize(14);
+    autoSwitchInfoLabel->setMarginLeft(16);
+    autoSwitchInfoLabel->setMarginTop(4);
+    m_contentBox->addView(autoSwitchInfoLabel);
+
+    // Connection timeout selector
+    auto* timeoutSelector = new brls::SelectorCell();
+    int timeoutIndex = 1; // default to 30s
+    if (settings.connectionTimeout <= 10) timeoutIndex = 0;
+    else if (settings.connectionTimeout <= 30) timeoutIndex = 1;
+    else if (settings.connectionTimeout <= 60) timeoutIndex = 2;
+    else timeoutIndex = 3;
+    timeoutSelector->init("Connection Timeout",
+        {"10 seconds", "30 seconds", "60 seconds", "120 seconds"},
+        timeoutIndex,
+        [](int index) {
+            int timeouts[] = {10, 30, 60, 120};
+            Application::getInstance().getSettings().connectionTimeout = timeouts[index];
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(timeoutSelector);
 
     // Disconnect button
     auto* disconnectCell = new brls::DetailCell();
@@ -89,28 +187,13 @@ void SettingsTab::createUISection() {
         });
     m_contentBox->addView(m_themeSelector);
 
-    // Show clock toggle
-    m_clockToggle = new brls::BooleanCell();
-    m_clockToggle->init("Show Clock", settings.showClock, [&settings](bool value) {
-        settings.showClock = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(m_clockToggle);
-
-    // Animations toggle
-    m_animationsToggle = new brls::BooleanCell();
-    m_animationsToggle->init("Enable Animations", settings.animationsEnabled, [&settings](bool value) {
-        settings.animationsEnabled = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(m_animationsToggle);
-
     // Debug logging toggle
     m_debugLogToggle = new brls::BooleanCell();
-    m_debugLogToggle->init("Debug Logging", settings.debugLogging, [&settings](bool value) {
-        settings.debugLogging = value;
+    m_debugLogToggle->init("Debug Logging", settings.debugLogging, [](bool value) {
+        Application::getInstance().getSettings().debugLogging = value;
         Application::getInstance().applyLogLevel();
         Application::getInstance().saveSettings();
+        brls::Application::notify(value ? "Debug logging enabled" : "Debug logging disabled");
     });
     m_contentBox->addView(m_debugLogToggle);
 }
@@ -157,6 +240,28 @@ void SettingsTab::createLibrarySection() {
     infoLabel->setMarginBottom(8);
     m_contentBox->addView(infoLabel);
 
+    // Grid display mode selector
+    auto* displayModeSelector = new brls::SelectorCell();
+    displayModeSelector->init("Display Mode",
+        {"Grid (Cover + Title)", "Compact Grid (Covers Only)", "List View"},
+        static_cast<int>(settings.libraryDisplayMode),
+        [&settings](int index) {
+            settings.libraryDisplayMode = static_cast<LibraryDisplayMode>(index);
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(displayModeSelector);
+
+    // Grid size selector
+    auto* gridSizeSelector = new brls::SelectorCell();
+    gridSizeSelector->init("Grid Size",
+        {"Large (4 columns)", "Medium (6 columns)", "Small (8 columns)"},
+        static_cast<int>(settings.libraryGridSize),
+        [&settings](int index) {
+            settings.libraryGridSize = static_cast<LibraryGridSize>(index);
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(gridSizeSelector);
+
     // Cache Library Data toggle
     auto* cacheDataToggle = new brls::BooleanCell();
     cacheDataToggle->init("Cache Library Data", settings.cacheLibraryData, [&settings](bool value) {
@@ -181,20 +286,74 @@ void SettingsTab::createLibrarySection() {
     cacheInfoLabel->setMarginTop(4);
     m_contentBox->addView(cacheInfoLabel);
 
+    // Library Updates header
+    auto* updatesHeader = new brls::Header();
+    updatesHeader->setTitle("Library Updates");
+    m_contentBox->addView(updatesHeader);
+
+    // Update on start toggle
+    auto* updateOnStartToggle = new brls::BooleanCell();
+    updateOnStartToggle->init("Update Library on Start", settings.updateOnStart, [](bool value) {
+        Application::getInstance().getSettings().updateOnStart = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(updateOnStartToggle);
+
+    // Info label for update on start
+    auto* updateOnStartInfoLabel = new brls::Label();
+    updateOnStartInfoLabel->setText("Automatically check for new chapters on app startup");
+    updateOnStartInfoLabel->setFontSize(14);
+    updateOnStartInfoLabel->setMarginLeft(16);
+    updateOnStartInfoLabel->setMarginTop(4);
+    m_contentBox->addView(updateOnStartInfoLabel);
+
+    // Default category selector
+    m_defaultCategorySelector = new brls::SelectorCell();
+    m_defaultCategorySelector->init("Default Category",
+        {"Default (All)", "Loading..."},
+        0,
+        [](int index) {
+            // Will be updated when categories are loaded
+        });
+    m_defaultCategorySelector->setDetailText("Category to show when opening library");
+    m_contentBox->addView(m_defaultCategorySelector);
+
+    // Load categories for the selector asynchronously
+    refreshDefaultCategorySelector();
+
+    // Display Badges header
+    auto* badgesHeader = new brls::Header();
+    badgesHeader->setTitle("Display Badges");
+    m_contentBox->addView(badgesHeader);
+
+    // Show unread badge toggle
+    auto* showUnreadBadgeToggle = new brls::BooleanCell();
+    showUnreadBadgeToggle->init("Show Unread Badge", settings.showUnreadBadge, [](bool value) {
+        Application::getInstance().getSettings().showUnreadBadge = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(showUnreadBadgeToggle);
+
+    // Show downloaded badge toggle
+    auto* showDownloadedBadgeToggle = new brls::BooleanCell();
+    showDownloadedBadgeToggle->init("Show Downloaded Badge", settings.showDownloadedBadge, [](bool value) {
+        Application::getInstance().getSettings().showDownloadedBadge = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(showDownloadedBadgeToggle);
+
     // Clear Cache button
     auto* clearCacheCell = new brls::DetailCell();
     clearCacheCell->setText("Clear Cache");
     clearCacheCell->setDetailText("Delete cached data and images");
     clearCacheCell->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Clear all cached data?");
+        dialog->setCancelable(true);  // Allow back button to close dialog
 
-        dialog->addButton("Cancel", [dialog]() {
-            dialog->close();
-        });
+        dialog->addButton("Cancel", []() {});
 
-        dialog->addButton("Clear", [dialog]() {
+        dialog->addButton("Clear", []() {
             LibraryCache::getInstance().clearAllCache();
-            dialog->close();
             brls::Application::notify("Cache cleared");
         });
 
@@ -223,71 +382,175 @@ void SettingsTab::showCategoryVisibilityDialog() {
             return a.order < b.order;
         });
 
-    // Create dialog
-    brls::Dialog* dialog = new brls::Dialog("Category Visibility");
-
-    auto* scrollView = new brls::ScrollingFrame();
-    scrollView->setWidth(450);
-    scrollView->setHeight(350);
-
-    auto* contentBox = new brls::Box();
-    contentBox->setAxis(brls::Axis::COLUMN);
-    contentBox->setPadding(10);
-
     auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
 
-    // Add toggle for each category
-    for (const auto& cat : categories) {
-        // Skip empty categories
-        if (cat.mangaCount <= 0) continue;
+    // Create dialog box (matching Manage Categories design)
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(550);
+    dialogBox->setHeight(450);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setCornerRadius(12);
 
-        auto* toggle = new brls::BooleanCell();
-        std::string catName = cat.name;
-        if (catName.length() > 18) {
-            catName = catName.substr(0, 16) + "..";
-        }
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Hidden Categories");
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(10);
+    dialogBox->addView(titleLabel);
 
-        // Category is visible if NOT in hidden list
-        bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Tap to toggle visibility in library");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setMarginBottom(15);
+    dialogBox->addView(infoLabel);
 
-        int catId = cat.id;
-        toggle->init(catName + " (" + std::to_string(cat.mangaCount) + ")", isVisible,
-            [catId](bool value) {
-                auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
-                if (value) {
-                    // Show category (remove from hidden)
-                    hidden.erase(catId);
-                } else {
-                    // Hide category (add to hidden)
-                    hidden.insert(catId);
-                }
-                Application::getInstance().saveSettings();
-            });
-
-        contentBox->addView(toggle);
-    }
-
-    // If no categories with manga
-    if (categories.empty()) {
-        auto* label = new brls::Label();
-        label->setText("No categories found");
-        label->setFontSize(16);
-        contentBox->addView(label);
-    }
-
-    scrollView->setContentView(contentBox);
-    dialog->addView(scrollView);
-
-    dialog->addButton("Done", [dialog, this]() {
-        dialog->close();
-        // Update the cell detail text
+    // Create close button early so it can be captured in lambdas
+    auto* closeBtn = new brls::Button();
+    closeBtn->setText("Done");
+    closeBtn->setMarginTop(15);
+    closeBtn->registerClickAction([this](brls::View* view) {
+        // Update the cell detail text before closing
         if (m_hideCategoriesCell) {
             size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
             m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
         }
+        brls::Application::popActivity();
+        return true;
     });
+    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
 
-    dialog->open();
+    // Scrollable category list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
+
+    auto* catList = new brls::Box();
+    catList->setAxis(brls::Axis::COLUMN);
+
+    // Filter to only show categories with manga
+    std::vector<Category> visibleCategories;
+    for (const auto& cat : categories) {
+        if (cat.mangaCount > 0) {
+            visibleCategories.push_back(cat);
+        }
+    }
+
+    for (size_t i = 0; i < visibleCategories.size(); i++) {
+        const auto& cat = visibleCategories[i];
+
+        auto* catRow = new brls::Box();
+        catRow->setAxis(brls::Axis::ROW);
+        catRow->setAlignItems(brls::AlignItems::CENTER);
+        catRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+        catRow->setPadding(10, 12, 10, 12);
+        catRow->setMarginBottom(6);
+        catRow->setCornerRadius(8);
+        catRow->setFocusable(true);
+
+        // Category is visible if NOT in hidden list
+        bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
+        catRow->setBackgroundColor(isVisible ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+
+        // Category info box
+        auto* infoBox = new brls::Box();
+        infoBox->setAxis(brls::Axis::COLUMN);
+        infoBox->setGrow(1.0f);
+
+        auto* nameLabel = new brls::Label();
+        std::string displayName = cat.name;
+        if (displayName.length() > 20) {
+            displayName = displayName.substr(0, 18) + "..";
+        }
+        nameLabel->setText(displayName);
+        nameLabel->setFontSize(16);
+        infoBox->addView(nameLabel);
+
+        auto* countLabel = new brls::Label();
+        countLabel->setText(std::to_string(cat.mangaCount) + " manga");
+        countLabel->setFontSize(12);
+        countLabel->setTextColor(nvgRGB(120, 120, 120));
+        infoBox->addView(countLabel);
+
+        catRow->addView(infoBox);
+
+        // Status indicator
+        auto* statusLabel = new brls::Label();
+        statusLabel->setText(isVisible ? "Visible" : "Hidden");
+        statusLabel->setFontSize(14);
+        statusLabel->setTextColor(isVisible ? nvgRGB(100, 200, 150) : nvgRGB(150, 100, 100));
+        statusLabel->setMarginRight(10);
+        catRow->addView(statusLabel);
+
+        // Store category id for toggle action
+        int catId = cat.id;
+
+        // Click to toggle visibility
+        catRow->registerClickAction([catRow, catId, statusLabel](brls::View* view) {
+            auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
+            bool currentlyHidden = (hidden.find(catId) != hidden.end());
+
+            if (currentlyHidden) {
+                // Show category (remove from hidden)
+                hidden.erase(catId);
+                catRow->setBackgroundColor(nvgRGBA(0, 100, 80, 200));
+                statusLabel->setText("Visible");
+                statusLabel->setTextColor(nvgRGB(100, 200, 150));
+            } else {
+                // Hide category (add to hidden)
+                hidden.insert(catId);
+                catRow->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
+                statusLabel->setText("Hidden");
+                statusLabel->setTextColor(nvgRGB(150, 100, 100));
+            }
+
+            Application::getInstance().saveSettings();
+            return true;
+        });
+        catRow->addGestureRecognizer(new brls::TapGestureRecognizer(catRow));
+
+        catList->addView(catRow);
+    }
+
+    // If no categories with manga
+    if (visibleCategories.empty()) {
+        auto* label = new brls::Label();
+        label->setText("No categories with manga found");
+        label->setFontSize(16);
+        label->setMarginTop(20);
+        catList->addView(label);
+    }
+
+    scrollView->setContentView(catList);
+    dialogBox->addView(scrollView);
+
+    // Add close button to dialog
+    dialogBox->addView(closeBtn);
+
+    // Register circle button to close the dialog
+    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
+        // Update the cell detail text before closing
+        if (m_hideCategoriesCell) {
+            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
+            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
+        }
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
+    // Set up navigation
+    auto& catChildren = catList->getChildren();
+    if (!catChildren.empty()) {
+        // Last category row -> down goes to closeBtn
+        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
+        // closeBtn -> up goes to last category
+        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+    }
+
+    // Push as new activity
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
 
 void SettingsTab::createReaderSection() {
@@ -473,25 +736,6 @@ void SettingsTab::createDownloadsSection() {
     });
     m_contentBox->addView(autoDownloadToggle);
 
-    // WiFi only toggle
-    auto* wifiOnlyToggle = new brls::BooleanCell();
-    wifiOnlyToggle->init("Download Over WiFi Only", settings.downloadOverWifiOnly, [&settings](bool value) {
-        settings.downloadOverWifiOnly = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(wifiOnlyToggle);
-
-    // Concurrent downloads selector
-    auto* concurrentSelector = new brls::SelectorCell();
-    concurrentSelector->init("Max Concurrent Downloads",
-        {"1", "2", "3"},
-        settings.maxConcurrentDownloads - 1,
-        [&settings](int index) {
-            settings.maxConcurrentDownloads = index + 1;
-            Application::getInstance().saveSettings();
-        });
-    m_contentBox->addView(concurrentSelector);
-
     // Delete after read toggle
     auto* deleteAfterReadToggle = new brls::BooleanCell();
     deleteAfterReadToggle->init("Delete After Reading", settings.deleteAfterRead, [&settings](bool value) {
@@ -534,12 +778,11 @@ void SettingsTab::createDownloadsSection() {
     m_clearDownloadsCell->setDetailText(std::to_string(downloads.size()) + " manga");
     m_clearDownloadsCell->registerClickAction([this](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
+        dialog->setCancelable(true);  // Allow back button to close dialog
 
-        dialog->addButton("Cancel", [dialog]() {
-            dialog->close();
-        });
+        dialog->addButton("Cancel", []() {});
 
-        dialog->addButton("Delete All", [dialog, this]() {
+        dialog->addButton("Delete All", [this]() {
             auto downloads = DownloadsManager::getInstance().getDownloads();
             for (const auto& item : downloads) {
                 DownloadsManager::getInstance().deleteMangaDownload(item.mangaId);
@@ -547,7 +790,6 @@ void SettingsTab::createDownloadsSection() {
             if (m_clearDownloadsCell) {
                 m_clearDownloadsCell->setDetailText("0 manga");
             }
-            dialog->close();
             brls::Application::notify("All downloads deleted");
         });
 
@@ -793,6 +1035,12 @@ void SettingsTab::showLanguageFilterDialog() {
     closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
     dialogBox->addView(closeBtn);
 
+    // Register circle button to close the dialog
+    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
     // Push as new activity
     brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
@@ -808,6 +1056,16 @@ void SettingsTab::createAboutSection() {
     versionCell->setText("Version");
     versionCell->setDetailText(VITA_SUWAYOMI_VERSION);
     m_contentBox->addView(versionCell);
+
+    // Check for Updates button
+    auto* updateCell = new brls::DetailCell();
+    updateCell->setText("Check for Updates");
+    updateCell->setDetailText("Check GitHub for new releases");
+    updateCell->registerClickAction([this](brls::View* view) {
+        checkForUpdates();
+        return true;
+    });
+    m_contentBox->addView(updateCell);
 
     // App description
     auto* descLabel = new brls::Label();
@@ -837,14 +1095,11 @@ void SettingsTab::createAboutSection() {
 
 void SettingsTab::onDisconnect() {
     brls::Dialog* dialog = new brls::Dialog("Disconnect from server?");
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
-    dialog->addButton("Cancel", [dialog]() {
-        dialog->close();
-    });
+    dialog->addButton("Cancel", []() {});
 
-    dialog->addButton("Disconnect", [dialog, this]() {
-        dialog->close();
-
+    dialog->addButton("Disconnect", [this]() {
         // Clear server connection
         Application::getInstance().setServerUrl("");
         Application::getInstance().setConnected(false);
@@ -864,6 +1119,77 @@ void SettingsTab::onThemeChanged(int index) {
     settings.theme = static_cast<AppTheme>(index);
     app.applyTheme();
     app.saveSettings();
+}
+
+void SettingsTab::showUrlInputDialog(const std::string& title, const std::string& hint,
+                                      const std::string& currentValue,
+                                      std::function<void(const std::string&)> callback) {
+    // Create a simple input dialog for URL entry
+    brls::Dialog* dialog = new brls::Dialog(title);
+    dialog->setCancelable(true);  // Allow back button to close dialog
+
+    // Input field container
+    auto* inputBox = new brls::Box();
+    inputBox->setAxis(brls::Axis::COLUMN);
+    inputBox->setPadding(16);
+
+    // Hint/description text
+    auto* hintLabel = new brls::Label();
+    hintLabel->setText(hint);
+    hintLabel->setFontSize(14);
+    hintLabel->setTextColor(nvgRGB(180, 180, 180));
+    hintLabel->setMarginBottom(12);
+    inputBox->addView(hintLabel);
+
+    // Current value display
+    auto* currentLabel = new brls::Label();
+    currentLabel->setText(currentValue.empty() ? "(not set)" : currentValue);
+    currentLabel->setFontSize(16);
+    inputBox->addView(currentLabel);
+
+    dialog->addView(inputBox);
+
+    // Close button - just close without changes (empty lambda, dialog auto-closes)
+    dialog->addButton("Close", []() {});
+
+    // Use the current value or prompt for new one via keyboard
+    dialog->addButton("Edit", [callback, currentValue]() {
+        // Open on-screen keyboard for input (dialog auto-closes before this runs)
+        brls::Application::getImeManager()->openForText([callback](std::string text) {
+            // Validate URL format
+            if (!text.empty()) {
+                // Remove trailing slashes
+                while (!text.empty() && text.back() == '/') {
+                    text.pop_back();
+                }
+                // Basic URL validation - should start with http:// or https://
+                if (text.find("http://") != 0 && text.find("https://") != 0) {
+                    brls::Application::notify("URL must start with http:// or https://");
+                    return;
+                }
+            }
+            callback(text);
+        }, "Enter Server URL", "", 256, currentValue, 0);
+    });
+
+    dialog->addButton("Clear", [callback]() {
+        // Dialog auto-closes before this runs
+        callback("");
+        brls::Application::notify("URL cleared");
+    });
+
+    dialog->open();
+}
+
+void SettingsTab::updateServerLabel() {
+    if (m_serverLabel) {
+        Application& app = Application::getInstance();
+        std::string activeUrl = app.getServerUrl();
+        if (activeUrl.empty()) {
+            activeUrl = app.getActiveServerUrl();
+        }
+        m_serverLabel->setText("Active: " + (activeUrl.empty() ? "Not connected" : activeUrl));
+    }
 }
 
 void SettingsTab::showCategoryManagementDialog() {
@@ -1171,6 +1497,7 @@ void SettingsTab::showCategoryManagementDialog() {
 
 void SettingsTab::showCreateCategoryDialog() {
     brls::Dialog* dialog = new brls::Dialog("Create New Category");
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     auto* contentBox = new brls::Box();
     contentBox->setAxis(brls::Axis::COLUMN);
@@ -1193,13 +1520,11 @@ void SettingsTab::showCreateCategoryDialog() {
 
     dialog->addView(contentBox);
 
-    dialog->addButton("Cancel", [dialog]() {
-        dialog->close();
-    });
+    dialog->addButton("Cancel", []() {});
 
-    dialog->addButton("Create", [dialog]() {
-        // Open software keyboard for input
-        brls::Application::getImeManager()->openForText([dialog](std::string text) {
+    dialog->addButton("Create", []() {
+        // Open software keyboard for input (dialog auto-closes before this runs)
+        brls::Application::getImeManager()->openForText([](std::string text) {
             if (text.empty()) {
                 brls::Application::notify("Category name cannot be empty");
                 return;
@@ -1208,7 +1533,6 @@ void SettingsTab::showCreateCategoryDialog() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             if (client.createCategory(text)) {
                 brls::Application::notify("Category created: " + text);
-                dialog->close();
             } else {
                 brls::Application::notify("Failed to create category");
             }
@@ -1220,17 +1544,12 @@ void SettingsTab::showCreateCategoryDialog() {
 
 void SettingsTab::showEditCategoryDialog(const Category& category) {
     brls::Dialog* dialog = new brls::Dialog("Edit Category: " + category.name);
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     auto* contentBox = new brls::Box();
     contentBox->setAxis(brls::Axis::COLUMN);
     contentBox->setPadding(20);
     contentBox->setWidth(400);
-
-    auto* inputLabel = new brls::Label();
-    inputLabel->setText("Current name: " + category.name);
-    inputLabel->setFontSize(16);
-    inputLabel->setMarginBottom(10);
-    contentBox->addView(inputLabel);
 
     auto* infoLabel = new brls::Label();
     infoLabel->setText("Press 'Rename' to change the name");
@@ -1244,14 +1563,13 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
     bool isDefault = category.isDefault;
     std::string catName = category.name;
 
-    dialog->addButton("Cancel", [this, dialog]() {
-        dialog->close();
+    dialog->addButton("Cancel", [this]() {
         // Re-open category management dialog
         showCategoryManagementDialog();
     });
 
-    dialog->addButton("Rename", [this, dialog, catId, isDefault, catName]() {
-        brls::Application::getImeManager()->openForText([this, dialog, catId, isDefault](std::string text) {
+    dialog->addButton("Rename", [this, catId, isDefault, catName]() {
+        brls::Application::getImeManager()->openForText([this, catId, isDefault](std::string text) {
             if (text.empty()) {
                 brls::Application::notify("Category name cannot be empty");
                 return;
@@ -1260,7 +1578,6 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             if (client.updateCategory(catId, text, isDefault)) {
                 brls::Application::notify("Category renamed to: " + text);
-                dialog->close();
                 // Re-open category management dialog to show updated list
                 showCategoryManagementDialog();
             } else {
@@ -1278,30 +1595,602 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
                          " manga from this category.\nThe manga will remain in your library.";
 
     brls::Dialog* dialog = new brls::Dialog(message);
+    dialog->setCancelable(true);  // Allow back button to close dialog
 
     int catId = category.id;
 
-    dialog->addButton("Cancel", [this, dialog]() {
-        dialog->close();
+    dialog->addButton("Cancel", [this]() {
         // Re-open category management dialog
         showCategoryManagementDialog();
     });
 
-    dialog->addButton("Delete", [this, dialog, catId]() {
+    dialog->addButton("Delete", [this, catId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         if (client.deleteCategory(catId)) {
             brls::Application::notify("Category deleted");
-            dialog->close();
             // Re-open category management dialog to show updated list
             showCategoryManagementDialog();
         } else {
             brls::Application::notify("Failed to delete category");
-            dialog->close();
             showCategoryManagementDialog();
         }
     });
 
     dialog->open();
+}
+
+void SettingsTab::showStorageManagement() {
+    // Push storage management view
+    brls::Application::notify("Opening storage management...");
+
+    // Create storage view inline (since we may not have the full view ready)
+    auto* storageBox = new brls::Box();
+    storageBox->setAxis(brls::Axis::COLUMN);
+    storageBox->setPadding(20);
+    storageBox->setGrow(1.0f);
+
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Storage Management");
+    titleLabel->setFontSize(24);
+    titleLabel->setMarginBottom(20);
+    storageBox->addView(titleLabel);
+
+    // Get downloads info
+    auto downloads = DownloadsManager::getInstance().getDownloads();
+    int64_t totalSize = 0;
+
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Downloaded manga: " + std::to_string(downloads.size()));
+    infoLabel->setFontSize(18);
+    infoLabel->setMarginBottom(10);
+    storageBox->addView(infoLabel);
+
+    // Clear all button
+    auto* clearBtn = new brls::Button();
+    clearBtn->setText("Clear All Downloads");
+    clearBtn->setMarginTop(20);
+    clearBtn->registerClickAction([](brls::View* view) {
+        brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
+        dialog->setCancelable(false);  // Prevent exit dialog from appearing
+        dialog->addButton("Cancel", []() {});
+        dialog->addButton("Delete", []() {
+            auto downloads = DownloadsManager::getInstance().getDownloads();
+            for (const auto& item : downloads) {
+                DownloadsManager::getInstance().deleteMangaDownload(item.mangaId);
+            }
+            brls::Application::notify("All downloads deleted");
+            brls::Application::popActivity();
+        });
+        dialog->open();
+        return true;
+    });
+    storageBox->addView(clearBtn);
+
+    // Back button
+    auto* backBtn = new brls::Button();
+    backBtn->setText("Back");
+    backBtn->setMarginTop(20);
+    backBtn->registerClickAction([](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    });
+    storageBox->addView(backBtn);
+
+    // Register circle button to close the dialog
+    storageBox->registerAction("Back", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
+    brls::Application::pushActivity(new brls::Activity(storageBox));
+}
+
+void SettingsTab::showStatisticsView() {
+    // Sync stats from server first
+    Application::getInstance().syncStatisticsFromServer();
+
+    Application& app = Application::getInstance();
+    AppSettings& settings = app.getSettings();
+
+    auto* statsBox = new brls::Box();
+    statsBox->setAxis(brls::Axis::COLUMN);
+    statsBox->setPadding(20);
+    statsBox->setGrow(1.0f);
+
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Reading Statistics");
+    titleLabel->setFontSize(24);
+    titleLabel->setMarginBottom(10);
+    statsBox->addView(titleLabel);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Synced from server and local reading");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(120, 120, 120));
+    infoLabel->setMarginBottom(15);
+    statsBox->addView(infoLabel);
+
+    // Total chapters read
+    auto* chaptersLabel = new brls::Label();
+    chaptersLabel->setText("Chapters Read: " + std::to_string(settings.totalChaptersRead));
+    chaptersLabel->setFontSize(18);
+    chaptersLabel->setMarginBottom(10);
+    statsBox->addView(chaptersLabel);
+
+    // Manga completed
+    auto* completedLabel = new brls::Label();
+    completedLabel->setText("Manga Completed: " + std::to_string(settings.totalMangaCompleted));
+    completedLabel->setFontSize(18);
+    completedLabel->setMarginBottom(10);
+    statsBox->addView(completedLabel);
+
+    // Reading streak
+    auto* streakLabel = new brls::Label();
+    streakLabel->setText("Current Streak: " + std::to_string(settings.currentStreak) + " days");
+    streakLabel->setFontSize(18);
+    streakLabel->setMarginBottom(10);
+    statsBox->addView(streakLabel);
+
+    // Longest streak
+    auto* longestLabel = new brls::Label();
+    longestLabel->setText("Longest Streak: " + std::to_string(settings.longestStreak) + " days");
+    longestLabel->setFontSize(18);
+    longestLabel->setMarginBottom(10);
+    statsBox->addView(longestLabel);
+
+    // Reading time note
+    auto* timeNoteLabel = new brls::Label();
+    timeNoteLabel->setText("Note: Reading time tracking is local only");
+    timeNoteLabel->setFontSize(14);
+    timeNoteLabel->setTextColor(nvgRGB(120, 120, 120));
+    timeNoteLabel->setMarginBottom(5);
+    statsBox->addView(timeNoteLabel);
+
+    // Reading time
+    int hours = static_cast<int>(settings.totalReadingTime / 3600);
+    int minutes = static_cast<int>((settings.totalReadingTime % 3600) / 60);
+    auto* timeLabel = new brls::Label();
+    timeLabel->setText("Total Reading Time: " + std::to_string(hours) + "h " + std::to_string(minutes) + "m");
+    timeLabel->setFontSize(18);
+    timeLabel->setMarginBottom(20);
+    statsBox->addView(timeLabel);
+
+    // Sync from Server button
+    auto* syncBtn = new brls::Button();
+    syncBtn->setText("Sync from Server");
+    syncBtn->registerClickAction([chaptersLabel, completedLabel](brls::View* view) {
+        brls::Application::notify("Syncing statistics...");
+        Application::getInstance().syncStatisticsFromServer();
+        AppSettings& s = Application::getInstance().getSettings();
+        chaptersLabel->setText("Chapters Read: " + std::to_string(s.totalChaptersRead));
+        completedLabel->setText("Manga Completed: " + std::to_string(s.totalMangaCompleted));
+        brls::Application::notify("Statistics synced");
+        return true;
+    });
+    syncBtn->addGestureRecognizer(new brls::TapGestureRecognizer(syncBtn));
+    statsBox->addView(syncBtn);
+
+    // Reset button
+    auto* resetBtn = new brls::Button();
+    resetBtn->setText("Reset Statistics");
+    resetBtn->setMarginTop(10);
+    resetBtn->registerClickAction([](brls::View* view) {
+        brls::Dialog* dialog = new brls::Dialog("Reset all reading statistics?");
+        dialog->setCancelable(true);  // Allow back button to close dialog
+        dialog->addButton("Cancel", []() {});
+        dialog->addButton("Reset", []() {
+            AppSettings& s = Application::getInstance().getSettings();
+            s.totalChaptersRead = 0;
+            s.totalMangaCompleted = 0;
+            s.currentStreak = 0;
+            s.longestStreak = 0;
+            s.totalReadingTime = 0;
+            s.lastReadDate = 0;
+            Application::getInstance().saveSettings();
+            brls::Application::notify("Statistics reset");
+            brls::Application::popActivity();
+        });
+        dialog->open();
+        return true;
+    });
+    resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
+    statsBox->addView(resetBtn);
+
+    // Back button
+    auto* backBtn = new brls::Button();
+    backBtn->setText("Back");
+    backBtn->setMarginTop(20);
+    backBtn->registerClickAction([](brls::View* view) {
+        brls::Application::popActivity();
+        return true;
+    });
+    backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
+    statsBox->addView(backBtn);
+
+    // Register circle button to close the dialog
+    statsBox->registerAction("Back", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
+    brls::Application::pushActivity(new brls::Activity(statsBox));
+}
+
+void SettingsTab::createBackupSection() {
+    auto* header = new brls::Header();
+    header->setTitle("Backup & Restore");
+    m_contentBox->addView(header);
+
+    // Export backup
+    auto* exportCell = new brls::DetailCell();
+    exportCell->setText("Export Backup");
+    exportCell->setDetailText("Save library and settings to file");
+    exportCell->registerClickAction([this](brls::View* view) {
+        exportBackup();
+        return true;
+    });
+    m_contentBox->addView(exportCell);
+
+    // Import backup
+    auto* importCell = new brls::DetailCell();
+    importCell->setText("Import Backup");
+    importCell->setDetailText("Restore from backup file");
+    importCell->registerClickAction([this](brls::View* view) {
+        importBackup();
+        return true;
+    });
+    m_contentBox->addView(importCell);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Backups are saved to ux0:data/VitaSuwayomi/backup/");
+    infoLabel->setFontSize(14);
+    infoLabel->setMarginLeft(16);
+    infoLabel->setMarginTop(4);
+    m_contentBox->addView(infoLabel);
+}
+
+void SettingsTab::createStatisticsSection() {
+    auto* header = new brls::Header();
+    header->setTitle("Reading Statistics");
+    m_contentBox->addView(header);
+
+    // View statistics
+    auto* statsCell = new brls::DetailCell();
+    statsCell->setText("View Statistics");
+    statsCell->setDetailText("Chapters read, streaks, and more");
+    statsCell->registerClickAction([this](brls::View* view) {
+        showStatisticsView();
+        return true;
+    });
+    m_contentBox->addView(statsCell);
+
+    // Storage management
+    auto* storageCell = new brls::DetailCell();
+    storageCell->setText("Storage Management");
+    storageCell->setDetailText("View and manage downloaded content");
+    storageCell->registerClickAction([this](brls::View* view) {
+        showStorageManagement();
+        return true;
+    });
+    m_contentBox->addView(storageCell);
+}
+
+void SettingsTab::exportBackup() {
+    brls::Application::notify("Creating backup...");
+
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+#ifdef __vita__
+    // Create backup directory
+    sceIoMkdir("ux0:data/VitaSuwayomi/backup", 0777);
+
+    // Generate filename with timestamp
+    time_t now = time(nullptr);
+    struct tm* tm_info = localtime(&now);
+    char filename[64];
+    strftime(filename, sizeof(filename), "backup_%Y%m%d_%H%M%S.json", tm_info);
+
+    std::string backupPath = "ux0:data/VitaSuwayomi/backup/" + std::string(filename);
+
+    if (client.exportBackup(backupPath)) {
+        brls::Application::notify("Backup saved: " + std::string(filename));
+    } else {
+        brls::Application::notify("Failed to create backup");
+    }
+#else
+    brls::Application::notify("Backup feature requires PS Vita");
+#endif
+}
+
+void SettingsTab::importBackup() {
+    brls::Dialog* dialog = new brls::Dialog("Import backup?\n\nThis will restore your library and settings from the most recent backup file.");
+    dialog->setCancelable(true);  // Allow back button to close dialog
+
+    dialog->addButton("Cancel", []() {});
+
+    dialog->addButton("Import", []() {
+        brls::Application::notify("Importing backup...");
+
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+#ifdef __vita__
+        // Find most recent backup file
+        std::string backupDir = "ux0:data/VitaSuwayomi/backup";
+        std::string latestBackup;
+
+        SceUID dir = sceIoDopen(backupDir.c_str());
+        if (dir >= 0) {
+            SceIoDirent entry;
+            while (sceIoDread(dir, &entry) > 0) {
+                if (SCE_S_ISREG(entry.d_stat.st_mode)) {
+                    std::string name = entry.d_name;
+                    if (name.find("backup_") == 0 && name.find(".json") != std::string::npos) {
+                        if (name > latestBackup) {
+                            latestBackup = name;
+                        }
+                    }
+                }
+            }
+            sceIoDclose(dir);
+        }
+
+        if (latestBackup.empty()) {
+            brls::Application::notify("No backup file found");
+            return;
+        }
+
+        std::string backupPath = backupDir + "/" + latestBackup;
+        if (client.importBackup(backupPath)) {
+            brls::Application::notify("Backup restored: " + latestBackup);
+        } else {
+            brls::Application::notify("Failed to import backup");
+        }
+#else
+        brls::Application::notify("Backup feature requires PS Vita");
+#endif
+    });
+
+    dialog->open();
+}
+
+void SettingsTab::refreshDefaultCategorySelector() {
+    if (!m_defaultCategorySelector) return;
+
+    // Fetch categories asynchronously
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::vector<Category> categories;
+
+    if (client.fetchCategories(categories)) {
+        // Sort by order
+        std::sort(categories.begin(), categories.end(),
+            [](const Category& a, const Category& b) {
+                return a.order < b.order;
+            });
+
+        // Build category names list
+        std::vector<std::string> categoryNames;
+        std::vector<int> categoryIds;
+
+        categoryNames.push_back("Default (All)");
+        categoryIds.push_back(0);
+
+        for (const auto& cat : categories) {
+            if (cat.mangaCount > 0) {
+                categoryNames.push_back(cat.name);
+                categoryIds.push_back(cat.id);
+            }
+        }
+
+        // Find current selection index
+        int currentIndex = 0;
+        int currentId = Application::getInstance().getSettings().defaultCategoryId;
+        for (size_t i = 0; i < categoryIds.size(); i++) {
+            if (categoryIds[i] == currentId) {
+                currentIndex = static_cast<int>(i);
+                break;
+            }
+        }
+
+        // Update the selector
+        m_defaultCategorySelector->init("Default Category",
+            categoryNames,
+            currentIndex,
+            [categoryIds](int index) {
+                if (index >= 0 && index < static_cast<int>(categoryIds.size())) {
+                    Application::getInstance().getSettings().defaultCategoryId = categoryIds[index];
+                    Application::getInstance().saveSettings();
+                }
+            });
+        m_defaultCategorySelector->setDetailText("Category to show when opening library");
+    }
+}
+
+void SettingsTab::checkForUpdates() {
+    brls::Application::notify("Checking for updates...");
+
+    // GitHub API URL for latest release
+    // TODO: Replace with actual repository when published
+    const std::string apiUrl = "https://api.github.com/repos/Breezyslasher/Vita_Suwayomi/releases/latest";
+
+    HttpClient client;
+    client.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
+    client.setTimeout(15);
+
+    std::string response;
+    if (!client.get(apiUrl, response)) {
+        brls::Application::notify("Failed to check for updates");
+        return;
+    }
+
+    // Simple JSON parsing for tag_name, body, and assets
+    auto extractJsonString = [&response](const std::string& key) -> std::string {
+        std::string search = "\"" + key + "\":";
+        size_t pos = response.find(search);
+        if (pos == std::string::npos) return "";
+
+        pos += search.length();
+        // Skip whitespace
+        while (pos < response.length() && (response[pos] == ' ' || response[pos] == '\t' || response[pos] == '\n')) pos++;
+
+        if (pos >= response.length()) return "";
+
+        if (response[pos] == '"') {
+            // String value
+            pos++;
+            std::string result;
+            while (pos < response.length() && response[pos] != '"') {
+                if (response[pos] == '\\' && pos + 1 < response.length()) {
+                    pos++;
+                    if (response[pos] == 'n') result += '\n';
+                    else if (response[pos] == 'r') result += '\r';
+                    else if (response[pos] == 't') result += '\t';
+                    else result += response[pos];
+                } else {
+                    result += response[pos];
+                }
+                pos++;
+            }
+            return result;
+        }
+        return "";
+    };
+
+    std::string tagName = extractJsonString("tag_name");
+    std::string releaseNotes = extractJsonString("body");
+
+    if (tagName.empty()) {
+        brls::Application::notify("Failed to parse update info");
+        return;
+    }
+
+    // Remove 'v' prefix if present
+    std::string newVersion = tagName;
+    if (!newVersion.empty() && (newVersion[0] == 'v' || newVersion[0] == 'V')) {
+        newVersion = newVersion.substr(1);
+    }
+
+    // Compare versions (simple string comparison for now)
+    std::string currentVersion = VITA_SUWAYOMI_VERSION;
+
+    // Parse version numbers for proper comparison
+    auto parseVersion = [](const std::string& ver) -> int {
+        int major = 0, minor = 0, patch = 0;
+        std::sscanf(ver.c_str(), "%d.%d.%d", &major, &minor, &patch);
+        return major * 10000 + minor * 100 + patch;
+    };
+
+    int currentNum = parseVersion(currentVersion);
+    int newNum = parseVersion(newVersion);
+
+    if (newNum <= currentNum) {
+        brls::Application::notify("You're running the latest version!");
+        return;
+    }
+
+    // Find VPK download URL in assets
+    std::string downloadUrl;
+    size_t assetsPos = response.find("\"assets\"");
+    if (assetsPos != std::string::npos) {
+        // Look for browser_download_url with .vpk extension
+        size_t searchPos = assetsPos;
+        while (searchPos < response.length()) {
+            size_t urlPos = response.find("\"browser_download_url\"", searchPos);
+            if (urlPos == std::string::npos) break;
+
+            urlPos += 23; // Skip past "browser_download_url":
+            while (urlPos < response.length() && response[urlPos] != '"') urlPos++;
+            if (urlPos >= response.length()) break;
+            urlPos++; // Skip opening quote
+
+            size_t urlEnd = response.find("\"", urlPos);
+            if (urlEnd == std::string::npos) break;
+
+            std::string url = response.substr(urlPos, urlEnd - urlPos);
+            if (url.find(".vpk") != std::string::npos) {
+                downloadUrl = url;
+                break;
+            }
+            searchPos = urlEnd + 1;
+        }
+    }
+
+    if (downloadUrl.empty()) {
+        brls::Application::notify("No VPK found in release");
+        return;
+    }
+
+    // Show update dialog
+    showUpdateDialog(newVersion, releaseNotes, downloadUrl);
+}
+
+void SettingsTab::showUpdateDialog(const std::string& newVersion, const std::string& releaseNotes,
+                                    const std::string& downloadUrl) {
+    std::string message = "New version " + newVersion + " available!\n\n";
+    if (!releaseNotes.empty()) {
+        // Truncate release notes if too long
+        std::string notes = releaseNotes;
+        if (notes.length() > 300) {
+            notes = notes.substr(0, 297) + "...";
+        }
+        message += notes;
+    }
+
+    brls::Dialog* dialog = new brls::Dialog(message);
+    dialog->setCancelable(true);  // Allow back button to close dialog
+
+    dialog->addButton("Later", []() {});
+
+    dialog->addButton("Download & Install", [downloadUrl, newVersion, this]() {
+        downloadAndInstallUpdate(downloadUrl, newVersion);
+    });
+
+    dialog->open();
+}
+
+void SettingsTab::downloadAndInstallUpdate(const std::string& downloadUrl, const std::string& version) {
+#ifdef __vita__
+    brls::Application::notify("Downloading update...");
+
+    // Create update directory
+    sceIoMkdir("ux0:data/VitaSuwayomi/updates", 0777);
+
+    std::string vpkPath = "ux0:data/VitaSuwayomi/updates/VitaSuwayomi_" + version + ".vpk";
+
+    HttpClient client;
+    client.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
+    client.setTimeout(300);  // 5 minute timeout for large downloads
+    client.setFollowRedirects(true);
+
+    if (client.downloadToFile(downloadUrl, vpkPath)) {
+        // Show success dialog with instructions
+        std::string msg = "Update downloaded successfully!\n\n"
+                          "VPK saved to:\n" + vpkPath + "\n\n"
+                          "Please install using VitaShell:\n"
+                          "1. Open VitaShell\n"
+                          "2. Navigate to ux0:data/VitaSuwayomi/updates/\n"
+                          "3. Select the VPK and press X to install\n"
+                          "4. Restart VitaSuwayomi after installation";
+
+        brls::Dialog* successDialog = new brls::Dialog(msg);
+        successDialog->setCancelable(true);  // Allow back button to close dialog
+
+        successDialog->addButton("OK", []() {});
+
+        successDialog->open();
+    } else {
+        brls::Application::notify("Failed to download update");
+    }
+#else
+    brls::Application::notify("Update download requires PS Vita");
+
+    // On non-Vita platforms, just show the download URL
+    brls::Dialog* dialog = new brls::Dialog("Download from:\n" + downloadUrl);
+    dialog->setCancelable(true);  // Allow back button to close dialog
+    dialog->addButton("OK", []() {});
+    dialog->open();
+#endif
 }
 
 } // namespace vitasuwayomi
