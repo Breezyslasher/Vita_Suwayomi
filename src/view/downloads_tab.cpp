@@ -114,19 +114,25 @@ DownloadsTab::DownloadsTab() {
     m_startStopLabel->setFontSize(12);
     m_startStopBtn->addView(m_startStopLabel);
 
-    // Start/Stop button tap action - toggle downloader state
+    // Start/Stop button tap action - toggle downloader state for both server and local
     m_startStopBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_startStopBtn, [this]() {
         asyncRun([this]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
+            DownloadsManager& mgr = DownloadsManager::getInstance();
             bool success = false;
             if (m_downloaderRunning) {
+                // Stop both server and local downloads
                 success = client.stopDownloads();
+                mgr.pauseDownloads();
             } else {
+                // Start both server and local downloads
                 success = client.startDownloads();
+                mgr.startDownloads();
             }
             if (success) {
                 brls::sync([this]() {
                     refreshQueue();
+                    refreshLocalDownloads();
                 });
             }
         });
@@ -149,9 +155,13 @@ DownloadsTab::DownloadsTab() {
     pauseLabel->setFontSize(12);
     pauseBtn->addView(pauseLabel);
 
-    // Pause button tap action - stop server downloads
+    // Pause button tap action - stop both server and local downloads
     pauseBtn->addGestureRecognizer(new brls::TapGestureRecognizer(pauseBtn, [this]() {
         pauseAllDownloads();
+        // Also pause local downloads
+        DownloadsManager& mgr = DownloadsManager::getInstance();
+        mgr.pauseDownloads();
+        refreshLocalDownloads();
     }));
     m_actionsRow->addView(pauseBtn);
 
@@ -248,6 +258,27 @@ DownloadsTab::DownloadsTab() {
 
 void DownloadsTab::willAppear(bool resetState) {
     brls::Box::willAppear(resetState);
+
+    // Register progress callback for real-time UI updates during local downloads
+    DownloadsManager& mgr = DownloadsManager::getInstance();
+    mgr.setProgressCallback([this](int downloadedPages, int totalPages) {
+        // Schedule a refresh on the main thread
+        brls::sync([this]() {
+            refreshLocalDownloads();
+        });
+    });
+
+    // Register chapter completion callback for UI refresh when chapters complete
+    mgr.setChapterCompletionCallback([this](int mangaId, int chapterIndex, bool success) {
+        brls::sync([this]() {
+            refreshLocalDownloads();
+            // Transfer focus to start/stop button if queue is now empty
+            if (m_lastLocalQueue.empty() && m_startStopBtn) {
+                brls::Application::giveFocus(m_startStopBtn);
+            }
+        });
+    });
+
     refresh();
     startAutoRefresh();
 }
@@ -255,6 +286,11 @@ void DownloadsTab::willAppear(bool resetState) {
 void DownloadsTab::willDisappear(bool resetState) {
     brls::Box::willDisappear(resetState);
     stopAutoRefresh();
+
+    // Clear callbacks to avoid updates when tab is not visible
+    DownloadsManager& mgr = DownloadsManager::getInstance();
+    mgr.setProgressCallback(nullptr);
+    mgr.setChapterCompletionCallback(nullptr);
 }
 
 void DownloadsTab::refresh() {
@@ -345,6 +381,10 @@ void DownloadsTab::refreshQueue() {
                 // Clear container if there were items before
                 while (m_queueContainer->getChildren().size() > 0) {
                     m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+                }
+                // Transfer focus to start/stop button when queue becomes empty
+                if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
+                    brls::Application::giveFocus(m_startStopBtn);
                 }
                 return;
             }
@@ -620,6 +660,10 @@ void DownloadsTab::refreshLocalDownloads() {
         while (m_localContainer->getChildren().size() > 0) {
             m_localContainer->removeView(m_localContainer->getChildren()[0]);
         }
+        // Transfer focus to start/stop button when queue becomes empty
+        if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
+            brls::Application::giveFocus(m_startStopBtn);
+        }
         return;
     }
 
@@ -844,10 +888,11 @@ void DownloadsTab::startAutoRefresh() {
                 break;
             }
 
-            // Trigger refresh on main thread
+            // Trigger refresh on main thread for both server and local queues
             brls::sync([this]() {
                 if (m_autoRefreshEnabled && this->getVisibility() == brls::Visibility::VISIBLE) {
                     refreshQueue();
+                    refreshLocalDownloads();
                 }
             });
         }

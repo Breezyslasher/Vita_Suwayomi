@@ -421,7 +421,6 @@ bool Application::loadSettings() {
 
     // Load display settings
     m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
-    m_settings.showDownloadedBadge = extractBool("showDownloadedBadge", true);
 
     // Load library grid customization
     int displayModeInt = extractInt("libraryDisplayMode");
@@ -744,7 +743,6 @@ bool Application::saveSettings() {
 
     // Display settings
     json += "  \"showUnreadBadge\": " + std::string(m_settings.showUnreadBadge ? "true" : "false") + ",\n";
-    json += "  \"showDownloadedBadge\": " + std::string(m_settings.showDownloadedBadge ? "true" : "false") + ",\n";
 
     // Library grid customization
     json += "  \"libraryDisplayMode\": " + std::to_string(static_cast<int>(m_settings.libraryDisplayMode)) + ",\n";

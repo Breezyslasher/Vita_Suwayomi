@@ -166,7 +166,6 @@ struct AppSettings {
 
     // Display Settings
     bool showUnreadBadge = true;
-    bool showDownloadedBadge = true;
 
     // Per-manga reader settings (keyed by manga ID)
     // If a manga has custom settings, they override the defaults above

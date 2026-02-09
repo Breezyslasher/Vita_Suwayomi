@@ -5393,8 +5393,8 @@ bool SuwayomiClient::updateCategoryOrderGraphQL(int categoryId, int newPosition)
 
 bool SuwayomiClient::triggerCategoryUpdateGraphQL(int categoryId) {
     const char* query = R"(
-        mutation UpdateLibraryManga($categoryIds: [Int!]) {
-            updateLibraryManga(input: { categoryIds: $categoryIds }) {
+        mutation UpdateCategoryManga($categories: [Int!]!) {
+            updateCategoryManga(input: { categories: $categories }) {
                 updateStatus {
                     isRunning
                 }
@@ -5402,7 +5402,7 @@ bool SuwayomiClient::triggerCategoryUpdateGraphQL(int categoryId) {
         }
     )";
 
-    std::string variables = "{\"categoryIds\":[" + std::to_string(categoryId) + "]}";
+    std::string variables = "{\"categories\":[" + std::to_string(categoryId) + "]}";
     std::string response = executeGraphQL(query, variables);
 
     if (response.empty()) {

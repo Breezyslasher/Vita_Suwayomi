@@ -334,14 +334,6 @@ void SettingsTab::createLibrarySection() {
     });
     m_contentBox->addView(showUnreadBadgeToggle);
 
-    // Show downloaded badge toggle
-    auto* showDownloadedBadgeToggle = new brls::BooleanCell();
-    showDownloadedBadgeToggle->init("Show Downloaded Badge", settings.showDownloadedBadge, [](bool value) {
-        Application::getInstance().getSettings().showDownloadedBadge = value;
-        Application::getInstance().saveSettings();
-    });
-    m_contentBox->addView(showDownloadedBadgeToggle);
-
     // Clear Cache button
     auto* clearCacheCell = new brls::DetailCell();
     clearCacheCell->setText("Clear Cache");
