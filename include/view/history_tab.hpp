@@ -36,6 +36,7 @@ private:
     brls::Box* m_emptyStateBox = nullptr;
     brls::Label* m_loadingLabel = nullptr;
     brls::Button* m_loadMoreBtn = nullptr;
+    brls::Button* m_refreshBtn = nullptr;  // Header refresh button for focus management
 
     // Data
     std::vector<ReadingHistoryItem> m_historyItems;

@@ -154,6 +154,18 @@ MangaItemCell::MangaItemCell() {
     m_descriptionLabel->setFontSize(9);
     m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     m_descriptionLabel->setVisibility(brls::Visibility::GONE);
+
+    // Start button hint icon - shown on focus to indicate menu action
+    m_startHintIcon = new brls::Image();
+    m_startHintIcon->setWidth(20);
+    m_startHintIcon->setHeight(20);
+    m_startHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_startHintIcon->setImageFromFile("app0:resources/images/start_button.png");
+    m_startHintIcon->setPositionType(brls::PositionType::ABSOLUTE);
+    m_startHintIcon->setPositionBottom(6);
+    m_startHintIcon->setPositionRight(6);
+    m_startHintIcon->setVisibility(brls::Visibility::GONE);
+    this->addView(m_startHintIcon);
 }
 
 void MangaItemCell::updateDisplay() {
@@ -283,11 +295,19 @@ brls::View* MangaItemCell::create() {
 void MangaItemCell::onFocusGained() {
     brls::Box::onFocusGained();
     updateFocusInfo(true);
+    // Show start button hint on focus
+    if (m_startHintIcon) {
+        m_startHintIcon->setVisibility(brls::Visibility::VISIBLE);
+    }
 }
 
 void MangaItemCell::onFocusLost() {
     brls::Box::onFocusLost();
     updateFocusInfo(false);
+    // Hide start button hint when focus is lost
+    if (m_startHintIcon) {
+        m_startHintIcon->setVisibility(brls::Visibility::GONE);
+    }
 }
 
 void MangaItemCell::setSelected(bool selected) {
@@ -401,6 +421,11 @@ void MangaItemCell::applyDisplayMode() {
             m_newBadge->setPositionTop(4);
             m_newBadge->setPositionRight(72);  // Position next to download badge
         }
+        // Position start hint for list mode
+        if (m_startHintIcon) {
+            m_startHintIcon->setPositionBottom(4);
+            m_startHintIcon->setPositionRight(4);
+        }
 
     } else if (m_compactMode) {
         // Compact mode: grid with covers only (no title overlay)
@@ -443,6 +468,11 @@ void MangaItemCell::applyDisplayMode() {
             m_newBadge->setPositionTop(26);
             m_newBadge->setPositionLeft(0);
         }
+        // Restore start hint position for compact mode
+        if (m_startHintIcon) {
+            m_startHintIcon->setPositionBottom(6);
+            m_startHintIcon->setPositionRight(6);
+        }
 
     } else {
         // Normal grid mode: cover + title overlay
@@ -484,6 +514,11 @@ void MangaItemCell::applyDisplayMode() {
         if (m_newBadge) {
             m_newBadge->setPositionTop(26);
             m_newBadge->setPositionLeft(0);
+        }
+        // Restore start hint position for normal grid mode
+        if (m_startHintIcon) {
+            m_startHintIcon->setPositionBottom(6);
+            m_startHintIcon->setPositionRight(6);
         }
     }
 }

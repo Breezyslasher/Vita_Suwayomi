@@ -68,12 +68,24 @@ LibrarySectionTab::LibrarySectionTab() {
     // Button container for Sort and Update
     auto* buttonBox = new brls::Box();
     buttonBox->setAxis(brls::Axis::ROW);
-    buttonBox->setAlignItems(brls::AlignItems::CENTER);
+    buttonBox->setAlignItems(brls::AlignItems::FLEX_END);
     buttonBox->setShrink(0.0f);  // Don't shrink buttons
 
-    // Sort button with icon
+    // Sort button container with Y button hint
+    auto* sortContainer = new brls::Box();
+    sortContainer->setAxis(brls::Axis::COLUMN);
+    sortContainer->setAlignItems(brls::AlignItems::CENTER);
+    sortContainer->setMarginLeft(10);
+
+    auto* sortHintIcon = new brls::Image();
+    sortHintIcon->setWidth(16);
+    sortHintIcon->setHeight(16);
+    sortHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    sortHintIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    sortHintIcon->setMarginBottom(2);
+    sortContainer->addView(sortHintIcon);
+
     m_sortBtn = new brls::Button();
-    m_sortBtn->setMarginLeft(10);
     m_sortBtn->setWidth(44);
     m_sortBtn->setHeight(40);
     m_sortBtn->setCornerRadius(8);
@@ -90,7 +102,8 @@ LibrarySectionTab::LibrarySectionTab() {
         cycleSortMode();
         return true;
     });
-    buttonBox->addView(m_sortBtn);
+    sortContainer->addView(m_sortBtn);
+    buttonBox->addView(sortContainer);
 
     // Load saved sort mode
     auto& app = Application::getInstance();
@@ -100,9 +113,21 @@ LibrarySectionTab::LibrarySectionTab() {
     // Initialize sort icon
     updateSortButtonText();
 
-    // Update button with refresh icon
+    // Update button container with Select button hint
+    auto* updateContainer = new brls::Box();
+    updateContainer->setAxis(brls::Axis::COLUMN);
+    updateContainer->setAlignItems(brls::AlignItems::CENTER);
+    updateContainer->setMarginLeft(8);
+
+    auto* updateHintIcon = new brls::Image();
+    updateHintIcon->setWidth(16);
+    updateHintIcon->setHeight(16);
+    updateHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    updateHintIcon->setImageFromFile("app0:resources/images/select_button.png");
+    updateHintIcon->setMarginBottom(2);
+    updateContainer->addView(updateHintIcon);
+
     m_updateBtn = new brls::Button();
-    m_updateBtn->setMarginLeft(8);
     m_updateBtn->setWidth(44);
     m_updateBtn->setHeight(40);
     m_updateBtn->setCornerRadius(8);
@@ -120,7 +145,8 @@ LibrarySectionTab::LibrarySectionTab() {
         triggerLibraryUpdate();
         return true;
     });
-    buttonBox->addView(m_updateBtn);
+    updateContainer->addView(m_updateBtn);
+    buttonBox->addView(updateContainer);
 
     topRow->addView(buttonBox);
 
@@ -195,6 +221,12 @@ LibrarySectionTab::LibrarySectionTab() {
     // Register Select button to refresh/update current category
     this->registerAction("Update Category", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
         triggerLibraryUpdate();
+        return true;
+    });
+
+    // Register Y button (triangle) to cycle sort mode
+    this->registerAction("Sort", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
+        cycleSortMode();
         return true;
     });
 

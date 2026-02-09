@@ -57,6 +57,7 @@ private:
     brls::Label* m_unreadBadge = nullptr;
     brls::Label* m_downloadBadge = nullptr;
     brls::Label* m_newBadge = nullptr;  // NEW indicator for recently updated
+    brls::Image* m_startHintIcon = nullptr;  // Start button hint shown on focus
 };
 
 // Alias for backward compatibility

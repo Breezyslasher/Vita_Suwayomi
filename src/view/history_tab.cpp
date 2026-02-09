@@ -50,26 +50,26 @@ HistoryTab::HistoryTab() {
     triangleIcon->setMarginBottom(2);
     refreshContainer->addView(triangleIcon);
 
-    auto* refreshBtn = new brls::Button();
-    refreshBtn->setWidth(44);
-    refreshBtn->setHeight(44);
-    refreshBtn->setCornerRadius(8);
-    refreshBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    refreshBtn->setAlignItems(brls::AlignItems::CENTER);
+    m_refreshBtn = new brls::Button();
+    m_refreshBtn->setWidth(44);
+    m_refreshBtn->setHeight(44);
+    m_refreshBtn->setCornerRadius(8);
+    m_refreshBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_refreshBtn->setAlignItems(brls::AlignItems::CENTER);
 
     auto* refreshIcon = new brls::Image();
     refreshIcon->setWidth(24);
     refreshIcon->setHeight(24);
     refreshIcon->setScalingType(brls::ImageScalingType::FIT);
     refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
-    refreshBtn->addView(refreshIcon);
+    m_refreshBtn->addView(refreshIcon);
 
-    refreshBtn->registerClickAction([this](brls::View* view) {
+    m_refreshBtn->registerClickAction([this](brls::View* view) {
         refresh();
         return true;
     });
-    refreshBtn->addGestureRecognizer(new brls::TapGestureRecognizer(refreshBtn));
-    refreshContainer->addView(refreshBtn);
+    m_refreshBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_refreshBtn));
+    refreshContainer->addView(m_refreshBtn);
 
     headerRow->addView(refreshContainer);
     this->addView(headerRow);
@@ -144,6 +144,12 @@ void HistoryTab::onFocusGained() {
 }
 
 void HistoryTab::refresh() {
+    // Move focus to refresh button before clearing items to prevent crash
+    // when focus is on a history item that will be destroyed
+    if (m_refreshBtn) {
+        brls::Application::giveFocus(m_refreshBtn);
+    }
+
     m_loaded = false;
     m_currentOffset = 0;
     m_hasMoreItems = true;
