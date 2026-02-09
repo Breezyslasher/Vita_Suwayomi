@@ -157,13 +157,13 @@ MangaItemCell::MangaItemCell() {
 
     // Start button hint icon - shown on focus to indicate menu action
     m_startHintIcon = new brls::Image();
-    m_startHintIcon->setWidth(20);
-    m_startHintIcon->setHeight(20);
+    m_startHintIcon->setWidth(64);
+    m_startHintIcon->setHeight(16);
     m_startHintIcon->setScalingType(brls::ImageScalingType::FIT);
     m_startHintIcon->setImageFromFile("app0:resources/images/start_button.png");
     m_startHintIcon->setPositionType(brls::PositionType::ABSOLUTE);
     m_startHintIcon->setPositionBottom(6);
-    m_startHintIcon->setPositionRight(6);
+    m_startHintIcon->setPositionLeft(6);
     m_startHintIcon->setVisibility(brls::Visibility::GONE);
     this->addView(m_startHintIcon);
 }
@@ -424,7 +424,7 @@ void MangaItemCell::applyDisplayMode() {
         // Position start hint for list mode
         if (m_startHintIcon) {
             m_startHintIcon->setPositionBottom(4);
-            m_startHintIcon->setPositionRight(4);
+            m_startHintIcon->setPositionLeft(4);
         }
 
     } else if (m_compactMode) {
@@ -471,7 +471,7 @@ void MangaItemCell::applyDisplayMode() {
         // Restore start hint position for compact mode
         if (m_startHintIcon) {
             m_startHintIcon->setPositionBottom(6);
-            m_startHintIcon->setPositionRight(6);
+            m_startHintIcon->setPositionLeft(6);
         }
 
     } else {
@@ -518,7 +518,7 @@ void MangaItemCell::applyDisplayMode() {
         // Restore start hint position for normal grid mode
         if (m_startHintIcon) {
             m_startHintIcon->setPositionBottom(6);
-            m_startHintIcon->setPositionRight(6);
+            m_startHintIcon->setPositionLeft(6);
         }
     }
 }

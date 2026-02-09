@@ -51,6 +51,9 @@ public:
     // Get first cell for focus transfer
     brls::View* getFirstCell() const;
 
+    // Focus a specific cell by index
+    void focusIndex(int index);
+
     static brls::View* create();
 
 private:

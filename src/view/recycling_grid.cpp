@@ -333,4 +333,15 @@ brls::View* RecyclingGrid::getFirstCell() const {
     return m_cells[0];
 }
 
+void RecyclingGrid::focusIndex(int index) {
+    if (index >= 0 && index < static_cast<int>(m_cells.size())) {
+        brls::Application::giveFocus(m_cells[index]);
+        m_focusedIndex = index;
+    } else if (!m_cells.empty()) {
+        // Fall back to first cell if index is out of range
+        brls::Application::giveFocus(m_cells[0]);
+        m_focusedIndex = 0;
+    }
+}
+
 } // namespace vitasuwayomi
