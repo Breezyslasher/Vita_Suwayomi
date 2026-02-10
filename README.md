@@ -17,7 +17,7 @@
 - [X] Credentials persist after app restart
 - [X] App handles invalid credentials gracefully
 - [X] App handles server offline gracefully
-- [ ] Connection status shows correctly
+- [X] Connection status shows correctly
 - [X] Local server URL (LAN) works
 - [X] Remote server URL (WAN) works
 - [X] Toggle between local/remote connections
@@ -29,33 +29,34 @@
 ## Library Browsing
 
 ### Category Navigation
-- [ ] All user categories appear as tabs
-- [ ] Category tabs scroll horizontally
-- [ ] Selected category is highlighted
-- [ ] Empty categories are hidden
-- [ ] Hidden categories (user-configured) don't show
-- [ ] L button navigates to previous category
-- [ ] R button navigates to next category
+- [X] All user categories appear as tabs
+- [X] Category tabs scroll horizontally
+- [X] Selected category is highlighted
+- [X] Empty categories are hidden
+- [X] Hidden categories (user-configured) don't show
+- [X] L button navigates to previous category
+- [X] R button navigates to next category
 
 ### Manga Display
-- [ ] Manga covers load properly
-- [ ] Manga titles display correctly
-- [ ] Unread badge shows on items with unread chapters
-- [ ] Gold star badge shows on library items (when browsing)
-- [ ] Scroll through manga grid works smoothly
-- [ ] Clicking manga opens detail view
+- [X] Manga covers load properly
+- [X] Manga titles display correctly
+- [X] Unread badge shows on items with unread chapters
+- [X] Gold star badge shows on library items (when browsing)
+- [X] Scroll through manga grid works smoothly
+- [X] Clicking manga opens detail view
 
 ### Button Hints
-- [ ] Button hint icons display correctly sized
+- [X] Button hint icons display correctly sized
 - [ ] L/R category hints show in header
-- [ ] Start button hint shows on focused manga
-- [ ] Triangle (Y) button hint for sort shows
+- [X] Start button hint shows on focused manga
+- [X] Triangle (Y) button hint for sort shows
+- [X] select button hint for update shows
 
 ### Controller Actions
-- [ ] Start button opens context menu on focused manga
+- [X] Start button opens context menu on focused manga
 - [ ] Triangle (Y) button opens sort options
-- [ ] Select button triggers category update
-- [ ] D-pad navigation through manga grid works
+- [X] Select button triggers category update
+- [X] D-pad navigation through manga grid works
 
 ### Library Display Options
 
