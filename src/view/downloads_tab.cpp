@@ -1244,17 +1244,29 @@ void DownloadsTab::addLocalItem(int mangaId, int chapterIndex, const std::string
 }
 
 void DownloadsTab::updateNavigationRoutes() {
-    // Find the first focusable queue item
+    // Find the first focusable queue item (server queue takes priority)
     brls::View* firstQueueItem = nullptr;
+    brls::View* firstServerItem = nullptr;
+    brls::View* lastServerItem = nullptr;
+    brls::View* firstLocalItem = nullptr;
 
-    // Check server queue first
-    if (!m_serverRowElements.empty() && m_serverRowElements[0].row) {
-        firstQueueItem = m_serverRowElements[0].row;
+    // Get server queue items
+    if (!m_serverRowElements.empty()) {
+        if (m_serverRowElements[0].row) {
+            firstServerItem = m_serverRowElements[0].row;
+        }
+        if (m_serverRowElements.back().row) {
+            lastServerItem = m_serverRowElements.back().row;
+        }
     }
-    // If no server queue items, check local queue
-    else if (!m_localRowElements.empty() && m_localRowElements[0].row) {
-        firstQueueItem = m_localRowElements[0].row;
+
+    // Get local queue items
+    if (!m_localRowElements.empty() && m_localRowElements[0].row) {
+        firstLocalItem = m_localRowElements[0].row;
     }
+
+    // First queue item is server if exists, otherwise local
+    firstQueueItem = firstServerItem ? firstServerItem : firstLocalItem;
 
     // Set up navigation from action buttons DOWN to first queue item
     if (firstQueueItem) {
@@ -1281,6 +1293,17 @@ void DownloadsTab::updateNavigationRoutes() {
         if (m_clearBtn) {
             m_clearBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
         }
+    }
+
+    // Set up navigation between server and local queues when both exist
+    if (lastServerItem && firstLocalItem) {
+        // Last server item DOWN -> first local item
+        lastServerItem->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstLocalItem);
+        // First local item UP -> last server item
+        firstLocalItem->setCustomNavigationRoute(brls::FocusDirection::UP, lastServerItem);
+    } else if (firstLocalItem && !firstServerItem) {
+        // Only local queue exists, first item UP -> pause button
+        firstLocalItem->setCustomNavigationRoute(brls::FocusDirection::UP, m_pauseBtn);
     }
 }
 
