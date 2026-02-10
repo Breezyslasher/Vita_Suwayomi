@@ -47,7 +47,7 @@ private:
     bool m_loaded = false;
     bool m_hasMoreItems = true;
     int m_currentOffset = 0;
-    static const int ITEMS_PER_PAGE = 50;
+    static const int ITEMS_PER_PAGE = 20;
 
     // Shared pointer to track if this object is still alive
     std::shared_ptr<bool> m_alive;

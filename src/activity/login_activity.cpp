@@ -114,6 +114,20 @@ void LoginActivity::onTestConnectionPressed() {
 
     SuwayomiClient& client = SuwayomiClient::getInstance();
 
+    // First check if server requires authentication
+    bool serverRequiresAuth = client.checkServerRequiresAuth(m_serverUrl);
+
+    if (serverRequiresAuth && m_authMode == AuthMode::NONE) {
+        if (statusLabel) statusLabel->setText("Server requires authentication! Change Auth Mode.");
+        return;
+    }
+
+    // Set auth mode and credentials for the test
+    client.setAuthMode(m_authMode);
+    if (m_authMode == AuthMode::BASIC_AUTH && !m_username.empty() && !m_password.empty()) {
+        client.setAuthCredentials(m_username, m_password);
+    }
+
     // Try to connect and fetch server info
     if (client.connectToServer(m_serverUrl)) {
         ServerInfo info;
@@ -124,7 +138,11 @@ void LoginActivity::onTestConnectionPressed() {
             if (statusLabel) statusLabel->setText("Server is reachable!");
         }
     } else {
-        if (statusLabel) statusLabel->setText("Cannot reach server - check URL");
+        if (serverRequiresAuth) {
+            if (statusLabel) statusLabel->setText("Auth failed - check username/password");
+        } else {
+            if (statusLabel) statusLabel->setText("Cannot reach server - check URL");
+        }
     }
 }
 
@@ -148,6 +166,13 @@ void LoginActivity::onConnectPressed() {
 
     // Handle authentication based on mode
     if (m_authMode == AuthMode::NONE) {
+        // No auth mode selected - first check if server requires authentication
+        if (client.checkServerRequiresAuth(m_serverUrl)) {
+            // Server requires auth but user selected "None"
+            if (statusLabel) statusLabel->setText("Server requires authentication! Change Auth Mode.");
+            brls::Application::notify("Server requires login - select an auth mode");
+            return;
+        }
         // No auth required, just test connection
         connected = client.connectToServer(m_serverUrl);
     } else if (m_authMode == AuthMode::BASIC_AUTH) {

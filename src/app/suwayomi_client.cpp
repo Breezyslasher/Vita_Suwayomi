@@ -1675,6 +1675,39 @@ bool SuwayomiClient::connectToServer(const std::string& url) {
     return false;
 }
 
+bool SuwayomiClient::checkServerRequiresAuth(const std::string& url) {
+    // Make a simple request WITHOUT authentication to check if server requires auth
+    // Returns true if server responds with 401 Unauthorized
+    brls::Logger::info("Checking if server requires authentication...");
+
+    // Create a basic HTTP client without any auth headers
+    vitasuwayomi::HttpClient http;
+    http.setTimeout(10);
+
+    // Try the GraphQL endpoint first (most common)
+    std::string testUrl = url + "/api/graphql";
+    std::string body = R"({"query":"{ aboutServer { name } }"})";
+
+    vitasuwayomi::HttpResponse response = http.post(testUrl, body, "application/json");
+
+    if (response.statusCode == 401) {
+        brls::Logger::info("Server requires authentication (got 401 from GraphQL)");
+        return true;
+    }
+
+    // Also try REST endpoint as fallback check
+    testUrl = url + "/api/v1/settings/about";
+    response = http.get(testUrl);
+
+    if (response.statusCode == 401) {
+        brls::Logger::info("Server requires authentication (got 401 from REST)");
+        return true;
+    }
+
+    brls::Logger::info("Server does not require authentication");
+    return false;
+}
+
 bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
     // Try GraphQL first (primary API)
     brls::Logger::info("Fetching server info via GraphQL...");

@@ -121,7 +121,6 @@ LibrarySectionTab::LibrarySectionTab() {
     updateContainer->setMarginLeft(8);
 
     auto* updateHintIcon = new brls::Image();
-    updateHintIcon->setWidth(16);
     updateHintIcon->setHeight(16);
     updateHintIcon->setScalingType(brls::ImageScalingType::FIT);
     updateHintIcon->setImageFromFile("app0:resources/images/select_button.png");
@@ -211,6 +210,8 @@ LibrarySectionTab::LibrarySectionTab() {
     // Register Start button for context menu on focused manga
     this->registerAction("Menu", brls::ControllerButton::BUTTON_START, [this](brls::View*) {
         if (!m_contentGrid) return true;
+        // Only show context menu if a book cell is actually focused
+        if (!m_contentGrid->hasCellFocus()) return true;
         int idx = m_contentGrid->getFocusedIndex();
         const Manga* manga = m_contentGrid->getItem(idx);
         if (manga) {

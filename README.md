@@ -12,44 +12,50 @@
 
 ## Authentication & Connection
 
-- [ ] Connect to Suwayomi server with URL
-- [ ] Login with username/password (Basic Auth)
-- [ ] Credentials persist after app restart
-- [ ] App handles invalid credentials gracefully
-- [ ] App handles server offline gracefully
+- [X] Connect to Suwayomi server with URL
+- [X] Login with username/password (Basic Auth)
+- [X] Credentials persist after app restart
+- [X] App handles invalid credentials gracefully
+- [X] App handles server offline gracefully
 - [ ] Connection status shows correctly
-- [ ] Local server URL (LAN) works
-- [ ] Remote server URL (WAN) works
-- [ ] Toggle between local/remote connections
-- [ ] Auto-switch on connection failure
+- [X] Local server URL (LAN) works
+- [X] Remote server URL (WAN) works
+- [X] Toggle between local/remote connections
+- [X] Auto-switch on connection failure
 - [ ] Connection timeout configuration works
-
----
-
-## Home Tab
-
-- [ ] Home tab displays correctly
-- [ ] Continue Reading section shows recent manga
-- [ ] Recent Chapter Updates section shows new releases
-- [ ] Clicking manga opens detail view
-- [ ] Clicking chapter opens reader directly
 
 ---
 
 ## Library Browsing
 
+### Category Navigation
 - [ ] All user categories appear as tabs
 - [ ] Category tabs scroll horizontally
 - [ ] Selected category is highlighted
 - [ ] Empty categories are hidden
 - [ ] Hidden categories (user-configured) don't show
+- [ ] L button navigates to previous category
+- [ ] R button navigates to next category
+
+### Manga Display
 - [ ] Manga covers load properly
 - [ ] Manga titles display correctly
 - [ ] Unread badge shows on items with unread chapters
-- [ ] Downloaded badge shows on downloaded items
+- [ ] Gold star badge shows on library items (when browsing)
 - [ ] Scroll through manga grid works smoothly
 - [ ] Clicking manga opens detail view
-- [ ] L/R buttons navigate between categories
+
+### Button Hints
+- [ ] Button hint icons display correctly sized
+- [ ] L/R category hints show in header
+- [ ] Start button hint shows on focused manga
+- [ ] Triangle (Y) button hint for sort shows
+
+### Controller Actions
+- [ ] Start button opens context menu on focused manga
+- [ ] Triangle (Y) button opens sort options
+- [ ] Select button triggers category update
+- [ ] D-pad navigation through manga grid works
 
 ### Library Display Options
 
@@ -98,47 +104,98 @@
 
 ## Browse Sources
 
+### Source List
 - [ ] Sources tab shows installed sources
 - [ ] Source icons load properly
+- [ ] Source names display correctly
 - [ ] Clicking source opens source browser
-- [ ] Popular manga loads for source
-- [ ] Latest manga loads for source
-- [ ] Search within source works
-- [ ] Pagination works (load more)
 - [ ] Filter sources by language works
 - [ ] NSFW sources toggle works
+
+### Source Browser
+- [ ] Popular manga tab loads correctly
+- [ ] Latest manga tab loads correctly
+- [ ] Search within source works
+- [ ] Manga grid displays with covers
+- [ ] Load More button appears for pagination
+- [ ] Load More fetches next page
+- [ ] Focus moves to first new item after load
+- [ ] Back button returns to source list
+
+### Navigation
+- [ ] D-pad navigation through manga works
+- [ ] UP from first row navigates to header/tabs
+- [ ] B button goes back to source list
+- [ ] Touch support for manga selection works
 
 ---
 
 ## Search
 
+### Search Input
 - [ ] Search tab opens correctly
-- [ ] Search returns results from sources
+- [ ] Keyboard input works
+- [ ] Search executes on submit
+
+### Source Search
+- [ ] Search returns results from current source
 - [ ] Search results show covers and titles
 - [ ] Clicking search result opens detail view
-- [ ] Global search across sources works
+- [ ] Load More for search results works
+- [ ] Focus moves to first result after search
+- [ ] Back button returns to source browser
+
+### Global Search
+- [ ] Global search across all sources works
 - [ ] Results grouped by source
+- [ ] Source headers show in results
+- [ ] Navigate between source result groups
+
+### Search History
 - [ ] Search history saves automatically
-- [ ] Search history limit configurable
-- [ ] Clear search history works
+- [ ] History button shows in search header
 - [ ] Quick access to previous searches
+- [ ] Clear search history works
+- [ ] Search history limit configurable
 
 ---
 
 ## Manga Detail View
 
+### Display
 - [ ] Cover image displays
 - [ ] Title displays correctly
 - [ ] Author/Artist displays correctly
 - [ ] Status shows (Ongoing/Completed/etc.)
 - [ ] Genre tags display
 - [ ] Description/summary displays
+- [ ] Description loads from server (not just cache)
 - [ ] Expandable description works
-- [ ] Add to library button works
-- [ ] Remove from library button works
-- [ ] Chapter list loads and displays
 - [ ] Chapter count displays
 - [ ] Source information displays
+
+### Library Actions
+- [ ] Add to library button works
+- [ ] Remove from library button works
+- [ ] Library status updates immediately
+
+### Chapter List
+- [ ] Chapter list loads and displays
+- [ ] Chapters sorted correctly
+- [ ] Read/unread status shown
+
+### Context Menu (Start Button)
+- [ ] Start button opens context menu
+- [ ] Continue Reading option works
+- [ ] Add/Remove from Library option works
+- [ ] Download options work
+- [ ] Track option opens tracking dialog
+- [ ] Single tracker auto-selects (skips list if only one)
+
+### Navigation
+- [ ] D-pad navigation works
+- [ ] L button doesn't conflict with other actions
+- [ ] B button returns to previous view
 
 ---
 
@@ -348,6 +405,37 @@
 
 ---
 
+## Downloads Tab UI
+
+### Queue Display
+- [ ] Server queue section shows when items exist
+- [ ] Local queue section shows when items exist
+- [ ] Empty sections are hidden
+- [ ] Queue items show manga title
+- [ ] Queue items show chapter name
+- [ ] Queue items show download progress
+
+### Control Buttons
+- [ ] Start button starts/resumes downloads
+- [ ] Stop button stops downloads
+- [ ] Pause button pauses downloads
+- [ ] Clear button clears completed downloads
+- [ ] Buttons work with controller (A button)
+- [ ] Buttons work with touch input
+
+### Navigation
+- [ ] D-pad navigation through queue items works
+- [ ] Navigation between server and local queues works
+- [ ] UP from first queue item goes to control buttons
+- [ ] DOWN from control buttons goes to first queue item
+
+### Status Display
+- [ ] Download status shows correctly (Downloading, Paused, etc.)
+- [ ] Progress percentage shows for active downloads
+- [ ] Queue count shows in section headers
+
+---
+
 ## Downloads - Settings & Options
 
 - [ ] Download location: Server only
@@ -374,12 +462,48 @@
 
 ## History Tab
 
+### Display & Loading
 - [ ] History tab displays correctly
-- [ ] Reading history shows chronologically
-- [ ] Relative timestamps display ("2 days ago")
-- [ ] Quick resume from history works
-- [ ] Remove individual history entry works
-- [ ] Clear entire history works
+- [ ] Reading history loads on tab open
+- [ ] Loading indicator shows while fetching
+- [ ] History count shows in title (e.g., "Reading History (25)")
+- [ ] Empty state shows when no history
+
+### History Items
+- [ ] Items grouped by date (Today, Yesterday, day name, or date)
+- [ ] Each item shows manga cover thumbnail
+- [ ] Each item shows manga title (truncated if long)
+- [ ] Each item shows chapter name or number
+- [ ] Each item shows page progress (e.g., "Page 5/20")
+- [ ] Relative timestamps display ("2 mins ago", "3 hours ago")
+- [ ] Resume indicator arrow shows on each item
+
+### Navigation & Controls
+- [ ] D-pad navigation through history items works
+- [ ] UP from first item focuses refresh button
+- [ ] DOWN from refresh button focuses first item
+- [ ] Triangle button triggers refresh
+- [ ] Refresh button in header works (touch)
+- [ ] Click/A button resumes reading from last page
+- [ ] Start button opens context menu
+
+### Context Menu Options
+- [ ] Continue Reading option works
+- [ ] View Manga Details option works
+- [ ] Mark as Unread option works (removes from history)
+
+### Pagination
+- [ ] Load More button appears when more items exist
+- [ ] Load More fetches next batch of items
+- [ ] Load More button shows "Loading..." during fetch
+- [ ] New items append without full list rebuild
+- [ ] Focus moves to first new item after load
+- [ ] Button hides when no more items
+
+### Refresh
+- [ ] Refresh clears and reloads history
+- [ ] Focus moves to refresh button during refresh (prevents crash)
+- [ ] History reloads from server
 
 ---
 
@@ -572,43 +696,42 @@ Webtoon auto-detection checks for:
 12. [ ] Check extensions tab
 13. [ ] Check downloads tab
 14. [ ] Check history tab
-15. [ ] Check home tab
 
 ### Reader Settings (New Features)
-16. [ ] Open reader settings in chapter
-17. [ ] Change reading direction, verify it applies
-18. [ ] Change rotation, verify it applies
-19. [ ] Close reader and reopen same manga - settings preserved
-20. [ ] Open different manga - uses default settings
-21. [ ] Swipe to change pages - verify animation works
-22. [ ] Swipe in rotated view - direction is correct
-23. [ ] Apply color filter and verify it works
-24. [ ] Adjust brightness and verify it works
+15. [ ] Open reader settings in chapter
+16. [ ] Change reading direction, verify it applies
+17. [ ] Change rotation, verify it applies
+18. [ ] Close reader and reopen same manga - settings preserved
+19. [ ] Open different manga - uses default settings
+20. [ ] Swipe to change pages - verify animation works
+21. [ ] Swipe in rotated view - direction is correct
+22. [ ] Apply color filter and verify it works
+23. [ ] Adjust brightness and verify it works
 
 ### Webtoon Detection (New Features)
-25. [ ] Open a known webtoon/manhwa manga
-26. [ ] Verify auto-detection applies vertical mode + fit-width
-27. [ ] Open a regular manga - uses default RTL mode
-28. [ ] Check Settings > Webtoon section exists
-29. [ ] Toggle "Auto-Detect Webtoon" off
-30. [ ] Open webtoon again - now uses user defaults
+24. [ ] Open a known webtoon/manhwa manga
+25. [ ] Verify auto-detection applies vertical mode + fit-width
+26. [ ] Open a regular manga - uses default RTL mode
+27. [ ] Check Settings > Webtoon section exists
+28. [ ] Toggle "Auto-Detect Webtoon" off
+29. [ ] Open webtoon again - now uses user defaults
 
 ### Settings Persistence
-31. [ ] Change default reader settings in Settings tab
-32. [ ] Restart app - settings persist
-33. [ ] Open new manga - default settings applied
-34. [ ] Per-manga settings still preserved after restart
+30. [ ] Change default reader settings in Settings tab
+31. [ ] Restart app - settings persist
+32. [ ] Open new manga - default settings applied
+33. [ ] Per-manga settings still preserved after restart
 
 ### Batch Operations
-35. [ ] Enter selection mode in library
-36. [ ] Select multiple manga
-37. [ ] Perform batch action (e.g., mark as read)
-38. [ ] Exit selection mode
+34. [ ] Enter selection mode in library
+35. [ ] Select multiple manga
+36. [ ] Perform batch action (e.g., mark as read)
+37. [ ] Exit selection mode
 
 ### Tracking
-39. [ ] Open manga detail view
-40. [ ] Access tracking option
-41. [ ] Bind to a tracker (if logged in)
+38. [ ] Open manga detail view
+39. [ ] Access tracking option
+40. [ ] Bind to a tracker (if logged in)
 
 ---
 

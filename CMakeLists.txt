@@ -73,7 +73,6 @@ set(APP_SOURCES
     src/activity/reader_activity.cpp
 
     # Views
-    src/view/home_tab.cpp
     src/view/library_section_tab.cpp
     src/view/history_tab.cpp
     src/view/search_tab.cpp
@@ -206,7 +205,6 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     FILE resources/xml/activity/main.xml resources/xml/activity/main.xml
     FILE resources/xml/activity/login.xml resources/xml/activity/login.xml
     FILE resources/xml/activity/reader.xml resources/xml/activity/reader.xml
-    FILE resources/xml/tabs/home.xml resources/xml/tabs/home.xml
     FILE resources/xml/tabs/library.xml resources/xml/tabs/library.xml
     FILE resources/xml/tabs/search.xml resources/xml/tabs/search.xml
     FILE resources/xml/tabs/settings.xml resources/xml/tabs/settings.xml

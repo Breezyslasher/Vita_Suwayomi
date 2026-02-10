@@ -303,6 +303,14 @@ void HistoryTab::rebuildHistoryList() {
         m_contentBox->addView(m_loadMoreBtn);
     }
 
+    // Set up navigation between refresh button and first history item
+    if (!m_itemRows.empty() && m_refreshBtn) {
+        // First item UP -> refresh button
+        m_itemRows[0]->setCustomNavigationRoute(brls::FocusDirection::UP, m_refreshBtn);
+        // Refresh button DOWN -> first item
+        m_refreshBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_itemRows[0]);
+    }
+
     // Focus on first new item after load more, or first item after initial load
     if (m_focusIndexAfterRebuild >= 0 && m_focusIndexAfterRebuild < static_cast<int>(m_itemRows.size())) {
         brls::Application::giveFocus(m_itemRows[m_focusIndexAfterRebuild]);

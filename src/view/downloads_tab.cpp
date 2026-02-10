@@ -76,6 +76,7 @@ DownloadsTab::DownloadsTab() {
     titleBox->setAxis(brls::Axis::ROW);
     titleBox->setAlignItems(brls::AlignItems::CENTER);
     titleBox->setShrink(0);  // Prevent title from shrinking
+    titleBox->setGrow(1.0f);  // Allow title to expand and prevent truncation
     headerRow->addView(titleBox);
 
     auto header = new brls::Label();

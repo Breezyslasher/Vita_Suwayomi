@@ -386,6 +386,9 @@ public:
     bool fetchServerInfo(ServerInfo& info);
     bool testConnection();
 
+    // Check if server requires authentication (returns true if 401 received)
+    bool checkServerRequiresAuth(const std::string& url);
+
     // Extension Management
     bool fetchExtensionList(std::vector<Extension>& extensions);
     bool fetchInstalledExtensions(std::vector<Extension>& extensions);  // Server-side filtered: installed only
