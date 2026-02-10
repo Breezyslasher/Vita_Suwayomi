@@ -286,8 +286,8 @@ brls::View* MangaItemCell::create() {
 void MangaItemCell::onFocusGained() {
     brls::Box::onFocusGained();
     updateFocusInfo(true);
-    // Show start button hint on focus
-    if (m_startHintIcon) {
+    // Show start button hint on focus (but not in browser/search tabs where library badge is shown)
+    if (m_startHintIcon && !m_showLibraryBadge) {
         m_startHintIcon->setVisibility(brls::Visibility::VISIBLE);
     }
 }
@@ -369,6 +369,10 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
     if (m_starBadge) {
         bool showStar = m_showLibraryBadge && m_manga.inLibrary;
         m_starBadge->setVisibility(showStar ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
+    // Hide start hint icon when in browser/search mode
+    if (m_startHintIcon && m_showLibraryBadge) {
+        m_startHintIcon->setVisibility(brls::Visibility::GONE);
     }
 }
 
