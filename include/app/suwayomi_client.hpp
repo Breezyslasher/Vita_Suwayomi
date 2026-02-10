@@ -389,6 +389,15 @@ public:
     // Check if server requires authentication (returns true if 401 received)
     bool checkServerRequiresAuth(const std::string& url);
 
+    // Check if server supports JWT login (simple_login/ui_login modes)
+    // Returns true if login mutation exists, false if server only supports basic auth
+    bool checkServerSupportsJWTLogin(const std::string& url);
+
+    // Get suggested auth mode based on server response
+    // Returns the likely auth mode the server is configured to use
+    // Also returns an error message if detection fails
+    AuthMode detectServerAuthMode(const std::string& url, std::string& errorMessage);
+
     // Extension Management
     bool fetchExtensionList(std::vector<Extension>& extensions);
     bool fetchInstalledExtensions(std::vector<Extension>& extensions);  // Server-side filtered: installed only
