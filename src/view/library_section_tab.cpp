@@ -900,10 +900,10 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
 
     std::vector<std::string> options;
     if (m_selectionMode) {
-        options = {"Select / Deselect", "Download All", "Download Next 5", "Mark as Read", "Mark as Unread",
+        options = {"Select / Deselect", "Download", "Mark as Read", "Mark as Unread",
                    "Change Categories", "Remove from Library", "Cancel Selection"};
     } else {
-        options = {"Select", "Download All", "Download Next 5", "Track", "Mark as Read", "Mark as Unread",
+        options = {"Select", "Download", "Track", "Mark as Read", "Mark as Unread",
                    "Change Categories", "Remove from Library", "Migrate Source"};
     }
 
@@ -924,47 +924,40 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
                         m_contentGrid->toggleSelection(index);
                         updateSelectionTitle();
                         break;
-                    case 1: { // Download All
+                    case 1: { // Download
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         showDownloadSubmenu(selectedManga);
                         break;
                     }
-                    case 2: { // Download Next 5
-                        auto selectedManga = m_contentGrid->getSelectedManga();
-                        if (selectedManga.empty()) selectedManga.push_back(manga);
-                        downloadNextChapters(selectedManga, 5);
-                        exitSelectionMode();
-                        break;
-                    }
-                    case 3: { // Mark as Read
+                    case 2: { // Mark as Read
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         markMangaRead(selectedManga);
                         exitSelectionMode();
                         break;
                     }
-                    case 4: { // Mark as Unread
+                    case 3: { // Mark as Unread
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         markMangaUnread(selectedManga);
                         exitSelectionMode();
                         break;
                     }
-                    case 5: { // Change Categories
+                    case 4: { // Change Categories
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         showChangeCategoryDialog(selectedManga);
                         break;
                     }
-                    case 6: { // Remove from Library
+                    case 5: { // Remove from Library
                         auto selectedManga = m_contentGrid->getSelectedManga();
                         if (selectedManga.empty()) selectedManga.push_back(manga);
                         removeFromLibrary(selectedManga);
                         exitSelectionMode();
                         break;
                     }
-                    case 7: // Cancel Selection
+                    case 6: // Cancel Selection
                         exitSelectionMode();
                         break;
                 }
@@ -974,40 +967,35 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
                     case 0: // Select
                         enterSelectionMode(index);
                         break;
-                    case 1: { // Download All
+                    case 1: { // Download
                         std::vector<Manga> list = {manga};
                         showDownloadSubmenu(list);
                         break;
                     }
-                    case 2: { // Download Next 5
-                        std::vector<Manga> list = {manga};
-                        downloadNextChapters(list, 5);
-                        break;
-                    }
-                    case 3: // Track
+                    case 2: // Track
                         openTracking(manga);
                         break;
-                    case 4: { // Mark as Read
+                    case 3: { // Mark as Read
                         std::vector<Manga> list = {manga};
                         markMangaRead(list);
                         break;
                     }
-                    case 5: { // Mark as Unread
+                    case 4: { // Mark as Unread
                         std::vector<Manga> list = {manga};
                         markMangaUnread(list);
                         break;
                     }
-                    case 6: { // Change Categories
+                    case 5: { // Change Categories
                         std::vector<Manga> list = {manga};
                         showChangeCategoryDialog(list);
                         break;
                     }
-                    case 7: { // Remove from Library
+                    case 6: { // Remove from Library
                         std::vector<Manga> list = {manga};
                         removeFromLibrary(list);
                         break;
                     }
-                    case 8: // Migrate Source
+                    case 7: // Migrate Source
                         showMigrateSourceMenu(manga);
                         break;
                 }
