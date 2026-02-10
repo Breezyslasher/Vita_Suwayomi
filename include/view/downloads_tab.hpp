@@ -78,6 +78,7 @@ private:
         int chapterId = 0;
         int mangaId = 0;
         int downloadedPages = 0;
+        int pageCount = 0;
         int state = 0;  // DownloadState as int
     };
     std::vector<CachedQueueItem> m_lastServerQueue;
@@ -90,6 +91,36 @@ private:
         int state = 0;  // LocalDownloadState as int
     };
     std::vector<CachedLocalItem> m_lastLocalQueue;
+
+    // UI element tracking for incremental updates (avoid full rebuilds)
+    struct LocalRowElements {
+        brls::Box* row = nullptr;
+        brls::Label* progressLabel = nullptr;
+        brls::Image* xButtonIcon = nullptr;
+        int mangaId = 0;
+        int chapterIndex = 0;
+    };
+    std::vector<LocalRowElements> m_localRowElements;
+
+    struct ServerRowElements {
+        brls::Box* row = nullptr;
+        brls::Label* progressLabel = nullptr;
+        brls::Image* xButtonIcon = nullptr;
+        int chapterId = 0;
+        int mangaId = 0;
+    };
+    std::vector<ServerRowElements> m_serverRowElements;
+
+    // Helper methods for incremental updates
+    void updateLocalProgress(int mangaId, int chapterIndex, int downloadedPages, int pageCount, int state);
+    void removeLocalItem(int mangaId, int chapterIndex);
+    void addLocalItem(int mangaId, int chapterIndex, const std::string& mangaTitle,
+                      const std::string& chapterName, float chapterNumber,
+                      int downloadedPages, int pageCount, int state);
+    brls::Box* createLocalRow(int mangaId, int chapterIndex, const std::string& mangaTitle,
+                              const std::string& chapterName, float chapterNumber,
+                              int downloadedPages, int pageCount, int state,
+                              brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon);
 
     // Swipe gesture state (avoid static variables)
     struct SwipeState {
