@@ -32,8 +32,6 @@ private:
     void showDownloadOptions(const std::string& ratingKey, const std::string& title);
     void startAutoRefresh();
     void stopAutoRefresh();
-    void pauseAllDownloads();
-    void clearAllDownloads();
 
     // Queue section (server downloads)
     brls::Box* m_queueSection = nullptr;

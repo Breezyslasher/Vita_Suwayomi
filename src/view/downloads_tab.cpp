@@ -162,12 +162,30 @@ DownloadsTab::DownloadsTab() {
     // Pause button action - stop both server and local downloads
     // brls::Button handles both touch and controller input via registerClickAction
     m_pauseBtn->registerClickAction([this](brls::View*) {
-        pauseAllDownloads();
-        // Also pause local downloads
-        DownloadsManager& mgr = DownloadsManager::getInstance();
-        mgr.pauseDownloads();
-        refreshLocalDownloads();
-        brls::Application::notify("Downloads stopped");
+        asyncRun([this]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            DownloadsManager& mgr = DownloadsManager::getInstance();
+
+            // Stop both server and local downloads
+            bool success = client.stopDownloads();
+            mgr.pauseDownloads();
+
+            brls::sync([this, success]() {
+                m_downloaderRunning = false;
+                if (m_startStopLabel) {
+                    m_startStopLabel->setText("Start");
+                }
+                if (m_downloadStatusLabel) {
+                    m_downloadStatusLabel->setText("• Stopped");
+                    m_downloadStatusLabel->setTextColor(nvgRGBA(200, 150, 100, 255));
+                }
+                if (success) {
+                    brls::Application::notify("Downloads stopped");
+                }
+                refreshQueue();
+                refreshLocalDownloads();
+            });
+        });
         return true;
     });
     m_actionsRow->addView(m_pauseBtn);
@@ -198,21 +216,36 @@ DownloadsTab::DownloadsTab() {
     // Clear button action - clear both server and local download queues
     // brls::Button handles both touch and controller input via registerClickAction
     m_clearBtn->registerClickAction([this](brls::View*) {
-        // Clear server queue
-        clearAllDownloads();
+        asyncRun([this]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            DownloadsManager& mgr = DownloadsManager::getInstance();
 
-        // Clear local queue - cancel all queued chapters
-        DownloadsManager& mgr = DownloadsManager::getInstance();
-        auto queuedChapters = mgr.getQueuedChapters();
-        for (const auto& chapter : queuedChapters) {
-            if (chapter.state == LocalDownloadState::QUEUED ||
-                chapter.state == LocalDownloadState::DOWNLOADING) {
-                mgr.cancelChapterDownload(chapter.mangaId, chapter.chapterIndex);
+            // Clear server queue
+            bool success = client.clearDownloadQueue();
+
+            // Clear local queue - cancel all queued chapters
+            auto queuedChapters = mgr.getQueuedChapters();
+            for (const auto& chapter : queuedChapters) {
+                if (chapter.state == LocalDownloadState::QUEUED ||
+                    chapter.state == LocalDownloadState::DOWNLOADING) {
+                    mgr.cancelChapterDownload(chapter.mangaId, chapter.chapterIndex);
+                }
             }
-        }
 
-        refreshLocalDownloads();
-        brls::Application::notify("Queues cleared");
+            brls::sync([this, success]() {
+                m_downloaderRunning = false;
+                if (m_startStopLabel) {
+                    m_startStopLabel->setText("Start");
+                }
+                if (m_downloadStatusLabel) {
+                    m_downloadStatusLabel->setText("");
+                }
+                if (success) {
+                    brls::Application::notify("Queues cleared");
+                }
+                refresh();
+            });
+        });
         return true;
     });
     m_actionsRow->addView(m_clearBtn);
@@ -928,42 +961,6 @@ void DownloadsTab::stopAutoRefresh() {
     // The atomic checks in the callbacks will prevent any issues
 }
 
-void DownloadsTab::pauseAllDownloads() {
-    asyncRun([this]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
-        if (client.stopDownloads()) {
-            brls::sync([this]() {
-                m_downloaderRunning = false;
-                if (m_startStopLabel) {
-                    m_startStopLabel->setText("Start");
-                }
-                if (m_downloadStatusLabel) {
-                    m_downloadStatusLabel->setText("• Stopped");
-                    m_downloadStatusLabel->setTextColor(nvgRGBA(200, 150, 100, 255));
-                }
-                refreshQueue();
-            });
-        }
-    });
-}
-
-void DownloadsTab::clearAllDownloads() {
-    asyncRun([this]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
-        if (client.clearDownloadQueue()) {
-            brls::sync([this]() {
-                m_downloaderRunning = false;
-                if (m_startStopLabel) {
-                    m_startStopLabel->setText("Start");
-                }
-                if (m_downloadStatusLabel) {
-                    m_downloadStatusLabel->setText("");
-                }
-                refresh();
-            });
-        }
-    });
-}
 
 // Helper: Create a local download row with all UI elements
 brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std::string& mangaTitle,
