@@ -114,12 +114,14 @@ DownloadsTab::DownloadsTab() {
     m_startStopLabel->setFontSize(12);
     m_startStopBtn->addView(m_startStopLabel);
 
-    // Start/Stop button tap action - toggle downloader state for both server and local
-    m_startStopBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_startStopBtn, [this]() {
+    // Start/Stop button action - toggle downloader state for both server and local
+    // brls::Button handles both touch and controller input via registerClickAction
+    m_startStopBtn->registerClickAction([this](brls::View*) {
         asyncRun([this]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             DownloadsManager& mgr = DownloadsManager::getInstance();
             bool success = false;
+            bool wasRunning = m_downloaderRunning;
             if (m_downloaderRunning) {
                 // Stop both server and local downloads
                 success = client.stopDownloads();
@@ -129,14 +131,16 @@ DownloadsTab::DownloadsTab() {
                 success = client.startDownloads();
                 mgr.startDownloads();
             }
-            if (success) {
-                brls::sync([this]() {
-                    refreshQueue();
-                    refreshLocalDownloads();
-                });
-            }
+            brls::sync([this, success, wasRunning]() {
+                if (success) {
+                    brls::Application::notify(wasRunning ? "Downloads paused" : "Downloads started");
+                }
+                refreshQueue();
+                refreshLocalDownloads();
+            });
         });
-    }));
+        return true;
+    });
     m_actionsRow->addView(m_startStopBtn);
 
     // Stop/Pause button (stop current downloads)
@@ -155,14 +159,17 @@ DownloadsTab::DownloadsTab() {
     pauseLabel->setFontSize(12);
     m_pauseBtn->addView(pauseLabel);
 
-    // Pause button tap action - stop both server and local downloads
-    m_pauseBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_pauseBtn, [this]() {
+    // Pause button action - stop both server and local downloads
+    // brls::Button handles both touch and controller input via registerClickAction
+    m_pauseBtn->registerClickAction([this](brls::View*) {
         pauseAllDownloads();
         // Also pause local downloads
         DownloadsManager& mgr = DownloadsManager::getInstance();
         mgr.pauseDownloads();
         refreshLocalDownloads();
-    }));
+        brls::Application::notify("Downloads stopped");
+        return true;
+    });
     m_actionsRow->addView(m_pauseBtn);
 
     // Clear button
@@ -188,10 +195,26 @@ DownloadsTab::DownloadsTab() {
     clearLabel->setFontSize(12);
     m_clearBtn->addView(clearLabel);
 
-    // Clear button tap action - clear server download queue
-    m_clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_clearBtn, [this]() {
+    // Clear button action - clear both server and local download queues
+    // brls::Button handles both touch and controller input via registerClickAction
+    m_clearBtn->registerClickAction([this](brls::View*) {
+        // Clear server queue
         clearAllDownloads();
-    }));
+
+        // Clear local queue - cancel all queued chapters
+        DownloadsManager& mgr = DownloadsManager::getInstance();
+        auto queuedChapters = mgr.getQueuedChapters();
+        for (const auto& chapter : queuedChapters) {
+            if (chapter.state == LocalDownloadState::QUEUED ||
+                chapter.state == LocalDownloadState::DOWNLOADING) {
+                mgr.cancelChapterDownload(chapter.mangaId, chapter.chapterIndex);
+            }
+        }
+
+        refreshLocalDownloads();
+        brls::Application::notify("Queues cleared");
+        return true;
+    });
     m_actionsRow->addView(m_clearBtn);
 
     // === Download Queue Section (server downloads) ===
