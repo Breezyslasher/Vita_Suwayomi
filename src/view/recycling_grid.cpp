@@ -265,6 +265,15 @@ const Manga* RecyclingGrid::getItem(int index) const {
     return nullptr;
 }
 
+bool RecyclingGrid::hasCellFocus() const {
+    for (const auto* cell : m_cells) {
+        if (cell && cell->isFocused()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 brls::View* RecyclingGrid::create() {
     return new RecyclingGrid();
 }
