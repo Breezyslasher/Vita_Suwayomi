@@ -2330,7 +2330,6 @@ void MangaDetailView::toggleDescription() {
     if (m_descriptionExpanded) {
         // Show full description
         m_descriptionLabel->setText(m_fullDescription + " [L]");
-        brls::Application::notify("Summary expanded");
     } else {
         // Show truncated description (first ~80 chars / 2 lines)
         std::string truncatedDesc = m_fullDescription;
@@ -2338,7 +2337,6 @@ void MangaDetailView::toggleDescription() {
             truncatedDesc = truncatedDesc.substr(0, 77) + "... [L]";
         }
         m_descriptionLabel->setText(truncatedDesc);
-        brls::Application::notify("Summary collapsed");
     }
 }
 

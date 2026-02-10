@@ -136,6 +136,17 @@ MangaItemCell::MangaItemCell() {
     m_newBadge->setVisibility(brls::Visibility::GONE);
     this->addView(m_newBadge);
 
+    // Star badge - top right corner (shows if manga is in library, browser/search only)
+    m_starBadge = new brls::Label();
+    m_starBadge->setFontSize(14);
+    m_starBadge->setText("\u2605");  // Unicode filled star character
+    m_starBadge->setTextColor(nvgRGB(255, 215, 0));  // Gold color
+    m_starBadge->setPositionType(brls::PositionType::ABSOLUTE);
+    m_starBadge->setPositionTop(6);
+    m_starBadge->setPositionRight(6);
+    m_starBadge->setVisibility(brls::Visibility::GONE);
+    this->addView(m_starBadge);
+
     // Description label (hidden, for focus state)
     m_descriptionLabel = new brls::Label();
     m_descriptionLabel->setFontSize(9);
@@ -205,6 +216,12 @@ void MangaItemCell::updateDisplay() {
         }
 
         m_newBadge->setVisibility(showNew ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
+
+    // Show star badge if manga is in library (browser/search tabs only)
+    if (m_starBadge) {
+        bool showStar = m_showLibraryBadge && m_manga.inLibrary;
+        m_starBadge->setVisibility(showStar ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
 }
 
@@ -344,6 +361,16 @@ void MangaItemCell::setListMode(bool listMode) {
     applyDisplayMode();
 }
 
+void MangaItemCell::setShowLibraryBadge(bool show) {
+    if (m_showLibraryBadge == show) return;
+    m_showLibraryBadge = show;
+    // Update star badge visibility
+    if (m_starBadge) {
+        bool showStar = m_showLibraryBadge && m_manga.inLibrary;
+        m_starBadge->setVisibility(showStar ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
+}
+
 void MangaItemCell::applyDisplayMode() {
     if (m_listMode) {
         // List mode: simple horizontal layout with title only (no cover)
@@ -395,6 +422,11 @@ void MangaItemCell::applyDisplayMode() {
             m_startHintIcon->setPositionTop(4);
             m_startHintIcon->setPositionRight(4);
         }
+        // Position star badge for list mode (top-right, below start hint)
+        if (m_starBadge) {
+            m_starBadge->setPositionTop(4);
+            m_starBadge->setPositionRight(72);  // Left of start hint
+        }
 
     } else if (m_compactMode) {
         // Compact mode: grid with covers only (no title overlay)
@@ -438,6 +470,11 @@ void MangaItemCell::applyDisplayMode() {
             m_startHintIcon->setPositionTop(6);
             m_startHintIcon->setPositionRight(6);
         }
+        // Star badge position for compact mode (top-right, below start hint area)
+        if (m_starBadge) {
+            m_starBadge->setPositionTop(26);
+            m_starBadge->setPositionRight(6);
+        }
 
     } else {
         // Normal grid mode: cover + title overlay
@@ -480,6 +517,11 @@ void MangaItemCell::applyDisplayMode() {
         if (m_startHintIcon) {
             m_startHintIcon->setPositionTop(6);
             m_startHintIcon->setPositionRight(6);
+        }
+        // Star badge position for normal grid mode (top-right, below start hint area)
+        if (m_starBadge) {
+            m_starBadge->setPositionTop(26);
+            m_starBadge->setPositionRight(6);
         }
     }
 }
