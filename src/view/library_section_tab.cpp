@@ -79,7 +79,7 @@ LibrarySectionTab::LibrarySectionTab() {
     sortContainer->setMarginLeft(10);
 
     auto* sortHintIcon = new brls::Image();
-    sortHintIcon->setWidth(64);
+    sortHintIcon->setWidth(16);
     sortHintIcon->setHeight(16);
     sortHintIcon->setScalingType(brls::ImageScalingType::FIT);
     sortHintIcon->setImageFromFile("app0:resources/images/triangle_button.png");
@@ -121,7 +121,7 @@ LibrarySectionTab::LibrarySectionTab() {
     updateContainer->setMarginLeft(8);
 
     auto* updateHintIcon = new brls::Image();
-    updateHintIcon->setWidth(64);
+    updateHintIcon->setWidth(16);
     updateHintIcon->setHeight(16);
     updateHintIcon->setScalingType(brls::ImageScalingType::FIT);
     updateHintIcon->setImageFromFile("app0:resources/images/select_button.png");
