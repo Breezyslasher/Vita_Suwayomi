@@ -6,7 +6,6 @@
 #include "view/media_item_cell.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
-#include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
 #include <ctime>
 #include <fstream>
@@ -113,41 +112,41 @@ MangaItemCell::MangaItemCell() {
     m_listInfoBox->setVisibility(brls::Visibility::GONE);
     this->addView(m_listInfoBox);
 
-    // Unread badge - top right corner
+    // Unread badge - top left corner
     m_unreadBadge = new brls::Label();
     m_unreadBadge->setFontSize(10);
     m_unreadBadge->setTextColor(nvgRGB(255, 255, 255));
     m_unreadBadge->setBackgroundColor(nvgRGBA(0, 150, 136, 255)); // Teal badge
-    m_unreadBadge->setMargins(6, 6, 0, 0);
+    m_unreadBadge->setMargins(6, 0, 0, 6);
     m_unreadBadge->setPositionType(brls::PositionType::ABSOLUTE);
     m_unreadBadge->setPositionTop(0);
-    m_unreadBadge->setPositionRight(0);
+    m_unreadBadge->setPositionLeft(0);
     m_unreadBadge->setVisibility(brls::Visibility::GONE);
     this->addView(m_unreadBadge);
 
-    // Download badge - top left corner (shows checkmark if downloaded)
-    m_downloadBadge = new brls::Label();
-    m_downloadBadge->setFontSize(12);
-    m_downloadBadge->setTextColor(nvgRGB(255, 255, 255));
-    m_downloadBadge->setBackgroundColor(nvgRGBA(76, 175, 80, 255)); // Green badge
-    m_downloadBadge->setMargins(6, 0, 0, 6);
-    m_downloadBadge->setPositionType(brls::PositionType::ABSOLUTE);
-    m_downloadBadge->setPositionTop(0);
-    m_downloadBadge->setPositionLeft(0);
-    m_downloadBadge->setVisibility(brls::Visibility::GONE);
-    this->addView(m_downloadBadge);
-
-    // NEW badge - below download badge (shows if recently updated)
+    // NEW badge - top left, below unread badge (shows if recently updated)
     m_newBadge = new brls::Label();
     m_newBadge->setFontSize(8);
     m_newBadge->setText("NEW");
     m_newBadge->setTextColor(nvgRGB(255, 255, 255));
     m_newBadge->setBackgroundColor(nvgRGBA(231, 76, 60, 255)); // Red badge
     m_newBadge->setPositionType(brls::PositionType::ABSOLUTE);
-    m_newBadge->setPositionTop(26);  // Below download badge
+    m_newBadge->setPositionTop(26);  // Below unread badge
     m_newBadge->setPositionLeft(0);
     m_newBadge->setVisibility(brls::Visibility::GONE);
     this->addView(m_newBadge);
+
+    // Star badge - top right corner (shows if manga is in library, browser/search only)
+    m_starBadge = new brls::Image();
+    m_starBadge->setWidth(16);
+    m_starBadge->setHeight(16);
+    m_starBadge->setScalingType(brls::ImageScalingType::FIT);
+    m_starBadge->setImageFromFile("app0:resources/icons/star.png");
+    m_starBadge->setPositionType(brls::PositionType::ABSOLUTE);
+    m_starBadge->setPositionTop(6);
+    m_starBadge->setPositionRight(6);
+    m_starBadge->setVisibility(brls::Visibility::GONE);
+    this->addView(m_starBadge);
 
     // Description label (hidden, for focus state)
     m_descriptionLabel = new brls::Label();
@@ -155,15 +154,15 @@ MangaItemCell::MangaItemCell() {
     m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     m_descriptionLabel->setVisibility(brls::Visibility::GONE);
 
-    // Start button hint icon - shown on focus to indicate menu action
+    // Start button hint icon - shown on focus (top-right) to indicate menu action
     m_startHintIcon = new brls::Image();
     m_startHintIcon->setWidth(64);
     m_startHintIcon->setHeight(16);
     m_startHintIcon->setScalingType(brls::ImageScalingType::FIT);
     m_startHintIcon->setImageFromFile("app0:resources/images/start_button.png");
     m_startHintIcon->setPositionType(brls::PositionType::ABSOLUTE);
-    m_startHintIcon->setPositionBottom(6);
-    m_startHintIcon->setPositionLeft(6);
+    m_startHintIcon->setPositionTop(6);
+    m_startHintIcon->setPositionRight(6);
     m_startHintIcon->setVisibility(brls::Visibility::GONE);
     this->addView(m_startHintIcon);
 }
@@ -194,7 +193,7 @@ void MangaItemCell::updateDisplay() {
         }
     }
 
-    // Show unread badge (teal, top-right) - respects showUnreadBadge setting
+    // Show unread badge (teal, top-left) - respects showUnreadBadge setting
     if (m_unreadBadge) {
         const auto& settings = Application::getInstance().getSettings();
         if (settings.showUnreadBadge && m_manga.unreadCount > 0) {
@@ -202,20 +201,6 @@ void MangaItemCell::updateDisplay() {
             m_unreadBadge->setVisibility(brls::Visibility::VISIBLE);
         } else {
             m_unreadBadge->setVisibility(brls::Visibility::GONE);
-        }
-    }
-
-    // Show download badge if any chapters are downloaded locally - respects showDownloadedBadge setting
-    if (m_downloadBadge) {
-        const auto& settings = Application::getInstance().getSettings();
-        static const std::string ICON_CHECK = "\xEE\xA1\xAC";
-        DownloadsManager& dm = DownloadsManager::getInstance();
-        DownloadItem* download = dm.getMangaDownload(m_manga.id);
-        if (settings.showDownloadedBadge && download != nullptr) {
-            m_downloadBadge->setText(ICON_CHECK);
-            m_downloadBadge->setVisibility(brls::Visibility::VISIBLE);
-        } else {
-            m_downloadBadge->setVisibility(brls::Visibility::GONE);
         }
     }
 
@@ -232,6 +217,12 @@ void MangaItemCell::updateDisplay() {
         }
 
         m_newBadge->setVisibility(showNew ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
+
+    // Show star badge if manga is in library (browser/search tabs only)
+    if (m_starBadge) {
+        bool showStar = m_showLibraryBadge && m_manga.inLibrary;
+        m_starBadge->setVisibility(showStar ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
 }
 
@@ -295,8 +286,8 @@ brls::View* MangaItemCell::create() {
 void MangaItemCell::onFocusGained() {
     brls::Box::onFocusGained();
     updateFocusInfo(true);
-    // Show start button hint on focus
-    if (m_startHintIcon) {
+    // Show start button hint on focus (but not in browser/search tabs where library badge is shown)
+    if (m_startHintIcon && !m_showLibraryBadge) {
         m_startHintIcon->setVisibility(brls::Visibility::VISIBLE);
     }
 }
@@ -371,6 +362,20 @@ void MangaItemCell::setListMode(bool listMode) {
     applyDisplayMode();
 }
 
+void MangaItemCell::setShowLibraryBadge(bool show) {
+    if (m_showLibraryBadge == show) return;
+    m_showLibraryBadge = show;
+    // Update star badge visibility
+    if (m_starBadge) {
+        bool showStar = m_showLibraryBadge && m_manga.inLibrary;
+        m_starBadge->setVisibility(showStar ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
+    // Hide start hint icon when in browser/search mode
+    if (m_startHintIcon && m_showLibraryBadge) {
+        m_startHintIcon->setVisibility(brls::Visibility::GONE);
+    }
+}
+
 void MangaItemCell::applyDisplayMode() {
     if (m_listMode) {
         // List mode: simple horizontal layout with title only (no cover)
@@ -408,23 +413,24 @@ void MangaItemCell::applyDisplayMode() {
             m_listInfoBox->addView(listTitle);
         }
 
-        // Position badges for list mode (right side)
+        // Position badges for list mode (left side)
         if (m_unreadBadge) {
             m_unreadBadge->setPositionTop(4);
-            m_unreadBadge->setPositionRight(8);
-        }
-        if (m_downloadBadge) {
-            m_downloadBadge->setPositionTop(4);
-            m_downloadBadge->setPositionRight(40);  // Position next to unread badge
+            m_unreadBadge->setPositionLeft(8);
         }
         if (m_newBadge) {
             m_newBadge->setPositionTop(4);
-            m_newBadge->setPositionRight(72);  // Position next to download badge
+            m_newBadge->setPositionLeft(40);  // Position next to unread badge
         }
-        // Position start hint for list mode
+        // Position start hint for list mode (top-right)
         if (m_startHintIcon) {
-            m_startHintIcon->setPositionBottom(4);
-            m_startHintIcon->setPositionLeft(4);
+            m_startHintIcon->setPositionTop(4);
+            m_startHintIcon->setPositionRight(4);
+        }
+        // Position star badge for list mode (top-right, below start hint)
+        if (m_starBadge) {
+            m_starBadge->setPositionTop(4);
+            m_starBadge->setPositionRight(72);  // Left of start hint
         }
 
     } else if (m_compactMode) {
@@ -455,23 +461,24 @@ void MangaItemCell::applyDisplayMode() {
             m_listInfoBox->setVisibility(brls::Visibility::GONE);
         }
 
-        // Restore badge positions for grid mode
+        // Restore badge positions for grid mode (left side)
         if (m_unreadBadge) {
             m_unreadBadge->setPositionTop(0);
-            m_unreadBadge->setPositionRight(0);
-        }
-        if (m_downloadBadge) {
-            m_downloadBadge->setPositionTop(0);
-            m_downloadBadge->setPositionLeft(0);
+            m_unreadBadge->setPositionLeft(0);
         }
         if (m_newBadge) {
             m_newBadge->setPositionTop(26);
             m_newBadge->setPositionLeft(0);
         }
-        // Restore start hint position for compact mode
+        // Restore start hint position for compact mode (top-right)
         if (m_startHintIcon) {
-            m_startHintIcon->setPositionBottom(6);
-            m_startHintIcon->setPositionLeft(6);
+            m_startHintIcon->setPositionTop(6);
+            m_startHintIcon->setPositionRight(6);
+        }
+        // Star badge position for compact mode (top-right, below start hint area)
+        if (m_starBadge) {
+            m_starBadge->setPositionTop(26);
+            m_starBadge->setPositionRight(6);
         }
 
     } else {
@@ -502,23 +509,24 @@ void MangaItemCell::applyDisplayMode() {
             m_listInfoBox->setVisibility(brls::Visibility::GONE);
         }
 
-        // Restore badge positions for grid mode
+        // Restore badge positions for grid mode (left side)
         if (m_unreadBadge) {
             m_unreadBadge->setPositionTop(0);
-            m_unreadBadge->setPositionRight(0);
-        }
-        if (m_downloadBadge) {
-            m_downloadBadge->setPositionTop(0);
-            m_downloadBadge->setPositionLeft(0);
+            m_unreadBadge->setPositionLeft(0);
         }
         if (m_newBadge) {
             m_newBadge->setPositionTop(26);
             m_newBadge->setPositionLeft(0);
         }
-        // Restore start hint position for normal grid mode
+        // Restore start hint position for normal grid mode (top-right)
         if (m_startHintIcon) {
-            m_startHintIcon->setPositionBottom(6);
-            m_startHintIcon->setPositionLeft(6);
+            m_startHintIcon->setPositionTop(6);
+            m_startHintIcon->setPositionRight(6);
+        }
+        // Star badge position for normal grid mode (top-right, below start hint area)
+        if (m_starBadge) {
+            m_starBadge->setPositionTop(26);
+            m_starBadge->setPositionRight(6);
         }
     }
 }

@@ -228,6 +228,7 @@ void SourceBrowseTab::updateGrid() {
 
     for (const auto& manga : m_mangaList) {
         auto* cell = new MangaItemCell();
+        cell->setShowLibraryBadge(true);  // Show star for library items in browser
         cell->setManga(manga);
         cell->registerClickAction([this, manga](brls::View*) {
             onMangaSelected(manga);

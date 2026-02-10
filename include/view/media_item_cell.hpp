@@ -22,6 +22,7 @@ public:
     // Display mode
     void setCompactMode(bool compact);  // Hide title overlay (covers only)
     void setListMode(bool listMode);    // Horizontal list layout
+    void setShowLibraryBadge(bool show);  // Show star badge for library items (browser/search only)
 
     void onFocusGained() override;
     void onFocusLost() override;
@@ -42,6 +43,7 @@ private:
     bool m_selected = false;
     bool m_compactMode = false;
     bool m_listMode = false;
+    bool m_showLibraryBadge = false;  // Whether to show star badge for library items
 
     Manga m_manga;
     std::string m_originalTitle;
@@ -55,9 +57,9 @@ private:
     brls::Label* m_descriptionLabel = nullptr;
     brls::Rectangle* m_progressBar = nullptr;
     brls::Label* m_unreadBadge = nullptr;
-    brls::Label* m_downloadBadge = nullptr;
     brls::Label* m_newBadge = nullptr;  // NEW indicator for recently updated
     brls::Image* m_startHintIcon = nullptr;  // Start button hint shown on focus
+    brls::Image* m_starBadge = nullptr;  // Star icon for manga in library
 };
 
 // Alias for backward compatibility

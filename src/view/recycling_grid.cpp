@@ -141,6 +141,11 @@ void RecyclingGrid::setupGrid() {
                 cell->setCompactMode(true);
             }
 
+            // Apply library badge setting (for browser/search tabs)
+            if (m_showLibraryBadge) {
+                cell->setShowLibraryBadge(true);
+            }
+
             // Load first rows immediately, defer rest for staggered loading
             if (row < maxInitialRows) {
                 cell->setManga(m_items[i]);
@@ -323,6 +328,16 @@ void RecyclingGrid::setListMode(bool listMode) {
     // Rebuild grid if we have items
     if (!m_items.empty()) {
         setupGrid();
+    }
+}
+
+void RecyclingGrid::setShowLibraryBadge(bool show) {
+    if (m_showLibraryBadge == show) return;
+    m_showLibraryBadge = show;
+
+    // Update existing cells
+    for (auto* cell : m_cells) {
+        cell->setShowLibraryBadge(show);
     }
 }
 

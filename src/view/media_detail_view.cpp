@@ -57,6 +57,41 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         return true;
     });
 
+    // Register Y button for chapter filter
+    this->registerAction("Filter", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
+        // Show filter options dialog
+        std::vector<std::string> options = {"Toggle Downloaded", "Toggle Unread", "Toggle Bookmarked", "Clear Filters"};
+        brls::Dropdown* dropdown = new brls::Dropdown(
+            "Chapter Filters", options,
+            [this](int selected) {
+                if (selected < 0) return;
+                switch (selected) {
+                    case 0:
+                        m_filterDownloaded = !m_filterDownloaded;
+                        brls::Application::notify(m_filterDownloaded ? "Filtering: Downloaded" : "Filter removed");
+                        break;
+                    case 1:
+                        m_filterUnread = !m_filterUnread;
+                        brls::Application::notify(m_filterUnread ? "Filtering: Unread" : "Filter removed");
+                        break;
+                    case 2:
+                        m_filterBookmarked = !m_filterBookmarked;
+                        brls::Application::notify(m_filterBookmarked ? "Filtering: Bookmarked" : "Filter removed");
+                        break;
+                    case 3:
+                        m_filterDownloaded = false;
+                        m_filterUnread = false;
+                        m_filterBookmarked = false;
+                        m_filterScanlator.clear();
+                        brls::Application::notify("Filters cleared");
+                        break;
+                }
+                populateChaptersList();
+            }, 0);
+        brls::Application::pushActivity(new brls::Activity(dropdown));
+        return true;
+    });
+
     // ========== LEFT PANEL: Cover + Action Buttons (260px) ==========
     auto* leftPanel = new brls::Box();
     leftPanel->setAxis(brls::Axis::COLUMN);
@@ -318,19 +353,19 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     sortContainer->addView(m_sortBtn);
     chaptersActions->addView(sortContainer);
 
-    // Filter button with L icon above
+    // Filter button with Y (triangle) icon above
     auto* filterContainer = new brls::Box();
     filterContainer->setAxis(brls::Axis::COLUMN);
     filterContainer->setAlignItems(brls::AlignItems::CENTER);
     filterContainer->setMarginRight(10);
 
-    auto* lButtonIcon = new brls::Image();
-    lButtonIcon->setWidth(36);
-    lButtonIcon->setHeight(24);
-    lButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    lButtonIcon->setImageFromFile("app0:resources/images/l_button.png");
-    lButtonIcon->setMarginBottom(2);
-    filterContainer->addView(lButtonIcon);
+    auto* yButtonIcon = new brls::Image();
+    yButtonIcon->setWidth(24);
+    yButtonIcon->setHeight(24);
+    yButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    yButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    yButtonIcon->setMarginBottom(2);
+    filterContainer->addView(yButtonIcon);
 
     m_filterBtn = new brls::Button();
     m_filterBtn->setWidth(44);
@@ -456,6 +491,36 @@ void MangaDetailView::loadDetails() {
 
     // Load tracking data
     loadTrackingData();
+
+    // Fetch full manga details from API if description is empty
+    if (m_manga.description.empty()) {
+        brls::Logger::info("MangaDetailView: Description is empty, fetching from API...");
+        asyncRun([this]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            Manga updatedManga;
+
+            if (client.fetchManga(m_manga.id, updatedManga)) {
+                brls::sync([this, updatedManga]() {
+                    // Update description if we got one
+                    if (!updatedManga.description.empty()) {
+                        m_manga.description = updatedManga.description;
+                        m_fullDescription = updatedManga.description;
+                        m_descriptionExpanded = false;
+
+                        // Update the description label
+                        if (m_descriptionLabel) {
+                            std::string truncatedDesc = m_fullDescription;
+                            if (truncatedDesc.length() > 80) {
+                                truncatedDesc = truncatedDesc.substr(0, 77) + "... [L]";
+                            }
+                            m_descriptionLabel->setText(truncatedDesc);
+                        }
+                        brls::Logger::info("MangaDetailView: Updated description from API");
+                    }
+                });
+            }
+        });
+    }
 }
 
 void MangaDetailView::loadCover() {
@@ -2265,7 +2330,6 @@ void MangaDetailView::toggleDescription() {
     if (m_descriptionExpanded) {
         // Show full description
         m_descriptionLabel->setText(m_fullDescription + " [L]");
-        brls::Application::notify("Summary expanded");
     } else {
         // Show truncated description (first ~80 chars / 2 lines)
         std::string truncatedDesc = m_fullDescription;
@@ -2273,7 +2337,6 @@ void MangaDetailView::toggleDescription() {
             truncatedDesc = truncatedDesc.substr(0, 77) + "... [L]";
         }
         m_descriptionLabel->setText(truncatedDesc);
-        brls::Application::notify("Summary collapsed");
     }
 }
 

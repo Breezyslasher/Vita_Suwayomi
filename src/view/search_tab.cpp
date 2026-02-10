@@ -250,6 +250,7 @@ SearchTab::SearchTab() {
     // Content grid
     m_contentGrid = new RecyclingGrid();
     m_contentGrid->setGrow(1.0f);
+    m_contentGrid->setShowLibraryBadge(true);  // Show star for library items in browser/search
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
@@ -989,6 +990,7 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     // Create manga cells for each result
     for (size_t i = 0; i < manga.size(); i++) {
         auto* cell = new MangaItemCell();
+        cell->setShowLibraryBadge(true);  // Show star for library items in search results
         cell->setManga(manga[i]);
         cell->setWidth(150);
         cell->setHeight(185);
