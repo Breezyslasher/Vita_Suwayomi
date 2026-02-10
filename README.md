@@ -12,16 +12,16 @@
 
 ## Authentication & Connection
 
-- [ ] Connect to Suwayomi server with URL
-- [ ] Login with username/password (Basic Auth)
-- [ ] Credentials persist after app restart
-- [ ] App handles invalid credentials gracefully
-- [ ] App handles server offline gracefully
+- [X] Connect to Suwayomi server with URL
+- [X] Login with username/password (Basic Auth)
+- [X] Credentials persist after app restart
+- [X] App handles invalid credentials gracefully
+- [X] App handles server offline gracefully
 - [ ] Connection status shows correctly
-- [ ] Local server URL (LAN) works
-- [ ] Remote server URL (WAN) works
-- [ ] Toggle between local/remote connections
-- [ ] Auto-switch on connection failure
+- [X] Local server URL (LAN) works
+- [X] Remote server URL (WAN) works
+- [X] Toggle between local/remote connections
+- [X] Auto-switch on connection failure
 - [ ] Connection timeout configuration works
 
 ---
