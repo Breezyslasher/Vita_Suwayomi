@@ -48,7 +48,7 @@ public:
     const Manga* getItem(int index) const;
     int getItemCount() const { return static_cast<int>(m_items.size()); }
     int getFocusedIndex() const { return m_focusedIndex; }
-    bool hasCellFocus() const;  // Returns true if any cell in the grid currently has focus
+    bool hasCellFocus();  // Returns true if any cell in the grid currently has focus
 
     // Get first cell for focus transfer
     brls::View* getFirstCell() const;
