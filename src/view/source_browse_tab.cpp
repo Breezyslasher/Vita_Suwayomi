@@ -7,7 +7,6 @@
 #include "view/manga_detail_view.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
-#include "view/media_item_cell.hpp"
 #include "utils/image_loader.hpp"
 
 #include <borealis.hpp>
@@ -171,10 +170,19 @@ void SourceBrowseTab::loadSearch(const std::string& query) {
 void SourceBrowseTab::loadNextPage() {
     if (!m_hasNextPage) return;
     m_currentPage++;
-    loadManga();
+
+    // Remember the index of first new item (current list size)
+    int firstNewItemIndex = static_cast<int>(m_mangaList.size());
+
+    // Show loading state on button
+    if (m_loadMoreBtn) {
+        m_loadMoreBtn->setText("Loading...");
+    }
+
+    loadManga(firstNewItemIndex);
 }
 
-void SourceBrowseTab::loadManga() {
+void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
     brls::Logger::debug("Loading manga from source {} (page {})", m_source.name, m_currentPage);
 
     // Show loading indicator for first page
@@ -183,7 +191,7 @@ void SourceBrowseTab::loadManga() {
         m_contentGrid->setVisibility(brls::Visibility::GONE);
     }
 
-    brls::async([this]() {
+    brls::async([this, focusIndexAfterLoad]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> newManga;
         bool hasNext = false;
@@ -201,7 +209,7 @@ void SourceBrowseTab::loadManga() {
                 break;
         }
 
-        brls::sync([this, success, newManga, hasNext]() {
+        brls::sync([this, success, newManga, hasNext, focusIndexAfterLoad]() {
             // Hide loading indicator
             m_loadingLabel->setVisibility(brls::Visibility::GONE);
             m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
@@ -214,8 +222,22 @@ void SourceBrowseTab::loadManga() {
                 m_hasNextPage = hasNext;
                 updateGrid();
                 updateLoadMoreButton();
+
+                // Focus on first newly loaded item (or first item for initial load)
+                if (focusIndexAfterLoad >= 0) {
+                    m_contentGrid->focusIndex(focusIndexAfterLoad);
+                } else if (!m_mangaList.empty()) {
+                    brls::View* firstCell = m_contentGrid->getFirstCell();
+                    if (firstCell) {
+                        brls::Application::giveFocus(firstCell);
+                    }
+                }
             } else {
                 brls::Application::notify("Failed to load manga");
+                // Reset load more button text on failure
+                if (m_loadMoreBtn) {
+                    m_loadMoreBtn->setText("Load More");
+                }
             }
         });
     });
@@ -224,18 +246,12 @@ void SourceBrowseTab::loadManga() {
 void SourceBrowseTab::updateGrid() {
     if (!m_contentGrid) return;
 
-    m_contentGrid->clearViews();
-
-    for (const auto& manga : m_mangaList) {
-        auto* cell = new MangaItemCell();
-        cell->setShowLibraryBadge(true);  // Show star for library items in browser
-        cell->setManga(manga);
-        cell->registerClickAction([this, manga](brls::View*) {
-            onMangaSelected(manga);
-            return true;
-        });
-        m_contentGrid->addView(cell);
-    }
+    // Use RecyclingGrid's setDataSource for proper grid management
+    m_contentGrid->setShowLibraryBadge(true);  // Show star for library items in browser
+    m_contentGrid->setOnItemSelected([this](const Manga& manga) {
+        onMangaSelected(manga);
+    });
+    m_contentGrid->setDataSource(m_mangaList);
 }
 
 void SourceBrowseTab::updateModeButtons() {
@@ -253,6 +269,7 @@ void SourceBrowseTab::updateModeButtons() {
 
 void SourceBrowseTab::updateLoadMoreButton() {
     if (m_loadMoreBtn) {
+        m_loadMoreBtn->setText("Load More");
         m_loadMoreBtn->setVisibility(m_hasNextPage ?
             brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }

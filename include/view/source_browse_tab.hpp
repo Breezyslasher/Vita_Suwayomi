@@ -36,7 +36,7 @@ private:
     void loadLatest();
     void loadSearch(const std::string& query);
     void loadNextPage();
-    void loadManga();
+    void loadManga(int focusIndexAfterLoad = -1);
     void updateGrid();
     void updateModeButtons();
     void updateLoadMoreButton();

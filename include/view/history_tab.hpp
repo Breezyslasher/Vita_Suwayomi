@@ -28,6 +28,8 @@ private:
     std::string formatTimestamp(int64_t timestamp);
     std::string formatRelativeTime(int64_t timestamp);
     void rebuildHistoryList();
+    void appendHistoryItems(const std::vector<ReadingHistoryItem>& items, size_t startIndex);
+    brls::Box* createHistoryItemRow(const ReadingHistoryItem& item, int index);
 
     // UI Components
     brls::Label* m_titleLabel = nullptr;
@@ -37,6 +39,8 @@ private:
     brls::Label* m_loadingLabel = nullptr;
     brls::Button* m_loadMoreBtn = nullptr;
     brls::Button* m_refreshBtn = nullptr;  // Header refresh button for focus management
+    std::vector<brls::Box*> m_itemRows;  // Track item rows for focus management
+    int m_focusIndexAfterRebuild = -1;  // Index to focus after rebuilding list
 
     // Data
     std::vector<ReadingHistoryItem> m_historyItems;

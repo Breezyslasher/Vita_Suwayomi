@@ -164,17 +164,6 @@ SearchTab::SearchTab() {
     m_modeBox->setAlignItems(brls::AlignItems::CENTER);
     m_modeBox->setMarginBottom(10);
 
-    // Sources button
-    m_sourcesBtn = new brls::Button();
-    m_sourcesBtn->setText("Sources");
-    m_sourcesBtn->setMarginRight(10);
-    m_sourcesBtn->registerClickAction([this](brls::View* view) {
-        showSources();
-        return true;
-    });
-    m_sourcesBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_sourcesBtn));
-    m_modeBox->addView(m_sourcesBtn);
-
     // Popular button
     m_popularBtn = new brls::Button();
     m_popularBtn->setText("Popular");
@@ -311,8 +300,8 @@ void SearchTab::loadSources() {
             brls::Logger::error("SearchTab: Failed to fetch sources");
             brls::sync([this]() {
                 m_resultsLabel->setText("Failed to load sources");
-                // Focus on Sources button so user can retry
-                brls::Application::giveFocus(m_sourcesBtn);
+                // Focus on history button so user can still navigate
+                brls::Application::giveFocus(m_historyBtn);
             });
         }
     });
@@ -458,7 +447,6 @@ void SearchTab::showSources() {
     m_latestBtn->setVisibility(brls::Visibility::GONE);
     m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::GONE);
-    m_sourcesBtn->setVisibility(brls::Visibility::VISIBLE);
 
     // Clear manga grid, results by source, and hide search results view
     m_mangaList.clear();
@@ -609,7 +597,6 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_titleLabel->setText(source.name);
 
     // Show source-specific buttons
-    m_sourcesBtn->setVisibility(brls::Visibility::GONE);
     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     // Filter button hidden until source filters are implemented
@@ -766,7 +753,6 @@ void SearchTab::performSearch(const std::string& query) {
 
     // Update UI for search mode
     m_browseMode = BrowseMode::SEARCH_RESULTS;
-    m_sourcesBtn->setVisibility(brls::Visibility::GONE);
     m_popularBtn->setVisibility(brls::Visibility::GONE);
     m_latestBtn->setVisibility(brls::Visibility::GONE);
     m_filterBtn->setVisibility(brls::Visibility::GONE);
@@ -1035,7 +1021,10 @@ void SearchTab::loadNextPage() {
     // Show loading state on button
     m_loadMoreBtn->setText("Loading...");
 
-    asyncRun([this]() {
+    // Remember the index of first new item (current list size)
+    int firstNewItemIndex = static_cast<int>(m_mangaList.size());
+
+    asyncRun([this, firstNewItemIndex]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -1050,7 +1039,7 @@ void SearchTab::loadNextPage() {
         }
 
         if (success) {
-            brls::sync([this, manga, hasNextPage]() {
+            brls::sync([this, manga, hasNextPage, firstNewItemIndex]() {
                 // Append to existing list
                 for (const auto& m : manga) {
                     m_mangaList.push_back(m);
@@ -1061,17 +1050,8 @@ void SearchTab::loadNextPage() {
                 m_loadMoreBtn->setText("Load More");
                 m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 
-                // Manage focus after loading
-                if (hasNextPage) {
-                    // Keep focus on Load More button for easy pagination
-                    brls::Application::giveFocus(m_loadMoreBtn);
-                } else {
-                    // No more pages, focus on first cell in content grid
-                    brls::View* firstCell = m_contentGrid->getFirstCell();
-                    if (firstCell) {
-                        brls::Application::giveFocus(firstCell);
-                    }
-                }
+                // Focus on first newly loaded item so user can continue browsing
+                m_contentGrid->focusIndex(firstNewItemIndex);
             });
         } else {
             brls::sync([this]() {
@@ -1087,12 +1067,10 @@ void SearchTab::updateModeButtons() {
     // Highlight active mode button (in a real app, you'd change button style)
     // For now, just ensure visibility is correct
     if (m_browseMode == BrowseMode::SOURCES) {
-        m_sourcesBtn->setVisibility(brls::Visibility::VISIBLE);
         m_popularBtn->setVisibility(brls::Visibility::GONE);
         m_latestBtn->setVisibility(brls::Visibility::GONE);
         m_backBtn->setVisibility(brls::Visibility::GONE);
     } else {
-        m_sourcesBtn->setVisibility(brls::Visibility::GONE);
         m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
         m_backBtn->setVisibility(brls::Visibility::VISIBLE);
 
@@ -1131,7 +1109,6 @@ void SearchTab::handleBackNavigation() {
                     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
                     // Update buttons for source browsing mode
-                    m_sourcesBtn->setVisibility(brls::Visibility::GONE);
                     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
                     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
                     m_backBtn->setVisibility(brls::Visibility::VISIBLE);

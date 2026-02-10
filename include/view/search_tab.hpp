@@ -50,7 +50,6 @@ private:
 
     // Mode selector buttons
     brls::Box* m_modeBox = nullptr;
-    brls::Button* m_sourcesBtn = nullptr;
     brls::Button* m_popularBtn = nullptr;
     brls::Button* m_latestBtn = nullptr;
     brls::Button* m_filterBtn = nullptr;

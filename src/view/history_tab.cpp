@@ -205,6 +205,9 @@ void HistoryTab::loadMoreHistory() {
 
     brls::Logger::debug("HistoryTab: Loading more history from offset {}...", m_currentOffset);
 
+    // Remember the index of first new item (current list size)
+    size_t firstNewItemIndex = m_historyItems.size();
+
     // Update load more button
     if (m_loadMoreBtn) {
         m_loadMoreBtn->setText("Loading...");
@@ -212,25 +215,26 @@ void HistoryTab::loadMoreHistory() {
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak]() {
+    asyncRun([this, aliveWeak, firstNewItemIndex]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<ReadingHistoryItem> moreHistory;
 
         bool success = client.fetchReadingHistory(m_currentOffset, ITEMS_PER_PAGE, moreHistory);
 
-        brls::sync([this, moreHistory, success, aliveWeak]() {
+        brls::sync([this, moreHistory, success, aliveWeak, firstNewItemIndex]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
             if (success && !moreHistory.empty()) {
-                // Append to existing items
+                // Append to existing items in data model
                 for (const auto& item : moreHistory) {
                     m_historyItems.push_back(item);
                 }
                 m_currentOffset += static_cast<int>(moreHistory.size());
                 m_hasMoreItems = (moreHistory.size() >= ITEMS_PER_PAGE);
 
-                rebuildHistoryList();
+                // Incrementally append items to UI (no rebuild needed)
+                appendHistoryItems(moreHistory, firstNewItemIndex);
             } else {
                 m_hasMoreItems = false;
                 if (m_loadMoreBtn) {
@@ -245,11 +249,14 @@ void HistoryTab::loadMoreHistory() {
 
 void HistoryTab::rebuildHistoryList() {
     m_contentBox->clearViews();
+    m_itemRows.clear();
+    m_loadMoreBtn = nullptr;
 
     if (m_historyItems.empty()) {
         m_scrollView->setVisibility(brls::Visibility::GONE);
         m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
         m_titleLabel->setText("Reading History");
+        m_focusIndexAfterRebuild = -1;
         return;
     }
 
@@ -276,101 +283,10 @@ void HistoryTab::rebuildHistoryList() {
             m_contentBox->addView(dateHeader);
         }
 
-        // History item row
-        auto* itemRow = new brls::Box();
-        itemRow->setAxis(brls::Axis::ROW);
-        itemRow->setAlignItems(brls::AlignItems::CENTER);
-        itemRow->setPadding(10);
-        itemRow->setMarginBottom(6);
-        itemRow->setCornerRadius(8);
-        itemRow->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
-        itemRow->setFocusable(true);
-        itemRow->setHeight(80);
-
-        // Cover image
-        auto* coverImage = new brls::Image();
-        coverImage->setWidth(50);
-        coverImage->setHeight(70);
-        coverImage->setCornerRadius(4);
-        coverImage->setScalingType(brls::ImageScalingType::FILL);
-        coverImage->setMarginRight(12);
-
-        // Load cover
-        if (!item.mangaThumbnail.empty()) {
-            std::string url = item.mangaThumbnail;
-            if (url[0] == '/') {
-                url = SuwayomiClient::getInstance().getServerUrl() + url;
-            }
-            ImageLoader::loadAsync(url, nullptr, coverImage);
-        }
-        itemRow->addView(coverImage);
-
-        // Info column
-        auto* infoBox = new brls::Box();
-        infoBox->setAxis(brls::Axis::COLUMN);
-        infoBox->setGrow(1.0f);
-        infoBox->setJustifyContent(brls::JustifyContent::CENTER);
-
-        // Manga title
-        auto* titleLabel = new brls::Label();
-        std::string title = item.mangaTitle;
-        if (title.length() > 35) {
-            title = title.substr(0, 33) + "..";
-        }
-        titleLabel->setText(title);
-        titleLabel->setFontSize(15);
-        titleLabel->setTextColor(nvgRGB(255, 255, 255));
-        infoBox->addView(titleLabel);
-
-        // Chapter info
-        auto* chapterLabel = new brls::Label();
-        std::string chapterText = item.chapterName;
-        if (chapterText.empty()) {
-            chapterText = "Chapter " + std::to_string(static_cast<int>(item.chapterNumber));
-        }
-        chapterLabel->setText(chapterText);
-        chapterLabel->setFontSize(13);
-        chapterLabel->setTextColor(nvgRGB(180, 180, 180));
-        infoBox->addView(chapterLabel);
-
-        // Progress and time
-        auto* progressLabel = new brls::Label();
-        std::string progressText = "Page " + std::to_string(item.lastPageRead + 1);
-        if (item.pageCount > 0) {
-            progressText += "/" + std::to_string(item.pageCount);
-        }
-        progressText += " - " + formatRelativeTime(item.lastReadAt);
-        progressLabel->setText(progressText);
-        progressLabel->setFontSize(11);
-        progressLabel->setTextColor(nvgRGB(120, 120, 120));
-        infoBox->addView(progressLabel);
-
-        itemRow->addView(infoBox);
-
-        // Resume button/indicator
-        auto* resumeLabel = new brls::Label();
-        resumeLabel->setText(">");
-        resumeLabel->setFontSize(20);
-        resumeLabel->setTextColor(nvgRGB(0, 150, 136));
-        resumeLabel->setMarginLeft(10);
-        itemRow->addView(resumeLabel);
-
-        // Click to resume reading
-        int index = static_cast<int>(i);
-        ReadingHistoryItem capturedItem = item;
-        itemRow->registerClickAction([this, capturedItem](brls::View* view) {
-            onHistoryItemSelected(capturedItem);
-            return true;
-        });
-        itemRow->addGestureRecognizer(new brls::TapGestureRecognizer(itemRow));
-
-        // Start button for menu
-        itemRow->registerAction("Menu", brls::ControllerButton::BUTTON_START, [this, capturedItem, index](brls::View*) {
-            showHistoryItemMenu(capturedItem, index);
-            return true;
-        });
-
+        // Create history item row using helper
+        auto* itemRow = createHistoryItemRow(item, static_cast<int>(i));
         m_contentBox->addView(itemRow);
+        m_itemRows.push_back(itemRow);
     }
 
     // Add Load More button if there are more items
@@ -385,6 +301,15 @@ void HistoryTab::rebuildHistoryList() {
         });
         m_loadMoreBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_loadMoreBtn));
         m_contentBox->addView(m_loadMoreBtn);
+    }
+
+    // Focus on first new item after load more, or first item after initial load
+    if (m_focusIndexAfterRebuild >= 0 && m_focusIndexAfterRebuild < static_cast<int>(m_itemRows.size())) {
+        brls::Application::giveFocus(m_itemRows[m_focusIndexAfterRebuild]);
+        m_focusIndexAfterRebuild = -1;
+    } else if (!m_itemRows.empty() && m_focusIndexAfterRebuild == -1) {
+        // Initial load - focus on first item
+        brls::Application::giveFocus(m_itemRows[0]);
     }
 
     brls::Logger::info("HistoryTab: Displayed {} history items", m_historyItems.size());
@@ -543,6 +468,167 @@ std::string HistoryTab::formatRelativeTime(int64_t timestamp) {
         strftime(buffer, sizeof(buffer), "%H:%M", tm_info);
         return std::string(buffer);
     }
+}
+
+brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int index) {
+    auto* itemRow = new brls::Box();
+    itemRow->setAxis(brls::Axis::ROW);
+    itemRow->setAlignItems(brls::AlignItems::CENTER);
+    itemRow->setPadding(10);
+    itemRow->setMarginBottom(6);
+    itemRow->setCornerRadius(8);
+    itemRow->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+    itemRow->setFocusable(true);
+    itemRow->setHeight(80);
+
+    // Cover image
+    auto* coverImage = new brls::Image();
+    coverImage->setWidth(50);
+    coverImage->setHeight(70);
+    coverImage->setCornerRadius(4);
+    coverImage->setScalingType(brls::ImageScalingType::FILL);
+    coverImage->setMarginRight(12);
+
+    // Load cover
+    if (!item.mangaThumbnail.empty()) {
+        std::string url = item.mangaThumbnail;
+        if (url[0] == '/') {
+            url = SuwayomiClient::getInstance().getServerUrl() + url;
+        }
+        ImageLoader::loadAsync(url, nullptr, coverImage);
+    }
+    itemRow->addView(coverImage);
+
+    // Info column
+    auto* infoBox = new brls::Box();
+    infoBox->setAxis(brls::Axis::COLUMN);
+    infoBox->setGrow(1.0f);
+    infoBox->setJustifyContent(brls::JustifyContent::CENTER);
+
+    // Manga title
+    auto* titleLabel = new brls::Label();
+    std::string title = item.mangaTitle;
+    if (title.length() > 35) {
+        title = title.substr(0, 33) + "..";
+    }
+    titleLabel->setText(title);
+    titleLabel->setFontSize(15);
+    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    infoBox->addView(titleLabel);
+
+    // Chapter info
+    auto* chapterLabel = new brls::Label();
+    std::string chapterText = item.chapterName;
+    if (chapterText.empty()) {
+        chapterText = "Chapter " + std::to_string(static_cast<int>(item.chapterNumber));
+    }
+    chapterLabel->setText(chapterText);
+    chapterLabel->setFontSize(13);
+    chapterLabel->setTextColor(nvgRGB(180, 180, 180));
+    infoBox->addView(chapterLabel);
+
+    // Progress and time
+    auto* progressLabel = new brls::Label();
+    std::string progressText = "Page " + std::to_string(item.lastPageRead + 1);
+    if (item.pageCount > 0) {
+        progressText += "/" + std::to_string(item.pageCount);
+    }
+    progressText += " - " + formatRelativeTime(item.lastReadAt);
+    progressLabel->setText(progressText);
+    progressLabel->setFontSize(11);
+    progressLabel->setTextColor(nvgRGB(120, 120, 120));
+    infoBox->addView(progressLabel);
+
+    itemRow->addView(infoBox);
+
+    // Resume button/indicator
+    auto* resumeLabel = new brls::Label();
+    resumeLabel->setText(">");
+    resumeLabel->setFontSize(20);
+    resumeLabel->setTextColor(nvgRGB(0, 150, 136));
+    resumeLabel->setMarginLeft(10);
+    itemRow->addView(resumeLabel);
+
+    // Click to resume reading
+    ReadingHistoryItem capturedItem = item;
+    itemRow->registerClickAction([this, capturedItem](brls::View* view) {
+        onHistoryItemSelected(capturedItem);
+        return true;
+    });
+    itemRow->addGestureRecognizer(new brls::TapGestureRecognizer(itemRow));
+
+    // Start button for menu
+    itemRow->registerAction("Menu", brls::ControllerButton::BUTTON_START, [this, capturedItem, index](brls::View*) {
+        showHistoryItemMenu(capturedItem, index);
+        return true;
+    });
+
+    return itemRow;
+}
+
+void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items, size_t startIndex) {
+    if (items.empty()) return;
+
+    // Get the last date from existing items to check if we need date headers
+    std::string lastDate;
+    if (!m_historyItems.empty() && startIndex > 0) {
+        lastDate = formatTimestamp(m_historyItems[startIndex - 1].lastReadAt);
+    }
+
+    // Remove Load More button temporarily (we'll add it back at the end)
+    if (m_loadMoreBtn && m_loadMoreBtn->getParent() == m_contentBox) {
+        m_contentBox->removeView(m_loadMoreBtn);
+        m_loadMoreBtn = nullptr;
+    }
+
+    // Add the new items
+    for (size_t i = 0; i < items.size(); i++) {
+        const auto& item = items[i];
+        size_t globalIndex = startIndex + i;
+
+        // Date header if date changed
+        std::string dateStr = formatTimestamp(item.lastReadAt);
+        if (dateStr != lastDate) {
+            lastDate = dateStr;
+
+            auto* dateHeader = new brls::Label();
+            dateHeader->setText(dateStr);
+            dateHeader->setFontSize(16);
+            dateHeader->setTextColor(nvgRGB(0, 150, 136));  // Teal
+            dateHeader->setMarginTop(globalIndex > 0 ? 20 : 5);
+            dateHeader->setMarginBottom(8);
+            m_contentBox->addView(dateHeader);
+        }
+
+        // Create the item row
+        auto* itemRow = createHistoryItemRow(item, static_cast<int>(globalIndex));
+        m_contentBox->addView(itemRow);
+        m_itemRows.push_back(itemRow);
+    }
+
+    // Add Load More button if there are more items
+    if (m_hasMoreItems) {
+        m_loadMoreBtn = new brls::Button();
+        m_loadMoreBtn->setText("Load More");
+        m_loadMoreBtn->setMarginTop(15);
+        m_loadMoreBtn->setMarginBottom(15);
+        m_loadMoreBtn->registerClickAction([this](brls::View*) {
+            loadMoreHistory();
+            return true;
+        });
+        m_loadMoreBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_loadMoreBtn));
+        m_contentBox->addView(m_loadMoreBtn);
+    }
+
+    // Update title with new count
+    m_titleLabel->setText("Reading History (" + std::to_string(m_historyItems.size()) + ")");
+
+    // Focus on first newly added item
+    if (!items.empty() && startIndex < m_itemRows.size()) {
+        brls::Application::giveFocus(m_itemRows[startIndex]);
+    }
+
+    brls::Logger::info("HistoryTab: Appended {} items, now have {} total", items.size(), m_historyItems.size());
 }
 
 } // namespace vitasuwayomi
