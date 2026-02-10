@@ -59,7 +59,7 @@ private:
     brls::Label* m_unreadBadge = nullptr;
     brls::Label* m_newBadge = nullptr;  // NEW indicator for recently updated
     brls::Image* m_startHintIcon = nullptr;  // Start button hint shown on focus
-    brls::Label* m_starBadge = nullptr;  // Star icon for manga in library
+    brls::Image* m_starBadge = nullptr;  // Star icon for manga in library
 };
 
 // Alias for backward compatibility

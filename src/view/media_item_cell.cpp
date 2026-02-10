@@ -137,10 +137,11 @@ MangaItemCell::MangaItemCell() {
     this->addView(m_newBadge);
 
     // Star badge - top right corner (shows if manga is in library, browser/search only)
-    m_starBadge = new brls::Label();
-    m_starBadge->setFontSize(14);
-    m_starBadge->setText("\u2605");  // Unicode filled star character
-    m_starBadge->setTextColor(nvgRGB(255, 215, 0));  // Gold color
+    m_starBadge = new brls::Image();
+    m_starBadge->setWidth(16);
+    m_starBadge->setHeight(16);
+    m_starBadge->setScalingType(brls::ImageScalingType::FIT);
+    m_starBadge->setImageFromFile("app0:resources/icons/star.png");
     m_starBadge->setPositionType(brls::PositionType::ABSOLUTE);
     m_starBadge->setPositionTop(6);
     m_starBadge->setPositionRight(6);
