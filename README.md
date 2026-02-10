@@ -26,16 +26,6 @@
 
 ---
 
-## Home Tab
-
-- [ ] Home tab displays correctly
-- [ ] Continue Reading section shows recent manga
-- [ ] Recent Chapter Updates section shows new releases
-- [ ] Clicking manga opens detail view
-- [ ] Clicking chapter opens reader directly
-
----
-
 ## Library Browsing
 
 ### Category Navigation
@@ -706,43 +696,42 @@ Webtoon auto-detection checks for:
 12. [ ] Check extensions tab
 13. [ ] Check downloads tab
 14. [ ] Check history tab
-15. [ ] Check home tab
 
 ### Reader Settings (New Features)
-16. [ ] Open reader settings in chapter
-17. [ ] Change reading direction, verify it applies
-18. [ ] Change rotation, verify it applies
-19. [ ] Close reader and reopen same manga - settings preserved
-20. [ ] Open different manga - uses default settings
-21. [ ] Swipe to change pages - verify animation works
-22. [ ] Swipe in rotated view - direction is correct
-23. [ ] Apply color filter and verify it works
-24. [ ] Adjust brightness and verify it works
+15. [ ] Open reader settings in chapter
+16. [ ] Change reading direction, verify it applies
+17. [ ] Change rotation, verify it applies
+18. [ ] Close reader and reopen same manga - settings preserved
+19. [ ] Open different manga - uses default settings
+20. [ ] Swipe to change pages - verify animation works
+21. [ ] Swipe in rotated view - direction is correct
+22. [ ] Apply color filter and verify it works
+23. [ ] Adjust brightness and verify it works
 
 ### Webtoon Detection (New Features)
-25. [ ] Open a known webtoon/manhwa manga
-26. [ ] Verify auto-detection applies vertical mode + fit-width
-27. [ ] Open a regular manga - uses default RTL mode
-28. [ ] Check Settings > Webtoon section exists
-29. [ ] Toggle "Auto-Detect Webtoon" off
-30. [ ] Open webtoon again - now uses user defaults
+24. [ ] Open a known webtoon/manhwa manga
+25. [ ] Verify auto-detection applies vertical mode + fit-width
+26. [ ] Open a regular manga - uses default RTL mode
+27. [ ] Check Settings > Webtoon section exists
+28. [ ] Toggle "Auto-Detect Webtoon" off
+29. [ ] Open webtoon again - now uses user defaults
 
 ### Settings Persistence
-31. [ ] Change default reader settings in Settings tab
-32. [ ] Restart app - settings persist
-33. [ ] Open new manga - default settings applied
-34. [ ] Per-manga settings still preserved after restart
+30. [ ] Change default reader settings in Settings tab
+31. [ ] Restart app - settings persist
+32. [ ] Open new manga - default settings applied
+33. [ ] Per-manga settings still preserved after restart
 
 ### Batch Operations
-35. [ ] Enter selection mode in library
-36. [ ] Select multiple manga
-37. [ ] Perform batch action (e.g., mark as read)
-38. [ ] Exit selection mode
+34. [ ] Enter selection mode in library
+35. [ ] Select multiple manga
+36. [ ] Perform batch action (e.g., mark as read)
+37. [ ] Exit selection mode
 
 ### Tracking
-39. [ ] Open manga detail view
-40. [ ] Access tracking option
-41. [ ] Bind to a tracker (if logged in)
+38. [ ] Open manga detail view
+39. [ ] Access tracking option
+40. [ ] Bind to a tracker (if logged in)
 
 ---
 
