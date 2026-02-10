@@ -61,6 +61,10 @@ private:
     brls::Button* m_startStopBtn = nullptr;
     brls::Label* m_startStopLabel = nullptr;
 
+    // Pause and Clear buttons (for d-pad navigation)
+    brls::Button* m_pauseBtn = nullptr;
+    brls::Button* m_clearBtn = nullptr;
+
     // Download status display
     brls::Label* m_downloadStatusLabel = nullptr;
     bool m_downloaderRunning = false;
@@ -114,6 +118,7 @@ private:
     // Helper methods for incremental updates
     void updateLocalProgress(int mangaId, int chapterIndex, int downloadedPages, int pageCount, int state);
     void removeLocalItem(int mangaId, int chapterIndex);
+    void updateNavigationRoutes();  // Update d-pad navigation between buttons and queue items
     void addLocalItem(int mangaId, int chapterIndex, const std::string& mangaTitle,
                       const std::string& chapterName, float chapterNumber,
                       int downloadedPages, int pageCount, int state);

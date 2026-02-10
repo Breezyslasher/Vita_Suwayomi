@@ -140,40 +140,40 @@ DownloadsTab::DownloadsTab() {
     m_actionsRow->addView(m_startStopBtn);
 
     // Stop/Pause button (stop current downloads)
-    auto* pauseBtn = new brls::Button();
-    pauseBtn->setWidth(60);
-    pauseBtn->setHeight(32);
-    pauseBtn->setCornerRadius(6);
-    pauseBtn->setMarginRight(8);
-    pauseBtn->setPaddingLeft(8);
-    pauseBtn->setPaddingRight(8);
-    pauseBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    pauseBtn->setAlignItems(brls::AlignItems::CENTER);
+    m_pauseBtn = new brls::Button();
+    m_pauseBtn->setWidth(60);
+    m_pauseBtn->setHeight(32);
+    m_pauseBtn->setCornerRadius(6);
+    m_pauseBtn->setMarginRight(8);
+    m_pauseBtn->setPaddingLeft(8);
+    m_pauseBtn->setPaddingRight(8);
+    m_pauseBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_pauseBtn->setAlignItems(brls::AlignItems::CENTER);
 
     auto* pauseLabel = new brls::Label();
     pauseLabel->setText("Stop");
     pauseLabel->setFontSize(12);
-    pauseBtn->addView(pauseLabel);
+    m_pauseBtn->addView(pauseLabel);
 
     // Pause button tap action - stop both server and local downloads
-    pauseBtn->addGestureRecognizer(new brls::TapGestureRecognizer(pauseBtn, [this]() {
+    m_pauseBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_pauseBtn, [this]() {
         pauseAllDownloads();
         // Also pause local downloads
         DownloadsManager& mgr = DownloadsManager::getInstance();
         mgr.pauseDownloads();
         refreshLocalDownloads();
     }));
-    m_actionsRow->addView(pauseBtn);
+    m_actionsRow->addView(m_pauseBtn);
 
     // Clear button
-    auto* clearBtn = new brls::Button();
-    clearBtn->setWidth(70);
-    clearBtn->setHeight(32);
-    clearBtn->setCornerRadius(6);
-    clearBtn->setPaddingLeft(8);
-    clearBtn->setPaddingRight(8);
-    clearBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    clearBtn->setAlignItems(brls::AlignItems::CENTER);
+    m_clearBtn = new brls::Button();
+    m_clearBtn->setWidth(70);
+    m_clearBtn->setHeight(32);
+    m_clearBtn->setCornerRadius(6);
+    m_clearBtn->setPaddingLeft(8);
+    m_clearBtn->setPaddingRight(8);
+    m_clearBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_clearBtn->setAlignItems(brls::AlignItems::CENTER);
 
     m_clearIcon = new brls::Image();
     m_clearIcon->setWidth(16);
@@ -181,18 +181,18 @@ DownloadsTab::DownloadsTab() {
     m_clearIcon->setScalingType(brls::ImageScalingType::FIT);
     m_clearIcon->setImageFromFile("app0:resources/icons/delete.png");
     m_clearIcon->setMarginRight(4);
-    clearBtn->addView(m_clearIcon);
+    m_clearBtn->addView(m_clearIcon);
 
     auto* clearLabel = new brls::Label();
     clearLabel->setText("Clear");
     clearLabel->setFontSize(12);
-    clearBtn->addView(clearLabel);
+    m_clearBtn->addView(clearLabel);
 
     // Clear button tap action - clear server download queue
-    clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn, [this]() {
+    m_clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_clearBtn, [this]() {
         clearAllDownloads();
     }));
-    m_actionsRow->addView(clearBtn);
+    m_actionsRow->addView(m_clearBtn);
 
     // === Download Queue Section (server downloads) ===
     m_queueSection = new brls::Box();
@@ -415,6 +415,8 @@ void DownloadsTab::refreshQueue() {
                 while (m_queueContainer->getChildren().size() > 0) {
                     m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
                 }
+                // Update navigation routes (may now point to local queue)
+                updateNavigationRoutes();
                 if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
                     brls::Application::giveFocus(m_startStopBtn);
                 }
@@ -687,6 +689,9 @@ void DownloadsTab::refreshQueue() {
 
                 m_queueContainer->addView(row);
             }
+
+            // Update d-pad navigation routes after queue is built
+            updateNavigationRoutes();
         });
     });
 }
@@ -738,6 +743,9 @@ void DownloadsTab::refreshLocalDownloads() {
             m_localContainer->removeView(m_localContainer->getChildren()[0]);
         }
         m_localSection->setVisibility(brls::Visibility::GONE);
+
+        // Update navigation routes (local queue now empty, may affect routing)
+        updateNavigationRoutes();
 
         // Update status if no server downloads either
         if (m_lastServerQueue.empty() && m_downloadStatusLabel) {
@@ -842,6 +850,11 @@ void DownloadsTab::refreshLocalDownloads() {
         addLocalItem(item.mangaId, item.chapterIndex, item.mangaTitle,
                      item.chapterName, item.chapterNumber,
                      item.downloadedPages, item.pageCount, item.state);
+    }
+
+    // Update navigation routes if items were added or removed
+    if (!toAdd.empty() || !toRemove.empty()) {
+        updateNavigationRoutes();
     }
 
     // Note: We don't need to restore focus because we're doing incremental updates
@@ -1175,6 +1188,8 @@ void DownloadsTab::removeLocalItem(int mangaId, int chapterIndex) {
         if (m_lastServerQueue.empty() && m_downloadStatusLabel) {
             m_downloadStatusLabel->setText("");
         }
+        // Update navigation routes since local queue is now empty
+        updateNavigationRoutes();
         if (m_startStopBtn) {
             brls::Application::giveFocus(m_startStopBtn);
         }
@@ -1183,6 +1198,10 @@ void DownloadsTab::removeLocalItem(int mangaId, int chapterIndex) {
         int newIdx = std::min(removeIdx, static_cast<int>(m_localRowElements.size()) - 1);
         if (newIdx >= 0 && m_localRowElements[newIdx].row) {
             brls::Application::giveFocus(m_localRowElements[newIdx].row);
+        }
+        // Update navigation routes since first item may have changed
+        if (removeIdx == 0) {
+            updateNavigationRoutes();
         }
     }
 }
@@ -1222,6 +1241,47 @@ void DownloadsTab::addLocalItem(int mangaId, int chapterIndex, const std::string
     m_localSection->setVisibility(brls::Visibility::VISIBLE);
     m_localEmptyLabel->setVisibility(brls::Visibility::GONE);
     m_localScroll->setVisibility(brls::Visibility::VISIBLE);
+}
+
+void DownloadsTab::updateNavigationRoutes() {
+    // Find the first focusable queue item
+    brls::View* firstQueueItem = nullptr;
+
+    // Check server queue first
+    if (!m_serverRowElements.empty() && m_serverRowElements[0].row) {
+        firstQueueItem = m_serverRowElements[0].row;
+    }
+    // If no server queue items, check local queue
+    else if (!m_localRowElements.empty() && m_localRowElements[0].row) {
+        firstQueueItem = m_localRowElements[0].row;
+    }
+
+    // Set up navigation from action buttons DOWN to first queue item
+    if (firstQueueItem) {
+        if (m_startStopBtn) {
+            m_startStopBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstQueueItem);
+        }
+        if (m_pauseBtn) {
+            m_pauseBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstQueueItem);
+        }
+        if (m_clearBtn) {
+            m_clearBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstQueueItem);
+        }
+
+        // Set up navigation from first queue item UP to pause button
+        firstQueueItem->setCustomNavigationRoute(brls::FocusDirection::UP, m_pauseBtn);
+    } else {
+        // No queue items, clear custom navigation routes
+        if (m_startStopBtn) {
+            m_startStopBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+        }
+        if (m_pauseBtn) {
+            m_pauseBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+        }
+        if (m_clearBtn) {
+            m_clearBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
+        }
+    }
 }
 
 } // namespace vitasuwayomi
