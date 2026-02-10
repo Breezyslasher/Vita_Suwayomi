@@ -100,7 +100,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_sortBtn->addView(m_sortIcon);
 
     m_sortBtn->registerClickAction([this](brls::View* view) {
-        cycleSortMode();
+        showSortMenu();
         return true;
     });
     sortContainer->addView(m_sortBtn);
@@ -226,9 +226,9 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
 
-    // Register Y button (triangle) to cycle sort mode
+    // Register Y button (triangle) to show sort menu
     this->registerAction("Sort", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
-        cycleSortMode();
+        showSortMenu();
         return true;
     });
 
@@ -786,6 +786,66 @@ void LibrarySectionTab::cycleSortMode() {
     auto& app = Application::getInstance();
     app.getSettings().librarySortMode = static_cast<int>(m_sortMode);
     app.saveSettings();
+}
+
+void LibrarySectionTab::showSortMenu() {
+    std::vector<std::string> options = {
+        "A-Z",
+        "Z-A",
+        "Most Unread",
+        "Least Unread"
+    };
+
+    // Find current selection index for highlighting
+    int currentIndex = 0;
+    switch (m_sortMode) {
+        case LibrarySortMode::TITLE_ASC:
+        case LibrarySortMode::RECENTLY_ADDED:
+            currentIndex = 0;
+            break;
+        case LibrarySortMode::TITLE_DESC:
+            currentIndex = 1;
+            break;
+        case LibrarySortMode::UNREAD_DESC:
+            currentIndex = 2;
+            break;
+        case LibrarySortMode::UNREAD_ASC:
+            currentIndex = 3;
+            break;
+    }
+
+    auto* dropdown = new brls::Dropdown(
+        "Sort By",
+        options,
+        [this](int selected) {
+            if (selected < 0) return; // Cancelled
+
+            switch (selected) {
+                case 0:
+                    m_sortMode = LibrarySortMode::TITLE_ASC;
+                    break;
+                case 1:
+                    m_sortMode = LibrarySortMode::TITLE_DESC;
+                    break;
+                case 2:
+                    m_sortMode = LibrarySortMode::UNREAD_DESC;
+                    break;
+                case 3:
+                    m_sortMode = LibrarySortMode::UNREAD_ASC;
+                    break;
+            }
+
+            updateSortButtonText();
+            sortMangaList();
+
+            // Persist sort mode
+            auto& app = Application::getInstance();
+            app.getSettings().librarySortMode = static_cast<int>(m_sortMode);
+            app.saveSettings();
+        },
+        currentIndex
+    );
+    brls::Application::pushActivity(new brls::Activity(dropdown));
 }
 
 void LibrarySectionTab::updateSortButtonText() {

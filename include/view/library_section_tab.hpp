@@ -41,6 +41,7 @@ private:
     void updateCategoryButtonStyles();
     void sortMangaList();
     void cycleSortMode();
+    void showSortMenu();
     void updateSortButtonText();
     void navigateToPreviousCategory();
     void navigateToNextCategory();
