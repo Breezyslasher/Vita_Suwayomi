@@ -114,12 +114,36 @@ void LoginActivity::onTestConnectionPressed() {
 
     SuwayomiClient& client = SuwayomiClient::getInstance();
 
-    // First check if server requires authentication
+    // Check if server requires authentication and detect the expected auth mode
     bool serverRequiresAuth = client.checkServerRequiresAuth(m_serverUrl);
 
     if (serverRequiresAuth && m_authMode == AuthMode::NONE) {
-        if (statusLabel) statusLabel->setText("Server requires authentication! Change Auth Mode.");
+        // User selected None but server requires auth - detect the correct mode
+        std::string errorMsg;
+        AuthMode detectedMode = client.detectServerAuthMode(m_serverUrl, errorMsg);
+        std::string modeName = getAuthModeName(detectedMode);
+        if (statusLabel) statusLabel->setText("Server requires auth! Try: " + modeName);
+        brls::Application::notify("Suggested auth mode: " + modeName);
         return;
+    }
+
+    // Check for auth mode mismatch
+    if (serverRequiresAuth) {
+        bool supportsJWT = client.checkServerSupportsJWTLogin(m_serverUrl);
+
+        if (m_authMode == AuthMode::BASIC_AUTH && supportsJWT) {
+            // User selected Basic Auth but server uses JWT
+            if (statusLabel) statusLabel->setText("Wrong auth mode! Try: UI Login (JWT)");
+            brls::Application::notify("Server uses JWT auth - select UI Login");
+            return;
+        }
+
+        if ((m_authMode == AuthMode::SIMPLE_LOGIN || m_authMode == AuthMode::UI_LOGIN) && !supportsJWT) {
+            // User selected JWT mode but server only supports Basic Auth
+            if (statusLabel) statusLabel->setText("Wrong auth mode! Try: Basic Auth");
+            brls::Application::notify("Server uses Basic Auth - select Basic Auth mode");
+            return;
+        }
     }
 
     // Set auth mode and credentials for the test
@@ -168,14 +192,23 @@ void LoginActivity::onConnectPressed() {
     if (m_authMode == AuthMode::NONE) {
         // No auth mode selected - first check if server requires authentication
         if (client.checkServerRequiresAuth(m_serverUrl)) {
-            // Server requires auth but user selected "None"
-            if (statusLabel) statusLabel->setText("Server requires authentication! Change Auth Mode.");
-            brls::Application::notify("Server requires login - select an auth mode");
+            // Server requires auth but user selected "None" - detect correct mode
+            std::string errorMsg;
+            AuthMode detectedMode = client.detectServerAuthMode(m_serverUrl, errorMsg);
+            std::string modeName = getAuthModeName(detectedMode);
+            if (statusLabel) statusLabel->setText("Server requires auth! Try: " + modeName);
+            brls::Application::notify("Suggested: " + modeName);
             return;
         }
         // No auth required, just test connection
         connected = client.connectToServer(m_serverUrl);
     } else if (m_authMode == AuthMode::BASIC_AUTH) {
+        // Check if server actually uses JWT instead
+        if (client.checkServerRequiresAuth(m_serverUrl) && client.checkServerSupportsJWTLogin(m_serverUrl)) {
+            if (statusLabel) statusLabel->setText("Wrong auth mode! Try: UI Login (JWT)");
+            brls::Application::notify("Server uses JWT - select UI Login mode");
+            return;
+        }
         // Basic auth - set credentials and connect
         if (!m_username.empty() && !m_password.empty()) {
             client.setAuthCredentials(m_username, m_password);
@@ -183,6 +216,12 @@ void LoginActivity::onConnectPressed() {
         connected = client.connectToServer(m_serverUrl);
     } else {
         // JWT-based auth (simple_login or ui_login)
+        // Check if server actually uses Basic Auth instead
+        if (client.checkServerRequiresAuth(m_serverUrl) && !client.checkServerSupportsJWTLogin(m_serverUrl)) {
+            if (statusLabel) statusLabel->setText("Wrong auth mode! Try: Basic Auth");
+            brls::Application::notify("Server uses Basic Auth - select Basic Auth mode");
+            return;
+        }
         // First try to connect to server
         if (client.connectToServer(m_serverUrl)) {
             // Then attempt login if credentials are provided

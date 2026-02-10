@@ -1708,6 +1708,81 @@ bool SuwayomiClient::checkServerRequiresAuth(const std::string& url) {
     return false;
 }
 
+bool SuwayomiClient::checkServerSupportsJWTLogin(const std::string& url) {
+    // Try the login mutation with dummy credentials to see if it exists
+    // If the server supports JWT login, it will return an error about invalid credentials
+    // If not, it will return an error about unknown field 'login'
+    brls::Logger::info("Checking if server supports JWT login...");
+
+    vitasuwayomi::HttpClient http;
+    http.setTimeout(10);
+    http.setDefaultHeader("Accept", "application/json");
+    http.setDefaultHeader("Content-Type", "application/json");
+
+    std::string testUrl = url + "/api/graphql";
+
+    // Try the login mutation - we don't care about credentials, just if the mutation exists
+    std::string body = R"({"query":"mutation { login(input: { username: \"test\", password: \"test\" }) { accessToken } }"})";
+
+    vitasuwayomi::HttpResponse response = http.post(testUrl, body);
+
+    if (!response.success) {
+        brls::Logger::warning("Failed to check JWT support: {}", response.error);
+        return false;
+    }
+
+    // Check for GraphQL errors
+    if (response.body.find("\"errors\"") != std::string::npos) {
+        // If error contains "Cannot query field" or "Unknown field" or similar,
+        // the login mutation doesn't exist - server uses Basic Auth only
+        if (response.body.find("Cannot query field") != std::string::npos ||
+            response.body.find("Unknown field") != std::string::npos ||
+            response.body.find("unknown field") != std::string::npos ||
+            response.body.find("Field \"login\" not found") != std::string::npos ||
+            response.body.find("not found") != std::string::npos) {
+            brls::Logger::info("Server does NOT support JWT login (login mutation not found)");
+            return false;
+        }
+
+        // Other errors (like invalid credentials) mean the mutation exists
+        brls::Logger::info("Server supports JWT login (mutation exists but credentials failed)");
+        return true;
+    }
+
+    // If no errors, the mutation succeeded (unlikely with test credentials, but possible)
+    brls::Logger::info("Server supports JWT login");
+    return true;
+}
+
+AuthMode SuwayomiClient::detectServerAuthMode(const std::string& url, std::string& errorMessage) {
+    brls::Logger::info("Detecting server auth mode for: {}", url);
+
+    // Step 1: Check if server requires authentication at all
+    bool requiresAuth = checkServerRequiresAuth(url);
+
+    if (!requiresAuth) {
+        brls::Logger::info("Server detected as: No authentication required");
+        errorMessage = "";
+        return AuthMode::NONE;
+    }
+
+    // Step 2: Server requires auth - check if it supports JWT login
+    bool supportsJWT = checkServerSupportsJWTLogin(url);
+
+    if (supportsJWT) {
+        // Server supports JWT - could be SIMPLE_LOGIN or UI_LOGIN
+        // We default to UI_LOGIN as it's the more recent/common one
+        brls::Logger::info("Server detected as: JWT-based authentication (UI Login)");
+        errorMessage = "";
+        return AuthMode::UI_LOGIN;
+    } else {
+        // Server doesn't support JWT login mutation - likely Basic Auth
+        brls::Logger::info("Server detected as: Basic authentication");
+        errorMessage = "";
+        return AuthMode::BASIC_AUTH;
+    }
+}
+
 bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
     // Try GraphQL first (primary API)
     brls::Logger::info("Fetching server info via GraphQL...");
