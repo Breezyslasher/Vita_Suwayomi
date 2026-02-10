@@ -73,7 +73,6 @@ set(APP_SOURCES
     src/activity/reader_activity.cpp
 
     # Views
-    src/view/home_tab.cpp
     src/view/library_section_tab.cpp
     src/view/history_tab.cpp
     src/view/search_tab.cpp
