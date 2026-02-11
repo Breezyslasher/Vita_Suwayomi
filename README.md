@@ -60,21 +60,27 @@
 
 ### Library Display Options
 
-- [ ] Grid View displays correctly (covers + titles)
-- [ ] Compact Grid View works (covers only)
+- [X] Grid View displays correctly (covers + titles)
+- [X] Compact Grid View works (covers only)
 - [ ] List View works (detailed)
-- [ ] Grid size 4 columns works
-- [ ] Grid size 6 columns works
-- [ ] Grid size 8 columns works
-- [ ] Display mode persists after restart
+- [X] Grid size 4 columns works
+- [X] Grid size 6 columns works
+- [X] Grid size 8 columns works
+- [X] Display mode persists after restart
 
 ### Library Sorting
 
-- [ ] Sort by Title A-Z works
-- [ ] Sort by Title Z-A works
-- [ ] Sort by Unread Count (most first) works
-- [ ] Sort by Unread Count (least first) works
-- [ ] Sort by Recently Added works
+- [X] Sort by Title A-Z works
+- [X] Sort by Title Z-A works
+- [X] Sort by Unread Count (most first) works
+- [X] Sort by Unread Count (least first) works
+- [X] Sort by Recently Added works (Newest)
+- [X] Sort by Recently Added works (Oldest)
+- [ ] Sort Last Read
+- [ ] Sort Date Updated (Newest)
+- [ ] Sort Date Updated (Oldest)
+- [ ] Sort Total Chapters
+- [ ] Sort downloads Only
 - [ ] Sort mode persists after restart
 
 ### Selection Mode & Batch Operations
