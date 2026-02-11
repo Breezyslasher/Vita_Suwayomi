@@ -100,24 +100,24 @@
 
 ## Category Management
 
-- [ ] Categories load from server
-- [ ] Categories sorted by order
+- [X] Categories load from server
+- [X] Categories sorted by order
 - [ ] Update button triggers category-specific update
 - [ ] Update notification shows correctly
 - [ ] Refresh reloads categories and manga
-- [ ] Hide/show categories in settings
+- [X] Hide/show categories in settings
 
 ---
 
 ## Browse Sources
 
 ### Source List
-- [ ] Sources tab shows installed sources
-- [ ] Source icons load properly
-- [ ] Source names display correctly
-- [ ] Clicking source opens source browser
-- [ ] Filter sources by language works
-- [ ] NSFW sources toggle works
+- [X] Sources tab shows installed sources
+- [X] Source icons load properly
+- [X] Source names display correctly
+- [X] Clicking source opens source browser
+- [X] Filter sources by language works
+- [X] NSFW sources toggle works
 
 ### Source Browser
 - [ ] Popular manga tab loads correctly
