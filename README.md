@@ -17,7 +17,7 @@
 - [X] Credentials persist after app restart
 - [X] App handles invalid credentials gracefully
 - [X] App handles server offline gracefully
-- [ ] Connection status shows correctly
+- [X] Connection status shows correctly
 - [X] Local server URL (LAN) works
 - [X] Remote server URL (WAN) works
 - [X] Toggle between local/remote connections
@@ -29,51 +29,58 @@
 ## Library Browsing
 
 ### Category Navigation
-- [ ] All user categories appear as tabs
-- [ ] Category tabs scroll horizontally
-- [ ] Selected category is highlighted
-- [ ] Empty categories are hidden
-- [ ] Hidden categories (user-configured) don't show
-- [ ] L button navigates to previous category
-- [ ] R button navigates to next category
+- [X] All user categories appear as tabs
+- [X] Category tabs scroll horizontally
+- [X] Selected category is highlighted
+- [X] Empty categories are hidden
+- [X] Hidden categories (user-configured) don't show
+- [X] L button navigates to previous category
+- [X] R button navigates to next category
 
 ### Manga Display
-- [ ] Manga covers load properly
-- [ ] Manga titles display correctly
-- [ ] Unread badge shows on items with unread chapters
-- [ ] Gold star badge shows on library items (when browsing)
-- [ ] Scroll through manga grid works smoothly
-- [ ] Clicking manga opens detail view
+- [X] Manga covers load properly
+- [X] Manga titles display correctly
+- [X] Unread badge shows on items with unread chapters
+- [X] Gold star badge shows on library items (when browsing)
+- [X] Scroll through manga grid works smoothly
+- [X] Clicking manga opens detail view
 
 ### Button Hints
-- [ ] Button hint icons display correctly sized
+- [X] Button hint icons display correctly sized
 - [ ] L/R category hints show in header
-- [ ] Start button hint shows on focused manga
-- [ ] Triangle (Y) button hint for sort shows
+- [X] Start button hint shows on focused manga
+- [X] Triangle (Y) button hint for sort shows
+- [X] select button hint for update shows
 
 ### Controller Actions
-- [ ] Start button opens context menu on focused manga
+- [X] Start button opens context menu on focused manga
 - [ ] Triangle (Y) button opens sort options
-- [ ] Select button triggers category update
-- [ ] D-pad navigation through manga grid works
+- [X] Select button triggers category update
+- [X] D-pad navigation through manga grid works
 
 ### Library Display Options
 
-- [ ] Grid View displays correctly (covers + titles)
-- [ ] Compact Grid View works (covers only)
+- [X] Grid View displays correctly (covers + titles)
+- [X] Compact Grid View works (covers only)
 - [ ] List View works (detailed)
-- [ ] Grid size 4 columns works
-- [ ] Grid size 6 columns works
-- [ ] Grid size 8 columns works
-- [ ] Display mode persists after restart
+- [X] Grid size 4 columns works
+- [X] Grid size 6 columns works
+- [X] Grid size 8 columns works
+- [X] Display mode persists after restart
 
 ### Library Sorting
 
-- [ ] Sort by Title A-Z works
-- [ ] Sort by Title Z-A works
-- [ ] Sort by Unread Count (most first) works
-- [ ] Sort by Unread Count (least first) works
-- [ ] Sort by Recently Added works
+- [X] Sort by Title A-Z works
+- [X] Sort by Title Z-A works
+- [X] Sort by Unread Count (most first) works
+- [X] Sort by Unread Count (least first) works
+- [X] Sort by Recently Added works (Newest)
+- [X] Sort by Recently Added works (Oldest)
+- [ ] Sort Last Read
+- [ ] Sort Date Updated (Newest)
+- [ ] Sort Date Updated (Oldest)
+- [ ] Sort Total Chapters
+- [ ] Sort downloads Only
 - [ ] Sort mode persists after restart
 
 ### Selection Mode & Batch Operations
@@ -93,24 +100,24 @@
 
 ## Category Management
 
-- [ ] Categories load from server
-- [ ] Categories sorted by order
+- [X] Categories load from server
+- [X] Categories sorted by order
 - [ ] Update button triggers category-specific update
 - [ ] Update notification shows correctly
 - [ ] Refresh reloads categories and manga
-- [ ] Hide/show categories in settings
+- [X] Hide/show categories in settings
 
 ---
 
 ## Browse Sources
 
 ### Source List
-- [ ] Sources tab shows installed sources
-- [ ] Source icons load properly
-- [ ] Source names display correctly
-- [ ] Clicking source opens source browser
-- [ ] Filter sources by language works
-- [ ] NSFW sources toggle works
+- [X] Sources tab shows installed sources
+- [X] Source icons load properly
+- [X] Source names display correctly
+- [X] Clicking source opens source browser
+- [X] Filter sources by language works
+- [X] NSFW sources toggle works
 
 ### Source Browser
 - [ ] Popular manga tab loads correctly
