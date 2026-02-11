@@ -711,11 +711,15 @@ void LibrarySectionTab::sortMangaList() {
         }
     }
 
-    // For DOWNLOADED_ONLY mode, filter out manga with no downloads first
+    // For DOWNLOADED_ONLY mode, filter out manga with no LOCAL downloads first
     if (m_sortMode == LibrarySortMode::DOWNLOADED_ONLY) {
+        DownloadsManager& dm = DownloadsManager::getInstance();
         m_mangaList.erase(
             std::remove_if(m_mangaList.begin(), m_mangaList.end(),
-                [](const Manga& m) { return m.downloadedCount <= 0; }),
+                [&dm](const Manga& m) {
+                    DownloadItem* item = dm.getMangaDownload(m.id);
+                    return !item || item->completedChapters <= 0;
+                }),
             m_mangaList.end());
     }
 
@@ -797,14 +801,21 @@ void LibrarySectionTab::sortMangaList() {
                 });
             break;
         case LibrarySortMode::DOWNLOADED_ONLY:
-            std::sort(m_mangaList.begin(), m_mangaList.end(),
-                [](const Manga& a, const Manga& b) {
-                    // Sort by downloaded chapter count (most downloaded first)
-                    if (a.downloadedCount != b.downloadedCount) {
-                        return a.downloadedCount > b.downloadedCount;
-                    }
-                    return a.title < b.title;
-                });
+            {
+                // Sort by LOCAL downloaded chapter count (most downloaded first)
+                DownloadsManager& dm = DownloadsManager::getInstance();
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [&dm](const Manga& a, const Manga& b) {
+                        DownloadItem* itemA = dm.getMangaDownload(a.id);
+                        DownloadItem* itemB = dm.getMangaDownload(b.id);
+                        int countA = itemA ? itemA->completedChapters : 0;
+                        int countB = itemB ? itemB->completedChapters : 0;
+                        if (countA != countB) {
+                            return countA > countB;
+                        }
+                        return a.title < b.title;
+                    });
+            }
             break;
     }
 
