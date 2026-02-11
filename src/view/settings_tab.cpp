@@ -1039,6 +1039,10 @@ void SettingsTab::showLanguageFilterDialog() {
     // Store all rows so we can update "All" visual state when individual languages are toggled
     auto allRows = std::make_shared<std::vector<brls::Box*>>();
 
+    // Track first and last rows for navigation
+    brls::Box* firstLangRow = nullptr;
+    brls::Box* lastLangRow = nullptr;
+
     for (const auto& [code, name] : languages) {
         bool isEnabled = (code == "all" && settings.enabledSourceLanguages.empty()) ||
                          (code != "all" && settings.enabledSourceLanguages.count(code) > 0);
@@ -1065,6 +1069,12 @@ void SettingsTab::showLanguageFilterDialog() {
         langRow->addView(codeLabel);
 
         allRows->push_back(langRow);
+
+        // Track first and last rows
+        if (!firstLangRow) {
+            firstLangRow = langRow;
+        }
+        lastLangRow = langRow;
 
         std::string langCode = code;
         langRow->registerClickAction([langCode, langRow, allRows](brls::View* view) {
@@ -1133,6 +1143,14 @@ void SettingsTab::showLanguageFilterDialog() {
 
     dialogBox->addView(closeBtn);
 
+    // Set up navigation routes between last language row and Done button
+    if (lastLangRow) {
+        // Last language row DOWN -> closeBtn (Done button)
+        lastLangRow->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
+        // closeBtn UP -> last language row
+        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, lastLangRow);
+    }
+
     // Register B button on dialogBox as fallback
     dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         updateLanguageFilterCellText();
@@ -1140,8 +1158,13 @@ void SettingsTab::showLanguageFilterDialog() {
         return true;
     }, true);  // hidden action
 
-    // Push as new activity
+    // Push as new activity and give focus to the first language row
     brls::Application::pushActivity(new brls::Activity(dialogBox));
+
+    // Give focus to first language row (at top of list)
+    if (firstLangRow) {
+        brls::Application::giveFocus(firstLangRow);
+    }
 }
 
 void SettingsTab::createAboutSection() {
@@ -1769,7 +1792,7 @@ void SettingsTab::showStorageManagement() {
     clearBtn->setMarginTop(20);
     clearBtn->registerClickAction([](brls::View* view) {
         brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
-        dialog->setCancelable(false);  // Prevent exit dialog from appearing
+        dialog->setCancelable(true);  // Allow B button to close dialog
         dialog->addButton("Cancel", []() {});
         dialog->addButton("Delete", []() {
             auto downloads = DownloadsManager::getInstance().getDownloads();
@@ -1782,6 +1805,12 @@ void SettingsTab::showStorageManagement() {
         dialog->open();
         return true;
     });
+    clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn));
+    // Register circle button on clearBtn
+    clearBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
     storageBox->addView(clearBtn);
 
     // Back button
@@ -1792,10 +1821,16 @@ void SettingsTab::showStorageManagement() {
         brls::Application::popActivity();
         return true;
     });
+    backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
+    // Register circle button on backBtn
+    backBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
     storageBox->addView(backBtn);
 
-    // Register circle button to close the dialog
-    storageBox->registerAction("Back", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+    // Register circle button on storageBox as fallback
+    storageBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
         brls::Application::popActivity();
         return true;
     }, true);  // hidden action
@@ -1887,6 +1922,11 @@ void SettingsTab::showStatisticsView() {
         return true;
     });
     syncBtn->addGestureRecognizer(new brls::TapGestureRecognizer(syncBtn));
+    // Register circle button on syncBtn
+    syncBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
     statsBox->addView(syncBtn);
 
     // Reset button
@@ -1913,6 +1953,11 @@ void SettingsTab::showStatisticsView() {
         return true;
     });
     resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
+    // Register circle button on resetBtn
+    resetBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
     statsBox->addView(resetBtn);
 
     // Back button
@@ -1924,10 +1969,15 @@ void SettingsTab::showStatisticsView() {
         return true;
     });
     backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
+    // Register circle button on backBtn
+    backBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
     statsBox->addView(backBtn);
 
-    // Register circle button to close the dialog
-    statsBox->registerAction("Back", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+    // Register circle button on statsBox as fallback
+    statsBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
         brls::Application::popActivity();
         return true;
     }, true);  // hidden action
