@@ -573,6 +573,22 @@ Manga SuwayomiClient::parseMangaFromGraphQL(const std::string& json) {
     // GraphQL might have unreadCount directly
     manga.unreadCount = extractJsonInt(json, "unreadCount");
 
+    // Parse downloadedChapterCount and chapterCount
+    manga.downloadedCount = extractJsonInt(json, "downloadedChapterCount");
+    manga.chapterCount = extractJsonInt(json, "chapterCount");
+
+    // Parse lastReadChapter for lastReadAt timestamp
+    std::string lastReadChapter = extractJsonObject(json, "lastReadChapter");
+    if (!lastReadChapter.empty()) {
+        manga.lastReadAt = extractJsonInt64(lastReadChapter, "lastReadAt");
+    }
+
+    // Parse latestUploadedChapter for uploadDate
+    std::string latestChapter = extractJsonObject(json, "latestUploadedChapter");
+    if (!latestChapter.empty()) {
+        manga.latestChapterUploadDate = extractJsonInt64(latestChapter, "uploadDate");
+    }
+
     return manga;
 }
 
@@ -1546,6 +1562,14 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
                     inLibrary
                     inLibraryAt
                     unreadCount
+                    downloadedChapterCount
+                    chapterCount
+                    lastReadChapter {
+                        lastReadAt
+                    }
+                    latestUploadedChapter {
+                        uploadDate
+                    }
                 }
             }
         }
@@ -1600,6 +1624,14 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
                         inLibrary
                         inLibraryAt
                         unreadCount
+                        downloadedChapterCount
+                        chapterCount
+                        lastReadChapter {
+                            lastReadAt
+                        }
+                        latestUploadedChapter {
+                            uploadDate
+                        }
                     }
                 }
             }
