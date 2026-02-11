@@ -44,18 +44,11 @@ A native Suwayomi client for PlayStation Vita. Read manga from your Suwayomi ser
 - Suwayomi-Server running and accessible
 - Network connectivity between Vita and server
 
-## Building
 
-```bash
-# Requires VitaSDK
-mkdir build && cd build
-cmake ..
-make
-```
 
 ## Installation
 
-1. Build or download the VPK file
+1. Download the VPK file
 2. Transfer to Vita via USB or FTP
 3. Install using VitaShell
 4. Configure your Suwayomi server URL in settings
