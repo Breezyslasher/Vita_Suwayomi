@@ -47,6 +47,9 @@ private:
     brls::Box* m_localContainer = nullptr;
     brls::Label* m_localEmptyLabel = nullptr;
 
+    // Empty state (shown when no downloads in either queue)
+    brls::Box* m_emptyStateBox = nullptr;
+
     // Track currently focused X button icon (like book detail view)
     brls::Image* m_currentFocusedIcon = nullptr;
 
