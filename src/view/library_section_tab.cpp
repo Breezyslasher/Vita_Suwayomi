@@ -165,6 +165,9 @@ LibrarySectionTab::LibrarySectionTab() {
     // Apply library display settings from user preferences
     const auto& settings = Application::getInstance().getSettings();
 
+    // Apply list row size first (before list mode, so it's ready when list mode is set)
+    m_contentGrid->setListRowSize(static_cast<int>(settings.listRowSize));
+
     // Apply display mode (Grid/Compact/List)
     switch (settings.libraryDisplayMode) {
         case LibraryDisplayMode::GRID_NORMAL:

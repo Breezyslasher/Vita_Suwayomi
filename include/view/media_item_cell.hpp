@@ -22,6 +22,7 @@ public:
     // Display mode
     void setCompactMode(bool compact);  // Hide title overlay (covers only)
     void setListMode(bool listMode);    // Horizontal list layout
+    void setListRowSize(int rowSize);   // List row size: 0=small, 1=medium, 2=large, 3=auto
     void setShowLibraryBadge(bool show);  // Show star badge for library items (browser/search only)
 
     void onFocusGained() override;
@@ -44,6 +45,7 @@ private:
     bool m_compactMode = false;
     bool m_listMode = false;
     bool m_showLibraryBadge = false;  // Whether to show star badge for library items
+    int m_listRowSize = 1;  // 0=small, 1=medium, 2=large, 3=auto
 
     Manga m_manga;
     std::string m_originalTitle;

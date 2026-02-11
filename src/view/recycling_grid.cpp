@@ -122,21 +122,44 @@ void RecyclingGrid::setupGrid() {
         rowBox->setAxis(brls::Axis::ROW);
         rowBox->setJustifyContent(brls::JustifyContent::FLEX_START);
         rowBox->setMarginBottom(m_rowMargin);
-        rowBox->setHeight(m_cellHeight);
 
         // Create cells for this row
         int startIdx = row * m_columns;
         int endIdx = std::min(startIdx + m_columns, (int)m_items.size());
 
+        // For list mode with auto-size, calculate row height based on title length
+        int rowHeight = m_cellHeight;
+        if (m_listMode && m_listRowSize == 3) {  // Auto mode
+            // Calculate max title length in this row (for list mode it's 1 item per row)
+            int maxTitleLen = 0;
+            for (int i = startIdx; i < endIdx; i++) {
+                int titleLen = static_cast<int>(m_items[i].title.length());
+                if (titleLen > maxTitleLen) {
+                    maxTitleLen = titleLen;
+                }
+            }
+            // Base height + extra for long titles
+            // Estimate: ~45 chars per line at font size 14, cell width 900px with padding
+            int lines = (maxTitleLen + 44) / 45;  // Ceiling division
+            if (lines < 1) lines = 1;
+            if (lines > 3) lines = 3;  // Cap at 3 lines max
+            rowHeight = 40 + (lines * 20);  // Base padding + line height
+            if (rowHeight < 60) rowHeight = 60;  // Minimum height
+            if (rowHeight > 120) rowHeight = 120;  // Maximum height
+        }
+
+        rowBox->setHeight(rowHeight);
+
         for (int i = startIdx; i < endIdx; i++) {
             auto* cell = new MangaItemCell();
             cell->setWidth(m_cellWidth);
-            cell->setHeight(m_cellHeight);
+            cell->setHeight(rowHeight);
             cell->setMarginRight(m_cellMargin);
 
             // Apply display mode to cell
             if (m_listMode) {
                 cell->setListMode(true);
+                cell->setListRowSize(m_listRowSize);  // Pass row size to cell
             } else if (m_compactMode) {
                 cell->setCompactMode(true);
             }
@@ -325,7 +348,24 @@ void RecyclingGrid::setListMode(bool listMode) {
         // List mode: 1 column, larger cells
         m_columns = 1;
         m_cellWidth = 900;
-        m_cellHeight = 80;
+        // Apply list row size setting
+        switch (m_listRowSize) {
+            case 0:  // Small
+                m_cellHeight = 60;
+                break;
+            case 1:  // Medium (default)
+                m_cellHeight = 80;
+                break;
+            case 2:  // Large
+                m_cellHeight = 100;
+                break;
+            case 3:  // Auto - will be handled per-cell in setupGrid
+                m_cellHeight = 0;  // Dynamic height
+                break;
+            default:
+                m_cellHeight = 80;
+                break;
+        }
         m_rowMargin = 5;
     } else {
         // Reset to default grid
@@ -337,6 +377,37 @@ void RecyclingGrid::setListMode(bool listMode) {
     // Rebuild grid if we have items
     if (!m_items.empty()) {
         setupGrid();
+    }
+}
+
+void RecyclingGrid::setListRowSize(int rowSize) {
+    if (m_listRowSize == rowSize) return;
+    m_listRowSize = rowSize;
+
+    // If currently in list mode, update dimensions and rebuild
+    if (m_listMode) {
+        switch (m_listRowSize) {
+            case 0:  // Small
+                m_cellHeight = 60;
+                break;
+            case 1:  // Medium (default)
+                m_cellHeight = 80;
+                break;
+            case 2:  // Large
+                m_cellHeight = 100;
+                break;
+            case 3:  // Auto - dynamic height
+                m_cellHeight = 0;
+                break;
+            default:
+                m_cellHeight = 80;
+                break;
+        }
+
+        // Rebuild grid if we have items
+        if (!m_items.empty()) {
+            setupGrid();
+        }
     }
 }
 

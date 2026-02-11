@@ -70,6 +70,14 @@ enum class LibraryGridSize {
     LARGE = 2     // 8 columns (more manga visible)
 };
 
+// List view row size
+enum class ListRowSize {
+    SMALL = 0,    // Compact rows (60px)
+    MEDIUM = 1,   // Standard rows (80px, default)
+    LARGE = 2,    // Large rows (100px)
+    AUTO = 3      // Auto-size to fit title
+};
+
 // Download mode options
 enum class DownloadMode {
     SERVER_ONLY = 0,    // Download to server queue only
@@ -126,6 +134,7 @@ struct AppSettings {
     // Library Grid Customization
     LibraryDisplayMode libraryDisplayMode = LibraryDisplayMode::GRID_NORMAL;
     LibraryGridSize libraryGridSize = LibraryGridSize::MEDIUM;
+    ListRowSize listRowSize = ListRowSize::MEDIUM;  // List view row size
 
     // Search History
     std::vector<std::string> searchHistory;  // Recent search queries

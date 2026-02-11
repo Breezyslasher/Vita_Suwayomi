@@ -262,6 +262,26 @@ void SettingsTab::createLibrarySection() {
         });
     m_contentBox->addView(gridSizeSelector);
 
+    // List row size selector (for list view mode)
+    auto* listRowSizeSelector = new brls::SelectorCell();
+    listRowSizeSelector->init("List Row Size",
+        {"Small (compact)", "Medium (default)", "Large (spacious)", "Auto (fit title)"},
+        static_cast<int>(settings.listRowSize),
+        [&settings](int index) {
+            settings.listRowSize = static_cast<ListRowSize>(index);
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(listRowSizeSelector);
+
+    // Info label for list row size
+    auto* listRowInfoLabel = new brls::Label();
+    listRowInfoLabel->setText("Auto mode adjusts row height to fit the full title");
+    listRowInfoLabel->setFontSize(14);
+    listRowInfoLabel->setMarginLeft(16);
+    listRowInfoLabel->setMarginTop(4);
+    listRowInfoLabel->setMarginBottom(8);
+    m_contentBox->addView(listRowInfoLabel);
+
     // Cache Library Data toggle
     auto* cacheDataToggle = new brls::BooleanCell();
     cacheDataToggle->init("Cache Library Data", settings.cacheLibraryData, [&settings](bool value) {

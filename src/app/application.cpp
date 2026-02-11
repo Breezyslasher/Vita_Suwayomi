@@ -431,8 +431,12 @@ bool Application::loadSettings() {
     if (gridSizeInt >= 0 && gridSizeInt <= 2) {
         m_settings.libraryGridSize = static_cast<LibraryGridSize>(gridSizeInt);
     }
-    brls::Logger::info("loadSettings: libraryDisplayMode={}, libraryGridSize={}",
-                       displayModeInt, gridSizeInt);
+    int listRowSizeInt = extractInt("listRowSize");
+    if (listRowSizeInt >= 0 && listRowSizeInt <= 3) {
+        m_settings.listRowSize = static_cast<ListRowSize>(listRowSizeInt);
+    }
+    brls::Logger::info("loadSettings: libraryDisplayMode={}, libraryGridSize={}, listRowSize={}",
+                       displayModeInt, gridSizeInt, listRowSizeInt);
 
     // Load search history settings
     m_settings.maxSearchHistory = extractInt("maxSearchHistory");
@@ -747,6 +751,7 @@ bool Application::saveSettings() {
     // Library grid customization
     json += "  \"libraryDisplayMode\": " + std::to_string(static_cast<int>(m_settings.libraryDisplayMode)) + ",\n";
     json += "  \"libraryGridSize\": " + std::to_string(static_cast<int>(m_settings.libraryGridSize)) + ",\n";
+    json += "  \"listRowSize\": " + std::to_string(static_cast<int>(m_settings.listRowSize)) + ",\n";
 
     // Search history
     json += "  \"maxSearchHistory\": " + std::to_string(m_settings.maxSearchHistory) + ",\n";
