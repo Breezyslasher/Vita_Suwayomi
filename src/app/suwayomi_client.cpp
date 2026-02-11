@@ -573,8 +573,8 @@ Manga SuwayomiClient::parseMangaFromGraphQL(const std::string& json) {
     // GraphQL might have unreadCount directly
     manga.unreadCount = extractJsonInt(json, "unreadCount");
 
-    // Parse downloadedChapterCount and chapterCount
-    manga.downloadedCount = extractJsonInt(json, "downloadedChapterCount");
+    // Parse downloadCount and chapterCount
+    manga.downloadedCount = extractJsonInt(json, "downloadCount");
     manga.chapterCount = extractJsonInt(json, "chapterCount");
 
     // Parse lastReadChapter for lastReadAt timestamp
@@ -1562,7 +1562,7 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
                     inLibrary
                     inLibraryAt
                     unreadCount
-                    downloadedChapterCount
+                    downloadCount
                     chapterCount
                     lastReadChapter {
                         lastReadAt
@@ -1624,7 +1624,7 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
                         inLibrary
                         inLibraryAt
                         unreadCount
-                        downloadedChapterCount
+                        downloadCount
                         chapterCount
                         lastReadChapter {
                             lastReadAt
