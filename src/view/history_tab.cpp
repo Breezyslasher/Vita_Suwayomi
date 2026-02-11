@@ -402,7 +402,15 @@ void HistoryTab::markChapterUnread(const ReadingHistoryItem& item) {
 std::string HistoryTab::formatTimestamp(int64_t timestamp) {
     if (timestamp <= 0) return "Unknown date";
 
-    time_t itemTime = static_cast<time_t>(timestamp / 1000);  // Convert from milliseconds
+    // Detect if timestamp is in milliseconds or seconds
+    // Timestamps > 100 billion are likely milliseconds (dates after ~1973 in ms)
+    // Timestamps < 100 billion are likely seconds (dates up to ~5000 AD in seconds)
+    time_t itemTime;
+    if (timestamp > 100000000000LL) {
+        itemTime = static_cast<time_t>(timestamp / 1000);  // Convert from milliseconds
+    } else {
+        itemTime = static_cast<time_t>(timestamp);  // Already in seconds
+    }
     time_t now = std::time(nullptr);
 
     // Calculate days difference using actual time difference (handles year boundaries)
@@ -454,7 +462,15 @@ std::string HistoryTab::formatTimestamp(int64_t timestamp) {
 std::string HistoryTab::formatRelativeTime(int64_t timestamp) {
     if (timestamp <= 0) return "";
 
-    time_t time = static_cast<time_t>(timestamp / 1000);
+    // Detect if timestamp is in milliseconds or seconds
+    // Timestamps > 100 billion are likely milliseconds (dates after ~1973 in ms)
+    // Timestamps < 100 billion are likely seconds (dates up to ~5000 AD in seconds)
+    time_t time;
+    if (timestamp > 100000000000LL) {
+        time = static_cast<time_t>(timestamp / 1000);  // Convert from milliseconds
+    } else {
+        time = static_cast<time_t>(timestamp);  // Already in seconds
+    }
     time_t now = std::time(nullptr);
     int64_t diff = now - time;
 

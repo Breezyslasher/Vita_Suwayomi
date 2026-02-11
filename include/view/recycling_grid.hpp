@@ -30,10 +30,12 @@ public:
     void setGridSize(int columns);  // 4, 6, or 8 columns
     void setCompactMode(bool compact);  // Compact mode (covers only, no titles)
     void setListMode(bool listMode);  // List view instead of grid
+    void setListRowSize(int rowSize);  // List row size: 0=small(60), 1=medium(80), 2=large(100), 3=auto
     void setShowLibraryBadge(bool show);  // Show star badge for library items (browser/search only)
     int getGridColumns() const { return m_columns; }
     bool isCompactMode() const { return m_compactMode; }
     bool isListMode() const { return m_listMode; }
+    int getListRowSize() const { return m_listRowSize; }
 
     // Selection mode
     void setSelectionMode(bool enabled);
@@ -91,6 +93,7 @@ private:
     bool m_compactMode = false;
     bool m_listMode = false;
     bool m_showLibraryBadge = false;
+    int m_listRowSize = 1;  // 0=small(60), 1=medium(80), 2=large(100), 3=auto
 
     int m_visibleStartRow = 0;
     int m_lastScrollY = 0;

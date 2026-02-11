@@ -313,6 +313,29 @@ DownloadsTab::DownloadsTab() {
     m_localContainer = new brls::Box();
     m_localContainer->setAxis(brls::Axis::COLUMN);
     m_localScroll->setContentView(m_localContainer);
+
+    // Empty state (shown when no downloads in either queue)
+    m_emptyStateBox = new brls::Box();
+    m_emptyStateBox->setAxis(brls::Axis::COLUMN);
+    m_emptyStateBox->setJustifyContent(brls::JustifyContent::CENTER);
+    m_emptyStateBox->setAlignItems(brls::AlignItems::CENTER);
+    m_emptyStateBox->setGrow(1.0f);
+    m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);  // Start visible until data loads
+
+    auto* emptyIcon = new brls::Label();
+    emptyIcon->setText("No Downloads");
+    emptyIcon->setFontSize(24);
+    emptyIcon->setTextColor(nvgRGB(128, 128, 128));
+    emptyIcon->setMarginBottom(10);
+    m_emptyStateBox->addView(emptyIcon);
+
+    auto* emptyHint = new brls::Label();
+    emptyHint->setText("Queue chapters for download from manga details");
+    emptyHint->setFontSize(16);
+    emptyHint->setTextColor(nvgRGB(100, 100, 100));
+    m_emptyStateBox->addView(emptyHint);
+
+    this->addView(m_emptyStateBox);
 }
 
 void DownloadsTab::willAppear(bool resetState) {
@@ -414,6 +437,11 @@ void DownloadsTab::refreshQueue() {
                     m_downloadStatusLabel->setText("");
                 }
 
+                // Show empty state if local queue is also empty
+                if (m_lastLocalQueue.empty() && m_emptyStateBox) {
+                    m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
+                }
+
                 if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
                     brls::Application::giveFocus(m_startStopBtn);
                 }
@@ -472,12 +500,21 @@ void DownloadsTab::refreshQueue() {
                 while (m_queueContainer->getChildren().size() > 0) {
                     m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
                 }
+                // Show empty state if local queue is also empty
+                if (m_lastLocalQueue.empty() && m_emptyStateBox) {
+                    m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
+                }
                 // Update navigation routes (may now point to local queue)
                 updateNavigationRoutes();
                 if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
                     brls::Application::giveFocus(m_startStopBtn);
                 }
                 return;
+            }
+
+            // Hide empty state when we have items
+            if (m_emptyStateBox) {
+                m_emptyStateBox->setVisibility(brls::Visibility::GONE);
             }
 
             // Show section
@@ -801,6 +838,11 @@ void DownloadsTab::refreshLocalDownloads() {
         }
         m_localSection->setVisibility(brls::Visibility::GONE);
 
+        // Show empty state if server queue is also empty
+        if (m_lastServerQueue.empty() && m_emptyStateBox) {
+            m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
+        }
+
         // Update navigation routes (local queue now empty, may affect routing)
         updateNavigationRoutes();
 
@@ -814,6 +856,11 @@ void DownloadsTab::refreshLocalDownloads() {
             brls::Application::giveFocus(m_startStopBtn);
         }
         return;
+    }
+
+    // Hide empty state when we have items
+    if (m_emptyStateBox) {
+        m_emptyStateBox->setVisibility(brls::Visibility::GONE);
     }
 
     // Show section
@@ -1208,6 +1255,10 @@ void DownloadsTab::removeLocalItem(int mangaId, int chapterIndex) {
         m_localSection->setVisibility(brls::Visibility::GONE);
         if (m_lastServerQueue.empty() && m_downloadStatusLabel) {
             m_downloadStatusLabel->setText("");
+        }
+        // Show empty state if server queue is also empty
+        if (m_lastServerQueue.empty() && m_emptyStateBox) {
+            m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
         }
         // Update navigation routes since local queue is now empty
         updateNavigationRoutes();
