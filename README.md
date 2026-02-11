@@ -1,12 +1,8 @@
-# VitaSuwayomi Complete Feature Testing Checklist
+# VitaSuwayomi
 
-## Status Legend
+A native Suwayomi client for PlayStation Vita. Read manga from your Suwayomi server directly on your Vita with full controller and touch support.
 
-| Symbol | Status |
-|--------|--------|
-| ✓ | Working |
-| X | Broken |
-| _(no symbol)_ | Untested |
+> **Note:** Check the [Issues](../../issues) page for current status of app features and known bugs.
 
 > **Tip:** Click on any section header to collapse/expand it. Collapse sections once you've completed all items!
 
@@ -1106,26 +1102,17 @@ Webtoon auto-detection checks for:
 - CMake 3.10+
 - Git
 
-### Building
 
-```bash
-mkdir build && cd build
-cmake ..
-make
-```
 
-### Installing on Vita
+## Installation
 
-1. Build the VPK file
-2. Transfer to Vita via USB/FTP
+1. Download the VPK file
+2. Transfer to Vita via USB or FTP
 3. Install using VitaShell
-4. Launch from LiveArea
+4. Configure your Suwayomi server URL in settings
 
----
 
-## Server Requirements
 
-- Suwayomi-Server running and accessible
-- Network connectivity between Vita and server
-- Basic Auth enabled if using authentication
-- Recommended: Both local (LAN) and remote (WAN) URLs configured for failover
+## License
+
+[Add license information here]

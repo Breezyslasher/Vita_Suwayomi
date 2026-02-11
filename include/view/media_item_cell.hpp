@@ -52,6 +52,7 @@ private:
     brls::Image* m_thumbnailImage = nullptr;
     brls::Box* m_titleOverlay = nullptr;  // Title overlay container (grid mode)
     brls::Box* m_listInfoBox = nullptr;   // Info container (list mode)
+    brls::Label* m_listTitleLabel = nullptr;  // Title label for list mode
     brls::Label* m_titleLabel = nullptr;
     brls::Label* m_subtitleLabel = nullptr;
     brls::Label* m_descriptionLabel = nullptr;

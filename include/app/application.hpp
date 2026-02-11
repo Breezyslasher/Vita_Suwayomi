@@ -120,7 +120,7 @@ struct AppSettings {
     std::set<int> hiddenCategoryIds;  // Categories hidden from library view
     bool cacheLibraryData = true;     // Cache manga info for faster loading
     bool cacheCoverImages = true;     // Cache cover images to disk
-    int librarySortMode = 0;          // Library sort mode (0=A-Z, 1=Z-A, 2=Unread desc, 3=Unread asc, 4=Recently added)
+    int librarySortMode = 0;          // Library sort mode (0-10, see LibrarySortMode enum)
     bool chapterSortDescending = true; // Chapter sort order (true=newest first)
 
     // Library Grid Customization
