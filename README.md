@@ -55,9 +55,7 @@ A native Suwayomi client for PlayStation Vita. Read manga from your Suwayomi ser
 3. Install using VitaShell
 4. Configure your Suwayomi server URL in settings
 
-## Testing
 
-Use the [Testing Checklist](.github/ISSUE_TEMPLATE/testing-checklist.md) issue template for comprehensive feature testing.
 
 ## License
 
