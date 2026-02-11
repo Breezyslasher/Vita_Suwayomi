@@ -435,8 +435,44 @@ bool Application::loadSettings() {
     if (listRowSizeInt >= 0 && listRowSizeInt <= 3) {
         m_settings.listRowSize = static_cast<ListRowSize>(listRowSizeInt);
     }
-    brls::Logger::info("loadSettings: libraryDisplayMode={}, libraryGridSize={}, listRowSize={}",
-                       displayModeInt, gridSizeInt, listRowSizeInt);
+    int defaultSortInt = extractInt("defaultLibrarySortMode");
+    if (defaultSortInt >= 0 && defaultSortInt <= 10) {
+        m_settings.defaultLibrarySortMode = defaultSortInt;
+    }
+    brls::Logger::info("loadSettings: libraryDisplayMode={}, libraryGridSize={}, listRowSize={}, defaultSort={}",
+                       displayModeInt, gridSizeInt, listRowSizeInt, defaultSortInt);
+
+    // Load per-category sort modes
+    m_settings.categorySortModes.clear();
+    size_t catSortPos = content.find("\"categorySortModes\"");
+    if (catSortPos != std::string::npos) {
+        size_t openBrace = content.find('{', catSortPos);
+        if (openBrace != std::string::npos) {
+            size_t closeBrace = content.find('}', openBrace);
+            if (closeBrace != std::string::npos) {
+                std::string catSortJson = content.substr(openBrace + 1, closeBrace - openBrace - 1);
+                // Parse each entry: "categoryId": sortMode
+                size_t searchPos = 0;
+                while (searchPos < catSortJson.length()) {
+                    size_t quoteStart = catSortJson.find('"', searchPos);
+                    if (quoteStart == std::string::npos) break;
+                    size_t quoteEnd = catSortJson.find('"', quoteStart + 1);
+                    if (quoteEnd == std::string::npos) break;
+                    std::string catIdStr = catSortJson.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+                    int categoryId = atoi(catIdStr.c_str());
+                    size_t colonPos = catSortJson.find(':', quoteEnd);
+                    if (colonPos != std::string::npos) {
+                        int sortMode = atoi(catSortJson.c_str() + colonPos + 1);
+                        if (sortMode >= -1 && sortMode <= 10) {
+                            m_settings.categorySortModes[categoryId] = sortMode;
+                        }
+                    }
+                    searchPos = quoteEnd + 1;
+                }
+                brls::Logger::debug("Loaded {} per-category sort modes", m_settings.categorySortModes.size());
+            }
+        }
+    }
 
     // Load search history settings
     m_settings.maxSearchHistory = extractInt("maxSearchHistory");
@@ -752,6 +788,17 @@ bool Application::saveSettings() {
     json += "  \"libraryDisplayMode\": " + std::to_string(static_cast<int>(m_settings.libraryDisplayMode)) + ",\n";
     json += "  \"libraryGridSize\": " + std::to_string(static_cast<int>(m_settings.libraryGridSize)) + ",\n";
     json += "  \"listRowSize\": " + std::to_string(static_cast<int>(m_settings.listRowSize)) + ",\n";
+    json += "  \"defaultLibrarySortMode\": " + std::to_string(m_settings.defaultLibrarySortMode) + ",\n";
+
+    // Per-category sort modes
+    json += "  \"categorySortModes\": {";
+    bool firstCatSort = true;
+    for (const auto& pair : m_settings.categorySortModes) {
+        if (!firstCatSort) json += ",";
+        firstCatSort = false;
+        json += "\"" + std::to_string(pair.first) + "\": " + std::to_string(pair.second);
+    }
+    json += "},\n";
 
     // Search history
     json += "  \"maxSearchHistory\": " + std::to_string(m_settings.maxSearchHistory) + ",\n";

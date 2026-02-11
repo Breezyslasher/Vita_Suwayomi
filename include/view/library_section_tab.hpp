@@ -14,18 +14,21 @@
 namespace vitasuwayomi {
 
 // Sort modes for library manga
+// Note: DEFAULT (-1) uses the default sort mode from settings
+// Other values are 0-10 for specific sort modes
 enum class LibrarySortMode {
-    TITLE_ASC,              // A-Z
-    TITLE_DESC,             // Z-A
-    UNREAD_DESC,            // Most unread first
-    UNREAD_ASC,             // Least unread first
-    RECENTLY_ADDED_DESC,    // Recently added (newest first)
-    RECENTLY_ADDED_ASC,     // Recently added (oldest first)
-    LAST_READ,              // Last read (most recent first)
-    DATE_UPDATED_DESC,      // Latest chapter upload (newest first)
-    DATE_UPDATED_ASC,       // Latest chapter upload (oldest first)
-    TOTAL_CHAPTERS,         // Most chapters first
-    DOWNLOADED_ONLY,        // Downloaded count, hiding books with no downloads
+    DEFAULT = -1,           // Use default sort mode from settings
+    TITLE_ASC = 0,          // A-Z
+    TITLE_DESC = 1,         // Z-A
+    UNREAD_DESC = 2,        // Most unread first
+    UNREAD_ASC = 3,         // Least unread first
+    RECENTLY_ADDED_DESC = 4,// Recently added (newest first)
+    RECENTLY_ADDED_ASC = 5, // Recently added (oldest first)
+    LAST_READ = 6,          // Last read (most recent first)
+    DATE_UPDATED_DESC = 7,  // Latest chapter upload (newest first)
+    DATE_UPDATED_ASC = 8,   // Latest chapter upload (oldest first)
+    TOTAL_CHAPTERS = 9,     // Most chapters first
+    DOWNLOADED_ONLY = 10,   // Downloaded count, hiding books with no downloads
 };
 
 class LibrarySectionTab : public brls::Box {

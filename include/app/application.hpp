@@ -136,6 +136,10 @@ struct AppSettings {
     LibraryGridSize libraryGridSize = LibraryGridSize::MEDIUM;
     ListRowSize listRowSize = ListRowSize::MEDIUM;  // List view row size
 
+    // Library Sort Settings
+    int defaultLibrarySortMode = 0;  // Default sort mode for new categories (0=A-Z by default)
+    std::map<int, int> categorySortModes;  // Per-category sort modes (categoryId -> sortMode, -1 means use default)
+
     // Search History
     std::vector<std::string> searchHistory;  // Recent search queries
     int maxSearchHistory = 20;               // Max number of searches to remember

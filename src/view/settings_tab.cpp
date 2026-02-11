@@ -282,6 +282,28 @@ void SettingsTab::createLibrarySection() {
     listRowInfoLabel->setMarginBottom(8);
     m_contentBox->addView(listRowInfoLabel);
 
+    // Default library sort mode selector
+    auto* defaultSortSelector = new brls::SelectorCell();
+    defaultSortSelector->init("Default Sort Mode",
+        {"A-Z", "Z-A", "Most Unread", "Least Unread", "Recently Added (Newest)",
+         "Recently Added (Oldest)", "Last Read", "Date Updated (Newest)",
+         "Date Updated (Oldest)", "Total Chapters", "Downloaded Only"},
+        settings.defaultLibrarySortMode,
+        [&settings](int index) {
+            settings.defaultLibrarySortMode = index;
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(defaultSortSelector);
+
+    // Info label for default sort mode
+    auto* defaultSortInfoLabel = new brls::Label();
+    defaultSortInfoLabel->setText("Used when category sort is set to 'Default'");
+    defaultSortInfoLabel->setFontSize(14);
+    defaultSortInfoLabel->setMarginLeft(16);
+    defaultSortInfoLabel->setMarginTop(4);
+    defaultSortInfoLabel->setMarginBottom(8);
+    m_contentBox->addView(defaultSortInfoLabel);
+
     // Cache Library Data toggle
     auto* cacheDataToggle = new brls::BooleanCell();
     cacheDataToggle->init("Cache Library Data", settings.cacheLibraryData, [&settings](bool value) {

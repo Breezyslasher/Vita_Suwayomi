@@ -520,6 +520,19 @@ void LibrarySectionTab::selectCategory(int categoryId) {
     brls::Logger::debug("LibrarySectionTab: Selected category {} ({}) at index {}",
                        categoryId, m_currentCategoryName, m_selectedCategoryIndex);
 
+    // Load per-category sort mode from settings
+    auto& settings = Application::getInstance().getSettings();
+    auto it = settings.categorySortModes.find(categoryId);
+    if (it != settings.categorySortModes.end()) {
+        m_sortMode = static_cast<LibrarySortMode>(it->second);
+        brls::Logger::debug("LibrarySectionTab: Loaded category sort mode {} for category {}",
+                           it->second, categoryId);
+    } else {
+        // No per-category setting, use default
+        m_sortMode = LibrarySortMode::DEFAULT;
+    }
+    updateSortButtonText();
+
     updateCategoryButtonStyles();
     scrollToCategoryIndex(m_selectedCategoryIndex);
     loadCategoryManga(categoryId);
@@ -714,8 +727,15 @@ void LibrarySectionTab::sortMangaList() {
         }
     }
 
+    // Resolve DEFAULT to actual sort mode from settings
+    LibrarySortMode effectiveMode = m_sortMode;
+    if (effectiveMode == LibrarySortMode::DEFAULT) {
+        int defaultSort = Application::getInstance().getSettings().defaultLibrarySortMode;
+        effectiveMode = static_cast<LibrarySortMode>(defaultSort);
+    }
+
     // For DOWNLOADED_ONLY mode, filter out manga with no LOCAL downloads first
-    if (m_sortMode == LibrarySortMode::DOWNLOADED_ONLY) {
+    if (effectiveMode == LibrarySortMode::DOWNLOADED_ONLY) {
         DownloadsManager& dm = DownloadsManager::getInstance();
         m_mangaList.erase(
             std::remove_if(m_mangaList.begin(), m_mangaList.end(),
@@ -726,7 +746,8 @@ void LibrarySectionTab::sortMangaList() {
             m_mangaList.end());
     }
 
-    switch (m_sortMode) {
+    switch (effectiveMode) {
+        case LibrarySortMode::DEFAULT:  // Should never happen but handle gracefully
         case LibrarySortMode::TITLE_ASC:
             std::sort(m_mangaList.begin(), m_mangaList.end(),
                 [](const Manga& a, const Manga& b) { return a.title < b.title; });
@@ -845,6 +866,9 @@ void LibrarySectionTab::sortMangaList() {
 void LibrarySectionTab::cycleSortMode() {
     // Cycle through sort modes
     switch (m_sortMode) {
+        case LibrarySortMode::DEFAULT:
+            m_sortMode = LibrarySortMode::TITLE_ASC;
+            break;
         case LibrarySortMode::TITLE_ASC:
             m_sortMode = LibrarySortMode::TITLE_DESC;
             break;
@@ -876,21 +900,28 @@ void LibrarySectionTab::cycleSortMode() {
             m_sortMode = LibrarySortMode::DOWNLOADED_ONLY;
             break;
         case LibrarySortMode::DOWNLOADED_ONLY:
-            m_sortMode = LibrarySortMode::TITLE_ASC;
+            m_sortMode = LibrarySortMode::DEFAULT;
             break;
     }
 
     updateSortButtonText();
     sortMangaList();
 
-    // Persist sort mode
+    // Persist per-category sort mode
     auto& app = Application::getInstance();
-    app.getSettings().librarySortMode = static_cast<int>(m_sortMode);
+    if (m_sortMode == LibrarySortMode::DEFAULT) {
+        // Remove per-category setting to use default
+        app.getSettings().categorySortModes.erase(m_currentCategoryId);
+    } else {
+        // Save per-category sort mode
+        app.getSettings().categorySortModes[m_currentCategoryId] = static_cast<int>(m_sortMode);
+    }
     app.saveSettings();
 }
 
 void LibrarySectionTab::showSortMenu() {
     std::vector<std::string> options = {
+        "Default (Settings)",
         "A-Z",
         "Z-A",
         "Most Unread",
@@ -907,82 +938,90 @@ void LibrarySectionTab::showSortMenu() {
     // Find current selection index for highlighting
     int currentIndex = 0;
     switch (m_sortMode) {
-        case LibrarySortMode::TITLE_ASC:
+        case LibrarySortMode::DEFAULT:
             currentIndex = 0;
             break;
-        case LibrarySortMode::TITLE_DESC:
+        case LibrarySortMode::TITLE_ASC:
             currentIndex = 1;
             break;
-        case LibrarySortMode::UNREAD_DESC:
+        case LibrarySortMode::TITLE_DESC:
             currentIndex = 2;
             break;
-        case LibrarySortMode::UNREAD_ASC:
+        case LibrarySortMode::UNREAD_DESC:
             currentIndex = 3;
             break;
-        case LibrarySortMode::RECENTLY_ADDED_DESC:
+        case LibrarySortMode::UNREAD_ASC:
             currentIndex = 4;
             break;
-        case LibrarySortMode::RECENTLY_ADDED_ASC:
+        case LibrarySortMode::RECENTLY_ADDED_DESC:
             currentIndex = 5;
             break;
-        case LibrarySortMode::LAST_READ:
+        case LibrarySortMode::RECENTLY_ADDED_ASC:
             currentIndex = 6;
             break;
-        case LibrarySortMode::DATE_UPDATED_DESC:
+        case LibrarySortMode::LAST_READ:
             currentIndex = 7;
             break;
-        case LibrarySortMode::DATE_UPDATED_ASC:
+        case LibrarySortMode::DATE_UPDATED_DESC:
             currentIndex = 8;
             break;
-        case LibrarySortMode::TOTAL_CHAPTERS:
+        case LibrarySortMode::DATE_UPDATED_ASC:
             currentIndex = 9;
             break;
-        case LibrarySortMode::DOWNLOADED_ONLY:
+        case LibrarySortMode::TOTAL_CHAPTERS:
             currentIndex = 10;
             break;
+        case LibrarySortMode::DOWNLOADED_ONLY:
+            currentIndex = 11;
+            break;
     }
+
+    int categoryId = m_currentCategoryId;
 
     auto* dropdown = new brls::Dropdown(
         "Sort By",
         options,
-        [this](int selected) {
+        [this, categoryId](int selected) {
             if (selected < 0) return; // Cancelled
 
             // Defer action to next frame so dropdown fully closes first
             // This fixes hover/focus transfer issues
-            brls::sync([this, selected]() {
+            brls::sync([this, selected, categoryId]() {
                 switch (selected) {
                     case 0:
-                        m_sortMode = LibrarySortMode::TITLE_ASC;
+                        m_sortMode = LibrarySortMode::DEFAULT;
                         break;
                     case 1:
-                        m_sortMode = LibrarySortMode::TITLE_DESC;
+                        m_sortMode = LibrarySortMode::TITLE_ASC;
                         break;
                     case 2:
-                        m_sortMode = LibrarySortMode::UNREAD_DESC;
+                        m_sortMode = LibrarySortMode::TITLE_DESC;
                         break;
                     case 3:
-                        m_sortMode = LibrarySortMode::UNREAD_ASC;
+                        m_sortMode = LibrarySortMode::UNREAD_DESC;
                         break;
                     case 4:
-                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_DESC;
+                        m_sortMode = LibrarySortMode::UNREAD_ASC;
                         break;
                     case 5:
-                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_ASC;
+                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_DESC;
                         break;
                     case 6:
-                        m_sortMode = LibrarySortMode::LAST_READ;
+                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_ASC;
                         break;
                     case 7:
-                        m_sortMode = LibrarySortMode::DATE_UPDATED_DESC;
+                        m_sortMode = LibrarySortMode::LAST_READ;
                         break;
                     case 8:
-                        m_sortMode = LibrarySortMode::DATE_UPDATED_ASC;
+                        m_sortMode = LibrarySortMode::DATE_UPDATED_DESC;
                         break;
                     case 9:
-                        m_sortMode = LibrarySortMode::TOTAL_CHAPTERS;
+                        m_sortMode = LibrarySortMode::DATE_UPDATED_ASC;
                         break;
                     case 10:
+                        m_sortMode = LibrarySortMode::TOTAL_CHAPTERS;
+                        break;
+                    case 11:
                         m_sortMode = LibrarySortMode::DOWNLOADED_ONLY;
                         break;
                 }
@@ -990,9 +1029,15 @@ void LibrarySectionTab::showSortMenu() {
                 updateSortButtonText();
                 sortMangaList();
 
-                // Persist sort mode
+                // Persist per-category sort mode
                 auto& app = Application::getInstance();
-                app.getSettings().librarySortMode = static_cast<int>(m_sortMode);
+                if (m_sortMode == LibrarySortMode::DEFAULT) {
+                    // Remove per-category setting to use default
+                    app.getSettings().categorySortModes.erase(categoryId);
+                } else {
+                    // Save per-category sort mode
+                    app.getSettings().categorySortModes[categoryId] = static_cast<int>(m_sortMode);
+                }
                 app.saveSettings();
             });
         },
@@ -1004,9 +1049,18 @@ void LibrarySectionTab::showSortMenu() {
 void LibrarySectionTab::updateSortButtonText() {
     if (!m_sortIcon) return;
 
+    // Get effective sort mode (resolve DEFAULT to actual sort mode)
+    LibrarySortMode effectiveMode = m_sortMode;
+    if (effectiveMode == LibrarySortMode::DEFAULT) {
+        // Use the default sort mode from settings
+        int defaultSort = Application::getInstance().getSettings().defaultLibrarySortMode;
+        effectiveMode = static_cast<LibrarySortMode>(defaultSort);
+    }
+
     std::string iconPath;
-    switch (m_sortMode) {
+    switch (effectiveMode) {
         case LibrarySortMode::TITLE_ASC:
+        default:
             iconPath = "app0:resources/icons/az.png";  // A-Z
             break;
         case LibrarySortMode::TITLE_DESC:
