@@ -365,7 +365,7 @@ bool Application::loadSettings() {
     m_settings.cacheLibraryData = extractBool("cacheLibraryData", true);
     m_settings.cacheCoverImages = extractBool("cacheCoverImages", true);
     m_settings.librarySortMode = extractInt("librarySortMode");
-    if (m_settings.librarySortMode < 0 || m_settings.librarySortMode > 4) m_settings.librarySortMode = 0;
+    if (m_settings.librarySortMode < 0 || m_settings.librarySortMode > 10) m_settings.librarySortMode = 0;
     m_settings.chapterSortDescending = extractBool("chapterSortDescending", true);
 
     // Load download settings

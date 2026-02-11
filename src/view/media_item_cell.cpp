@@ -107,9 +107,16 @@ MangaItemCell::MangaItemCell() {
     m_listInfoBox->setAxis(brls::Axis::COLUMN);
     m_listInfoBox->setJustifyContent(brls::JustifyContent::CENTER);
     m_listInfoBox->setAlignItems(brls::AlignItems::FLEX_START);
-    m_listInfoBox->setPadding(8, 12, 8, 12);
+    m_listInfoBox->setPadding(8, 16, 8, 16);
     m_listInfoBox->setGrow(1.0f);
     m_listInfoBox->setVisibility(brls::Visibility::GONE);
+
+    // List mode title label (persistent, not dynamically created)
+    m_listTitleLabel = new brls::Label();
+    m_listTitleLabel->setFontSize(14);
+    m_listTitleLabel->setTextColor(nvgRGB(255, 255, 255));
+    m_listInfoBox->addView(m_listTitleLabel);
+
     this->addView(m_listInfoBox);
 
     // Unread badge - top left corner
@@ -176,6 +183,15 @@ void MangaItemCell::updateDisplay() {
         }
         m_originalTitle = title;
         m_titleLabel->setText(title);
+    }
+
+    // Update list mode title as well
+    if (m_listTitleLabel) {
+        std::string listTitle = m_manga.title;
+        if (listTitle.length() > 60) {
+            listTitle = listTitle.substr(0, 58) + "..";
+        }
+        m_listTitleLabel->setText(listTitle);
     }
 
     // Set subtitle (author or chapter count)
@@ -393,24 +409,9 @@ void MangaItemCell::applyDisplayMode() {
             m_titleOverlay->setVisibility(brls::Visibility::GONE);
         }
 
-        // Show and populate list info box with title only
+        // Show list info box (title label is already added and updated by updateDisplay)
         if (m_listInfoBox) {
             m_listInfoBox->setVisibility(brls::Visibility::VISIBLE);
-            m_listInfoBox->clearViews();
-            m_listInfoBox->setPadding(8, 16, 8, 16);
-            m_listInfoBox->setJustifyContent(brls::JustifyContent::CENTER);
-            m_listInfoBox->setAlignItems(brls::AlignItems::FLEX_START);
-
-            // Title for list mode - show full title
-            auto* listTitle = new brls::Label();
-            listTitle->setFontSize(14);
-            listTitle->setTextColor(nvgRGB(255, 255, 255));
-            std::string title = m_manga.title;
-            if (title.length() > 60) {
-                title = title.substr(0, 58) + "..";
-            }
-            listTitle->setText(title);
-            m_listInfoBox->addView(listTitle);
         }
 
         // Position badges for list mode (left side)
