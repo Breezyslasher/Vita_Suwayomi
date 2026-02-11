@@ -5,6 +5,7 @@
 
 #include "view/recycling_grid.hpp"
 #include "view/media_item_cell.hpp"
+#include "view/long_press_gesture.hpp"
 
 namespace vitasuwayomi {
 
@@ -264,10 +265,29 @@ void RecyclingGrid::setupGrid() {
 
             int index = i;
             cell->registerClickAction([this, index](brls::View* view) {
+                // Skip click if long-press was just triggered
+                if (m_longPressTriggered) {
+                    m_longPressTriggered = false;
+                    return true;
+                }
                 onItemClicked(index);
                 return true;
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+
+            // Add long-press gesture for context menu
+            cell->addGestureRecognizer(new LongPressGestureRecognizer(
+                cell,
+                [this, index](LongPressGestureStatus status) {
+                    if (status.state == brls::GestureState::START) {
+                        m_longPressTriggered = true;
+                        if (index >= 0 && index < (int)m_items.size() && m_onItemLongPressed) {
+                            m_onItemLongPressed(m_items[index], index);
+                        }
+                    }
+                },
+                400  // 400ms hold duration
+            ));
 
             // Register B button on cell to handle back navigation
             cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {

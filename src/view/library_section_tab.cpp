@@ -162,6 +162,11 @@ LibrarySectionTab::LibrarySectionTab() {
         triggerLibraryUpdate();
     });
 
+    // Long-press on a book shows the context menu (same as START button)
+    m_contentGrid->setOnItemLongPressed([this](const Manga& manga, int index) {
+        showMangaContextMenu(manga, index);
+    });
+
     // Apply library display settings from user preferences
     const auto& settings = Application::getInstance().getSettings();
 

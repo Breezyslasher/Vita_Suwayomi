@@ -90,6 +90,7 @@ set(APP_SOURCES
     src/view/tracking_search_view.cpp
     src/view/migrate_search_view.cpp
     src/view/storage_view.cpp
+    src/view/long_press_gesture.cpp
 
     # Utils
     src/utils/http_client.cpp
