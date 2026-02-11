@@ -75,6 +75,92 @@ void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
     setupGrid();
 }
 
+void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
+    // Update cell data in place without rebuilding the grid structure
+    // This is much more efficient for sorting operations
+    if (items.size() != m_items.size()) {
+        // Size changed, need full rebuild
+        brls::Logger::debug("RecyclingGrid: updateDataOrder size mismatch ({} vs {}), doing full rebuild",
+                           items.size(), m_items.size());
+        setDataSource(items);
+        return;
+    }
+
+    if (m_cells.empty()) {
+        // No cells exist, need full rebuild
+        setDataSource(items);
+        return;
+    }
+
+    brls::Logger::debug("RecyclingGrid: updateDataOrder - updating {} cells in place", items.size());
+
+    // Update internal data
+    m_items = items;
+
+    // Update each cell with the new manga data at its position
+    // This preserves the grid structure and just updates the displayed content
+    int maxInitialRows = 6;
+    int cellsInInitialRows = maxInitialRows * m_columns;
+
+    for (size_t i = 0; i < m_cells.size() && i < items.size(); i++) {
+        MangaItemCell* cell = m_cells[i];
+        if (cell) {
+            // Use immediate load for visible cells, deferred for others
+            if (static_cast<int>(i) < cellsInInitialRows) {
+                cell->setManga(items[i]);
+            } else {
+                cell->setMangaDeferred(items[i]);
+            }
+        }
+    }
+
+    // Load thumbnails for remaining cells
+    if (static_cast<int>(m_cells.size()) > cellsInInitialRows) {
+        for (size_t i = cellsInInitialRows; i < m_cells.size(); i++) {
+            if (m_cells[i]) {
+                m_cells[i]->loadThumbnailIfNeeded();
+            }
+        }
+    }
+
+    brls::Logger::debug("RecyclingGrid: updateDataOrder complete");
+}
+
+void RecyclingGrid::removeItems(const std::vector<int>& mangaIdsToRemove) {
+    // Remove specific items without full rebuild
+    // This is used for filter operations like DOWNLOADED_ONLY
+    if (mangaIdsToRemove.empty()) return;
+
+    brls::Logger::debug("RecyclingGrid: removeItems - removing {} items", mangaIdsToRemove.size());
+
+    // Create a set for fast lookup
+    std::set<int> idsToRemove(mangaIdsToRemove.begin(), mangaIdsToRemove.end());
+
+    // Find indices to remove (in reverse order to avoid index shifting issues)
+    std::vector<size_t> indicesToRemove;
+    for (size_t i = 0; i < m_items.size(); i++) {
+        if (idsToRemove.count(m_items[i].id)) {
+            indicesToRemove.push_back(i);
+        }
+    }
+
+    if (indicesToRemove.empty()) return;
+
+    // For simplicity, if we're removing items, do a full rebuild
+    // This ensures proper row layout recalculation
+    // In the future, we could optimize this to remove cells in place
+    std::vector<Manga> filteredItems;
+    for (size_t i = 0; i < m_items.size(); i++) {
+        if (idsToRemove.find(m_items[i].id) == idsToRemove.end()) {
+            filteredItems.push_back(m_items[i]);
+        }
+    }
+
+    brls::Logger::debug("RecyclingGrid: removeItems - filtered from {} to {} items",
+                       m_items.size(), filteredItems.size());
+    setDataSource(filteredItems);
+}
+
 void RecyclingGrid::setOnItemSelected(std::function<void(const Manga&)> callback) {
     m_onItemSelected = callback;
 }

@@ -734,6 +734,10 @@ void LibrarySectionTab::sortMangaList() {
         effectiveMode = static_cast<LibrarySortMode>(defaultSort);
     }
 
+    // Track if we're filtering items (which changes the list size)
+    size_t originalSize = m_mangaList.size();
+    bool isFilterOperation = false;
+
     // For DOWNLOADED_ONLY mode, filter out manga with no LOCAL downloads first
     if (effectiveMode == LibrarySortMode::DOWNLOADED_ONLY) {
         DownloadsManager& dm = DownloadsManager::getInstance();
@@ -744,6 +748,7 @@ void LibrarySectionTab::sortMangaList() {
                     return !item || item->completedChapters <= 0;
                 }),
             m_mangaList.end());
+        isFilterOperation = (m_mangaList.size() != originalSize);
     }
 
     switch (effectiveMode) {
@@ -845,21 +850,39 @@ void LibrarySectionTab::sortMangaList() {
 
     // Update grid display
     if (m_contentGrid) {
-        m_contentGrid->setDataSource(m_mangaList);
+        // Use in-place update for pure reordering (no items removed)
+        // This avoids rebuilding the entire grid which is much more efficient
+        if (!isFilterOperation && m_contentGrid->getItemCount() == static_cast<int>(m_mangaList.size())) {
+            m_contentGrid->updateDataOrder(m_mangaList);
+        } else {
+            // Items were filtered out or list size changed, need full rebuild
+            m_contentGrid->setDataSource(m_mangaList);
+        }
 
         // Restore focus: find the manga's new index after sorting
+        int newIndex = -1;
         if (focusedMangaId >= 0) {
-            int newIndex = -1;
             for (size_t i = 0; i < m_mangaList.size(); i++) {
                 if (m_mangaList[i].id == focusedMangaId) {
                     newIndex = static_cast<int>(i);
                     break;
                 }
             }
-            if (newIndex >= 0) {
-                m_contentGrid->focusIndex(newIndex);
-            }
         }
+
+        // If we found the manga, focus it at its new position
+        // If not found (e.g., switched categories), focus first item if:
+        // - The grid currently has focus (user was navigating the library), OR
+        // - We just switched categories via L/R buttons (m_focusGridAfterLoad flag)
+        if (newIndex >= 0) {
+            m_contentGrid->focusIndex(newIndex);
+        } else if (!m_mangaList.empty() && (m_contentGrid->hasCellFocus() || m_focusGridAfterLoad)) {
+            // Previous focused manga not in new list, focus first item
+            m_contentGrid->focusIndex(0);
+        }
+
+        // Reset the flag after handling
+        m_focusGridAfterLoad = false;
     }
 }
 
@@ -1109,6 +1132,9 @@ void LibrarySectionTab::navigateToPreviousCategory() {
         }
     }
 
+    // Set flag to focus grid after loading the new category
+    m_focusGridAfterLoad = true;
+
     // Go to previous category (wrap around)
     if (currentIndex > 0) {
         selectCategory(m_categories[currentIndex - 1].id);
@@ -1129,6 +1155,9 @@ void LibrarySectionTab::navigateToNextCategory() {
             break;
         }
     }
+
+    // Set flag to focus grid after loading the new category
+    m_focusGridAfterLoad = true;
 
     // Go to next category (wrap around)
     if (currentIndex >= 0 && currentIndex < static_cast<int>(m_categories.size()) - 1) {
