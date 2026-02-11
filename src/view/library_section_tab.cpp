@@ -593,6 +593,7 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         if (cache.loadCategoryManga(categoryId, cachedManga)) {
             brls::Logger::info("LibrarySectionTab: Loaded {} manga from cache for category {}",
                               cachedManga.size(), categoryId);
+            m_fullMangaList = cachedManga;
             m_mangaList = cachedManga;
             sortMangaList();
             m_loaded = true;
@@ -651,6 +652,7 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
 
                 // Only update if we're still on the same category
                 if (m_currentCategoryId == categoryId) {
+                    m_fullMangaList = manga;
                     m_mangaList = manga;
                     sortMangaList();
                 }
@@ -737,6 +739,12 @@ void LibrarySectionTab::sortMangaList() {
     if (effectiveMode == LibrarySortMode::DEFAULT) {
         int defaultSort = Application::getInstance().getSettings().defaultLibrarySortMode;
         effectiveMode = static_cast<LibrarySortMode>(defaultSort);
+    }
+
+    // Restore full list before sorting/filtering
+    // This ensures switching away from DOWNLOADED_ONLY restores all books
+    if (!m_fullMangaList.empty()) {
+        m_mangaList = m_fullMangaList;
     }
 
     // Track if we're filtering items (which changes the list size)

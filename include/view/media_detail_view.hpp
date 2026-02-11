@@ -7,6 +7,9 @@
 
 #include <borealis.hpp>
 #include <set>
+#include <chrono>
+#include <atomic>
+#include <memory>
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
@@ -22,6 +25,7 @@ public:
 
     // Override to refresh chapter data when returning from reader
     void willAppear(bool resetState) override;
+    void willDisappear(bool resetState) override;
 
 private:
     void loadDetails();
@@ -143,6 +147,11 @@ private:
 
     // Reset cover image
     void resetCover();
+
+    // Live download progress tracking
+    std::chrono::steady_clock::time_point m_lastProgressRefresh;
+    std::atomic<bool> m_progressCallbackActive{false};
+    std::shared_ptr<bool> m_alive;
 };
 
 // Alias for backward compatibility

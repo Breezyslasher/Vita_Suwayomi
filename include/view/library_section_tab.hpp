@@ -107,7 +107,8 @@ private:
     RecyclingGrid* m_contentGrid = nullptr;
 
     // Data
-    std::vector<Manga> m_mangaList;
+    std::vector<Manga> m_mangaList;           // Working list (may be filtered)
+    std::vector<Manga> m_fullMangaList;       // Complete list (never filtered)
     std::vector<Category> m_categories;       // Visible categories
 
     bool m_loaded = false;

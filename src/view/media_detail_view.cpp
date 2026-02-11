@@ -15,12 +15,15 @@
 #include <ctime>
 #include <set>
 #include <limits>
+#include <chrono>
+#include <atomic>
 
 namespace vitasuwayomi {
 
 MangaDetailView::MangaDetailView(const Manga& manga)
-    : m_manga(manga) {
+    : m_manga(manga), m_alive(std::make_shared<bool>(true)) {
     brls::Logger::info("MangaDetailView: Creating for '{}' id={}", manga.title, manga.id);
+    m_lastProgressRefresh = std::chrono::steady_clock::now();
 
     // Komikku-style: horizontal layout with left panel (cover) and right panel (info)
     this->setAxis(brls::Axis::ROW);
@@ -476,8 +479,72 @@ void MangaDetailView::refresh() {
 
 void MangaDetailView::willAppear(bool resetState) {
     brls::Box::willAppear(resetState);
+
+    // Register progress callback for live download updates
+    m_progressCallbackActive.store(true);
+    m_lastProgressRefresh = std::chrono::steady_clock::now();
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    int mangaId = m_manga.id;
+
+    DownloadsManager& dm = DownloadsManager::getInstance();
+
+    dm.setProgressCallback([this, aliveWeak, mangaId](int downloadedPages, int totalPages) {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive || !m_progressCallbackActive.load()) {
+            return;
+        }
+
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - m_lastProgressRefresh).count();
+
+        // Update every 200ms for smooth progress, or immediately for completion
+        const int PROGRESS_INTERVAL_MS = 200;
+        if (elapsed >= PROGRESS_INTERVAL_MS || downloadedPages == totalPages) {
+            m_lastProgressRefresh = now;
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive || !m_progressCallbackActive.load()) {
+                    return;
+                }
+                populateChaptersList();
+            });
+        }
+    });
+
+    dm.setChapterCompletionCallback([this, aliveWeak, mangaId](int completedMangaId, int chapterIndex, bool success) {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive || !m_progressCallbackActive.load()) {
+            return;
+        }
+
+        // Only refresh if the completed chapter belongs to this manga
+        if (completedMangaId == mangaId) {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive || !m_progressCallbackActive.load()) {
+                    return;
+                }
+                populateChaptersList();
+            });
+        }
+    });
+
     // Reload chapters to update the read button text when returning from reader
     loadChapters();
+}
+
+void MangaDetailView::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Stop receiving progress updates when not visible
+    m_progressCallbackActive.store(false);
+
+    // Clear callbacks to prevent updates while view is hidden
+    DownloadsManager& dm = DownloadsManager::getInstance();
+    dm.setProgressCallback(nullptr);
+    dm.setChapterCompletionCallback(nullptr);
 }
 
 void MangaDetailView::loadDetails() {
@@ -2686,6 +2753,13 @@ void MangaDetailView::updateSelectionUI() {
 
 MangaDetailView::~MangaDetailView() {
     brls::Logger::debug("MangaDetailView: Destroying view for manga {}", m_manga.id);
+
+    // Mark as no longer alive to stop any pending callbacks
+    if (m_alive) {
+        *m_alive = false;
+    }
+    m_progressCallbackActive.store(false);
+
     // Clear any callbacks that might reference this view to prevent crashes
     DownloadsManager& dm = DownloadsManager::getInstance();
     dm.setProgressCallback(nullptr);
