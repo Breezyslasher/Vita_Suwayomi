@@ -2,6 +2,8 @@
 
 A native Suwayomi client for PlayStation Vita. Read manga from your Suwayomi server directly on your Vita with full controller and touch support.
 
+> **Note:** Check the [Issues](../../issues) page for current status of app features and known bugs.
+
 ## Features
 
 **Library Management**
