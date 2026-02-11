@@ -8,9 +8,12 @@
 | X | Broken |
 | _(no symbol)_ | Untested |
 
+> **Tip:** Click on any section header to collapse/expand it. Collapse sections once you've completed all items!
+
 ---
 
-## Authentication & Connection
+<details open>
+<summary><h2>Authentication & Connection</h2></summary>
 
 - [X] Connect to Suwayomi server with URL
 - [X] Login with username/password (Basic Auth)
@@ -24,11 +27,16 @@
 - [X] Auto-switch on connection failure
 - [ ] Connection timeout configuration works
 
+</details>
+
 ---
 
-## Library Browsing
+<details open>
+<summary><h2>Library Browsing</h2></summary>
 
-### Category Navigation
+<details open>
+<summary><h3>Category Navigation</h3></summary>
+
 - [X] All user categories appear as tabs
 - [X] Category tabs scroll horizontally
 - [X] Selected category is highlighted
@@ -37,7 +45,11 @@
 - [X] L button navigates to previous category
 - [X] R button navigates to next category
 
-### Manga Display
+</details>
+
+<details open>
+<summary><h3>Manga Display</h3></summary>
+
 - [X] Manga covers load properly
 - [X] Manga titles display correctly
 - [X] Unread badge shows on items with unread chapters
@@ -45,20 +57,31 @@
 - [X] Scroll through manga grid works smoothly
 - [X] Clicking manga opens detail view
 
-### Button Hints
+</details>
+
+<details open>
+<summary><h3>Button Hints</h3></summary>
+
 - [X] Button hint icons display correctly sized
 - [ ] L/R category hints show in header
 - [X] Start button hint shows on focused manga
 - [X] Triangle (Y) button hint for sort shows
 - [X] select button hint for update shows
 
-### Controller Actions
+</details>
+
+<details open>
+<summary><h3>Controller Actions</h3></summary>
+
 - [X] Start button opens context menu on focused manga
 - [ ] Triangle (Y) button opens sort options
 - [X] Select button triggers category update
 - [X] D-pad navigation through manga grid works
 
-### Library Display Options
+</details>
+
+<details open>
+<summary><h3>Library Display Options</h3></summary>
 
 - [X] Grid View displays correctly (covers + titles)
 - [X] Compact Grid View works (covers only)
@@ -68,7 +91,10 @@
 - [X] Grid size 8 columns works
 - [X] Display mode persists after restart
 
-### Library Sorting
+</details>
+
+<details open>
+<summary><h3>Library Sorting</h3></summary>
 
 - [X] Sort by Title A-Z works
 - [X] Sort by Title Z-A works
@@ -83,7 +109,10 @@
 - [ ] Sort downloads Only
 - [ ] Sort mode persists after restart
 
-### Selection Mode & Batch Operations
+</details>
+
+<details open>
+<summary><h3>Selection Mode & Batch Operations</h3></summary>
 
 - [ ] Enter selection mode (long press/Start button)
 - [ ] Multi-select manga works
@@ -96,9 +125,14 @@
 - [ ] Change categories for multiple manga works
 - [ ] Exit selection mode works
 
+</details>
+
+</details>
+
 ---
 
-## Category Management
+<details open>
+<summary><h2>Category Management</h2></summary>
 
 - [X] Categories load from server
 - [X] Categories sorted by order
@@ -107,11 +141,16 @@
 - [ ] Refresh reloads categories and manga
 - [X] Hide/show categories in settings
 
+</details>
+
 ---
 
-## Browse Sources
+<details open>
+<summary><h2>Browse Sources</h2></summary>
 
-### Source List
+<details open>
+<summary><h3>Source List</h3></summary>
+
 - [X] Sources tab shows installed sources
 - [X] Source icons load properly
 - [X] Source names display correctly
@@ -119,7 +158,11 @@
 - [X] Filter sources by language works
 - [X] NSFW sources toggle works
 
-### Source Browser
+</details>
+
+<details open>
+<summary><h3>Source Browser</h3></summary>
+
 - [ ] Popular manga tab loads correctly
 - [ ] Latest manga tab loads correctly
 - [ ] Search within source works
@@ -129,22 +172,37 @@
 - [ ] Focus moves to first new item after load
 - [ ] Back button returns to source list
 
-### Navigation
+</details>
+
+<details open>
+<summary><h3>Navigation</h3></summary>
+
 - [ ] D-pad navigation through manga works
 - [ ] UP from first row navigates to header/tabs
 - [ ] B button goes back to source list
 - [ ] Touch support for manga selection works
 
+</details>
+
+</details>
+
 ---
 
-## Search
+<details open>
+<summary><h2>Search</h2></summary>
 
-### Search Input
+<details open>
+<summary><h3>Search Input</h3></summary>
+
 - [ ] Search tab opens correctly
 - [ ] Keyboard input works
 - [ ] Search executes on submit
 
-### Source Search
+</details>
+
+<details open>
+<summary><h3>Source Search</h3></summary>
+
 - [ ] Search returns results from current source
 - [ ] Search results show covers and titles
 - [ ] Clicking search result opens detail view
@@ -152,24 +210,39 @@
 - [ ] Focus moves to first result after search
 - [ ] Back button returns to source browser
 
-### Global Search
+</details>
+
+<details open>
+<summary><h3>Global Search</h3></summary>
+
 - [ ] Global search across all sources works
 - [ ] Results grouped by source
 - [ ] Source headers show in results
 - [ ] Navigate between source result groups
 
-### Search History
+</details>
+
+<details open>
+<summary><h3>Search History</h3></summary>
+
 - [ ] Search history saves automatically
 - [ ] History button shows in search header
 - [ ] Quick access to previous searches
 - [ ] Clear search history works
 - [ ] Search history limit configurable
 
+</details>
+
+</details>
+
 ---
 
-## Manga Detail View
+<details open>
+<summary><h2>Manga Detail View</h2></summary>
 
-### Display
+<details open>
+<summary><h3>Display</h3></summary>
+
 - [ ] Cover image displays
 - [ ] Title displays correctly
 - [ ] Author/Artist displays correctly
@@ -181,17 +254,29 @@
 - [ ] Chapter count displays
 - [ ] Source information displays
 
-### Library Actions
+</details>
+
+<details open>
+<summary><h3>Library Actions</h3></summary>
+
 - [ ] Add to library button works
 - [ ] Remove from library button works
 - [ ] Library status updates immediately
 
-### Chapter List
+</details>
+
+<details open>
+<summary><h3>Chapter List</h3></summary>
+
 - [ ] Chapter list loads and displays
 - [ ] Chapters sorted correctly
 - [ ] Read/unread status shown
 
-### Context Menu (Start Button)
+</details>
+
+<details open>
+<summary><h3>Context Menu (Start Button)</h3></summary>
+
 - [ ] Start button opens context menu
 - [ ] Continue Reading option works
 - [ ] Add/Remove from Library option works
@@ -199,14 +284,23 @@
 - [ ] Track option opens tracking dialog
 - [ ] Single tracker auto-selects (skips list if only one)
 
-### Navigation
+</details>
+
+<details open>
+<summary><h3>Navigation</h3></summary>
+
 - [ ] D-pad navigation works
 - [ ] L button doesn't conflict with other actions
 - [ ] B button returns to previous view
 
+</details>
+
+</details>
+
 ---
 
-## Chapter List
+<details open>
+<summary><h2>Chapter List</h2></summary>
 
 - [ ] Chapters load correctly
 - [ ] Chapter names display properly
@@ -221,7 +315,8 @@
 - [ ] Download chapter works
 - [ ] Delete downloaded chapter works
 
-### Chapter List Filtering & Sorting
+<details open>
+<summary><h3>Chapter List Filtering & Sorting</h3></summary>
 
 - [ ] Sort by newest first works
 - [ ] Sort by oldest first works
@@ -232,9 +327,14 @@
 - [ ] Multi-select chapters works
 - [ ] Range selection works
 
+</details>
+
+</details>
+
 ---
 
-## Reader - Basic Controls
+<details open>
+<summary><h2>Reader - Basic Controls</h2></summary>
 
 - [ ] Pages load correctly
 - [ ] Page counter shows current/total
@@ -246,9 +346,12 @@
 - [ ] Page slider works
 - [ ] Jump to page input works
 
+</details>
+
 ---
 
-## Reader - Navigation
+<details open>
+<summary><h2>Reader - Navigation</h2></summary>
 
 - [ ] D-pad left/right changes pages
 - [ ] L/R shoulder buttons change pages
@@ -259,9 +362,12 @@
 - [ ] Page slider navigation works
 - [ ] Resume from last read position works
 
+</details>
+
 ---
 
-## Reader - Touch Gestures
+<details open>
+<summary><h2>Reader - Touch Gestures</h2></summary>
 
 - [ ] Swipe left/right to change pages
 - [ ] Swipe shows preview of next/previous page
@@ -276,27 +382,36 @@
 - [ ] Pinch to zoom works
 - [ ] Long press for context menu works
 
+</details>
+
 ---
 
-## Reader - Reading Modes
+<details open>
+<summary><h2>Reader - Reading Modes</h2></summary>
 
 - [ ] Right-to-Left (RTL) mode works
 - [ ] Left-to-Right (LTR) mode works
 - [ ] Vertical scroll mode works
 - [ ] Webtoon (continuous scroll) mode works
 
+</details>
+
 ---
 
-## Reader - Page Scaling
+<details open>
+<summary><h2>Reader - Page Scaling</h2></summary>
 
 - [ ] Fit Screen works
 - [ ] Fit Width works
 - [ ] Fit Height works
 - [ ] Original Size (1:1) works
 
+</details>
+
 ---
 
-## Reader - Image Controls
+<details open>
+<summary><h2>Reader - Image Controls</h2></summary>
 
 - [ ] Rotation 0° works
 - [ ] Rotation 90° works
@@ -304,9 +419,12 @@
 - [ ] Rotation 270° works
 - [ ] Auto-crop borders works
 
+</details>
+
 ---
 
-## Reader - Color Filters
+<details open>
+<summary><h2>Reader - Color Filters</h2></summary>
 
 - [ ] No filter (default) works
 - [ ] Sepia filter works
@@ -316,9 +434,12 @@
 - [ ] Filter intensity adjustment (0-100%) works
 - [ ] Filter settings persist
 
+</details>
+
 ---
 
-## Reader - Settings Persistence
+<details open>
+<summary><h2>Reader - Settings Persistence</h2></summary>
 
 - [ ] Reader settings menu opens (Settings button)
 - [ ] Reading direction changes persist
@@ -329,9 +450,12 @@
 - [ ] Per-manga settings override global defaults
 - [ ] Different manga can have different settings
 
+</details>
+
 ---
 
-## Reader - Server Sync
+<details open>
+<summary><h2>Reader - Server Sync</h2></summary>
 
 - [ ] Settings save to Suwayomi server (meta keys)
 - [ ] Settings load from server on chapter open
@@ -339,27 +463,36 @@
 - [ ] Settings sync works with Tachiyomi/Mihon clients
 - [ ] Meta keys used: readerMode, rotation, scaleType, cropBorders, webtoonSidePadding
 
+</details>
+
 ---
 
-## Reader - Progress
+<details open>
+<summary><h2>Reader - Progress</h2></summary>
 
 - [ ] Last page read saves to server
 - [ ] Resume at last read page works
 - [ ] Finishing chapter marks as read
 - [ ] Progress syncs correctly
 
+</details>
+
 ---
 
-## Reader - Auto-Chapter Advance
+<details open>
+<summary><h2>Reader - Auto-Chapter Advance</h2></summary>
 
 - [ ] Auto-advance toggle works
 - [ ] Advance delay (0-10 seconds) configurable
 - [ ] Countdown shows before advancing
 - [ ] Auto-advance respects setting
 
+</details>
+
 ---
 
-## Reader - Webtoon Mode
+<details open>
+<summary><h2>Reader - Webtoon Mode</h2></summary>
 
 - [ ] Webtoon auto-detection works (genre/source based)
 - [ ] Auto-detected webtoons use vertical mode
@@ -371,9 +504,12 @@
 - [ ] Seamless page scrolling works
 - [ ] Tall page splitting works
 
+</details>
+
 ---
 
-## Extensions Management
+<details open>
+<summary><h2>Extensions Management</h2></summary>
 
 - [ ] Extensions tab shows available extensions
 - [ ] Installed extensions marked
@@ -386,9 +522,12 @@
 - [ ] Search extensions by name works
 - [ ] Expandable/collapsible sections work
 
+</details>
+
 ---
 
-## Downloads - Server Downloads
+<details open>
+<summary><h2>Downloads - Server Downloads</h2></summary>
 
 - [ ] Queue chapter download to server works
 - [ ] Download progress shows
@@ -399,9 +538,12 @@
 - [ ] Start/Stop download queue works
 - [ ] Downloaded chapters read offline
 
+</details>
+
 ---
 
-## Downloads - Local Downloads
+<details open>
+<summary><h2>Downloads - Local Downloads</h2></summary>
 
 - [ ] Queue chapter download locally works
 - [ ] Local download progress shows
@@ -410,11 +552,16 @@
 - [ ] Read locally downloaded chapters offline
 - [ ] Delete local downloads works
 
+</details>
+
 ---
 
-## Downloads Tab UI
+<details open>
+<summary><h2>Downloads Tab UI</h2></summary>
 
-### Queue Display
+<details open>
+<summary><h3>Queue Display</h3></summary>
+
 - [ ] Server queue section shows when items exist
 - [ ] Local queue section shows when items exist
 - [ ] Empty sections are hidden
@@ -422,7 +569,11 @@
 - [ ] Queue items show chapter name
 - [ ] Queue items show download progress
 
-### Control Buttons
+</details>
+
+<details open>
+<summary><h3>Control Buttons</h3></summary>
+
 - [ ] Start button starts/resumes downloads
 - [ ] Stop button stops downloads
 - [ ] Pause button pauses downloads
@@ -430,20 +581,33 @@
 - [ ] Buttons work with controller (A button)
 - [ ] Buttons work with touch input
 
-### Navigation
+</details>
+
+<details open>
+<summary><h3>Navigation</h3></summary>
+
 - [ ] D-pad navigation through queue items works
 - [ ] Navigation between server and local queues works
 - [ ] UP from first queue item goes to control buttons
 - [ ] DOWN from control buttons goes to first queue item
 
-### Status Display
+</details>
+
+<details open>
+<summary><h3>Status Display</h3></summary>
+
 - [ ] Download status shows correctly (Downloading, Paused, etc.)
 - [ ] Progress percentage shows for active downloads
 - [ ] Queue count shows in section headers
 
+</details>
+
+</details>
+
 ---
 
-## Downloads - Settings & Options
+<details open>
+<summary><h2>Downloads - Settings & Options</h2></summary>
 
 - [ ] Download location: Server only
 - [ ] Download location: Local only
@@ -454,9 +618,12 @@
 - [ ] Auto-resume downloads on startup works
 - [ ] Delete after reading toggle works
 
+</details>
+
 ---
 
-## Downloads - Storage Management
+<details open>
+<summary><h2>Downloads - Storage Management</h2></summary>
 
 - [ ] View total storage usage
 - [ ] Per-manga storage breakdown
@@ -465,18 +632,27 @@
 - [ ] Clear all downloads
 - [ ] Cache clearing works
 
+</details>
+
 ---
 
-## History Tab
+<details open>
+<summary><h2>History Tab</h2></summary>
 
-### Display & Loading
+<details open>
+<summary><h3>Display & Loading</h3></summary>
+
 - [ ] History tab displays correctly
 - [ ] Reading history loads on tab open
 - [ ] Loading indicator shows while fetching
 - [ ] History count shows in title (e.g., "Reading History (25)")
 - [ ] Empty state shows when no history
 
-### History Items
+</details>
+
+<details open>
+<summary><h3>History Items</h3></summary>
+
 - [ ] Items grouped by date (Today, Yesterday, day name, or date)
 - [ ] Each item shows manga cover thumbnail
 - [ ] Each item shows manga title (truncated if long)
@@ -485,7 +661,11 @@
 - [ ] Relative timestamps display ("2 mins ago", "3 hours ago")
 - [ ] Resume indicator arrow shows on each item
 
-### Navigation & Controls
+</details>
+
+<details open>
+<summary><h3>Navigation & Controls</h3></summary>
+
 - [ ] D-pad navigation through history items works
 - [ ] UP from first item focuses refresh button
 - [ ] DOWN from refresh button focuses first item
@@ -494,12 +674,20 @@
 - [ ] Click/A button resumes reading from last page
 - [ ] Start button opens context menu
 
-### Context Menu Options
+</details>
+
+<details open>
+<summary><h3>Context Menu Options</h3></summary>
+
 - [ ] Continue Reading option works
 - [ ] View Manga Details option works
 - [ ] Mark as Unread option works (removes from history)
 
-### Pagination
+</details>
+
+<details open>
+<summary><h3>Pagination</h3></summary>
+
 - [ ] Load More button appears when more items exist
 - [ ] Load More fetches next batch of items
 - [ ] Load More button shows "Loading..." during fetch
@@ -507,23 +695,36 @@
 - [ ] Focus moves to first new item after load
 - [ ] Button hides when no more items
 
-### Refresh
+</details>
+
+<details open>
+<summary><h3>Refresh</h3></summary>
+
 - [ ] Refresh clears and reloads history
 - [ ] Focus moves to refresh button during refresh (prevents crash)
 - [ ] History reloads from server
 
+</details>
+
+</details>
+
 ---
 
-## Tracking Integration
+<details open>
+<summary><h2>Tracking Integration</h2></summary>
 
-### Tracker Setup
+<details open>
+<summary><h3>Tracker Setup</h3></summary>
 
 - [ ] MyAnimeList login works
 - [ ] AniList login works
 - [ ] OAuth authentication completes
 - [ ] Tracker credentials persist
 
-### Tracker Features
+</details>
+
+<details open>
+<summary><h3>Tracker Features</h3></summary>
 
 - [ ] Search tracker database works
 - [ ] Bind manga to tracker entry works
@@ -537,9 +738,14 @@
 - [ ] View tracked items works
 - [ ] Unbind tracker works
 
+</details>
+
+</details>
+
 ---
 
-## Manga Migration
+<details open>
+<summary><h2>Manga Migration</h2></summary>
 
 - [ ] Migration option appears in context menu
 - [ ] Search for manga across all sources works
@@ -547,9 +753,12 @@
 - [ ] Migrate between sources works
 - [ ] Reading progress preserved after migration
 
+</details>
+
 ---
 
-## Reading Statistics
+<details open>
+<summary><h2>Reading Statistics</h2></summary>
 
 - [ ] Statistics display correctly
 - [ ] Total chapters read counter works
@@ -559,18 +768,24 @@
 - [ ] Total reading time displays
 - [ ] Reset statistics works
 
+</details>
+
 ---
 
-## Backup & Restore
+<details open>
+<summary><h2>Backup & Restore</h2></summary>
 
 - [ ] Export library backup works
 - [ ] Import library from backup works
 - [ ] Backup file validation works
 - [ ] Automatic backup naming with timestamps
 
+</details>
+
 ---
 
-## Settings - Connection
+<details open>
+<summary><h2>Settings - Connection</h2></summary>
 
 - [ ] Server URL setting persists
 - [ ] Username setting persists
@@ -580,9 +795,12 @@
 - [ ] Local URL configuration works
 - [ ] Remote URL configuration works
 
+</details>
+
 ---
 
-## Settings - UI
+<details open>
+<summary><h2>Settings - UI</h2></summary>
 
 - [ ] Theme: System works
 - [ ] Theme: Light works
@@ -591,9 +809,12 @@
 - [ ] Enable Animations toggle works
 - [ ] Debug Logging toggle works
 
+</details>
+
 ---
 
-## Settings - Reader Defaults
+<details open>
+<summary><h2>Settings - Reader Defaults</h2></summary>
 
 - [ ] Default reading direction setting works (RTL/LTR/Vertical/Webtoon)
 - [ ] Default page scale mode setting works
@@ -604,9 +825,12 @@
 - [ ] Tap to navigate setting works
 - [ ] Default settings apply to new manga without custom settings
 
+</details>
+
 ---
 
-## Settings - Webtoon / Long Strip
+<details open>
+<summary><h2>Settings - Webtoon / Long Strip</h2></summary>
 
 - [ ] Crop borders toggle works
 - [ ] Auto-detect webtoon toggle works
@@ -615,17 +839,23 @@
 - [ ] Disabling auto-detect uses user defaults for all manga
 - [ ] Enabling auto-detect applies webtoon defaults to detected webtoons
 
+</details>
+
 ---
 
-## Settings - Webtoon Detection
+<details open>
+<summary><h2>Settings - Webtoon Detection</h2></summary>
 
 Webtoon auto-detection checks for:
 - [ ] Genre tags: "Long Strip", "Webtoon", "Web Comic", "Manhwa", "Manhua", "Full Color"
 - [ ] Sources: Webtoon, Tapas, Tappytoon, Lezhin, Toomics, Bilibili, Asura, Reaper, Flame
 
+</details>
+
 ---
 
-## Settings - Library
+<details open>
+<summary><h2>Settings - Library</h2></summary>
 
 - [ ] Display mode setting persists
 - [ ] Grid size setting persists
@@ -634,9 +864,12 @@ Webtoon auto-detection checks for:
 - [ ] Default sort mode setting works
 - [ ] Chapter sort order setting works
 
+</details>
+
 ---
 
-## Settings - Downloads
+<details open>
+<summary><h2>Settings - Downloads</h2></summary>
 
 - [ ] Download location preference persists
 - [ ] Auto-download new chapters setting works
@@ -645,16 +878,22 @@ Webtoon auto-detection checks for:
 - [ ] Delete after reading setting works
 - [ ] Resume on startup setting works
 
+</details>
+
 ---
 
-## Settings - Browse
+<details open>
+<summary><h2>Settings - Browse</h2></summary>
 
 - [ ] Language filter configuration works
 - [ ] NSFW source visibility toggle works
 
+</details>
+
 ---
 
-## Navigation & UI
+<details open>
+<summary><h2>Navigation & UI</h2></summary>
 
 - [ ] D-pad navigation works throughout app
 - [ ] Tab switching works
@@ -665,18 +904,24 @@ Webtoon auto-detection checks for:
 - [ ] Toast notifications display correctly
 - [ ] Dialog boxes work correctly
 
+</details>
+
 ---
 
-## Error Handling
+<details open>
+<summary><h2>Error Handling</h2></summary>
 
 - [ ] Network errors show user-friendly message
 - [ ] Empty states handled gracefully
 - [ ] Failed image loads show placeholder
 - [ ] Server errors reported appropriately
 
+</details>
+
 ---
 
-## Server Information
+<details open>
+<summary><h2>Server Information</h2></summary>
 
 - [ ] View connected server details
 - [ ] Server version displays
@@ -684,11 +929,16 @@ Webtoon auto-detection checks for:
 - [ ] GitHub link works
 - [ ] Discord link works
 
+</details>
+
 ---
 
-## Smoke Test (Quick Validation ~10 minutes)
+<details open>
+<summary><h2>Smoke Test (Quick Validation ~10 minutes)</h2></summary>
 
-### Basic Functionality
+<details open>
+<summary><h3>Basic Functionality</h3></summary>
+
 1. [ ] App launches successfully
 2. [ ] Connect to Suwayomi server
 3. [ ] Library categories load and display
@@ -704,7 +954,11 @@ Webtoon auto-detection checks for:
 13. [ ] Check downloads tab
 14. [ ] Check history tab
 
-### Reader Settings (New Features)
+</details>
+
+<details open>
+<summary><h3>Reader Settings (New Features)</h3></summary>
+
 15. [ ] Open reader settings in chapter
 16. [ ] Change reading direction, verify it applies
 17. [ ] Change rotation, verify it applies
@@ -715,7 +969,11 @@ Webtoon auto-detection checks for:
 22. [ ] Apply color filter and verify it works
 23. [ ] Adjust brightness and verify it works
 
-### Webtoon Detection (New Features)
+</details>
+
+<details open>
+<summary><h3>Webtoon Detection (New Features)</h3></summary>
+
 24. [ ] Open a known webtoon/manhwa manga
 25. [ ] Verify auto-detection applies vertical mode + fit-width
 26. [ ] Open a regular manga - uses default RTL mode
@@ -723,28 +981,47 @@ Webtoon auto-detection checks for:
 28. [ ] Toggle "Auto-Detect Webtoon" off
 29. [ ] Open webtoon again - now uses user defaults
 
-### Settings Persistence
+</details>
+
+<details open>
+<summary><h3>Settings Persistence</h3></summary>
+
 30. [ ] Change default reader settings in Settings tab
 31. [ ] Restart app - settings persist
 32. [ ] Open new manga - default settings applied
 33. [ ] Per-manga settings still preserved after restart
 
-### Batch Operations
+</details>
+
+<details open>
+<summary><h3>Batch Operations</h3></summary>
+
 34. [ ] Enter selection mode in library
 35. [ ] Select multiple manga
 36. [ ] Perform batch action (e.g., mark as read)
 37. [ ] Exit selection mode
 
-### Tracking
+</details>
+
+<details open>
+<summary><h3>Tracking</h3></summary>
+
 38. [ ] Open manga detail view
 39. [ ] Access tracking option
 40. [ ] Bind to a tracker (if logged in)
 
+</details>
+
+</details>
+
 ---
 
-## Regression Tests (Edge Cases)
+<details open>
+<summary><h2>Regression Tests (Edge Cases)</h2></summary>
 
-### Swipe Navigation Edge Cases
+<details open>
+<summary><h3>Swipe Navigation Edge Cases</h3></summary>
+
 - [ ] Swipe at first page - no previous page preview, snaps back
 - [ ] Swipe at last page - shows next chapter or end indicator
 - [ ] Quick successive swipes don't break animation
@@ -753,43 +1030,71 @@ Webtoon auto-detection checks for:
 - [ ] Swipe with 180° rotation - directions inverted correctly
 - [ ] Swipe with 270° rotation - horizontal swipe moves vertically (opposite)
 
-### Settings Priority Edge Cases
+</details>
+
+<details open>
+<summary><h3>Settings Priority Edge Cases</h3></summary>
+
 - [ ] Server has settings, local cache has different settings - server wins
 - [ ] Server unreachable - falls back to local cache
 - [ ] No server settings, no local cache - uses global defaults
 - [ ] Webtoon detected but has server settings - server settings win
 - [ ] Clear local cache - server settings still load correctly
 
-### Webtoon Detection Edge Cases
+</details>
+
+<details open>
+<summary><h3>Webtoon Detection Edge Cases</h3></summary>
+
 - [ ] Manga with "Manhwa" genre but from non-webtoon source - detected as webtoon
 - [ ] Manga from "Webtoon" source but no genre tags - detected as webtoon
 - [ ] Manga with "Full Color" tag only - detected as webtoon
 - [ ] Regular manga with no webtoon indicators - uses normal defaults
 - [ ] User manually changes detected webtoon settings - custom settings saved
 
-### Chapter Navigation Edge Cases
+</details>
+
+<details open>
+<summary><h3>Chapter Navigation Edge Cases</h3></summary>
+
 - [ ] Last chapter, swipe to next - shows end indicator or loops
 - [ ] First chapter, go to previous - shows start indicator
 - [ ] Chapter with single page - navigation still works
 - [ ] Chapter with 100+ pages - performance acceptable
 - [ ] Navigate chapters rapidly - no crashes
 
-### Settings Sync Edge Cases
+</details>
+
+<details open>
+<summary><h3>Settings Sync Edge Cases</h3></summary>
+
 - [ ] Change settings while offline - saves locally, syncs when online
 - [ ] Multiple rapid setting changes - all saved correctly
 - [ ] Server returns error on save - local cache preserved
 - [ ] Corrupt server meta data - handled gracefully, uses defaults
 
-### Download Edge Cases
+</details>
+
+<details open>
+<summary><h3>Download Edge Cases</h3></summary>
+
 - [ ] Download interrupted - resumes correctly
 - [ ] Download while reading - doesn't affect reader
 - [ ] Multiple concurrent downloads work
 - [ ] Low storage handling
 
-### Tracking Edge Cases
+</details>
+
+<details open>
+<summary><h3>Tracking Edge Cases</h3></summary>
+
 - [ ] Tracker auth expires - handles gracefully
 - [ ] Tracker API error - shows user-friendly message
 - [ ] Sync progress with no tracker bound - no crash
+
+</details>
+
+</details>
 
 ---
 
