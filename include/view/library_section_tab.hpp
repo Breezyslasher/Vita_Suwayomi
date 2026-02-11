@@ -15,11 +15,13 @@ namespace vitasuwayomi {
 
 // Sort modes for library manga
 enum class LibrarySortMode {
-    TITLE_ASC,       // A-Z
-    TITLE_DESC,      // Z-A
-    UNREAD_DESC,     // Most unread first
-    UNREAD_ASC,      // Least unread first
-    RECENTLY_ADDED,  // Recently added (by ID, higher = newer)
+    TITLE_ASC,        // A-Z
+    TITLE_DESC,       // Z-A
+    UNREAD_DESC,      // Most unread first
+    UNREAD_ASC,       // Least unread first
+    RECENTLY_ADDED,   // Recently added (by inLibraryAt timestamp)
+    TOTAL_CHAPTERS,   // Most chapters first
+    DOWNLOADED_COUNT, // Most downloaded first
 };
 
 class LibrarySectionTab : public brls::Box {
