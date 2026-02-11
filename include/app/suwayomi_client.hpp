@@ -137,6 +137,8 @@ struct Manga {
     int chapterCount = 0;
     int lastChapterRead = 0;
     float lastReadProgress = 0.0f;  // Progress in last chapter (0.0-1.0)
+    int64_t lastReadAt = 0;         // Timestamp when manga was last read (Unix ms)
+    int64_t latestChapterUploadDate = 0;  // Latest chapter upload date for "Date Updated" sort
 
     // Tracking info
     std::vector<int> categoryIds;

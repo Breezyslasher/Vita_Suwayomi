@@ -100,7 +100,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_sortBtn->addView(m_sortIcon);
 
     m_sortBtn->registerClickAction([this](brls::View* view) {
-        cycleSortMode();
+        showSortMenu();
         return true;
     });
     sortContainer->addView(m_sortBtn);
@@ -226,9 +226,9 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
 
-    // Register Y button (triangle) to cycle sort mode
+    // Register Y button (triangle) to show sort menu
     this->registerAction("Sort", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
-        cycleSortMode();
+        showSortMenu();
         return true;
     });
 
@@ -711,6 +711,18 @@ void LibrarySectionTab::sortMangaList() {
         }
     }
 
+    // For DOWNLOADED_ONLY mode, filter out manga with no LOCAL downloads first
+    if (m_sortMode == LibrarySortMode::DOWNLOADED_ONLY) {
+        DownloadsManager& dm = DownloadsManager::getInstance();
+        m_mangaList.erase(
+            std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                [&dm](const Manga& m) {
+                    DownloadItem* item = dm.getMangaDownload(m.id);
+                    return !item || item->completedChapters <= 0;
+                }),
+            m_mangaList.end());
+    }
+
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
             std::sort(m_mangaList.begin(), m_mangaList.end(),
@@ -728,16 +740,82 @@ void LibrarySectionTab::sortMangaList() {
             std::sort(m_mangaList.begin(), m_mangaList.end(),
                 [](const Manga& a, const Manga& b) { return a.unreadCount < b.unreadCount; });
             break;
-        case LibrarySortMode::RECENTLY_ADDED:
+        case LibrarySortMode::RECENTLY_ADDED_DESC:
             std::sort(m_mangaList.begin(), m_mangaList.end(),
                 [](const Manga& a, const Manga& b) {
-                    // Use inLibraryAt timestamp for proper "recently added" sorting
-                    // Fall back to id comparison if timestamps are equal or missing
+                    // Newest first (higher timestamp = more recent)
                     if (a.inLibraryAt != b.inLibraryAt) {
                         return a.inLibraryAt > b.inLibraryAt;
                     }
                     return a.id > b.id;
                 });
+            break;
+        case LibrarySortMode::RECENTLY_ADDED_ASC:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) {
+                    // Oldest first (lower timestamp = older)
+                    if (a.inLibraryAt != b.inLibraryAt) {
+                        return a.inLibraryAt < b.inLibraryAt;
+                    }
+                    return a.id < b.id;
+                });
+            break;
+        case LibrarySortMode::LAST_READ:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) {
+                    // Most recently read first
+                    if (a.lastReadAt != b.lastReadAt) {
+                        return a.lastReadAt > b.lastReadAt;
+                    }
+                    return a.title < b.title;
+                });
+            break;
+        case LibrarySortMode::DATE_UPDATED_DESC:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) {
+                    // Most recently updated first (latest chapter upload)
+                    if (a.latestChapterUploadDate != b.latestChapterUploadDate) {
+                        return a.latestChapterUploadDate > b.latestChapterUploadDate;
+                    }
+                    return a.title < b.title;
+                });
+            break;
+        case LibrarySortMode::DATE_UPDATED_ASC:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) {
+                    // Least recently updated first
+                    if (a.latestChapterUploadDate != b.latestChapterUploadDate) {
+                        return a.latestChapterUploadDate < b.latestChapterUploadDate;
+                    }
+                    return a.title < b.title;
+                });
+            break;
+        case LibrarySortMode::TOTAL_CHAPTERS:
+            std::sort(m_mangaList.begin(), m_mangaList.end(),
+                [](const Manga& a, const Manga& b) {
+                    // Sort by total chapter count (most chapters first)
+                    if (a.chapterCount != b.chapterCount) {
+                        return a.chapterCount > b.chapterCount;
+                    }
+                    return a.title < b.title;
+                });
+            break;
+        case LibrarySortMode::DOWNLOADED_ONLY:
+            {
+                // Sort by LOCAL downloaded chapter count (most downloaded first)
+                DownloadsManager& dm = DownloadsManager::getInstance();
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [&dm](const Manga& a, const Manga& b) {
+                        DownloadItem* itemA = dm.getMangaDownload(a.id);
+                        DownloadItem* itemB = dm.getMangaDownload(b.id);
+                        int countA = itemA ? itemA->completedChapters : 0;
+                        int countB = itemB ? itemB->completedChapters : 0;
+                        if (countA != countB) {
+                            return countA > countB;
+                        }
+                        return a.title < b.title;
+                    });
+            }
             break;
     }
 
@@ -762,7 +840,7 @@ void LibrarySectionTab::sortMangaList() {
 }
 
 void LibrarySectionTab::cycleSortMode() {
-    // Cycle through sort modes: A-Z -> Z-A -> Unread -> Read -> (loop)
+    // Cycle through sort modes
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
             m_sortMode = LibrarySortMode::TITLE_DESC;
@@ -774,7 +852,27 @@ void LibrarySectionTab::cycleSortMode() {
             m_sortMode = LibrarySortMode::UNREAD_ASC;
             break;
         case LibrarySortMode::UNREAD_ASC:
-        case LibrarySortMode::RECENTLY_ADDED:
+            m_sortMode = LibrarySortMode::RECENTLY_ADDED_DESC;
+            break;
+        case LibrarySortMode::RECENTLY_ADDED_DESC:
+            m_sortMode = LibrarySortMode::RECENTLY_ADDED_ASC;
+            break;
+        case LibrarySortMode::RECENTLY_ADDED_ASC:
+            m_sortMode = LibrarySortMode::LAST_READ;
+            break;
+        case LibrarySortMode::LAST_READ:
+            m_sortMode = LibrarySortMode::DATE_UPDATED_DESC;
+            break;
+        case LibrarySortMode::DATE_UPDATED_DESC:
+            m_sortMode = LibrarySortMode::DATE_UPDATED_ASC;
+            break;
+        case LibrarySortMode::DATE_UPDATED_ASC:
+            m_sortMode = LibrarySortMode::TOTAL_CHAPTERS;
+            break;
+        case LibrarySortMode::TOTAL_CHAPTERS:
+            m_sortMode = LibrarySortMode::DOWNLOADED_ONLY;
+            break;
+        case LibrarySortMode::DOWNLOADED_ONLY:
             m_sortMode = LibrarySortMode::TITLE_ASC;
             break;
     }
@@ -788,13 +886,124 @@ void LibrarySectionTab::cycleSortMode() {
     app.saveSettings();
 }
 
+void LibrarySectionTab::showSortMenu() {
+    std::vector<std::string> options = {
+        "A-Z",
+        "Z-A",
+        "Most Unread",
+        "Least Unread",
+        "Recently Added (Newest)",
+        "Recently Added (Oldest)",
+        "Last Read",
+        "Date Updated (Newest)",
+        "Date Updated (Oldest)",
+        "Total Chapters",
+        "Downloaded Only"
+    };
+
+    // Find current selection index for highlighting
+    int currentIndex = 0;
+    switch (m_sortMode) {
+        case LibrarySortMode::TITLE_ASC:
+            currentIndex = 0;
+            break;
+        case LibrarySortMode::TITLE_DESC:
+            currentIndex = 1;
+            break;
+        case LibrarySortMode::UNREAD_DESC:
+            currentIndex = 2;
+            break;
+        case LibrarySortMode::UNREAD_ASC:
+            currentIndex = 3;
+            break;
+        case LibrarySortMode::RECENTLY_ADDED_DESC:
+            currentIndex = 4;
+            break;
+        case LibrarySortMode::RECENTLY_ADDED_ASC:
+            currentIndex = 5;
+            break;
+        case LibrarySortMode::LAST_READ:
+            currentIndex = 6;
+            break;
+        case LibrarySortMode::DATE_UPDATED_DESC:
+            currentIndex = 7;
+            break;
+        case LibrarySortMode::DATE_UPDATED_ASC:
+            currentIndex = 8;
+            break;
+        case LibrarySortMode::TOTAL_CHAPTERS:
+            currentIndex = 9;
+            break;
+        case LibrarySortMode::DOWNLOADED_ONLY:
+            currentIndex = 10;
+            break;
+    }
+
+    auto* dropdown = new brls::Dropdown(
+        "Sort By",
+        options,
+        [this](int selected) {
+            if (selected < 0) return; // Cancelled
+
+            // Defer action to next frame so dropdown fully closes first
+            // This fixes hover/focus transfer issues
+            brls::sync([this, selected]() {
+                switch (selected) {
+                    case 0:
+                        m_sortMode = LibrarySortMode::TITLE_ASC;
+                        break;
+                    case 1:
+                        m_sortMode = LibrarySortMode::TITLE_DESC;
+                        break;
+                    case 2:
+                        m_sortMode = LibrarySortMode::UNREAD_DESC;
+                        break;
+                    case 3:
+                        m_sortMode = LibrarySortMode::UNREAD_ASC;
+                        break;
+                    case 4:
+                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_DESC;
+                        break;
+                    case 5:
+                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_ASC;
+                        break;
+                    case 6:
+                        m_sortMode = LibrarySortMode::LAST_READ;
+                        break;
+                    case 7:
+                        m_sortMode = LibrarySortMode::DATE_UPDATED_DESC;
+                        break;
+                    case 8:
+                        m_sortMode = LibrarySortMode::DATE_UPDATED_ASC;
+                        break;
+                    case 9:
+                        m_sortMode = LibrarySortMode::TOTAL_CHAPTERS;
+                        break;
+                    case 10:
+                        m_sortMode = LibrarySortMode::DOWNLOADED_ONLY;
+                        break;
+                }
+
+                updateSortButtonText();
+                sortMangaList();
+
+                // Persist sort mode
+                auto& app = Application::getInstance();
+                app.getSettings().librarySortMode = static_cast<int>(m_sortMode);
+                app.saveSettings();
+            });
+        },
+        currentIndex
+    );
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
 void LibrarySectionTab::updateSortButtonText() {
     if (!m_sortIcon) return;
 
     std::string iconPath;
     switch (m_sortMode) {
         case LibrarySortMode::TITLE_ASC:
-        case LibrarySortMode::RECENTLY_ADDED:  // Fallback (not used)
             iconPath = "app0:resources/icons/az.png";  // A-Z
             break;
         case LibrarySortMode::TITLE_DESC:
@@ -805,6 +1014,27 @@ void LibrarySectionTab::updateSortButtonText() {
             break;
         case LibrarySortMode::UNREAD_ASC:
             iconPath = "app0:resources/icons/sort-1-9.png";  // Least unread first
+            break;
+        case LibrarySortMode::RECENTLY_ADDED_DESC:
+            iconPath = "app0:resources/icons/sort-clock-descending.png";  // Recently added (newest)
+            break;
+        case LibrarySortMode::RECENTLY_ADDED_ASC:
+            iconPath = "app0:resources/icons/sort-clock-ascending.png";  // Recently added (oldest)
+            break;
+        case LibrarySortMode::LAST_READ:
+            iconPath = "app0:resources/icons/book-open-page-variant.png";  // Last read
+            break;
+        case LibrarySortMode::DATE_UPDATED_DESC:
+            iconPath = "app0:resources/icons/sort-calendar-descending.png";  // Date updated (newest)
+            break;
+        case LibrarySortMode::DATE_UPDATED_ASC:
+            iconPath = "app0:resources/icons/sort-calendar-ascending.png";  // Date updated (oldest)
+            break;
+        case LibrarySortMode::TOTAL_CHAPTERS:
+            iconPath = "app0:resources/icons/book-multiple.png";  // Total chapters
+            break;
+        case LibrarySortMode::DOWNLOADED_ONLY:
+            iconPath = "app0:resources/icons/book-arrow-down.png";  // Downloaded only
             break;
     }
     m_sortIcon->setImageFromFile(iconPath);

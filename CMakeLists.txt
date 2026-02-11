@@ -240,6 +240,13 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     FILE resources/icons/show.png resources/icons/show.png
     FILE resources/icons/sort-1-9.png resources/icons/sort-1-9.png
     FILE resources/icons/sort-9-1.png resources/icons/sort-9-1.png
+    FILE resources/icons/sort-clock-ascending.png resources/icons/sort-clock-ascending.png
+    FILE resources/icons/sort-clock-descending.png resources/icons/sort-clock-descending.png
+    FILE resources/icons/sort-calendar-ascending.png resources/icons/sort-calendar-ascending.png
+    FILE resources/icons/sort-calendar-descending.png resources/icons/sort-calendar-descending.png
+    FILE resources/icons/book-open-page-variant.png resources/icons/book-open-page-variant.png
+    FILE resources/icons/book-multiple.png resources/icons/book-multiple.png
+    FILE resources/icons/book-arrow-down.png resources/icons/book-arrow-down.png
     FILE resources/icons/star.png resources/icons/star.png
     FILE resources/icons/tag.png resources/icons/tag.png
     FILE resources/icons/web.png resources/icons/web.png
