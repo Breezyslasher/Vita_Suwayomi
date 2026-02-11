@@ -28,6 +28,7 @@ private:
 
     void onDisconnect();
     void showLanguageFilterDialog();
+    void updateLanguageFilterCellText();
     void onThemeChanged(int index);
     void showCategoryVisibilityDialog();
     void showCategoryManagementDialog();
@@ -70,6 +71,9 @@ private:
 
     // Downloads section
     brls::DetailCell* m_clearDownloadsCell = nullptr;
+
+    // Browse section
+    brls::DetailCell* m_languageFilterCell = nullptr;
 };
 
 } // namespace vitasuwayomi

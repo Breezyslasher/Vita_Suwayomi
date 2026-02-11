@@ -457,6 +457,16 @@ void SettingsTab::showCategoryVisibilityDialog() {
     });
     closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
 
+    // Register B button on close button
+    closeBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (m_hideCategoriesCell) {
+            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
+            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
+        }
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
     // Scrollable category list
     auto* scrollView = new brls::ScrollingFrame();
     scrollView->setGrow(1.0f);
@@ -544,6 +554,16 @@ void SettingsTab::showCategoryVisibilityDialog() {
             return true;
         });
         catRow->addGestureRecognizer(new brls::TapGestureRecognizer(catRow));
+
+        // Register B button on each row to close dialog
+        catRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            if (m_hideCategoriesCell) {
+                size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
+                m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
+            }
+            brls::Application::popActivity();
+            return true;
+        }, true);  // hidden action
 
         catList->addView(catRow);
     }
@@ -851,25 +871,17 @@ void SettingsTab::createBrowseSection() {
     m_contentBox->addView(header);
 
     // Source language filter
-    auto* languageFilterCell = new brls::DetailCell();
-    languageFilterCell->setText("Source Languages");
+    m_languageFilterCell = new brls::DetailCell();
+    m_languageFilterCell->setText("Source Languages");
 
     // Build description of currently enabled languages
-    std::string langDesc;
-    if (settings.enabledSourceLanguages.empty()) {
-        langDesc = "All languages";
-    } else {
-        for (const auto& lang : settings.enabledSourceLanguages) {
-            if (!langDesc.empty()) langDesc += ", ";
-            langDesc += lang;
-        }
-    }
-    languageFilterCell->setDetailText(langDesc);
-    languageFilterCell->registerClickAction([this](brls::View* view) {
+    updateLanguageFilterCellText();
+
+    m_languageFilterCell->registerClickAction([this](brls::View* view) {
         showLanguageFilterDialog();
         return true;
     });
-    m_contentBox->addView(languageFilterCell);
+    m_contentBox->addView(m_languageFilterCell);
 
     // Info label
     auto* langInfoLabel = new brls::Label();
@@ -886,6 +898,26 @@ void SettingsTab::createBrowseSection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(nsfwToggle);
+}
+
+void SettingsTab::updateLanguageFilterCellText() {
+    if (!m_languageFilterCell) return;
+
+    const auto& settings = Application::getInstance().getSettings();
+    std::string langDesc;
+    if (settings.enabledSourceLanguages.empty()) {
+        langDesc = "All languages";
+    } else {
+        for (const auto& lang : settings.enabledSourceLanguages) {
+            if (!langDesc.empty()) langDesc += ", ";
+            langDesc += lang;
+        }
+        // Truncate if too long
+        if (langDesc.length() > 30) {
+            langDesc = langDesc.substr(0, 27) + "...";
+        }
+    }
+    m_languageFilterCell->setDetailText(langDesc);
 }
 
 void SettingsTab::showLanguageFilterDialog() {
@@ -980,6 +1012,7 @@ void SettingsTab::showLanguageFilterDialog() {
     dialogBox->setPadding(20);
     dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
     dialogBox->setCornerRadius(12);
+    dialogBox->setFocusable(true);
 
     // Title
     auto* titleLabel = new brls::Label();
@@ -1002,6 +1035,9 @@ void SettingsTab::showLanguageFilterDialog() {
 
     auto* langList = new brls::Box();
     langList->setAxis(brls::Axis::COLUMN);
+
+    // Store all rows so we can update "All" visual state when individual languages are toggled
+    auto allRows = std::make_shared<std::vector<brls::Box*>>();
 
     for (const auto& [code, name] : languages) {
         bool isEnabled = (code == "all" && settings.enabledSourceLanguages.empty()) ||
@@ -1028,13 +1064,19 @@ void SettingsTab::showLanguageFilterDialog() {
         codeLabel->setTextColor(nvgRGB(120, 120, 120));
         langRow->addView(codeLabel);
 
+        allRows->push_back(langRow);
+
         std::string langCode = code;
-        langRow->registerClickAction([langCode, langRow](brls::View* view) {
+        langRow->registerClickAction([langCode, langRow, allRows](brls::View* view) {
             AppSettings& s = Application::getInstance().getSettings();
 
             if (langCode == "all") {
                 s.enabledSourceLanguages.clear();
                 brls::Application::notify("Showing all languages");
+                // Update all row visuals - "All" is enabled, others are disabled
+                for (size_t i = 0; i < allRows->size(); i++) {
+                    (*allRows)[i]->setBackgroundColor(i == 0 ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+                }
             } else {
                 if (s.enabledSourceLanguages.count(langCode) > 0) {
                     s.enabledSourceLanguages.erase(langCode);
@@ -1045,12 +1087,25 @@ void SettingsTab::showLanguageFilterDialog() {
                 // Update visual state
                 bool nowEnabled = s.enabledSourceLanguages.count(langCode) > 0;
                 langRow->setBackgroundColor(nowEnabled ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+
+                // Update "All" row visual - disabled when any language is selected
+                if (!allRows->empty()) {
+                    bool allEnabled = s.enabledSourceLanguages.empty();
+                    (*allRows)[0]->setBackgroundColor(allEnabled ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+                }
             }
 
             Application::getInstance().saveSettings();
             return true;
         });
         langRow->addGestureRecognizer(new brls::TapGestureRecognizer(langRow));
+
+        // Register B button on each row to close dialog
+        langRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            updateLanguageFilterCellText();
+            brls::Application::popActivity();
+            return true;
+        }, true);  // hidden action
 
         langList->addView(langRow);
     }
@@ -1062,15 +1117,25 @@ void SettingsTab::showLanguageFilterDialog() {
     auto* closeBtn = new brls::Button();
     closeBtn->setText("Done");
     closeBtn->setMarginTop(15);
-    closeBtn->registerClickAction([](brls::View* view) {
+    closeBtn->registerClickAction([this](brls::View* view) {
+        updateLanguageFilterCellText();
         brls::Application::popActivity();
         return true;
     });
     closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
+
+    // Register B button on close button
+    closeBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        updateLanguageFilterCellText();
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
     dialogBox->addView(closeBtn);
 
-    // Register circle button to close the dialog
-    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+    // Register B button on dialogBox as fallback
+    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        updateLanguageFilterCellText();
         brls::Application::popActivity();
         return true;
     }, true);  // hidden action
@@ -1278,6 +1343,13 @@ void SettingsTab::showCategoryManagementDialog() {
         return true;
     });
     createBtn->addGestureRecognizer(new brls::TapGestureRecognizer(createBtn));
+
+    // Register B button on create button
+    createBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
+
     dialogBox->addView(createBtn);
 
     // Create close button early so it can be captured in lambdas (added to dialog later)
@@ -1289,6 +1361,12 @@ void SettingsTab::showCategoryManagementDialog() {
         return true;
     });
     closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
+
+    // Register B button on close button
+    closeBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);  // hidden action
 
     // Scrollable category list
     auto* scrollView = new brls::ScrollingFrame();
@@ -1479,6 +1557,12 @@ void SettingsTab::showCategoryManagementDialog() {
             return true;
         });
         catRow->addGestureRecognizer(new brls::TapGestureRecognizer(catRow));
+
+        // Register B button on each row to close dialog
+        catRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+            brls::Application::popActivity();
+            return true;
+        }, true);  // hidden action
 
         catList->addView(catRow);
     }
