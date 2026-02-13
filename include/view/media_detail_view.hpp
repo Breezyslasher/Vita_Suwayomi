@@ -33,6 +33,7 @@ private:
     void loadCover();
     void onRead(int chapterIndex = -1);  // -1 means continue from last read
     void onAddToLibrary();
+    void addToLibraryWithCategory(int mangaId, int categoryId);  // -1 for no category
     void onRemoveFromLibrary();
     void onDownloadChapters();
     void onDeleteDownloads();

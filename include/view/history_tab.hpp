@@ -37,10 +37,13 @@ private:
     brls::Box* m_contentBox = nullptr;
     brls::Box* m_emptyStateBox = nullptr;
     brls::Label* m_loadingLabel = nullptr;
-    brls::Button* m_loadMoreBtn = nullptr;
     brls::Button* m_refreshBtn = nullptr;  // Header refresh button for focus management
     std::vector<brls::Box*> m_itemRows;  // Track item rows for focus management
     int m_focusIndexAfterRebuild = -1;  // Index to focus after rebuilding list
+
+    // Infinite scroll
+    bool m_isLoadingMore = false;  // Prevent multiple simultaneous loads
+    void setupInfiniteScroll();  // Set up focus listeners for infinite scroll
 
     // Data
     std::vector<ReadingHistoryItem> m_historyItems;

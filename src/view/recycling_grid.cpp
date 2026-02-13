@@ -208,6 +208,10 @@ void RecyclingGrid::setOnBackPressed(std::function<bool()> callback) {
     m_onBackPressed = callback;
 }
 
+void RecyclingGrid::setOnNearBottom(std::function<void()> callback) {
+    m_onNearBottom = callback;
+}
+
 void RecyclingGrid::setOnSelectionChanged(std::function<void(int count)> callback) {
     m_onSelectionChanged = callback;
 }
@@ -331,9 +335,17 @@ void RecyclingGrid::setupGrid() {
                 return false;
             }, true);  // hidden action
 
-            // Track focused index
-            cell->getFocusEvent()->subscribe([this, index](brls::View*) {
+            // Track focused index and trigger infinite scroll when near bottom
+            int totalItems = static_cast<int>(m_items.size());
+            cell->getFocusEvent()->subscribe([this, index, totalItems](brls::View*) {
                 m_focusedIndex = index;
+
+                // Trigger infinite scroll when focus is near the last row
+                // Use a threshold of the last 2 rows worth of items (m_columns * 2)
+                int threshold = m_columns * 2;
+                if (m_onNearBottom && index >= totalItems - threshold) {
+                    m_onNearBottom();
+                }
             });
 
             rowBox->addView(cell);

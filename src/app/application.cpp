@@ -1041,4 +1041,16 @@ void Application::syncStatisticsFromServer() {
     }
 }
 
+void Application::markMangaAddedToLibrary(int mangaId) {
+    m_libraryAdditions.insert(mangaId);
+}
+
+bool Application::wasMangaAddedToLibrary(int mangaId) const {
+    return m_libraryAdditions.count(mangaId) > 0;
+}
+
+void Application::clearLibraryAdditions() {
+    m_libraryAdditions.clear();
+}
+
 } // namespace vitasuwayomi

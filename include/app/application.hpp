@@ -124,7 +124,6 @@ struct AppSettings {
     // Library Settings
     bool updateOnStart = false;
     bool updateOnlyWifi = true;
-    int defaultCategoryId = 0;
     std::set<int> hiddenCategoryIds;  // Categories hidden from library view
     bool cacheLibraryData = true;     // Cache manga info for faster loading
     bool cacheCoverImages = true;     // Cache cover images to disk
@@ -251,6 +250,11 @@ public:
     void updateReadingStatistics(bool chapterCompleted = false, bool mangaCompleted = false);
     void syncStatisticsFromServer();
 
+    // Library addition tracking (for UI updates across views)
+    void markMangaAddedToLibrary(int mangaId);
+    bool wasMangaAddedToLibrary(int mangaId) const;
+    void clearLibraryAdditions();
+
     // Get string for display
     static std::string getThemeString(AppTheme theme);
     static std::string getReadingModeString(ReadingMode mode);
@@ -270,6 +274,9 @@ private:
     std::string m_authPassword;
     int m_currentCategoryId = 0;
     AppSettings m_settings;
+
+    // Track manga IDs that have been added to library (for UI updates)
+    std::set<int> m_libraryAdditions;
 };
 
 } // namespace vitasuwayomi

@@ -197,6 +197,18 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_trackingButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_trackingButton));
     leftPanel->addView(m_trackingButton);
 
+    // Set up explicit navigation between buttons
+    // Read button -> down goes to library button (if visible) or tracking button
+    if (m_libraryButton) {
+        m_readButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_libraryButton);
+        m_libraryButton->setCustomNavigationRoute(brls::FocusDirection::UP, m_readButton);
+        m_libraryButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_trackingButton);
+        m_trackingButton->setCustomNavigationRoute(brls::FocusDirection::UP, m_libraryButton);
+    } else {
+        m_readButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_trackingButton);
+        m_trackingButton->setCustomNavigationRoute(brls::FocusDirection::UP, m_readButton);
+    }
+
     this->addView(leftPanel);
 
     // ========== RIGHT PANEL: Info + Chapters (grows to fill) ==========
@@ -1190,7 +1202,21 @@ void MangaDetailView::populateChaptersList() {
                 }
             }, brls::PanAxis::HORIZONTAL));
 
+        // Set up left navigation to the buttons in the left panel
+        // This allows users to navigate from chapter list to the action buttons
+        chapterRow->setCustomNavigationRoute(brls::FocusDirection::LEFT, m_readButton);
+
         m_chaptersBox->addView(chapterRow);
+    }
+
+    // Set up navigation from left panel buttons to the first chapter row
+    if (m_chaptersBox->getChildrenCount() > 0) {
+        brls::View* firstChapter = m_chaptersBox->getChildren().front();
+        m_readButton->setCustomNavigationRoute(brls::FocusDirection::RIGHT, firstChapter);
+        if (m_libraryButton) {
+            m_libraryButton->setCustomNavigationRoute(brls::FocusDirection::RIGHT, firstChapter);
+        }
+        m_trackingButton->setCustomNavigationRoute(brls::FocusDirection::RIGHT, firstChapter);
     }
 
     brls::Logger::debug("MangaDetailView: Populated {} chapters", sortedChapters.size());
@@ -1419,25 +1445,102 @@ void MangaDetailView::onRead(int chapterId) {
 }
 
 void MangaDetailView::onAddToLibrary() {
-    brls::Logger::info("MangaDetailView: Adding to library");
+    brls::Logger::info("MangaDetailView: Adding to library with category selection");
 
-    asyncRun([this]() {
+    // Fetch categories first, then show selection dialog
+    int mangaId = m_manga.id;
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    asyncRun([this, mangaId, aliveWeak]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Category> categories;
+
+        bool categoriesOk = client.fetchCategories(categories);
+
+        brls::sync([this, mangaId, categories, categoriesOk, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            if (!categoriesOk || categories.empty()) {
+                // No categories available, just add to library without category
+                addToLibraryWithCategory(mangaId, -1);
+                return;
+            }
+
+            // Build category options for dropdown
+            std::vector<std::string> options;
+            options.push_back("Default (No Category)");
+            for (const auto& cat : categories) {
+                options.push_back(cat.name);
+            }
+
+            // Store categories for later use in callback
+            std::vector<int> categoryIds;
+            categoryIds.push_back(-1);  // Default/no category
+            for (const auto& cat : categories) {
+                categoryIds.push_back(cat.id);
+            }
+
+            brls::Dropdown* dropdown = new brls::Dropdown(
+                "Select Category", options,
+                [this, mangaId, categoryIds, aliveWeak](int selected) {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+
+                    if (selected < 0) {
+                        // Cancelled - do nothing
+                        return;
+                    }
+
+                    int categoryId = categoryIds[selected];
+                    brls::sync([this, mangaId, categoryId]() {
+                        addToLibraryWithCategory(mangaId, categoryId);
+                    });
+                }, 0);
+            brls::Application::pushActivity(new brls::Activity(dropdown));
+        });
+    });
+}
+
+void MangaDetailView::addToLibraryWithCategory(int mangaId, int categoryId) {
+    brls::Logger::info("MangaDetailView: Adding manga {} to library with category {}", mangaId, categoryId);
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    asyncRun([this, mangaId, categoryId, aliveWeak]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        if (client.addMangaToLibrary(m_manga.id)) {
-            brls::sync([this]() {
+        // First add to library
+        bool addSuccess = client.addMangaToLibrary(mangaId);
+
+        if (addSuccess && categoryId > 0) {
+            // Set the category for this manga
+            std::vector<int> categoryIds = {categoryId};
+            client.setMangaCategories(mangaId, categoryIds);
+        }
+
+        brls::sync([this, mangaId, addSuccess, categoryId, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            if (addSuccess) {
                 m_manga.inLibrary = true;
+                // Update category IDs if a category was selected
+                if (categoryId > 0) {
+                    m_manga.categoryIds.clear();
+                    m_manga.categoryIds.push_back(categoryId);
+                }
                 // Hide the button after adding to library
                 if (m_libraryButton) {
                     m_libraryButton->setVisibility(brls::Visibility::GONE);
                 }
+                // Mark manga as added to library for UI updates in other views
+                Application::getInstance().markMangaAddedToLibrary(mangaId);
                 brls::Application::notify("Added to library");
-            });
-        } else {
-            brls::sync([]() {
+            } else {
                 brls::Application::notify("Failed to add to library");
-            });
-        }
+            }
+        });
     });
 }
 

@@ -27,6 +27,7 @@ public:
     void setOnItemLongPressed(std::function<void(const Manga&, int index)> callback);
     void setOnPullToRefresh(std::function<void()> callback);
     void setOnBackPressed(std::function<bool()> callback);
+    void setOnNearBottom(std::function<void()> callback);  // For infinite scroll
     void clearViews();
 
     // Grid customization
@@ -74,6 +75,7 @@ private:
     std::function<void(const Manga&, int index)> m_onItemLongPressed;
     std::function<void()> m_onPullToRefresh;
     std::function<bool()> m_onBackPressed;
+    std::function<void()> m_onNearBottom;  // For infinite scroll
     std::function<void(int count)> m_onSelectionChanged;
 
     // Pull-to-refresh state

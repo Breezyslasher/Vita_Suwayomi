@@ -201,17 +201,13 @@ void HistoryTab::loadHistory() {
 }
 
 void HistoryTab::loadMoreHistory() {
-    if (!m_hasMoreItems) return;
+    if (!m_hasMoreItems || m_isLoadingMore) return;
 
     brls::Logger::debug("HistoryTab: Loading more history from offset {}...", m_currentOffset);
+    m_isLoadingMore = true;
 
     // Remember the index of first new item (current list size)
     size_t firstNewItemIndex = m_historyItems.size();
-
-    // Update load more button
-    if (m_loadMoreBtn) {
-        m_loadMoreBtn->setText("Loading...");
-    }
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
@@ -225,6 +221,8 @@ void HistoryTab::loadMoreHistory() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
+            m_isLoadingMore = false;
+
             if (success && !moreHistory.empty()) {
                 // Append to existing items in data model
                 for (const auto& item : moreHistory) {
@@ -237,9 +235,6 @@ void HistoryTab::loadMoreHistory() {
                 appendHistoryItems(moreHistory, firstNewItemIndex);
             } else {
                 m_hasMoreItems = false;
-                if (m_loadMoreBtn) {
-                    m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
-                }
             }
 
             brls::Logger::info("HistoryTab: Now have {} history items", m_historyItems.size());
@@ -250,7 +245,6 @@ void HistoryTab::loadMoreHistory() {
 void HistoryTab::rebuildHistoryList() {
     m_contentBox->clearViews();
     m_itemRows.clear();
-    m_loadMoreBtn = nullptr;
 
     if (m_historyItems.empty()) {
         m_scrollView->setVisibility(brls::Visibility::GONE);
@@ -289,19 +283,8 @@ void HistoryTab::rebuildHistoryList() {
         m_itemRows.push_back(itemRow);
     }
 
-    // Add Load More button if there are more items
-    if (m_hasMoreItems) {
-        m_loadMoreBtn = new brls::Button();
-        m_loadMoreBtn->setText("Load More");
-        m_loadMoreBtn->setMarginTop(15);
-        m_loadMoreBtn->setMarginBottom(15);
-        m_loadMoreBtn->registerClickAction([this](brls::View*) {
-            loadMoreHistory();
-            return true;
-        });
-        m_loadMoreBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_loadMoreBtn));
-        m_contentBox->addView(m_loadMoreBtn);
-    }
+    // Set up infinite scroll (focus-based loading when near bottom)
+    setupInfiniteScroll();
 
     // Set up navigation between refresh button and first history item
     if (!m_itemRows.empty() && m_refreshBtn) {
@@ -599,12 +582,6 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
         lastDate = formatTimestamp(m_historyItems[startIndex - 1].lastReadAt);
     }
 
-    // Remove Load More button temporarily (we'll add it back at the end)
-    if (m_loadMoreBtn && m_loadMoreBtn->getParent() == m_contentBox) {
-        m_contentBox->removeView(m_loadMoreBtn);
-        m_loadMoreBtn = nullptr;
-    }
-
     // Add the new items
     for (size_t i = 0; i < items.size(); i++) {
         const auto& item = items[i];
@@ -630,19 +607,8 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
         m_itemRows.push_back(itemRow);
     }
 
-    // Add Load More button if there are more items
-    if (m_hasMoreItems) {
-        m_loadMoreBtn = new brls::Button();
-        m_loadMoreBtn->setText("Load More");
-        m_loadMoreBtn->setMarginTop(15);
-        m_loadMoreBtn->setMarginBottom(15);
-        m_loadMoreBtn->registerClickAction([this](brls::View*) {
-            loadMoreHistory();
-            return true;
-        });
-        m_loadMoreBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_loadMoreBtn));
-        m_contentBox->addView(m_loadMoreBtn);
-    }
+    // Set up infinite scroll for newly added items
+    setupInfiniteScroll();
 
     // Update title with new count
     m_titleLabel->setText("Reading History (" + std::to_string(m_historyItems.size()) + ")");
@@ -653,6 +619,32 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
     }
 
     brls::Logger::info("HistoryTab: Appended {} items, now have {} total", items.size(), m_historyItems.size());
+}
+
+void HistoryTab::setupInfiniteScroll() {
+    if (!m_hasMoreItems || m_itemRows.empty()) return;
+
+    // Set up focus listeners on the last few items to trigger loading more
+    // When user focuses on items within the last 3, we start loading more
+    const int TRIGGER_THRESHOLD = 3;
+    int startIdx = std::max(0, static_cast<int>(m_itemRows.size()) - TRIGGER_THRESHOLD);
+
+    for (int i = startIdx; i < static_cast<int>(m_itemRows.size()); i++) {
+        brls::Box* row = m_itemRows[i];
+        if (!row) continue;
+
+        // Subscribe to focus event to trigger loading more
+        std::weak_ptr<bool> aliveWeak = m_alive;
+        row->getFocusEvent()->subscribe([this, aliveWeak](brls::View*) {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            // Load more if we have more items and not already loading
+            if (m_hasMoreItems && !m_isLoadingMore) {
+                loadMoreHistory();
+            }
+        });
+    }
 }
 
 } // namespace vitasuwayomi
