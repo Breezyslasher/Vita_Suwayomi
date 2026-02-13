@@ -31,6 +31,11 @@ public:
     bool hasCategoryCache(int categoryId);
     void invalidateCategoryCache(int categoryId);
 
+    // Individual manga details caching (for detail view)
+    bool saveMangaDetails(const Manga& manga);
+    bool loadMangaDetails(int mangaId, Manga& manga);
+    bool hasMangaDetailsCache(int mangaId);
+
     // Cover image caching
     bool saveCoverImage(int mangaId, const std::vector<uint8_t>& imageData);
     bool loadCoverImage(int mangaId, std::vector<uint8_t>& imageData);
@@ -58,13 +63,19 @@ private:
 
     std::string getCacheDir();
     std::string getCoverCacheDir();
+    std::string getMangaDetailsCacheDir();
     std::string getCategoryFilePath(int categoryId);
     std::string getCategoriesFilePath();
+    std::string getMangaDetailsFilePath(int mangaId);
     bool ensureDirectoryExists(const std::string& path);
 
-    // Serialize/deserialize manga
+    // Serialize/deserialize manga (basic - for category lists)
     std::string serializeManga(const Manga& manga);
     bool deserializeManga(const std::string& line, Manga& manga);
+
+    // Serialize/deserialize manga details (full - for detail view)
+    std::string serializeMangaDetails(const Manga& manga);
+    bool deserializeMangaDetails(const std::string& data, Manga& manga);
 
     // Serialize/deserialize category
     std::string serializeCategory(const Category& category);

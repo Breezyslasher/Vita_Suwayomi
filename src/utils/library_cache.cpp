@@ -40,6 +40,11 @@ bool LibraryCache::init() {
         return false;
     }
 
+    if (!ensureDirectoryExists(getMangaDetailsCacheDir())) {
+        brls::Logger::error("LibraryCache: Failed to create manga details cache directory");
+        return false;
+    }
+
     m_initialized = true;
     brls::Logger::info("LibraryCache: Initialized at {}", getCacheDir());
     return true;
@@ -67,6 +72,14 @@ std::string LibraryCache::getCategoriesFilePath() {
 
 std::string LibraryCache::getCoverCachePath(int mangaId) {
     return getCoverCacheDir() + "/" + std::to_string(mangaId) + ".tga";
+}
+
+std::string LibraryCache::getMangaDetailsCacheDir() {
+    return getCacheDir() + "/manga_details";
+}
+
+std::string LibraryCache::getMangaDetailsFilePath(int mangaId) {
+    return getMangaDetailsCacheDir() + "/" + std::to_string(mangaId) + ".txt";
 }
 
 bool LibraryCache::ensureDirectoryExists(const std::string& path) {
@@ -577,6 +590,209 @@ size_t LibraryCache::getCacheSize() {
 #endif
 
     return total;
+}
+
+// Helper to escape special characters for serialization
+static std::string escapeString(const std::string& str) {
+    std::string result;
+    result.reserve(str.size());
+    for (char c : str) {
+        if (c == '|') result += "\\|";
+        else if (c == '\n') result += "\\n";
+        else if (c == '\r') result += "\\r";
+        else if (c == '\\') result += "\\\\";
+        else result += c;
+    }
+    return result;
+}
+
+// Helper to unescape special characters for deserialization
+static std::string unescapeString(const std::string& str) {
+    std::string result;
+    result.reserve(str.size());
+    for (size_t i = 0; i < str.size(); i++) {
+        if (str[i] == '\\' && i + 1 < str.size()) {
+            char next = str[i + 1];
+            if (next == '|') { result += '|'; i++; }
+            else if (next == 'n') { result += '\n'; i++; }
+            else if (next == 'r') { result += '\r'; i++; }
+            else if (next == '\\') { result += '\\'; i++; }
+            else result += str[i];
+        } else {
+            result += str[i];
+        }
+    }
+    return result;
+}
+
+std::string LibraryCache::serializeMangaDetails(const Manga& manga) {
+    std::ostringstream ss;
+    // Format: key=value pairs, one per line for readability and robustness
+    ss << "id=" << manga.id << "\n";
+    ss << "sourceId=" << manga.sourceId << "\n";
+    ss << "url=" << escapeString(manga.url) << "\n";
+    ss << "title=" << escapeString(manga.title) << "\n";
+    ss << "thumbnailUrl=" << escapeString(manga.thumbnailUrl) << "\n";
+    ss << "artist=" << escapeString(manga.artist) << "\n";
+    ss << "author=" << escapeString(manga.author) << "\n";
+    ss << "description=" << escapeString(manga.description) << "\n";
+    ss << "status=" << static_cast<int>(manga.status) << "\n";
+    ss << "inLibrary=" << (manga.inLibrary ? 1 : 0) << "\n";
+    ss << "unreadCount=" << manga.unreadCount << "\n";
+    ss << "downloadedCount=" << manga.downloadedCount << "\n";
+    ss << "chapterCount=" << manga.chapterCount << "\n";
+    ss << "lastChapterRead=" << manga.lastChapterRead << "\n";
+    ss << "sourceName=" << escapeString(manga.sourceName) << "\n";
+
+    // Serialize genres as comma-separated
+    ss << "genre=";
+    for (size_t i = 0; i < manga.genre.size(); i++) {
+        if (i > 0) ss << ",";
+        ss << escapeString(manga.genre[i]);
+    }
+    ss << "\n";
+
+    return ss.str();
+}
+
+bool LibraryCache::deserializeMangaDetails(const std::string& data, Manga& manga) {
+    std::istringstream ss(data);
+    std::string line;
+
+    while (std::getline(ss, line)) {
+        if (line.empty()) continue;
+
+        size_t eqPos = line.find('=');
+        if (eqPos == std::string::npos) continue;
+
+        std::string key = line.substr(0, eqPos);
+        std::string value = line.substr(eqPos + 1);
+
+        try {
+            if (key == "id") manga.id = std::stoi(value);
+            else if (key == "sourceId") manga.sourceId = std::stoll(value);
+            else if (key == "url") manga.url = unescapeString(value);
+            else if (key == "title") manga.title = unescapeString(value);
+            else if (key == "thumbnailUrl") manga.thumbnailUrl = unescapeString(value);
+            else if (key == "artist") manga.artist = unescapeString(value);
+            else if (key == "author") manga.author = unescapeString(value);
+            else if (key == "description") manga.description = unescapeString(value);
+            else if (key == "status") manga.status = static_cast<MangaStatus>(std::stoi(value));
+            else if (key == "inLibrary") manga.inLibrary = (value == "1");
+            else if (key == "unreadCount") manga.unreadCount = std::stoi(value);
+            else if (key == "downloadedCount") manga.downloadedCount = std::stoi(value);
+            else if (key == "chapterCount") manga.chapterCount = std::stoi(value);
+            else if (key == "lastChapterRead") manga.lastChapterRead = std::stoi(value);
+            else if (key == "sourceName") manga.sourceName = unescapeString(value);
+            else if (key == "genre") {
+                manga.genre.clear();
+                if (!value.empty()) {
+                    std::istringstream genreStream(value);
+                    std::string genre;
+                    while (std::getline(genreStream, genre, ',')) {
+                        if (!genre.empty()) {
+                            manga.genre.push_back(unescapeString(genre));
+                        }
+                    }
+                }
+            }
+        } catch (...) {
+            // Skip invalid values
+        }
+    }
+
+    return manga.id > 0;
+}
+
+bool LibraryCache::saveMangaDetails(const Manga& manga) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    // Ensure directory exists
+    ensureDirectoryExists(getMangaDetailsCacheDir());
+
+    std::string path = getMangaDetailsFilePath(manga.id);
+    std::string data = serializeMangaDetails(manga);
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd < 0) {
+        brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
+        return false;
+    }
+    sceIoWrite(fd, data.c_str(), data.size());
+    sceIoClose(fd);
+#else
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+    file << data;
+    file.close();
+#endif
+
+    brls::Logger::debug("LibraryCache: Saved manga details for id={}", manga.id);
+    return true;
+}
+
+bool LibraryCache::loadMangaDetails(int mangaId, Manga& manga) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::string path = getMangaDetailsFilePath(mangaId);
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) {
+        return false;
+    }
+
+    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+    if (size <= 0 || size > 1024 * 1024) {
+        sceIoClose(fd);
+        return false;
+    }
+
+    std::vector<char> buffer(size + 1);
+    sceIoRead(fd, buffer.data(), size);
+    buffer[size] = '\0';
+    sceIoClose(fd);
+
+    std::string data(buffer.data());
+#else
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    file.close();
+    std::string data = ss.str();
+#endif
+
+    if (deserializeMangaDetails(data, manga)) {
+        brls::Logger::debug("LibraryCache: Loaded manga details for id={}", mangaId);
+        return true;
+    }
+
+    return false;
+}
+
+bool LibraryCache::hasMangaDetailsCache(int mangaId) {
+    std::string path = getMangaDetailsFilePath(mangaId);
+
+#ifdef __vita__
+    SceIoStat stat;
+    return sceIoGetstat(path.c_str(), &stat) >= 0;
+#else
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+#endif
 }
 
 } // namespace vitasuwayomi
