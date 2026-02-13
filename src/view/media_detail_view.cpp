@@ -810,12 +810,11 @@ void MangaDetailView::populateChaptersList() {
 
     // Create chapter cells (Komikku-style: rounded, clean design)
     for (const auto& chapter : sortedChapters) {
-        // For downloaded filter, check both server and local download state
+        // For downloaded filter, only check LOCAL download state (not server)
         if (m_filterDownloaded) {
-            bool isServerDownloaded = chapter.downloaded;
             DownloadedChapter* localCh = dmForFilter.getChapterDownload(m_manga.id, chapter.index);
             bool isLocallyDownloaded = localCh && localCh->state == LocalDownloadState::COMPLETED;
-            if (!isServerDownloaded && !isLocallyDownloaded) continue;
+            if (!isLocallyDownloaded) continue;
         }
         if (m_filterUnread && chapter.read) continue;
         if (m_filterBookmarked && !chapter.bookmarked) continue;
@@ -1105,9 +1104,6 @@ void MangaDetailView::populateChaptersList() {
                             }
                         } else {
                             // Right swipe - download, delete, or cancel
-                            // Get download mode setting
-                            DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
-
                             // Get download mode setting
                             DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
 
