@@ -344,7 +344,6 @@ bool Application::loadSettings() {
     // Load library settings
     m_settings.updateOnStart = extractBool("updateOnStart", false);
     m_settings.updateOnlyWifi = extractBool("updateOnlyWifi", true);
-    m_settings.defaultCategoryId = extractInt("defaultCategoryId");
 
     // Load hidden categories (comma-separated IDs)
     m_settings.hiddenCategoryIds.clear();
@@ -737,7 +736,6 @@ bool Application::saveSettings() {
     // Library settings
     json += "  \"updateOnStart\": " + std::string(m_settings.updateOnStart ? "true" : "false") + ",\n";
     json += "  \"updateOnlyWifi\": " + std::string(m_settings.updateOnlyWifi ? "true" : "false") + ",\n";
-    json += "  \"defaultCategoryId\": " + std::to_string(m_settings.defaultCategoryId) + ",\n";
 
     // Hidden categories (stored as comma-separated IDs)
     std::string hiddenCatsStr;
