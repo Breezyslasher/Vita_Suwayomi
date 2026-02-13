@@ -73,6 +73,7 @@ RecyclingGrid::RecyclingGrid() {
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
     brls::Logger::debug("RecyclingGrid: setDataSource with {} items", items.size());
     m_items = items;
+    m_nearBottomTriggered = false;  // Reset trigger flag when new data is loaded
     setupGrid();
 }
 
@@ -220,6 +221,7 @@ void RecyclingGrid::clearViews() {
     m_items.clear();
     m_rows.clear();
     m_cells.clear();
+    m_nearBottomTriggered = false;
     if (m_contentBox) {
         m_contentBox->clearViews();
     }
@@ -335,15 +337,16 @@ void RecyclingGrid::setupGrid() {
                 return false;
             }, true);  // hidden action
 
-            // Track focused index and trigger infinite scroll when near bottom
+            // Track focused index and trigger infinite scroll when at bottom
             int totalItems = static_cast<int>(m_items.size());
             cell->getFocusEvent()->subscribe([this, index, totalItems](brls::View*) {
                 m_focusedIndex = index;
 
-                // Trigger infinite scroll when focus is near the last row
-                // Use a threshold of the last 2 rows worth of items (m_columns * 2)
-                int threshold = m_columns * 2;
-                if (m_onNearBottom && index >= totalItems - threshold) {
+                // Trigger infinite scroll only when focus is on the very last row
+                // Only trigger once per data load to prevent continuous loading
+                int threshold = m_columns;  // Just the last row
+                if (m_onNearBottom && !m_nearBottomTriggered && index >= totalItems - threshold) {
+                    m_nearBottomTriggered = true;  // Prevent re-triggering until new data loads
                     m_onNearBottom();
                 }
             });

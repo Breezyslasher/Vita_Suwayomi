@@ -7,6 +7,7 @@
 
 #include <borealis.hpp>
 #include <memory>
+#include <set>
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
@@ -43,6 +44,7 @@ private:
 
     // Infinite scroll
     bool m_isLoadingMore = false;  // Prevent multiple simultaneous loads
+    std::set<int> m_itemsWithScrollListeners;  // Track which item indices have listeners
     void setupInfiniteScroll();  // Set up focus listeners for infinite scroll
 
     // Data

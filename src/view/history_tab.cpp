@@ -245,6 +245,7 @@ void HistoryTab::loadMoreHistory() {
 void HistoryTab::rebuildHistoryList() {
     m_contentBox->clearViews();
     m_itemRows.clear();
+    m_itemsWithScrollListeners.clear();  // Clear listener tracking on rebuild
 
     if (m_historyItems.empty()) {
         m_scrollView->setVisibility(brls::Visibility::GONE);
@@ -624,14 +625,22 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
 void HistoryTab::setupInfiniteScroll() {
     if (!m_hasMoreItems || m_itemRows.empty()) return;
 
-    // Set up focus listeners on the last few items to trigger loading more
-    // When user focuses on items within the last 3, we start loading more
-    const int TRIGGER_THRESHOLD = 3;
+    // Set up focus listener on the very last item only to trigger loading more
+    // This prevents aggressive loading - user must reach the actual bottom
+    const int TRIGGER_THRESHOLD = 1;
     int startIdx = std::max(0, static_cast<int>(m_itemRows.size()) - TRIGGER_THRESHOLD);
 
     for (int i = startIdx; i < static_cast<int>(m_itemRows.size()); i++) {
+        // Skip if this item already has a listener attached
+        if (m_itemsWithScrollListeners.count(i) > 0) {
+            continue;
+        }
+
         brls::Box* row = m_itemRows[i];
         if (!row) continue;
+
+        // Mark this item as having a listener
+        m_itemsWithScrollListeners.insert(i);
 
         // Subscribe to focus event to trigger loading more
         std::weak_ptr<bool> aliveWeak = m_alive;

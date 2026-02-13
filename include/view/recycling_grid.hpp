@@ -76,6 +76,7 @@ private:
     std::function<void()> m_onPullToRefresh;
     std::function<bool()> m_onBackPressed;
     std::function<void()> m_onNearBottom;  // For infinite scroll
+    bool m_nearBottomTriggered = false;  // Prevent repeated triggers until new data loads
     std::function<void(int count)> m_onSelectionChanged;
 
     // Pull-to-refresh state
