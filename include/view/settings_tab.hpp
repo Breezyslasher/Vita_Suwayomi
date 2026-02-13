@@ -43,7 +43,6 @@ private:
                             const std::string& currentValue,
                             std::function<void(const std::string&)> callback);
     void updateServerLabel();
-    void refreshDefaultCategorySelector();
     void checkForUpdates();
     void showUpdateDialog(const std::string& newVersion, const std::string& releaseNotes,
                           const std::string& downloadUrl);
@@ -62,7 +61,6 @@ private:
 
     // Library section
     brls::DetailCell* m_hideCategoriesCell = nullptr;
-    brls::SelectorCell* m_defaultCategorySelector = nullptr;
 
     // Reader section
     brls::SelectorCell* m_readingModeSelector = nullptr;

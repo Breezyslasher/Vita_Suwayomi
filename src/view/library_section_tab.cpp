@@ -328,20 +328,8 @@ void LibrarySectionTab::loadCategories() {
             m_categoriesLoaded = true;
             createCategoryTabs();
 
-            // Load default category from settings, or first category if not found
-            int defaultId = Application::getInstance().getSettings().defaultCategoryId;
-            bool foundDefault = false;
-            if (defaultId != 0) {
-                for (const auto& cat : m_categories) {
-                    if (cat.id == defaultId) {
-                        foundDefault = true;
-                        break;
-                    }
-                }
-            }
-            if (foundDefault) {
-                selectCategory(defaultId);
-            } else if (!m_categories.empty()) {
+            // Select first category
+            if (!m_categories.empty()) {
                 selectCategory(m_categories[0].id);
             } else {
                 selectCategory(0);
@@ -376,20 +364,8 @@ void LibrarySectionTab::loadCategories() {
                 m_categoriesLoaded = true;
                 createCategoryTabs();
 
-                // Load default category from settings, or first category if not found
-                int defaultId = Application::getInstance().getSettings().defaultCategoryId;
-                bool foundDefault = false;
-                if (defaultId != 0) {
-                    for (const auto& cat : m_categories) {
-                        if (cat.id == defaultId) {
-                            foundDefault = true;
-                            break;
-                        }
-                    }
-                }
-                if (foundDefault) {
-                    selectCategory(defaultId);
-                } else if (!m_categories.empty()) {
+                // Select first category
+                if (!m_categories.empty()) {
                     selectCategory(m_categories[0].id);
                 } else {
                     // No categories - load all library manga

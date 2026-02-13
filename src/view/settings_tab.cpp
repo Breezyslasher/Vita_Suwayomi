@@ -349,20 +349,6 @@ void SettingsTab::createLibrarySection() {
     updateOnStartInfoLabel->setMarginTop(4);
     m_contentBox->addView(updateOnStartInfoLabel);
 
-    // Default category selector
-    m_defaultCategorySelector = new brls::SelectorCell();
-    m_defaultCategorySelector->init("Default Category",
-        {"Default (All)", "Loading..."},
-        0,
-        [](int index) {
-            // Will be updated when categories are loaded
-        });
-    m_defaultCategorySelector->setDetailText("Category to show when opening library");
-    m_contentBox->addView(m_defaultCategorySelector);
-
-    // Load categories for the selector asynchronously
-    refreshDefaultCategorySelector();
-
     // Display Badges header
     auto* badgesHeader = new brls::Header();
     badgesHeader->setTitle("Display Badges");
@@ -2121,58 +2107,6 @@ void SettingsTab::importBackup() {
     });
 
     dialog->open();
-}
-
-void SettingsTab::refreshDefaultCategorySelector() {
-    if (!m_defaultCategorySelector) return;
-
-    // Fetch categories asynchronously
-    SuwayomiClient& client = SuwayomiClient::getInstance();
-    std::vector<Category> categories;
-
-    if (client.fetchCategories(categories)) {
-        // Sort by order
-        std::sort(categories.begin(), categories.end(),
-            [](const Category& a, const Category& b) {
-                return a.order < b.order;
-            });
-
-        // Build category names list
-        std::vector<std::string> categoryNames;
-        std::vector<int> categoryIds;
-
-        categoryNames.push_back("Default (All)");
-        categoryIds.push_back(0);
-
-        for (const auto& cat : categories) {
-            if (cat.mangaCount > 0) {
-                categoryNames.push_back(cat.name);
-                categoryIds.push_back(cat.id);
-            }
-        }
-
-        // Find current selection index
-        int currentIndex = 0;
-        int currentId = Application::getInstance().getSettings().defaultCategoryId;
-        for (size_t i = 0; i < categoryIds.size(); i++) {
-            if (categoryIds[i] == currentId) {
-                currentIndex = static_cast<int>(i);
-                break;
-            }
-        }
-
-        // Update the selector
-        m_defaultCategorySelector->init("Default Category",
-            categoryNames,
-            currentIndex,
-            [categoryIds](int index) {
-                if (index >= 0 && index < static_cast<int>(categoryIds.size())) {
-                    Application::getInstance().getSettings().defaultCategoryId = categoryIds[index];
-                    Application::getInstance().saveSettings();
-                }
-            });
-        m_defaultCategorySelector->setDetailText("Category to show when opening library");
-    }
 }
 
 void SettingsTab::checkForUpdates() {
