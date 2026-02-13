@@ -208,6 +208,10 @@ void RecyclingGrid::setOnBackPressed(std::function<bool()> callback) {
     m_onBackPressed = callback;
 }
 
+void RecyclingGrid::setOnSelectionChanged(std::function<void(int count)> callback) {
+    m_onSelectionChanged = callback;
+}
+
 void RecyclingGrid::clearViews() {
     m_items.clear();
     m_rows.clear();
@@ -387,6 +391,11 @@ void RecyclingGrid::toggleSelection(int index) {
     } else {
         m_selectedIndices.insert(index);
         m_cells[index]->setSelected(true);
+    }
+
+    // Notify selection change
+    if (m_onSelectionChanged) {
+        m_onSelectionChanged(static_cast<int>(m_selectedIndices.size()));
     }
 }
 

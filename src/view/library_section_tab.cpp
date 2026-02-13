@@ -167,6 +167,33 @@ LibrarySectionTab::LibrarySectionTab() {
         showMangaContextMenu(manga, index);
     });
 
+    // Auto-exit selection mode when all items are deselected (after a short delay)
+    m_contentGrid->setOnSelectionChanged([this](int count) {
+        if (m_selectionMode) {
+            updateSelectionTitle();
+            if (count == 0) {
+                // Delay exit by ~2 seconds so user can re-select if they misclicked
+                int generation = ++m_selectionExitGeneration;
+                std::weak_ptr<bool> aliveWeak = m_alive;
+                asyncRun([this, generation, aliveWeak]() {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+                    brls::sync([this, generation, aliveWeak]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
+                        // Only exit if no new selections happened since we scheduled this
+                        if (m_selectionMode && m_selectionExitGeneration == generation &&
+                            m_contentGrid && m_contentGrid->getSelectionCount() == 0) {
+                            exitSelectionMode();
+                        }
+                    });
+                });
+            } else {
+                // User selected something, cancel any pending auto-exit
+                ++m_selectionExitGeneration;
+            }
+        }
+    });
+
     // Apply library display settings from user preferences
     const auto& settings = Application::getInstance().getSettings();
 
@@ -994,7 +1021,7 @@ void LibrarySectionTab::showSortMenu() {
         "Date Updated (Newest)",
         "Date Updated (Oldest)",
         "Total Chapters",
-        "Downloaded Only"
+        "Local Downloads Only"
     };
 
     // Find current selection index for highlighting
@@ -1278,7 +1305,7 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
                 switch (selected) {
                     case 0: // Select / Deselect
                         m_contentGrid->toggleSelection(index);
-                        updateSelectionTitle();
+                        // Selection callback handles title update and auto-exit if count is 0
                         break;
                     case 1: { // Download
                         auto selectedManga = m_contentGrid->getSelectedManga();
@@ -1525,8 +1552,8 @@ void LibrarySectionTab::enterSelectionMode(int initialIndex) {
     if (m_contentGrid) {
         m_contentGrid->setSelectionMode(true);
         m_contentGrid->toggleSelection(initialIndex);
+        // toggleSelection fires onSelectionChanged which calls updateSelectionTitle
     }
-    updateSelectionTitle();
     brls::Logger::info("LibrarySectionTab: Entered selection mode");
 }
 

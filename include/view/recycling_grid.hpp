@@ -48,6 +48,7 @@ public:
     std::vector<int> getSelectedIndices() const;
     std::vector<Manga> getSelectedManga() const;
     int getSelectionCount() const;
+    void setOnSelectionChanged(std::function<void(int count)> callback);
 
     // Get item at index
     const Manga* getItem(int index) const;
@@ -73,6 +74,7 @@ private:
     std::function<void(const Manga&, int index)> m_onItemLongPressed;
     std::function<void()> m_onPullToRefresh;
     std::function<bool()> m_onBackPressed;
+    std::function<void(int count)> m_onSelectionChanged;
 
     // Pull-to-refresh state
     bool m_isPulling = false;
