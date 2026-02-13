@@ -508,7 +508,7 @@ void MangaDetailView::willAppear(bool resetState) {
                 if (!alive || !*alive || !m_progressCallbackActive.load()) {
                     return;
                 }
-                populateChaptersList();
+                updateChapterDownloadStates();
             });
         }
     });
@@ -526,7 +526,7 @@ void MangaDetailView::willAppear(bool resetState) {
                 if (!alive || !*alive || !m_progressCallbackActive.load()) {
                     return;
                 }
-                populateChaptersList();
+                updateChapterDownloadStates();
             });
         }
     });
@@ -665,10 +665,83 @@ void MangaDetailView::loadChapters() {
     });
 }
 
+void MangaDetailView::updateChapterDownloadStates() {
+    if (m_chapterDlElements.empty()) return;
+
+    DownloadsManager& dm = DownloadsManager::getInstance();
+
+    for (auto& elem : m_chapterDlElements) {
+        if (!elem.dlBtn) continue;
+
+        DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, elem.chapterIndex);
+
+        int newState = -1;  // not local
+        int newPercent = -1;
+        if (localCh) {
+            newState = static_cast<int>(localCh->state);
+            if (localCh->state == LocalDownloadState::DOWNLOADING && localCh->pageCount > 0) {
+                newPercent = (localCh->downloadedPages * 100) / localCh->pageCount;
+            }
+        }
+
+        // Skip if state hasn't changed
+        if (newState == elem.cachedState && newPercent == elem.cachedPercent) continue;
+
+        elem.cachedState = newState;
+        elem.cachedPercent = newPercent;
+
+        // Update button appearance in-place
+        brls::Button* dlBtn = elem.dlBtn;
+        dlBtn->clearViews();
+
+        if (localCh && localCh->state == LocalDownloadState::DOWNLOADING) {
+            dlBtn->setText(std::to_string(newPercent >= 0 ? newPercent : 0) + "%");
+            dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
+        } else if (localCh && localCh->state == LocalDownloadState::COMPLETED) {
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
+            dlBtn->addView(icon);
+            dlBtn->setText("");
+            dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
+        } else if (localCh && localCh->state == LocalDownloadState::QUEUED) {
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("app0:resources/icons/refresh.png");
+            dlBtn->addView(icon);
+            dlBtn->setText("");
+            dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
+        } else if (localCh && localCh->state == LocalDownloadState::FAILED) {
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("app0:resources/icons/cross.png");
+            dlBtn->addView(icon);
+            dlBtn->setText("");
+            dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
+        } else {
+            auto* icon = new brls::Image();
+            icon->setWidth(20);
+            icon->setHeight(20);
+            icon->setScalingType(brls::ImageScalingType::FIT);
+            icon->setImageFromFile("app0:resources/icons/download.png");
+            dlBtn->addView(icon);
+            dlBtn->setText("");
+            dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+        }
+    }
+}
+
 void MangaDetailView::populateChaptersList() {
     if (!m_chaptersBox) return;
 
     m_chaptersBox->clearViews();
+    m_chapterDlElements.clear();
 
     // Sort chapters
     std::vector<Chapter> sortedChapters = m_chapters;
@@ -824,6 +897,18 @@ void MangaDetailView::populateChaptersList() {
             });
         }
         dlBtn->addGestureRecognizer(new brls::TapGestureRecognizer(dlBtn));
+
+        // Track this button for incremental download state updates
+        {
+            ChapterDownloadUI cdui;
+            cdui.chapterIndex = chapter.index;
+            cdui.dlBtn = dlBtn;
+            cdui.cachedState = localCh ? static_cast<int>(localCh->state) : -1;
+            cdui.cachedPercent = (isLocallyDownloading && localCh && localCh->pageCount > 0)
+                ? (localCh->downloadedPages * 100) / localCh->pageCount : -1;
+            m_chapterDlElements.push_back(cdui);
+        }
+
         statusBox->addView(dlBtn);
 
         // X button icon indicator (shows X button action is available) - only visible when focused

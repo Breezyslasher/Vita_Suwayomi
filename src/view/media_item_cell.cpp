@@ -273,6 +273,14 @@ void MangaItemCell::setMangaDeferred(const Manga& manga) {
     updateDisplay();
 }
 
+void MangaItemCell::updateMangaData(const Manga& manga) {
+    // Update manga data in place without reloading thumbnail
+    // Used for incremental updates when only counts/metadata change
+    m_manga = manga;
+    // Don't reset m_thumbnailLoaded - keep existing thumbnail
+    updateDisplay();
+}
+
 void MangaItemCell::loadThumbnailIfNeeded() {
     if (!m_thumbnailLoaded && m_manga.id > 0) {
         loadThumbnail();

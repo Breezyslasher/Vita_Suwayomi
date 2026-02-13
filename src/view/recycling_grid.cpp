@@ -127,6 +127,36 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
     brls::Logger::debug("RecyclingGrid: updateDataOrder complete");
 }
 
+void RecyclingGrid::updateCellData(const std::vector<Manga>& items) {
+    // Update cell metadata in place without reloading thumbnails
+    // Used for incremental updates when only counts/metadata change (like downloads tab)
+    if (items.size() != m_items.size()) {
+        brls::Logger::debug("RecyclingGrid: updateCellData size mismatch, doing full rebuild");
+        setDataSource(items);
+        return;
+    }
+
+    if (m_cells.empty()) {
+        setDataSource(items);
+        return;
+    }
+
+    brls::Logger::debug("RecyclingGrid: updateCellData - updating {} cells metadata in place", items.size());
+
+    // Update internal data
+    m_items = items;
+
+    // Update each cell's data without reloading thumbnails
+    for (size_t i = 0; i < m_cells.size() && i < items.size(); i++) {
+        MangaItemCell* cell = m_cells[i];
+        if (cell) {
+            cell->updateMangaData(items[i]);
+        }
+    }
+
+    brls::Logger::debug("RecyclingGrid: updateCellData complete");
+}
+
 void RecyclingGrid::removeItems(const std::vector<int>& mangaIdsToRemove) {
     // Remove specific items without full rebuild
     // This is used for filter operations like DOWNLOADED_ONLY

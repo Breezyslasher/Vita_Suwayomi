@@ -16,6 +16,7 @@ public:
 
     void setManga(const Manga& manga);
     void setMangaDeferred(const Manga& manga);  // Set data without loading image
+    void updateMangaData(const Manga& manga);   // Update data in place without reloading thumbnail
     void loadThumbnailIfNeeded();  // Load image if not already loaded
     const Manga& getManga() const { return m_manga; }
 

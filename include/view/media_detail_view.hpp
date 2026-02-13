@@ -148,10 +148,20 @@ private:
     // Reset cover image
     void resetCover();
 
-    // Live download progress tracking
+    // Live download progress tracking (incremental, no full rebuild)
     std::chrono::steady_clock::time_point m_lastProgressRefresh;
     std::atomic<bool> m_progressCallbackActive{false};
     std::shared_ptr<bool> m_alive;
+
+    // Cached chapter download state for incremental UI updates
+    struct ChapterDownloadUI {
+        int chapterIndex;
+        brls::Button* dlBtn = nullptr;
+        int cachedState = -1;       // LocalDownloadState as int, -1 = not local
+        int cachedPercent = -1;     // Download percent (0-100)
+    };
+    std::vector<ChapterDownloadUI> m_chapterDlElements;
+    void updateChapterDownloadStates();  // Update download buttons in-place
 };
 
 // Alias for backward compatibility

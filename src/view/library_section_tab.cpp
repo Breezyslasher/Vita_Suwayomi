@@ -580,9 +580,17 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         m_titleLabel->setText(m_currentCategoryName);
     }
 
+    // Check if this is a background refresh of the same category (don't cancel images)
+    bool isSameCategory = (categoryId == m_cachedCategoryId);
+
     // Cancel pending image loads when switching categories
     // Keep memory cache for faster switching back to previous categories
-    ImageLoader::cancelAll();
+    if (!isSameCategory) {
+        ImageLoader::cancelAll();
+        // Clear cached state when switching categories
+        m_cachedMangaList.clear();
+        m_cachedCategoryId = categoryId;
+    }
 
     // Check if we have cached data (for instant loading)
     bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
@@ -599,8 +607,8 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
             m_loaded = true;
             // Continue to refresh from server in background
         }
-    } else {
-        // No cache - clear display while loading
+    } else if (!isSameCategory) {
+        // No cache and switching categories - clear display while loading
         m_mangaList.clear();
         if (m_contentGrid) {
             m_contentGrid->setDataSource(m_mangaList);
@@ -609,7 +617,7 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, categoryId, aliveWeak, cacheEnabled]() {
+    asyncRun([this, categoryId, aliveWeak, cacheEnabled, isSameCategory]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
 
@@ -644,7 +652,7 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
                 LibraryCache::getInstance().saveCategoryManga(categoryId, manga);
             }
 
-            brls::sync([this, manga, categoryId, aliveWeak]() {
+            brls::sync([this, manga, categoryId, aliveWeak, isSameCategory]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) {
                     return;
@@ -652,9 +660,14 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
 
                 // Only update if we're still on the same category
                 if (m_currentCategoryId == categoryId) {
-                    m_fullMangaList = manga;
-                    m_mangaList = manga;
-                    sortMangaList();
+                    // Use incremental update if refreshing the same category
+                    if (isSameCategory && !m_cachedMangaList.empty()) {
+                        updateMangaCellsIncrementally(manga);
+                    } else {
+                        m_fullMangaList = manga;
+                        m_mangaList = manga;
+                        sortMangaList();
+                    }
                 }
                 m_loaded = true;
             });
@@ -870,6 +883,19 @@ void LibrarySectionTab::sortMangaList() {
         } else {
             // Items were filtered out or list size changed, need full rebuild
             m_contentGrid->setDataSource(m_mangaList);
+        }
+
+        // Handle empty state after filtering (e.g., "Downloads Only" with no local downloads)
+        if (m_mangaList.empty()) {
+            // Transfer focus: prefer category button, fall back to sort button
+            if (m_focusGridAfterLoad && m_selectedCategoryIndex >= 0 &&
+                m_selectedCategoryIndex < static_cast<int>(m_categoryButtons.size())) {
+                brls::Application::giveFocus(m_categoryButtons[m_selectedCategoryIndex]);
+            } else if (m_sortBtn) {
+                brls::Application::giveFocus(m_sortBtn);
+            }
+            m_focusGridAfterLoad = false;
+            return;
         }
 
         // Restore focus: find the manga's new index after sorting
@@ -1384,29 +1410,102 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         catNames,
         [this, capturedList](int selected) {
             if (selected < 0 || selected >= (int)m_categories.size()) return;
-            int categoryId = m_categories[selected].id;
+            int destCategoryId = m_categories[selected].id;
             std::string catName = m_categories[selected].name;
+            int srcCategoryId = m_currentCategoryId;
+
+            // If moving to the same category, do nothing
+            if (destCategoryId == srcCategoryId) {
+                brls::Application::notify("Already in " + catName);
+                if (m_selectionMode) exitSelectionMode();
+                return;
+            }
 
             std::weak_ptr<bool> aliveWeak = m_alive;
             std::vector<Manga> asyncList = capturedList;
+            bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
 
             brls::Application::notify("Moving to " + catName + "...");
 
-            asyncRun([asyncList, categoryId, catName, aliveWeak]() {
+            asyncRun([this, asyncList, destCategoryId, srcCategoryId, catName, aliveWeak, cacheEnabled]() {
                 SuwayomiClient& client = SuwayomiClient::getInstance();
                 int successCount = 0;
+                std::vector<int> movedMangaIds;
                 for (const auto& manga : asyncList) {
-                    std::vector<int> catIds = {categoryId};
+                    std::vector<int> catIds = {destCategoryId};
                     if (client.setMangaCategories(manga.id, catIds)) {
                         successCount++;
+                        movedMangaIds.push_back(manga.id);
                     }
                 }
 
-                brls::sync([successCount, asyncList, catName, aliveWeak]() {
+                brls::sync([this, successCount, movedMangaIds, catName, srcCategoryId, destCategoryId, aliveWeak, cacheEnabled]() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
+
                     brls::Application::notify("Moved " + std::to_string(successCount) +
                                               " manga to " + catName);
+
+                    if (movedMangaIds.empty()) return;
+
+                    // Remove moved manga from current display without full refresh
+                    std::set<int> idsToRemove(movedMangaIds.begin(), movedMangaIds.end());
+
+                    // Get focus info before removal
+                    int focusedIdx = m_contentGrid ? m_contentGrid->getFocusedIndex() : -1;
+                    bool hadCellFocus = m_contentGrid && m_contentGrid->hasCellFocus();
+
+                    // Remove from working lists
+                    m_mangaList.erase(
+                        std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                            [&idsToRemove](const Manga& m) { return idsToRemove.count(m.id) > 0; }),
+                        m_mangaList.end());
+                    m_fullMangaList.erase(
+                        std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(),
+                            [&idsToRemove](const Manga& m) { return idsToRemove.count(m.id) > 0; }),
+                        m_fullMangaList.end());
+
+                    // Update grid with removed items
+                    if (m_contentGrid) {
+                        m_contentGrid->removeItems(movedMangaIds);
+                    }
+
+                    // Update cache for source category
+                    if (cacheEnabled) {
+                        LibraryCache::getInstance().saveCategoryManga(srcCategoryId, m_fullMangaList);
+                        LibraryCache::getInstance().invalidateCategoryCache(destCategoryId);
+                    }
+
+                    // Update cached manga list
+                    m_cachedMangaList.clear();
+                    for (const auto& m : m_fullMangaList) {
+                        CachedMangaItem cached;
+                        cached.id = m.id;
+                        cached.unreadCount = m.unreadCount;
+                        cached.lastReadAt = m.lastReadAt;
+                        cached.latestChapterUploadDate = m.latestChapterUploadDate;
+                        cached.chapterCount = m.chapterCount;
+                        m_cachedMangaList.push_back(cached);
+                    }
+
+                    // Handle focus transfer after removal
+                    if (hadCellFocus && m_contentGrid) {
+                        if (m_mangaList.empty()) {
+                            // Grid is now empty, focus category or sort button
+                            if (m_selectedCategoryIndex >= 0 &&
+                                m_selectedCategoryIndex < static_cast<int>(m_categoryButtons.size())) {
+                                brls::Application::giveFocus(m_categoryButtons[m_selectedCategoryIndex]);
+                            } else if (m_sortBtn) {
+                                brls::Application::giveFocus(m_sortBtn);
+                            }
+                        } else {
+                            // Focus the item at the same position or the last item
+                            int newIdx = std::min(focusedIdx, static_cast<int>(m_mangaList.size()) - 1);
+                            if (newIdx >= 0) {
+                                m_contentGrid->focusIndex(newIdx);
+                            }
+                        }
+                    }
                 });
             });
 
@@ -1617,21 +1716,230 @@ void LibrarySectionTab::removeFromLibrary(const std::vector<Manga>& mangaList) {
     std::weak_ptr<bool> aliveWeak = m_alive;
     std::vector<Manga> asyncList = mangaList;
     int categoryId = m_currentCategoryId;
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
 
-    asyncRun([this, asyncList, aliveWeak, categoryId]() {
+    // Capture focus info before async operation
+    int focusedIdx = m_contentGrid ? m_contentGrid->getFocusedIndex() : -1;
+    bool hadCellFocus = m_contentGrid && m_contentGrid->hasCellFocus();
+
+    asyncRun([this, asyncList, aliveWeak, categoryId, cacheEnabled, focusedIdx, hadCellFocus]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         int count = 0;
+        std::vector<int> removedMangaIds;
         for (const auto& manga : asyncList) {
-            if (client.removeMangaFromLibrary(manga.id)) count++;
+            if (client.removeMangaFromLibrary(manga.id)) {
+                count++;
+                removedMangaIds.push_back(manga.id);
+            }
         }
 
-        brls::sync([this, count, aliveWeak, categoryId]() {
+        brls::sync([this, count, removedMangaIds, aliveWeak, categoryId, cacheEnabled, focusedIdx, hadCellFocus]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
+
             brls::Application::notify("Removed " + std::to_string(count) + " manga");
-            loadCategoryManga(categoryId);
+
+            if (removedMangaIds.empty()) return;
+
+            // Remove from current display without full refresh
+            std::set<int> idsToRemove(removedMangaIds.begin(), removedMangaIds.end());
+
+            m_mangaList.erase(
+                std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                    [&idsToRemove](const Manga& m) { return idsToRemove.count(m.id) > 0; }),
+                m_mangaList.end());
+            m_fullMangaList.erase(
+                std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(),
+                    [&idsToRemove](const Manga& m) { return idsToRemove.count(m.id) > 0; }),
+                m_fullMangaList.end());
+
+            // Update grid
+            if (m_contentGrid) {
+                m_contentGrid->removeItems(removedMangaIds);
+            }
+
+            // Update cache
+            if (cacheEnabled) {
+                LibraryCache::getInstance().saveCategoryManga(categoryId, m_fullMangaList);
+            }
+
+            // Update cached manga list
+            m_cachedMangaList.clear();
+            for (const auto& m : m_fullMangaList) {
+                CachedMangaItem cached;
+                cached.id = m.id;
+                cached.unreadCount = m.unreadCount;
+                cached.lastReadAt = m.lastReadAt;
+                cached.latestChapterUploadDate = m.latestChapterUploadDate;
+                cached.chapterCount = m.chapterCount;
+                m_cachedMangaList.push_back(cached);
+            }
+
+            // Handle focus transfer after removal
+            if (hadCellFocus && m_contentGrid) {
+                if (m_mangaList.empty()) {
+                    // Grid is now empty, focus category or sort button
+                    if (m_selectedCategoryIndex >= 0 &&
+                        m_selectedCategoryIndex < static_cast<int>(m_categoryButtons.size())) {
+                        brls::Application::giveFocus(m_categoryButtons[m_selectedCategoryIndex]);
+                    } else if (m_sortBtn) {
+                        brls::Application::giveFocus(m_sortBtn);
+                    }
+                } else {
+                    // Focus the item at the same position or the last item
+                    int newIdx = std::min(focusedIdx, static_cast<int>(m_mangaList.size()) - 1);
+                    if (newIdx >= 0) {
+                        m_contentGrid->focusIndex(newIdx);
+                    }
+                }
+            }
         });
     });
+}
+
+void LibrarySectionTab::updateMangaCellsIncrementally(const std::vector<Manga>& newManga) {
+    // Compare new manga list with cached state for incremental updates
+    // This avoids full page refresh when only metadata changed (like downloads tab)
+
+    brls::Logger::debug("LibrarySectionTab: updateMangaCellsIncrementally - {} new, {} cached",
+                       newManga.size(), m_cachedMangaList.size());
+
+    // Check if structure changed (different IDs or count)
+    bool structureChanged = (newManga.size() != m_cachedMangaList.size());
+    if (!structureChanged) {
+        for (size_t i = 0; i < newManga.size(); i++) {
+            if (newManga[i].id != m_cachedMangaList[i].id) {
+                structureChanged = true;
+                break;
+            }
+        }
+    }
+
+    // Update full list
+    m_fullMangaList = newManga;
+
+    if (structureChanged) {
+        brls::Logger::debug("LibrarySectionTab: Structure changed, doing full rebuild");
+        // Structure changed, need full rebuild
+        m_mangaList = newManga;
+        sortMangaList();  // This will call setDataSource
+
+        // Update cache
+        m_cachedMangaList.clear();
+        for (const auto& m : newManga) {
+            CachedMangaItem cached;
+            cached.id = m.id;
+            cached.unreadCount = m.unreadCount;
+            cached.lastReadAt = m.lastReadAt;
+            cached.latestChapterUploadDate = m.latestChapterUploadDate;
+            cached.chapterCount = m.chapterCount;
+            m_cachedMangaList.push_back(cached);
+        }
+        return;
+    }
+
+    // Structure is the same - check if any metadata changed
+    bool hasChanges = false;
+    for (size_t i = 0; i < newManga.size(); i++) {
+        const auto& newItem = newManga[i];
+        const auto& cached = m_cachedMangaList[i];
+        if (newItem.unreadCount != cached.unreadCount ||
+            newItem.lastReadAt != cached.lastReadAt ||
+            newItem.latestChapterUploadDate != cached.latestChapterUploadDate ||
+            newItem.chapterCount != cached.chapterCount) {
+            hasChanges = true;
+            break;
+        }
+    }
+
+    if (!hasChanges) {
+        brls::Logger::debug("LibrarySectionTab: No changes detected, skipping update");
+        return;  // Nothing changed
+    }
+
+    brls::Logger::debug("LibrarySectionTab: Metadata changed, updating cells in place");
+
+    // Update the manga list
+    m_mangaList = newManga;
+
+    // Apply current sort mode to get the correct order
+    // But use updateCellData to avoid reloading thumbnails
+    LibrarySortMode effectiveMode = m_sortMode;
+    if (effectiveMode == LibrarySortMode::DEFAULT) {
+        int defaultSort = Application::getInstance().getSettings().defaultLibrarySortMode;
+        effectiveMode = static_cast<LibrarySortMode>(defaultSort);
+    }
+
+    // For DOWNLOADED_ONLY mode, we need to re-filter
+    if (effectiveMode == LibrarySortMode::DOWNLOADED_ONLY) {
+        // This requires full sort since filtering changes structure
+        sortMangaList();
+    } else if (m_contentGrid && m_contentGrid->getItemCount() == static_cast<int>(m_mangaList.size())) {
+        // Same size and not filtering, can update in place
+        // Apply the sort to m_mangaList first
+        switch (effectiveMode) {
+            case LibrarySortMode::TITLE_ASC:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.title < b.title; });
+                break;
+            case LibrarySortMode::TITLE_DESC:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.title > b.title; });
+                break;
+            case LibrarySortMode::UNREAD_DESC:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.unreadCount > b.unreadCount; });
+                break;
+            case LibrarySortMode::UNREAD_ASC:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.unreadCount < b.unreadCount; });
+                break;
+            case LibrarySortMode::RECENTLY_ADDED_DESC:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.inLibraryAt > b.inLibraryAt; });
+                break;
+            case LibrarySortMode::RECENTLY_ADDED_ASC:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.inLibraryAt < b.inLibraryAt; });
+                break;
+            case LibrarySortMode::LAST_READ:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.lastReadAt > b.lastReadAt; });
+                break;
+            case LibrarySortMode::DATE_UPDATED_DESC:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.latestChapterUploadDate > b.latestChapterUploadDate; });
+                break;
+            case LibrarySortMode::DATE_UPDATED_ASC:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.latestChapterUploadDate < b.latestChapterUploadDate; });
+                break;
+            case LibrarySortMode::TOTAL_CHAPTERS:
+                std::sort(m_mangaList.begin(), m_mangaList.end(),
+                    [](const Manga& a, const Manga& b) { return a.chapterCount > b.chapterCount; });
+                break;
+            default:
+                break;
+        }
+
+        // Update cells in place without reloading thumbnails
+        m_contentGrid->updateCellData(m_mangaList);
+    } else {
+        // Size mismatch, need full rebuild
+        sortMangaList();
+    }
+
+    // Update cache
+    m_cachedMangaList.clear();
+    for (const auto& m : newManga) {
+        CachedMangaItem cached;
+        cached.id = m.id;
+        cached.unreadCount = m.unreadCount;
+        cached.lastReadAt = m.lastReadAt;
+        cached.latestChapterUploadDate = m.latestChapterUploadDate;
+        cached.chapterCount = m.chapterCount;
+        m_cachedMangaList.push_back(cached);
+    }
 }
 
 void LibrarySectionTab::openTracking(const Manga& manga) {

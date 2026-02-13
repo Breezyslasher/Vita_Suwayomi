@@ -21,6 +21,7 @@ public:
 
     void setDataSource(const std::vector<Manga>& items);
     void updateDataOrder(const std::vector<Manga>& items);  // Update cell data in place without rebuilding grid
+    void updateCellData(const std::vector<Manga>& items);   // Update cell metadata in place (unread counts, etc.)
     void removeItems(const std::vector<int>& mangaIdsToRemove);  // Remove specific items without full rebuild
     void setOnItemSelected(std::function<void(const Manga&)> callback);
     void setOnItemLongPressed(std::function<void(const Manga&, int index)> callback);

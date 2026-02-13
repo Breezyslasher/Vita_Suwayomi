@@ -111,6 +111,20 @@ private:
     std::vector<Manga> m_fullMangaList;       // Complete list (never filtered)
     std::vector<Category> m_categories;       // Visible categories
 
+    // Cached manga state for incremental updates (like downloads tab)
+    struct CachedMangaItem {
+        int id;
+        int unreadCount;
+        int64_t lastReadAt;
+        int64_t latestChapterUploadDate;
+        int chapterCount;
+    };
+    std::vector<CachedMangaItem> m_cachedMangaList;  // Cached state for comparison
+    int m_cachedCategoryId = -1;                     // Category ID for cached data
+
+    // Helper to update manga cells incrementally without full rebuild
+    void updateMangaCellsIncrementally(const std::vector<Manga>& newManga);
+
     bool m_loaded = false;
     bool m_categoriesLoaded = false;
     bool m_focusGridAfterLoad = false;  // Focus first grid item after loading new category
