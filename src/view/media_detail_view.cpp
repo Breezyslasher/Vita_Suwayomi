@@ -1210,7 +1210,7 @@ void MangaDetailView::populateChaptersList() {
     }
 
     // Set up navigation from left panel buttons to the first chapter row
-    if (m_chaptersBox->getChildrenCount() > 0) {
+    if (!m_chaptersBox->getChildren().empty()) {
         brls::View* firstChapter = m_chaptersBox->getChildren().front();
         m_readButton->setCustomNavigationRoute(brls::FocusDirection::RIGHT, firstChapter);
         if (m_libraryButton) {
