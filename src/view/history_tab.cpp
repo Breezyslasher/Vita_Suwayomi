@@ -614,10 +614,9 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
     // Update title with new count
     m_titleLabel->setText("Reading History (" + std::to_string(m_historyItems.size()) + ")");
 
-    // Focus on first newly added item
-    if (!items.empty() && startIndex < m_itemRows.size()) {
-        brls::Application::giveFocus(m_itemRows[startIndex]);
-    }
+    // Don't force focus - the user is already at the bottom (which triggered the load).
+    // Jumping focus to the first new item would scroll them away from their position.
+    // The new items appear below naturally, and the user can keep scrolling down.
 
     brls::Logger::info("HistoryTab: Appended {} items, now have {} total", items.size(), m_historyItems.size());
 }

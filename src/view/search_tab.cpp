@@ -1075,32 +1075,58 @@ void SearchTab::loadNextPage() {
     if (!m_hasNextPage || m_isLoadingMore) return;
 
     m_isLoadingMore = true;
-    m_currentPage++;
-    brls::Logger::debug("SearchTab: Loading page {}", m_currentPage);
+    int startPage = m_currentPage + 1;
+    brls::Logger::debug("SearchTab: Loading pages {} and {}", startPage, startPage + 1);
 
     // Remember the index of first new item (current list size)
     int firstNewItemIndex = static_cast<int>(m_mangaList.size());
 
-    asyncRun([this, firstNewItemIndex]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
-        std::vector<Manga> manga;
-        bool hasNextPage = false;
+    // Capture browse mode and source info for the async thread
+    BrowseMode browseMode = m_browseMode;
+    int64_t sourceId = m_currentSourceId;
+    std::string searchQuery = m_searchQuery;
 
-        bool success = false;
-        if (m_browseMode == BrowseMode::POPULAR) {
-            success = client.fetchPopularManga(m_currentSourceId, m_currentPage, manga, hasNextPage);
-        } else if (m_browseMode == BrowseMode::LATEST) {
-            success = client.fetchLatestManga(m_currentSourceId, m_currentPage, manga, hasNextPage);
-        } else if (m_browseMode == BrowseMode::SEARCH_RESULTS && !m_searchQuery.empty()) {
-            success = client.searchManga(m_currentSourceId, m_searchQuery, m_currentPage, manga, hasNextPage);
+    asyncRun([this, firstNewItemIndex, startPage, browseMode, sourceId, searchQuery]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Manga> allManga;
+        bool hasNextPage = false;
+        int lastPageLoaded = startPage;
+
+        // Load 2 pages at once for a smoother browsing experience
+        for (int i = 0; i < 2; i++) {
+            std::vector<Manga> manga;
+            bool pageHasNext = false;
+            bool success = false;
+
+            int page = startPage + i;
+
+            if (browseMode == BrowseMode::POPULAR) {
+                success = client.fetchPopularManga(sourceId, page, manga, pageHasNext);
+            } else if (browseMode == BrowseMode::LATEST) {
+                success = client.fetchLatestManga(sourceId, page, manga, pageHasNext);
+            } else if (browseMode == BrowseMode::SEARCH_RESULTS && !searchQuery.empty()) {
+                success = client.searchManga(sourceId, searchQuery, page, manga, pageHasNext);
+            }
+
+            if (success) {
+                for (const auto& m : manga) {
+                    allManga.push_back(m);
+                }
+                hasNextPage = pageHasNext;
+                lastPageLoaded = page;
+            }
+
+            // Stop if this page had no next page or failed
+            if (!success || !pageHasNext) break;
         }
 
-        if (success) {
-            brls::sync([this, manga, hasNextPage, firstNewItemIndex]() {
+        brls::sync([this, allManga, hasNextPage, firstNewItemIndex, lastPageLoaded]() {
+            if (!allManga.empty()) {
                 // Append to existing list
-                for (const auto& m : manga) {
+                for (const auto& m : allManga) {
                     m_mangaList.push_back(m);
                 }
+                m_currentPage = lastPageLoaded;
                 m_hasNextPage = hasNextPage;
                 m_isLoadingMore = false;
                 m_contentGrid->setDataSource(m_mangaList);
@@ -1108,12 +1134,10 @@ void SearchTab::loadNextPage() {
 
                 // Focus on first newly loaded item so user can continue browsing
                 m_contentGrid->focusIndex(firstNewItemIndex);
-            });
-        } else {
-            brls::sync([this]() {
+            } else {
                 m_isLoadingMore = false;
-            });
-        }
+            }
+        });
     });
 }
 
