@@ -473,6 +473,7 @@ void SearchTab::clearSearchHistory() {
 }
 
 void SearchTab::showSources() {
+    m_loadGeneration++;  // Invalidate any in-flight async callbacks
     m_browseMode = BrowseMode::SOURCES;
     m_titleLabel->setText("Browse");
     m_searchLabel->setVisibility(brls::Visibility::GONE);
@@ -682,8 +683,9 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
     brls::Logger::debug("SearchTab: Loading popular manga from source {}", sourceId);
     m_resultsLabel->setText("Loading popular manga...");
     m_currentPage = 1;
+    int gen = ++m_loadGeneration;
 
-    asyncRun([this, sourceId]() {
+    asyncRun([this, sourceId, gen]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -691,7 +693,8 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
         if (client.fetchPopularManga(sourceId, 1, manga, hasNextPage)) {
             brls::Logger::info("SearchTab: Got {} popular manga", manga.size());
 
-            brls::sync([this, manga, hasNextPage]() {
+            brls::sync([this, manga, hasNextPage, gen]() {
+                if (gen != m_loadGeneration) return;  // Stale callback, user navigated away
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
@@ -708,7 +711,8 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch popular manga");
-            brls::sync([this]() {
+            brls::sync([this, gen]() {
+                if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Failed to load popular manga");
                 m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
                 // Focus on Popular button so user can retry
@@ -722,8 +726,9 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
     brls::Logger::debug("SearchTab: Loading latest manga from source {}", sourceId);
     m_resultsLabel->setText("Loading latest manga...");
     m_currentPage = 1;
+    int gen = ++m_loadGeneration;
 
-    asyncRun([this, sourceId]() {
+    asyncRun([this, sourceId, gen]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -731,7 +736,8 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
         if (client.fetchLatestManga(sourceId, 1, manga, hasNextPage)) {
             brls::Logger::info("SearchTab: Got {} latest manga", manga.size());
 
-            brls::sync([this, manga, hasNextPage]() {
+            brls::sync([this, manga, hasNextPage, gen]() {
+                if (gen != m_loadGeneration) return;
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
@@ -748,7 +754,8 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch latest manga");
-            brls::sync([this]() {
+            brls::sync([this, gen]() {
+                if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Failed to load latest manga");
                 m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
                 // Focus on Latest button so user can retry
@@ -803,8 +810,9 @@ void SearchTab::performSearch(const std::string& query) {
 
     // Copy filtered sources for async use
     std::vector<Source> sourcesToSearch = m_filteredSources;
+    int gen = ++m_loadGeneration;
 
-    asyncRun([this, query, sourcesToSearch]() {
+    asyncRun([this, query, sourcesToSearch, gen]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         // Map to group results by source
@@ -848,7 +856,8 @@ void SearchTab::performSearch(const std::string& query) {
             }
         }
 
-        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources]() {
+        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources, gen]() {
+            if (gen != m_loadGeneration) return;  // Stale callback, user navigated away
             m_mangaList = allResults;
             m_resultsBySource = resultsBySource;
 
@@ -884,8 +893,9 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
     m_resultsLabel->setText("Searching...");
     m_browseMode = BrowseMode::SEARCH_RESULTS;
     m_currentPage = 1;
+    int gen = ++m_loadGeneration;
 
-    asyncRun([this, sourceId, query]() {
+    asyncRun([this, sourceId, query, gen]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -893,7 +903,8 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
         if (client.searchManga(sourceId, query, 1, manga, hasNextPage)) {
             brls::Logger::info("SearchTab: Found {} results for '{}'", manga.size(), query);
 
-            brls::sync([this, manga, hasNextPage]() {
+            brls::sync([this, manga, hasNextPage, gen]() {
+                if (gen != m_loadGeneration) return;
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
@@ -913,7 +924,8 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
             });
         } else {
             brls::Logger::error("SearchTab: Failed to search manga");
-            brls::sync([this]() {
+            brls::sync([this, gen]() {
+                if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Search failed");
                 m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
                 // Focus on back button so user can go back
@@ -1068,7 +1080,9 @@ void SearchTab::loadNextPage() {
     // Remember the index of first new item (current list size)
     int firstNewItemIndex = static_cast<int>(m_mangaList.size());
 
-    asyncRun([this, firstNewItemIndex]() {
+    int gen = m_loadGeneration;  // Don't increment - loadNextPage appends, not a new navigation
+
+    asyncRun([this, firstNewItemIndex, gen]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -1083,7 +1097,8 @@ void SearchTab::loadNextPage() {
         }
 
         if (success) {
-            brls::sync([this, manga, hasNextPage, firstNewItemIndex]() {
+            brls::sync([this, manga, hasNextPage, firstNewItemIndex, gen]() {
+                if (gen != m_loadGeneration) return;
                 // Append to existing list
                 for (const auto& m : manga) {
                     m_mangaList.push_back(m);
@@ -1098,7 +1113,8 @@ void SearchTab::loadNextPage() {
                 m_contentGrid->focusIndex(firstNewItemIndex);
             });
         } else {
-            brls::sync([this]() {
+            brls::sync([this, gen]() {
+                if (gen != m_loadGeneration) return;
                 m_loadMoreBtn->setText("Load More");
                 // Keep focus on Load More button after failure
                 brls::Application::giveFocus(m_loadMoreBtn);
@@ -1129,6 +1145,7 @@ void SearchTab::updateModeButtons() {
 }
 
 void SearchTab::handleBackNavigation() {
+    m_loadGeneration++;  // Invalidate any in-flight async callbacks
     if (m_browseMode == BrowseMode::SEARCH_RESULTS) {
         if (m_isGlobalSearch) {
             // Global search: go back to sources list
