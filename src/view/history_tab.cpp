@@ -126,7 +126,7 @@ HistoryTab::HistoryTab() {
     brls::Logger::debug("HistoryTab: Created");
 
     // Load history immediately on construction
-    loadHistory();
+    requestHistoryPage(true);
 }
 
 HistoryTab::~HistoryTab() {
@@ -138,8 +138,8 @@ HistoryTab::~HistoryTab() {
 
 void HistoryTab::onFocusGained() {
     brls::Box::onFocusGained();
-    if (!m_loaded) {
-        loadHistory();
+    if (!m_loaded && !m_isPageRequestInFlight) {
+        requestHistoryPage(true);
     }
 }
 
@@ -154,88 +154,80 @@ void HistoryTab::refresh() {
     m_currentOffset = 0;
     m_hasMoreItems = true;
     m_historyItems.clear();
-    loadHistory();
+    m_coverImages.clear();
+    m_requestedCoverLoads.clear();
+    requestHistoryPage(true);
 }
 
-void HistoryTab::loadHistory() {
-    brls::Logger::debug("HistoryTab: Loading history...");
+void HistoryTab::requestHistoryPage(bool reset) {
+    if (m_isPageRequestInFlight) {
+        return;
+    }
 
-    // Show loading indicator
-    m_loadingLabel->setVisibility(brls::Visibility::VISIBLE);
-    m_scrollView->setVisibility(brls::Visibility::GONE);
-    m_emptyStateBox->setVisibility(brls::Visibility::GONE);
-    m_titleLabel->setText("Reading History (Loading...)");
+    if (!reset && (!m_loaded || !m_hasMoreItems)) {
+        return;
+    }
+
+    const int requestOffset = reset ? 0 : m_currentOffset;
+    m_isPageRequestInFlight = true;
+
+    if (reset) {
+        brls::Logger::debug("HistoryTab: Loading history...");
+        m_loadingLabel->setVisibility(brls::Visibility::VISIBLE);
+        m_scrollView->setVisibility(brls::Visibility::GONE);
+        m_emptyStateBox->setVisibility(brls::Visibility::GONE);
+        m_titleLabel->setText("Reading History (Loading...)");
+    } else {
+        brls::Logger::debug("HistoryTab: Loading more history from offset {}...", requestOffset);
+    }
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak]() {
+    asyncRun([this, aliveWeak, reset, requestOffset]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        std::vector<ReadingHistoryItem> history;
+        std::vector<ReadingHistoryItem> page;
 
-        // Fetch initial batch
-        bool success = client.fetchReadingHistory(0, ITEMS_PER_PAGE, history);
+        bool success = client.fetchReadingHistory(requestOffset, ITEMS_PER_PAGE, page);
 
-        brls::sync([this, history, success, aliveWeak]() {
+        brls::sync([this, page, success, aliveWeak, reset, requestOffset]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
-            m_loaded = true;
-            m_loadingLabel->setVisibility(brls::Visibility::GONE);
+            m_isPageRequestInFlight = false;
 
-            // Handle load failure (offline or server error)
+            if (reset) {
+                m_loaded = true;
+                m_loadingLabel->setVisibility(brls::Visibility::GONE);
+            }
+
             if (!success) {
-                m_scrollView->setVisibility(brls::Visibility::GONE);
-                m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
-                m_titleLabel->setText("Reading History");
-                brls::Application::notify("Failed to load history - check connection");
+                if (reset) {
+                    m_scrollView->setVisibility(brls::Visibility::GONE);
+                    m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
+                    m_titleLabel->setText("Reading History");
+                    brls::Application::notify("Failed to load history - check connection");
+                }
                 return;
             }
 
-            m_historyItems = history;
-            m_currentOffset = static_cast<int>(history.size());
-            m_hasMoreItems = (history.size() >= ITEMS_PER_PAGE);
-
-            rebuildHistoryList();
-        });
-    });
-}
-
-void HistoryTab::loadMoreHistory() {
-    if (!m_hasMoreItems || m_isLoadingMore) return;
-
-    brls::Logger::debug("HistoryTab: Loading more history from offset {}...", m_currentOffset);
-    m_isLoadingMore = true;
-
-    // Remember the index of first new item (current list size)
-    size_t firstNewItemIndex = m_historyItems.size();
-
-    std::weak_ptr<bool> aliveWeak = m_alive;
-
-    asyncRun([this, aliveWeak, firstNewItemIndex]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
-        std::vector<ReadingHistoryItem> moreHistory;
-
-        bool success = client.fetchReadingHistory(m_currentOffset, ITEMS_PER_PAGE, moreHistory);
-
-        brls::sync([this, moreHistory, success, aliveWeak, firstNewItemIndex]() {
-            auto alive = aliveWeak.lock();
-            if (!alive || !*alive) return;
-
-            m_isLoadingMore = false;
-
-            if (success && !moreHistory.empty()) {
-                // Append to existing items in data model
-                for (const auto& item : moreHistory) {
-                    m_historyItems.push_back(item);
-                }
-                m_currentOffset += static_cast<int>(moreHistory.size());
-                m_hasMoreItems = (moreHistory.size() >= ITEMS_PER_PAGE);
-
-                // Incrementally append items to UI (no rebuild needed)
-                appendHistoryItems(moreHistory, firstNewItemIndex);
-            } else {
-                m_hasMoreItems = false;
+            if (reset) {
+                m_historyItems = page;
+                m_currentOffset = static_cast<int>(page.size());
+                m_hasMoreItems = (page.size() >= ITEMS_PER_PAGE);
+                rebuildHistoryList();
+                return;
             }
+
+            if (page.empty()) {
+                m_hasMoreItems = false;
+                return;
+            }
+
+            size_t firstNewItemIndex = m_historyItems.size();
+            m_historyItems.insert(m_historyItems.end(), page.begin(), page.end());
+            m_currentOffset = requestOffset + static_cast<int>(page.size());
+            m_hasMoreItems = (page.size() >= ITEMS_PER_PAGE);
+            appendHistoryItems(page, firstNewItemIndex);
 
             brls::Logger::info("HistoryTab: Now have {} history items", m_historyItems.size());
         });
@@ -245,6 +237,8 @@ void HistoryTab::loadMoreHistory() {
 void HistoryTab::rebuildHistoryList() {
     m_contentBox->clearViews();
     m_itemRows.clear();
+    m_coverImages.clear();
+    m_requestedCoverLoads.clear();
     m_itemsWithScrollListeners.clear();  // Clear listener tracking on rebuild
 
     if (m_historyItems.empty()) {
@@ -497,13 +491,14 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
     coverImage->setScalingType(brls::ImageScalingType::FILL);
     coverImage->setMarginRight(12);
 
-    // Load cover
-    if (!item.mangaThumbnail.empty()) {
-        std::string url = item.mangaThumbnail;
-        if (url[0] == '/') {
-            url = SuwayomiClient::getInstance().getServerUrl() + url;
-        }
-        ImageLoader::loadAsync(url, nullptr, coverImage);
+    if (m_coverImages.size() <= static_cast<size_t>(index)) {
+        m_coverImages.resize(static_cast<size_t>(index) + 1, nullptr);
+    }
+    m_coverImages[static_cast<size_t>(index)] = coverImage;
+
+    bool highPriorityCover = index < EAGER_COVER_LOAD_COUNT;
+    if (highPriorityCover) {
+        requestCoverLoadForIndex(static_cast<size_t>(index));
     }
     itemRow->addView(coverImage);
 
@@ -571,8 +566,54 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
         return true;
     });
 
+    // Load visible/near-visible covers as user scrolls to keep memory and network pressure stable.
+    itemRow->getFocusEvent()->subscribe([this, index](brls::View*) {
+        preloadCoversAroundIndex(index);
+    });
+
     return itemRow;
 }
+
+void HistoryTab::requestCoverLoadForIndex(size_t index) {
+    if (index >= m_historyItems.size() || index >= m_coverImages.size()) {
+        return;
+    }
+
+    if (m_requestedCoverLoads.count(static_cast<int>(index)) > 0) {
+        return;
+    }
+
+    brls::Image* coverImage = m_coverImages[index];
+    if (!coverImage) {
+        return;
+    }
+
+    std::string url = m_historyItems[index].mangaThumbnail;
+    if (url.empty()) {
+        return;
+    }
+
+    if (url[0] == '/') {
+        url = SuwayomiClient::getInstance().getServerUrl() + url;
+    }
+
+    m_requestedCoverLoads.insert(static_cast<int>(index));
+    ImageLoader::loadAsync(url, nullptr, coverImage);
+}
+
+void HistoryTab::preloadCoversAroundIndex(int index) {
+    if (index < 0) {
+        return;
+    }
+
+    const int start = std::max(0, index);
+    const int end = std::min(static_cast<int>(m_historyItems.size()) - 1, start + COVER_PREFETCH_COUNT - 1);
+
+    for (int i = start; i <= end; i++) {
+        requestCoverLoadForIndex(static_cast<size_t>(i));
+    }
+}
+
 
 void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items, size_t startIndex) {
     if (items.empty()) return;
@@ -614,10 +655,6 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
     // Update title with new count
     m_titleLabel->setText("Reading History (" + std::to_string(m_historyItems.size()) + ")");
 
-    // Focus on first newly added item
-    if (!items.empty() && startIndex < m_itemRows.size()) {
-        brls::Application::giveFocus(m_itemRows[startIndex]);
-    }
 
     brls::Logger::info("HistoryTab: Appended {} items, now have {} total", items.size(), m_historyItems.size());
 }
@@ -625,10 +662,9 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
 void HistoryTab::setupInfiniteScroll() {
     if (!m_hasMoreItems || m_itemRows.empty()) return;
 
-    // Set up focus listener on the very last item only to trigger loading more
-    // This prevents aggressive loading - user must reach the actual bottom
-    const int TRIGGER_THRESHOLD = 1;
-    int startIdx = std::max(0, static_cast<int>(m_itemRows.size()) - TRIGGER_THRESHOLD);
+    // Trigger when user is near the bottom for smooth "keep scrolling" behavior
+    // without aggressive preloading of many pages at once.
+    int startIdx = std::max(0, static_cast<int>(m_itemRows.size()) - LOAD_MORE_TRIGGER_THRESHOLD);
 
     for (int i = startIdx; i < static_cast<int>(m_itemRows.size()); i++) {
         // Skip if this item already has a listener attached
@@ -649,8 +685,8 @@ void HistoryTab::setupInfiniteScroll() {
             if (!alive || !*alive) return;
 
             // Load more if we have more items and not already loading
-            if (m_hasMoreItems && !m_isLoadingMore) {
-                loadMoreHistory();
+            if (m_hasMoreItems && !m_isPageRequestInFlight) {
+                requestHistoryPage(false);
             }
         });
     }
