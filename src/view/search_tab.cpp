@@ -75,6 +75,14 @@ SearchTab::SearchTab() {
         return true;
     });
     m_historyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_historyBtn));
+    // B button on History goes back when not on sources list
+    m_historyBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (m_browseMode != BrowseMode::SOURCES) {
+            brls::sync([this]() { handleBackNavigation(); });
+            return true;
+        }
+        return false;
+    }, true);
     historyContainer->addView(m_historyBtn);
     buttonContainer->addView(historyContainer);
 
@@ -113,6 +121,14 @@ SearchTab::SearchTab() {
         return true;
     });
     m_globalSearchBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_globalSearchBtn));
+    // B button on Search goes back when not on sources list
+    m_globalSearchBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (m_browseMode != BrowseMode::SOURCES) {
+            brls::sync([this]() { handleBackNavigation(); });
+            return true;
+        }
+        return false;
+    }, true);
     searchContainer->addView(m_globalSearchBtn);
     buttonContainer->addView(searchContainer);
 
@@ -176,6 +192,11 @@ SearchTab::SearchTab() {
         return true;
     });
     m_popularBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_popularBtn));
+    // B button on Popular goes back
+    m_popularBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        brls::sync([this]() { handleBackNavigation(); });
+        return true;
+    }, true);
     m_modeBox->addView(m_popularBtn);
 
     // Latest button
@@ -190,6 +211,11 @@ SearchTab::SearchTab() {
         return true;
     });
     m_latestBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_latestBtn));
+    // B button on Latest goes back
+    m_latestBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        brls::sync([this]() { handleBackNavigation(); });
+        return true;
+    }, true);
     m_modeBox->addView(m_latestBtn);
 
     // Filter button with tag icon
@@ -214,6 +240,11 @@ SearchTab::SearchTab() {
         return true;
     });
     m_filterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_filterBtn));
+    // B button on Filter goes back
+    m_filterBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        brls::sync([this]() { handleBackNavigation(); });
+        return true;
+    }, true);
     m_modeBox->addView(m_filterBtn);
 
     // Back button
@@ -225,6 +256,11 @@ SearchTab::SearchTab() {
         return true;
     });
     m_backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_backBtn));
+    // B button on Back also goes back
+    m_backBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        brls::sync([this]() { handleBackNavigation(); });
+        return true;
+    }, true);
     m_modeBox->addView(m_backBtn);
 
     this->addView(m_modeBox);
@@ -386,19 +422,22 @@ void SearchTab::showSearchHistoryDialog() {
         [this, historySize = history.size()](int selected) {
             if (selected < 0) return;
 
-            if (selected == static_cast<int>(historySize)) {
-                // Clear history
-                clearSearchHistory();
-            } else {
-                // Use selected search query
-                auto& history = Application::getInstance().getSettings().searchHistory;
-                if (selected < static_cast<int>(history.size())) {
-                    std::string query = history[selected];
-                    m_searchQuery = query;
-                    m_titleLabel->setText("Search: " + query);
-                    performSearch(query);
+            // Wrap in brls::sync to ensure proper focus after dropdown closes
+            brls::sync([this, selected, historySize]() {
+                if (selected == static_cast<int>(historySize)) {
+                    // Clear history
+                    clearSearchHistory();
+                } else {
+                    // Use selected search query
+                    auto& history = Application::getInstance().getSettings().searchHistory;
+                    if (selected < static_cast<int>(history.size())) {
+                        std::string query = history[selected];
+                        m_searchQuery = query;
+                        m_titleLabel->setText("Search: " + query);
+                        performSearch(query);
+                    }
                 }
-            }
+            });
         }, 0);
     brls::Application::pushActivity(new brls::Activity(dropdown));
 }
@@ -823,6 +862,8 @@ void SearchTab::performSearch(const std::string& query) {
                 m_resultsLabel->setText(resultText);
                 m_contentGrid->setDataSource(m_mangaList);
                 m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
+                // Focus on back button when no results found
+                brls::Application::giveFocus(m_backBtn);
             } else {
                 std::string resultText = std::to_string(allResults.size()) + " results from " +
                                         std::to_string(resultsBySource.size()) + " sources";
@@ -865,6 +906,9 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
                     if (firstCell) {
                         brls::Application::giveFocus(firstCell);
                     }
+                } else {
+                    // No results - focus on back button
+                    brls::Application::giveFocus(m_backBtn);
                 }
             });
         } else {

@@ -42,6 +42,12 @@ public:
     bool hasCoverCache(int mangaId);
     std::string getCoverCachePath(int mangaId);
 
+    // Reading history caching
+    bool saveHistory(const std::vector<ReadingHistoryItem>& history);
+    bool loadHistory(std::vector<ReadingHistoryItem>& history);
+    bool hasHistoryCache();
+    void invalidateHistoryCache();
+
     // Cache management
     void clearAllCache();
     void clearCoverCache();
@@ -80,6 +86,11 @@ private:
     // Serialize/deserialize category
     std::string serializeCategory(const Category& category);
     bool deserializeCategory(const std::string& line, Category& category);
+
+    // Serialize/deserialize history item
+    std::string serializeHistoryItem(const ReadingHistoryItem& item);
+    bool deserializeHistoryItem(const std::string& line, ReadingHistoryItem& item);
+    std::string getHistoryFilePath();
 
     bool m_enabled = true;
     bool m_coverCacheEnabled = true;

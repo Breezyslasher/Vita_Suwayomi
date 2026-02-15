@@ -1193,6 +1193,22 @@ void MangaDetailView::populateChaptersList() {
         m_chaptersBox->addView(chapterRow);
     }
 
+    // Set up navigation: UP from first chapter row goes to read button
+    auto& children = m_chaptersBox->getChildren();
+    if (!children.empty() && m_readButton) {
+        children.front()->setCustomNavigationRoute(brls::FocusDirection::UP, m_readButton);
+        // Read button DOWN goes to first chapter row
+        m_readButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
+        // Library button DOWN goes to first chapter row
+        if (m_libraryButton) {
+            m_libraryButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
+        }
+        // Tracking button DOWN goes to first chapter row
+        if (m_trackingButton) {
+            m_trackingButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
+        }
+    }
+
     brls::Logger::debug("MangaDetailView: Populated {} chapters", sortedChapters.size());
 }
 
@@ -1419,25 +1435,68 @@ void MangaDetailView::onRead(int chapterId) {
 }
 
 void MangaDetailView::onAddToLibrary() {
-    brls::Logger::info("MangaDetailView: Adding to library");
+    brls::Logger::info("MangaDetailView: Adding to library with category selection");
 
+    // First add to library, then show category picker
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        if (client.addMangaToLibrary(m_manga.id)) {
-            brls::sync([this]() {
-                m_manga.inLibrary = true;
-                // Hide the button after adding to library
-                if (m_libraryButton) {
-                    m_libraryButton->setVisibility(brls::Visibility::GONE);
-                }
-                brls::Application::notify("Added to library");
-            });
-        } else {
+        if (!client.addMangaToLibrary(m_manga.id)) {
             brls::sync([]() {
                 brls::Application::notify("Failed to add to library");
             });
+            return;
         }
+
+        // Fetch categories for selection
+        std::vector<Category> categories;
+        client.fetchCategories(categories);
+
+        brls::sync([this, categories]() {
+            m_manga.inLibrary = true;
+
+            // Track addition for immediate library UI update
+            Application::getInstance().trackLibraryAddition(m_manga.id);
+
+            // Hide the button after adding to library
+            if (m_libraryButton) {
+                m_libraryButton->setVisibility(brls::Visibility::GONE);
+            }
+
+            // If categories available, show selection dropdown
+            if (categories.size() > 1) {
+                m_categories = categories;
+                std::vector<std::string> options;
+                for (const auto& cat : categories) {
+                    options.push_back(cat.name);
+                }
+
+                brls::Dropdown* dropdown = new brls::Dropdown(
+                    "Select Category", options,
+                    [this](int selected) {
+                        if (selected < 0 || selected >= static_cast<int>(m_categories.size())) return;
+
+                        int categoryId = m_categories[selected].id;
+                        brls::sync([this, categoryId]() {
+                            asyncRun([this, categoryId]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                if (client.setMangaCategories(m_manga.id, {categoryId})) {
+                                    brls::sync([this]() {
+                                        brls::Application::notify("Added to library");
+                                    });
+                                } else {
+                                    brls::sync([]() {
+                                        brls::Application::notify("Added to library (category failed)");
+                                    });
+                                }
+                            });
+                        });
+                    }, 0);
+                brls::Application::pushActivity(new brls::Activity(dropdown));
+            } else {
+                brls::Application::notify("Added to library");
+            }
+        });
     });
 }
 
@@ -1945,7 +2004,47 @@ void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
 }
 
 void MangaDetailView::showCategoryDialog() {
-    brls::Application::notify("Category management not yet implemented");
+    asyncRun([this]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Category> categories;
+        client.fetchCategories(categories);
+
+        brls::sync([this, categories]() {
+            if (categories.empty()) {
+                brls::Application::notify("No categories found");
+                return;
+            }
+
+            m_categories = categories;
+            std::vector<std::string> options;
+            for (const auto& cat : categories) {
+                options.push_back(cat.name);
+            }
+
+            brls::Dropdown* dropdown = new brls::Dropdown(
+                "Move to Category", options,
+                [this](int selected) {
+                    if (selected < 0 || selected >= static_cast<int>(m_categories.size())) return;
+
+                    int categoryId = m_categories[selected].id;
+                    brls::sync([this, categoryId]() {
+                        asyncRun([this, categoryId]() {
+                            SuwayomiClient& client = SuwayomiClient::getInstance();
+                            if (client.setMangaCategories(m_manga.id, {categoryId})) {
+                                brls::sync([]() {
+                                    brls::Application::notify("Category updated");
+                                });
+                            } else {
+                                brls::sync([]() {
+                                    brls::Application::notify("Failed to update category");
+                                });
+                            }
+                        });
+                    });
+                }, 0);
+            brls::Application::pushActivity(new brls::Activity(dropdown));
+        });
+    });
 }
 
 void MangaDetailView::showTrackingDialog() {

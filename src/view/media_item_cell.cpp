@@ -253,8 +253,10 @@ void MangaItemCell::updateDisplay() {
     }
 
     // Show star badge if manga is in library (browser/search tabs only)
+    // Also check recent additions cache for immediate update
     if (m_starBadge) {
-        bool showStar = m_showLibraryBadge && m_manga.inLibrary;
+        bool inLib = m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id);
+        bool showStar = m_showLibraryBadge && inLib;
         m_starBadge->setVisibility(showStar ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
 }
@@ -406,10 +408,10 @@ void MangaItemCell::setListMode(bool listMode) {
 void MangaItemCell::setShowLibraryBadge(bool show) {
     if (m_showLibraryBadge == show) return;
     m_showLibraryBadge = show;
-    // Update star badge visibility
+    // Update star badge visibility (also check recent additions cache)
     if (m_starBadge) {
-        bool showStar = m_showLibraryBadge && m_manga.inLibrary;
-        m_starBadge->setVisibility(showStar ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+        bool inLib = m_showLibraryBadge && (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id));
+        m_starBadge->setVisibility(inLib ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
     // Hide start hint icon when in browser/search mode
     if (m_startHintIcon && m_showLibraryBadge) {

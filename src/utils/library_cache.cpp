@@ -795,4 +795,181 @@ bool LibraryCache::hasMangaDetailsCache(int mangaId) {
 #endif
 }
 
+// ---- Reading History Cache ----
+
+std::string LibraryCache::getHistoryFilePath() {
+    return getCacheDir() + "/history.txt";
+}
+
+std::string LibraryCache::serializeHistoryItem(const ReadingHistoryItem& item) {
+    std::ostringstream ss;
+    // Format: chapterId|mangaId|mangaTitle|mangaThumbnail|chapterName|chapterNumber|lastPageRead|pageCount|lastReadAt|sourceName
+    ss << item.chapterId << "|"
+       << item.mangaId << "|"
+       << escapeString(item.mangaTitle) << "|"
+       << escapeString(item.mangaThumbnail) << "|"
+       << escapeString(item.chapterName) << "|"
+       << item.chapterNumber << "|"
+       << item.lastPageRead << "|"
+       << item.pageCount << "|"
+       << item.lastReadAt << "|"
+       << escapeString(item.sourceName);
+    return ss.str();
+}
+
+bool LibraryCache::deserializeHistoryItem(const std::string& line, ReadingHistoryItem& item) {
+    // Split on unescaped pipe characters
+    std::vector<std::string> parts;
+    std::string current;
+    for (size_t i = 0; i < line.size(); i++) {
+        if (line[i] == '\\' && i + 1 < line.size()) {
+            current += line[i];
+            current += line[i + 1];
+            i++;
+        } else if (line[i] == '|') {
+            parts.push_back(current);
+            current.clear();
+        } else {
+            current += line[i];
+        }
+    }
+    parts.push_back(current);
+
+    if (parts.size() < 10) return false;
+
+    try {
+        item.chapterId = std::stoi(parts[0]);
+        item.mangaId = std::stoi(parts[1]);
+        item.mangaTitle = unescapeString(parts[2]);
+        item.mangaThumbnail = unescapeString(parts[3]);
+        item.chapterName = unescapeString(parts[4]);
+        item.chapterNumber = std::stof(parts[5]);
+        item.lastPageRead = std::stoi(parts[6]);
+        item.pageCount = std::stoi(parts[7]);
+        item.lastReadAt = std::stoll(parts[8]);
+        item.sourceName = unescapeString(parts[9]);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool LibraryCache::saveHistory(const std::vector<ReadingHistoryItem>& history) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::string path = getHistoryFilePath();
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd < 0) {
+        brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
+        return false;
+    }
+
+    for (const auto& item : history) {
+        std::string line = serializeHistoryItem(item) + "\n";
+        sceIoWrite(fd, line.c_str(), line.size());
+    }
+
+    sceIoClose(fd);
+#else
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    for (const auto& item : history) {
+        file << serializeHistoryItem(item) << "\n";
+    }
+
+    file.close();
+#endif
+
+    brls::Logger::debug("LibraryCache: Saved {} history items", history.size());
+    return true;
+}
+
+bool LibraryCache::loadHistory(std::vector<ReadingHistoryItem>& history) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::string path = getHistoryFilePath();
+    history.clear();
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) {
+        return false;
+    }
+
+    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+    if (size <= 0 || size > 5 * 1024 * 1024) {
+        sceIoClose(fd);
+        return false;
+    }
+
+    std::vector<char> buffer(size + 1);
+    sceIoRead(fd, buffer.data(), size);
+    buffer[size] = '\0';
+    sceIoClose(fd);
+
+    std::istringstream stream(buffer.data());
+    std::string line;
+    while (std::getline(stream, line)) {
+        if (line.empty()) continue;
+        ReadingHistoryItem item;
+        if (deserializeHistoryItem(line, item)) {
+            history.push_back(item);
+        }
+    }
+#else
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        ReadingHistoryItem item;
+        if (deserializeHistoryItem(line, item)) {
+            history.push_back(item);
+        }
+    }
+
+    file.close();
+#endif
+
+    brls::Logger::debug("LibraryCache: Loaded {} history items from cache", history.size());
+    return !history.empty();
+}
+
+bool LibraryCache::hasHistoryCache() {
+    std::string path = getHistoryFilePath();
+
+#ifdef __vita__
+    SceIoStat stat;
+    return sceIoGetstat(path.c_str(), &stat) >= 0;
+#else
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+#endif
+}
+
+void LibraryCache::invalidateHistoryCache() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::string path = getHistoryFilePath();
+
+#ifdef __vita__
+    sceIoRemove(path.c_str());
+#else
+    remove(path.c_str());
+#endif
+}
+
 } // namespace vitasuwayomi
