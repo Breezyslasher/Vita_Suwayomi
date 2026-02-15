@@ -5,6 +5,7 @@
 
 #include "view/recycling_grid.hpp"
 #include "view/media_item_cell.hpp"
+#include "view/long_press_gesture.hpp"
 
 namespace vitasuwayomi {
 
@@ -75,6 +76,122 @@ void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
     setupGrid();
 }
 
+void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
+    // Update cell data in place without rebuilding the grid structure
+    // This is much more efficient for sorting operations
+    if (items.size() != m_items.size()) {
+        // Size changed, need full rebuild
+        brls::Logger::debug("RecyclingGrid: updateDataOrder size mismatch ({} vs {}), doing full rebuild",
+                           items.size(), m_items.size());
+        setDataSource(items);
+        return;
+    }
+
+    if (m_cells.empty()) {
+        // No cells exist, need full rebuild
+        setDataSource(items);
+        return;
+    }
+
+    brls::Logger::debug("RecyclingGrid: updateDataOrder - updating {} cells in place", items.size());
+
+    // Update internal data
+    m_items = items;
+
+    // Update each cell with the new manga data at its position
+    // This preserves the grid structure and just updates the displayed content
+    int maxInitialRows = 6;
+    int cellsInInitialRows = maxInitialRows * m_columns;
+
+    for (size_t i = 0; i < m_cells.size() && i < items.size(); i++) {
+        MangaItemCell* cell = m_cells[i];
+        if (cell) {
+            // Use immediate load for visible cells, deferred for others
+            if (static_cast<int>(i) < cellsInInitialRows) {
+                cell->setManga(items[i]);
+            } else {
+                cell->setMangaDeferred(items[i]);
+            }
+        }
+    }
+
+    // Load thumbnails for remaining cells
+    if (static_cast<int>(m_cells.size()) > cellsInInitialRows) {
+        for (size_t i = cellsInInitialRows; i < m_cells.size(); i++) {
+            if (m_cells[i]) {
+                m_cells[i]->loadThumbnailIfNeeded();
+            }
+        }
+    }
+
+    brls::Logger::debug("RecyclingGrid: updateDataOrder complete");
+}
+
+void RecyclingGrid::updateCellData(const std::vector<Manga>& items) {
+    // Update cell metadata in place without reloading thumbnails
+    // Used for incremental updates when only counts/metadata change (like downloads tab)
+    if (items.size() != m_items.size()) {
+        brls::Logger::debug("RecyclingGrid: updateCellData size mismatch, doing full rebuild");
+        setDataSource(items);
+        return;
+    }
+
+    if (m_cells.empty()) {
+        setDataSource(items);
+        return;
+    }
+
+    brls::Logger::debug("RecyclingGrid: updateCellData - updating {} cells metadata in place", items.size());
+
+    // Update internal data
+    m_items = items;
+
+    // Update each cell's data without reloading thumbnails
+    for (size_t i = 0; i < m_cells.size() && i < items.size(); i++) {
+        MangaItemCell* cell = m_cells[i];
+        if (cell) {
+            cell->updateMangaData(items[i]);
+        }
+    }
+
+    brls::Logger::debug("RecyclingGrid: updateCellData complete");
+}
+
+void RecyclingGrid::removeItems(const std::vector<int>& mangaIdsToRemove) {
+    // Remove specific items without full rebuild
+    // This is used for filter operations like DOWNLOADED_ONLY
+    if (mangaIdsToRemove.empty()) return;
+
+    brls::Logger::debug("RecyclingGrid: removeItems - removing {} items", mangaIdsToRemove.size());
+
+    // Create a set for fast lookup
+    std::set<int> idsToRemove(mangaIdsToRemove.begin(), mangaIdsToRemove.end());
+
+    // Find indices to remove (in reverse order to avoid index shifting issues)
+    std::vector<size_t> indicesToRemove;
+    for (size_t i = 0; i < m_items.size(); i++) {
+        if (idsToRemove.count(m_items[i].id)) {
+            indicesToRemove.push_back(i);
+        }
+    }
+
+    if (indicesToRemove.empty()) return;
+
+    // For simplicity, if we're removing items, do a full rebuild
+    // This ensures proper row layout recalculation
+    // In the future, we could optimize this to remove cells in place
+    std::vector<Manga> filteredItems;
+    for (size_t i = 0; i < m_items.size(); i++) {
+        if (idsToRemove.find(m_items[i].id) == idsToRemove.end()) {
+            filteredItems.push_back(m_items[i]);
+        }
+    }
+
+    brls::Logger::debug("RecyclingGrid: removeItems - filtered from {} to {} items",
+                       m_items.size(), filteredItems.size());
+    setDataSource(filteredItems);
+}
+
 void RecyclingGrid::setOnItemSelected(std::function<void(const Manga&)> callback) {
     m_onItemSelected = callback;
 }
@@ -89,6 +206,10 @@ void RecyclingGrid::setOnPullToRefresh(std::function<void()> callback) {
 
 void RecyclingGrid::setOnBackPressed(std::function<bool()> callback) {
     m_onBackPressed = callback;
+}
+
+void RecyclingGrid::setOnSelectionChanged(std::function<void(int count)> callback) {
+    m_onSelectionChanged = callback;
 }
 
 void RecyclingGrid::clearViews() {
@@ -178,10 +299,29 @@ void RecyclingGrid::setupGrid() {
 
             int index = i;
             cell->registerClickAction([this, index](brls::View* view) {
+                // Skip click if long-press was just triggered
+                if (m_longPressTriggered) {
+                    m_longPressTriggered = false;
+                    return true;
+                }
                 onItemClicked(index);
                 return true;
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+
+            // Add long-press gesture for context menu
+            cell->addGestureRecognizer(new LongPressGestureRecognizer(
+                cell,
+                [this, index](LongPressGestureStatus status) {
+                    if (status.state == brls::GestureState::START) {
+                        m_longPressTriggered = true;
+                        if (index >= 0 && index < (int)m_items.size() && m_onItemLongPressed) {
+                            m_onItemLongPressed(m_items[index], index);
+                        }
+                    }
+                },
+                400  // 400ms hold duration
+            ));
 
             // Register B button on cell to handle back navigation
             cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
@@ -251,6 +391,11 @@ void RecyclingGrid::toggleSelection(int index) {
     } else {
         m_selectedIndices.insert(index);
         m_cells[index]->setSelected(true);
+    }
+
+    // Notify selection change
+    if (m_onSelectionChanged) {
+        m_onSelectionChanged(static_cast<int>(m_selectedIndices.size()));
     }
 }
 

@@ -20,6 +20,9 @@ public:
     RecyclingGrid();
 
     void setDataSource(const std::vector<Manga>& items);
+    void updateDataOrder(const std::vector<Manga>& items);  // Update cell data in place without rebuilding grid
+    void updateCellData(const std::vector<Manga>& items);   // Update cell metadata in place (unread counts, etc.)
+    void removeItems(const std::vector<int>& mangaIdsToRemove);  // Remove specific items without full rebuild
     void setOnItemSelected(std::function<void(const Manga&)> callback);
     void setOnItemLongPressed(std::function<void(const Manga&, int index)> callback);
     void setOnPullToRefresh(std::function<void()> callback);
@@ -45,6 +48,7 @@ public:
     std::vector<int> getSelectedIndices() const;
     std::vector<Manga> getSelectedManga() const;
     int getSelectionCount() const;
+    void setOnSelectionChanged(std::function<void(int count)> callback);
 
     // Get item at index
     const Manga* getItem(int index) const;
@@ -70,6 +74,7 @@ private:
     std::function<void(const Manga&, int index)> m_onItemLongPressed;
     std::function<void()> m_onPullToRefresh;
     std::function<bool()> m_onBackPressed;
+    std::function<void(int count)> m_onSelectionChanged;
 
     // Pull-to-refresh state
     bool m_isPulling = false;
@@ -98,6 +103,9 @@ private:
     int m_visibleStartRow = 0;
     int m_lastScrollY = 0;
     bool m_needsUpdate = false;
+
+    // Long-press tracking - when true, the next click should be skipped
+    bool m_longPressTriggered = false;
 };
 
 } // namespace vitasuwayomi

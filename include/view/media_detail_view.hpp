@@ -7,6 +7,9 @@
 
 #include <borealis.hpp>
 #include <set>
+#include <chrono>
+#include <atomic>
+#include <memory>
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
@@ -22,6 +25,7 @@ public:
 
     // Override to refresh chapter data when returning from reader
     void willAppear(bool resetState) override;
+    void willDisappear(bool resetState) override;
 
 private:
     void loadDetails();
@@ -110,6 +114,7 @@ private:
     brls::Button* m_sortBtn = nullptr;
     brls::Image* m_sortIcon = nullptr;
     brls::Button* m_filterBtn = nullptr;
+    brls::Button* m_menuBtn = nullptr;
     bool m_sortDescending = true;  // Default: newest first
     bool m_filterDownloaded = false;
     bool m_filterUnread = false;
@@ -143,6 +148,21 @@ private:
 
     // Reset cover image
     void resetCover();
+
+    // Live download progress tracking (incremental, no full rebuild)
+    std::chrono::steady_clock::time_point m_lastProgressRefresh;
+    std::atomic<bool> m_progressCallbackActive{false};
+    std::shared_ptr<bool> m_alive;
+
+    // Cached chapter download state for incremental UI updates
+    struct ChapterDownloadUI {
+        int chapterIndex;
+        brls::Button* dlBtn = nullptr;
+        int cachedState = -1;       // LocalDownloadState as int, -1 = not local
+        int cachedPercent = -1;     // Download percent (0-100)
+    };
+    std::vector<ChapterDownloadUI> m_chapterDlElements;
+    void updateChapterDownloadStates();  // Update download buttons in-place
 };
 
 // Alias for backward compatibility

@@ -237,6 +237,11 @@ public:
     int getCurrentCategoryId() const { return m_currentCategoryId; }
     void setCurrentCategoryId(int id) { m_currentCategoryId = id; }
 
+    // Track library additions for immediate UI update
+    void trackLibraryAddition(int mangaId) { m_recentLibraryAdditions.insert(mangaId); }
+    bool isRecentlyAdded(int mangaId) const { return m_recentLibraryAdditions.count(mangaId) > 0; }
+    void clearRecentAdditions() { m_recentLibraryAdditions.clear(); }
+
     // Application settings access
     AppSettings& getSettings() { return m_settings; }
     const AppSettings& getSettings() const { return m_settings; }
@@ -269,6 +274,7 @@ private:
     std::string m_authUsername;
     std::string m_authPassword;
     int m_currentCategoryId = 0;
+    std::set<int> m_recentLibraryAdditions;  // Manga IDs added to library this session
     AppSettings m_settings;
 };
 

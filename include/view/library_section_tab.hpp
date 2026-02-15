@@ -28,7 +28,7 @@ enum class LibrarySortMode {
     DATE_UPDATED_DESC = 7,  // Latest chapter upload (newest first)
     DATE_UPDATED_ASC = 8,   // Latest chapter upload (oldest first)
     TOTAL_CHAPTERS = 9,     // Most chapters first
-    DOWNLOADED_ONLY = 10,   // Downloaded count, hiding books with no downloads
+    DOWNLOADED_ONLY = 10,   // Local downloaded count, hiding books with no local downloads
 };
 
 class LibrarySectionTab : public brls::Box {
@@ -77,6 +77,7 @@ private:
     void openTracking(const Manga& manga);
 
     bool m_selectionMode = false;
+    int m_selectionExitGeneration = 0;  // Generation counter to cancel pending auto-exit
 
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
@@ -107,11 +108,27 @@ private:
     RecyclingGrid* m_contentGrid = nullptr;
 
     // Data
-    std::vector<Manga> m_mangaList;
+    std::vector<Manga> m_mangaList;           // Working list (may be filtered)
+    std::vector<Manga> m_fullMangaList;       // Complete list (never filtered)
     std::vector<Category> m_categories;       // Visible categories
+
+    // Cached manga state for incremental updates (like downloads tab)
+    struct CachedMangaItem {
+        int id;
+        int unreadCount;
+        int64_t lastReadAt;
+        int64_t latestChapterUploadDate;
+        int chapterCount;
+    };
+    std::vector<CachedMangaItem> m_cachedMangaList;  // Cached state for comparison
+    int m_cachedCategoryId = -1;                     // Category ID for cached data
+
+    // Helper to update manga cells incrementally without full rebuild
+    void updateMangaCellsIncrementally(const std::vector<Manga>& newManga);
 
     bool m_loaded = false;
     bool m_categoriesLoaded = false;
+    bool m_focusGridAfterLoad = false;  // Focus first grid item after loading new category
 
     // Shared pointer to track if this object is still alive
     std::shared_ptr<bool> m_alive;

@@ -38,9 +38,9 @@ private:
     brls::Box* m_emptyStateBox = nullptr;
     brls::Label* m_loadingLabel = nullptr;
     brls::Button* m_loadMoreBtn = nullptr;
-    brls::Button* m_refreshBtn = nullptr;  // Header refresh button for focus management
-    std::vector<brls::Box*> m_itemRows;  // Track item rows for focus management
-    int m_focusIndexAfterRebuild = -1;  // Index to focus after rebuilding list
+    brls::Button* m_refreshBtn = nullptr;
+    std::vector<brls::Box*> m_itemRows;
+    int m_focusIndexAfterRebuild = -1;
 
     // Data
     std::vector<ReadingHistoryItem> m_historyItems;

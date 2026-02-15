@@ -330,7 +330,7 @@ void HistoryTab::onHistoryItemSelected(const ReadingHistoryItem& item) {
     // Resume reading from last page using chapter ID (not chapter number)
     Application::getInstance().pushReaderActivityAtPage(
         item.mangaId,
-        item.chapterId,  // Use chapter ID for proper chapter identification
+        item.chapterId,
         item.lastPageRead,
         item.mangaTitle
     );
@@ -403,41 +403,30 @@ std::string HistoryTab::formatTimestamp(int64_t timestamp) {
     if (timestamp <= 0) return "Unknown date";
 
     // Detect if timestamp is in milliseconds or seconds
-    // Timestamps > 100 billion are likely milliseconds (dates after ~1973 in ms)
-    // Timestamps < 100 billion are likely seconds (dates up to ~5000 AD in seconds)
     time_t itemTime;
     if (timestamp > 100000000000LL) {
-        itemTime = static_cast<time_t>(timestamp / 1000);  // Convert from milliseconds
+        itemTime = static_cast<time_t>(timestamp / 1000);
     } else {
-        itemTime = static_cast<time_t>(timestamp);  // Already in seconds
+        itemTime = static_cast<time_t>(timestamp);
     }
     time_t now = std::time(nullptr);
 
-    // Calculate days difference using actual time difference (handles year boundaries)
-    // 86400 = seconds in a day
     int64_t timeDiff = now - itemTime;
     int daysDiff = static_cast<int>(timeDiff / 86400);
 
-    // Get the tm struct for the item time (for day name and date formatting)
     struct tm* tm_info = localtime(&itemTime);
     if (!tm_info) return "Unknown date";
-
-    // Make a copy since localtime uses static buffer
     struct tm itemTm = *tm_info;
 
-    // Check same calendar day (not just within 24 hours)
     struct tm* now_tm = localtime(&now);
     if (!now_tm) return "Unknown date";
 
-    // Check if it's today (same year, month, day)
     if (itemTm.tm_year == now_tm->tm_year &&
         itemTm.tm_mon == now_tm->tm_mon &&
         itemTm.tm_mday == now_tm->tm_mday) {
         return "Today";
     }
 
-    // Check if it's yesterday (within 24-48 hours and different calendar day)
-    // Or check by decrementing today's date
     time_t yesterdayTime = now - 86400;
     struct tm* yesterday_tm = localtime(&yesterdayTime);
     if (yesterday_tm &&
@@ -447,13 +436,11 @@ std::string HistoryTab::formatTimestamp(int64_t timestamp) {
         return "Yesterday";
     }
 
-    // Check if it's within this week (less than 7 days ago)
     if (daysDiff >= 0 && daysDiff < 7) {
         const char* days[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
         return days[itemTm.tm_wday];
     }
 
-    // Format as date
     char buffer[64];
     strftime(buffer, sizeof(buffer), "%b %d, %Y", &itemTm);
     return std::string(buffer);
@@ -462,14 +449,11 @@ std::string HistoryTab::formatTimestamp(int64_t timestamp) {
 std::string HistoryTab::formatRelativeTime(int64_t timestamp) {
     if (timestamp <= 0) return "";
 
-    // Detect if timestamp is in milliseconds or seconds
-    // Timestamps > 100 billion are likely milliseconds (dates after ~1973 in ms)
-    // Timestamps < 100 billion are likely seconds (dates up to ~5000 AD in seconds)
     time_t time;
     if (timestamp > 100000000000LL) {
-        time = static_cast<time_t>(timestamp / 1000);  // Convert from milliseconds
+        time = static_cast<time_t>(timestamp / 1000);
     } else {
-        time = static_cast<time_t>(timestamp);  // Already in seconds
+        time = static_cast<time_t>(timestamp);
     }
     time_t now = std::time(nullptr);
     int64_t diff = now - time;
@@ -486,7 +470,6 @@ std::string HistoryTab::formatRelativeTime(int64_t timestamp) {
         int days = static_cast<int>(diff / 86400);
         return std::to_string(days) + (days == 1 ? " day ago" : " days ago");
     } else {
-        // Format time
         struct tm* tm_info = localtime(&time);
         char buffer[32];
         strftime(buffer, sizeof(buffer), "%H:%M", tm_info);
