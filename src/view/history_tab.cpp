@@ -8,9 +8,11 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
+#include <chrono>
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <thread>
 
 namespace vitasuwayomi {
 
@@ -138,7 +140,7 @@ HistoryTab::~HistoryTab() {
 
 void HistoryTab::onFocusGained() {
     brls::Box::onFocusGained();
-    if (!m_loaded) {
+    if (!m_loaded && !m_isLoadingHistory) {
         loadHistory();
     }
 }
@@ -158,6 +160,12 @@ void HistoryTab::refresh() {
 }
 
 void HistoryTab::loadHistory() {
+    if (m_isLoadingHistory) {
+        brls::Logger::debug("HistoryTab: loadHistory skipped (already loading)");
+        return;
+    }
+
+    m_isLoadingHistory = true;
     brls::Logger::debug("HistoryTab: Loading history...");
 
     // Show loading indicator
@@ -180,6 +188,7 @@ void HistoryTab::loadHistory() {
             if (!alive || !*alive) return;
 
             m_loaded = true;
+            m_isLoadingHistory = false;
             m_loadingLabel->setVisibility(brls::Visibility::GONE);
 
             // Handle load failure (offline or server error)
@@ -201,7 +210,7 @@ void HistoryTab::loadHistory() {
 }
 
 void HistoryTab::loadMoreHistory() {
-    if (!m_hasMoreItems || m_isLoadingMore) return;
+    if (!m_hasMoreItems || m_isLoadingMore || m_isLoadingHistory) return;
 
     brls::Logger::debug("HistoryTab: Loading more history from offset {}...", m_currentOffset);
     m_isLoadingMore = true;
@@ -497,14 +506,8 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
     coverImage->setScalingType(brls::ImageScalingType::FILL);
     coverImage->setMarginRight(12);
 
-    // Load cover
-    if (!item.mangaThumbnail.empty()) {
-        std::string url = item.mangaThumbnail;
-        if (url[0] == '/') {
-            url = SuwayomiClient::getInstance().getServerUrl() + url;
-        }
-        ImageLoader::loadAsync(url, nullptr, coverImage);
-    }
+    bool highPriorityCover = index < EAGER_COVER_LOAD_COUNT;
+    requestCoverLoad(item.mangaThumbnail, coverImage, highPriorityCover);
     itemRow->addView(coverImage);
 
     // Info column
@@ -571,7 +574,39 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
         return true;
     });
 
+    // Lazy-load cover art when row receives focus to avoid many simultaneous image requests.
+    if (!highPriorityCover && !item.mangaThumbnail.empty()) {
+        std::string thumbnail = item.mangaThumbnail;
+        itemRow->getFocusEvent()->subscribe([this, coverImage, thumbnail](brls::View*) {
+            requestCoverLoad(thumbnail, coverImage, false);
+        });
+    }
+
     return itemRow;
+}
+
+void HistoryTab::requestCoverLoad(const std::string& thumbnailUrl, brls::Image* coverImage, bool highPriority) {
+    if (thumbnailUrl.empty() || !coverImage) {
+        return;
+    }
+
+    std::string url = thumbnailUrl;
+    if (url[0] == '/') {
+        url = SuwayomiClient::getInstance().getServerUrl() + url;
+    }
+
+    if (highPriority) {
+        ImageLoader::loadAsync(url, nullptr, coverImage);
+        return;
+    }
+
+    // Low-priority image loading: avoid flooding requests during fast navigation.
+    asyncRun([url, coverImage]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        brls::sync([url, coverImage]() {
+            ImageLoader::loadAsync(url, nullptr, coverImage);
+        });
+    });
 }
 
 void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items, size_t startIndex) {
