@@ -444,26 +444,26 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     startButtonIcon->setMarginBottom(2);
     menuContainer->addView(startButtonIcon);
 
-    auto* menuBtn = new brls::Button();
-    menuBtn->setWidth(44);
-    menuBtn->setHeight(40);
-    menuBtn->setCornerRadius(8);
-    menuBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    menuBtn->setAlignItems(brls::AlignItems::CENTER);
+    m_menuBtn = new brls::Button();
+    m_menuBtn->setWidth(44);
+    m_menuBtn->setHeight(40);
+    m_menuBtn->setCornerRadius(8);
+    m_menuBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_menuBtn->setAlignItems(brls::AlignItems::CENTER);
 
     auto* menuIcon = new brls::Image();
     menuIcon->setWidth(24);
     menuIcon->setHeight(24);
     menuIcon->setScalingType(brls::ImageScalingType::FIT);
     menuIcon->setImageFromFile("app0:resources/icons/menu.png");
-    menuBtn->addView(menuIcon);
+    m_menuBtn->addView(menuIcon);
 
-    menuBtn->registerClickAction([this](brls::View* view) {
+    m_menuBtn->registerClickAction([this](brls::View* view) {
         showMangaMenu();
         return true;
     });
-    menuBtn->addGestureRecognizer(new brls::TapGestureRecognizer(menuBtn));
-    menuContainer->addView(menuBtn);
+    m_menuBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_menuBtn));
+    menuContainer->addView(m_menuBtn);
     chaptersActions->addView(menuContainer);
 
     chaptersHeader->addView(chaptersActions);
@@ -1193,19 +1193,61 @@ void MangaDetailView::populateChaptersList() {
         m_chaptersBox->addView(chapterRow);
     }
 
-    // Set up navigation: UP from first chapter row goes to read button
+    // Set up D-pad navigation routes between left panel buttons, chapter header buttons, and chapter list
     auto& children = m_chaptersBox->getChildren();
-    if (!children.empty() && m_readButton) {
-        children.front()->setCustomNavigationRoute(brls::FocusDirection::UP, m_readButton);
-        // Read button DOWN goes to first chapter row
-        m_readButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
-        // Library button DOWN goes to first chapter row
-        if (m_libraryButton) {
-            m_libraryButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
+
+    // UP from read button -> sort button (chapter header area)
+    if (m_readButton && m_sortBtn) {
+        m_readButton->setCustomNavigationRoute(brls::FocusDirection::UP, m_sortBtn);
+    }
+
+    // DOWN from read button -> library button if it exists and is visible, else tracking button
+    if (m_readButton) {
+        if (m_libraryButton && m_libraryButton->getVisibility() == brls::Visibility::VISIBLE) {
+            m_readButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_libraryButton);
+        } else if (m_trackingButton) {
+            m_readButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_trackingButton);
         }
-        // Tracking button DOWN goes to first chapter row
-        if (m_trackingButton) {
-            m_trackingButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
+    }
+
+    // DOWN from library button -> tracking button
+    if (m_libraryButton && m_trackingButton) {
+        m_libraryButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_trackingButton);
+    }
+
+    // DOWN from tracking button -> first chapter row
+    if (m_trackingButton && !children.empty()) {
+        m_trackingButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
+    }
+
+    // UP from first chapter row -> sort button (chapter header area)
+    if (!children.empty() && m_sortBtn) {
+        children.front()->setCustomNavigationRoute(brls::FocusDirection::UP, m_sortBtn);
+    }
+
+    // DOWN from chapter header buttons -> first chapter row
+    if (!children.empty()) {
+        if (m_sortBtn) {
+            m_sortBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
+        }
+        if (m_filterBtn) {
+            m_filterBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
+        }
+        if (m_menuBtn) {
+            m_menuBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, children.front());
+        }
+    }
+
+    // UP from chapter header buttons -> read button (to cycle back to left panel)
+    if (m_readButton) {
+        if (m_sortBtn) {
+            m_sortBtn->setCustomNavigationRoute(brls::FocusDirection::UP, m_readButton);
+        }
+        if (m_filterBtn) {
+            m_filterBtn->setCustomNavigationRoute(brls::FocusDirection::UP, m_readButton);
+        }
+        if (m_menuBtn) {
+            m_menuBtn->setCustomNavigationRoute(brls::FocusDirection::UP, m_readButton);
         }
     }
 
@@ -1458,9 +1500,17 @@ void MangaDetailView::onAddToLibrary() {
             // Track addition for immediate library UI update
             Application::getInstance().trackLibraryAddition(m_manga.id);
 
-            // Hide the button after adding to library
+            // Hide the button after adding to library and transfer focus to read button
             if (m_libraryButton) {
                 m_libraryButton->setVisibility(brls::Visibility::GONE);
+                // Update read button DOWN route to skip hidden library button
+                if (m_readButton && m_trackingButton) {
+                    m_readButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_trackingButton);
+                }
+                // Transfer focus back to read button
+                if (m_readButton) {
+                    brls::Application::giveFocus(m_readButton);
+                }
             }
 
             // If categories available, show selection dropdown

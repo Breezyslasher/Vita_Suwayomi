@@ -114,6 +114,7 @@ private:
     brls::Button* m_sortBtn = nullptr;
     brls::Image* m_sortIcon = nullptr;
     brls::Button* m_filterBtn = nullptr;
+    brls::Button* m_menuBtn = nullptr;
     bool m_sortDescending = true;  // Default: newest first
     bool m_filterDownloaded = false;
     bool m_filterUnread = false;
