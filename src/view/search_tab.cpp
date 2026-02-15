@@ -392,6 +392,7 @@ void SearchTab::filterSourcesByLanguage() {
 }
 
 void SearchTab::showGlobalSearchDialog() {
+    m_loadGeneration++;  // Invalidate in-flight loads so they don't steal focus from IME
     brls::Application::getImeManager()->openForText([this](std::string text) {
         if (text.empty()) return;
 
@@ -403,6 +404,7 @@ void SearchTab::showGlobalSearchDialog() {
 }
 
 void SearchTab::showSearchHistoryDialog() {
+    m_loadGeneration++;  // Invalidate in-flight loads so they don't steal focus from dialog
     auto& settings = Application::getInstance().getSettings();
     auto& history = settings.searchHistory;
 
