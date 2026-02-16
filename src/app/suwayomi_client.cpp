@@ -2253,6 +2253,144 @@ std::string SuwayomiClient::getExtensionIconUrl(const std::string& apkName) {
 }
 
 // ============================================================================
+// Extension Repository Management
+// ============================================================================
+
+bool SuwayomiClient::fetchExtensionRepos(std::vector<std::string>& repos) {
+    const char* query = R"(
+        query GetSettings {
+            settings {
+                extensionRepos
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query, "");
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string settings = extractJsonObject(data, "settings");
+    if (settings.empty()) return false;
+
+    repos = extractJsonStringArray(settings, "extensionRepos");
+    brls::Logger::debug("Fetched {} extension repositories", repos.size());
+    return true;
+}
+
+bool SuwayomiClient::addExtensionRepo(const std::string& repoUrl) {
+    // First fetch current repos
+    std::vector<std::string> currentRepos;
+    if (!fetchExtensionRepos(currentRepos)) {
+        brls::Logger::error("Failed to fetch current extension repos");
+        return false;
+    }
+
+    // Check if repo already exists
+    for (const auto& repo : currentRepos) {
+        if (repo == repoUrl) {
+            brls::Logger::info("Extension repo already exists: {}", repoUrl);
+            return true;  // Already exists, consider it a success
+        }
+    }
+
+    // Add new repo to the list
+    currentRepos.push_back(repoUrl);
+
+    // Build the repos array string for GraphQL
+    std::string reposArray = "[";
+    for (size_t i = 0; i < currentRepos.size(); i++) {
+        if (i > 0) reposArray += ",";
+        // Escape the URL string
+        std::string escapedUrl;
+        for (char c : currentRepos[i]) {
+            switch (c) {
+                case '"': escapedUrl += "\\\""; break;
+                case '\\': escapedUrl += "\\\\"; break;
+                default: escapedUrl += c; break;
+            }
+        }
+        reposArray += "\"" + escapedUrl + "\"";
+    }
+    reposArray += "]";
+
+    const char* query = R"(
+        mutation SetSettings($input: SetSettingsInput!) {
+            setSettings(input: $input) {
+                settings {
+                    extensionRepos
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"input\":{\"extensionRepos\":" + reposArray + "}}";
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("Failed to update extension repos");
+        return false;
+    }
+
+    brls::Logger::info("Successfully added extension repo: {}", repoUrl);
+    return true;
+}
+
+bool SuwayomiClient::removeExtensionRepo(const std::string& repoUrl) {
+    // First fetch current repos
+    std::vector<std::string> currentRepos;
+    if (!fetchExtensionRepos(currentRepos)) {
+        brls::Logger::error("Failed to fetch current extension repos");
+        return false;
+    }
+
+    // Remove the repo from the list
+    auto it = std::find(currentRepos.begin(), currentRepos.end(), repoUrl);
+    if (it == currentRepos.end()) {
+        brls::Logger::info("Extension repo not found: {}", repoUrl);
+        return true;  // Not found, consider it a success
+    }
+    currentRepos.erase(it);
+
+    // Build the repos array string for GraphQL
+    std::string reposArray = "[";
+    for (size_t i = 0; i < currentRepos.size(); i++) {
+        if (i > 0) reposArray += ",";
+        // Escape the URL string
+        std::string escapedUrl;
+        for (char c : currentRepos[i]) {
+            switch (c) {
+                case '"': escapedUrl += "\\\""; break;
+                case '\\': escapedUrl += "\\\\"; break;
+                default: escapedUrl += c; break;
+            }
+        }
+        reposArray += "\"" + escapedUrl + "\"";
+    }
+    reposArray += "]";
+
+    const char* query = R"(
+        mutation SetSettings($input: SetSettingsInput!) {
+            setSettings(input: $input) {
+                settings {
+                    extensionRepos
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"input\":{\"extensionRepos\":" + reposArray + "}}";
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("Failed to update extension repos");
+        return false;
+    }
+
+    brls::Logger::info("Successfully removed extension repo: {}", repoUrl);
+    return true;
+}
+
+// ============================================================================
 // Source Management
 // ============================================================================
 

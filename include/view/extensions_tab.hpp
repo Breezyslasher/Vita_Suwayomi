@@ -157,6 +157,9 @@ private:
     void showSearchResults();
     void hideSearchResults();
 
+    // Extension repositories
+    void showAddRepoDialog();
+
     // Extension operations
     void installExtension(const Extension& ext);
     void updateExtension(const Extension& ext);
