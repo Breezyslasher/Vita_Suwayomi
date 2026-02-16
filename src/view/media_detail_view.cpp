@@ -1633,6 +1633,88 @@ void MangaDetailView::downloadAllChapters() {
         return;
     }
 
+    // Show confirmation for large downloads to prevent accidental mass-downloads
+    const size_t LARGE_DOWNLOAD_THRESHOLD = 50;
+    size_t totalChapters = serverChapterIds.size() + localChapterPairs.size();
+    if (totalChapters > LARGE_DOWNLOAD_THRESHOLD) {
+        brls::Dialog* confirmDialog = new brls::Dialog("Confirm Download");
+
+        std::string message = "Are you sure you want to download " + std::to_string(totalChapters) + " chapters?\n\n";
+        message += "This may take a while and use significant storage space.";
+
+        brls::Label* label = new brls::Label();
+        label->setText(message);
+        label->setHorizontalAlign(NVGalign::NVG_ALIGN_CENTER);
+        confirmDialog->addView(label);
+
+        confirmDialog->addButton("Download", [downloadMode, mangaId, mangaTitle, serverChapterIds, localChapterPairs, confirmDialog]() {
+            confirmDialog->close();
+
+            // Proceed with download (same code as before but in async)
+            asyncRun([downloadMode, mangaId, mangaTitle, serverChapterIds, localChapterPairs]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                DownloadsManager& localMgr = DownloadsManager::getInstance();
+
+                bool serverSuccess = true;
+                bool localSuccess = true;
+
+                // Queue to server if needed
+                if (!serverChapterIds.empty()) {
+                    brls::Logger::info("MangaDetailView: Queueing {} to SERVER", serverChapterIds.size());
+                    if (client.queueChapterDownloads(serverChapterIds)) {
+                        client.startDownloads();
+                        brls::Logger::info("MangaDetailView: Server queue SUCCESS");
+                    } else {
+                        serverSuccess = false;
+                        brls::Logger::error("MangaDetailView: Server queue FAILED");
+                    }
+                }
+
+                // Queue to local if needed
+                if (!localChapterPairs.empty()) {
+                    brls::Logger::info("MangaDetailView: Queueing {} to LOCAL", localChapterPairs.size());
+                    if (localMgr.queueChaptersDownload(mangaId, localChapterPairs, mangaTitle)) {
+                        localMgr.startDownloads();
+                        brls::Logger::info("MangaDetailView: Local queue SUCCESS");
+                    } else {
+                        localSuccess = false;
+                        brls::Logger::error("MangaDetailView: Local queue FAILED");
+                    }
+                }
+
+                // Show result notification
+                brls::sync([downloadMode, serverSuccess, localSuccess, serverChapterIds, localChapterPairs]() {
+                    if (downloadMode == DownloadMode::SERVER_ONLY) {
+                        if (serverSuccess) {
+                            brls::Application::notify("Queued " + std::to_string(serverChapterIds.size()) + " chapters to server");
+                        } else {
+                            brls::Application::notify("Failed to queue to server");
+                        }
+                    } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                        if (localSuccess) {
+                            brls::Application::notify("Queued " + std::to_string(localChapterPairs.size()) + " chapters locally");
+                        } else {
+                            brls::Application::notify("Failed to queue locally");
+                        }
+                    } else {
+                        std::string msg = "Queued ";
+                        if (!serverChapterIds.empty()) msg += std::to_string(serverChapterIds.size()) + " to server";
+                        if (!serverChapterIds.empty() && !localChapterPairs.empty()) msg += ", ";
+                        if (!localChapterPairs.empty()) msg += std::to_string(localChapterPairs.size()) + " locally";
+                        brls::Application::notify(msg);
+                    }
+                });
+            });
+        });
+
+        confirmDialog->addButton("Cancel", [confirmDialog]() {
+            confirmDialog->close();
+        });
+
+        confirmDialog->open();
+        return;
+    }
+
     // Don't capture 'this' - use only copied data to avoid crashes if view is destroyed
     asyncRun([downloadMode, mangaId, mangaTitle, serverChapterIds, localChapterPairs]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
