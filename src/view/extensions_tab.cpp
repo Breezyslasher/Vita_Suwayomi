@@ -12,6 +12,7 @@
 #include <borealis.hpp>
 #include <algorithm>
 #include <cctype>
+#include <thread>
 
 namespace vitasuwayomi {
 
@@ -695,6 +696,37 @@ ExtensionsTab::ExtensionsTab() {
     buttonBox->setAxis(brls::Axis::ROW);
     buttonBox->setAlignItems(brls::AlignItems::FLEX_END);
 
+    // Add Repository button (Select button)
+    auto* repoContainer = new brls::Box();
+    repoContainer->setAxis(brls::Axis::COLUMN);
+    repoContainer->setAlignItems(brls::AlignItems::CENTER);
+    repoContainer->setMarginRight(10);
+
+    auto* selectButtonIcon = new brls::Image();
+    selectButtonIcon->setWidth(64);
+    selectButtonIcon->setHeight(16);
+    selectButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    selectButtonIcon->setImageFromFile("app0:resources/images/select_button.png");
+    selectButtonIcon->setMarginBottom(2);
+    repoContainer->addView(selectButtonIcon);
+
+    auto* repoBox = new brls::Box();
+    repoBox->setFocusable(true);
+    repoBox->setPadding(8, 8, 8, 8);
+    repoBox->setCornerRadius(4);
+    repoBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    auto* repoIcon = new brls::Image();
+    repoIcon->setSize(brls::Size(24, 24));
+    repoIcon->setImageFromFile("app0:resources/icons/import.png");
+    repoBox->addView(repoIcon);
+    repoBox->registerClickAction([this](brls::View*) {
+        brls::sync([this]() { showAddRepoDialog(); });
+        return true;
+    });
+    repoBox->addGestureRecognizer(new brls::TapGestureRecognizer(repoBox));
+    repoContainer->addView(repoBox);
+    buttonBox->addView(repoContainer);
+
     // Search button
     auto* searchContainer = new brls::Box();
     searchContainer->setAxis(brls::Axis::COLUMN);
@@ -767,6 +799,11 @@ ExtensionsTab::ExtensionsTab() {
 
     this->registerAction("Refresh", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
         brls::sync([this]() { refreshExtensions(); });
+        return true;
+    });
+
+    this->registerAction("Add Repo", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
+        brls::sync([this]() { showAddRepoDialog(); });
         return true;
     });
 
@@ -1413,6 +1450,42 @@ void ExtensionsTab::showSearchResults() {
 void ExtensionsTab::hideSearchResults() {
     clearSearch();
     reloadRecycler();
+}
+
+void ExtensionsTab::showAddRepoDialog() {
+    brls::Application::getImeManager()->openForText([this](std::string text) {
+        if (text.empty()) {
+            brls::Application::notify("Repository URL cannot be empty");
+            return;
+        }
+
+        // Validate URL format
+        if (text.find("http://") != 0 && text.find("https://") != 0) {
+            brls::Application::notify("Invalid URL: must start with http:// or https://");
+            return;
+        }
+
+        // Show loading notification
+        brls::Application::notify("Adding extension repository...");
+
+        // Add repository in background thread
+        std::thread([this, text]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            bool success = client.addExtensionRepo(text);
+
+            brls::sync([this, success, text]() {
+                if (success) {
+                    brls::Application::notify("Repository added successfully!");
+                    // Refresh extension list to load from new repository
+                    refreshExtensions();
+                } else {
+                    brls::Application::notify("Failed to add repository");
+                }
+            });
+        }).detach();
+    }, "Add Extension Repository",
+       "https://raw.githubusercontent.com/komikku-app/extensions/repo/index.min.json",
+       256);
 }
 
 } // namespace vitasuwayomi

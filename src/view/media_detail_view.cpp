@@ -391,8 +391,16 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_filterBtn->setWidth(44);
     m_filterBtn->setHeight(40);
     m_filterBtn->setCornerRadius(8);
-    m_filterBtn->setText("F");  // Filter indicator
-    m_filterBtn->setFontSize(14);
+    m_filterBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_filterBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    // Add filter icon
+    auto* filterIcon = new brls::Image();
+    filterIcon->setWidth(24);
+    filterIcon->setHeight(24);
+    filterIcon->setScalingType(brls::ImageScalingType::FIT);
+    filterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
+    m_filterBtn->addView(filterIcon);
 
     m_filterBtn->registerClickAction([this](brls::View* view) {
         // Show filter options dialog

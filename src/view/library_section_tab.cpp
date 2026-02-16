@@ -425,12 +425,13 @@ void LibrarySectionTab::createCategoryTabs() {
     m_categoryScrollOffset = 0.0f;
 
     // Filter out empty categories (mangaCount == 0) and hidden categories
-    // Also filter the "Default" category (id 0) if it's empty
+    // EXCEPTION: Keep the "Default" category (id 0) even if mangaCount is 0,
+    // because the server may not populate this field correctly for the default category
     std::vector<Category> visibleCategories;
     const auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
     for (const auto& cat : m_categories) {
-        // Skip empty categories
-        if (cat.mangaCount <= 0) {
+        // Skip empty categories, but keep the default category (id 0)
+        if (cat.mangaCount <= 0 && cat.id != 0) {
             brls::Logger::debug("LibrarySectionTab: Hiding empty category '{}' (id={})",
                               cat.name, cat.id);
             continue;
@@ -666,7 +667,13 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
             }
 
             manga.clear();
-            success = client.fetchCategoryManga(categoryId, manga);
+            // For default category (id=0), use fetchLibraryManga as fallback
+            // since fetchCategoryManga(0) may not work correctly on all servers
+            if (categoryId == 0) {
+                success = client.fetchLibraryManga(manga);
+            } else {
+                success = client.fetchCategoryManga(categoryId, manga);
+            }
             if (success) break;
         }
 

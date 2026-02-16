@@ -409,6 +409,11 @@ public:
     bool uninstallExtension(const std::string& pkgName);
     std::string getExtensionIconUrl(const std::string& apkName);
 
+    // Extension Repository Management
+    bool fetchExtensionRepos(std::vector<std::string>& repos);
+    bool addExtensionRepo(const std::string& repoUrl);
+    bool removeExtensionRepo(const std::string& repoUrl);
+
     // Source Management
     bool fetchSourceList(std::vector<Source>& sources);
     bool fetchSource(int64_t sourceId, Source& source);
