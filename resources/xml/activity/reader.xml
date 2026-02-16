@@ -190,10 +190,26 @@
                 style="bordered"
                 width="100%"
                 height="40"
-                marginBottom="15">
+                marginBottom="10">
                 <brls:Label
                     id="reader/settings_rot_label"
                     text="0°"
+                    fontSize="14"
+                    textColor="#ffffff"
+                    horizontalAlign="center"
+                    width="100%"/>
+            </brls:Button>
+
+            <!-- Scale button -->
+            <brls:Button
+                id="reader/settings_scale_btn"
+                style="bordered"
+                width="100%"
+                height="40"
+                marginBottom="15">
+                <brls:Label
+                    id="reader/settings_scale_label"
+                    text="Fit Screen"
                     fontSize="14"
                     textColor="#ffffff"
                     horizontalAlign="center"

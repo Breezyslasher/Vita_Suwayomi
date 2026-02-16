@@ -69,6 +69,31 @@ public:
      */
     bool hasImage() const { return m_nvgImage != 0; }
 
+    /**
+     * Set zoom level (1.0 = normal, >1.0 = zoomed in)
+     */
+    void setZoomLevel(float level);
+
+    /**
+     * Get current zoom level
+     */
+    float getZoomLevel() const { return m_zoomLevel; }
+
+    /**
+     * Set zoom offset (pan position when zoomed)
+     */
+    void setZoomOffset(brls::Point offset);
+
+    /**
+     * Get current zoom offset
+     */
+    brls::Point getZoomOffset() const { return m_zoomOffset; }
+
+    /**
+     * Reset zoom to normal (1.0x with no offset)
+     */
+    void resetZoom();
+
     static brls::View* create();
 
 private:
@@ -79,6 +104,10 @@ private:
     float m_rotationRadians = 0.0f;
     brls::ImageScalingType m_scalingType = brls::ImageScalingType::FIT;
     NVGcolor m_bgColor = nvgRGBA(26, 26, 46, 255);  // Default dark mode color
+
+    // Zoom state
+    float m_zoomLevel = 1.0f;      // Current zoom level (1.0 = normal)
+    brls::Point m_zoomOffset = {0, 0};  // Pan offset when zoomed
 
     // Calculate image bounds for current scaling type
     void calculateImageBounds(float viewX, float viewY, float viewW, float viewH,

@@ -162,12 +162,21 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
     // Save state
     nvgSave(vg);
 
-    // Use scissor to clip rendering to the calculated bounds
-    nvgScissor(vg, imgX, imgY, imgW, imgH);
+    // Use scissor to clip rendering to the view bounds (not calculated bounds when zoomed)
+    nvgScissor(vg, x, y, width, height);
 
     // Calculate center of the destination area
     float centerX = imgX + imgW / 2.0f;
     float centerY = imgY + imgH / 2.0f;
+
+    // Apply zoom transform (scale + translate)
+    if (m_zoomLevel != 1.0f) {
+        // Translate to center, apply zoom, then apply pan offset
+        nvgTranslate(vg, centerX, centerY);
+        nvgScale(vg, m_zoomLevel, m_zoomLevel);
+        nvgTranslate(vg, m_zoomOffset.x, m_zoomOffset.y);
+        nvgTranslate(vg, -centerX, -centerY);
+    }
 
     // For rotated images, we need to render differently
     bool isRotated90or270 = (m_rotationDegrees == 90.0f || m_rotationDegrees == 270.0f);
@@ -249,6 +258,22 @@ void RotatableImage::cycleRotation() {
         newRotation = 0.0f;
     }
     setRotation(newRotation);
+}
+
+void RotatableImage::setZoomLevel(float level) {
+    m_zoomLevel = std::max(0.5f, std::min(4.0f, level));  // Clamp between 0.5x and 4x
+    this->invalidate();
+}
+
+void RotatableImage::setZoomOffset(brls::Point offset) {
+    m_zoomOffset = offset;
+    this->invalidate();
+}
+
+void RotatableImage::resetZoom() {
+    m_zoomLevel = 1.0f;
+    m_zoomOffset = {0, 0};
+    this->invalidate();
 }
 
 brls::View* RotatableImage::create() {

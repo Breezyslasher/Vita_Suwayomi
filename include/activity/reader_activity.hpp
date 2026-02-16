@@ -131,9 +131,11 @@ private:
     BRLS_BIND(brls::Button, settingsFormatBtn, "reader/settings_format_btn");
     BRLS_BIND(brls::Button, settingsDirBtn, "reader/settings_dir_btn");
     BRLS_BIND(brls::Button, settingsRotBtn, "reader/settings_rot_btn");
+    BRLS_BIND(brls::Button, settingsScaleBtn, "reader/settings_scale_btn");
     BRLS_BIND(brls::Label, settingsFormatLabel, "reader/settings_format_label");
     BRLS_BIND(brls::Label, settingsDirLabel, "reader/settings_dir_label");
     BRLS_BIND(brls::Label, settingsRotLabel, "reader/settings_rot_label");
+    BRLS_BIND(brls::Label, settingsScaleLabel, "reader/settings_scale_label");
 
     // Webtoon continuous scroll view
     BRLS_BIND(WebtoonScrollView, webtoonScroll, "reader/webtoon_scroll");

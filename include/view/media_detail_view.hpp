@@ -158,6 +158,7 @@ private:
     struct ChapterDownloadUI {
         int chapterIndex;
         brls::Button* dlBtn = nullptr;
+        brls::Image* dlIcon = nullptr;  // Cached icon for this button
         int cachedState = -1;       // LocalDownloadState as int, -1 = not local
         int cachedPercent = -1;     // Download percent (0-100)
     };

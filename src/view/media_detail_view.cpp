@@ -552,15 +552,18 @@ void MangaDetailView::willAppear(bool resetState) {
 }
 
 void MangaDetailView::willDisappear(bool resetState) {
-    brls::Box::willDisappear(resetState);
+    // CRITICAL: Clear callbacks FIRST to prevent any async updates after destruction
+    DownloadsManager& dm = DownloadsManager::getInstance();
+    dm.setProgressCallback(nullptr);
+    dm.setChapterCompletionCallback(nullptr);
 
     // Stop receiving progress updates when not visible
     m_progressCallbackActive.store(false);
 
-    // Clear callbacks to prevent updates while view is hidden
-    DownloadsManager& dm = DownloadsManager::getInstance();
-    dm.setProgressCallback(nullptr);
-    dm.setChapterCompletionCallback(nullptr);
+    // Mark view as no longer alive to prevent stale callback execution
+    *m_alive = false;
+
+    brls::Box::willDisappear(resetState);
 }
 
 void MangaDetailView::loadDetails() {
@@ -583,7 +586,12 @@ void MangaDetailView::loadDetails() {
             Manga updatedManga;
 
             if (client.fetchManga(m_manga.id, updatedManga)) {
-                brls::sync([this, updatedManga]() {
+                brls::sync([this, updatedManga, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) {
+                        return;
+                    }
+
                     bool needsUpdate = false;
 
                     // Update description if we got one
@@ -677,7 +685,12 @@ void MangaDetailView::loadChapters() {
                 }
             }
 
-            brls::sync([this, chapters, chaptersToDownload]() {
+            brls::sync([this, chapters, chaptersToDownload, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) {
+                    return;
+                }
+
                 m_chapters = chapters;
                 populateChaptersList();
 
@@ -710,12 +723,21 @@ void MangaDetailView::loadChapters() {
 }
 
 void MangaDetailView::updateChapterDownloadStates() {
+    // Guard: check if view is still alive
+    if (!m_alive || !*m_alive) return;
     if (m_chapterDlElements.empty()) return;
 
     DownloadsManager& dm = DownloadsManager::getInstance();
 
     for (auto& elem : m_chapterDlElements) {
+        // Null check: ensure button is still valid
         if (!elem.dlBtn) continue;
+
+        // Verify button is still a child of m_chaptersBox (not destroyed during rebuild)
+        if (m_chaptersBox && !m_chaptersBox->isChild(elem.dlBtn)) {
+            elem.dlBtn = nullptr;
+            continue;
+        }
 
         DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, elem.chapterIndex);
 
@@ -736,51 +758,43 @@ void MangaDetailView::updateChapterDownloadStates() {
 
         // Update button appearance in-place
         brls::Button* dlBtn = elem.dlBtn;
-        dlBtn->clearViews();
         dlBtn->setText("");  // Clear text first
 
         if (localCh && localCh->state == LocalDownloadState::DOWNLOADING) {
-            // Show download percentage inside the button
+            // Show download percentage inside the button (no icon needed)
+            if (elem.dlIcon) {
+                elem.dlIcon->setVisibility(brls::Visibility::GONE);
+            }
             int pct = newPercent >= 0 ? newPercent : 0;
             dlBtn->setText(std::to_string(pct) + "%");
             dlBtn->setFontSize(10);
             dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 220));  // Blue
-        } else if (localCh && localCh->state == LocalDownloadState::COMPLETED) {
-            auto* icon = new brls::Image();
-            icon->setWidth(20);
-            icon->setHeight(20);
-            icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
-            dlBtn->addView(icon);
-            dlBtn->setText("");
-            dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
-        } else if (localCh && localCh->state == LocalDownloadState::QUEUED) {
-            auto* icon = new brls::Image();
-            icon->setWidth(20);
-            icon->setHeight(20);
-            icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("app0:resources/icons/refresh.png");
-            dlBtn->addView(icon);
-            dlBtn->setText("");
-            dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
-        } else if (localCh && localCh->state == LocalDownloadState::FAILED) {
-            auto* icon = new brls::Image();
-            icon->setWidth(20);
-            icon->setHeight(20);
-            icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("app0:resources/icons/cross.png");
-            dlBtn->addView(icon);
-            dlBtn->setText("");
-            dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
         } else {
-            auto* icon = new brls::Image();
-            icon->setWidth(20);
-            icon->setHeight(20);
-            icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("app0:resources/icons/download.png");
-            dlBtn->addView(icon);
-            dlBtn->setText("");
-            dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+            // Create icon if not cached
+            if (!elem.dlIcon) {
+                elem.dlIcon = new brls::Image();
+                elem.dlIcon->setWidth(20);
+                elem.dlIcon->setHeight(20);
+                elem.dlIcon->setScalingType(brls::ImageScalingType::FIT);
+                dlBtn->addView(elem.dlIcon);
+            }
+
+            elem.dlIcon->setVisibility(brls::Visibility::VISIBLE);
+
+            // Update icon image based on state
+            if (localCh && localCh->state == LocalDownloadState::COMPLETED) {
+                elem.dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
+                dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
+            } else if (localCh && localCh->state == LocalDownloadState::QUEUED) {
+                elem.dlIcon->setImageFromFile("app0:resources/icons/refresh.png");
+                dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
+            } else if (localCh && localCh->state == LocalDownloadState::FAILED) {
+                elem.dlIcon->setImageFromFile("app0:resources/icons/cross.png");
+                dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
+            } else {
+                elem.dlIcon->setImageFromFile("app0:resources/icons/download.png");
+                dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+            }
         }
     }
 }
