@@ -1644,7 +1644,7 @@ void MangaDetailView::downloadAllChapters() {
 
         brls::Label* label = new brls::Label();
         label->setText(message);
-        label->setHorizontalAlign(NVGalign::NVG_ALIGN_CENTER);
+        label->setHorizontalAlign(brls::HorizontalAlign);
         confirmDialog->addView(label);
 
         confirmDialog->addButton("Download", [downloadMode, mangaId, mangaTitle, serverChapterIds, localChapterPairs, confirmDialog]() {
