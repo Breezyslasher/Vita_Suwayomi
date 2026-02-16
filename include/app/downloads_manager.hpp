@@ -10,6 +10,7 @@
 #include <functional>
 #include <mutex>
 #include <atomic>
+#include <chrono>
 
 namespace vitasuwayomi {
 
@@ -209,6 +210,10 @@ private:
     DownloadProgressCallback m_progressCallback;
     ChapterCompletionCallback m_chapterCompletionCallback;
     std::string m_downloadsPath;
+
+    // Debouncing for saveStateUnlocked
+    std::chrono::steady_clock::time_point m_lastSaveTime;
+    bool m_saveStatePending = false;
 };
 
 } // namespace vitasuwayomi
