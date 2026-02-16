@@ -352,6 +352,25 @@ void ReaderActivity::onContentAvailable() {
                     float dx = m_touchCurrent.x - m_touchStart.x;
                     float dy = m_touchCurrent.y - m_touchStart.y;
 
+                    // If zoomed, use pan to scroll the zoomed image instead of page navigation
+                    if (m_isZoomed) {
+                        // Update zoom offset based on pan delta
+                        brls::Point newOffset = {
+                            m_zoomOffset.x + dx,
+                            m_zoomOffset.y + dy
+                        };
+
+                        // Apply offset to image
+                        if (pageImage) {
+                            pageImage->setZoomOffset(newOffset);
+                        }
+
+                        // Update touch start for next delta calculation
+                        m_touchStart = m_touchCurrent;
+                        m_zoomOffset = newOffset;
+                        return;
+                    }
+
                     // Raw delta follows the finger (for visual feedback)
                     float rawDelta = useVerticalSwipe ? dy : dx;
                     float crossDelta = useVerticalSwipe ? dx : dy;
@@ -619,6 +638,31 @@ void ReaderActivity::onContentAvailable() {
             return true;
         });
         settingsRotBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsRotBtn));
+    }
+
+    if (settingsScaleBtn) {
+        settingsScaleBtn->registerClickAction([this](brls::View*) {
+            // Cycle through scale modes: FIT_SCREEN -> FIT_WIDTH -> FIT_HEIGHT -> ORIGINAL -> FIT_SCREEN
+            switch (m_settings.scaleMode) {
+                case ReaderScaleMode::FIT_SCREEN:
+                    m_settings.scaleMode = ReaderScaleMode::FIT_WIDTH;
+                    break;
+                case ReaderScaleMode::FIT_WIDTH:
+                    m_settings.scaleMode = ReaderScaleMode::FIT_HEIGHT;
+                    break;
+                case ReaderScaleMode::FIT_HEIGHT:
+                    m_settings.scaleMode = ReaderScaleMode::ORIGINAL;
+                    break;
+                case ReaderScaleMode::ORIGINAL:
+                    m_settings.scaleMode = ReaderScaleMode::FIT_SCREEN;
+                    break;
+            }
+            applySettings();
+            saveSettingsToApp();
+            updateSettingsLabels();
+            return true;
+        });
+        settingsScaleBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsScaleBtn));
     }
 
     // Update direction label
@@ -1225,6 +1269,18 @@ void ReaderActivity::updateSettingsLabels() {
         }
         settingsRotLabel->setText(rotText);
     }
+
+    // Update scale label
+    if (settingsScaleLabel) {
+        std::string scaleText;
+        switch (m_settings.scaleMode) {
+            case ReaderScaleMode::FIT_SCREEN: scaleText = "Fit Screen"; break;
+            case ReaderScaleMode::FIT_WIDTH: scaleText = "Fit Width"; break;
+            case ReaderScaleMode::FIT_HEIGHT: scaleText = "Fit Height"; break;
+            case ReaderScaleMode::ORIGINAL: scaleText = "Original"; break;
+        }
+        settingsScaleLabel->setText(scaleText);
+    }
 }
 
 void ReaderActivity::applySettings() {
@@ -1234,13 +1290,22 @@ void ReaderActivity::applySettings() {
     brls::ImageScalingType scalingType = brls::ImageScalingType::FIT;
     switch (m_settings.scaleMode) {
         case ReaderScaleMode::FIT_SCREEN:
+            scalingType = brls::ImageScalingType::FIT;
+            break;
         case ReaderScaleMode::FIT_WIDTH:
+            // FIT_WIDTH: fit width to screen, allow vertical scrolling
+            // Use FILL to ensure width fills (may crop vertically)
+            scalingType = brls::ImageScalingType::FILL;
+            break;
         case ReaderScaleMode::FIT_HEIGHT:
+            // FIT_HEIGHT: fit height to screen, allow horizontal scrolling
+            // Use FIT to maintain aspect ratio and fit height
             scalingType = brls::ImageScalingType::FIT;
             break;
         case ReaderScaleMode::ORIGINAL:
-            // FILL maintains aspect ratio but may crop - closest to original
-            scalingType = brls::ImageScalingType::FILL;
+            // ORIGINAL: no scaling, show image at native resolution
+            // Use SCALE to show at 1:1 pixel ratio
+            scalingType = brls::ImageScalingType::STRETCH;
             break;
     }
 
@@ -1391,8 +1456,9 @@ void ReaderActivity::resetZoom() {
     m_zoomOffset = {0, 0};
 
     if (pageImage) {
-        // Reset to fit scaling - maintains aspect ratio, shows margins
-        pageImage->setScalingType(brls::ImageScalingType::FIT);
+        pageImage->resetZoom();
+        // Restore scale mode settings
+        applySettings();
     }
 }
 
@@ -1401,8 +1467,22 @@ void ReaderActivity::zoomTo(float level, brls::Point center) {
     m_zoomLevel = level;
 
     if (pageImage) {
-        // Use FILL scaling for zoomed view
-        pageImage->setScalingType(brls::ImageScalingType::FILL);
+        pageImage->setZoomLevel(level);
+
+        // Calculate zoom offset to center on the tap position
+        // Transform center point to image space and zoom around it
+        brls::Rect frame = pageImage->getFrame();
+        float relX = (center.x - frame.getMinX()) / frame.getWidth();
+        float relY = (center.y - frame.getMinY()) / frame.getHeight();
+
+        // Offset to keep the tapped point in place
+        brls::Point offset = {
+            -(relX - 0.5f) * frame.getWidth() * (level - 1.0f),
+            -(relY - 0.5f) * frame.getHeight() * (level - 1.0f)
+        };
+
+        m_zoomOffset = offset;
+        pageImage->setZoomOffset(offset);
 
         std::string zoomText = "Zoom: " + std::to_string(static_cast<int>(level * 100)) + "%";
         brls::Application::notify(zoomText);
@@ -1425,11 +1505,10 @@ void ReaderActivity::handlePinchZoom(float scaleFactor) {
             m_isZoomed = (newZoom > 1.0f);
 
             if (pageImage) {
-                if (m_isZoomed) {
-                    pageImage->setScalingType(brls::ImageScalingType::FILL);
-                } else {
-                    pageImage->setScalingType(brls::ImageScalingType::FIT);
-                }
+                pageImage->setZoomLevel(newZoom);
+
+                // Preserve current zoom offset (user's pan position)
+                pageImage->setZoomOffset(m_zoomOffset);
             }
         }
     }
