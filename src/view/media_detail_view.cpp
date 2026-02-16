@@ -2618,33 +2618,67 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                 }
                 case 5: {  // Remove Tracking
                     brls::sync([this, recordId, trackerName]() {
-                        brls::Dialog* confirmDialog = new brls::Dialog("Remove from " + trackerName + "?");
-                        confirmDialog->setCancelable(false);  // Prevent exit dialog from appearing
+                        // Show removal options
+                        std::vector<std::string> removeOptions = {
+                            "Remove from app only",
+                            "Remove from " + trackerName + " too"
+                        };
 
-                        confirmDialog->addButton("Remove", [this, confirmDialog, recordId, trackerName]() {
-                            confirmDialog->close();
+                        brls::Dropdown* removeDropdown = new brls::Dropdown(
+                            "Remove Tracking",
+                            removeOptions,
+                            [this, recordId, trackerName](int selected) {
+                                if (selected < 0) return;
 
-                            asyncRun([this, recordId, trackerName]() {
-                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                bool deleteRemote = (selected == 1);
+                                std::string message = deleteRemote
+                                    ? "This will remove tracking from both the app and " + trackerName + "."
+                                    : "This will only remove tracking from the app. Your entry on " + trackerName + " will remain.";
 
-                                if (client.unbindTracker(recordId, false)) {
-                                    brls::sync([this, trackerName]() {
-                                        brls::Application::notify("Removed from " + trackerName);
-                                        updateTrackingButtonText();
+                                // Confirmation dialog
+                                brls::Dialog* confirmDialog = new brls::Dialog(
+                                    "Remove from " + trackerName + "?\n\n" + message);
+                                confirmDialog->setCancelable(false);
+
+                                confirmDialog->addButton("Remove", [this, confirmDialog, recordId, trackerName, deleteRemote]() {
+                                    confirmDialog->close();
+
+                                    asyncRun([this, recordId, trackerName, deleteRemote]() {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+                                        if (client.unbindTracker(recordId, deleteRemote)) {
+                                            // Remove from local tracking list immediately
+                                            auto it = std::find_if(m_trackRecords.begin(), m_trackRecords.end(),
+                                                [recordId](const TrackRecord& r) { return r.id == recordId; });
+                                            if (it != m_trackRecords.end()) {
+                                                brls::sync([this, it]() {
+                                                    m_trackRecords.erase(it);
+                                                });
+                                            }
+
+                                            brls::sync([this, trackerName, deleteRemote]() {
+                                                std::string msg = deleteRemote
+                                                    ? "Removed from " + trackerName + " and app"
+                                                    : "Removed from app (kept on " + trackerName + ")";
+                                                brls::Application::notify(msg);
+                                                updateTrackingButtonText();
+                                            });
+                                        } else {
+                                            brls::sync([]() {
+                                                brls::Application::notify("Failed to remove tracking");
+                                            });
+                                        }
                                     });
-                                } else {
-                                    brls::sync([]() {
-                                        brls::Application::notify("Failed to remove tracking");
-                                    });
-                                }
-                            });
-                        });
+                                });
 
-                        confirmDialog->addButton("Cancel", [confirmDialog]() {
-                            confirmDialog->close();
-                        });
+                                confirmDialog->addButton("Cancel", [confirmDialog]() {
+                                    confirmDialog->close();
+                                });
 
-                        confirmDialog->open();
+                                confirmDialog->open();
+                            }, 0);
+
+                        brls::Application::pushActivity(new brls::Activity(removeDropdown));
                     });
                     break;
                 }

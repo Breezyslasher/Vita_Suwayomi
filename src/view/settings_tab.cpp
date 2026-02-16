@@ -282,6 +282,27 @@ void SettingsTab::createLibrarySection() {
     listRowInfoLabel->setMarginBottom(8);
     m_contentBox->addView(listRowInfoLabel);
 
+    // Library grouping mode selector
+    auto* groupModeSelector = new brls::SelectorCell();
+    groupModeSelector->init("Library Grouping",
+        {"By Category (Tabs)", "By Source", "No Grouping (All Manga)"},
+        static_cast<int>(settings.libraryGroupMode),
+        [&settings](int index) {
+            settings.libraryGroupMode = static_cast<LibraryGroupMode>(index);
+            Application::getInstance().saveSettings();
+            brls::Application::notify("Library grouping updated - restart app to apply");
+        });
+    m_contentBox->addView(groupModeSelector);
+
+    // Info label for grouping mode
+    auto* groupModeInfoLabel = new brls::Label();
+    groupModeInfoLabel->setText("How manga is organized in the library");
+    groupModeInfoLabel->setFontSize(14);
+    groupModeInfoLabel->setMarginLeft(16);
+    groupModeInfoLabel->setMarginTop(4);
+    groupModeInfoLabel->setMarginBottom(8);
+    m_contentBox->addView(groupModeInfoLabel);
+
     // Default library sort mode selector
     auto* defaultSortSelector = new brls::SelectorCell();
     defaultSortSelector->init("Default Sort Mode",

@@ -57,6 +57,12 @@ private:
     void scrollToCategoryIndex(int index);
     void updateCategoryButtonTexts();
 
+    // Grouping methods
+    void setGroupMode(LibraryGroupMode mode);
+    void loadAllManga();
+    void loadBySource();
+    void showGroupModeMenu();
+
     // Context menu (Start button / long-press)
     void showMangaContextMenu(const Manga& manga, int index);
     void showDownloadSubmenu(const std::vector<Manga>& mangaList);
@@ -88,6 +94,9 @@ private:
 
     // Sort mode
     LibrarySortMode m_sortMode = LibrarySortMode::TITLE_ASC;
+
+    // Group mode
+    LibraryGroupMode m_groupMode = LibraryGroupMode::BY_CATEGORY;
 
     // UI Components
     brls::Label* m_titleLabel = nullptr;
