@@ -18,8 +18,10 @@
 #include <psp2/io/fcntl.h>
 #endif
 
-// Auto-refresh interval in milliseconds (3 seconds)
+// Auto-refresh interval in milliseconds (3 seconds for small queues, 5 seconds for large)
 static const int AUTO_REFRESH_INTERVAL_MS = 3000;
+static const int AUTO_REFRESH_INTERVAL_LARGE_MS = 5000;
+static const int LARGE_QUEUE_THRESHOLD = 50;
 
 namespace vitasuwayomi {
 
@@ -981,8 +983,13 @@ void DownloadsTab::startAutoRefresh() {
     // Start auto-refresh loop in background thread
     asyncRun([this]() {
         while (m_autoRefreshEnabled.load()) {
+            // Adaptive interval - use longer interval for large queues to reduce UI thread pressure
+            int totalItems = static_cast<int>(m_lastServerQueue.size() + m_lastLocalQueue.size());
+            int refreshInterval = (totalItems > LARGE_QUEUE_THRESHOLD) ?
+                                  AUTO_REFRESH_INTERVAL_LARGE_MS : AUTO_REFRESH_INTERVAL_MS;
+
             // Sleep for the interval
-            std::this_thread::sleep_for(std::chrono::milliseconds(AUTO_REFRESH_INTERVAL_MS));
+            std::this_thread::sleep_for(std::chrono::milliseconds(refreshInterval));
 
             // Check if still enabled after sleep (use atomic load)
             if (!m_autoRefreshEnabled.load()) {
