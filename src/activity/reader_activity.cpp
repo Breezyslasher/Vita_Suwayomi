@@ -1305,7 +1305,7 @@ void ReaderActivity::applySettings() {
         case ReaderScaleMode::ORIGINAL:
             // ORIGINAL: no scaling, show image at native resolution
             // Use SCALE to show at 1:1 pixel ratio
-            scalingType = brls::ImageScalingType::SCALE;
+            scalingType = brls::ImageScalingType::STRETCH;
             break;
     }
 
