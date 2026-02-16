@@ -18,6 +18,7 @@
 #include <limits>
 #include <chrono>
 #include <atomic>
+#include <algorithm>
 
 namespace vitasuwayomi {
 
@@ -734,9 +735,12 @@ void MangaDetailView::updateChapterDownloadStates() {
         if (!elem.dlBtn) continue;
 
         // Verify button is still a child of m_chaptersBox (not destroyed during rebuild)
-        if (m_chaptersBox && !m_chaptersBox->isChild(elem.dlBtn)) {
-            elem.dlBtn = nullptr;
-            continue;
+        if (m_chaptersBox) {
+            auto& children = m_chaptersBox->getChildren();
+            if (std::find(children.begin(), children.end(), elem.dlBtn) == children.end()) {
+                elem.dlBtn = nullptr;
+                continue;
+            }
         }
 
         DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, elem.chapterIndex);
