@@ -251,6 +251,7 @@ vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
     FILE resources/icons/star.png resources/icons/star.png
     FILE resources/icons/tag.png resources/icons/tag.png
     FILE resources/icons/web.png resources/icons/web.png
+    FILE resources/icons/web.png resources/icons/filter-menu-outline.png
 
     # Button images
     FILE resources/images/circle_button.png resources/images/circle_button.png
