@@ -8,6 +8,7 @@
 
 #include <borealis.hpp>
 #include <memory>
+#include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "view/recycling_grid.hpp"
 
