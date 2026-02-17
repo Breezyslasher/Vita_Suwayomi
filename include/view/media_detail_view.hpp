@@ -158,9 +158,10 @@ private:
     struct ChapterDownloadUI {
         int chapterIndex;
         brls::Button* dlBtn = nullptr;
-        brls::Image* dlIcon = nullptr;  // Cached icon for this button
+        brls::Image* dlIcon = nullptr;    // Icon for state display
+        brls::Label* dlLabel = nullptr;   // Label for x/x progress text
         int cachedState = -1;       // LocalDownloadState as int, -1 = not local
-        int cachedPercent = -1;     // Download percent (0-100)
+        int cachedPercent = -1;     // Downloaded pages count
     };
     std::vector<ChapterDownloadUI> m_chapterDlElements;
     void updateChapterDownloadStates();  // Update download buttons in-place
