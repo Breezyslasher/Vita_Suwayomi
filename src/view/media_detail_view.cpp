@@ -556,8 +556,15 @@ void MangaDetailView::willAppear(bool resetState) {
         }
     });
 
-    // Reload chapters to update the read button text when returning from reader
-    loadChapters();
+    // On first appearance, chapters are loaded via loadDetails().
+    // On subsequent appearances (returning from reader), just update
+    // download states in-place rather than doing a full reload.
+    if (!m_chapters.empty()) {
+        updateChapterDownloadStates();
+        updateReadButtonText();
+    } else {
+        loadChapters();
+    }
 }
 
 void MangaDetailView::willDisappear(bool resetState) {
@@ -765,7 +772,7 @@ void MangaDetailView::updateChapterDownloadStates() {
         dlBtn->setText("");  // Clear text first
 
         if (localCh && localCh->state == LocalDownloadState::DOWNLOADING) {
-            // Show page progress x/x inside the button (no icon needed)
+            // Show page progress x/x inside the button, hide icon
             if (elem.dlIcon) {
                 elem.dlIcon->setVisibility(brls::Visibility::GONE);
             }
@@ -774,16 +781,8 @@ void MangaDetailView::updateChapterDownloadStates() {
             dlBtn->setText(progress);
             dlBtn->setFontSize(9);
             dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 220));  // Blue
-        } else {
-            // Create icon if not cached
-            if (!elem.dlIcon) {
-                elem.dlIcon = new brls::Image();
-                elem.dlIcon->setWidth(20);
-                elem.dlIcon->setHeight(20);
-                elem.dlIcon->setScalingType(brls::ImageScalingType::FIT);
-                dlBtn->addView(elem.dlIcon);
-            }
-
+        } else if (elem.dlIcon) {
+            // Show icon, clear text
             elem.dlIcon->setVisibility(brls::Visibility::VISIBLE);
 
             // Update icon image based on local download state
@@ -914,56 +913,44 @@ void MangaDetailView::populateChaptersList() {
         bool isLocallyQueued = localCh && localCh->state == LocalDownloadState::QUEUED;
         bool isLocallyFailed = localCh && localCh->state == LocalDownloadState::FAILED;
 
-        // Show download progress if downloading
+        // Create a single icon that persists for the lifetime of this button.
+        // This icon is tracked in ChapterDownloadUI so updateChapterDownloadStates()
+        // can update it in-place without creating duplicate icons.
+        auto* dlIcon = new brls::Image();
+        dlIcon->setWidth(20);
+        dlIcon->setHeight(20);
+        dlIcon->setScalingType(brls::ImageScalingType::FIT);
+        dlBtn->addView(dlIcon);
+
+        // Set initial state
         if (isLocallyDownloading && localCh) {
+            // Downloading - hide icon, show page progress text
+            dlIcon->setVisibility(brls::Visibility::GONE);
             std::string progress = std::to_string(localCh->downloadedPages) + "/" +
                                    std::to_string(localCh->pageCount);
             dlBtn->setText(progress);
             dlBtn->setFontSize(9);
             dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
         } else if (isLocallyDownloaded) {
-            // Completed - show checkmark icon
-            auto* icon = new brls::Image();
-            icon->setWidth(20);
-            icon->setHeight(20);
-            icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
-            dlBtn->addView(icon);
+            dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
             dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 deleteChapterDownload(capturedChapter);
                 return true;
             });
         } else if (isLocallyQueued) {
-            // Queued - show refresh/waiting icon
-            auto* icon = new brls::Image();
-            icon->setWidth(20);
-            icon->setHeight(20);
-            icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("app0:resources/icons/refresh.png");
-            dlBtn->addView(icon);
+            dlIcon->setImageFromFile("app0:resources/icons/refresh.png");
             dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
         } else if (isLocallyFailed) {
-            // Failed - show cross icon
-            auto* icon = new brls::Image();
-            icon->setWidth(20);
-            icon->setHeight(20);
-            icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("app0:resources/icons/cross.png");
-            dlBtn->addView(icon);
+            dlIcon->setImageFromFile("app0:resources/icons/cross.png");
             dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 downloadChapter(capturedChapter);  // Retry
                 return true;
             });
         } else {
-            // Not downloaded - show download icon
-            auto* icon = new brls::Image();
-            icon->setWidth(20);
-            icon->setHeight(20);
-            icon->setScalingType(brls::ImageScalingType::FIT);
-            icon->setImageFromFile("app0:resources/icons/download.png");
-            dlBtn->addView(icon);
+            // Not downloaded
+            dlIcon->setImageFromFile("app0:resources/icons/download.png");
             dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
             dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
                 downloadChapter(capturedChapter);
@@ -972,11 +959,12 @@ void MangaDetailView::populateChaptersList() {
         }
         dlBtn->addGestureRecognizer(new brls::TapGestureRecognizer(dlBtn));
 
-        // Track this button for incremental download state updates
+        // Track this button and icon for incremental download state updates
         {
             ChapterDownloadUI cdui;
             cdui.chapterIndex = chapter.index;
             cdui.dlBtn = dlBtn;
+            cdui.dlIcon = dlIcon;
             cdui.cachedState = localCh ? static_cast<int>(localCh->state) : -1;
             cdui.cachedPercent = (isLocallyDownloading && localCh)
                 ? localCh->downloadedPages : -1;

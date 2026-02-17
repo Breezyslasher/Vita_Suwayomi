@@ -1551,79 +1551,8 @@ bool SuwayomiClient::deleteMangaMeta(int mangaId, const std::string& key) {
 }
 
 bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga) {
-    // Use category(id) query to get manga for a specific category
-    // This is the documented and reliable Suwayomi API approach
-    const char* query = R"(
-        query GetCategoryManga($categoryId: Int!) {
-            category(id: $categoryId) {
-                id
-                name
-                mangas {
-                    nodes {
-                        id
-                        title
-                        thumbnailUrl
-                        author
-                        inLibrary
-                        inLibraryAt
-                        unreadCount
-                        downloadCount
-                        chapters {
-                            totalCount
-                        }
-                        lastReadChapter {
-                            lastReadAt
-                        }
-                        latestUploadedChapter {
-                            uploadDate
-                        }
-                    }
-                }
-            }
-        }
-    )";
-
-    std::string variables = "{\"categoryId\":" + std::to_string(categoryId) + "}";
-
-    brls::Logger::info("GraphQL: Fetching manga for category {}", categoryId);
-
-    std::string response = executeGraphQL(query, variables);
-    if (response.empty()) {
-        brls::Logger::warning("GraphQL category query failed, trying fallback...");
-        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
-    }
-
-    std::string data = extractJsonObject(response, "data");
-    if (data.empty()) {
-        brls::Logger::warning("GraphQL: No data in response, trying fallback...");
-        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
-    }
-
-    std::string categoryObj = extractJsonObject(data, "category");
-    if (categoryObj.empty()) {
-        brls::Logger::warning("GraphQL: No category object, trying fallback...");
-        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
-    }
-
-    std::string mangasObj = extractJsonObject(categoryObj, "mangas");
-    if (mangasObj.empty()) {
-        brls::Logger::warning("GraphQL: No mangas in category, trying fallback...");
-        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
-    }
-
-    std::string nodesJson = extractJsonArray(mangasObj, "nodes");
-    manga.clear();
-    std::vector<std::string> items = splitJsonArray(nodesJson);
-    for (const auto& item : items) {
-        manga.push_back(parseMangaFromGraphQL(item));
-    }
-
-    brls::Logger::info("GraphQL: Fetched {} manga for category {}", manga.size(), categoryId);
-    return true;
-}
-
-// Fallback method using mangas query with filter (for newer Suwayomi versions that support it)
-bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga) {
+    // Use mangas query with categoryId filter - this correctly filters manga by category
+    // The category(id).mangas approach returns ALL library manga unfiltered
     const char* query = R"(
         query GetMangasByCategory($categoryId: Int!) {
             mangas(
@@ -1657,13 +1586,90 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
 
     std::string variables = "{\"categoryId\":" + std::to_string(categoryId) + "}";
 
+    brls::Logger::info("GraphQL: Fetching manga for category {} with filter", categoryId);
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::warning("GraphQL filter query failed, trying fallback...");
+        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        brls::Logger::warning("GraphQL: No data in response, trying fallback...");
+        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
+    }
+
+    std::string mangasObj = extractJsonObject(data, "mangas");
+    if (mangasObj.empty()) {
+        brls::Logger::warning("GraphQL: No mangas object, trying fallback...");
+        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
+    }
+
+    std::string nodesJson = extractJsonArray(mangasObj, "nodes");
+    manga.clear();
+    std::vector<std::string> items = splitJsonArray(nodesJson);
+    for (const auto& item : items) {
+        manga.push_back(parseMangaFromGraphQL(item));
+    }
+
+    // If filter returned 0 results for the default category (id=0),
+    // the server may not support categoryId filter for the default category.
+    // Fall back to category(id) query which works for the default category.
+    if (manga.empty() && categoryId == 0) {
+        brls::Logger::info("GraphQL: Filter returned 0 for default category, trying fallback...");
+        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
+    }
+
+    brls::Logger::info("GraphQL: Fetched {} manga for category {} (filter method)", manga.size(), categoryId);
+    return true;
+}
+
+// Fallback method using category(id).mangas query
+// Only reliable for the default category (id=0); for other categories this may return all library manga
+bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga) {
+    const char* query = R"(
+        query GetCategoryManga($categoryId: Int!) {
+            category(id: $categoryId) {
+                id
+                name
+                mangas {
+                    nodes {
+                        id
+                        title
+                        thumbnailUrl
+                        author
+                        inLibrary
+                        inLibraryAt
+                        unreadCount
+                        downloadCount
+                        chapters {
+                            totalCount
+                        }
+                        lastReadChapter {
+                            lastReadAt
+                        }
+                        latestUploadedChapter {
+                            uploadDate
+                        }
+                    }
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"categoryId\":" + std::to_string(categoryId) + "}";
+
     std::string response = executeGraphQL(query, variables);
     if (response.empty()) return false;
 
     std::string data = extractJsonObject(response, "data");
     if (data.empty()) return false;
 
-    std::string mangasObj = extractJsonObject(data, "mangas");
+    std::string categoryObj = extractJsonObject(data, "category");
+    if (categoryObj.empty()) return false;
+
+    std::string mangasObj = extractJsonObject(categoryObj, "mangas");
     if (mangasObj.empty()) return false;
 
     std::string nodesJson = extractJsonArray(mangasObj, "nodes");
@@ -1673,7 +1679,7 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
         manga.push_back(parseMangaFromGraphQL(item));
     }
 
-    brls::Logger::info("GraphQL fallback: Fetched {} manga for category {} (filter method)", manga.size(), categoryId);
+    brls::Logger::info("GraphQL fallback: Fetched {} manga for category {}", manga.size(), categoryId);
     return true;
 }
 
