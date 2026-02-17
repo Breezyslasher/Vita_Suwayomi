@@ -735,6 +735,7 @@ void MangaDetailView::updateChapterDownloadStates() {
     // Guard: check if view is still alive
     if (!m_alive || !*m_alive) return;
     if (m_chapterDlElements.empty()) return;
+    if (!m_chaptersBox) return;
 
     DownloadsManager& dm = DownloadsManager::getInstance();
 
@@ -742,44 +743,36 @@ void MangaDetailView::updateChapterDownloadStates() {
         // Null check: ensure button is still valid
         if (!elem.dlBtn) continue;
 
-        // Verify button is still a child of m_chaptersBox (not destroyed during rebuild)
-        if (m_chaptersBox) {
-            auto& children = m_chaptersBox->getChildren();
-            if (std::find(children.begin(), children.end(), elem.dlBtn) == children.end()) {
-                elem.dlBtn = nullptr;
-                continue;
-            }
-        }
-
         DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, elem.chapterIndex);
 
         int newState = -1;  // not local
-        int newPercent = -1;
+        int newPages = -1;
         if (localCh) {
             newState = static_cast<int>(localCh->state);
-            if (localCh->state == LocalDownloadState::DOWNLOADING && localCh->pageCount > 0) {
-                newPercent = (localCh->downloadedPages * 100) / localCh->pageCount;
+            if (localCh->state == LocalDownloadState::DOWNLOADING) {
+                newPages = localCh->downloadedPages;
             }
         }
 
         // Skip if state hasn't changed
-        if (newState == elem.cachedState && newPercent == elem.cachedPercent) continue;
+        if (newState == elem.cachedState && newPages == elem.cachedPercent) continue;
 
         elem.cachedState = newState;
-        elem.cachedPercent = newPercent;
+        elem.cachedPercent = newPages;
 
         // Update button appearance in-place
         brls::Button* dlBtn = elem.dlBtn;
         dlBtn->setText("");  // Clear text first
 
         if (localCh && localCh->state == LocalDownloadState::DOWNLOADING) {
-            // Show download percentage inside the button (no icon needed)
+            // Show page progress x/x inside the button (no icon needed)
             if (elem.dlIcon) {
                 elem.dlIcon->setVisibility(brls::Visibility::GONE);
             }
-            int pct = newPercent >= 0 ? newPercent : 0;
-            dlBtn->setText(std::to_string(pct) + "%");
-            dlBtn->setFontSize(10);
+            std::string progress = std::to_string(localCh->downloadedPages) + "/" +
+                                   std::to_string(localCh->pageCount);
+            dlBtn->setText(progress);
+            dlBtn->setFontSize(9);
             dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 220));  // Blue
         } else {
             // Create icon if not cached
@@ -793,7 +786,7 @@ void MangaDetailView::updateChapterDownloadStates() {
 
             elem.dlIcon->setVisibility(brls::Visibility::VISIBLE);
 
-            // Update icon image based on state
+            // Update icon image based on local download state
             if (localCh && localCh->state == LocalDownloadState::COMPLETED) {
                 elem.dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
                 dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
@@ -923,12 +916,10 @@ void MangaDetailView::populateChaptersList() {
 
         // Show download progress if downloading
         if (isLocallyDownloading && localCh) {
-            int percent = 0;
-            if (localCh->pageCount > 0) {
-                percent = (localCh->downloadedPages * 100) / localCh->pageCount;
-            }
-            dlBtn->setText(std::to_string(percent) + "%");
-            dlBtn->setFontSize(11);
+            std::string progress = std::to_string(localCh->downloadedPages) + "/" +
+                                   std::to_string(localCh->pageCount);
+            dlBtn->setText(progress);
+            dlBtn->setFontSize(9);
             dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));  // Blue
         } else if (isLocallyDownloaded) {
             // Completed - show checkmark icon
@@ -987,8 +978,8 @@ void MangaDetailView::populateChaptersList() {
             cdui.chapterIndex = chapter.index;
             cdui.dlBtn = dlBtn;
             cdui.cachedState = localCh ? static_cast<int>(localCh->state) : -1;
-            cdui.cachedPercent = (isLocallyDownloading && localCh && localCh->pageCount > 0)
-                ? (localCh->downloadedPages * 100) / localCh->pageCount : -1;
+            cdui.cachedPercent = (isLocallyDownloading && localCh)
+                ? localCh->downloadedPages : -1;
             m_chapterDlElements.push_back(cdui);
         }
 
@@ -1289,7 +1280,8 @@ void MangaDetailView::showMangaMenu() {
     std::vector<Chapter> chapters = m_chapters;
 
     std::vector<std::string> options = {
-        "Download all chapters",
+        "Download all",
+        "Download unread",
         "Remove all chapters",
         "Cancel downloading chapters",
         "Reset cover"
@@ -1301,12 +1293,17 @@ void MangaDetailView::showMangaMenu() {
             if (selected < 0) return;  // Cancelled
 
             switch (selected) {
-                case 0:  // Download all chapters
+                case 0:  // Download all
                     brls::sync([this]() {
                         downloadAllChapters();
                     });
                     break;
-                case 1: {  // Remove all chapters
+                case 1:  // Download unread
+                    brls::sync([this]() {
+                        downloadUnreadChapters();
+                    });
+                    break;
+                case 2: {  // Remove all chapters
                     brls::sync([mangaId, chapters]() {
                         // Get download mode setting
                         DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
@@ -1394,12 +1391,12 @@ void MangaDetailView::showMangaMenu() {
                     });
                     break;
                 }
-                case 2:  // Cancel downloading chapters
+                case 3:  // Cancel downloading chapters
                     brls::sync([this]() {
                         cancelAllDownloading();
                     });
                     break;
-                case 3:  // Reset cover
+                case 4:  // Reset cover
                     brls::sync([this]() {
                         resetCover();
                     });
