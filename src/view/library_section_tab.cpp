@@ -2108,7 +2108,7 @@ void LibrarySectionTab::openTracking(const Manga& manga) {
                                             "Remove from " + trackerNameCopy + "?\n\n" + message);
                                         confirmDialog->setCancelable(false);
 
-                                        confirmDialog->addButton("Remove", [recordId, trackerNameCopy, deleteRemote, aliveWeak]() {
+                                        confirmDialog->addButton("Remove", [confirmDialog, recordId, trackerNameCopy, deleteRemote, aliveWeak]() {
                                             confirmDialog->close();
 
                                             brls::Application::notify("Removing from " + trackerNameCopy + "...");
@@ -2130,7 +2130,7 @@ void LibrarySectionTab::openTracking(const Manga& manga) {
                                             });
                                         });
 
-                                        confirmDialog->addButton("Cancel", []() {
+                                        confirmDialog->addButton("Cancel", [confirmDialog]() {
                                             confirmDialog->close();
                                         });
 
@@ -2255,8 +2255,8 @@ void LibrarySectionTab::loadAllManga() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> allManga;
 
-        // Fetch all library manga (category ID 0 typically returns all)
-        if (!client.fetchLibraryManga(0, allManga)) {
+        // Fetch all library manga
+        if (!client.fetchLibraryManga(allManga)) {
             brls::sync([aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
@@ -2292,7 +2292,7 @@ void LibrarySectionTab::loadBySource() {
         std::vector<Manga> allManga;
 
         // Fetch all library manga
-        if (!client.fetchLibraryManga(0, allManga)) {
+        if (!client.fetchLibraryManga(allManga)) {
             brls::sync([aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
