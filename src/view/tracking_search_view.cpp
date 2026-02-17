@@ -63,7 +63,7 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     m_descriptionLabel->setFontSize(13);
     m_descriptionLabel->setTextColor(nvgRGB(180, 180, 180));
     m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
-    m_descriptionLabel->setMaxLines(2);  // Limit description to 2 lines
+    //m_descriptionLabel->setMaxLines(2);  // Limit description to 2 lines
     textBox->addView(m_descriptionLabel);
 
     this->addView(textBox);
