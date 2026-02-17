@@ -570,6 +570,12 @@ Manga SuwayomiClient::parseMangaFromGraphQL(const std::string& json) {
     // Parse genre array
     manga.genre = extractJsonStringArray(json, "genre");
 
+    // Parse source name from nested source object
+    std::string sourceObj = extractJsonObject(json, "source");
+    if (!sourceObj.empty()) {
+        manga.sourceName = extractJsonValue(sourceObj, "displayName");
+    }
+
     // GraphQL might have unreadCount directly
     manga.unreadCount = extractJsonInt(json, "unreadCount");
 
@@ -895,6 +901,9 @@ bool SuwayomiClient::fetchLibraryMangaGraphQL(std::vector<Manga>& manga) {
                     status
                     inLibrary
                     unreadCount
+                    source {
+                        displayName
+                    }
                 }
                 totalCount
             }
@@ -1024,6 +1033,9 @@ bool SuwayomiClient::fetchMangaGraphQL(int mangaId, Manga& manga) {
                 url
                 inLibrary
                 initialized
+                source {
+                    displayName
+                }
             }
         }
     )";
@@ -1566,10 +1578,17 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
                     title
                     thumbnailUrl
                     author
+                    artist
+                    description
+                    genre
+                    status
                     inLibrary
                     inLibraryAt
                     unreadCount
                     downloadCount
+                    source {
+                        displayName
+                    }
                     chapters {
                         totalCount
                     }
@@ -1639,10 +1658,17 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
                         title
                         thumbnailUrl
                         author
+                        artist
+                        description
+                        genre
+                        status
                         inLibrary
                         inLibraryAt
                         unreadCount
                         downloadCount
+                        source {
+                            displayName
+                        }
                         chapters {
                             totalCount
                         }

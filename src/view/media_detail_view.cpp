@@ -226,29 +226,34 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_titleLabel->setMarginBottom(4);
     titleBox->addView(m_titleLabel);
 
-    // Source
+    // Source (always created so async API update can populate it)
+    m_sourceLabel = new brls::Label();
+    m_sourceLabel->setFontSize(13);
+    m_sourceLabel->setTextColor(nvgRGB(128, 128, 128));
+    m_sourceLabel->setMarginBottom(8);
     if (!m_manga.sourceName.empty()) {
-        m_sourceLabel = new brls::Label();
         m_sourceLabel->setText(m_manga.sourceName);
-        m_sourceLabel->setFontSize(13);
-        m_sourceLabel->setTextColor(nvgRGB(128, 128, 128));
-        m_sourceLabel->setMarginBottom(8);
-        titleBox->addView(m_sourceLabel);
+    } else {
+        m_sourceLabel->setVisibility(brls::Visibility::GONE);
     }
+    titleBox->addView(m_sourceLabel);
 
     // Stats row: Author | Status | Chapters
     auto* statsRow = new brls::Box();
     statsRow->setAxis(brls::Axis::ROW);
     statsRow->setMarginBottom(8);
 
+    // Author (always created so async API update can populate it)
+    m_authorLabel = new brls::Label();
+    m_authorLabel->setFontSize(12);
+    m_authorLabel->setTextColor(nvgRGB(160, 160, 160));
+    m_authorLabel->setMarginRight(15);
     if (!m_manga.author.empty()) {
-        m_authorLabel = new brls::Label();
         m_authorLabel->setText(m_manga.author);
-        m_authorLabel->setFontSize(12);
-        m_authorLabel->setTextColor(nvgRGB(160, 160, 160));
-        m_authorLabel->setMarginRight(15);
-        statsRow->addView(m_authorLabel);
+    } else {
+        m_authorLabel->setVisibility(brls::Visibility::GONE);
     }
+    statsRow->addView(m_authorLabel);
 
     m_statusLabel = new brls::Label();
     m_statusLabel->setText(m_manga.getStatusString());
@@ -633,7 +638,10 @@ void MangaDetailView::loadDetails() {
                     // Update other fields from API response
                     if (!updatedManga.author.empty() && m_manga.author.empty()) {
                         m_manga.author = updatedManga.author;
-                        if (m_authorLabel) m_authorLabel->setText(m_manga.author);
+                        if (m_authorLabel) {
+                            m_authorLabel->setText(m_manga.author);
+                            m_authorLabel->setVisibility(brls::Visibility::VISIBLE);
+                        }
                         needsUpdate = true;
                     }
                     if (!updatedManga.artist.empty() && m_manga.artist.empty()) {
@@ -646,7 +654,19 @@ void MangaDetailView::loadDetails() {
                     }
                     if (!updatedManga.sourceName.empty() && m_manga.sourceName.empty()) {
                         m_manga.sourceName = updatedManga.sourceName;
-                        if (m_sourceLabel) m_sourceLabel->setText(m_manga.sourceName);
+                        if (m_sourceLabel) {
+                            m_sourceLabel->setText(m_manga.sourceName);
+                            m_sourceLabel->setVisibility(brls::Visibility::VISIBLE);
+                        }
+                        needsUpdate = true;
+                    }
+                    // Update status if we got a valid one
+                    if (updatedManga.status != MangaStatus::UNKNOWN &&
+                        m_manga.status == MangaStatus::UNKNOWN) {
+                        m_manga.status = updatedManga.status;
+                        if (m_statusLabel) {
+                            m_statusLabel->setText(m_manga.getStatusString());
+                        }
                         needsUpdate = true;
                     }
 
