@@ -344,6 +344,7 @@ void DownloadsTab::willAppear(bool resetState) {
     brls::Box::willAppear(resetState);
 
     // Clear tracking vectors for fresh start
+    m_currentFocusedIcon = nullptr;
     m_localRowElements.clear();
     m_serverRowElements.clear();
     m_lastLocalQueue.clear();
@@ -571,13 +572,33 @@ void DownloadsTab::refreshQueue() {
                 }
             }
 
-            // Check if queue structure changed (order or items changed)
-            bool structureChanged = (newCache.size() != m_lastServerQueue.size());
-            if (!structureChanged) {
+            // Determine structural changes: items to remove and add
+            std::vector<int> toRemoveIds;
+            for (const auto& elem : m_serverRowElements) {
+                bool found = false;
+                for (const auto& newItem : newCache) {
+                    if (elem.chapterId == newItem.chapterId) { found = true; break; }
+                }
+                if (!found) toRemoveIds.push_back(elem.chapterId);
+            }
+
+            std::vector<size_t> toAddIndices;
+            for (size_t i = 0; i < queue.size(); i++) {
+                bool found = false;
+                for (const auto& elem : m_serverRowElements) {
+                    if (elem.chapterId == queue[i].chapterId) { found = true; break; }
+                }
+                if (!found) toAddIndices.push_back(i);
+            }
+
+            bool setChanged = !toRemoveIds.empty() || !toAddIndices.empty();
+
+            // Check if order changed (only when the set of items is the same)
+            bool orderChanged = false;
+            if (!setChanged && newCache.size() == m_serverRowElements.size()) {
                 for (size_t i = 0; i < newCache.size(); i++) {
-                    if (newCache[i].chapterId != m_lastServerQueue[i].chapterId ||
-                        newCache[i].mangaId != m_lastServerQueue[i].mangaId) {
-                        structureChanged = true;
+                    if (newCache[i].chapterId != m_serverRowElements[i].chapterId) {
+                        orderChanged = true;
                         break;
                     }
                 }
@@ -586,204 +607,47 @@ void DownloadsTab::refreshQueue() {
             // Update cache
             m_lastServerQueue = newCache;
 
-            // If structure changed, need full rebuild
-            if (!structureChanged) {
-                return;  // Just progress updates, no rebuild needed
+            if (!setChanged && !orderChanged) {
+                // Only progress updates, no structural change needed
+                updateNavigationRoutes();
+                return;
             }
 
-            // Full rebuild for structure changes
-            m_serverRowElements.clear();
-            while (m_queueContainer->getChildren().size() > 0) {
-                m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
-            }
+            // FIX 1: Null m_currentFocusedIcon before any structural change
+            // to prevent dangling pointer access during rebuild
+            m_currentFocusedIcon = nullptr;
 
-            int queueIndex = 0;
-            int queueSize = static_cast<int>(queue.size());
-            for (const auto& item : queue) {
-                int currentIndex = queueIndex++;
-                auto row = new brls::Box();
-                row->setAxis(brls::Axis::ROW);
-                row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-                row->setAlignItems(brls::AlignItems::CENTER);
-                row->setPadding(8);
-                row->setMargins(0, 0, 8, 0);
-                row->setCornerRadius(6);
-                row->setFocusable(true);
-
-                NVGcolor originalBgColor;
-                if (item.state == DownloadState::DOWNLOADING) {
-                    originalBgColor = nvgRGBA(30, 60, 30, 200);
-                } else if (item.state == DownloadState::ERROR) {
-                    originalBgColor = nvgRGBA(60, 30, 30, 200);
-                } else {
-                    originalBgColor = nvgRGBA(40, 40, 40, 200);
+            if (setChanged) {
+                // Incremental update: remove gone items, then add new items
+                for (int chapterId : toRemoveIds) {
+                    removeServerItem(chapterId);
                 }
-                row->setBackgroundColor(originalBgColor);
 
-                auto infoBox = new brls::Box();
-                infoBox->setAxis(brls::Axis::COLUMN);
-                infoBox->setGrow(1.0f);
-
-                auto titleLabel = new brls::Label();
-                titleLabel->setText(item.mangaTitle);
-                titleLabel->setFontSize(16);
-                infoBox->addView(titleLabel);
-
-                auto chapterLabel = new brls::Label();
-                std::string chapterText = item.chapterName;
-                if (item.chapterNumber > 0) {
-                    chapterText = "Ch. " + std::to_string(static_cast<int>(item.chapterNumber));
-                    if (!item.chapterName.empty()) {
-                        chapterText += " - " + item.chapterName;
-                    }
+                int totalQueueSize = static_cast<int>(queue.size());
+                for (size_t idx : toAddIndices) {
+                    const auto& item = queue[idx];
+                    addServerItem(item.chapterId, item.mangaId, item.mangaTitle,
+                                  item.chapterName, item.chapterNumber,
+                                  item.downloadedPages, item.pageCount,
+                                  static_cast<int>(item.state),
+                                  static_cast<int>(idx), totalQueueSize);
                 }
-                chapterLabel->setText(chapterText);
-                chapterLabel->setFontSize(14);
-                chapterLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
-                infoBox->addView(chapterLabel);
-
-                row->addView(infoBox);
-
-                auto statusBox = new brls::Box();
-                statusBox->setAxis(brls::Axis::ROW);
-                statusBox->setAlignItems(brls::AlignItems::CENTER);
-
-                auto progressLabel = new brls::Label();
-                progressLabel->setFontSize(16);
-                progressLabel->setMargins(0, 0, 0, 10);
-
-                std::string progressText;
-                if (item.state == DownloadState::DOWNLOADING) {
-                    progressText = std::to_string(item.downloadedPages) + "/" +
-                                   std::to_string(item.pageCount) + " pages";
-                    progressLabel->setTextColor(nvgRGBA(100, 200, 100, 255));
-                } else if (item.state == DownloadState::QUEUED) {
-                    progressText = "Queued";
-                } else if (item.state == DownloadState::DOWNLOADED) {
-                    progressText = "Done";
-                } else if (item.state == DownloadState::ERROR) {
-                    progressText = "Error";
-                    progressLabel->setTextColor(nvgRGBA(200, 100, 100, 255));
-                } else {
-                    progressText = std::to_string(item.downloadedPages) + "/" +
-                                   std::to_string(item.pageCount);
+            } else {
+                // Order changed: full rebuild needed to update currentIndex in actions
+                m_serverRowElements.clear();
+                while (m_queueContainer->getChildren().size() > 0) {
+                    m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
                 }
-                progressLabel->setText(progressText);
 
-                statusBox->addView(progressLabel);
-
-                auto* xButtonIcon = new brls::Image();
-                xButtonIcon->setWidth(24);
-                xButtonIcon->setHeight(24);
-                xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-                xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
-                xButtonIcon->setMarginLeft(8);
-                xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
-                statusBox->addView(xButtonIcon);
-
-                row->addView(statusBox);
-
-                // Track this row's elements
-                ServerRowElements elem;
-                elem.row = row;
-                elem.progressLabel = progressLabel;
-                elem.xButtonIcon = xButtonIcon;
-                elem.chapterId = item.chapterId;
-                elem.mangaId = item.mangaId;
-                m_serverRowElements.push_back(elem);
-
-                row->getFocusEvent()->subscribe([this, xButtonIcon](brls::View* view) {
-                    if (m_currentFocusedIcon && m_currentFocusedIcon != xButtonIcon) {
-                        m_currentFocusedIcon->setVisibility(brls::Visibility::INVISIBLE);
-                    }
-                    xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
-                    m_currentFocusedIcon = xButtonIcon;
-                });
-
-                int mangaId = item.mangaId;
-                int chapterId = item.chapterId;
-                row->registerAction("Remove", brls::ControllerButton::BUTTON_X,
-                    [this, mangaId, chapterId](brls::View* view) {
-                        asyncRun([this, mangaId, chapterId]() {
-                            SuwayomiClient& client = SuwayomiClient::getInstance();
-                            std::vector<int> chapterIds = {chapterId};
-                            client.deleteChapterDownloads(chapterIds, mangaId);
-                            brls::sync([this]() {
-                                refreshQueue();
-                            });
-                        });
-                        return true;
-                    });
-
-                row->registerAction("Move Up", brls::ControllerButton::BUTTON_LB,
-                    [this, chapterId, mangaId, currentIndex](brls::View* view) {
-                        if (currentIndex > 0) {
-                            asyncRun([this, chapterId, mangaId, currentIndex]() {
-                                SuwayomiClient& client = SuwayomiClient::getInstance();
-                                if (client.reorderDownload(chapterId, mangaId, 0, currentIndex - 1)) {
-                                    brls::sync([this]() {
-                                        refreshQueue();
-                                    });
-                                }
-                            });
-                        }
-                        return true;
-                    });
-
-                row->registerAction("Move Down", brls::ControllerButton::BUTTON_RB,
-                    [this, chapterId, mangaId, currentIndex, queueSize](brls::View* view) {
-                        if (currentIndex < queueSize - 1) {
-                            asyncRun([this, chapterId, mangaId, currentIndex]() {
-                                SuwayomiClient& client = SuwayomiClient::getInstance();
-                                if (client.reorderDownload(chapterId, mangaId, 0, currentIndex + 1)) {
-                                    brls::sync([this]() {
-                                        refreshQueue();
-                                    });
-                                }
-                            });
-                        }
-                        return true;
-                    });
-
-                auto swipeState = std::make_shared<SwipeState>();
-                row->addGestureRecognizer(new brls::PanGestureRecognizer(
-                    [this, row, mangaId, chapterId, originalBgColor, swipeState](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-                        const float SWIPE_THRESHOLD = 60.0f;
-                        const float TAP_THRESHOLD = 15.0f;
-
-                        if (status.state == brls::GestureState::START) {
-                            swipeState->touchStart = status.position;
-                            swipeState->isValidSwipe = false;
-                        } else if (status.state == brls::GestureState::STAY) {
-                            float dx = status.position.x - swipeState->touchStart.x;
-                            float dy = status.position.y - swipeState->touchStart.y;
-
-                            if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
-                                swipeState->isValidSwipe = true;
-                                if (dx < -SWIPE_THRESHOLD * 0.5f) {
-                                    row->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
-                                } else {
-                                    row->setBackgroundColor(originalBgColor);
-                                }
-                            }
-                        } else if (status.state == brls::GestureState::END) {
-                            row->setBackgroundColor(originalBgColor);
-
-                            float dx = status.position.x - swipeState->touchStart.x;
-                            if (swipeState->isValidSwipe && dx < -SWIPE_THRESHOLD) {
-                                asyncRun([this, mangaId, chapterId]() {
-                                    SuwayomiClient& client = SuwayomiClient::getInstance();
-                                    std::vector<int> chapterIds = {chapterId};
-                                    client.deleteChapterDownloads(chapterIds, mangaId);
-                                    brls::sync([this]() {
-                                        refreshQueue();
-                                    });
-                                });
-                            }
-                        }
-                    }, brls::PanAxis::HORIZONTAL));
-
-                m_queueContainer->addView(row);
+                int queueIndex = 0;
+                int totalQueueSize = static_cast<int>(queue.size());
+                for (const auto& item : queue) {
+                    addServerItem(item.chapterId, item.mangaId, item.mangaTitle,
+                                  item.chapterName, item.chapterNumber,
+                                  item.downloadedPages, item.pageCount,
+                                  static_cast<int>(item.state),
+                                  queueIndex++, totalQueueSize);
+                }
             }
 
             // Update d-pad navigation routes after queue is built
@@ -1115,7 +979,21 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     // Show X button icon when this row gets focus
     row->getFocusEvent()->subscribe([this, xButtonIcon](brls::View* view) {
         if (m_currentFocusedIcon && m_currentFocusedIcon != xButtonIcon) {
-            m_currentFocusedIcon->setVisibility(brls::Visibility::INVISIBLE);
+            // Validate that m_currentFocusedIcon still points to a live UI element
+            bool isValid = false;
+            for (const auto& elem : m_serverRowElements) {
+                if (elem.xButtonIcon == m_currentFocusedIcon) { isValid = true; break; }
+            }
+            if (!isValid) {
+                for (const auto& elem : m_localRowElements) {
+                    if (elem.xButtonIcon == m_currentFocusedIcon) { isValid = true; break; }
+                }
+            }
+            if (isValid) {
+                m_currentFocusedIcon->setVisibility(brls::Visibility::INVISIBLE);
+            } else {
+                m_currentFocusedIcon = nullptr;
+            }
         }
         xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
         m_currentFocusedIcon = xButtonIcon;
@@ -1236,6 +1114,11 @@ void DownloadsTab::removeLocalItem(int mangaId, int chapterIndex) {
     if (removeIdx < 0) return;
 
     auto& elem = m_localRowElements[removeIdx];
+
+    // Null m_currentFocusedIcon if it belongs to this row being removed
+    if (m_currentFocusedIcon == elem.xButtonIcon) {
+        m_currentFocusedIcon = nullptr;
+    }
 
     // Check if this item has focus
     brls::View* currentFocus = brls::Application::getCurrentFocus();
@@ -1383,6 +1266,271 @@ void DownloadsTab::updateNavigationRoutes() {
     } else if (firstLocalItem && !firstServerItem) {
         // Only local queue exists, first item UP -> pause button
         firstLocalItem->setCustomNavigationRoute(brls::FocusDirection::UP, m_pauseBtn);
+    }
+}
+
+// Helper: Create a server download row with all UI elements (mirrors createLocalRow)
+brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::string& mangaTitle,
+                                         const std::string& chapterName, float chapterNumber,
+                                         int downloadedPages, int pageCount, int state,
+                                         int currentIndex, int queueSize,
+                                         brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon) {
+    auto row = new brls::Box();
+    row->setAxis(brls::Axis::ROW);
+    row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    row->setAlignItems(brls::AlignItems::CENTER);
+    row->setPadding(8);
+    row->setMargins(0, 0, 8, 0);
+    row->setCornerRadius(6);
+    row->setFocusable(true);
+
+    NVGcolor originalBgColor;
+    if (state == static_cast<int>(DownloadState::DOWNLOADING)) {
+        originalBgColor = nvgRGBA(30, 60, 30, 200);
+    } else if (state == static_cast<int>(DownloadState::ERROR)) {
+        originalBgColor = nvgRGBA(60, 30, 30, 200);
+    } else {
+        originalBgColor = nvgRGBA(40, 40, 40, 200);
+    }
+    row->setBackgroundColor(originalBgColor);
+
+    auto infoBox = new brls::Box();
+    infoBox->setAxis(brls::Axis::COLUMN);
+    infoBox->setGrow(1.0f);
+
+    auto titleLabel = new brls::Label();
+    titleLabel->setText(mangaTitle);
+    titleLabel->setFontSize(16);
+    infoBox->addView(titleLabel);
+
+    auto chapterLabel = new brls::Label();
+    std::string chapterText = chapterName;
+    if (chapterNumber > 0) {
+        chapterText = "Ch. " + std::to_string(static_cast<int>(chapterNumber));
+        if (!chapterName.empty()) {
+            chapterText += " - " + chapterName;
+        }
+    }
+    chapterLabel->setText(chapterText);
+    chapterLabel->setFontSize(14);
+    chapterLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
+    infoBox->addView(chapterLabel);
+
+    row->addView(infoBox);
+
+    auto statusBox = new brls::Box();
+    statusBox->setAxis(brls::Axis::ROW);
+    statusBox->setAlignItems(brls::AlignItems::CENTER);
+
+    auto progressLabel = new brls::Label();
+    progressLabel->setFontSize(16);
+    progressLabel->setMargins(0, 0, 0, 10);
+
+    std::string progressText;
+    if (state == static_cast<int>(DownloadState::DOWNLOADING)) {
+        progressText = std::to_string(downloadedPages) + "/" +
+                       std::to_string(pageCount) + " pages";
+        progressLabel->setTextColor(nvgRGBA(100, 200, 100, 255));
+    } else if (state == static_cast<int>(DownloadState::QUEUED)) {
+        progressText = "Queued";
+    } else if (state == static_cast<int>(DownloadState::DOWNLOADED)) {
+        progressText = "Done";
+    } else if (state == static_cast<int>(DownloadState::ERROR)) {
+        progressText = "Error";
+        progressLabel->setTextColor(nvgRGBA(200, 100, 100, 255));
+    } else {
+        progressText = std::to_string(downloadedPages) + "/" + std::to_string(pageCount);
+    }
+    progressLabel->setText(progressText);
+    outProgressLabel = progressLabel;
+
+    statusBox->addView(progressLabel);
+
+    auto* xButtonIcon = new brls::Image();
+    xButtonIcon->setWidth(24);
+    xButtonIcon->setHeight(24);
+    xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
+    xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
+    xButtonIcon->setMarginLeft(8);
+    xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
+    outXButtonIcon = xButtonIcon;
+    statusBox->addView(xButtonIcon);
+
+    row->addView(statusBox);
+
+    // FIX 2: Focus handler with null-check validation to guard against dangling pointer
+    row->getFocusEvent()->subscribe([this, xButtonIcon](brls::View* view) {
+        if (m_currentFocusedIcon && m_currentFocusedIcon != xButtonIcon) {
+            // Validate that m_currentFocusedIcon still points to a live UI element
+            bool isValid = false;
+            for (const auto& elem : m_serverRowElements) {
+                if (elem.xButtonIcon == m_currentFocusedIcon) { isValid = true; break; }
+            }
+            if (!isValid) {
+                for (const auto& elem : m_localRowElements) {
+                    if (elem.xButtonIcon == m_currentFocusedIcon) { isValid = true; break; }
+                }
+            }
+            if (isValid) {
+                m_currentFocusedIcon->setVisibility(brls::Visibility::INVISIBLE);
+            } else {
+                m_currentFocusedIcon = nullptr;
+            }
+        }
+        xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
+        m_currentFocusedIcon = xButtonIcon;
+    });
+
+    row->registerAction("Remove", brls::ControllerButton::BUTTON_X,
+        [this, mangaId, chapterId](brls::View* view) {
+            asyncRun([this, mangaId, chapterId]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                std::vector<int> chapterIds = {chapterId};
+                client.deleteChapterDownloads(chapterIds, mangaId);
+                brls::sync([this]() {
+                    refreshQueue();
+                });
+            });
+            return true;
+        });
+
+    row->registerAction("Move Up", brls::ControllerButton::BUTTON_LB,
+        [this, chapterId, mangaId, currentIndex](brls::View* view) {
+            if (currentIndex > 0) {
+                asyncRun([this, chapterId, mangaId, currentIndex]() {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                    if (client.reorderDownload(chapterId, mangaId, 0, currentIndex - 1)) {
+                        brls::sync([this]() {
+                            refreshQueue();
+                        });
+                    }
+                });
+            }
+            return true;
+        });
+
+    row->registerAction("Move Down", brls::ControllerButton::BUTTON_RB,
+        [this, chapterId, mangaId, currentIndex, queueSize](brls::View* view) {
+            if (currentIndex < queueSize - 1) {
+                asyncRun([this, chapterId, mangaId, currentIndex]() {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                    if (client.reorderDownload(chapterId, mangaId, 0, currentIndex + 1)) {
+                        brls::sync([this]() {
+                            refreshQueue();
+                        });
+                    }
+                });
+            }
+            return true;
+        });
+
+    auto swipeState = std::make_shared<SwipeState>();
+    row->addGestureRecognizer(new brls::PanGestureRecognizer(
+        [this, row, mangaId, chapterId, originalBgColor, swipeState](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            const float SWIPE_THRESHOLD = 60.0f;
+            const float TAP_THRESHOLD = 15.0f;
+
+            if (status.state == brls::GestureState::START) {
+                swipeState->touchStart = status.position;
+                swipeState->isValidSwipe = false;
+            } else if (status.state == brls::GestureState::STAY) {
+                float dx = status.position.x - swipeState->touchStart.x;
+                float dy = status.position.y - swipeState->touchStart.y;
+
+                if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
+                    swipeState->isValidSwipe = true;
+                    if (dx < -SWIPE_THRESHOLD * 0.5f) {
+                        row->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
+                    } else {
+                        row->setBackgroundColor(originalBgColor);
+                    }
+                }
+            } else if (status.state == brls::GestureState::END) {
+                row->setBackgroundColor(originalBgColor);
+
+                float dx = status.position.x - swipeState->touchStart.x;
+                if (swipeState->isValidSwipe && dx < -SWIPE_THRESHOLD) {
+                    asyncRun([this, mangaId, chapterId]() {
+                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                        std::vector<int> chapterIds = {chapterId};
+                        client.deleteChapterDownloads(chapterIds, mangaId);
+                        brls::sync([this]() {
+                            refreshQueue();
+                        });
+                    });
+                }
+            }
+        }, brls::PanAxis::HORIZONTAL));
+
+    return row;
+}
+
+// Helper: Add a new server download item to the UI
+void DownloadsTab::addServerItem(int chapterId, int mangaId, const std::string& mangaTitle,
+                                  const std::string& chapterName, float chapterNumber,
+                                  int downloadedPages, int pageCount, int state,
+                                  int currentIndex, int queueSize) {
+    brls::Label* progressLabel = nullptr;
+    brls::Image* xButtonIcon = nullptr;
+
+    auto* row = createServerRow(chapterId, mangaId, mangaTitle, chapterName, chapterNumber,
+                                downloadedPages, pageCount, state, currentIndex, queueSize,
+                                progressLabel, xButtonIcon);
+
+    m_queueContainer->addView(row);
+
+    ServerRowElements elem;
+    elem.row = row;
+    elem.progressLabel = progressLabel;
+    elem.xButtonIcon = xButtonIcon;
+    elem.chapterId = chapterId;
+    elem.mangaId = mangaId;
+    m_serverRowElements.push_back(elem);
+}
+
+// Helper: Remove a server download item from the UI
+void DownloadsTab::removeServerItem(int chapterId) {
+    int removeIdx = -1;
+    for (size_t i = 0; i < m_serverRowElements.size(); i++) {
+        if (m_serverRowElements[i].chapterId == chapterId) {
+            removeIdx = static_cast<int>(i);
+            break;
+        }
+    }
+
+    if (removeIdx < 0) return;
+
+    auto& elem = m_serverRowElements[removeIdx];
+
+    // Null m_currentFocusedIcon if it belongs to this row being removed
+    if (m_currentFocusedIcon == elem.xButtonIcon) {
+        m_currentFocusedIcon = nullptr;
+    }
+
+    // Check if this item has focus
+    brls::View* currentFocus = brls::Application::getCurrentFocus();
+    bool hadFocus = (elem.row == currentFocus);
+
+    // Remove from container
+    if (m_queueContainer && elem.row) {
+        m_queueContainer->removeView(elem.row);
+    }
+
+    // Remove from tracking
+    m_serverRowElements.erase(m_serverRowElements.begin() + removeIdx);
+
+    // Transfer focus if this row had it
+    if (hadFocus) {
+        if (!m_serverRowElements.empty()) {
+            int newIdx = std::min(removeIdx, static_cast<int>(m_serverRowElements.size()) - 1);
+            if (newIdx >= 0 && m_serverRowElements[newIdx].row) {
+                brls::Application::giveFocus(m_serverRowElements[newIdx].row);
+            }
+        } else if (!m_localRowElements.empty() && m_localRowElements[0].row) {
+            brls::Application::giveFocus(m_localRowElements[0].row);
+        } else if (m_startStopBtn) {
+            brls::Application::giveFocus(m_startStopBtn);
+        }
     }
 }
 
