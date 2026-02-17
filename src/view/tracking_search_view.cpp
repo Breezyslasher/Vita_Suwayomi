@@ -38,6 +38,7 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     textBox->setJustifyContent(brls::JustifyContent::CENTER);
     textBox->setAlignItems(brls::AlignItems::FLEX_START);
     textBox->setGrow(1.0f);
+    textBox->setShrink(1.0f);  // Allow text container to shrink
 
     // Title label (main text)
     m_titleLabel = new brls::Label();
@@ -45,6 +46,7 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     m_titleLabel->setTextColor(nvgRGB(255, 255, 255));
     m_titleLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
     m_titleLabel->setMarginBottom(6);
+    m_titleLabel->setSingleLine(true);  // Prevent title from wrapping/overflowing
     textBox->addView(m_titleLabel);
 
     // Status label (publishing status, chapters, type)
@@ -53,6 +55,7 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     m_statusLabel->setTextColor(nvgRGB(130, 200, 130));
     m_statusLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
     m_statusLabel->setMarginBottom(6);
+    m_statusLabel->setSingleLine(true);  // Prevent status from wrapping
     textBox->addView(m_statusLabel);
 
     // Description label (subtext)
@@ -60,9 +63,14 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     m_descriptionLabel->setFontSize(13);
     m_descriptionLabel->setTextColor(nvgRGB(180, 180, 180));
     m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
+    //m_descriptionLabel->setMaxLines(2);  // Limit description to 2 lines
     textBox->addView(m_descriptionLabel);
 
     this->addView(textBox);
+
+    // Set fixed height and clip overflow
+    this->setHeight(140);
+    this->setClipsToBounds(true);
 }
 
 void TrackingSearchResultCell::setResult(const TrackSearchResult& result) {
@@ -142,7 +150,14 @@ void TrackingSearchResultCell::loadCoverImage() {
     if (!m_coverImage || m_coverLoaded) return;
     m_coverLoaded = true;
 
-    if (m_result.coverUrl.empty()) return;
+    if (m_result.coverUrl.empty()) {
+        // Set placeholder image for missing covers
+        m_coverImage->setImageFromFile("app0:resources/icons/book-open-page-variant.png");
+        return;
+    }
+
+    // Set loading placeholder while image loads
+    m_coverImage->setImageFromFile("app0:resources/icons/book-open-page-variant.png");
 
     // Tracker cover URLs are external URLs (MAL, AniList CDN, etc.)
     // Proxy them through the Suwayomi server to avoid HTTPS/CORS issues on Vita
@@ -150,7 +165,14 @@ void TrackingSearchResultCell::loadCoverImage() {
     std::string proxiedUrl = client.buildProxiedImageUrl(m_result.coverUrl);
 
     brls::Logger::debug("TrackingSearchResultCell: Loading cover from {}", proxiedUrl);
-    ImageLoader::loadAsync(proxiedUrl, nullptr, m_coverImage);
+
+    // Load with callback to handle failures gracefully
+    ImageLoader::loadAsync(proxiedUrl, [this](brls::Image* img) {
+        // Successfully loaded - callback invoked by ImageLoader
+        brls::Logger::debug("TrackingSearchResultCell: Cover loaded successfully");
+    }, m_coverImage);
+
+    // Note: If loading fails (retry exhausted), the placeholder will remain visible
 }
 
 void TrackingSearchResultCell::onFocusGained() {

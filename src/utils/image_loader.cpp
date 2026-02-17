@@ -384,9 +384,25 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     // Add authentication if needed
     applyAuthHeaders(client);
 
-    HttpResponse resp = client.get(url);
+    // Retry logic for slow/unreliable proxy servers
+    const int maxRetries = 2;
+    HttpResponse resp;
+    bool success = false;
 
-    if (!resp.success || resp.body.empty()) {
+    for (int attempt = 0; attempt <= maxRetries && !success; attempt++) {
+        if (attempt > 0) {
+            brls::Logger::debug("ImageLoader: Retry {} for {}", attempt, url);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000 * attempt));  // 1s, 2s
+        }
+
+        resp = client.get(url);
+        if (resp.success && !resp.body.empty()) {
+            success = true;
+        }
+    }
+
+    if (!success || resp.body.empty()) {
+        brls::Logger::warning("ImageLoader: Failed to load {} after {} attempts", url, maxRetries + 1);
         return;
     }
 

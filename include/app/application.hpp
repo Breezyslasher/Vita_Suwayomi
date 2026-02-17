@@ -78,6 +78,13 @@ enum class ListRowSize {
     AUTO = 3      // Auto-size to fit title
 };
 
+// Library grouping mode
+enum class LibraryGroupMode {
+    BY_CATEGORY = 0,   // Group by category (default, with tabs)
+    BY_SOURCE = 1,     // Group by manga source
+    NO_GROUPING = 2    // Show all manga in one grid
+};
+
 // Download mode options
 enum class DownloadMode {
     SERVER_ONLY = 0,    // Download to server queue only
@@ -135,6 +142,7 @@ struct AppSettings {
     LibraryDisplayMode libraryDisplayMode = LibraryDisplayMode::GRID_NORMAL;
     LibraryGridSize libraryGridSize = LibraryGridSize::MEDIUM;
     ListRowSize listRowSize = ListRowSize::MEDIUM;  // List view row size
+    LibraryGroupMode libraryGroupMode = LibraryGroupMode::BY_CATEGORY;  // Library grouping mode
 
     // Library Sort Settings
     int defaultLibrarySortMode = 0;  // Default sort mode for new categories (0=A-Z by default)

@@ -111,6 +111,9 @@ LibrarySectionTab::LibrarySectionTab() {
     int savedSort = app.getSettings().librarySortMode;
     m_sortMode = static_cast<LibrarySortMode>(savedSort);
 
+    // Load saved group mode
+    m_groupMode = app.getSettings().libraryGroupMode;
+
     // Initialize sort icon
     updateSortButtonText();
 
@@ -267,6 +270,12 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
 
+    // Register X button for grouping mode menu
+    this->registerAction("Grouping", brls::ControllerButton::BUTTON_X, [this](brls::View*) {
+        showGroupModeMenu();
+        return true;
+    });
+
     // Load categories first, then create tabs
     loadCategories();
 }
@@ -280,6 +289,13 @@ LibrarySectionTab::~LibrarySectionTab() {
 
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
+
+    // Apply grouping mode visibility
+    if (m_groupMode == LibraryGroupMode::BY_CATEGORY) {
+        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
+    } else {
+        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+    }
 
     if (!m_loaded && m_categoriesLoaded) {
         loadCategoryManga(m_currentCategoryId);
@@ -2070,23 +2086,58 @@ void LibrarySectionTab::openTracking(const Manga& manga) {
                                 }
                                 brls::Application::notify(info);
                             } else if (action == 1) {
-                                // Remove tracking
-                                brls::Application::notify("Removing from " + selectedTracker.name + "...");
-                                int recordId = selectedRecord.id;
-                                std::string trackerNameCopy = selectedTracker.name;
-                                asyncRun([recordId, trackerNameCopy, aliveWeak]() {
-                                    SuwayomiClient& client = SuwayomiClient::getInstance();
-                                    bool success = client.unbindTracker(recordId, false);
-                                    brls::sync([success, aliveWeak]() {
-                                        auto alive = aliveWeak.lock();
-                                        if (!alive || !*alive) return;
-                                        if (success) {
-                                            brls::Application::notify("Tracking removed");
-                                        } else {
-                                            brls::Application::notify("Failed to remove tracking");
-                                        }
-                                    });
-                                });
+                                // Remove tracking - show options
+                                std::vector<std::string> removeOptions = {
+                                    "Remove from app only",
+                                    "Remove from " + selectedTracker.name + " too"
+                                };
+
+                                brls::Dropdown* removeDropdown = new brls::Dropdown(
+                                    "Remove Tracking",
+                                    removeOptions,
+                                    [recordId = selectedRecord.id, trackerNameCopy = selectedTracker.name, aliveWeak](int selected) {
+                                        if (selected < 0) return;
+
+                                        bool deleteRemote = (selected == 1);
+                                        std::string message = deleteRemote
+                                            ? "This will remove tracking from both the app and " + trackerNameCopy + "."
+                                            : "This will only remove tracking from the app. Your entry on " + trackerNameCopy + " will remain.";
+
+                                        // Confirmation dialog
+                                        brls::Dialog* confirmDialog = new brls::Dialog(
+                                            "Remove from " + trackerNameCopy + "?\n\n" + message);
+                                        confirmDialog->setCancelable(false);
+
+                                        confirmDialog->addButton("Remove", [confirmDialog, recordId, trackerNameCopy, deleteRemote, aliveWeak]() {
+                                            confirmDialog->close();
+
+                                            brls::Application::notify("Removing from " + trackerNameCopy + "...");
+                                            asyncRun([recordId, trackerNameCopy, deleteRemote, aliveWeak]() {
+                                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                                bool success = client.unbindTracker(recordId, deleteRemote);
+                                                brls::sync([success, deleteRemote, trackerNameCopy, aliveWeak]() {
+                                                    auto alive = aliveWeak.lock();
+                                                    if (!alive || !*alive) return;
+                                                    if (success) {
+                                                        std::string msg = deleteRemote
+                                                            ? "Removed from " + trackerNameCopy + " and app"
+                                                            : "Removed from app (kept on " + trackerNameCopy + ")";
+                                                        brls::Application::notify(msg);
+                                                    } else {
+                                                        brls::Application::notify("Failed to remove tracking");
+                                                    }
+                                                });
+                                            });
+                                        });
+
+                                        confirmDialog->addButton("Cancel", [confirmDialog]() {
+                                            confirmDialog->close();
+                                        });
+
+                                        confirmDialog->open();
+                                    }, 0);
+
+                                brls::Application::pushActivity(new brls::Activity(removeDropdown));
                             }
                         }, 0);
                     brls::Application::pushActivity(new brls::Activity(actionDropdown));
@@ -2162,6 +2213,157 @@ void LibrarySectionTab::openTracking(const Manga& manga) {
             brls::Application::pushActivity(new brls::Activity(dropdown));
         });
     });
+}
+
+void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
+    m_groupMode = mode;
+    Application::getInstance().getSettings().libraryGroupMode = mode;
+    Application::getInstance().saveSettings();
+
+    // Reload library with new grouping
+    if (mode == LibraryGroupMode::BY_CATEGORY) {
+        // Show category tabs
+        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
+        // Reload current category
+        if (!m_categories.empty()) {
+            selectCategory(m_currentCategoryId);
+        }
+    } else if (mode == LibraryGroupMode::NO_GROUPING) {
+        // Hide category tabs
+        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+        // Load all manga
+        loadAllManga();
+    } else if (mode == LibraryGroupMode::BY_SOURCE) {
+        // Hide category tabs
+        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+        // Load all manga grouped by source
+        loadBySource();
+    }
+}
+
+void LibrarySectionTab::loadAllManga() {
+    brls::Logger::debug("LibrarySectionTab::loadAllManga - loading all manga without grouping");
+
+    // Update title
+    if (m_titleLabel) {
+        m_titleLabel->setText("All Manga");
+    }
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    asyncRun([this, aliveWeak]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Manga> allManga;
+
+        // Fetch all library manga
+        if (!client.fetchLibraryManga(allManga)) {
+            brls::sync([aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                brls::Application::notify("Failed to load library");
+            });
+            return;
+        }
+
+        brls::sync([this, allManga, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            m_fullMangaList = allManga;
+            m_mangaList = allManga;
+            sortMangaList();
+            m_loaded = true;
+        });
+    });
+}
+
+void LibrarySectionTab::loadBySource() {
+    brls::Logger::debug("LibrarySectionTab::loadBySource - loading manga grouped by source");
+
+    // Update title
+    if (m_titleLabel) {
+        m_titleLabel->setText("Library by Source");
+    }
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    asyncRun([this, aliveWeak]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Manga> allManga;
+
+        // Fetch all library manga
+        if (!client.fetchLibraryManga(allManga)) {
+            brls::sync([aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                brls::Application::notify("Failed to load library");
+            });
+            return;
+        }
+
+        // Group by source
+        std::map<std::string, std::vector<Manga>> mangaBySource;
+        for (const auto& manga : allManga) {
+            std::string sourceName = manga.sourceName.empty() ? "Unknown" : manga.sourceName;
+            mangaBySource[sourceName].push_back(manga);
+        }
+
+        // Sort sources alphabetically
+        std::vector<std::pair<std::string, std::vector<Manga>>> sortedSources;
+        for (auto& pair : mangaBySource) {
+            sortedSources.push_back(std::move(pair));
+        }
+        std::sort(sortedSources.begin(), sortedSources.end(),
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
+
+        // Flatten back to a single list with source headers
+        // Note: RecyclingGrid doesn't support section headers yet, so we just sort by source
+        // and the manga will be grouped together visually
+        std::vector<Manga> sortedBySource;
+        for (const auto& sourcePair : sortedSources) {
+            // Sort manga within each source
+            auto sourceManga = sourcePair.second;
+            std::sort(sourceManga.begin(), sourceManga.end(),
+                      [](const Manga& a, const Manga& b) { return a.title < b.title; });
+            sortedBySource.insert(sortedBySource.end(), sourceManga.begin(), sourceManga.end());
+        }
+
+        brls::sync([this, sortedBySource, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            m_fullMangaList = sortedBySource;
+            m_mangaList = sortedBySource;
+            // Don't sort again - already sorted by source
+            m_loaded = true;
+
+            if (m_contentGrid) {
+                m_contentGrid->setDataSource(m_mangaList);
+            }
+        });
+    });
+}
+
+void LibrarySectionTab::showGroupModeMenu() {
+    std::vector<std::string> options = {
+        "By Category",
+        "By Source",
+        "No Grouping (All)"
+    };
+
+    int currentMode = static_cast<int>(m_groupMode);
+
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Library Grouping",
+        options,
+        [this](int selected) {
+            if (selected < 0 || selected > 2) return;
+            setGroupMode(static_cast<LibraryGroupMode>(selected));
+        },
+        currentMode
+    );
+
+    brls::Application::pushActivity(new brls::Activity(dropdown));
 }
 
 } // namespace vitasuwayomi

@@ -116,7 +116,7 @@ private:
     };
     std::vector<ServerRowElements> m_serverRowElements;
 
-    // Helper methods for incremental updates
+    // Helper methods for incremental updates (local queue)
     void updateLocalProgress(int mangaId, int chapterIndex, int downloadedPages, int pageCount, int state);
     void removeLocalItem(int mangaId, int chapterIndex);
     void updateNavigationRoutes();  // Update d-pad navigation between buttons and queue items
@@ -127,6 +127,18 @@ private:
                               const std::string& chapterName, float chapterNumber,
                               int downloadedPages, int pageCount, int state,
                               brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon);
+
+    // Helper methods for incremental updates (server queue)
+    brls::Box* createServerRow(int chapterId, int mangaId, const std::string& mangaTitle,
+                               const std::string& chapterName, float chapterNumber,
+                               int downloadedPages, int pageCount, int state,
+                               int currentIndex, int queueSize,
+                               brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon);
+    void addServerItem(int chapterId, int mangaId, const std::string& mangaTitle,
+                       const std::string& chapterName, float chapterNumber,
+                       int downloadedPages, int pageCount, int state,
+                       int currentIndex, int queueSize);
+    void removeServerItem(int chapterId);
 
     // Swipe gesture state (avoid static variables)
     struct SwipeState {
