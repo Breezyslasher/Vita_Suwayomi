@@ -418,9 +418,21 @@ void LibrarySectionTab::loadCategories() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
+            // Only recreate category tabs if categories actually changed
+            bool categoriesChanged = (m_categories.size() != categories.size());
+            if (!categoriesChanged) {
+                for (size_t i = 0; i < categories.size() && !categoriesChanged; i++) {
+                    if (categories[i].id != m_categories[i].id) {
+                        categoriesChanged = true;
+                    }
+                }
+            }
+
             m_categories = categories;
             m_categoriesLoaded = true;
-            createCategoryTabs();
+            if (categoriesChanged || m_categoryButtons.empty()) {
+                createCategoryTabs();
+            }
 
             // Determine which category to select
             int defaultId = resolvedCategoryId;
@@ -472,10 +484,18 @@ void LibrarySectionTab::loadCategories() {
                     m_titleLabel->setText(m_currentCategoryName);
                 }
 
-                // Apply the prefetched manga directly
-                m_fullMangaList = prefetchedManga;
-                m_mangaList = prefetchedManga;
-                sortMangaList();
+                // Apply the prefetched manga
+                // If grid already has data from cache, use incremental update
+                // to avoid destroying and recreating 100+ cells
+                if (m_loaded && !m_cachedMangaList.empty()) {
+                    brls::Logger::info("LibrarySectionTab: Incrementally updating {} items from combined query",
+                                      prefetchedManga.size());
+                    updateMangaCellsIncrementally(prefetchedManga);
+                } else {
+                    m_fullMangaList = prefetchedManga;
+                    m_mangaList = prefetchedManga;
+                    sortMangaList();
+                }
                 m_loaded = true;
 
                 brls::Logger::info("LibrarySectionTab: Applied prefetched manga ({} items) from combined query",
@@ -705,6 +725,19 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
             m_mangaList = cachedManga;
             sortMangaList();
             m_loaded = true;
+
+            // Populate cached state so server refresh uses incremental updates
+            m_cachedMangaList.clear();
+            for (const auto& m : cachedManga) {
+                CachedMangaItem cached;
+                cached.id = m.id;
+                cached.unreadCount = m.unreadCount;
+                cached.lastReadAt = m.lastReadAt;
+                cached.latestChapterUploadDate = m.latestChapterUploadDate;
+                cached.chapterCount = m.chapterCount;
+                m_cachedMangaList.push_back(cached);
+            }
+
             // Continue to refresh from server in background
         }
     } else if (!isSameCategory) {
@@ -752,7 +785,7 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
                 LibraryCache::getInstance().saveCategoryManga(categoryId, manga);
             }
 
-            brls::sync([this, manga, categoryId, aliveWeak, isSameCategory]() {
+            brls::sync([this, manga, categoryId, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) {
                     return;
@@ -760,8 +793,9 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
 
                 // Only update if we're still on the same category
                 if (m_currentCategoryId == categoryId) {
-                    // Use incremental update if refreshing the same category
-                    if (isSameCategory && !m_cachedMangaList.empty()) {
+                    // Use incremental update when grid already has data (from cache or combined query)
+                    // This avoids destroying and recreating 100+ cells on server refresh
+                    if (!m_cachedMangaList.empty()) {
                         updateMangaCellsIncrementally(manga);
                     } else {
                         m_fullMangaList = manga;

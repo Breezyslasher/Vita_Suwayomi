@@ -95,6 +95,9 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
 
     brls::Logger::debug("RecyclingGrid: updateDataOrder - updating {} cells in place", items.size());
 
+    // Save old items to detect which cells actually changed manga
+    std::vector<Manga> oldItems = std::move(m_items);
+
     // Update internal data
     m_items = items;
 
@@ -106,8 +109,11 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
     for (size_t i = 0; i < m_cells.size() && i < items.size(); i++) {
         MangaItemCell* cell = m_cells[i];
         if (cell) {
-            // Use immediate load for visible cells, deferred for others
-            if (static_cast<int>(i) < cellsInInitialRows) {
+            // If same manga at same position, only update metadata (preserves loaded thumbnail)
+            if (i < oldItems.size() && oldItems[i].id == items[i].id) {
+                cell->updateMangaData(items[i]);
+            } else if (static_cast<int>(i) < cellsInInitialRows) {
+                // Different manga - reload with thumbnail
                 cell->setManga(items[i]);
             } else {
                 cell->setMangaDeferred(items[i]);
@@ -115,9 +121,12 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
         }
     }
 
-    // Load thumbnails for remaining cells
+    // Only load thumbnails for a buffer beyond visible rows (not all remaining)
+    int bufferRows = 3;
+    int preloadUpToCell = std::min((maxInitialRows + bufferRows) * m_columns, static_cast<int>(m_cells.size()));
+
     if (static_cast<int>(m_cells.size()) > cellsInInitialRows) {
-        for (size_t i = cellsInInitialRows; i < m_cells.size(); i++) {
+        for (int i = cellsInInitialRows; i < preloadUpToCell; i++) {
             if (m_cells[i]) {
                 m_cells[i]->loadThumbnailIfNeeded();
             }
@@ -331,9 +340,10 @@ void RecyclingGrid::setupGrid() {
                 return false;
             }, true);  // hidden action
 
-            // Track focused index
+            // Track focused index and trigger thumbnail loading for nearby cells
             cell->getFocusEvent()->subscribe([this, index](brls::View*) {
                 m_focusedIndex = index;
+                loadThumbnailsNearIndex(index);
             });
 
             rowBox->addView(cell);
@@ -344,17 +354,45 @@ void RecyclingGrid::setupGrid() {
         m_rows.push_back(rowBox);
     }
 
-    // Load remaining covers immediately - ImageLoader handles queuing
-    // No artificial delays needed; the image loader's queue prevents overload
+    // Only load a buffer of rows beyond the visible area, not the entire library.
+    // Further rows will be loaded on-demand as the user scrolls (via focus events).
+    // This prevents queuing hundreds of HTTP requests for large libraries.
+    int bufferRows = 3;  // Load 3 extra rows beyond visible as prefetch
+    int preloadUpToRow = std::min(maxInitialRows + bufferRows, totalRows);
+
     if (totalRows > maxInitialRows) {
         int startCell = maxInitialRows * m_columns;
-        // Queue all remaining thumbnails at once - ImageLoader handles concurrency
-        for (int i = startCell; i < (int)m_cells.size(); i++) {
+        int endCell = std::min(preloadUpToRow * m_columns, (int)m_cells.size());
+        for (int i = startCell; i < endCell; i++) {
             m_cells[i]->loadThumbnailIfNeeded();
         }
     }
 
-    brls::Logger::debug("RecyclingGrid: Grid setup complete with {} cells", m_cells.size());
+    brls::Logger::debug("RecyclingGrid: Grid setup complete with {} cells, thumbnails preloaded for {} rows",
+                        m_cells.size(), preloadUpToRow);
+}
+
+void RecyclingGrid::loadThumbnailsNearIndex(int index) {
+    if (m_cells.empty() || m_columns <= 0) return;
+
+    int focusedRow = index / m_columns;
+    int totalRows = (static_cast<int>(m_cells.size()) + m_columns - 1) / m_columns;
+
+    // Load thumbnails for rows around the focused cell: 2 rows above, 6 rows below
+    int loadFromRow = std::max(0, focusedRow - 2);
+    int loadToRow = std::min(totalRows, focusedRow + 7);  // 6 rows below (visible area + buffer)
+
+    int startCell = loadFromRow * m_columns;
+    int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
+
+    // loadThumbnailIfNeeded() checks m_thumbnailLoaded internally,
+    // so calling it on already-loaded cells is a no-op (just a bool check).
+    // This avoids gaps when the user jumps to a distant row.
+    for (int i = startCell; i < endCell; i++) {
+        if (m_cells[i]) {
+            m_cells[i]->loadThumbnailIfNeeded();
+        }
+    }
 }
 
 void RecyclingGrid::updateVisibleCells() {

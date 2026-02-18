@@ -9,6 +9,7 @@
 #include <string>
 #include <functional>
 #include <map>
+#include <list>
 #include <mutex>
 #include <queue>
 #include <atomic>
@@ -91,8 +92,20 @@ private:
     static void executeLoad(const LoadRequest& request);
     static void executeRotatableLoad(const RotatableLoadRequest& request);
 
-    static std::map<std::string, std::vector<uint8_t>> s_cache;
+    // LRU cache: list stores entries in access order (most recent at front)
+    // map provides O(1) lookup by URL
+    struct CacheEntry {
+        std::string url;
+        std::vector<uint8_t> data;
+    };
+    static std::list<CacheEntry> s_cacheList;
+    static std::map<std::string, std::list<CacheEntry>::iterator> s_cacheMap;
+    static size_t s_maxCacheSize;
     static std::mutex s_cacheMutex;
+
+    // LRU cache helpers
+    static void cachePut(const std::string& url, const std::vector<uint8_t>& data);
+    static bool cacheGet(const std::string& url, std::vector<uint8_t>& data);
     static std::string s_authUsername;
     static std::string s_authPassword;
     static std::string s_accessToken;  // JWT access token for Bearer auth
@@ -104,6 +117,25 @@ private:
     static std::atomic<int> s_activeLoads;
     static int s_maxConcurrentLoads;
     static int s_maxThumbnailSize;
+
+    // Batched texture upload queue - prevents main thread freeze from
+    // 50+ GPU texture uploads arriving simultaneously from disk cache reads.
+    // Background threads push completed images here instead of calling brls::sync() directly.
+    // A single scheduled callback processes a few textures per frame.
+    struct PendingTextureUpdate {
+        std::vector<uint8_t> data;
+        brls::Image* target;
+        LoadCallback callback;
+    };
+    static std::queue<PendingTextureUpdate> s_pendingTextures;
+    static std::mutex s_pendingMutex;
+    static std::atomic<bool> s_pendingScheduled;
+    static constexpr int MAX_TEXTURES_PER_FRAME = 4;  // Limit GPU uploads per frame
+
+    // Queue a texture for batched upload on the main thread
+    static void queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback);
+    // Process a batch of pending texture uploads (called on main thread)
+    static void processPendingTextures();
 };
 
 } // namespace vitasuwayomi

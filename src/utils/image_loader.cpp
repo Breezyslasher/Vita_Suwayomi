@@ -28,6 +28,9 @@
 // If not found, you may need to add it to the project
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_PNG
+#define STBI_ONLY_BMP
+#define STBI_ONLY_TGA
+#define STBI_ONLY_GIF
 #define STBI_NO_HDR
 #define STBI_NO_LINEAR
 #define STB_IMAGE_STATIC
@@ -37,7 +40,9 @@
 namespace vitasuwayomi {
 
 // Static member initialization
-std::map<std::string, std::vector<uint8_t>> ImageLoader::s_cache;
+std::list<ImageLoader::CacheEntry> ImageLoader::s_cacheList;
+std::map<std::string, std::list<ImageLoader::CacheEntry>::iterator> ImageLoader::s_cacheMap;
+size_t ImageLoader::s_maxCacheSize = 200;  // LRU cache: 200 entries for large libraries
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
@@ -48,6 +53,11 @@ std::mutex ImageLoader::s_queueMutex;
 std::atomic<int> ImageLoader::s_activeLoads{0};
 int ImageLoader::s_maxConcurrentLoads = 4;  // Increased for faster library loading
 int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
+
+// Batched texture upload queue
+std::queue<ImageLoader::PendingTextureUpdate> ImageLoader::s_pendingTextures;
+std::mutex ImageLoader::s_pendingMutex;
+std::atomic<bool> ImageLoader::s_pendingScheduled{false};
 
 // Flag to track if queue processor is running
 static std::atomic<bool> s_processorRunning{false};
@@ -341,6 +351,24 @@ void ImageLoader::setAccessToken(const std::string& token) {
     s_accessToken = token;
 }
 
+// Helper for Base64 encoding
+static std::string base64EncodeImage(const std::string& input) {
+    static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    int val = 0, valb = -6;
+    for (unsigned char c : input) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (encoded.size() % 4) encoded.push_back('=');
+    return encoded;
+}
+
 // Helper to apply authentication headers to HTTP client
 static void applyAuthHeaders(HttpClient& client) {
     // Prefer JWT Bearer auth if access token is available
@@ -349,21 +377,54 @@ static void applyAuthHeaders(HttpClient& client) {
     } else if (!ImageLoader::getAuthUsername().empty() && !ImageLoader::getAuthPassword().empty()) {
         // Fall back to Basic Auth
         std::string credentials = ImageLoader::getAuthUsername() + ":" + ImageLoader::getAuthPassword();
-        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        std::string encoded;
-        int val = 0, valb = -6;
-        for (unsigned char c : credentials) {
-            val = (val << 8) + c;
-            valb += 8;
-            while (valb >= 0) {
-                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                valb -= 6;
+        client.setDefaultHeader("Authorization", "Basic " + base64EncodeImage(credentials));
+    }
+}
+
+// Authenticated HTTP GET with automatic JWT token refresh on 401/403.
+// If the request fails due to an expired token, refreshes via SuwayomiClient
+// and retries once with the new token.
+static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2) {
+    HttpClient client;
+    applyAuthHeaders(client);
+
+    HttpResponse resp;
+    bool success = false;
+    bool tokenRefreshed = false;
+
+    for (int attempt = 0; attempt <= maxRetries && !success; attempt++) {
+        if (attempt > 0) {
+            brls::Logger::debug("ImageLoader: Retry {} for {}", attempt, url);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000 * attempt));
+        }
+
+        resp = client.get(url);
+
+        // Check for auth failure (401 Unauthorized or 403 Forbidden)
+        if ((resp.statusCode == 401 || resp.statusCode == 403) && !tokenRefreshed) {
+            brls::Logger::info("ImageLoader: Got {} for {}, attempting token refresh...",
+                              resp.statusCode, url);
+            auto& suwayomiClient = SuwayomiClient::getInstance();
+            if (suwayomiClient.refreshToken()) {
+                brls::Logger::info("ImageLoader: Token refreshed, retrying download");
+                tokenRefreshed = true;
+                // Re-create client with new token
+                client = HttpClient();
+                applyAuthHeaders(client);
+                // Don't count this as a retry attempt
+                attempt--;
+                continue;
+            } else {
+                brls::Logger::warning("ImageLoader: Token refresh failed for {}", url);
             }
         }
-        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-        while (encoded.size() % 4) encoded.push_back('=');
-        client.setDefaultHeader("Authorization", "Basic " + encoded);
+
+        if (resp.success && !resp.body.empty()) {
+            success = true;
+        }
     }
+
+    return resp;
 }
 
 void ImageLoader::setMaxConcurrentLoads(int max) {
@@ -374,66 +435,171 @@ void ImageLoader::setMaxThumbnailSize(int maxSize) {
     s_maxThumbnailSize = maxSize > 0 ? maxSize : 0;
 }
 
+void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& data) {
+    std::lock_guard<std::mutex> lock(s_cacheMutex);
+
+    // If key already exists, move to front and update data
+    auto it = s_cacheMap.find(url);
+    if (it != s_cacheMap.end()) {
+        s_cacheList.erase(it->second);
+        s_cacheMap.erase(it);
+    }
+
+    // Evict oldest entries (back of list) if over capacity
+    while (s_cacheList.size() >= s_maxCacheSize) {
+        auto& oldest = s_cacheList.back();
+        s_cacheMap.erase(oldest.url);
+        s_cacheList.pop_back();
+    }
+
+    // Insert at front (most recently used)
+    s_cacheList.push_front({url, data});
+    s_cacheMap[url] = s_cacheList.begin();
+}
+
+bool ImageLoader::cacheGet(const std::string& url, std::vector<uint8_t>& data) {
+    std::lock_guard<std::mutex> lock(s_cacheMutex);
+
+    auto it = s_cacheMap.find(url);
+    if (it == s_cacheMap.end()) {
+        return false;
+    }
+
+    // Move to front (mark as recently used)
+    data = it->second->data;
+    s_cacheList.splice(s_cacheList.begin(), s_cacheList, it->second);
+    return true;
+}
+
+void ImageLoader::queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback) {
+    {
+        std::lock_guard<std::mutex> lock(s_pendingMutex);
+        s_pendingTextures.push({data, target, callback});
+    }
+
+    // Schedule processing if not already scheduled
+    bool expected = false;
+    if (s_pendingScheduled.compare_exchange_strong(expected, true)) {
+        brls::sync([]() {
+            processPendingTextures();
+        });
+    }
+}
+
+void ImageLoader::processPendingTextures() {
+    s_pendingScheduled = false;
+
+    // Process up to MAX_TEXTURES_PER_FRAME textures this frame
+    int processed = 0;
+    while (processed < MAX_TEXTURES_PER_FRAME) {
+        PendingTextureUpdate update;
+        {
+            std::lock_guard<std::mutex> lock(s_pendingMutex);
+            if (s_pendingTextures.empty()) return;
+            update = std::move(s_pendingTextures.front());
+            s_pendingTextures.pop();
+        }
+
+        if (update.target) {
+            update.target->setImageFromMem(update.data.data(), update.data.size());
+            if (update.callback) update.callback(update.target);
+        }
+        processed++;
+    }
+
+    // If more pending, schedule another batch for the next frame
+    bool morePending = false;
+    {
+        std::lock_guard<std::mutex> lock(s_pendingMutex);
+        morePending = !s_pendingTextures.empty();
+    }
+    if (morePending) {
+        bool expected = false;
+        if (s_pendingScheduled.compare_exchange_strong(expected, true)) {
+            brls::sync([]() {
+                processPendingTextures();
+            });
+        }
+    }
+}
+
 void ImageLoader::executeLoad(const LoadRequest& request) {
     const std::string& url = request.url;
     brls::Image* target = request.target;
     LoadCallback callback = request.callback;
 
-    HttpClient client;
-
-    // Add authentication if needed
-    applyAuthHeaders(client);
-
-    // Retry logic for slow/unreliable proxy servers
-    const int maxRetries = 2;
-    HttpResponse resp;
-    bool success = false;
-
-    for (int attempt = 0; attempt <= maxRetries && !success; attempt++) {
-        if (attempt > 0) {
-            brls::Logger::debug("ImageLoader: Retry {} for {}", attempt, url);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000 * attempt));  // 1s, 2s
-        }
-
-        resp = client.get(url);
-        if (resp.success && !resp.body.empty()) {
-            success = true;
+    // Check disk cache first (this runs on a background thread, so disk I/O is fine)
+    if (Application::getInstance().getSettings().cacheCoverImages) {
+        int mangaId = extractMangaIdFromUrl(url);
+        if (mangaId > 0) {
+            std::vector<uint8_t> diskData;
+            if (LibraryCache::getInstance().loadCoverImage(mangaId, diskData)) {
+                // Found in disk cache - add to memory LRU cache
+                cachePut(url, diskData);
+                // Queue for batched texture upload (prevents main thread freeze
+                // when 50+ covers load from disk cache simultaneously)
+                if (target) {
+                    queueTextureUpdate(diskData, target, callback);
+                }
+                return;
+            }
         }
     }
 
-    if (!success || resp.body.empty()) {
-        brls::Logger::warning("ImageLoader: Failed to load {} after {} attempts", url, maxRetries + 1);
+    // Authenticated GET with automatic JWT refresh on 401/403
+    HttpResponse resp = authenticatedGet(url, 2);
+
+    if (!resp.success || resp.body.empty()) {
+        brls::Logger::warning("ImageLoader: Failed to load {} (status {})", url, resp.statusCode);
         return;
     }
 
     // Check image format
     bool isWebP = false;
-    bool isValidImage = false;
+    bool isKnownFormat = false;
 
     if (resp.body.size() > 12) {
         unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
 
         if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
-            isValidImage = true;  // JPEG
+            isKnownFormat = true;  // JPEG
         }
         else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
-            isValidImage = true;  // PNG
+            isKnownFormat = true;  // PNG
         }
         else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
-            isValidImage = true;  // GIF
+            isKnownFormat = true;  // GIF
+        }
+        else if (data[0] == 0x42 && data[1] == 0x4D) {
+            isKnownFormat = true;  // BMP
         }
         else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
                  data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
             isWebP = true;
-            isValidImage = true;
+            isKnownFormat = true;
         }
     }
 
-    if (!isValidImage) {
+    // For unrecognized formats (.bin, etc.), try stb_image as fallback
+    // stb_image can auto-detect JPEG, PNG, BMP, GIF, TGA, PSD, PIC
+    if (!isKnownFormat && !isWebP && resp.body.size() > 4) {
+        int testW, testH, testC;
+        if (stbi_info_from_memory(
+                reinterpret_cast<const unsigned char*>(resp.body.data()),
+                static_cast<int>(resp.body.size()),
+                &testW, &testH, &testC)) {
+            isKnownFormat = true;
+            brls::Logger::info("ImageLoader: stb_image detected unknown format image {}x{} for {}",
+                              testW, testH, url);
+        }
+    }
+
+    if (!isKnownFormat) {
+        brls::Logger::warning("ImageLoader: Unrecognized image format for {}", url);
         return;
     }
 
-    // Convert WebP if needed
+    // Convert and downscale all image formats for thumbnails
     std::vector<uint8_t> imageData;
     if (isWebP) {
         imageData = convertWebPtoTGA(
@@ -445,17 +611,21 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             return;
         }
     } else {
-        imageData.assign(resp.body.begin(), resp.body.end());
+        // Downscale JPEG/PNG thumbnails too (not just WebP)
+        // This reduces memory usage and makes cache more effective
+        imageData = convertImageToTGA(
+            reinterpret_cast<const uint8_t*>(resp.body.data()),
+            resp.body.size(),
+            s_maxThumbnailSize
+        );
+        if (imageData.empty()) {
+            // Fallback: use raw data if conversion fails
+            imageData.assign(resp.body.begin(), resp.body.end());
+        }
     }
 
-    // Cache the image in memory (larger cache for big libraries)
-    {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.size() > 80) {
-            s_cache.clear();
-        }
-        s_cache[url] = imageData;
-    }
+    // Cache the image in memory using LRU eviction
+    cachePut(url, imageData);
 
     // Save to disk cache if enabled
     if (Application::getInstance().getSettings().cacheCoverImages) {
@@ -465,12 +635,9 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         }
     }
 
-    // Update UI on main thread
+    // Queue for batched texture upload on main thread
     if (target) {
-        brls::sync([imageData, callback, target]() {
-            target->setImageFromMem(imageData.data(), imageData.size());
-            if (callback) callback(target);
-        });
+        queueTextureUpdate(imageData, target, callback);
     }
 }
 
@@ -542,39 +709,19 @@ void ImageLoader::processQueue() {
 void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target) {
     if (url.empty() || !target) return;
 
-    // Check memory cache first
+    // Check memory cache first (LRU - promotes to front on hit)
+    // This is fast (in-memory map lookup) and safe on the main thread
     {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        auto it = s_cache.find(url);
-        if (it != s_cache.end()) {
-            target->setImageFromMem(it->second.data(), it->second.size());
+        std::vector<uint8_t> cachedData;
+        if (cacheGet(url, cachedData)) {
+            target->setImageFromMem(cachedData.data(), cachedData.size());
             if (callback) callback(target);
             return;
         }
     }
 
-    // Check disk cache if enabled
-    if (Application::getInstance().getSettings().cacheCoverImages) {
-        int mangaId = extractMangaIdFromUrl(url);
-        if (mangaId > 0) {
-            std::vector<uint8_t> diskData;
-            if (LibraryCache::getInstance().loadCoverImage(mangaId, diskData)) {
-                // Found in disk cache - add to memory cache and display
-                {
-                    std::lock_guard<std::mutex> lock(s_cacheMutex);
-                    if (s_cache.size() > 80) {
-                        s_cache.clear();
-                    }
-                    s_cache[url] = diskData;
-                }
-                target->setImageFromMem(diskData.data(), diskData.size());
-                if (callback) callback(target);
-                return;
-            }
-        }
-    }
-
-    // Add to queue for network download
+    // Disk cache and network downloads are handled on background threads
+    // via executeLoad() to avoid blocking the main thread with I/O
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
         s_loadQueue.push({url, callback, target, true});
@@ -633,13 +780,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
 #endif
     } else {
-        // Load from HTTP
-        HttpClient client;
-
-        // Add authentication if needed
-        applyAuthHeaders(client);
-
-        HttpResponse resp = client.get(url);
+        // Load from HTTP with automatic JWT refresh on 401/403
+        HttpResponse resp = authenticatedGet(url, 2);
         if (resp.success && !resp.body.empty()) {
             imageBody = std::move(resp.body);
             loadSuccess = true;
@@ -671,11 +813,29 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
                 isValidImage = true;
             }
+            // BMP
+            else if (data[0] == 0x42 && data[1] == 0x4D) {
+                isJpegOrPng = true;  // Treat like JPEG/PNG (stb_image can decode)
+                isValidImage = true;
+            }
             // WebP
             else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
                      data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
                 isWebP = true;
                 isValidImage = true;
+            }
+        }
+
+        // Fallback: try stb_image for unrecognized formats (.bin, TGA, etc.)
+        if (!isValidImage && imageBody.size() > 4) {
+            int testW, testH, testC;
+            if (stbi_info_from_memory(
+                    reinterpret_cast<const unsigned char*>(imageBody.data()),
+                    static_cast<int>(imageBody.size()),
+                    &testW, &testH, &testC)) {
+                isJpegOrPng = true;  // stb_image can handle it
+                isValidImage = true;
+                brls::Logger::info("ImageLoader: stb_image detected unknown format {}x{} for {}", testW, testH, url);
             }
         }
 
@@ -742,18 +902,12 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             brls::Logger::debug("ImageLoader: Using image directly ({} bytes)", imageData.size());
         }
 
-        // Cache the image (include segment in key if segmented)
+        // Cache the image using LRU (include segment in key if segmented)
         std::string cacheKey = url + "_full";
         if (totalSegments > 1) {
             cacheKey += "_seg" + std::to_string(segment);
         }
-        {
-            std::lock_guard<std::mutex> lock(s_cacheMutex);
-            if (s_cache.size() > 50) {
-                s_cache.clear();
-            }
-            s_cache[cacheKey] = imageData;
-        }
+        cachePut(cacheKey, imageData);
 
         // Update UI on main thread
         brls::sync([imageData, callback, target]() {
@@ -770,13 +924,12 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
 void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target) {
     if (url.empty() || !target) return;
 
-    // Check cache first
+    // Check LRU cache first
     std::string cacheKey = url + "_full";
     {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        auto it = s_cache.find(cacheKey);
-        if (it != s_cache.end()) {
-            target->setImageFromMem(it->second.data(), it->second.size());
+        std::vector<uint8_t> cachedData;
+        if (cacheGet(cacheKey, cachedData)) {
+            target->setImageFromMem(cachedData.data(), cachedData.size());
             if (callback) callback(target);
             return;
         }
@@ -795,13 +948,12 @@ void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, 
                                             RotatableLoadCallback callback, RotatableImage* target) {
     if (url.empty() || !target) return;
 
-    // Check cache first (with segment key)
+    // Check LRU cache first (with segment key)
     std::string cacheKey = url + "_full_seg" + std::to_string(segment);
     {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        auto it = s_cache.find(cacheKey);
-        if (it != s_cache.end()) {
-            target->setImageFromMem(it->second.data(), it->second.size());
+        std::vector<uint8_t> cachedData;
+        if (cacheGet(cacheKey, cachedData)) {
+            target->setImageFromMem(cachedData.data(), cachedData.size());
             if (callback) callback(target);
             return;
         }
@@ -821,7 +973,7 @@ void ImageLoader::preload(const std::string& url) {
 
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.find(url) != s_cache.end()) {
+        if (s_cacheMap.find(url) != s_cacheMap.end()) {
             return;
         }
     }
@@ -880,12 +1032,8 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
         }
 #endif
     } else {
-        HttpClient client;
-
-        // Add authentication if needed
-        applyAuthHeaders(client);
-
-        HttpResponse resp = client.get(url);
+        // Load from HTTP with automatic JWT refresh on 401/403
+        HttpResponse resp = authenticatedGet(url, 2);
         if (resp.success && !resp.body.empty()) {
             imageData = std::move(resp.body);
             loadSuccess = true;
@@ -961,7 +1109,7 @@ void ImageLoader::preloadFullSize(const std::string& url) {
     // Check if already cached
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.find(cacheKey) != s_cache.end()) {
+        if (s_cacheMap.find(cacheKey) != s_cacheMap.end()) {
             return;
         }
     }
@@ -977,7 +1125,8 @@ void ImageLoader::preloadFullSize(const std::string& url) {
 
 void ImageLoader::clearCache() {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
-    s_cache.clear();
+    s_cacheList.clear();
+    s_cacheMap.clear();
 }
 
 void ImageLoader::cancelAll() {
@@ -987,6 +1136,13 @@ void ImageLoader::cancelAll() {
     }
     while (!s_rotatableLoadQueue.empty()) {
         s_rotatableLoadQueue.pop();
+    }
+    // Also clear pending texture uploads
+    {
+        std::lock_guard<std::mutex> lock2(s_pendingMutex);
+        while (!s_pendingTextures.empty()) {
+            s_pendingTextures.pop();
+        }
     }
 }
 

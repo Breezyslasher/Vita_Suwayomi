@@ -62,6 +62,9 @@ public:
     // Focus a specific cell by index
     void focusIndex(int index);
 
+    // Load thumbnails around a specific cell index (called on focus change)
+    void loadThumbnailsNearIndex(int index);
+
     static brls::View* create();
 
 private:
