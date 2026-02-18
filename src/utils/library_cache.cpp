@@ -408,7 +408,7 @@ void LibraryCache::invalidateCategoryCache(int categoryId) {
 bool LibraryCache::saveCoverImage(int mangaId, const std::vector<uint8_t>& imageData) {
     if (!m_coverCacheEnabled || imageData.empty()) return false;
 
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_coverMutex);
 
     std::string path = getCoverCachePath(mangaId);
 
@@ -434,7 +434,7 @@ bool LibraryCache::saveCoverImage(int mangaId, const std::vector<uint8_t>& image
 bool LibraryCache::loadCoverImage(int mangaId, std::vector<uint8_t>& imageData) {
     if (!m_coverCacheEnabled) return false;
 
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_coverMutex);
 
     std::string path = getCoverCachePath(mangaId);
     imageData.clear();

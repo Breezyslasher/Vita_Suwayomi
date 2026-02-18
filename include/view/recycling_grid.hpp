@@ -10,6 +10,7 @@
 #include <functional>
 #include <vector>
 #include <set>
+#include <memory>
 
 namespace vitasuwayomi {
 
@@ -18,6 +19,7 @@ class MangaItemCell;
 class RecyclingGrid : public brls::ScrollingFrame {
 public:
     RecyclingGrid();
+    ~RecyclingGrid();
 
     void setDataSource(const std::vector<Manga>& items);
     void updateDataOrder(const std::vector<Manga>& items);  // Update cell data in place without rebuilding grid
@@ -69,6 +71,8 @@ public:
 
 private:
     void setupGrid();
+    void createRowRange(int startRow, int endRow);  // Create rows [startRow, endRow)
+    void buildNextRowBatch();  // Continue incremental grid building
     void updateVisibleCells();
     void onItemClicked(int index);
 
@@ -109,6 +113,13 @@ private:
 
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;
+
+    // Incremental grid building state - spreads cell creation across frames
+    // to prevent multi-second freezes on large libraries (98+ books)
+    std::shared_ptr<bool> m_alive;
+    int m_incrementalBuildRow = 0;
+    int m_totalRowsNeeded = 0;
+    bool m_incrementalBuildActive = false;
 };
 
 } // namespace vitasuwayomi

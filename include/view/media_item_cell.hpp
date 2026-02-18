@@ -51,6 +51,8 @@ private:
     Manga m_manga;
     std::string m_originalTitle;
     bool m_thumbnailLoaded = false;
+    bool m_starImageLoaded = false;       // Lazy: load star.png only when first shown
+    bool m_startHintImageLoaded = false;  // Lazy: load start_button.png only when first shown
 
     brls::Image* m_thumbnailImage = nullptr;
     brls::Box* m_titleOverlay = nullptr;  // Title overlay container (grid mode)
