@@ -95,6 +95,9 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
 
     brls::Logger::debug("RecyclingGrid: updateDataOrder - updating {} cells in place", items.size());
 
+    // Save old items to detect which cells actually changed manga
+    std::vector<Manga> oldItems = std::move(m_items);
+
     // Update internal data
     m_items = items;
 
@@ -106,8 +109,11 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
     for (size_t i = 0; i < m_cells.size() && i < items.size(); i++) {
         MangaItemCell* cell = m_cells[i];
         if (cell) {
-            // Use immediate load for visible cells, deferred for others
-            if (static_cast<int>(i) < cellsInInitialRows) {
+            // If same manga at same position, only update metadata (preserves loaded thumbnail)
+            if (i < oldItems.size() && oldItems[i].id == items[i].id) {
+                cell->updateMangaData(items[i]);
+            } else if (static_cast<int>(i) < cellsInInitialRows) {
+                // Different manga - reload with thumbnail
                 cell->setManga(items[i]);
             } else {
                 cell->setMangaDeferred(items[i]);

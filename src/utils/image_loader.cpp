@@ -28,6 +28,9 @@
 // If not found, you may need to add it to the project
 #define STBI_ONLY_JPEG
 #define STBI_ONLY_PNG
+#define STBI_ONLY_BMP
+#define STBI_ONLY_TGA
+#define STBI_ONLY_GIF
 #define STBI_NO_HDR
 #define STBI_NO_LINEAR
 #define STB_IMAGE_STATIC
@@ -465,28 +468,46 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
 
     // Check image format
     bool isWebP = false;
-    bool isValidImage = false;
+    bool isKnownFormat = false;
 
     if (resp.body.size() > 12) {
         unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
 
         if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
-            isValidImage = true;  // JPEG
+            isKnownFormat = true;  // JPEG
         }
         else if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
-            isValidImage = true;  // PNG
+            isKnownFormat = true;  // PNG
         }
         else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
-            isValidImage = true;  // GIF
+            isKnownFormat = true;  // GIF
+        }
+        else if (data[0] == 0x42 && data[1] == 0x4D) {
+            isKnownFormat = true;  // BMP
         }
         else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
                  data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
             isWebP = true;
-            isValidImage = true;
+            isKnownFormat = true;
         }
     }
 
-    if (!isValidImage) {
+    // For unrecognized formats (.bin, etc.), try stb_image as fallback
+    // stb_image can auto-detect JPEG, PNG, BMP, GIF, TGA, PSD, PIC
+    if (!isKnownFormat && !isWebP && resp.body.size() > 4) {
+        int testW, testH, testC;
+        if (stbi_info_from_memory(
+                reinterpret_cast<const unsigned char*>(resp.body.data()),
+                static_cast<int>(resp.body.size()),
+                &testW, &testH, &testC)) {
+            isKnownFormat = true;
+            brls::Logger::info("ImageLoader: stb_image detected unknown format image {}x{} for {}",
+                              testW, testH, url);
+        }
+    }
+
+    if (!isKnownFormat) {
+        brls::Logger::warning("ImageLoader: Unrecognized image format for {}", url);
         return;
     }
 
@@ -712,11 +733,29 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
                 isValidImage = true;
             }
+            // BMP
+            else if (data[0] == 0x42 && data[1] == 0x4D) {
+                isJpegOrPng = true;  // Treat like JPEG/PNG (stb_image can decode)
+                isValidImage = true;
+            }
             // WebP
             else if (data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
                      data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) {
                 isWebP = true;
                 isValidImage = true;
+            }
+        }
+
+        // Fallback: try stb_image for unrecognized formats (.bin, TGA, etc.)
+        if (!isValidImage && imageBody.size() > 4) {
+            int testW, testH, testC;
+            if (stbi_info_from_memory(
+                    reinterpret_cast<const unsigned char*>(imageBody.data()),
+                    static_cast<int>(imageBody.size()),
+                    &testW, &testH, &testC)) {
+                isJpegOrPng = true;  // stb_image can handle it
+                isValidImage = true;
+                brls::Logger::info("ImageLoader: stb_image detected unknown format {}x{} for {}", testW, testH, url);
             }
         }
 
