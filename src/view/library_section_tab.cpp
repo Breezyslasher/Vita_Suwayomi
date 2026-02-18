@@ -369,6 +369,10 @@ void LibrarySectionTab::loadCategories() {
     // Determine default category for combined query
     int prefetchCategoryId = Application::getInstance().getSettings().defaultCategoryId;
 
+    // Mark that the combined query is fetching this category's manga,
+    // so loadCategoryManga() can skip its own redundant server fetch
+    m_combinedQueryCategoryId = prefetchCategoryId;
+
     asyncRun([this, aliveWeak, cacheEnabled, prefetchCategoryId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Category> categories;
@@ -396,6 +400,7 @@ void LibrarySectionTab::loadCategories() {
                     createCategoryTabs();
                     selectCategory(0);
                 }
+                m_combinedQueryCategoryId = -1;
             });
             return;
         }
@@ -504,6 +509,9 @@ void LibrarySectionTab::loadCategories() {
                 // No prefetched manga or category changed - use normal selectCategory flow
                 selectCategory(selectedId);
             }
+
+            // Combined query done - allow loadCategoryManga to fetch from server again
+            m_combinedQueryCategoryId = -1;
         });
     });
 }
@@ -749,6 +757,15 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
     }
 
     std::weak_ptr<bool> aliveWeak = m_alive;
+
+    // Skip the separate server fetch if the combined query from loadCategories()
+    // is already fetching manga for this exact category. This avoids a redundant
+    // network round-trip and a second main-thread update callback that could freeze the UI.
+    if (m_combinedQueryCategoryId == categoryId) {
+        brls::Logger::info("LibrarySectionTab: Skipping redundant fetch for category {} (combined query in progress)",
+                          categoryId);
+        return;
+    }
 
     asyncRun([this, categoryId, aliveWeak, cacheEnabled, isSameCategory]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -1938,23 +1955,35 @@ void LibrarySectionTab::updateMangaCellsIncrementally(const std::vector<Manga>& 
     brls::Logger::debug("LibrarySectionTab: updateMangaCellsIncrementally - {} new, {} cached",
                        newManga.size(), m_cachedMangaList.size());
 
-    // Check if structure changed (different IDs or count)
-    bool structureChanged = (newManga.size() != m_cachedMangaList.size());
-    if (!structureChanged) {
-        for (size_t i = 0; i < newManga.size(); i++) {
-            if (newManga[i].id != m_cachedMangaList[i].id) {
-                structureChanged = true;
+    // Use set-based comparison to detect actual structural changes (books added/removed)
+    // Positional comparison would falsely trigger a full rebuild when the server returns
+    // the same books in a different order, causing a multi-second freeze on 75+ book libraries
+    bool sizeChanged = (newManga.size() != m_cachedMangaList.size());
+    bool idsChanged = false;
+
+    if (!sizeChanged) {
+        // Build set of cached IDs for O(n) comparison
+        std::set<int> cachedIds;
+        for (const auto& c : m_cachedMangaList) {
+            cachedIds.insert(c.id);
+        }
+        for (const auto& m : newManga) {
+            if (cachedIds.find(m.id) == cachedIds.end()) {
+                idsChanged = true;
                 break;
             }
         }
     }
 
+    bool structureChanged = sizeChanged || idsChanged;
+
     // Update full list
     m_fullMangaList = newManga;
 
     if (structureChanged) {
-        brls::Logger::debug("LibrarySectionTab: Structure changed, doing full rebuild");
-        // Structure changed, need full rebuild
+        brls::Logger::debug("LibrarySectionTab: Structure changed (size={} ids={}), doing full rebuild",
+                           sizeChanged, idsChanged);
+        // Books were actually added or removed, need full rebuild
         m_mangaList = newManga;
         sortMangaList();  // This will call setDataSource
 
