@@ -507,7 +507,7 @@ void ReaderActivity::onContentAvailable() {
         backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
     }
 
-    // Set up page slider
+    // Page slider in bottom bar
     if (pageSlider) {
         pageSlider->getProgressEvent()->subscribe([this](float progress) {
             if (m_pages.empty()) return;
@@ -518,7 +518,7 @@ void ReaderActivity::onContentAvailable() {
         });
     }
 
-    // Set up chapter navigation buttons
+    // Chapter navigation buttons in bottom bar
     if (prevChapterBtn) {
         prevChapterBtn->registerClickAction([this](brls::View*) {
             previousChapter();
@@ -535,7 +535,7 @@ void ReaderActivity::onContentAvailable() {
         nextChapterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(nextChapterBtn));
     }
 
-    // Set up settings button
+    // Settings button in top bar
     if (settingsBtn) {
         settingsBtn->registerClickAction([this](brls::View*) {
             showSettings();
@@ -680,6 +680,7 @@ void ReaderActivity::loadPages() {
     bool isWebtoonMode = m_settings.isWebtoonFormat;
     int mangaId = m_mangaId;
     int chapterIndex = m_chapterIndex;
+    std::weak_ptr<bool> aliveWeak = m_alive;
 
     vitasuwayomi::asyncTask<bool>([this, isWebtoonMode, mangaId, chapterIndex]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -778,7 +779,10 @@ void ReaderActivity::loadPages() {
         m_totalChapters = static_cast<int>(m_chapters.size());
 
         return true;
-    }, [this, isWebtoonMode](bool success) {
+    }, [this, isWebtoonMode, aliveWeak](bool success) {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive) return;
+
         if (!success || m_pages.empty()) {
             brls::Logger::error("No pages to display");
 
@@ -1216,6 +1220,11 @@ void ReaderActivity::showSettings() {
         settingsOverlay->setVisibility(brls::Visibility::VISIBLE);
         m_settingsVisible = true;
 
+        // Give focus to the first settings button
+        if (settingsFormatBtn) {
+            brls::Application::giveFocus(settingsFormatBtn);
+        }
+
         // Register circle button to close settings while overlay is visible
         this->registerAction("Close Settings", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
             hideSettings();
@@ -1230,6 +1239,13 @@ void ReaderActivity::hideSettings() {
     if (settingsOverlay) {
         settingsOverlay->setVisibility(brls::Visibility::GONE);
         m_settingsVisible = false;
+
+        // Return focus to the content view
+        if (m_continuousScrollMode && webtoonScroll) {
+            brls::Application::giveFocus(webtoonScroll);
+        } else if (pageImage) {
+            brls::Application::giveFocus(pageImage);
+        }
 
         // Restore normal circle button behavior (close reader)
         this->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
@@ -1744,6 +1760,9 @@ void ReaderActivity::updateReaderMode() {
 
 void ReaderActivity::willDisappear(bool resetState) {
     Activity::willDisappear(resetState);
+
+    // Invalidate alive flag so pending async callbacks bail out safely
+    *m_alive = false;
 
     // Restore screen dimming when leaving the reader
     if (m_settings.keepScreenOn) {

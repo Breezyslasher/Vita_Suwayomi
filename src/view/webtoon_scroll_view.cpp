@@ -21,6 +21,7 @@ WebtoonScrollView::WebtoonScrollView() {
 }
 
 WebtoonScrollView::~WebtoonScrollView() {
+    *m_alive = false;
     clearPages();
 }
 
@@ -169,6 +170,10 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
 }
 
 void WebtoonScrollView::clearPages() {
+    // Invalidate alive flag so pending async image loads don't access deleted pointers
+    *m_alive = false;
+    m_alive = std::make_shared<bool>(true);
+
     for (auto* img : m_pageImages) {
         delete img;
     }
@@ -391,6 +396,9 @@ void WebtoonScrollView::updateVisibleImages() {
     int loadStart = std::max(0, firstVisible - PRELOAD_PAGES);
     int loadEnd = std::min(static_cast<int>(m_pages.size()) - 1, lastVisible + PRELOAD_PAGES);
 
+    // Capture alive flag for async callbacks
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
     // Load pages in range
     for (int i = loadStart; i <= loadEnd; i++) {
         if (m_loadedPages.count(i) > 0 || m_loadingPages.count(i) > 0) {
@@ -408,11 +416,13 @@ void WebtoonScrollView::updateVisibleImages() {
             // Segmented webtoon page
             ImageLoader::loadAsyncFullSizeSegment(
                 page.imageUrl, page.segment, page.totalSegments,
-                [this, pageIndex, img](RotatableImage* loadedImg) {
+                [this, aliveWeak, pageIndex, img](RotatableImage* loadedImg) {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+
                     m_loadingPages.erase(pageIndex);
                     m_loadedPages.insert(pageIndex);
 
-                    // Update page height based on actual image dimensions
                     if (img->hasImage()) {
                         float imageWidth = static_cast<float>(img->getImageWidth());
                         float imageHeight = static_cast<float>(img->getImageHeight());
@@ -422,7 +432,6 @@ void WebtoonScrollView::updateVisibleImages() {
                             float aspectRatio = imageHeight / imageWidth;
                             float newHeight = availableWidth * aspectRatio;
 
-                            // Update total height
                             float oldHeight = m_pageHeights[pageIndex];
                             m_totalHeight += (newHeight - oldHeight);
                             m_pageHeights[pageIndex] = newHeight;
@@ -435,11 +444,13 @@ void WebtoonScrollView::updateVisibleImages() {
         } else {
             // Regular page
             ImageLoader::loadAsyncFullSize(page.imageUrl,
-                [this, pageIndex, img](RotatableImage* loadedImg) {
+                [this, aliveWeak, pageIndex, img](RotatableImage* loadedImg) {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+
                     m_loadingPages.erase(pageIndex);
                     m_loadedPages.insert(pageIndex);
 
-                    // Update page height based on actual image dimensions
                     if (img->hasImage()) {
                         float imageWidth = static_cast<float>(img->getImageWidth());
                         float imageHeight = static_cast<float>(img->getImageHeight());
@@ -449,7 +460,6 @@ void WebtoonScrollView::updateVisibleImages() {
                             float aspectRatio = imageHeight / imageWidth;
                             float newHeight = availableWidth * aspectRatio;
 
-                            // Update total height
                             float oldHeight = m_pageHeights[pageIndex];
                             m_totalHeight += (newHeight - oldHeight);
                             m_pageHeights[pageIndex] = newHeight;

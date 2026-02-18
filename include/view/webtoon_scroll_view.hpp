@@ -9,6 +9,7 @@
 #include <vector>
 #include <set>
 #include <functional>
+#include <memory>
 #include "view/rotatable_image.hpp"
 #include "app/suwayomi_client.hpp"
 
@@ -157,6 +158,9 @@ private:
     // Callbacks
     ScrollProgressCallback m_progressCallback;
     TapCallback m_tapCallback;
+
+    // Alive flag for async callback safety (cleared in clearPages/destructor)
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 
     // Preload buffer - how many pages ahead/behind to load
     static constexpr int PRELOAD_PAGES = 3;
