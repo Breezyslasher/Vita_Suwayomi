@@ -54,6 +54,11 @@ std::atomic<int> ImageLoader::s_activeLoads{0};
 int ImageLoader::s_maxConcurrentLoads = 4;  // Increased for faster library loading
 int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
+// Batched texture upload queue
+std::queue<ImageLoader::PendingTextureUpdate> ImageLoader::s_pendingTextures;
+std::mutex ImageLoader::s_pendingMutex;
+std::atomic<bool> ImageLoader::s_pendingScheduled{false};
+
 // Flag to track if queue processor is running
 static std::atomic<bool> s_processorRunning{false};
 
@@ -415,6 +420,58 @@ bool ImageLoader::cacheGet(const std::string& url, std::vector<uint8_t>& data) {
     return true;
 }
 
+void ImageLoader::queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback) {
+    {
+        std::lock_guard<std::mutex> lock(s_pendingMutex);
+        s_pendingTextures.push({data, target, callback});
+    }
+
+    // Schedule processing if not already scheduled
+    bool expected = false;
+    if (s_pendingScheduled.compare_exchange_strong(expected, true)) {
+        brls::sync([]() {
+            processPendingTextures();
+        });
+    }
+}
+
+void ImageLoader::processPendingTextures() {
+    s_pendingScheduled = false;
+
+    // Process up to MAX_TEXTURES_PER_FRAME textures this frame
+    int processed = 0;
+    while (processed < MAX_TEXTURES_PER_FRAME) {
+        PendingTextureUpdate update;
+        {
+            std::lock_guard<std::mutex> lock(s_pendingMutex);
+            if (s_pendingTextures.empty()) return;
+            update = std::move(s_pendingTextures.front());
+            s_pendingTextures.pop();
+        }
+
+        if (update.target) {
+            update.target->setImageFromMem(update.data.data(), update.data.size());
+            if (update.callback) update.callback(update.target);
+        }
+        processed++;
+    }
+
+    // If more pending, schedule another batch for the next frame
+    bool morePending = false;
+    {
+        std::lock_guard<std::mutex> lock(s_pendingMutex);
+        morePending = !s_pendingTextures.empty();
+    }
+    if (morePending) {
+        bool expected = false;
+        if (s_pendingScheduled.compare_exchange_strong(expected, true)) {
+            brls::sync([]() {
+                processPendingTextures();
+            });
+        }
+    }
+}
+
 void ImageLoader::executeLoad(const LoadRequest& request) {
     const std::string& url = request.url;
     brls::Image* target = request.target;
@@ -426,13 +483,12 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         if (mangaId > 0) {
             std::vector<uint8_t> diskData;
             if (LibraryCache::getInstance().loadCoverImage(mangaId, diskData)) {
-                // Found in disk cache - add to memory LRU cache and display
+                // Found in disk cache - add to memory LRU cache
                 cachePut(url, diskData);
+                // Queue for batched texture upload (prevents main thread freeze
+                // when 50+ covers load from disk cache simultaneously)
                 if (target) {
-                    brls::sync([diskData, callback, target]() {
-                        target->setImageFromMem(diskData.data(), diskData.size());
-                        if (callback) callback(target);
-                    });
+                    queueTextureUpdate(diskData, target, callback);
                 }
                 return;
             }
@@ -547,12 +603,9 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         }
     }
 
-    // Update UI on main thread
+    // Queue for batched texture upload on main thread
     if (target) {
-        brls::sync([imageData, callback, target]() {
-            target->setImageFromMem(imageData.data(), imageData.size());
-            if (callback) callback(target);
-        });
+        queueTextureUpdate(imageData, target, callback);
     }
 }
 
@@ -1060,6 +1113,13 @@ void ImageLoader::cancelAll() {
     }
     while (!s_rotatableLoadQueue.empty()) {
         s_rotatableLoadQueue.pop();
+    }
+    // Also clear pending texture uploads
+    {
+        std::lock_guard<std::mutex> lock2(s_pendingMutex);
+        while (!s_pendingTextures.empty()) {
+            s_pendingTextures.pop();
+        }
     }
 }
 

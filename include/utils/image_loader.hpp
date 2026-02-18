@@ -117,6 +117,25 @@ private:
     static std::atomic<int> s_activeLoads;
     static int s_maxConcurrentLoads;
     static int s_maxThumbnailSize;
+
+    // Batched texture upload queue - prevents main thread freeze from
+    // 50+ GPU texture uploads arriving simultaneously from disk cache reads.
+    // Background threads push completed images here instead of calling brls::sync() directly.
+    // A single scheduled callback processes a few textures per frame.
+    struct PendingTextureUpdate {
+        std::vector<uint8_t> data;
+        brls::Image* target;
+        LoadCallback callback;
+    };
+    static std::queue<PendingTextureUpdate> s_pendingTextures;
+    static std::mutex s_pendingMutex;
+    static std::atomic<bool> s_pendingScheduled;
+    static constexpr int MAX_TEXTURES_PER_FRAME = 4;  // Limit GPU uploads per frame
+
+    // Queue a texture for batched upload on the main thread
+    static void queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback);
+    // Process a batch of pending texture uploads (called on main thread)
+    static void processPendingTextures();
 };
 
 } // namespace vitasuwayomi
