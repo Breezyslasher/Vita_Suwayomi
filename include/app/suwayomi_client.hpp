@@ -473,6 +473,10 @@ public:
     bool removeMangaFromCategory(int mangaId, int categoryId);
     bool fetchCategoryManga(int categoryId, std::vector<Manga>& manga);
 
+    // Combined/parallel fetch operations (single request for multiple data)
+    bool fetchCategoriesWithManga(std::vector<Category>& categories, int categoryId, std::vector<Manga>& manga);
+    bool fetchMangaWithChapters(int mangaId, Manga& manga, std::vector<Chapter>& chapters);
+
     // Library Operations
     bool fetchLibraryManga(std::vector<Manga>& manga);
     bool fetchLibraryMangaByCategory(int categoryId, std::vector<Manga>& manga);
@@ -604,6 +608,8 @@ private:
     bool setMangaCategoriesGraphQL(int mangaId, const std::vector<int>& categoryIds);
     bool fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga);
     bool fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga);
+    bool fetchCategoriesWithMangaGraphQL(std::vector<Category>& categories, int categoryId, std::vector<Manga>& manga);
+    bool fetchMangaWithChaptersGraphQL(int mangaId, Manga& manga, std::vector<Chapter>& chapters);
 
     // Category Management GraphQL methods
     bool createCategoryGraphQL(const std::string& name);

@@ -1710,6 +1710,197 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
 }
 
 // ============================================================================
+// Combined/Parallel GraphQL queries
+// ============================================================================
+
+bool SuwayomiClient::fetchCategoriesWithMangaGraphQL(std::vector<Category>& categories, int categoryId, std::vector<Manga>& manga) {
+    const char* query = R"(
+        query GetCategoriesAndManga($categoryId: Int!) {
+            categories {
+                nodes {
+                    id
+                    name
+                    order
+                    mangas {
+                        totalCount
+                    }
+                }
+            }
+            mangas(
+                filter: {
+                    inLibrary: { equalTo: true }
+                    categoryId: { equalTo: $categoryId }
+                }
+            ) {
+                nodes {
+                    id
+                    title
+                    thumbnailUrl
+                    author
+                    artist
+                    description
+                    genre
+                    status
+                    inLibrary
+                    inLibraryAt
+                    unreadCount
+                    downloadCount
+                    source {
+                        displayName
+                    }
+                    chapters {
+                        totalCount
+                    }
+                    lastReadChapter {
+                        lastReadAt
+                    }
+                    latestUploadedChapter {
+                        uploadDate
+                    }
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"categoryId\":" + std::to_string(categoryId) + "}";
+    brls::Logger::info("GraphQL: Fetching categories + manga for category {} in single request", categoryId);
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    // Parse categories
+    std::string categoriesObj = extractJsonObject(data, "categories");
+    if (!categoriesObj.empty()) {
+        std::string nodesJson = extractJsonArray(categoriesObj, "nodes");
+        categories.clear();
+        std::vector<std::string> items = splitJsonArray(nodesJson);
+        for (const auto& item : items) {
+            categories.push_back(parseCategoryFromGraphQL(item));
+        }
+        brls::Logger::debug("GraphQL combined: Fetched {} categories", categories.size());
+    }
+
+    // Parse manga
+    std::string mangasObj = extractJsonObject(data, "mangas");
+    if (!mangasObj.empty()) {
+        std::string nodesJson = extractJsonArray(mangasObj, "nodes");
+        manga.clear();
+        std::vector<std::string> items = splitJsonArray(nodesJson);
+        for (const auto& item : items) {
+            manga.push_back(parseMangaFromGraphQL(item));
+        }
+        brls::Logger::debug("GraphQL combined: Fetched {} manga for category {}", manga.size(), categoryId);
+    }
+
+    return !categories.empty();
+}
+
+bool SuwayomiClient::fetchCategoriesWithManga(std::vector<Category>& categories, int categoryId, std::vector<Manga>& manga) {
+    if (fetchCategoriesWithMangaGraphQL(categories, categoryId, manga)) {
+        return true;
+    }
+
+    // Fallback: fetch separately
+    brls::Logger::info("Combined query failed, falling back to separate fetches");
+    if (!fetchCategories(categories)) {
+        return false;
+    }
+    fetchCategoryManga(categoryId, manga);
+    return true;
+}
+
+bool SuwayomiClient::fetchMangaWithChaptersGraphQL(int mangaId, Manga& manga, std::vector<Chapter>& chapters) {
+    const char* query = R"(
+        query GetMangaWithChapters($mangaId: Int!) {
+            manga(id: $mangaId) {
+                id
+                title
+                thumbnailUrl
+                author
+                artist
+                description
+                genre
+                status
+                url
+                inLibrary
+                initialized
+                source {
+                    displayName
+                }
+            }
+            chapters(
+                condition: { mangaId: $mangaId }
+                first: 1000
+                orderBy: SOURCE_ORDER
+                orderByType: DESC
+            ) {
+                nodes {
+                    id
+                    name
+                    chapterNumber
+                    scanlator
+                    uploadDate
+                    isRead
+                    isDownloaded
+                    isBookmarked
+                    pageCount
+                    lastPageRead
+                    lastReadAt
+                    sourceOrder
+                }
+                totalCount
+            }
+        }
+    )";
+
+    std::string variables = "{\"mangaId\":" + std::to_string(mangaId) + "}";
+    brls::Logger::info("GraphQL: Fetching manga details + chapters for manga {} in single request", mangaId);
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    // Parse manga details
+    std::string mangaJson = extractJsonObject(data, "manga");
+    if (!mangaJson.empty()) {
+        manga = parseMangaFromGraphQL(mangaJson);
+    }
+
+    // Parse chapters
+    std::string chaptersObj = extractJsonObject(data, "chapters");
+    if (!chaptersObj.empty()) {
+        std::string nodesJson = extractJsonArray(chaptersObj, "nodes");
+        chapters.clear();
+        std::vector<std::string> items = splitJsonArray(nodesJson);
+        for (const auto& item : items) {
+            Chapter ch = parseChapterFromGraphQL(item);
+            ch.mangaId = mangaId;
+            chapters.push_back(ch);
+        }
+        brls::Logger::debug("GraphQL combined: Fetched {} chapters for manga {}", chapters.size(), mangaId);
+    }
+
+    return manga.id > 0;
+}
+
+bool SuwayomiClient::fetchMangaWithChapters(int mangaId, Manga& manga, std::vector<Chapter>& chapters) {
+    if (fetchMangaWithChaptersGraphQL(mangaId, manga, chapters)) {
+        return true;
+    }
+
+    // Fallback: fetch separately
+    brls::Logger::info("Combined manga+chapters query failed, falling back to separate fetches");
+    bool gotManga = fetchManga(mangaId, manga);
+    bool gotChapters = fetchChapters(mangaId, chapters);
+    return gotManga || gotChapters;
+}
+
+// ============================================================================
 // Connection & Server Info
 // ============================================================================
 

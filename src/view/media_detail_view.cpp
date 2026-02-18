@@ -593,39 +593,52 @@ void MangaDetailView::willDisappear(bool resetState) {
 void MangaDetailView::loadDetails() {
     brls::Logger::debug("MangaDetailView: Loading details for manga {}", m_manga.id);
 
-    // Load cover
+    // Load cover (async image loading - parallel)
     loadCover();
 
-    // Load chapters
-    loadChapters();
-
-    // Load tracking data
+    // Load tracking data (parallel)
     loadTrackingData();
 
-    // Fetch full manga details from API if description is empty
     if (m_manga.description.empty()) {
-        brls::Logger::info("MangaDetailView: Description is empty, fetching from API...");
+        // Description missing: use combined query to fetch manga details + chapters in one request
+        // This saves a network round-trip vs fetching them separately
+        brls::Logger::info("MangaDetailView: Using combined query for details + chapters");
         asyncRun([this]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             Manga updatedManga;
+            std::vector<Chapter> chapters;
 
-            if (client.fetchManga(m_manga.id, updatedManga)) {
-                brls::sync([this, updatedManga, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) {
-                        return;
+            if (client.fetchMangaWithChapters(m_manga.id, updatedManga, chapters)) {
+                brls::Logger::info("MangaDetailView: Combined query got manga details + {} chapters", chapters.size());
+
+                // Handle auto-download
+                bool autoDownload = Application::getInstance().getSettings().autoDownloadChapters;
+                std::vector<int> chaptersToDownload;
+                if (autoDownload) {
+                    for (const auto& ch : chapters) {
+                        if (!ch.read && !ch.downloaded) {
+                            chaptersToDownload.push_back(ch.id);
+                        }
                     }
+                    if (!chaptersToDownload.empty()) {
+                        brls::Logger::info("MangaDetailView: autoDownloadChapters - queuing {} unread chapters",
+                                          chaptersToDownload.size());
+                        client.queueChapterDownloads(chaptersToDownload);
+                    }
+                }
 
+                brls::sync([this, updatedManga, chapters, chaptersToDownload,
+                            aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+
+                    // Apply manga details
                     bool needsUpdate = false;
-
-                    // Update description if we got one
                     if (!updatedManga.description.empty()) {
                         m_manga.description = updatedManga.description;
                         m_fullDescription = updatedManga.description;
                         m_descriptionExpanded = false;
                         needsUpdate = true;
-
-                        // Update the description label
                         if (m_descriptionLabel) {
                             std::string truncatedDesc = m_fullDescription;
                             if (truncatedDesc.length() > 80) {
@@ -634,8 +647,6 @@ void MangaDetailView::loadDetails() {
                             m_descriptionLabel->setText(truncatedDesc);
                         }
                     }
-
-                    // Update other fields from API response
                     if (!updatedManga.author.empty() && m_manga.author.empty()) {
                         m_manga.author = updatedManga.author;
                         if (m_authorLabel) {
@@ -660,7 +671,6 @@ void MangaDetailView::loadDetails() {
                         }
                         needsUpdate = true;
                     }
-                    // Update status if we got a valid one
                     if (updatedManga.status != MangaStatus::UNKNOWN &&
                         m_manga.status == MangaStatus::UNKNOWN) {
                         m_manga.status = updatedManga.status;
@@ -669,15 +679,70 @@ void MangaDetailView::loadDetails() {
                         }
                         needsUpdate = true;
                     }
-
-                    // Save updated manga details to cache
                     if (needsUpdate) {
                         LibraryCache::getInstance().saveMangaDetails(m_manga);
-                        brls::Logger::info("MangaDetailView: Updated and cached manga details from API");
+                        brls::Logger::info("MangaDetailView: Updated and cached manga details from combined query");
+                    }
+
+                    // Apply chapters
+                    m_chapters = chapters;
+                    populateChaptersList();
+                    if (m_chapterCountLabel) {
+                        std::string info = std::to_string(m_chapters.size()) + " chapters";
+                        int unread = 0;
+                        for (const auto& ch : m_chapters) {
+                            if (!ch.read) unread++;
+                        }
+                        if (unread > 0) {
+                            info += " (" + std::to_string(unread) + " unread)";
+                        }
+                        m_chapterCountLabel->setText(info);
+                    }
+                    updateReadButtonText();
+                    if (!chaptersToDownload.empty()) {
+                        brls::Application::notify("Auto-downloading " +
+                            std::to_string(chaptersToDownload.size()) + " new chapters");
                     }
                 });
+            } else {
+                // Combined query failed - fall back to separate fetches
+                brls::Logger::warning("MangaDetailView: Combined query failed, using separate fetches");
+                brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    loadChapters();
+                });
+
+                // Also try fetching manga details separately
+                Manga fallbackManga;
+                if (client.fetchManga(m_manga.id, fallbackManga)) {
+                    brls::sync([this, fallbackManga, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
+                        bool needsUpdate = false;
+                        if (!fallbackManga.description.empty()) {
+                            m_manga.description = fallbackManga.description;
+                            m_fullDescription = fallbackManga.description;
+                            m_descriptionExpanded = false;
+                            needsUpdate = true;
+                            if (m_descriptionLabel) {
+                                std::string truncatedDesc = m_fullDescription;
+                                if (truncatedDesc.length() > 80) {
+                                    truncatedDesc = truncatedDesc.substr(0, 77) + "... [L]";
+                                }
+                                m_descriptionLabel->setText(truncatedDesc);
+                            }
+                        }
+                        if (needsUpdate) {
+                            LibraryCache::getInstance().saveMangaDetails(m_manga);
+                        }
+                    });
+                }
             }
         });
+    } else {
+        // Description already available - just load chapters (parallel with cover + tracking above)
+        loadChapters();
     }
 }
 
