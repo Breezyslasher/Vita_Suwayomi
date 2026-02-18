@@ -659,7 +659,7 @@ void SettingsTab::createReaderSection() {
     // Page scale mode selector
     m_pageScaleModeSelector = new brls::SelectorCell();
     m_pageScaleModeSelector->init("Page Scale",
-        {"Fit Screen", "Fit Width", "Fit Height", "Original"},
+        {"Fit Screen", "Fit Width", "Fit Height", "Original Size (1:1)"},
         static_cast<int>(settings.pageScaleMode),
         [&settings](int index) {
             settings.pageScaleMode = static_cast<PageScaleMode>(index);

@@ -10,6 +10,14 @@
 
 namespace vitasuwayomi {
 
+// Custom scale modes for the reader (more granular than borealis)
+enum class ImageScaleMode {
+    FIT_SCREEN,     // Fit entire image on screen, maintain aspect ratio
+    FIT_WIDTH,      // Fit width to screen, may crop top/bottom
+    FIT_HEIGHT,     // Fit height to screen, may crop left/right
+    ORIGINAL        // Show at native 1:1 pixel resolution, centered
+};
+
 class RotatableImage : public brls::Box {
 public:
     RotatableImage();
@@ -49,9 +57,20 @@ public:
     void cycleRotation();
 
     /**
-     * Set scaling type (FIT maintains aspect ratio)
+     * Set scaling type (legacy borealis compat - maps to custom mode)
      */
-    void setScalingType(brls::ImageScalingType type) { m_scalingType = type; }
+    void setScalingType(brls::ImageScalingType type) {
+        switch (type) {
+            case brls::ImageScalingType::FIT: m_scaleMode = ImageScaleMode::FIT_SCREEN; break;
+            case brls::ImageScalingType::FILL: m_scaleMode = ImageScaleMode::FIT_WIDTH; break;
+            default: m_scaleMode = ImageScaleMode::FIT_SCREEN; break;
+        }
+    }
+
+    /**
+     * Set custom scale mode (preferred over setScalingType)
+     */
+    void setScaleMode(ImageScaleMode mode) { m_scaleMode = mode; }
 
     /**
      * Set background color (shown in margins when image doesn't fill view)
@@ -102,7 +121,7 @@ private:
     int m_imageHeight = 0;
     float m_rotationDegrees = 0.0f;
     float m_rotationRadians = 0.0f;
-    brls::ImageScalingType m_scalingType = brls::ImageScalingType::FIT;
+    ImageScaleMode m_scaleMode = ImageScaleMode::FIT_SCREEN;
     NVGcolor m_bgColor = nvgRGBA(26, 26, 46, 255);  // Default dark mode color
 
     // Zoom state

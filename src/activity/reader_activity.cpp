@@ -1277,7 +1277,7 @@ void ReaderActivity::updateSettingsLabels() {
             case ReaderScaleMode::FIT_SCREEN: scaleText = "Fit Screen"; break;
             case ReaderScaleMode::FIT_WIDTH: scaleText = "Fit Width"; break;
             case ReaderScaleMode::FIT_HEIGHT: scaleText = "Fit Height"; break;
-            case ReaderScaleMode::ORIGINAL: scaleText = "Original"; break;
+            case ReaderScaleMode::ORIGINAL: scaleText = "Original (1:1)"; break;
         }
         settingsScaleLabel->setText(scaleText);
     }
@@ -1286,33 +1286,27 @@ void ReaderActivity::updateSettingsLabels() {
 void ReaderActivity::applySettings() {
     if (!pageImage) return;
 
-    // Determine scaling type based on mode
-    brls::ImageScalingType scalingType = brls::ImageScalingType::FIT;
+    // Map reader scale mode to image scale mode
+    vitasuwayomi::ImageScaleMode imgMode = vitasuwayomi::ImageScaleMode::FIT_SCREEN;
     switch (m_settings.scaleMode) {
         case ReaderScaleMode::FIT_SCREEN:
-            scalingType = brls::ImageScalingType::FIT;
+            imgMode = vitasuwayomi::ImageScaleMode::FIT_SCREEN;
             break;
         case ReaderScaleMode::FIT_WIDTH:
-            // FIT_WIDTH: fit width to screen, allow vertical scrolling
-            // Use FILL to ensure width fills (may crop vertically)
-            scalingType = brls::ImageScalingType::FILL;
+            imgMode = vitasuwayomi::ImageScaleMode::FIT_WIDTH;
             break;
         case ReaderScaleMode::FIT_HEIGHT:
-            // FIT_HEIGHT: fit height to screen, allow horizontal scrolling
-            // Use FIT to maintain aspect ratio and fit height
-            scalingType = brls::ImageScalingType::FIT;
+            imgMode = vitasuwayomi::ImageScaleMode::FIT_HEIGHT;
             break;
         case ReaderScaleMode::ORIGINAL:
-            // ORIGINAL: no scaling, show image at native resolution
-            // Use SCALE to show at 1:1 pixel ratio
-            scalingType = brls::ImageScalingType::STRETCH;
+            imgMode = vitasuwayomi::ImageScaleMode::ORIGINAL;
             break;
     }
 
     // Apply scaling to both main and preview images
-    pageImage->setScalingType(scalingType);
+    pageImage->setScaleMode(imgMode);
     if (previewImage) {
-        previewImage->setScalingType(scalingType);
+        previewImage->setScaleMode(imgMode);
     }
 
     // Apply rotation to both main and preview images
