@@ -117,9 +117,7 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
 
     // Only load thumbnails for a buffer beyond visible rows (not all remaining)
     int bufferRows = 3;
-    int preloadUpToRow = maxInitialRows + bufferRows;
-    int preloadUpToCell = std::min(preloadUpToRow * m_columns, static_cast<int>(m_cells.size()));
-    m_thumbnailLoadedUpToRow = preloadUpToRow;
+    int preloadUpToCell = std::min((maxInitialRows + bufferRows) * m_columns, static_cast<int>(m_cells.size()));
 
     if (static_cast<int>(m_cells.size()) > cellsInInitialRows) {
         for (int i = cellsInInitialRows; i < preloadUpToCell; i++) {
@@ -355,7 +353,6 @@ void RecyclingGrid::setupGrid() {
     // This prevents queuing hundreds of HTTP requests for large libraries.
     int bufferRows = 3;  // Load 3 extra rows beyond visible as prefetch
     int preloadUpToRow = std::min(maxInitialRows + bufferRows, totalRows);
-    m_thumbnailLoadedUpToRow = preloadUpToRow;
 
     if (totalRows > maxInitialRows) {
         int startCell = maxInitialRows * m_columns;
@@ -379,31 +376,16 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     int loadFromRow = std::max(0, focusedRow - 2);
     int loadToRow = std::min(totalRows, focusedRow + 7);  // 6 rows below (visible area + buffer)
 
-    // Only load rows that haven't been loaded yet
-    if (loadToRow <= m_thumbnailLoadedUpToRow && loadFromRow >= 0) {
-        // Already loaded this range
-        return;
-    }
-
     int startCell = loadFromRow * m_columns;
     int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
 
-    int loaded = 0;
+    // loadThumbnailIfNeeded() checks m_thumbnailLoaded internally,
+    // so calling it on already-loaded cells is a no-op (just a bool check).
+    // This avoids gaps when the user jumps to a distant row.
     for (int i = startCell; i < endCell; i++) {
         if (m_cells[i]) {
-            // loadThumbnailIfNeeded checks m_thumbnailLoaded internally, so safe to call repeatedly
             m_cells[i]->loadThumbnailIfNeeded();
-            loaded++;
         }
-    }
-
-    if (loadToRow > m_thumbnailLoadedUpToRow) {
-        m_thumbnailLoadedUpToRow = loadToRow;
-    }
-
-    if (loaded > 0) {
-        brls::Logger::debug("RecyclingGrid: Loaded thumbnails for rows {}-{} near focus index {}",
-                           loadFromRow, loadToRow - 1, index);
     }
 }
 

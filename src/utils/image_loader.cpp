@@ -417,6 +417,25 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     brls::Image* target = request.target;
     LoadCallback callback = request.callback;
 
+    // Check disk cache first (this runs on a background thread, so disk I/O is fine)
+    if (Application::getInstance().getSettings().cacheCoverImages) {
+        int mangaId = extractMangaIdFromUrl(url);
+        if (mangaId > 0) {
+            std::vector<uint8_t> diskData;
+            if (LibraryCache::getInstance().loadCoverImage(mangaId, diskData)) {
+                // Found in disk cache - add to memory LRU cache and display
+                cachePut(url, diskData);
+                if (target) {
+                    brls::sync([diskData, callback, target]() {
+                        target->setImageFromMem(diskData.data(), diskData.size());
+                        if (callback) callback(target);
+                    });
+                }
+                return;
+            }
+        }
+    }
+
     HttpClient client;
 
     // Add authentication if needed
@@ -585,6 +604,7 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
     if (url.empty() || !target) return;
 
     // Check memory cache first (LRU - promotes to front on hit)
+    // This is fast (in-memory map lookup) and safe on the main thread
     {
         std::vector<uint8_t> cachedData;
         if (cacheGet(url, cachedData)) {
@@ -594,22 +614,8 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
         }
     }
 
-    // Check disk cache if enabled
-    if (Application::getInstance().getSettings().cacheCoverImages) {
-        int mangaId = extractMangaIdFromUrl(url);
-        if (mangaId > 0) {
-            std::vector<uint8_t> diskData;
-            if (LibraryCache::getInstance().loadCoverImage(mangaId, diskData)) {
-                // Found in disk cache - add to memory LRU cache and display
-                cachePut(url, diskData);
-                target->setImageFromMem(diskData.data(), diskData.size());
-                if (callback) callback(target);
-                return;
-            }
-        }
-    }
-
-    // Add to queue for network download
+    // Disk cache and network downloads are handled on background threads
+    // via executeLoad() to avoid blocking the main thread with I/O
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
         s_loadQueue.push({url, callback, target, true});

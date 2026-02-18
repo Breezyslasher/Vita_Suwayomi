@@ -106,7 +106,6 @@ private:
     int m_visibleStartRow = 0;
     int m_lastScrollY = 0;
     bool m_needsUpdate = false;
-    int m_thumbnailLoadedUpToRow = 0;  // Tracks how far thumbnails have been loaded
 
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;
