@@ -570,6 +570,12 @@ Manga SuwayomiClient::parseMangaFromGraphQL(const std::string& json) {
     // Parse genre array
     manga.genre = extractJsonStringArray(json, "genre");
 
+    // Parse source name from nested source object
+    std::string sourceObj = extractJsonObject(json, "source");
+    if (!sourceObj.empty()) {
+        manga.sourceName = extractJsonValue(sourceObj, "displayName");
+    }
+
     // GraphQL might have unreadCount directly
     manga.unreadCount = extractJsonInt(json, "unreadCount");
 
@@ -895,6 +901,9 @@ bool SuwayomiClient::fetchLibraryMangaGraphQL(std::vector<Manga>& manga) {
                     status
                     inLibrary
                     unreadCount
+                    source {
+                        displayName
+                    }
                 }
                 totalCount
             }
@@ -1024,6 +1033,9 @@ bool SuwayomiClient::fetchMangaGraphQL(int mangaId, Manga& manga) {
                 url
                 inLibrary
                 initialized
+                source {
+                    displayName
+                }
             }
         }
     )";
@@ -1551,8 +1563,8 @@ bool SuwayomiClient::deleteMangaMeta(int mangaId, const std::string& key) {
 }
 
 bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga) {
-    // Use the mangas query with categoryId filter - this is the correct Suwayomi API
-    // The filter ensures only manga assigned to this specific category are returned
+    // Use mangas query with categoryId filter - this correctly filters manga by category
+    // The category(id).mangas approach returns ALL library manga unfiltered
     const char* query = R"(
         query GetMangasByCategory($categoryId: Int!) {
             mangas(
@@ -1566,10 +1578,17 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
                     title
                     thumbnailUrl
                     author
+                    artist
+                    description
+                    genre
+                    status
                     inLibrary
                     inLibraryAt
                     unreadCount
                     downloadCount
+                    source {
+                        displayName
+                    }
                     chapters {
                         totalCount
                     }
@@ -1613,11 +1632,20 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
         manga.push_back(parseMangaFromGraphQL(item));
     }
 
+    // If filter returned 0 results for the default category (id=0),
+    // the server may not support categoryId filter for the default category.
+    // Fall back to category(id) query which works for the default category.
+    if (manga.empty() && categoryId == 0) {
+        brls::Logger::info("GraphQL: Filter returned 0 for default category, trying fallback...");
+        return fetchCategoryMangaGraphQLFallback(categoryId, manga);
+    }
+
     brls::Logger::info("GraphQL: Fetched {} manga for category {} (filter method)", manga.size(), categoryId);
     return true;
 }
 
-// Fallback method using category.mangas query (for older Suwayomi versions)
+// Fallback method using category(id).mangas query
+// Only reliable for the default category (id=0); for other categories this may return all library manga
 bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vector<Manga>& manga) {
     const char* query = R"(
         query GetCategoryManga($categoryId: Int!) {
@@ -1630,10 +1658,17 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
                         title
                         thumbnailUrl
                         author
+                        artist
+                        description
+                        genre
+                        status
                         inLibrary
                         inLibraryAt
                         unreadCount
                         downloadCount
+                        source {
+                            displayName
+                        }
                         chapters {
                             totalCount
                         }
