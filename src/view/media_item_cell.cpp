@@ -144,11 +144,11 @@ MangaItemCell::MangaItemCell() {
     this->addView(m_newBadge);
 
     // Star badge - top right corner (shows if manga is in library, browser/search only)
+    // Image loaded lazily on first visibility to avoid 98+ useless GPU texture creations
     m_starBadge = new brls::Image();
     m_starBadge->setWidth(16);
     m_starBadge->setHeight(16);
     m_starBadge->setScalingType(brls::ImageScalingType::FIT);
-    m_starBadge->setImageFromFile("app0:resources/icons/star.png");
     m_starBadge->setPositionType(brls::PositionType::ABSOLUTE);
     m_starBadge->setPositionTop(6);
     m_starBadge->setPositionRight(6);
@@ -162,11 +162,11 @@ MangaItemCell::MangaItemCell() {
     m_descriptionLabel->setVisibility(brls::Visibility::GONE);
 
     // Start button hint icon - shown on focus (top-right) to indicate menu action
+    // Image loaded lazily on first focus to avoid 98+ useless GPU texture creations
     m_startHintIcon = new brls::Image();
     m_startHintIcon->setWidth(64);
     m_startHintIcon->setHeight(16);
     m_startHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_startHintIcon->setImageFromFile("app0:resources/images/start_button.png");
     m_startHintIcon->setPositionType(brls::PositionType::ABSOLUTE);
     m_startHintIcon->setPositionTop(6);
     m_startHintIcon->setPositionRight(6);
@@ -257,6 +257,10 @@ void MangaItemCell::updateDisplay() {
     if (m_starBadge) {
         bool inLib = m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id);
         bool showStar = m_showLibraryBadge && inLib;
+        if (showStar && !m_starImageLoaded) {
+            m_starBadge->setImageFromFile("app0:resources/icons/star.png");
+            m_starImageLoaded = true;
+        }
         m_starBadge->setVisibility(showStar ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
 }
@@ -331,6 +335,10 @@ void MangaItemCell::onFocusGained() {
     updateFocusInfo(true);
     // Show start button hint on focus (but not in browser/search tabs where library badge is shown)
     if (m_startHintIcon && !m_showLibraryBadge) {
+        if (!m_startHintImageLoaded) {
+            m_startHintIcon->setImageFromFile("app0:resources/images/start_button.png");
+            m_startHintImageLoaded = true;
+        }
         m_startHintIcon->setVisibility(brls::Visibility::VISIBLE);
     }
 }
@@ -411,6 +419,10 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
     // Update star badge visibility (also check recent additions cache)
     if (m_starBadge) {
         bool inLib = m_showLibraryBadge && (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id));
+        if (inLib && !m_starImageLoaded) {
+            m_starBadge->setImageFromFile("app0:resources/icons/star.png");
+            m_starImageLoaded = true;
+        }
         m_starBadge->setVisibility(inLib ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
     // Hide start hint icon when in browser/search mode

@@ -139,6 +139,7 @@ private:
     bool m_loaded = false;
     bool m_categoriesLoaded = false;
     bool m_focusGridAfterLoad = false;  // Focus first grid item after loading new category
+    int m_combinedQueryCategoryId = -1; // Category being fetched by combined query (skip redundant fetch)
 
     // Shared pointer to track if this object is still alive
     std::shared_ptr<bool> m_alive;

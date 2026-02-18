@@ -95,7 +95,8 @@ private:
     bool m_enabled = true;
     bool m_coverCacheEnabled = true;
     bool m_initialized = false;
-    std::mutex m_mutex;
+    std::mutex m_mutex;       // Protects metadata operations (categories, manga lists, details)
+    std::mutex m_coverMutex;  // Separate mutex for cover image I/O (allows parallel reads by worker threads)
 };
 
 } // namespace vitasuwayomi

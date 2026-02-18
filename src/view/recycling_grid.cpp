@@ -10,6 +10,7 @@
 namespace vitasuwayomi {
 
 RecyclingGrid::RecyclingGrid() {
+    m_alive = std::make_shared<bool>(true);
     this->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
 
     // Content box to hold all rows
@@ -68,6 +69,13 @@ RecyclingGrid::RecyclingGrid() {
             }
         },
         brls::PanAxis::VERTICAL));
+}
+
+RecyclingGrid::~RecyclingGrid() {
+    if (m_alive) {
+        *m_alive = false;
+    }
+    m_incrementalBuildActive = false;
 }
 
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
@@ -222,6 +230,7 @@ void RecyclingGrid::setOnSelectionChanged(std::function<void(int count)> callbac
 }
 
 void RecyclingGrid::clearViews() {
+    m_incrementalBuildActive = false;  // Cancel any pending incremental build
     m_items.clear();
     m_rows.clear();
     m_cells.clear();
@@ -231,6 +240,9 @@ void RecyclingGrid::clearViews() {
 }
 
 void RecyclingGrid::setupGrid() {
+    // Cancel any ongoing incremental build
+    m_incrementalBuildActive = false;
+
     // Clear existing views
     m_contentBox->clearViews();
     m_rows.clear();
@@ -238,16 +250,46 @@ void RecyclingGrid::setupGrid() {
 
     if (m_items.empty()) return;
 
-    // Calculate number of rows needed
-    int totalRows = (m_items.size() + m_columns - 1) / m_columns;
+    m_totalRowsNeeded = (m_items.size() + m_columns - 1) / m_columns;
 
-    brls::Logger::debug("RecyclingGrid: Creating {} rows for {} items", totalRows, m_items.size());
+    // On PS Vita's 444MHz CPU, creating 98+ MangaItemCell objects (each with ~11
+    // sub-views) at once causes a multi-second freeze. Build incrementally:
+    // - Create first 2 rows immediately (visible content appears fast)
+    // - Build remaining rows in batches of 2 per frame via brls::sync()
+    int immediateRows = std::min(2, m_totalRowsNeeded);
 
-    // Create all rows and cells
-    // Load first 6 rows immediately (visible on screen), then load rest quickly
+    brls::Logger::info("RecyclingGrid: Building {} rows for {} items (first {} immediate)",
+                        m_totalRowsNeeded, m_items.size(), immediateRows);
+
+    createRowRange(0, immediateRows);
+
+    // Schedule remaining rows for incremental building
+    if (immediateRows < m_totalRowsNeeded) {
+        m_incrementalBuildRow = immediateRows;
+        m_incrementalBuildActive = true;
+        std::weak_ptr<bool> aliveWeak = m_alive;
+        brls::sync([this, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            buildNextRowBatch();
+        });
+    } else {
+        // Small library - all rows built, trigger buffer preload
+        int maxInitialRows = 6;
+        int bufferRows = 3;
+        int preloadUpToRow = std::min(maxInitialRows + bufferRows, m_totalRowsNeeded);
+        int startCell = std::min(maxInitialRows * m_columns, (int)m_cells.size());
+        int endCell = std::min(preloadUpToRow * m_columns, (int)m_cells.size());
+        for (int i = startCell; i < endCell; i++) {
+            m_cells[i]->loadThumbnailIfNeeded();
+        }
+    }
+}
+
+void RecyclingGrid::createRowRange(int startRow, int endRow) {
     int maxInitialRows = 6;
 
-    for (int row = 0; row < totalRows; row++) {
+    for (int row = startRow; row < endRow; row++) {
         auto* rowBox = new brls::Box();
         rowBox->setAxis(brls::Axis::ROW);
         rowBox->setJustifyContent(brls::JustifyContent::FLEX_START);
@@ -260,7 +302,6 @@ void RecyclingGrid::setupGrid() {
         // For list mode with auto-size, calculate row height based on title length
         int rowHeight = m_cellHeight;
         if (m_listMode && m_listRowSize == 3) {  // Auto mode
-            // Calculate max title length in this row (for list mode it's 1 item per row)
             int maxTitleLen = 0;
             for (int i = startIdx; i < endIdx; i++) {
                 int titleLen = static_cast<int>(m_items[i].title.length());
@@ -268,14 +309,12 @@ void RecyclingGrid::setupGrid() {
                     maxTitleLen = titleLen;
                 }
             }
-            // Base height + extra for long titles
-            // Estimate: ~45 chars per line at font size 14, cell width 900px with padding
-            int lines = (maxTitleLen + 44) / 45;  // Ceiling division
+            int lines = (maxTitleLen + 44) / 45;
             if (lines < 1) lines = 1;
-            if (lines > 3) lines = 3;  // Cap at 3 lines max
-            rowHeight = 40 + (lines * 20);  // Base padding + line height
-            if (rowHeight < 60) rowHeight = 60;  // Minimum height
-            if (rowHeight > 120) rowHeight = 120;  // Maximum height
+            if (lines > 3) lines = 3;
+            rowHeight = 40 + (lines * 20);
+            if (rowHeight < 60) rowHeight = 60;
+            if (rowHeight > 120) rowHeight = 120;
         }
 
         rowBox->setHeight(rowHeight);
@@ -289,7 +328,7 @@ void RecyclingGrid::setupGrid() {
             // Apply display mode to cell
             if (m_listMode) {
                 cell->setListMode(true);
-                cell->setListRowSize(m_listRowSize);  // Pass row size to cell
+                cell->setListRowSize(m_listRowSize);
             } else if (m_compactMode) {
                 cell->setCompactMode(true);
             }
@@ -308,7 +347,6 @@ void RecyclingGrid::setupGrid() {
 
             int index = i;
             cell->registerClickAction([this, index](brls::View* view) {
-                // Skip click if long-press was just triggered
                 if (m_longPressTriggered) {
                     m_longPressTriggered = false;
                     return true;
@@ -318,7 +356,6 @@ void RecyclingGrid::setupGrid() {
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
 
-            // Add long-press gesture for context menu
             cell->addGestureRecognizer(new LongPressGestureRecognizer(
                 cell,
                 [this, index](LongPressGestureStatus status) {
@@ -329,18 +366,16 @@ void RecyclingGrid::setupGrid() {
                         }
                     }
                 },
-                400  // 400ms hold duration
+                400
             ));
 
-            // Register B button on cell to handle back navigation
             cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
                 if (m_onBackPressed) {
                     return m_onBackPressed();
                 }
                 return false;
-            }, true);  // hidden action
+            }, true);
 
-            // Track focused index and trigger thumbnail loading for nearby cells
             cell->getFocusEvent()->subscribe([this, index](brls::View*) {
                 m_focusedIndex = index;
                 loadThumbnailsNearIndex(index);
@@ -353,23 +388,44 @@ void RecyclingGrid::setupGrid() {
         m_contentBox->addView(rowBox);
         m_rows.push_back(rowBox);
     }
+}
 
-    // Only load a buffer of rows beyond the visible area, not the entire library.
-    // Further rows will be loaded on-demand as the user scrolls (via focus events).
-    // This prevents queuing hundreds of HTTP requests for large libraries.
-    int bufferRows = 3;  // Load 3 extra rows beyond visible as prefetch
-    int preloadUpToRow = std::min(maxInitialRows + bufferRows, totalRows);
+void RecyclingGrid::buildNextRowBatch() {
+    if (!m_incrementalBuildActive) return;
+    if (m_incrementalBuildRow >= m_totalRowsNeeded) {
+        m_incrementalBuildActive = false;
+        return;
+    }
 
-    if (totalRows > maxInitialRows) {
-        int startCell = maxInitialRows * m_columns;
+    // Build 2 rows per frame (~12 cells) to keep frames responsive
+    int batchSize = 2;
+    int endRow = std::min(m_incrementalBuildRow + batchSize, m_totalRowsNeeded);
+
+    createRowRange(m_incrementalBuildRow, endRow);
+    m_incrementalBuildRow = endRow;
+
+    if (m_incrementalBuildRow < m_totalRowsNeeded) {
+        // More rows to build - schedule next batch
+        std::weak_ptr<bool> aliveWeak = m_alive;
+        brls::sync([this, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            buildNextRowBatch();
+        });
+    } else {
+        // All rows built - trigger thumbnail preloading for buffer rows
+        m_incrementalBuildActive = false;
+        int maxInitialRows = 6;
+        int bufferRows = 3;
+        int preloadUpToRow = std::min(maxInitialRows + bufferRows, m_totalRowsNeeded);
+        int startCell = std::min(maxInitialRows * m_columns, (int)m_cells.size());
         int endCell = std::min(preloadUpToRow * m_columns, (int)m_cells.size());
         for (int i = startCell; i < endCell; i++) {
             m_cells[i]->loadThumbnailIfNeeded();
         }
+        brls::Logger::info("RecyclingGrid: Incremental build complete - {} cells in {} rows",
+                            m_cells.size(), m_totalRowsNeeded);
     }
-
-    brls::Logger::debug("RecyclingGrid: Grid setup complete with {} cells, thumbnails preloaded for {} rows",
-                        m_cells.size(), preloadUpToRow);
 }
 
 void RecyclingGrid::loadThumbnailsNearIndex(int index) {
