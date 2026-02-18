@@ -14,6 +14,8 @@
 #include <queue>
 #include <atomic>
 #include <condition_variable>
+#include <vector>
+#include <thread>
 
 namespace vitasuwayomi {
 
@@ -64,7 +66,7 @@ public:
     // Cancel all pending loads
     static void cancelAll();
 
-    // Set max concurrent loads (default: 4)
+    // Set max concurrent loads (default: 6)
     static void setMaxConcurrentLoads(int max);
 
     // Set max thumbnail size for downscaling (default: 200)
@@ -88,7 +90,6 @@ private:
         int totalSegments = 1;  // Total segments (1 = no splitting)
     };
 
-    static void processQueue();
     static void executeLoad(const LoadRequest& request);
     static void executeRotatableLoad(const RotatableLoadRequest& request);
 
@@ -110,16 +111,24 @@ private:
     static std::string s_authPassword;
     static std::string s_accessToken;  // JWT access token for Bearer auth
 
-    // Concurrent load limiting
+    // Worker thread pool - persistent threads that reuse HTTP connections
+    // Each worker has its own HttpClient for TCP connection reuse (keep-alive)
+    static void workerThreadFunc(int workerId);
+    static void ensureWorkersStarted();
+    static std::vector<std::thread> s_workers;
+    static std::atomic<bool> s_workersStarted;
+    static std::atomic<bool> s_shutdownWorkers;
+
+    // Shared queue for worker threads
     static std::queue<LoadRequest> s_loadQueue;
     static std::queue<RotatableLoadRequest> s_rotatableLoadQueue;
     static std::mutex s_queueMutex;
-    static std::atomic<int> s_activeLoads;
+    static std::condition_variable s_queueCV;  // Wake workers when items are queued
     static int s_maxConcurrentLoads;
     static int s_maxThumbnailSize;
 
     // Batched texture upload queue - prevents main thread freeze from
-    // 50+ GPU texture uploads arriving simultaneously from disk cache reads.
+    // GPU texture uploads arriving simultaneously.
     // Background threads push completed images here instead of calling brls::sync() directly.
     // A single scheduled callback processes a few textures per frame.
     struct PendingTextureUpdate {

@@ -50,17 +50,19 @@ std::string ImageLoader::s_accessToken;
 std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
-std::atomic<int> ImageLoader::s_activeLoads{0};
-int ImageLoader::s_maxConcurrentLoads = 4;  // Increased for faster library loading
+std::condition_variable ImageLoader::s_queueCV;
+int ImageLoader::s_maxConcurrentLoads = 6;  // Worker thread count for concurrent downloads
 int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
+
+// Worker thread pool
+std::vector<std::thread> ImageLoader::s_workers;
+std::atomic<bool> ImageLoader::s_workersStarted{false};
+std::atomic<bool> ImageLoader::s_shutdownWorkers{false};
 
 // Batched texture upload queue
 std::queue<ImageLoader::PendingTextureUpdate> ImageLoader::s_pendingTextures;
 std::mutex ImageLoader::s_pendingMutex;
 std::atomic<bool> ImageLoader::s_pendingScheduled{false};
-
-// Flag to track if queue processor is running
-static std::atomic<bool> s_processorRunning{false};
 
 // Helper to extract manga ID from thumbnail URL
 // URLs look like: http://server/api/v1/manga/123/thumbnail or /api/v1/manga/123/thumbnail
@@ -428,7 +430,7 @@ static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2)
 }
 
 void ImageLoader::setMaxConcurrentLoads(int max) {
-    s_maxConcurrentLoads = std::max(1, std::min(max, 4));
+    s_maxConcurrentLoads = std::max(1, std::min(max, 8));
 }
 
 void ImageLoader::setMaxThumbnailSize(int maxSize) {
@@ -641,69 +643,72 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     }
 }
 
-void ImageLoader::processQueue() {
-    // Only allow one processor thread at a time
+void ImageLoader::ensureWorkersStarted() {
     bool expected = false;
-    if (!s_processorRunning.compare_exchange_strong(expected, true)) {
-        return;  // Another processor is already running
+    if (!s_workersStarted.compare_exchange_strong(expected, true)) {
+        return;  // Already started
     }
 
-    // Start a single background thread that processes the entire queue
-    std::thread([]() {
-        while (true) {
-            // Check if we can process more
-            if (s_activeLoads >= s_maxConcurrentLoads) {
-                // Wait a bit before checking again
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                continue;
+    s_shutdownWorkers = false;
+    int numWorkers = s_maxConcurrentLoads;
+    brls::Logger::info("ImageLoader: Starting {} worker threads", numWorkers);
+
+    for (int i = 0; i < numWorkers; i++) {
+        s_workers.emplace_back(workerThreadFunc, i);
+        s_workers.back().detach();
+    }
+}
+
+void ImageLoader::workerThreadFunc(int workerId) {
+    // Each worker has its own HttpClient for TCP connection reuse (HTTP keep-alive).
+    // This avoids creating a new TCP connection for every cover download.
+    HttpClient httpClient;
+    applyAuthHeaders(httpClient);
+
+    brls::Logger::debug("ImageLoader: Worker {} started", workerId);
+
+    while (!s_shutdownWorkers) {
+        LoadRequest request;
+        RotatableLoadRequest rotatableRequest;
+        bool hasRequest = false;
+        bool isRotatable = false;
+
+        {
+            std::unique_lock<std::mutex> lock(s_queueMutex);
+            // Wait for items to be queued (with timeout to allow shutdown check)
+            s_queueCV.wait_for(lock, std::chrono::milliseconds(500), []() {
+                return !s_loadQueue.empty() || !s_rotatableLoadQueue.empty() || s_shutdownWorkers;
+            });
+
+            if (s_shutdownWorkers) break;
+
+            // Rotatable queue has priority (reader pages)
+            if (!s_rotatableLoadQueue.empty()) {
+                rotatableRequest = s_rotatableLoadQueue.front();
+                s_rotatableLoadQueue.pop();
+                hasRequest = true;
+                isRotatable = true;
+            } else if (!s_loadQueue.empty()) {
+                request = s_loadQueue.front();
+                s_loadQueue.pop();
+                hasRequest = true;
             }
-
-            // Get next request from either queue
-            LoadRequest request;
-            RotatableLoadRequest rotatableRequest;
-            bool hasRequest = false;
-            bool isRotatable = false;
-
-            {
-                std::lock_guard<std::mutex> lock(s_queueMutex);
-                // Check rotatable queue first (reader pages have priority)
-                if (!s_rotatableLoadQueue.empty()) {
-                    rotatableRequest = s_rotatableLoadQueue.front();
-                    s_rotatableLoadQueue.pop();
-                    hasRequest = true;
-                    isRotatable = true;
-                } else if (!s_loadQueue.empty()) {
-                    request = s_loadQueue.front();
-                    s_loadQueue.pop();
-                    hasRequest = true;
-                }
-            }
-
-            if (!hasRequest) {
-                // Both queues are empty, exit processor
-                s_processorRunning = false;
-                return;
-            }
-
-            s_activeLoads++;
-
-            // Execute load in a new thread
-            if (isRotatable) {
-                std::thread([rotatableRequest]() {
-                    executeRotatableLoad(rotatableRequest);
-                    s_activeLoads--;
-                }).detach();
-            } else {
-                std::thread([request]() {
-                    executeLoad(request);
-                    s_activeLoads--;
-                }).detach();
-            }
-
-            // Small delay between starting loads to prevent overwhelming the system
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-    }).detach();
+
+        if (!hasRequest) continue;
+
+        // Refresh auth headers in case token was refreshed by another thread
+        httpClient.clearDefaultHeaders();
+        applyAuthHeaders(httpClient);
+
+        if (isRotatable) {
+            executeRotatableLoad(rotatableRequest);
+        } else {
+            executeLoad(request);
+        }
+    }
+
+    brls::Logger::debug("ImageLoader: Worker {} exiting", workerId);
 }
 
 void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target) {
@@ -714,21 +719,24 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
     {
         std::vector<uint8_t> cachedData;
         if (cacheGet(url, cachedData)) {
-            target->setImageFromMem(cachedData.data(), cachedData.size());
-            if (callback) callback(target);
+            // Route through batched texture queue even for memory cache hits.
+            // Direct setImageFromMem() on the main thread causes a freeze when
+            // many cells hit memory cache simultaneously (e.g., after grid rebuild).
+            queueTextureUpdate(cachedData, target, callback);
             return;
         }
     }
 
-    // Disk cache and network downloads are handled on background threads
+    // Disk cache and network downloads are handled on worker threads
     // via executeLoad() to avoid blocking the main thread with I/O
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
         s_loadQueue.push({url, callback, target, true});
     }
+    s_queueCV.notify_one();
 
-    // Start processor if not already running
-    processQueue();
+    // Start workers if not already running
+    ensureWorkersStarted();
 }
 
 void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
@@ -941,7 +949,8 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
         s_rotatableLoadQueue.push({url, callback, target, 0, 1});  // segment=0, totalSegments=1
     }
 
-    processQueue();
+    s_queueCV.notify_one();
+    ensureWorkersStarted();
 }
 
 void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, int totalSegments,
@@ -965,7 +974,8 @@ void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, 
         s_rotatableLoadQueue.push({url, callback, target, segment, totalSegments});
     }
 
-    processQueue();
+    s_queueCV.notify_one();
+    ensureWorkersStarted();
 }
 
 void ImageLoader::preload(const std::string& url) {
@@ -983,7 +993,8 @@ void ImageLoader::preload(const std::string& url) {
         s_loadQueue.push({url, nullptr, nullptr, true});
     }
 
-    processQueue();
+    s_queueCV.notify_one();
+    ensureWorkersStarted();
 }
 
 bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& height, int& suggestedSegments) {
@@ -1120,7 +1131,8 @@ void ImageLoader::preloadFullSize(const std::string& url) {
         s_rotatableLoadQueue.push({url, nullptr, nullptr});  // No callback/target for preload
     }
 
-    processQueue();
+    s_queueCV.notify_one();
+    ensureWorkersStarted();
 }
 
 void ImageLoader::clearCache() {
@@ -1130,12 +1142,14 @@ void ImageLoader::clearCache() {
 }
 
 void ImageLoader::cancelAll() {
-    std::lock_guard<std::mutex> lock(s_queueMutex);
-    while (!s_loadQueue.empty()) {
-        s_loadQueue.pop();
-    }
-    while (!s_rotatableLoadQueue.empty()) {
-        s_rotatableLoadQueue.pop();
+    {
+        std::lock_guard<std::mutex> lock(s_queueMutex);
+        while (!s_loadQueue.empty()) {
+            s_loadQueue.pop();
+        }
+        while (!s_rotatableLoadQueue.empty()) {
+            s_rotatableLoadQueue.pop();
+        }
     }
     // Also clear pending texture uploads
     {
