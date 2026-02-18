@@ -585,10 +585,8 @@ void ReaderActivity::onContentAvailable() {
             saveSettingsToApp();
             updateSettingsLabels();
 
-            // Clear the webtoon scroll view if switching away from webtoon
-            if (webtoonScroll && !m_settings.isWebtoonFormat) {
-                webtoonScroll->clearPages();
-            }
+            // Immediately switch views between paged and webtoon mode
+            updateReaderMode();
 
             // Reload pages for page splitting and mode change
             m_pages.clear();
