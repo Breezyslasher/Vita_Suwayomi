@@ -96,8 +96,8 @@ void RotatableImage::calculateImageBounds(float viewX, float viewY, float viewW,
     float imageAspect = (float)effectiveWidth / (float)effectiveHeight;
     float viewAspect = viewW / viewH;
 
-    switch (m_scalingType) {
-        case brls::ImageScalingType::FIT:
+    switch (m_scaleMode) {
+        case ImageScaleMode::FIT_SCREEN:
             // Fit entire image within view, maintaining aspect ratio
             if (viewAspect > imageAspect) {
                 // View is wider - fit to height
@@ -114,30 +114,29 @@ void RotatableImage::calculateImageBounds(float viewX, float viewY, float viewW,
             }
             break;
 
-        case brls::ImageScalingType::FILL:
-            // Fill view, cropping if necessary
-            if (viewAspect > imageAspect) {
-                // View is wider - fill width, crop top/bottom
-                imgW = viewW;
-                imgH = viewW / imageAspect;
-                imgX = viewX;
-                imgY = viewY + (viewH - imgH) / 2.0f;
-            } else {
-                // View is taller - fill height, crop left/right
-                imgH = viewH;
-                imgW = viewH * imageAspect;
-                imgX = viewX + (viewW - imgW) / 2.0f;
-                imgY = viewY;
-            }
+        case ImageScaleMode::FIT_WIDTH:
+            // Fit width to screen width, scale height proportionally
+            imgW = viewW;
+            imgH = viewW / imageAspect;
+            imgX = viewX;
+            imgY = viewY + (viewH - imgH) / 2.0f;
             break;
 
-        case brls::ImageScalingType::STRETCH:
-        default:
-            // Stretch to fill (distorts aspect ratio)
-            imgX = viewX;
-            imgY = viewY;
-            imgW = viewW;
+        case ImageScaleMode::FIT_HEIGHT:
+            // Fit height to screen height, scale width proportionally
             imgH = viewH;
+            imgW = viewH * imageAspect;
+            imgX = viewX + (viewW - imgW) / 2.0f;
+            imgY = viewY;
+            break;
+
+        case ImageScaleMode::ORIGINAL:
+        default:
+            // Show at native 1:1 pixel resolution, centered in view
+            imgW = (float)effectiveWidth;
+            imgH = (float)effectiveHeight;
+            imgX = viewX + (viewW - imgW) / 2.0f;
+            imgY = viewY + (viewH - imgH) / 2.0f;
             break;
     }
 }

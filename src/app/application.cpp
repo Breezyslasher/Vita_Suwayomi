@@ -207,7 +207,7 @@ std::string Application::getPageScaleModeString(PageScaleMode mode) {
         case PageScaleMode::FIT_SCREEN: return "Fit Screen";
         case PageScaleMode::FIT_WIDTH: return "Fit Width";
         case PageScaleMode::FIT_HEIGHT: return "Fit Height";
-        case PageScaleMode::ORIGINAL: return "Original";
+        case PageScaleMode::ORIGINAL: return "Original (1:1)";
         default: return "Unknown";
     }
 }
