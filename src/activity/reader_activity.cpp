@@ -682,7 +682,16 @@ void ReaderActivity::loadPages() {
     int chapterIndex = m_chapterIndex;
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    vitasuwayomi::asyncTask<bool>([this, isWebtoonMode, mangaId, chapterIndex]() {
+    // Use shared containers so the background thread writes to its own memory,
+    // NOT to `this->m_pages` etc. which may be freed if the Activity is destroyed.
+    auto sharedPages = std::make_shared<std::vector<Page>>();
+    auto sharedChapterName = std::make_shared<std::string>();
+    auto sharedChapters = std::make_shared<std::vector<Chapter>>();
+    auto sharedTotalChapters = std::make_shared<int>(0);
+
+    vitasuwayomi::asyncTask<bool>([isWebtoonMode, mangaId, chapterIndex,
+                                    sharedPages, sharedChapterName,
+                                    sharedChapters, sharedTotalChapters]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         DownloadsManager& localMgr = DownloadsManager::getInstance();
         localMgr.init();
@@ -727,7 +736,6 @@ void ReaderActivity::loadPages() {
         // For webtoon mode, check for tall images that need splitting
         if (isWebtoonMode && !rawPages.empty()) {
             brls::Logger::info("Webtoon mode: checking {} pages for tall images", rawPages.size());
-            m_pages.clear();
 
             for (size_t i = 0; i < rawPages.size(); i++) {
                 const Page& rawPage = rawPages[i];
@@ -742,46 +750,54 @@ void ReaderActivity::loadPages() {
 
                     for (int seg = 0; seg < suggestedSegments; seg++) {
                         Page segmentPage;
-                        segmentPage.index = static_cast<int>(m_pages.size());
+                        segmentPage.index = static_cast<int>(sharedPages->size());
                         segmentPage.url = rawPage.url;
                         segmentPage.imageUrl = rawPage.imageUrl;
                         segmentPage.segment = seg;
                         segmentPage.totalSegments = suggestedSegments;
                         segmentPage.originalIndex = static_cast<int>(i);
-                        m_pages.push_back(segmentPage);
+                        sharedPages->push_back(segmentPage);
                     }
                 } else {
                     // Single page (no splitting needed)
                     Page singlePage = rawPage;
-                    singlePage.index = static_cast<int>(m_pages.size());
+                    singlePage.index = static_cast<int>(sharedPages->size());
                     singlePage.segment = 0;
                     singlePage.totalSegments = 1;
                     singlePage.originalIndex = static_cast<int>(i);
-                    m_pages.push_back(singlePage);
+                    sharedPages->push_back(singlePage);
                 }
             }
 
             brls::Logger::info("Webtoon mode: {} raw pages expanded to {} virtual pages",
-                               rawPages.size(), m_pages.size());
+                               rawPages.size(), sharedPages->size());
         } else {
             // Normal mode - use pages as-is
-            m_pages = std::move(rawPages);
+            *sharedPages = std::move(rawPages);
         }
 
         // Also fetch chapter details for the name
         Chapter chapter;
         if (client.fetchChapter(mangaId, chapterIndex, chapter)) {
-            m_chapterName = chapter.name;
+            *sharedChapterName = chapter.name;
         }
 
         // Fetch all chapters for navigation
-        client.fetchChapters(mangaId, m_chapters);
-        m_totalChapters = static_cast<int>(m_chapters.size());
+        client.fetchChapters(mangaId, *sharedChapters);
+        *sharedTotalChapters = static_cast<int>(sharedChapters->size());
 
         return true;
-    }, [this, isWebtoonMode, aliveWeak](bool success) {
+    }, [this, isWebtoonMode, aliveWeak,
+        sharedPages, sharedChapterName,
+        sharedChapters, sharedTotalChapters](bool success) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
+
+        // Copy results from shared containers into our members (safe - we're alive)
+        m_pages = std::move(*sharedPages);
+        m_chapterName = std::move(*sharedChapterName);
+        m_chapters = std::move(*sharedChapters);
+        m_totalChapters = *sharedTotalChapters;
 
         if (!success || m_pages.empty()) {
             brls::Logger::error("No pages to display");
@@ -826,15 +842,20 @@ void ReaderActivity::loadPages() {
                 webtoonScroll->setSidePadding(m_settings.webtoonSidePadding);
                 webtoonScroll->setRotation(static_cast<float>(m_settings.rotation));
 
-                // Set up progress callback
-                webtoonScroll->setProgressCallback([this](int currentPage, int totalPages, float scrollPercent) {
+                // Set up progress callback with alive guard
+                std::weak_ptr<bool> cbAlive = m_alive;
+                webtoonScroll->setProgressCallback([this, cbAlive](int currentPage, int totalPages, float scrollPercent) {
+                    auto a = cbAlive.lock();
+                    if (!a || !*a) return;
                     m_currentPage = currentPage;
                     updatePageDisplay();
                     updateProgress();
                 });
 
-                // Set up tap callback to toggle controls
-                webtoonScroll->setTapCallback([this]() {
+                // Set up tap callback with alive guard
+                webtoonScroll->setTapCallback([this, cbAlive]() {
+                    auto a = cbAlive.lock();
+                    if (!a || !*a) return;
                     toggleControls();
                 });
 
@@ -882,19 +903,24 @@ void ReaderActivity::loadPage(int index) {
     // Load image using RotatableImage
     if (pageImage) {
         int currentPageAtLoad = m_currentPage;
+        std::weak_ptr<bool> aliveWeak = m_alive;
 
         if (page.totalSegments > 1) {
             // Load specific segment for webtoon splitting
             ImageLoader::loadAsyncFullSizeSegment(
                 imageUrl, page.segment, page.totalSegments,
-                [this, index, currentPageAtLoad](RotatableImage* img) {
+                [aliveWeak, index, currentPageAtLoad](RotatableImage* img) {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
                     if (index == currentPageAtLoad) {
                         brls::Logger::debug("ReaderActivity: Page {} (segment) loaded", index);
                     }
                 }, pageImage);
         } else {
             // Load full image normally
-            ImageLoader::loadAsyncFullSize(imageUrl, [this, index, currentPageAtLoad](RotatableImage* img) {
+            ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index, currentPageAtLoad](RotatableImage* img) {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (index == currentPageAtLoad) {
                     brls::Logger::debug("ReaderActivity: Page {} loaded", index);
                 }
@@ -977,10 +1003,13 @@ void ReaderActivity::updateDirectionLabel() {
 }
 
 void ReaderActivity::updateProgress() {
-    // Save reading progress to server
-    vitasuwayomi::asyncRun([this]() {
+    // Save reading progress to server - capture values, not 'this'
+    int mangaId = m_mangaId;
+    int chapterIndex = m_chapterIndex;
+    int currentPage = m_currentPage;
+    vitasuwayomi::asyncRun([mangaId, chapterIndex, currentPage]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        client.updateChapterProgress(m_mangaId, m_chapterIndex, m_currentPage);
+        client.updateChapterProgress(mangaId, chapterIndex, currentPage);
     });
 }
 
@@ -1610,6 +1639,7 @@ void ReaderActivity::loadPreviewPage(int index) {
 
     const Page& page = m_pages[index];
     std::string imageUrl = page.imageUrl;
+    std::weak_ptr<bool> aliveWeak = m_alive;
 
     if (page.totalSegments > 1) {
         brls::Logger::debug("Loading preview page {} segment {}/{}",
@@ -1618,14 +1648,18 @@ void ReaderActivity::loadPreviewPage(int index) {
         // Load specific segment for webtoon splitting
         ImageLoader::loadAsyncFullSizeSegment(
             imageUrl, page.segment, page.totalSegments,
-            [this, index](RotatableImage* img) {
+            [aliveWeak, index](RotatableImage* img) {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Logger::debug("Preview page {} (segment) loaded", index);
             }, previewImage);
     } else {
         brls::Logger::debug("Loading preview page {}", index);
 
         // Load the preview image (full size for manga reader)
-        ImageLoader::loadAsyncFullSize(imageUrl, [this, index](RotatableImage* img) {
+        ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             brls::Logger::debug("Preview page {} loaded", index);
         }, previewImage);
     }
@@ -1702,11 +1736,20 @@ void ReaderActivity::preloadNextChapter() {
 
     brls::Logger::info("Preloading next chapter {}", m_chapterIndex + 1);
 
-    vitasuwayomi::asyncTask<bool>([this]() {
+    int mangaId = m_mangaId;
+    int nextChapterIndex = m_chapterIndex + 1;
+    auto sharedNextPages = std::make_shared<std::vector<Page>>();
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    vitasuwayomi::asyncTask<bool>([mangaId, nextChapterIndex, sharedNextPages]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        return client.fetchChapterPages(m_mangaId, m_chapterIndex + 1, m_nextChapterPages);
-    }, [this](bool success) {
-        if (success && !m_nextChapterPages.empty()) {
+        return client.fetchChapterPages(mangaId, nextChapterIndex, *sharedNextPages);
+    }, [this, aliveWeak, sharedNextPages](bool success) {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive) return;
+
+        if (success && !sharedNextPages->empty()) {
+            m_nextChapterPages = std::move(*sharedNextPages);
             m_nextChapterLoaded = true;
             brls::Logger::info("Next chapter preloaded: {} pages", m_nextChapterPages.size());
 
@@ -1745,15 +1788,20 @@ void ReaderActivity::updateReaderMode() {
             webtoonScroll->setSidePadding(m_settings.webtoonSidePadding);
             webtoonScroll->setRotation(static_cast<float>(m_settings.rotation));
 
-            // Set up progress callback
-            webtoonScroll->setProgressCallback([this](int currentPage, int totalPages, float scrollPercent) {
+            // Set up progress callback with alive guard
+            std::weak_ptr<bool> cbAlive = m_alive;
+            webtoonScroll->setProgressCallback([this, cbAlive](int currentPage, int totalPages, float scrollPercent) {
+                auto a = cbAlive.lock();
+                if (!a || !*a) return;
                 m_currentPage = currentPage;
                 updatePageDisplay();
                 updateProgress();
             });
 
-            // Set up tap callback to toggle controls
-            webtoonScroll->setTapCallback([this]() {
+            // Set up tap callback with alive guard
+            webtoonScroll->setTapCallback([this, cbAlive]() {
+                auto a = cbAlive.lock();
+                if (!a || !*a) return;
                 toggleControls();
             });
 
@@ -1779,8 +1827,22 @@ void ReaderActivity::updateReaderMode() {
 void ReaderActivity::willDisappear(bool resetState) {
     Activity::willDisappear(resetState);
 
-    // Invalidate alive flag so pending async callbacks bail out safely
+    // Invalidate alive flag so pending async callbacks bail out safely.
+    // This must happen BEFORE any cleanup so that in-flight callbacks
+    // (image loader brls::sync, asyncTask completions, etc.) see the
+    // flag as false and skip accessing any of our member state.
     *m_alive = false;
+
+    // Cancel all pending image loader operations to avoid their brls::sync
+    // callbacks calling target->setImageFromMem() on our destroyed views.
+    ImageLoader::cancelAll();
+
+    // Clear webtoon scroll view callbacks and pages so it stops referencing us
+    if (webtoonScroll) {
+        webtoonScroll->setProgressCallback(nullptr);
+        webtoonScroll->setTapCallback(nullptr);
+        webtoonScroll->clearPages();
+    }
 
     // Restore screen dimming when leaving the reader
     if (m_settings.keepScreenOn) {

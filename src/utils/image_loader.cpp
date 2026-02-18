@@ -985,6 +985,9 @@ void ImageLoader::cancelAll() {
     while (!s_loadQueue.empty()) {
         s_loadQueue.pop();
     }
+    while (!s_rotatableLoadQueue.empty()) {
+        s_rotatableLoadQueue.pop();
+    }
 }
 
 } // namespace vitasuwayomi
