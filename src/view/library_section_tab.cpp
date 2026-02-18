@@ -366,52 +366,24 @@ void LibrarySectionTab::loadCategories() {
         }
     }
 
-    asyncRun([this, aliveWeak, cacheEnabled]() {
+    // Determine default category for combined query
+    int prefetchCategoryId = Application::getInstance().getSettings().defaultCategoryId;
+
+    asyncRun([this, aliveWeak, cacheEnabled, prefetchCategoryId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Category> categories;
+        std::vector<Manga> prefetchedManga;
+        int resolvedCategoryId = prefetchCategoryId;
+        bool usedCombinedQuery = false;
 
-        if (client.fetchCategories(categories)) {
-            brls::Logger::info("LibrarySectionTab: Got {} categories from server", categories.size());
-
-            // Sort categories by order
-            std::sort(categories.begin(), categories.end(),
-                      [](const Category& a, const Category& b) {
-                          return a.order < b.order;
-                      });
-
-            // Save to cache
-            if (cacheEnabled) {
-                LibraryCache::getInstance().saveCategories(categories);
-            }
-
-            brls::sync([this, categories, aliveWeak]() {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-
-                m_categories = categories;
-                m_categoriesLoaded = true;
-                createCategoryTabs();
-
-                // Load default category from settings, or first category if not found
-                int defaultId = Application::getInstance().getSettings().defaultCategoryId;
-                bool foundDefault = false;
-                if (defaultId != 0) {
-                    for (const auto& cat : m_categories) {
-                        if (cat.id == defaultId) {
-                            foundDefault = true;
-                            break;
-                        }
-                    }
-                }
-                if (foundDefault) {
-                    selectCategory(defaultId);
-                } else if (!m_categories.empty()) {
-                    selectCategory(m_categories[0].id);
-                } else {
-                    // No categories - load all library manga
-                    selectCategory(0);
-                }
-            });
+        // Try combined query: fetch categories + default category manga in one request
+        if (client.fetchCategoriesWithManga(categories, prefetchCategoryId, prefetchedManga)) {
+            brls::Logger::info("LibrarySectionTab: Combined query got {} categories + {} manga",
+                              categories.size(), prefetchedManga.size());
+            usedCombinedQuery = true;
+        } else if (client.fetchCategories(categories)) {
+            // Fallback to categories-only fetch
+            brls::Logger::info("LibrarySectionTab: Got {} categories from server (separate fetch)", categories.size());
         } else {
             brls::Logger::warning("LibrarySectionTab: Failed to fetch categories from server");
 
@@ -419,14 +391,100 @@ void LibrarySectionTab::loadCategories() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
-                // Only show fallback if we don't have cached data already
                 if (!m_categoriesLoaded) {
                     m_categoriesLoaded = true;
                     createCategoryTabs();
                     selectCategory(0);
                 }
             });
+            return;
         }
+
+        // Sort categories by order
+        std::sort(categories.begin(), categories.end(),
+                  [](const Category& a, const Category& b) {
+                      return a.order < b.order;
+                  });
+
+        // Save to cache
+        if (cacheEnabled) {
+            LibraryCache::getInstance().saveCategories(categories);
+            if (usedCombinedQuery && !prefetchedManga.empty()) {
+                LibraryCache::getInstance().saveCategoryManga(resolvedCategoryId, prefetchedManga);
+            }
+        }
+
+        brls::sync([this, categories, prefetchedManga, resolvedCategoryId, usedCombinedQuery, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
+            m_categories = categories;
+            m_categoriesLoaded = true;
+            createCategoryTabs();
+
+            // Determine which category to select
+            int defaultId = resolvedCategoryId;
+            bool foundDefault = false;
+            if (defaultId != 0) {
+                for (const auto& cat : m_categories) {
+                    if (cat.id == defaultId) {
+                        foundDefault = true;
+                        break;
+                    }
+                }
+            }
+
+            int selectedId = 0;
+            if (foundDefault) {
+                selectedId = defaultId;
+            } else if (!m_categories.empty()) {
+                selectedId = m_categories[0].id;
+            }
+
+            if (usedCombinedQuery && !prefetchedManga.empty() && selectedId == resolvedCategoryId) {
+                // We already have manga data from the combined query - skip the separate fetch
+                // Set up category selection state without triggering loadCategoryManga
+                m_currentCategoryId = selectedId;
+                m_currentCategoryName = "Library";
+                m_selectedCategoryIndex = 0;
+                for (size_t i = 0; i < m_categories.size(); i++) {
+                    if (m_categories[i].id == selectedId) {
+                        m_currentCategoryName = m_categories[i].name;
+                        m_selectedCategoryIndex = static_cast<int>(i);
+                        break;
+                    }
+                }
+
+                // Load per-category sort mode
+                auto& settings = Application::getInstance().getSettings();
+                auto it = settings.categorySortModes.find(selectedId);
+                if (it != settings.categorySortModes.end()) {
+                    m_sortMode = static_cast<LibrarySortMode>(it->second);
+                } else {
+                    m_sortMode = LibrarySortMode::DEFAULT;
+                }
+                updateSortButtonText();
+                updateCategoryButtonStyles();
+                scrollToCategoryIndex(m_selectedCategoryIndex);
+
+                // Update title
+                if (m_titleLabel) {
+                    m_titleLabel->setText(m_currentCategoryName);
+                }
+
+                // Apply the prefetched manga directly
+                m_fullMangaList = prefetchedManga;
+                m_mangaList = prefetchedManga;
+                sortMangaList();
+                m_loaded = true;
+
+                brls::Logger::info("LibrarySectionTab: Applied prefetched manga ({} items) from combined query",
+                                  prefetchedManga.size());
+            } else {
+                // No prefetched manga or category changed - use normal selectCategory flow
+                selectCategory(selectedId);
+            }
+        });
     });
 }
 
