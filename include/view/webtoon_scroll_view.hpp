@@ -124,8 +124,8 @@ private:
     // Pages data
     std::vector<Page> m_pages;
 
-    // Image containers for each page
-    std::vector<RotatableImage*> m_pageImages;
+    // Image containers for each page (shared_ptr so async load callbacks keep them alive)
+    std::vector<std::shared_ptr<RotatableImage>> m_pageImages;
 
     // Content box that holds all images
     brls::Box* m_contentBox = nullptr;

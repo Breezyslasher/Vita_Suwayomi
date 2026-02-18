@@ -139,7 +139,7 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
 
     // Create image containers for each page
     for (size_t i = 0; i < pages.size(); i++) {
-        auto* pageImg = new RotatableImage();
+        auto pageImg = std::make_shared<RotatableImage>();
         pageImg->setWidth(availableWidth);
         pageImg->setHeight(defaultHeight);  // Will be adjusted when image loads
         pageImg->setScalingType(brls::ImageScalingType::FIT);
@@ -170,13 +170,11 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
 }
 
 void WebtoonScrollView::clearPages() {
-    // Invalidate alive flag so pending async image loads don't access deleted pointers
+    // Invalidate alive flag so pending async callbacks don't mutate our state.
+    // Image objects stay alive via shared_ptr until all async callbacks complete.
     *m_alive = false;
     m_alive = std::make_shared<bool>(true);
 
-    for (auto* img : m_pageImages) {
-        delete img;
-    }
     m_pageImages.clear();
     m_pageHeights.clear();
     m_pages.clear();
@@ -255,7 +253,7 @@ void WebtoonScrollView::setRotation(float degrees) {
     }
 
     // Apply rotation to all existing page images
-    for (auto* img : m_pageImages) {
+    for (auto& img : m_pageImages) {
         if (img) {
             img->setRotation(imageRotation);
         }
@@ -408,7 +406,11 @@ void WebtoonScrollView::updateVisibleImages() {
         m_loadingPages.insert(i);
 
         const Page& page = m_pages[i];
-        RotatableImage* img = m_pageImages[i];
+        // Capture shared_ptr so the RotatableImage stays alive until the image
+        // loader's brls::sync callback completes (it calls target->setImageFromMem
+        // before our callback, so the object must outlive the entire brls::sync lambda).
+        std::shared_ptr<RotatableImage> imgPtr = m_pageImages[i];
+        RotatableImage* img = imgPtr.get();
         int pageIndex = i;
 
         // Load the image
@@ -416,16 +418,16 @@ void WebtoonScrollView::updateVisibleImages() {
             // Segmented webtoon page
             ImageLoader::loadAsyncFullSizeSegment(
                 page.imageUrl, page.segment, page.totalSegments,
-                [this, aliveWeak, pageIndex, img](RotatableImage* loadedImg) {
+                [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
 
                     m_loadingPages.erase(pageIndex);
                     m_loadedPages.insert(pageIndex);
 
-                    if (img->hasImage()) {
-                        float imageWidth = static_cast<float>(img->getImageWidth());
-                        float imageHeight = static_cast<float>(img->getImageHeight());
+                    if (imgPtr->hasImage()) {
+                        float imageWidth = static_cast<float>(imgPtr->getImageWidth());
+                        float imageHeight = static_cast<float>(imgPtr->getImageHeight());
 
                         if (imageWidth > 0 && imageHeight > 0) {
                             float availableWidth = m_viewWidth - (m_sidePadding * 2);
@@ -435,7 +437,7 @@ void WebtoonScrollView::updateVisibleImages() {
                             float oldHeight = m_pageHeights[pageIndex];
                             m_totalHeight += (newHeight - oldHeight);
                             m_pageHeights[pageIndex] = newHeight;
-                            img->setHeight(newHeight);
+                            imgPtr->setHeight(newHeight);
                         }
                     }
 
@@ -444,16 +446,16 @@ void WebtoonScrollView::updateVisibleImages() {
         } else {
             // Regular page
             ImageLoader::loadAsyncFullSize(page.imageUrl,
-                [this, aliveWeak, pageIndex, img](RotatableImage* loadedImg) {
+                [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
 
                     m_loadingPages.erase(pageIndex);
                     m_loadedPages.insert(pageIndex);
 
-                    if (img->hasImage()) {
-                        float imageWidth = static_cast<float>(img->getImageWidth());
-                        float imageHeight = static_cast<float>(img->getImageHeight());
+                    if (imgPtr->hasImage()) {
+                        float imageWidth = static_cast<float>(imgPtr->getImageWidth());
+                        float imageHeight = static_cast<float>(imgPtr->getImageHeight());
 
                         if (imageWidth > 0 && imageHeight > 0) {
                             float availableWidth = m_viewWidth - (m_sidePadding * 2);
@@ -463,7 +465,7 @@ void WebtoonScrollView::updateVisibleImages() {
                             float oldHeight = m_pageHeights[pageIndex];
                             m_totalHeight += (newHeight - oldHeight);
                             m_pageHeights[pageIndex] = newHeight;
-                            img->setHeight(newHeight);
+                            imgPtr->setHeight(newHeight);
                         }
                     }
 
@@ -531,7 +533,7 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         float currentX = x + m_scrollY;  // scrollY is used as horizontal offset
 
         for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
-            RotatableImage* img = m_pageImages[i];
+            RotatableImage* img = m_pageImages[i].get();
 
             // Calculate the correct page width for the rotated image
             // When rotated 90/270, the effective aspect ratio is imageHeight/imageWidth
@@ -586,7 +588,7 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
             // Check if page is in visible area (with some margin for smooth scrolling)
             if (pageBottom >= y - 100 && currentY <= y + height + 100) {
                 // Draw this page
-                RotatableImage* img = m_pageImages[i];
+                RotatableImage* img = m_pageImages[i].get();
                 if (img) {
                     // Update image width in case view resized
                     img->setWidth(availableWidth);

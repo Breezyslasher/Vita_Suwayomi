@@ -1151,6 +1151,12 @@ void ReaderActivity::showControls() {
         bottomBar->setAlpha(1.0f);
         bottomBar->setVisibility(brls::Visibility::VISIBLE);
     }
+
+    // Disable focus on the full-screen content views so D-pad doesn't
+    // land on them (focus highlight would appear at the corner)
+    if (pageImage) pageImage->setFocusable(false);
+    if (webtoonScroll) webtoonScroll->setFocusable(false);
+
     // Hide page counter when controls are visible (it's redundant)
     hidePageCounter();
     m_controlsVisible = true;
@@ -1166,6 +1172,18 @@ void ReaderActivity::hideControls() {
         bottomBar->setAlpha(0.0f);
         bottomBar->setVisibility(brls::Visibility::GONE);
     }
+
+    // Re-enable focus on content views
+    if (pageImage) pageImage->setFocusable(true);
+    if (webtoonScroll) webtoonScroll->setFocusable(true);
+
+    // Return focus to content
+    if (m_continuousScrollMode && webtoonScroll) {
+        brls::Application::giveFocus(webtoonScroll);
+    } else if (pageImage) {
+        brls::Application::giveFocus(pageImage);
+    }
+
     // Show page counter when controls are hidden
     showPageCounter();
     m_controlsVisible = false;
