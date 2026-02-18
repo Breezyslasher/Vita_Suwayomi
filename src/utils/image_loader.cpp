@@ -351,6 +351,24 @@ void ImageLoader::setAccessToken(const std::string& token) {
     s_accessToken = token;
 }
 
+// Helper for Base64 encoding
+static std::string base64EncodeImage(const std::string& input) {
+    static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    int val = 0, valb = -6;
+    for (unsigned char c : input) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (encoded.size() % 4) encoded.push_back('=');
+    return encoded;
+}
+
 // Helper to apply authentication headers to HTTP client
 static void applyAuthHeaders(HttpClient& client) {
     // Prefer JWT Bearer auth if access token is available
@@ -359,21 +377,54 @@ static void applyAuthHeaders(HttpClient& client) {
     } else if (!ImageLoader::getAuthUsername().empty() && !ImageLoader::getAuthPassword().empty()) {
         // Fall back to Basic Auth
         std::string credentials = ImageLoader::getAuthUsername() + ":" + ImageLoader::getAuthPassword();
-        static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        std::string encoded;
-        int val = 0, valb = -6;
-        for (unsigned char c : credentials) {
-            val = (val << 8) + c;
-            valb += 8;
-            while (valb >= 0) {
-                encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                valb -= 6;
+        client.setDefaultHeader("Authorization", "Basic " + base64EncodeImage(credentials));
+    }
+}
+
+// Authenticated HTTP GET with automatic JWT token refresh on 401/403.
+// If the request fails due to an expired token, refreshes via SuwayomiClient
+// and retries once with the new token.
+static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2) {
+    HttpClient client;
+    applyAuthHeaders(client);
+
+    HttpResponse resp;
+    bool success = false;
+    bool tokenRefreshed = false;
+
+    for (int attempt = 0; attempt <= maxRetries && !success; attempt++) {
+        if (attempt > 0) {
+            brls::Logger::debug("ImageLoader: Retry {} for {}", attempt, url);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000 * attempt));
+        }
+
+        resp = client.get(url);
+
+        // Check for auth failure (401 Unauthorized or 403 Forbidden)
+        if ((resp.statusCode == 401 || resp.statusCode == 403) && !tokenRefreshed) {
+            brls::Logger::info("ImageLoader: Got {} for {}, attempting token refresh...",
+                              resp.statusCode, url);
+            auto& suwayomiClient = SuwayomiClient::getInstance();
+            if (suwayomiClient.refreshToken()) {
+                brls::Logger::info("ImageLoader: Token refreshed, retrying download");
+                tokenRefreshed = true;
+                // Re-create client with new token
+                client = HttpClient();
+                applyAuthHeaders(client);
+                // Don't count this as a retry attempt
+                attempt--;
+                continue;
+            } else {
+                brls::Logger::warning("ImageLoader: Token refresh failed for {}", url);
             }
         }
-        if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-        while (encoded.size() % 4) encoded.push_back('=');
-        client.setDefaultHeader("Authorization", "Basic " + encoded);
+
+        if (resp.success && !resp.body.empty()) {
+            success = true;
+        }
     }
+
+    return resp;
 }
 
 void ImageLoader::setMaxConcurrentLoads(int max) {
@@ -495,30 +546,11 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         }
     }
 
-    HttpClient client;
+    // Authenticated GET with automatic JWT refresh on 401/403
+    HttpResponse resp = authenticatedGet(url, 2);
 
-    // Add authentication if needed
-    applyAuthHeaders(client);
-
-    // Retry logic for slow/unreliable proxy servers
-    const int maxRetries = 2;
-    HttpResponse resp;
-    bool success = false;
-
-    for (int attempt = 0; attempt <= maxRetries && !success; attempt++) {
-        if (attempt > 0) {
-            brls::Logger::debug("ImageLoader: Retry {} for {}", attempt, url);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000 * attempt));  // 1s, 2s
-        }
-
-        resp = client.get(url);
-        if (resp.success && !resp.body.empty()) {
-            success = true;
-        }
-    }
-
-    if (!success || resp.body.empty()) {
-        brls::Logger::warning("ImageLoader: Failed to load {} after {} attempts", url, maxRetries + 1);
+    if (!resp.success || resp.body.empty()) {
+        brls::Logger::warning("ImageLoader: Failed to load {} (status {})", url, resp.statusCode);
         return;
     }
 
@@ -748,13 +780,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
 #endif
     } else {
-        // Load from HTTP
-        HttpClient client;
-
-        // Add authentication if needed
-        applyAuthHeaders(client);
-
-        HttpResponse resp = client.get(url);
+        // Load from HTTP with automatic JWT refresh on 401/403
+        HttpResponse resp = authenticatedGet(url, 2);
         if (resp.success && !resp.body.empty()) {
             imageBody = std::move(resp.body);
             loadSuccess = true;
@@ -1005,12 +1032,8 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
         }
 #endif
     } else {
-        HttpClient client;
-
-        // Add authentication if needed
-        applyAuthHeaders(client);
-
-        HttpResponse resp = client.get(url);
+        // Load from HTTP with automatic JWT refresh on 401/403
+        HttpResponse resp = authenticatedGet(url, 2);
         if (resp.success && !resp.body.empty()) {
             imageData = std::move(resp.body);
             loadSuccess = true;
