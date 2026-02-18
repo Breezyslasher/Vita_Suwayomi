@@ -157,6 +157,9 @@ private:
     bool m_settingsVisible = false;
     bool m_continuousScrollMode = false;  // True when using WebtoonScrollView
 
+    // Alive flag for async callback safety
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
+
     // Switch between single-page and continuous scroll modes
     void updateReaderMode();
 

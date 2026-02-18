@@ -9,6 +9,7 @@
 #include <vector>
 #include <set>
 #include <functional>
+#include <memory>
 #include "view/rotatable_image.hpp"
 #include "app/suwayomi_client.hpp"
 
@@ -123,8 +124,8 @@ private:
     // Pages data
     std::vector<Page> m_pages;
 
-    // Image containers for each page
-    std::vector<RotatableImage*> m_pageImages;
+    // Image containers for each page (shared_ptr so async load callbacks keep them alive)
+    std::vector<std::shared_ptr<RotatableImage>> m_pageImages;
 
     // Content box that holds all images
     brls::Box* m_contentBox = nullptr;
@@ -157,6 +158,9 @@ private:
     // Callbacks
     ScrollProgressCallback m_progressCallback;
     TapCallback m_tapCallback;
+
+    // Alive flag for async callback safety (cleared in clearPages/destructor)
+    std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 
     // Preload buffer - how many pages ahead/behind to load
     static constexpr int PRELOAD_PAGES = 3;
