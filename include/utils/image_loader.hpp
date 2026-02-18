@@ -9,6 +9,7 @@
 #include <string>
 #include <functional>
 #include <map>
+#include <list>
 #include <mutex>
 #include <queue>
 #include <atomic>
@@ -91,8 +92,20 @@ private:
     static void executeLoad(const LoadRequest& request);
     static void executeRotatableLoad(const RotatableLoadRequest& request);
 
-    static std::map<std::string, std::vector<uint8_t>> s_cache;
+    // LRU cache: list stores entries in access order (most recent at front)
+    // map provides O(1) lookup by URL
+    struct CacheEntry {
+        std::string url;
+        std::vector<uint8_t> data;
+    };
+    static std::list<CacheEntry> s_cacheList;
+    static std::map<std::string, std::list<CacheEntry>::iterator> s_cacheMap;
+    static size_t s_maxCacheSize;
     static std::mutex s_cacheMutex;
+
+    // LRU cache helpers
+    static void cachePut(const std::string& url, const std::vector<uint8_t>& data);
+    static bool cacheGet(const std::string& url, std::vector<uint8_t>& data);
     static std::string s_authUsername;
     static std::string s_authPassword;
     static std::string s_accessToken;  // JWT access token for Bearer auth

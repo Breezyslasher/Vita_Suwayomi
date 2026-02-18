@@ -62,6 +62,9 @@ public:
     // Focus a specific cell by index
     void focusIndex(int index);
 
+    // Load thumbnails around a specific cell index (called on focus change)
+    void loadThumbnailsNearIndex(int index);
+
     static brls::View* create();
 
 private:
@@ -103,6 +106,7 @@ private:
     int m_visibleStartRow = 0;
     int m_lastScrollY = 0;
     bool m_needsUpdate = false;
+    int m_thumbnailLoadedUpToRow = 0;  // Tracks how far thumbnails have been loaded
 
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;

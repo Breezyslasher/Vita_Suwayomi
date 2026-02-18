@@ -37,7 +37,9 @@
 namespace vitasuwayomi {
 
 // Static member initialization
-std::map<std::string, std::vector<uint8_t>> ImageLoader::s_cache;
+std::list<ImageLoader::CacheEntry> ImageLoader::s_cacheList;
+std::map<std::string, std::list<ImageLoader::CacheEntry>::iterator> ImageLoader::s_cacheMap;
+size_t ImageLoader::s_maxCacheSize = 200;  // LRU cache: 200 entries for large libraries
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
@@ -374,6 +376,42 @@ void ImageLoader::setMaxThumbnailSize(int maxSize) {
     s_maxThumbnailSize = maxSize > 0 ? maxSize : 0;
 }
 
+void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& data) {
+    std::lock_guard<std::mutex> lock(s_cacheMutex);
+
+    // If key already exists, move to front and update data
+    auto it = s_cacheMap.find(url);
+    if (it != s_cacheMap.end()) {
+        s_cacheList.erase(it->second);
+        s_cacheMap.erase(it);
+    }
+
+    // Evict oldest entries (back of list) if over capacity
+    while (s_cacheList.size() >= s_maxCacheSize) {
+        auto& oldest = s_cacheList.back();
+        s_cacheMap.erase(oldest.url);
+        s_cacheList.pop_back();
+    }
+
+    // Insert at front (most recently used)
+    s_cacheList.push_front({url, data});
+    s_cacheMap[url] = s_cacheList.begin();
+}
+
+bool ImageLoader::cacheGet(const std::string& url, std::vector<uint8_t>& data) {
+    std::lock_guard<std::mutex> lock(s_cacheMutex);
+
+    auto it = s_cacheMap.find(url);
+    if (it == s_cacheMap.end()) {
+        return false;
+    }
+
+    // Move to front (mark as recently used)
+    data = it->second->data;
+    s_cacheList.splice(s_cacheList.begin(), s_cacheList, it->second);
+    return true;
+}
+
 void ImageLoader::executeLoad(const LoadRequest& request) {
     const std::string& url = request.url;
     brls::Image* target = request.target;
@@ -433,7 +471,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         return;
     }
 
-    // Convert WebP if needed
+    // Convert and downscale all image formats for thumbnails
     std::vector<uint8_t> imageData;
     if (isWebP) {
         imageData = convertWebPtoTGA(
@@ -445,17 +483,21 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             return;
         }
     } else {
-        imageData.assign(resp.body.begin(), resp.body.end());
+        // Downscale JPEG/PNG thumbnails too (not just WebP)
+        // This reduces memory usage and makes cache more effective
+        imageData = convertImageToTGA(
+            reinterpret_cast<const uint8_t*>(resp.body.data()),
+            resp.body.size(),
+            s_maxThumbnailSize
+        );
+        if (imageData.empty()) {
+            // Fallback: use raw data if conversion fails
+            imageData.assign(resp.body.begin(), resp.body.end());
+        }
     }
 
-    // Cache the image in memory (larger cache for big libraries)
-    {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.size() > 80) {
-            s_cache.clear();
-        }
-        s_cache[url] = imageData;
-    }
+    // Cache the image in memory using LRU eviction
+    cachePut(url, imageData);
 
     // Save to disk cache if enabled
     if (Application::getInstance().getSettings().cacheCoverImages) {
@@ -542,12 +584,11 @@ void ImageLoader::processQueue() {
 void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target) {
     if (url.empty() || !target) return;
 
-    // Check memory cache first
+    // Check memory cache first (LRU - promotes to front on hit)
     {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        auto it = s_cache.find(url);
-        if (it != s_cache.end()) {
-            target->setImageFromMem(it->second.data(), it->second.size());
+        std::vector<uint8_t> cachedData;
+        if (cacheGet(url, cachedData)) {
+            target->setImageFromMem(cachedData.data(), cachedData.size());
             if (callback) callback(target);
             return;
         }
@@ -559,14 +600,8 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
         if (mangaId > 0) {
             std::vector<uint8_t> diskData;
             if (LibraryCache::getInstance().loadCoverImage(mangaId, diskData)) {
-                // Found in disk cache - add to memory cache and display
-                {
-                    std::lock_guard<std::mutex> lock(s_cacheMutex);
-                    if (s_cache.size() > 80) {
-                        s_cache.clear();
-                    }
-                    s_cache[url] = diskData;
-                }
+                // Found in disk cache - add to memory LRU cache and display
+                cachePut(url, diskData);
                 target->setImageFromMem(diskData.data(), diskData.size());
                 if (callback) callback(target);
                 return;
@@ -742,18 +777,12 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             brls::Logger::debug("ImageLoader: Using image directly ({} bytes)", imageData.size());
         }
 
-        // Cache the image (include segment in key if segmented)
+        // Cache the image using LRU (include segment in key if segmented)
         std::string cacheKey = url + "_full";
         if (totalSegments > 1) {
             cacheKey += "_seg" + std::to_string(segment);
         }
-        {
-            std::lock_guard<std::mutex> lock(s_cacheMutex);
-            if (s_cache.size() > 50) {
-                s_cache.clear();
-            }
-            s_cache[cacheKey] = imageData;
-        }
+        cachePut(cacheKey, imageData);
 
         // Update UI on main thread
         brls::sync([imageData, callback, target]() {
@@ -770,13 +799,12 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
 void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target) {
     if (url.empty() || !target) return;
 
-    // Check cache first
+    // Check LRU cache first
     std::string cacheKey = url + "_full";
     {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        auto it = s_cache.find(cacheKey);
-        if (it != s_cache.end()) {
-            target->setImageFromMem(it->second.data(), it->second.size());
+        std::vector<uint8_t> cachedData;
+        if (cacheGet(cacheKey, cachedData)) {
+            target->setImageFromMem(cachedData.data(), cachedData.size());
             if (callback) callback(target);
             return;
         }
@@ -795,13 +823,12 @@ void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, 
                                             RotatableLoadCallback callback, RotatableImage* target) {
     if (url.empty() || !target) return;
 
-    // Check cache first (with segment key)
+    // Check LRU cache first (with segment key)
     std::string cacheKey = url + "_full_seg" + std::to_string(segment);
     {
-        std::lock_guard<std::mutex> lock(s_cacheMutex);
-        auto it = s_cache.find(cacheKey);
-        if (it != s_cache.end()) {
-            target->setImageFromMem(it->second.data(), it->second.size());
+        std::vector<uint8_t> cachedData;
+        if (cacheGet(cacheKey, cachedData)) {
+            target->setImageFromMem(cachedData.data(), cachedData.size());
             if (callback) callback(target);
             return;
         }
@@ -821,7 +848,7 @@ void ImageLoader::preload(const std::string& url) {
 
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.find(url) != s_cache.end()) {
+        if (s_cacheMap.find(url) != s_cacheMap.end()) {
             return;
         }
     }
@@ -961,7 +988,7 @@ void ImageLoader::preloadFullSize(const std::string& url) {
     // Check if already cached
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
-        if (s_cache.find(cacheKey) != s_cache.end()) {
+        if (s_cacheMap.find(cacheKey) != s_cacheMap.end()) {
             return;
         }
     }
@@ -977,7 +1004,8 @@ void ImageLoader::preloadFullSize(const std::string& url) {
 
 void ImageLoader::clearCache() {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
-    s_cache.clear();
+    s_cacheList.clear();
+    s_cacheMap.clear();
 }
 
 void ImageLoader::cancelAll() {
