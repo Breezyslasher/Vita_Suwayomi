@@ -16,6 +16,7 @@
 #include "utils/library_cache.hpp"
 #include "view/migrate_search_view.hpp"
 #include <chrono>
+#include <set>
 #include <thread>
 
 namespace vitasuwayomi {
@@ -374,6 +375,9 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
 
+    // Track initial connectivity for offline→online rebuild detection
+    m_wasOffline = !Application::getInstance().isConnected();
+
     // Load categories first, then create tabs
     loadCategories();
 }
@@ -388,10 +392,24 @@ LibrarySectionTab::~LibrarySectionTab() {
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
 
+    bool online = Application::getInstance().isConnected();
+
     // Show/hide update button + hint icon based on connectivity
     if (m_updateContainer) {
-        m_updateContainer->setVisibility(Application::getInstance().isConnected()
+        m_updateContainer->setVisibility(online
             ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
+
+    // Detect offline→online transition: full rebuild when reconnected
+    if (online && m_wasOffline) {
+        brls::Logger::info("LibrarySectionTab: Back online, rebuilding library");
+        m_wasOffline = false;
+        refresh();
+        loadCategories();
+        return;
+    }
+    if (!online) {
+        m_wasOffline = true;
     }
 
     // Check if group mode was changed externally (e.g. from settings tab)
@@ -2708,6 +2726,55 @@ void LibrarySectionTab::loadAllManga() {
         m_titleLabel->setText("All Manga");
     }
 
+    // When offline, aggregate cached category manga as fallback
+    if (!Application::getInstance().isConnected()) {
+        bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+        if (cacheEnabled) {
+            LibraryCache& cache = LibraryCache::getInstance();
+            std::vector<Manga> allCached;
+            std::set<int> seenIds;
+
+            // Load cached categories and merge their manga
+            std::vector<Category> categories;
+            if (cache.loadCategories(categories)) {
+                for (const auto& cat : categories) {
+                    std::vector<Manga> catManga;
+                    if (cache.loadCategoryManga(cat.id, catManga)) {
+                        for (auto& m : catManga) {
+                            if (seenIds.insert(m.id).second) {
+                                allCached.push_back(std::move(m));
+                            }
+                        }
+                    }
+                }
+            }
+            // Also try category 0 (default/all)
+            {
+                std::vector<Manga> catManga;
+                if (cache.loadCategoryManga(0, catManga)) {
+                    for (auto& m : catManga) {
+                        if (seenIds.insert(m.id).second) {
+                            allCached.push_back(std::move(m));
+                        }
+                    }
+                }
+            }
+
+            if (!allCached.empty()) {
+                brls::Logger::info("LibrarySectionTab: Loaded {} manga from cache for all-manga view (offline)",
+                                  allCached.size());
+                m_fullMangaList = allCached;
+                m_mangaList = allCached;
+                sortMangaList();
+                m_loaded = true;
+                return;
+            }
+        }
+        brls::Logger::info("LibrarySectionTab: Offline with no cache for all-manga view");
+        m_loaded = true;
+        return;
+    }
+
     std::weak_ptr<bool> aliveWeak = m_alive;
 
     asyncRun([this, aliveWeak]() {
@@ -2745,9 +2812,91 @@ void LibrarySectionTab::loadBySource() {
     if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::VISIBLE);
     if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
 
+    // Helper lambda: group manga by source and populate tabs
+    auto applySourceGrouping = [this](std::vector<Manga>& allManga) {
+        std::map<std::string, std::vector<Manga>> mangaBySource;
+        for (auto& manga : allManga) {
+            std::string sourceName = manga.sourceName.empty() ? "Unknown" : manga.sourceName;
+            mangaBySource[sourceName].push_back(manga);
+        }
+        std::vector<std::string> sourceNames;
+        for (const auto& pair : mangaBySource) {
+            sourceNames.push_back(pair.first);
+        }
+        std::sort(sourceNames.begin(), sourceNames.end());
+
+        m_mangaBySource = mangaBySource;
+        m_sourceNames = sourceNames;
+        createSourceTabs();
+
+        if (!m_sourceNames.empty()) {
+            bool foundPrevious = false;
+            if (!m_currentSourceName.empty()) {
+                for (const auto& name : m_sourceNames) {
+                    if (name == m_currentSourceName) { foundPrevious = true; break; }
+                }
+            }
+            if (foundPrevious) {
+                selectSource(m_currentSourceName);
+            } else {
+                selectSource(m_sourceNames[0]);
+            }
+        } else {
+            if (m_titleLabel) m_titleLabel->setText("Library by Source");
+            m_mangaList.clear();
+            m_fullMangaList.clear();
+            m_loaded = true;
+            if (m_contentGrid) m_contentGrid->setDataSource(m_mangaList);
+        }
+    };
+
+    // When offline, aggregate cached category manga as fallback
+    if (!Application::getInstance().isConnected()) {
+        bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+        if (cacheEnabled) {
+            LibraryCache& cache = LibraryCache::getInstance();
+            std::vector<Manga> allCached;
+            std::set<int> seenIds;
+
+            std::vector<Category> categories;
+            if (cache.loadCategories(categories)) {
+                for (const auto& cat : categories) {
+                    std::vector<Manga> catManga;
+                    if (cache.loadCategoryManga(cat.id, catManga)) {
+                        for (auto& m : catManga) {
+                            if (seenIds.insert(m.id).second) {
+                                allCached.push_back(std::move(m));
+                            }
+                        }
+                    }
+                }
+            }
+            {
+                std::vector<Manga> catManga;
+                if (cache.loadCategoryManga(0, catManga)) {
+                    for (auto& m : catManga) {
+                        if (seenIds.insert(m.id).second) {
+                            allCached.push_back(std::move(m));
+                        }
+                    }
+                }
+            }
+
+            if (!allCached.empty()) {
+                brls::Logger::info("LibrarySectionTab: Loaded {} manga from cache for by-source view (offline)",
+                                  allCached.size());
+                applySourceGrouping(allCached);
+                return;
+            }
+        }
+        brls::Logger::info("LibrarySectionTab: Offline with no cache for by-source view");
+        m_loaded = true;
+        return;
+    }
+
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak]() {
+    asyncRun([this, aliveWeak, applySourceGrouping]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> allManga;
 
@@ -2762,57 +2911,10 @@ void LibrarySectionTab::loadBySource() {
             return;
         }
 
-        // Group by source
-        std::map<std::string, std::vector<Manga>> mangaBySource;
-        for (const auto& manga : allManga) {
-            std::string sourceName = manga.sourceName.empty() ? "Unknown" : manga.sourceName;
-            mangaBySource[sourceName].push_back(manga);
-        }
-
-        // Sort sources alphabetically
-        std::vector<std::string> sourceNames;
-        for (const auto& pair : mangaBySource) {
-            sourceNames.push_back(pair.first);
-        }
-        std::sort(sourceNames.begin(), sourceNames.end());
-
-        brls::sync([this, mangaBySource, sourceNames, aliveWeak]() {
+        brls::sync([this, allManga, aliveWeak, applySourceGrouping]() mutable {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
-
-            m_mangaBySource = mangaBySource;
-            m_sourceNames = sourceNames;
-
-            // Create source name tabs
-            createSourceTabs();
-
-            // Select the first source (or previously selected if still valid)
-            if (!m_sourceNames.empty()) {
-                // Try to keep the previously selected source
-                bool foundPrevious = false;
-                if (!m_currentSourceName.empty()) {
-                    for (const auto& name : m_sourceNames) {
-                        if (name == m_currentSourceName) {
-                            foundPrevious = true;
-                            break;
-                        }
-                    }
-                }
-                if (foundPrevious) {
-                    selectSource(m_currentSourceName);
-                } else {
-                    selectSource(m_sourceNames[0]);
-                }
-            } else {
-                // No sources found
-                if (m_titleLabel) m_titleLabel->setText("Library by Source");
-                m_mangaList.clear();
-                m_fullMangaList.clear();
-                m_loaded = true;
-                if (m_contentGrid) {
-                    m_contentGrid->setDataSource(m_mangaList);
-                }
-            }
+            applySourceGrouping(allManga);
         });
     });
 }
