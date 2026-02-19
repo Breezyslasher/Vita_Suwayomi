@@ -15,6 +15,7 @@
 #include <borealis.hpp>
 #include <cmath>
 #include <chrono>
+#include <thread>
 
 // Register custom views for XML creation
 namespace {
@@ -805,6 +806,7 @@ void ReaderActivity::loadPages() {
             if (chapterLabel) {
                 chapterLabel->setText("Failed to load chapter");
             }
+            showPageError("Failed to load chapter pages");
             return;
         }
 
@@ -886,6 +888,8 @@ void ReaderActivity::loadPage(int index) {
         return;
     }
 
+    hidePageError();  // Clear any previous error
+
     const Page& page = m_pages[index];
     std::string imageUrl = page.imageUrl;
 
@@ -900,32 +904,45 @@ void ReaderActivity::loadPage(int index) {
     showPageCounter();
     schedulePageCounterHide();
 
+    // Track this load generation for timeout detection
+    int loadGen = ++m_pageLoadGeneration;
+
     // Load image using RotatableImage
     if (pageImage) {
         int currentPageAtLoad = m_currentPage;
         std::weak_ptr<bool> aliveWeak = m_alive;
 
+        auto onLoaded = [this, aliveWeak, index, currentPageAtLoad, loadGen](RotatableImage* img) {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            if (index == currentPageAtLoad) {
+                brls::Logger::debug("ReaderActivity: Page {} loaded", index);
+                // Mark this generation as loaded by advancing past it
+                if (m_pageLoadGeneration == loadGen) {
+                    m_pageLoadGeneration = loadGen + 1000;  // Signal success
+                }
+            }
+        };
+
         if (page.totalSegments > 1) {
-            // Load specific segment for webtoon splitting
             ImageLoader::loadAsyncFullSizeSegment(
-                imageUrl, page.segment, page.totalSegments,
-                [aliveWeak, index, currentPageAtLoad](RotatableImage* img) {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) return;
-                    if (index == currentPageAtLoad) {
-                        brls::Logger::debug("ReaderActivity: Page {} (segment) loaded", index);
-                    }
-                }, pageImage);
+                imageUrl, page.segment, page.totalSegments, onLoaded, pageImage);
         } else {
-            // Load full image normally
-            ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index, currentPageAtLoad](RotatableImage* img) {
+            ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage);
+        }
+
+        // Set up a timeout: if page hasn't loaded after 15 seconds, show error
+        vitasuwayomi::asyncRun([this, aliveWeak, loadGen, index]() {
+            std::this_thread::sleep_for(std::chrono::seconds(15));
+            brls::sync([this, aliveWeak, loadGen, index]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
-                if (index == currentPageAtLoad) {
-                    brls::Logger::debug("ReaderActivity: Page {} loaded", index);
+                // Only show error if this is still the same load attempt
+                if (m_pageLoadGeneration == loadGen) {
+                    showPageError("Failed to load page " + std::to_string(index + 1));
                 }
-            }, pageImage);
-        }
+            });
+        });
     }
 
     // Preload adjacent pages
@@ -1566,6 +1583,60 @@ void ReaderActivity::handlePinchZoom(float scaleFactor) {
                 pageImage->setZoomOffset(m_zoomOffset);
             }
         }
+    }
+}
+
+void ReaderActivity::showPageError(const std::string& message) {
+    if (!container) return;
+
+    hidePageError();  // Remove any existing error overlay
+
+    m_errorOverlay = new brls::Box();
+    m_errorOverlay->setAxis(brls::Axis::COLUMN);
+    m_errorOverlay->setJustifyContent(brls::JustifyContent::CENTER);
+    m_errorOverlay->setAlignItems(brls::AlignItems::CENTER);
+    m_errorOverlay->setWidth(960);
+    m_errorOverlay->setHeight(544);
+    m_errorOverlay->setPositionType(brls::PositionType::ABSOLUTE);
+    m_errorOverlay->setPositionTop(0);
+    m_errorOverlay->setPositionLeft(0);
+    m_errorOverlay->setBackgroundColor(nvgRGBA(26, 26, 46, 200));
+
+    m_errorLabel = new brls::Label();
+    m_errorLabel->setText(message);
+    m_errorLabel->setFontSize(18);
+    m_errorLabel->setTextColor(nvgRGB(200, 200, 200));
+    m_errorLabel->setMarginBottom(20);
+    m_errorOverlay->addView(m_errorLabel);
+
+    m_retryButton = new brls::Button();
+    m_retryButton->setText("Retry");
+    m_retryButton->setWidth(160);
+    m_retryButton->setHeight(44);
+    m_retryButton->setCornerRadius(22);
+    m_retryButton->setBackgroundColor(nvgRGBA(0, 150, 136, 255));
+    m_retryButton->registerClickAction([this](brls::View* view) {
+        hidePageError();
+        if (m_pages.empty()) {
+            loadPages();
+        } else {
+            loadPage(m_currentPage);
+        }
+        return true;
+    });
+    m_retryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_retryButton));
+    m_errorOverlay->addView(m_retryButton);
+
+    container->addView(m_errorOverlay);
+    brls::Application::giveFocus(m_retryButton);
+}
+
+void ReaderActivity::hidePageError() {
+    if (m_errorOverlay && container) {
+        container->removeView(m_errorOverlay);
+        m_errorOverlay = nullptr;
+        m_errorLabel = nullptr;
+        m_retryButton = nullptr;
     }
 }
 

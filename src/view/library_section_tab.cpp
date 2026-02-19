@@ -45,6 +45,15 @@ LibrarySectionTab::LibrarySectionTab() {
     topRow->setMarginBottom(15);
     topRow->setHeight(50);
 
+    // L button hint (before category tabs)
+    auto* lHintIcon = new brls::Image();
+    lHintIcon->setWidth(24);
+    lHintIcon->setHeight(24);
+    lHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    lHintIcon->setImageFromFile("app0:resources/images/l_button.png");
+    lHintIcon->setMarginRight(6);
+    topRow->addView(lHintIcon);
+
     // Category tabs container - outer box clips, inner box scrolls
     m_categoryTabsBox = new brls::Box();
     m_categoryTabsBox->setAxis(brls::Axis::ROW);
@@ -52,7 +61,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryTabsBox->setAlignItems(brls::AlignItems::CENTER);
     m_categoryTabsBox->setGrow(1.0f);
     m_categoryTabsBox->setMarginLeft(0);
-    m_categoryTabsBox->setMarginRight(10);
+    m_categoryTabsBox->setMarginRight(6);
     m_categoryTabsBox->setClipsToBounds(true);
 
     // Inner container that holds category buttons
@@ -65,6 +74,15 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryTabsBox->addView(m_categoryScrollContainer);
 
     topRow->addView(m_categoryTabsBox);
+
+    // R button hint (after category tabs)
+    auto* rHintIcon = new brls::Image();
+    rHintIcon->setWidth(24);
+    rHintIcon->setHeight(24);
+    rHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    rHintIcon->setImageFromFile("app0:resources/images/r_button.png");
+    rHintIcon->setMarginRight(10);
+    topRow->addView(rHintIcon);
 
     // Button container for Sort and Update
     auto* buttonBox = new brls::Box();
@@ -162,7 +180,14 @@ LibrarySectionTab::LibrarySectionTab() {
         onMangaSelected(manga);
     });
     m_contentGrid->setOnPullToRefresh([this]() {
-        triggerLibraryUpdate();
+        // Reload current category/group data from server
+        if (m_groupMode == LibraryGroupMode::BY_CATEGORY) {
+            loadCategoryManga(m_currentCategoryId);
+        } else if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+            loadAllManga();
+        } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            loadBySource();
+        }
     });
 
     // Long-press on a book shows the context menu (same as START button)
@@ -298,7 +323,14 @@ void LibrarySectionTab::onFocusGained() {
     }
 
     if (!m_loaded && m_categoriesLoaded) {
-        loadCategoryManga(m_currentCategoryId);
+        // Reload based on current group mode
+        if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+            loadAllManga();
+        } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            loadBySource();
+        } else {
+            loadCategoryManga(m_currentCategoryId);
+        }
     }
 }
 

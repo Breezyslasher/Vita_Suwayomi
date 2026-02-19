@@ -900,7 +900,17 @@ bool SuwayomiClient::fetchLibraryMangaGraphQL(std::vector<Manga>& manga) {
                     genre
                     status
                     inLibrary
+                    inLibraryAt
                     unreadCount
+                    lastReadChapter {
+                        lastReadAt
+                    }
+                    chapters {
+                        totalCount
+                    }
+                    latestUploadedChapter {
+                        uploadDate
+                    }
                     source {
                         displayName
                     }
