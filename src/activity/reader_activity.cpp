@@ -4,6 +4,7 @@
  */
 
 #include "activity/reader_activity.hpp"
+#include "view/pinch_gesture.hpp"
 #include "view/rotatable_label.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
@@ -348,6 +349,9 @@ void ReaderActivity::onContentAvailable() {
                     m_swipeOffset = 0.0f;
                     m_previewPageIndex = -1;
                 } else if (status.state == brls::GestureState::STAY) {
+                    // Suppress page navigation while pinch-to-zoom is active
+                    if (m_isPinching) return;
+
                     // Real-time swipe tracking (STAY = finger still on screen)
                     m_touchCurrent = status.position;
                     float dx = m_touchCurrent.x - m_touchStart.x;
@@ -402,6 +406,12 @@ void ReaderActivity::onContentAvailable() {
                         updateSwipePreview(rawDelta);
                     }
                 } else if (status.state == brls::GestureState::END) {
+                    // Don't turn the page if we were just pinch-zooming
+                    if (m_isPinching) {
+                        resetSwipeState();
+                        return;
+                    }
+
                     m_touchCurrent = status.position;
 
                     // Calculate distance moved
@@ -445,6 +455,47 @@ void ReaderActivity::onContentAvailable() {
                     m_isPanning = false;
                 }
             }, brls::PanAxis::ANY));
+
+        // Pinch-to-zoom gesture (Vita two-finger touch)
+        // Updates zoom level live on every frame while pinching
+        pageImage->addGestureRecognizer(new vitasuwayomi::PinchGestureRecognizer(
+            [this](vitasuwayomi::PinchGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::START) {
+                    // Record zoom level at pinch start
+                    m_isPinching = true;
+                    m_initialPinchDistance = 0;  // not used, PinchGestureRecognizer tracks internally
+                    m_initialZoomLevel = m_zoomLevel;
+                } else if (status.state == brls::GestureState::STAY) {
+                    // Live zoom update every frame
+                    float newZoom = m_initialZoomLevel * status.scaleFactor;
+                    newZoom = std::max(0.5f, std::min(4.0f, newZoom));
+
+                    if (std::abs(newZoom - m_zoomLevel) > 0.01f) {
+                        m_zoomLevel = newZoom;
+                        m_isZoomed = (newZoom > 1.05f);
+
+                        if (pageImage) {
+                            pageImage->setZoomLevel(newZoom);
+                            // Zoom towards the pinch center
+                            brls::Rect frame = pageImage->getFrame();
+                            float relX = (status.center.x - frame.getMinX()) / frame.getWidth();
+                            float relY = (status.center.y - frame.getMinY()) / frame.getHeight();
+                            brls::Point offset = {
+                                -(relX - 0.5f) * frame.getWidth() * (newZoom - 1.0f),
+                                -(relY - 0.5f) * frame.getHeight() * (newZoom - 1.0f)
+                            };
+                            m_zoomOffset = offset;
+                            pageImage->setZoomOffset(offset);
+                        }
+                    }
+                } else if (status.state == brls::GestureState::END) {
+                    m_isPinching = false;
+                    // Snap to 1x if near normal
+                    if (m_zoomLevel <= 1.05f && m_zoomLevel >= 0.95f) {
+                        resetZoom();
+                    }
+                }
+            }));
     }
 
     // Container fallback - simpler touch handling without preview

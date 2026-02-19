@@ -91,6 +91,7 @@ set(APP_SOURCES
     src/view/migrate_search_view.cpp
     src/view/storage_view.cpp
     src/view/long_press_gesture.cpp
+    src/view/pinch_gesture.cpp
 
     # Utils
     src/utils/http_client.cpp
@@ -163,6 +164,7 @@ target_link_libraries(${PROJECT_NAME}
     SceAudio_stub
     SceVshBridge_stub
     SceAppMgr_stub
+    SceTouch_stub
 
     # Standard libraries last
     z

@@ -107,6 +107,8 @@ private:
     // Category tabs row
     brls::Box* m_categoryTabsBox = nullptr;        // Outer container (clips)
     brls::Box* m_categoryScrollContainer = nullptr; // Inner container (scrolls)
+    brls::Image* m_lHintIcon = nullptr;             // L bumper hint
+    brls::Image* m_rHintIcon = nullptr;             // R bumper hint
     std::vector<brls::Button*> m_categoryButtons;
     int m_selectedCategoryIndex = 0;               // Index in m_categories
     float m_categoryScrollOffset = 0.0f;           // Current scroll offset
