@@ -950,9 +950,10 @@ void MangaDetailView::populateChaptersList() {
     // Get downloads manager to check local download state
     DownloadsManager& dmForFilter = DownloadsManager::getInstance();
 
-    // Force downloaded filter when downloads-only mode is enabled in settings
+    // Force downloaded filter when downloads-only mode is enabled and app is offline
     bool filterDownloaded = m_filterDownloaded ||
-                            Application::getInstance().getSettings().downloadsOnlyMode;
+                            (Application::getInstance().getSettings().downloadsOnlyMode &&
+                             !Application::getInstance().isConnected());
 
     // Create chapter cells (Komikku-style: rounded, clean design)
     for (const auto& chapter : sortedChapters) {

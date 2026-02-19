@@ -1094,8 +1094,9 @@ void LibrarySectionTab::sortMangaList() {
         effectiveMode = static_cast<LibrarySortMode>(defaultSort);
     }
 
-    // Force DOWNLOADED_ONLY filter when downloads-only mode is enabled in settings
-    if (Application::getInstance().getSettings().downloadsOnlyMode) {
+    // Force DOWNLOADED_ONLY filter when downloads-only mode is enabled and app is offline
+    if (Application::getInstance().getSettings().downloadsOnlyMode &&
+        !Application::getInstance().isConnected()) {
         effectiveMode = LibrarySortMode::DOWNLOADED_ONLY;
     }
 

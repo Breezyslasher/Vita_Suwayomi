@@ -419,7 +419,7 @@ void SettingsTab::createLibrarySection() {
 
     // Downloads Only info label
     auto* downloadsOnlyInfoLabel = new brls::Label();
-    downloadsOnlyInfoLabel->setText("Only show locally downloaded manga and chapters");
+    downloadsOnlyInfoLabel->setText("When offline, only show locally downloaded manga and chapters");
     downloadsOnlyInfoLabel->setFontSize(14);
     downloadsOnlyInfoLabel->setMarginLeft(16);
     downloadsOnlyInfoLabel->setMarginTop(4);
