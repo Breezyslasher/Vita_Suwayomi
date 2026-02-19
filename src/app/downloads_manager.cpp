@@ -169,7 +169,7 @@ bool DownloadsManager::queueChapterDownload(int mangaId, int chapterId, int chap
 
     // Check if chapter already exists
     for (auto& ch : manga->chapters) {
-        if (ch.chapterIndex == chapterIndex) {
+        if (ch.chapterIndex == chapterIndex || ch.chapterId == chapterId) {
             brls::Logger::debug("Chapter {} already in download queue", chapterIndex);
             return true;  // Already queued
         }
@@ -225,7 +225,7 @@ bool DownloadsManager::queueChaptersDownload(int mangaId,
         // Check if chapter already exists
         bool exists = false;
         for (const auto& existingCh : manga->chapters) {
-            if (existingCh.chapterIndex == ch.second) {
+            if (existingCh.chapterIndex == ch.second || existingCh.chapterId == ch.first) {
                 exists = true;
                 break;
             }
@@ -362,7 +362,7 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
     for (auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
             for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
-                if (it->chapterIndex == chapterIndex) {
+                if (it->chapterIndex == chapterIndex || it->chapterId == chapterIndex) {
                     if (it->state == LocalDownloadState::QUEUED ||
                         it->state == LocalDownloadState::DOWNLOADING) {
                         // Delete any partial download files
@@ -404,7 +404,7 @@ bool DownloadsManager::moveChapterInQueue(int mangaId, int chapterIndex, int dir
     for (auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
             for (size_t i = 0; i < manga.chapters.size(); i++) {
-                if (manga.chapters[i].chapterIndex == chapterIndex) {
+                if (manga.chapters[i].chapterIndex == chapterIndex || manga.chapters[i].chapterId == chapterIndex) {
                     // Only allow reordering queued chapters
                     if (manga.chapters[i].state != LocalDownloadState::QUEUED) {
                         return false;
@@ -488,7 +488,7 @@ bool DownloadsManager::deleteChapterDownload(int mangaId, int chapterIndex) {
     for (auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
             for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
-                if (it->chapterIndex == chapterIndex) {
+                if (it->chapterIndex == chapterIndex || it->chapterId == chapterIndex) {
                     // Store paths before erasing
                     std::string chapterDir = it->localPath;
                     std::string mangaDir = manga.localPath;
@@ -658,7 +658,8 @@ void DownloadsManager::updateReadingProgress(int mangaId, int chapterIndex, int 
             manga.lastReadTime = std::time(nullptr);
 
             for (auto& chapter : manga.chapters) {
-                if (chapter.chapterIndex == chapterIndex) {
+                // Match by chapterIndex OR chapterId (reader passes chapter ID)
+                if (chapter.chapterIndex == chapterIndex || chapter.chapterId == chapterIndex) {
                     chapter.lastPageRead = lastPageRead;
                     chapter.lastReadTime = std::time(nullptr);
                     break;
