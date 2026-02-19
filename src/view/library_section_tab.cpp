@@ -1094,6 +1094,11 @@ void LibrarySectionTab::sortMangaList() {
         effectiveMode = static_cast<LibrarySortMode>(defaultSort);
     }
 
+    // Force DOWNLOADED_ONLY filter when downloads-only mode is enabled in settings
+    if (Application::getInstance().getSettings().downloadsOnlyMode) {
+        effectiveMode = LibrarySortMode::DOWNLOADED_ONLY;
+    }
+
     // Restore full list before sorting/filtering
     // This ensures switching away from DOWNLOADED_ONLY restores all books
     if (!m_fullMangaList.empty()) {

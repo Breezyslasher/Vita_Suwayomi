@@ -364,6 +364,7 @@ bool Application::loadSettings() {
     // Load cache settings
     m_settings.cacheLibraryData = extractBool("cacheLibraryData", true);
     m_settings.cacheCoverImages = extractBool("cacheCoverImages", true);
+    m_settings.downloadsOnlyMode = extractBool("downloadsOnlyMode", false);
     m_settings.librarySortMode = extractInt("librarySortMode");
     if (m_settings.librarySortMode < 0 || m_settings.librarySortMode > 10) m_settings.librarySortMode = 0;
     m_settings.chapterSortDescending = extractBool("chapterSortDescending", true);
@@ -754,6 +755,7 @@ bool Application::saveSettings() {
     // Cache settings
     json += "  \"cacheLibraryData\": " + std::string(m_settings.cacheLibraryData ? "true" : "false") + ",\n";
     json += "  \"cacheCoverImages\": " + std::string(m_settings.cacheCoverImages ? "true" : "false") + ",\n";
+    json += "  \"downloadsOnlyMode\": " + std::string(m_settings.downloadsOnlyMode ? "true" : "false") + ",\n";
     json += "  \"librarySortMode\": " + std::to_string(m_settings.librarySortMode) + ",\n";
     json += "  \"chapterSortDescending\": " + std::string(m_settings.chapterSortDescending ? "true" : "false") + ",\n";
 

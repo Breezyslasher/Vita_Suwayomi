@@ -45,6 +45,11 @@ bool LibraryCache::init() {
         return false;
     }
 
+    if (!ensureDirectoryExists(getChaptersCacheDir())) {
+        brls::Logger::error("LibraryCache: Failed to create chapters cache directory");
+        return false;
+    }
+
     m_initialized = true;
     brls::Logger::info("LibraryCache: Initialized at {}", getCacheDir());
     return true;
@@ -964,6 +969,186 @@ bool LibraryCache::hasHistoryCache() {
 void LibraryCache::invalidateHistoryCache() {
     std::lock_guard<std::mutex> lock(m_mutex);
     std::string path = getHistoryFilePath();
+
+#ifdef __vita__
+    sceIoRemove(path.c_str());
+#else
+    remove(path.c_str());
+#endif
+}
+
+// ---- Chapter caching ----
+
+std::string LibraryCache::getChaptersCacheDir() {
+    return getCacheDir() + "/chapters";
+}
+
+std::string LibraryCache::getChaptersFilePath(int mangaId) {
+    return getChaptersCacheDir() + "/" + std::to_string(mangaId) + ".txt";
+}
+
+std::string LibraryCache::serializeChapter(const Chapter& ch) {
+    std::ostringstream ss;
+    // Format: id|name|chapterNumber|scanlator|uploadDate|read|bookmarked|lastPageRead|pageCount|index|fetchedAt|lastReadAt|downloaded|mangaId
+    ss << ch.id << "|"
+       << ch.name << "|"
+       << ch.chapterNumber << "|"
+       << ch.scanlator << "|"
+       << ch.uploadDate << "|"
+       << (ch.read ? 1 : 0) << "|"
+       << (ch.bookmarked ? 1 : 0) << "|"
+       << ch.lastPageRead << "|"
+       << ch.pageCount << "|"
+       << ch.index << "|"
+       << ch.fetchedAt << "|"
+       << ch.lastReadAt << "|"
+       << (ch.downloaded ? 1 : 0) << "|"
+       << ch.mangaId;
+    return ss.str();
+}
+
+bool LibraryCache::deserializeChapter(const std::string& line, Chapter& ch) {
+    std::istringstream ss(line);
+    std::string token;
+    std::vector<std::string> parts;
+
+    while (std::getline(ss, token, '|')) {
+        parts.push_back(token);
+    }
+
+    if (parts.size() < 14) return false;
+
+    try {
+        ch.id = std::stoi(parts[0]);
+        ch.name = parts[1];
+        ch.chapterNumber = std::stof(parts[2]);
+        ch.scanlator = parts[3];
+        ch.uploadDate = std::stoll(parts[4]);
+        ch.read = (parts[5] == "1");
+        ch.bookmarked = (parts[6] == "1");
+        ch.lastPageRead = std::stoi(parts[7]);
+        ch.pageCount = std::stoi(parts[8]);
+        ch.index = std::stoi(parts[9]);
+        ch.fetchedAt = std::stoll(parts[10]);
+        ch.lastReadAt = std::stoll(parts[11]);
+        ch.downloaded = (parts[12] == "1");
+        ch.mangaId = std::stoi(parts[13]);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool LibraryCache::saveChapters(int mangaId, const std::vector<Chapter>& chapters) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    ensureDirectoryExists(getChaptersCacheDir());
+    std::string path = getChaptersFilePath(mangaId);
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd < 0) {
+        brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
+        return false;
+    }
+
+    for (const auto& ch : chapters) {
+        std::string line = serializeChapter(ch) + "\n";
+        sceIoWrite(fd, line.c_str(), line.size());
+    }
+
+    sceIoClose(fd);
+#else
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    for (const auto& ch : chapters) {
+        file << serializeChapter(ch) << "\n";
+    }
+
+    file.close();
+#endif
+
+    brls::Logger::debug("LibraryCache: Saved {} chapters for manga {}", chapters.size(), mangaId);
+    return true;
+}
+
+bool LibraryCache::loadChapters(int mangaId, std::vector<Chapter>& chapters) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::string path = getChaptersFilePath(mangaId);
+    chapters.clear();
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) {
+        return false;
+    }
+
+    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+    if (size <= 0 || size > 10 * 1024 * 1024) {
+        sceIoClose(fd);
+        return false;
+    }
+
+    std::vector<char> buffer(size + 1);
+    sceIoRead(fd, buffer.data(), size);
+    buffer[size] = '\0';
+    sceIoClose(fd);
+
+    std::istringstream stream(buffer.data());
+    std::string line;
+    while (std::getline(stream, line)) {
+        if (line.empty()) continue;
+        Chapter ch;
+        if (deserializeChapter(line, ch)) {
+            chapters.push_back(ch);
+        }
+    }
+#else
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        Chapter ch;
+        if (deserializeChapter(line, ch)) {
+            chapters.push_back(ch);
+        }
+    }
+
+    file.close();
+#endif
+
+    brls::Logger::debug("LibraryCache: Loaded {} chapters for manga {} from cache", chapters.size(), mangaId);
+    return true;
+}
+
+bool LibraryCache::hasChaptersCache(int mangaId) {
+    std::string path = getChaptersFilePath(mangaId);
+#ifdef __vita__
+    SceIoStat stat;
+    return sceIoGetstat(path.c_str(), &stat) >= 0;
+#else
+    struct stat st;
+    return ::stat(path.c_str(), &st) == 0;
+#endif
+}
+
+void LibraryCache::invalidateChaptersCache(int mangaId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::string path = getChaptersFilePath(mangaId);
 
 #ifdef __vita__
     sceIoRemove(path.c_str());

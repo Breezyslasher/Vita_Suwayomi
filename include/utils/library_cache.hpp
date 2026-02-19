@@ -48,6 +48,12 @@ public:
     bool hasHistoryCache();
     void invalidateHistoryCache();
 
+    // Chapter list caching (per manga)
+    bool saveChapters(int mangaId, const std::vector<Chapter>& chapters);
+    bool loadChapters(int mangaId, std::vector<Chapter>& chapters);
+    bool hasChaptersCache(int mangaId);
+    void invalidateChaptersCache(int mangaId);
+
     // Cache management
     void clearAllCache();
     void clearCoverCache();
@@ -91,6 +97,12 @@ private:
     std::string serializeHistoryItem(const ReadingHistoryItem& item);
     bool deserializeHistoryItem(const std::string& line, ReadingHistoryItem& item);
     std::string getHistoryFilePath();
+
+    // Serialize/deserialize chapter
+    std::string serializeChapter(const Chapter& chapter);
+    bool deserializeChapter(const std::string& line, Chapter& chapter);
+    std::string getChaptersCacheDir();
+    std::string getChaptersFilePath(int mangaId);
 
     bool m_enabled = true;
     bool m_coverCacheEnabled = true;

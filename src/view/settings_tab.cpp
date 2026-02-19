@@ -408,6 +408,24 @@ void SettingsTab::createLibrarySection() {
     cacheInfoLabel->setMarginTop(4);
     m_contentBox->addView(cacheInfoLabel);
 
+    // Downloads Only Mode toggle
+    auto* downloadsOnlyToggle = new brls::BooleanCell();
+    downloadsOnlyToggle->init("Downloads Only Mode", settings.downloadsOnlyMode, [](bool value) {
+        Application::getInstance().getSettings().downloadsOnlyMode = value;
+        Application::getInstance().saveSettings();
+        brls::Application::notify(value ? "Showing downloaded only" : "Showing all manga");
+    });
+    m_contentBox->addView(downloadsOnlyToggle);
+
+    // Downloads Only info label
+    auto* downloadsOnlyInfoLabel = new brls::Label();
+    downloadsOnlyInfoLabel->setText("Only show locally downloaded manga and chapters");
+    downloadsOnlyInfoLabel->setFontSize(14);
+    downloadsOnlyInfoLabel->setMarginLeft(16);
+    downloadsOnlyInfoLabel->setMarginTop(4);
+    downloadsOnlyInfoLabel->setMarginBottom(8);
+    m_contentBox->addView(downloadsOnlyInfoLabel);
+
     // Library Updates header
     auto* updatesHeader = new brls::Header();
     updatesHeader->setTitle("Library Updates");
