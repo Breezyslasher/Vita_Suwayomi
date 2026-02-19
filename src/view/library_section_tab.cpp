@@ -46,13 +46,13 @@ LibrarySectionTab::LibrarySectionTab() {
     topRow->setHeight(50);
 
     // L button hint (before category tabs)
-    auto* lHintIcon = new brls::Image();
-    lHintIcon->setWidth(24);
-    lHintIcon->setHeight(24);
-    lHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    lHintIcon->setImageFromFile("app0:resources/images/l_button.png");
-    lHintIcon->setMarginRight(6);
-    topRow->addView(lHintIcon);
+    m_lHintIcon = new brls::Image();
+    m_lHintIcon->setWidth(24);
+    m_lHintIcon->setHeight(24);
+    m_lHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_lHintIcon->setImageFromFile("app0:resources/images/l_button.png");
+    m_lHintIcon->setMarginRight(6);
+    topRow->addView(m_lHintIcon);
 
     // Category tabs container - outer box clips, inner box scrolls
     m_categoryTabsBox = new brls::Box();
@@ -76,13 +76,13 @@ LibrarySectionTab::LibrarySectionTab() {
     topRow->addView(m_categoryTabsBox);
 
     // R button hint (after category tabs)
-    auto* rHintIcon = new brls::Image();
-    rHintIcon->setWidth(24);
-    rHintIcon->setHeight(24);
-    rHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    rHintIcon->setImageFromFile("app0:resources/images/r_button.png");
-    rHintIcon->setMarginRight(10);
-    topRow->addView(rHintIcon);
+    m_rHintIcon = new brls::Image();
+    m_rHintIcon->setWidth(24);
+    m_rHintIcon->setHeight(24);
+    m_rHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_rHintIcon->setImageFromFile("app0:resources/images/r_button.png");
+    m_rHintIcon->setMarginRight(10);
+    topRow->addView(m_rHintIcon);
 
     // Button container for Sort and Update
     auto* buttonBox = new brls::Box();
@@ -360,11 +360,15 @@ void LibrarySectionTab::onFocusGained() {
     // Apply grouping mode visibility
     if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+        if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::GONE);
+        if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::GONE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
     } else {
         // BY_CATEGORY and BY_SOURCE both show tabs
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
+        if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::VISIBLE);
+        if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, true);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
     }
@@ -411,6 +415,8 @@ void LibrarySectionTab::loadCategories() {
     // For non-category group modes, dispatch immediately and fetch categories in background
     if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+        if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::GONE);
+        if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::GONE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
         m_categoriesLoaded = true;
@@ -434,6 +440,8 @@ void LibrarySectionTab::loadCategories() {
 
     if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
+        if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::VISIBLE);
+        if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
         m_categoriesLoaded = true;
         loadBySource();
         // Still fetch categories in background for potential mode switch later
@@ -2532,8 +2540,10 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
 
     // Reload library with new grouping
     if (mode == LibraryGroupMode::BY_CATEGORY) {
-        // Show category tabs and recreate them from categories
+        // Show category tabs and L/R hints
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
+        if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::VISIBLE);
+        if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, true);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
         if (!m_categories.empty()) {
@@ -2543,11 +2553,15 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
     } else if (mode == LibraryGroupMode::NO_GROUPING) {
         // Hide tabs and L/R bumper hints entirely
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+        if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::GONE);
+        if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::GONE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
         loadAllManga();
     } else if (mode == LibraryGroupMode::BY_SOURCE) {
-        // loadBySource will show tabs and populate with source names
+        // Show tabs and L/R hints, loadBySource will populate with source names
+        if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::VISIBLE);
+        if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, true);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
         loadBySource();
@@ -2593,8 +2607,10 @@ void LibrarySectionTab::loadAllManga() {
 void LibrarySectionTab::loadBySource() {
     brls::Logger::debug("LibrarySectionTab::loadBySource - loading manga grouped by source");
 
-    // Show tabs row for source tabs
+    // Show tabs row and L/R hints for source tabs
     if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
+    if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::VISIBLE);
+    if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
