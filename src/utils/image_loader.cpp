@@ -51,7 +51,7 @@ std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
 std::condition_variable ImageLoader::s_queueCV;
-int ImageLoader::s_maxConcurrentLoads = 6;  // Worker thread count for concurrent downloads
+int ImageLoader::s_maxConcurrentLoads = 20;  // Worker thread count for concurrent downloads
 int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
 // Worker thread pool
@@ -430,7 +430,7 @@ static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2)
 }
 
 void ImageLoader::setMaxConcurrentLoads(int max) {
-    s_maxConcurrentLoads = std::max(1, std::min(max, 8));
+    s_maxConcurrentLoads = std::max(1, std::min(max, 20));
 }
 
 void ImageLoader::setMaxThumbnailSize(int maxSize) {
