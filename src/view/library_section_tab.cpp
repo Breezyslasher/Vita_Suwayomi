@@ -166,6 +166,10 @@ LibrarySectionTab::LibrarySectionTab() {
         triggerLibraryUpdate();
         return true;
     });
+    // Hide at construction if already offline
+    if (!Application::getInstance().isConnected()) {
+        m_updateBtn->setVisibility(brls::Visibility::GONE);
+    }
     updateContainer->addView(m_updateBtn);
     buttonBox->addView(updateContainer);
 
