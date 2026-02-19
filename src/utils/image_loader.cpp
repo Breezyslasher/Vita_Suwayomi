@@ -51,7 +51,7 @@ std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
 std::condition_variable ImageLoader::s_queueCV;
-int ImageLoader::s_maxConcurrentLoads = 10;  // Worker thread count for concurrent downloads
+int ImageLoader::s_maxConcurrentLoads = 20;  // Worker thread count for concurrent downloads
 int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
 // Worker thread pool
@@ -430,7 +430,7 @@ static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2)
 }
 
 void ImageLoader::setMaxConcurrentLoads(int max) {
-    s_maxConcurrentLoads = std::max(1, std::min(max, 8));
+    s_maxConcurrentLoads = std::max(1, std::min(max, 20));
 }
 
 void ImageLoader::setMaxThumbnailSize(int maxSize) {
@@ -549,19 +549,12 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     }
 
     // Authenticated GET with automatic JWT refresh on 401/403
-    auto dlStart = std::chrono::steady_clock::now();
     HttpResponse resp = authenticatedGet(url, 2);
-    auto dlEnd = std::chrono::steady_clock::now();
 
     if (!resp.success || resp.body.empty()) {
         brls::Logger::warning("ImageLoader: Failed to load {} (status {})", url, resp.statusCode);
         return;
     }
-
-    auto dlMs = std::chrono::duration_cast<std::chrono::milliseconds>(dlEnd - dlStart).count();
-    float dlKBps = (dlMs > 0) ? (resp.body.size() / 1024.0f) / (dlMs / 1000.0f) : 0;
-    brls::Logger::info("ImageLoader: Downloaded {}KB in {}ms ({:.1f} KB/s)",
-                        resp.body.size() / 1024, dlMs, dlKBps);
 
     // Check image format
     bool isWebP = false;
