@@ -169,6 +169,41 @@ LibrarySectionTab::LibrarySectionTab() {
     updateContainer->addView(m_updateBtn);
     buttonBox->addView(updateContainer);
 
+    // Grouping button container with Square button hint
+    auto* groupContainer = new brls::Box();
+    groupContainer->setAxis(brls::Axis::COLUMN);
+    groupContainer->setAlignItems(brls::AlignItems::CENTER);
+    groupContainer->setMarginLeft(8);
+
+    auto* groupHintIcon = new brls::Image();
+    groupHintIcon->setWidth(16);
+    groupHintIcon->setHeight(16);
+    groupHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    groupHintIcon->setImageFromFile("app0:resources/images/square_button.png");
+    groupHintIcon->setMarginBottom(2);
+    groupContainer->addView(groupHintIcon);
+
+    auto* groupBtn = new brls::Button();
+    groupBtn->setWidth(44);
+    groupBtn->setHeight(40);
+    groupBtn->setCornerRadius(8);
+    groupBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    groupBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* groupIcon = new brls::Image();
+    groupIcon->setWidth(24);
+    groupIcon->setHeight(24);
+    groupIcon->setScalingType(brls::ImageScalingType::FIT);
+    groupIcon->setImageFromFile("app0:resources/icons/format-list-group.png");
+    groupBtn->addView(groupIcon);
+
+    groupBtn->registerClickAction([this](brls::View* view) {
+        showGroupModeMenu();
+        return true;
+    });
+    groupContainer->addView(groupBtn);
+    buttonBox->addView(groupContainer);
+
     topRow->addView(buttonBox);
 
     this->addView(topRow);
@@ -772,7 +807,10 @@ void LibrarySectionTab::updateCategoryButtonStyles() {
 
         // Determine if this button is selected
         bool isSelected = false;
-        if (m_categories.empty()) {
+        if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            // For source tabs, use the selected index directly
+            isSelected = (static_cast<int>(i) == m_selectedCategoryIndex);
+        } else if (m_categories.empty()) {
             // Only one "Library" button
             isSelected = (m_currentCategoryId == 0);
         } else if (i < m_categories.size()) {
