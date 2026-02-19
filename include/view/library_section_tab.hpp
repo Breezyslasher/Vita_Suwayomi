@@ -114,6 +114,7 @@ private:
     float m_categoryScrollOffset = 0.0f;           // Current scroll offset
 
     // Action buttons
+    brls::Box* m_updateContainer = nullptr;
     brls::Button* m_updateBtn = nullptr;
     brls::Button* m_sortBtn = nullptr;
     brls::Image* m_sortIcon = nullptr;

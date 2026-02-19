@@ -136,17 +136,17 @@ LibrarySectionTab::LibrarySectionTab() {
     updateSortButtonText();
 
     // Update button container with Select button hint
-    auto* updateContainer = new brls::Box();
-    updateContainer->setAxis(brls::Axis::COLUMN);
-    updateContainer->setAlignItems(brls::AlignItems::CENTER);
-    updateContainer->setMarginLeft(8);
+    m_updateContainer = new brls::Box();
+    m_updateContainer->setAxis(brls::Axis::COLUMN);
+    m_updateContainer->setAlignItems(brls::AlignItems::CENTER);
+    m_updateContainer->setMarginLeft(8);
 
     auto* updateHintIcon = new brls::Image();
     updateHintIcon->setHeight(16);
     updateHintIcon->setScalingType(brls::ImageScalingType::FIT);
     updateHintIcon->setImageFromFile("app0:resources/images/select_button.png");
     updateHintIcon->setMarginBottom(2);
-    updateContainer->addView(updateHintIcon);
+    m_updateContainer->addView(updateHintIcon);
 
     m_updateBtn = new brls::Button();
     m_updateBtn->setWidth(44);
@@ -166,12 +166,12 @@ LibrarySectionTab::LibrarySectionTab() {
         triggerLibraryUpdate();
         return true;
     });
-    // Hide at construction if already offline
+    // Hide entire container (button + hint icon) at construction if already offline
     if (!Application::getInstance().isConnected()) {
-        m_updateBtn->setVisibility(brls::Visibility::GONE);
+        m_updateContainer->setVisibility(brls::Visibility::GONE);
     }
-    updateContainer->addView(m_updateBtn);
-    buttonBox->addView(updateContainer);
+    m_updateContainer->addView(m_updateBtn);
+    buttonBox->addView(m_updateContainer);
 
     // Grouping button container with Square button hint
     auto* groupContainer = new brls::Box();
@@ -387,9 +387,9 @@ LibrarySectionTab::~LibrarySectionTab() {
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
 
-    // Show/hide update button based on connectivity
-    if (m_updateBtn) {
-        m_updateBtn->setVisibility(Application::getInstance().isConnected()
+    // Show/hide update button + hint icon based on connectivity
+    if (m_updateContainer) {
+        m_updateContainer->setVisibility(Application::getInstance().isConnected()
             ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
 
