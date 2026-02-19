@@ -615,6 +615,22 @@ void MangaDetailView::loadDetails() {
             brls::Logger::info("MangaDetailView: Loaded {} chapters from cache for manga {}",
                               cachedChapters.size(), m_manga.id);
             m_chapters = cachedChapters;
+
+            // When offline, merge local reading progress from DownloadsManager
+            if (!Application::getInstance().isConnected()) {
+                DownloadsManager& dm = DownloadsManager::getInstance();
+                dm.init();
+                for (auto& ch : m_chapters) {
+                    DownloadedChapter* dlCh = dm.getChapterDownload(m_manga.id, ch.id);
+                    if (dlCh && dlCh->lastPageRead > ch.lastPageRead) {
+                        ch.lastPageRead = dlCh->lastPageRead;
+                        ch.lastReadAt = static_cast<int64_t>(dlCh->lastReadTime);
+                        brls::Logger::debug("MangaDetailView: Merged local progress for chapter {} page {}",
+                                           ch.id, ch.lastPageRead);
+                    }
+                }
+            }
+
             populateChaptersList();
             if (m_chapterCountLabel) {
                 std::string info = std::to_string(m_chapters.size()) + " chapters";
@@ -631,7 +647,7 @@ void MangaDetailView::loadDetails() {
         }
     }
 
-    if (m_manga.description.empty()) {
+    if (m_manga.description.empty() && Application::getInstance().isConnected()) {
         // Description missing: use combined query to fetch manga details + chapters in one request
         // This saves a network round-trip vs fetching them separately
         brls::Logger::info("MangaDetailView: Using combined query for details + chapters");
@@ -796,6 +812,12 @@ void MangaDetailView::loadCover() {
 
 void MangaDetailView::loadChapters() {
     brls::Logger::debug("MangaDetailView: Loading chapters for manga {}", m_manga.id);
+
+    // Skip server fetch when offline - cached chapters already loaded in loadDetails()
+    if (!Application::getInstance().isConnected()) {
+        brls::Logger::info("MangaDetailView: Offline, using cached chapters only");
+        return;
+    }
 
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -1617,6 +1639,24 @@ void MangaDetailView::onRead(int chapterId) {
             chapterId = firstChapter->id;
             startPage = 0;
             brls::Logger::info("MangaDetailView: Starting from first chapter id={}", chapterId);
+        } else if (!Application::getInstance().isConnected()) {
+            // Offline with no cached chapters - check DownloadsManager for progress
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            dm.init();
+            auto downloads = dm.getDownloads();
+            for (const auto& dl : downloads) {
+                if (dl.mangaId == m_manga.id && dl.lastChapterRead > 0) {
+                    chapterId = dl.lastChapterRead;
+                    startPage = dl.lastPageRead;
+                    brls::Logger::info("MangaDetailView: Offline, using DownloadsManager progress chapter={}, page={}",
+                                      chapterId, startPage);
+                    break;
+                }
+            }
+            if (chapterId == -1) {
+                brls::Application::notify("No chapters available offline");
+                return;
+            }
         } else {
             brls::Application::notify("No chapters available");
             return;
@@ -1627,6 +1667,16 @@ void MangaDetailView::onRead(int chapterId) {
             if (ch.id == chapterId) {
                 startPage = ch.lastPageRead;
                 break;
+            }
+        }
+
+        // When offline, also check DownloadsManager for more recent progress
+        if (!Application::getInstance().isConnected()) {
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            DownloadedChapter* dlCh = dm.getChapterDownload(m_manga.id, chapterId);
+            if (dlCh && dlCh->lastPageRead > startPage) {
+                startPage = dlCh->lastPageRead;
+                brls::Logger::info("MangaDetailView: Offline, using local progress page={}", startPage);
             }
         }
     }
@@ -2830,6 +2880,9 @@ void MangaDetailView::showTrackerLoginDialog(const Tracker& tracker) {
 }
 
 void MangaDetailView::loadTrackingData() {
+    // Skip when offline
+    if (!Application::getInstance().isConnected()) return;
+
     int mangaId = m_manga.id;
     asyncRun([this, mangaId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
