@@ -10,13 +10,16 @@
 #include "utils/library_cache.hpp"
 #include "utils/http_client.hpp"
 #include <algorithm>
+#include <chrono>
 #include <ctime>
 #include <sstream>
+#include <thread>
 
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
 #include <psp2/io/dirent.h>
 #include <psp2/io/stat.h>
+#include <psp2/net/netctl.h>
 #endif
 
 // Version defined in CMakeLists.txt or here
@@ -158,6 +161,16 @@ void SettingsTab::createAccountSection() {
             Application::getInstance().saveSettings();
         });
     m_contentBox->addView(timeoutSelector);
+
+    // Network Test button
+    auto* networkTestCell = new brls::DetailCell();
+    networkTestCell->setText("Network Test");
+    networkTestCell->setDetailText("Test WiFi and server connection");
+    networkTestCell->registerClickAction([this](brls::View* view) {
+        runNetworkTest();
+        return true;
+    });
+    m_contentBox->addView(networkTestCell);
 
     // Disconnect button
     auto* disconnectCell = new brls::DetailCell();
@@ -1333,6 +1346,121 @@ void SettingsTab::updateServerLabel() {
         }
         m_serverLabel->setText("Active: " + (activeUrl.empty() ? "Not connected" : activeUrl));
     }
+}
+
+void SettingsTab::runNetworkTest() {
+    brls::Application::notify("Running network test...");
+
+    std::thread([this]() {
+        std::string results;
+
+        // --- WiFi Check ---
+        bool wifiConnected = false;
+        std::string ipAddress = "-";
+        std::string dnsServer = "-";
+        int wifiLevel = 0;
+
+#ifdef __vita__
+        SceNetCtlInfo netInfo;
+        if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_IP_ADDRESS, &netInfo) >= 0) {
+            wifiConnected = true;
+            ipAddress = std::string(netInfo.ip_address);
+        }
+        if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_RSSI_PERCENTAGE, &netInfo) >= 0) {
+            wifiLevel = netInfo.rssi_percentage;
+        }
+        SceNetCtlInfo dnsInfo {};
+        if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_PRIMARY_DNS, &dnsInfo) >= 0) {
+            dnsServer = std::string(dnsInfo.primary_dns);
+        }
+#else
+        // Desktop stub: assume connected
+        wifiConnected = true;
+        ipAddress = "127.0.0.1";
+        dnsServer = "8.8.8.8";
+        wifiLevel = 100;
+#endif
+
+        results += "=== WiFi ===\n";
+        if (wifiConnected) {
+            results += "Status: Connected\n";
+            results += "IP: " + ipAddress + "\n";
+            results += "DNS: " + dnsServer + "\n";
+            results += "Signal: " + std::to_string(wifiLevel) + "%\n";
+        } else {
+            results += "Status: Not Connected\n";
+            results += "No WiFi connection detected.\n";
+        }
+
+        // --- Internet Check (DNS resolve + HTTP) ---
+        results += "\n=== Internet ===\n";
+        if (wifiConnected) {
+            HttpClient http;
+            http.setTimeout(10);
+            auto start = std::chrono::steady_clock::now();
+            HttpResponse resp = http.get("http://connectivitycheck.gstatic.com/generate_204");
+            auto end = std::chrono::steady_clock::now();
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+            if (resp.success && (resp.statusCode == 204 || resp.statusCode == 200)) {
+                results += "Status: Reachable (" + std::to_string(ms) + "ms)\n";
+            } else {
+                results += "Status: Unreachable\n";
+                if (!resp.error.empty())
+                    results += "Error: " + resp.error + "\n";
+            }
+        } else {
+            results += "Skipped (no WiFi)\n";
+        }
+
+        // --- Server Check ---
+        results += "\n=== Server ===\n";
+        Application& app = Application::getInstance();
+        std::string serverUrl = app.getServerUrl();
+        if (serverUrl.empty()) serverUrl = app.getActiveServerUrl();
+
+        if (serverUrl.empty()) {
+            results += "No server URL configured.\n";
+        } else {
+            results += "URL: " + serverUrl + "\n";
+
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            ServerInfo info;
+
+            auto start = std::chrono::steady_clock::now();
+            bool ok = client.fetchServerInfo(info);
+            auto end = std::chrono::steady_clock::now();
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+            if (ok) {
+                results += "Status: Connected (" + std::to_string(ms) + "ms)\n";
+                results += "Server: " + info.name + " v" + info.version + "\n";
+                results += "Build: " + info.buildType + "\n";
+            } else {
+                results += "Status: Failed (" + std::to_string(ms) + "ms)\n";
+                results += "Could not reach server.\n";
+            }
+        }
+
+        // Show results dialog on main thread
+        brls::sync([this, results]() {
+            brls::Dialog* dialog = new brls::Dialog("Network Test Results");
+            dialog->setCancelable(true);
+
+            auto* box = new brls::Box();
+            box->setAxis(brls::Axis::COLUMN);
+            box->setPadding(16);
+
+            auto* label = new brls::Label();
+            label->setText(results);
+            label->setFontSize(16);
+            box->addView(label);
+
+            dialog->addView(box);
+            dialog->addButton("Close", []() {});
+            dialog->open();
+        });
+    }).detach();
 }
 
 void SettingsTab::showCategoryManagementDialog() {

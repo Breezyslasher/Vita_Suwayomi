@@ -45,6 +45,7 @@ private:
     void updateServerLabel();
     void refreshDefaultCategorySelector();
     void checkForUpdates();
+    void runNetworkTest();
     void showUpdateDialog(const std::string& newVersion, const std::string& releaseNotes,
                           const std::string& downloadUrl);
     void downloadAndInstallUpdate(const std::string& downloadUrl, const std::string& version);
