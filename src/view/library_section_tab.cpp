@@ -355,8 +355,9 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
 
-    // Register Select button to refresh/update current category
+    // Register Select button to refresh/update current category (disabled when offline)
     this->registerAction("Update Category", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
+        if (!Application::getInstance().isConnected()) return true;
         triggerLibraryUpdate();
         return true;
     });
