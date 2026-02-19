@@ -206,6 +206,34 @@ LibrarySectionTab::LibrarySectionTab() {
 
     topRow->addView(buttonBox);
 
+    // Pull-down gesture on the top row to trigger library update
+    // When the user swipes down from the category tabs area, start a server update
+    topRow->addGestureRecognizer(new brls::PanGestureRecognizer(
+        [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            static brls::Point pullStart;
+            static bool validPull = false;
+            static constexpr float PULL_THRESHOLD = 60.0f;
+
+            if (status.state == brls::GestureState::START) {
+                pullStart = status.position;
+                validPull = false;
+            } else if (status.state == brls::GestureState::STAY) {
+                float dx = status.position.x - pullStart.x;
+                float dy = status.position.y - pullStart.y;
+                // Downward swipe that is mostly vertical
+                if (dy > 0 && std::abs(dy) > std::abs(dx) * 1.5f) {
+                    validPull = true;
+                }
+            } else if (status.state == brls::GestureState::END) {
+                float dy = status.position.y - pullStart.y;
+                if (validPull && dy > PULL_THRESHOLD) {
+                    triggerLibraryUpdate();
+                }
+                validPull = false;
+            }
+        },
+        brls::PanAxis::VERTICAL));
+
     this->addView(topRow);
 
     // Content grid
@@ -215,7 +243,10 @@ LibrarySectionTab::LibrarySectionTab() {
         onMangaSelected(manga);
     });
     m_contentGrid->setOnPullToRefresh([this]() {
-        // Reload current category/group data from server
+        // Trigger a server-side library update (check for new chapters)
+        triggerLibraryUpdate();
+
+        // Also reload current view data
         if (m_groupMode == LibraryGroupMode::BY_CATEGORY) {
             loadCategoryManga(m_currentCategoryId);
         } else if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
