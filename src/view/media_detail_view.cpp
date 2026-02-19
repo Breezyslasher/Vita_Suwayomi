@@ -679,6 +679,27 @@ void MangaDetailView::loadDetails() {
             if (client.fetchMangaWithChapters(m_manga.id, updatedManga, chapters)) {
                 brls::Logger::info("MangaDetailView: Combined query got manga details + {} chapters", chapters.size());
 
+                // Sync local offline progress with server chapters
+                {
+                    DownloadsManager& dm = DownloadsManager::getInstance();
+                    for (auto& ch : chapters) {
+                        DownloadedChapter* dlCh = dm.getChapterDownload(m_manga.id, ch.id);
+                        if (!dlCh) dlCh = dm.getChapterDownload(m_manga.id, ch.index);
+                        if (dlCh && dlCh->lastPageRead > 0 && dlCh->lastPageRead > ch.lastPageRead) {
+                            int id = ch.id > 0 ? ch.id : ch.index;
+                            client.updateChapterProgress(m_manga.id, id, dlCh->lastPageRead);
+                            ch.lastPageRead = dlCh->lastPageRead;
+                            if (dlCh->lastReadTime > 0) {
+                                ch.lastReadAt = static_cast<int64_t>(dlCh->lastReadTime) * 1000;
+                            }
+                            if (dlCh->pageCount > 0 && dlCh->lastPageRead >= dlCh->pageCount - 1) {
+                                client.markChapterRead(m_manga.id, id);
+                                ch.read = true;
+                            }
+                        }
+                    }
+                }
+
                 // Handle auto-download
                 bool autoDownload = Application::getInstance().getSettings().autoDownloadChapters;
                 std::vector<int> chaptersToDownload;
@@ -869,12 +890,47 @@ void MangaDetailView::loadChapters() {
         return;
     }
 
-    asyncRun([this]() {
+    int mangaId = m_manga.id;
+    asyncRun([this, mangaId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Chapter> chapters;
 
-        if (client.fetchChapters(m_manga.id, chapters)) {
+        if (client.fetchChapters(mangaId, chapters)) {
             brls::Logger::info("MangaDetailView: Got {} chapters", chapters.size());
+
+            // Compare local offline progress with server and sync
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            int syncedCount = 0;
+            for (auto& ch : chapters) {
+                DownloadedChapter* dlCh = dm.getChapterDownload(mangaId, ch.id);
+                if (!dlCh) dlCh = dm.getChapterDownload(mangaId, ch.index);
+                if (dlCh && dlCh->lastPageRead > 0) {
+                    if (dlCh->lastPageRead > ch.lastPageRead) {
+                        // Local is ahead — push to server and update chapter for display
+                        int id = ch.id > 0 ? ch.id : ch.index;
+                        client.updateChapterProgress(mangaId, id, dlCh->lastPageRead);
+                        ch.lastPageRead = dlCh->lastPageRead;
+                        if (dlCh->lastReadTime > 0) {
+                            ch.lastReadAt = static_cast<int64_t>(dlCh->lastReadTime) * 1000;
+                        }
+                        // Mark as read on server if at end
+                        if (dlCh->pageCount > 0 && dlCh->lastPageRead >= dlCh->pageCount - 1) {
+                            client.markChapterRead(mangaId, id);
+                            ch.read = true;
+                        }
+                        syncedCount++;
+                    } else if (ch.lastPageRead > dlCh->lastPageRead) {
+                        // Server is ahead — update local downloads
+                        dlCh->lastPageRead = ch.lastPageRead;
+                        if (ch.lastReadAt > 0) {
+                            dlCh->lastReadTime = static_cast<time_t>(ch.lastReadAt / 1000);
+                        }
+                    }
+                }
+            }
+            if (syncedCount > 0) {
+                brls::Logger::info("MangaDetailView: Synced {} chapters with local offline progress", syncedCount);
+            }
 
             // Check if autoDownloadChapters is enabled
             bool autoDownload = Application::getInstance().getSettings().autoDownloadChapters;

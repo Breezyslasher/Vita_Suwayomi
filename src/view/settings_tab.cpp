@@ -915,10 +915,19 @@ void SettingsTab::createDownloadsSection() {
     // Sync progress now button
     auto* syncNowCell = new brls::DetailCell();
     syncNowCell->setText("Sync Progress Now");
-    syncNowCell->setDetailText("Upload offline progress to server");
+    syncNowCell->setDetailText("Bidirectional sync with server");
     syncNowCell->registerClickAction([](brls::View* view) {
-        DownloadsManager::getInstance().syncProgressToServer();
-        brls::Application::notify("Progress synced to server");
+        if (!Application::getInstance().isConnected()) {
+            brls::Application::notify("Not connected to server");
+            return true;
+        }
+        brls::Application::notify("Syncing progress...");
+        vitasuwayomi::asyncRun([]() {
+            DownloadsManager::getInstance().syncProgressFromServer();
+            brls::sync([]() {
+                brls::Application::notify("Progress synced with server");
+            });
+        });
         return true;
     });
     m_contentBox->addView(syncNowCell);

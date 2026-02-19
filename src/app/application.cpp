@@ -6,6 +6,7 @@
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/library_cache.hpp"
+#include "utils/async.hpp"
 #include "activity/login_activity.hpp"
 #include "activity/main_activity.hpp"
 #include "activity/reader_activity.hpp"
@@ -93,6 +94,19 @@ void Application::run() {
         if (client.testConnection()) {
             brls::Logger::info("Connection restored successfully");
             m_isConnected = true;
+
+            // Sync offline reading progress to server in background
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            if (!dm.getDownloads().empty()) {
+                brls::Logger::info("Syncing offline reading progress to server...");
+                vitasuwayomi::asyncRun([]() {
+                    DownloadsManager::getInstance().syncProgressToServer();
+                    brls::sync([]() {
+                        brls::Logger::info("Offline reading progress synced to server");
+                    });
+                });
+            }
+
             pushMainActivity();
         } else {
             // Connection failed - could be offline or auth expired
