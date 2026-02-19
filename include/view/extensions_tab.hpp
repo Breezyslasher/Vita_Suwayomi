@@ -182,6 +182,7 @@ private:
 
     // UI elements
     brls::Label* m_titleLabel = nullptr;
+    brls::Label* m_errorLabel = nullptr;
     brls::RecyclerFrame* m_recycler = nullptr;
     brls::Box* m_refreshBox = nullptr;
     brls::Image* m_refreshIcon = nullptr;

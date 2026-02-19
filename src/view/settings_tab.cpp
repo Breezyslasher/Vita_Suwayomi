@@ -8,6 +8,7 @@
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/library_cache.hpp"
+#include "utils/async.hpp"
 #include "utils/http_client.hpp"
 #include <algorithm>
 #include <chrono>
@@ -171,6 +172,51 @@ void SettingsTab::createAccountSection() {
         return true;
     });
     m_contentBox->addView(networkTestCell);
+
+    // Connection status indicator
+    bool isOnline = Application::getInstance().isConnected();
+    auto* connectionStatusLabel = new brls::Label();
+    connectionStatusLabel->setText(isOnline ? "Status: Connected" : "Status: Offline");
+    connectionStatusLabel->setFontSize(16);
+    connectionStatusLabel->setMarginLeft(16);
+    connectionStatusLabel->setMarginBottom(8);
+    m_contentBox->addView(connectionStatusLabel);
+
+    // Reconnect button (try to connect to saved server)
+    auto* reconnectCell = new brls::DetailCell();
+    reconnectCell->setText("Reconnect");
+    reconnectCell->setDetailText("Try to connect to server");
+    reconnectCell->registerClickAction([this, connectionStatusLabel](brls::View* view) {
+        Application& app = Application::getInstance();
+        std::string url = app.getActiveServerUrl();
+        if (url.empty()) {
+            brls::Application::notify("No server URL configured");
+            return true;
+        }
+
+        brls::Application::notify("Connecting to " + url + "...");
+
+        asyncRun([url, connectionStatusLabel]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            client.setServerUrl(url);
+
+            bool success = client.testConnection();
+
+            brls::sync([success, connectionStatusLabel]() {
+                if (success) {
+                    Application::getInstance().setConnected(true);
+                    brls::Application::notify("Connected!");
+                    if (connectionStatusLabel) {
+                        connectionStatusLabel->setText("Status: Connected");
+                    }
+                } else {
+                    brls::Application::notify("Connection failed");
+                }
+            });
+        });
+        return true;
+    });
+    m_contentBox->addView(reconnectCell);
 
     // Disconnect button
     auto* disconnectCell = new brls::DetailCell();
@@ -361,6 +407,24 @@ void SettingsTab::createLibrarySection() {
     cacheInfoLabel->setMarginLeft(16);
     cacheInfoLabel->setMarginTop(4);
     m_contentBox->addView(cacheInfoLabel);
+
+    // Downloads Only Mode toggle
+    auto* downloadsOnlyToggle = new brls::BooleanCell();
+    downloadsOnlyToggle->init("Downloads Only Mode", settings.downloadsOnlyMode, [](bool value) {
+        Application::getInstance().getSettings().downloadsOnlyMode = value;
+        Application::getInstance().saveSettings();
+        brls::Application::notify(value ? "Showing downloaded only" : "Showing all manga");
+    });
+    m_contentBox->addView(downloadsOnlyToggle);
+
+    // Downloads Only info label
+    auto* downloadsOnlyInfoLabel = new brls::Label();
+    downloadsOnlyInfoLabel->setText("When offline, only show locally downloaded manga and chapters");
+    downloadsOnlyInfoLabel->setFontSize(14);
+    downloadsOnlyInfoLabel->setMarginLeft(16);
+    downloadsOnlyInfoLabel->setMarginTop(4);
+    downloadsOnlyInfoLabel->setMarginBottom(8);
+    m_contentBox->addView(downloadsOnlyInfoLabel);
 
     // Library Updates header
     auto* updatesHeader = new brls::Header();

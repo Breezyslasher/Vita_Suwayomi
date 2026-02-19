@@ -558,7 +558,8 @@ DownloadedChapter* DownloadsManager::getChapterDownload(int mangaId, int chapter
     for (auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
             for (auto& chapter : manga.chapters) {
-                if (chapter.chapterIndex == chapterIndex) {
+                // Match by chapterIndex OR chapterId (reader passes chapter ID)
+                if (chapter.chapterIndex == chapterIndex || chapter.chapterId == chapterIndex) {
                     return &chapter;
                 }
             }
@@ -591,7 +592,8 @@ bool DownloadsManager::isChapterDownloaded(int mangaId, int chapterIndex) const 
     for (const auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
             for (const auto& chapter : manga.chapters) {
-                if (chapter.chapterIndex == chapterIndex) {
+                // Match by chapterIndex OR chapterId (reader passes chapter ID)
+                if (chapter.chapterIndex == chapterIndex || chapter.chapterId == chapterIndex) {
                     return chapter.state == LocalDownloadState::COMPLETED;
                 }
             }
@@ -607,7 +609,8 @@ std::string DownloadsManager::getPagePath(int mangaId, int chapterIndex, int pag
     for (const auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
             for (const auto& chapter : manga.chapters) {
-                if (chapter.chapterIndex == chapterIndex) {
+                // Match by chapterIndex OR chapterId (reader passes chapter ID)
+                if (chapter.chapterIndex == chapterIndex || chapter.chapterId == chapterIndex) {
                     for (const auto& page : chapter.pages) {
                         if (page.index == pageIndex && page.downloaded) {
                             return page.localPath;
@@ -628,7 +631,8 @@ std::vector<std::string> DownloadsManager::getChapterPages(int mangaId, int chap
     for (const auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
             for (const auto& chapter : manga.chapters) {
-                if (chapter.chapterIndex == chapterIndex) {
+                // Match by chapterIndex OR chapterId (reader passes chapter ID)
+                if (chapter.chapterIndex == chapterIndex || chapter.chapterId == chapterIndex) {
                     for (const auto& page : chapter.pages) {
                         if (page.downloaded) {
                             pages.push_back(page.localPath);

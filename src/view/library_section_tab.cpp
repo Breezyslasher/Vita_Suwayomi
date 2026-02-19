@@ -559,6 +559,9 @@ void LibrarySectionTab::loadCategories() {
         } else {
             brls::Logger::warning("LibrarySectionTab: Failed to fetch categories from server");
 
+            // Mark connection as lost to prevent cascading retries
+            Application::getInstance().setConnected(false);
+
             brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
@@ -956,6 +959,13 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         return;
     }
 
+    // Skip network fetch entirely if we know we're offline and have data to show
+    if (!Application::getInstance().isConnected() && !m_mangaList.empty()) {
+        brls::Logger::info("LibrarySectionTab: Offline with cached data, skipping fetch");
+        m_loaded = true;
+        return;
+    }
+
     asyncRun([this, categoryId, aliveWeak, cacheEnabled, isSameCategory]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
@@ -970,6 +980,12 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
+            // Skip retries if we've detected we're offline
+            if (attempt > 0 && !Application::getInstance().isConnected()) {
+                brls::Logger::info("LibrarySectionTab: Skipping retry, app is offline");
+                break;
+            }
+
             if (attempt > 0) {
                 int delayMs = baseDelayMs * (1 << (attempt - 1));  // 1s, 2s, 4s
                 brls::Logger::info("LibrarySectionTab: Retry {} for category {} in {}ms",
@@ -980,6 +996,11 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
             manga.clear();
             success = client.fetchCategoryManga(categoryId, manga);
             if (success) break;
+        }
+
+        // If all retries failed, mark connection as lost
+        if (!success) {
+            Application::getInstance().setConnected(false);
         }
 
         if (success) {
@@ -1092,6 +1113,12 @@ void LibrarySectionTab::sortMangaList() {
     if (effectiveMode == LibrarySortMode::DEFAULT) {
         int defaultSort = Application::getInstance().getSettings().defaultLibrarySortMode;
         effectiveMode = static_cast<LibrarySortMode>(defaultSort);
+    }
+
+    // Force DOWNLOADED_ONLY filter when downloads-only mode is enabled and app is offline
+    if (Application::getInstance().getSettings().downloadsOnlyMode &&
+        !Application::getInstance().isConnected()) {
+        effectiveMode = LibrarySortMode::DOWNLOADED_ONLY;
     }
 
     // Restore full list before sorting/filtering
@@ -2615,10 +2642,11 @@ void LibrarySectionTab::loadAllManga() {
 
         // Fetch all library manga
         if (!client.fetchLibraryManga(allManga)) {
+            Application::getInstance().setConnected(false);
             brls::sync([aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
-                brls::Application::notify("Failed to load library");
+                brls::Application::notify("Failed to load library - check connection");
             });
             return;
         }
@@ -2651,10 +2679,11 @@ void LibrarySectionTab::loadBySource() {
 
         // Fetch all library manga
         if (!client.fetchLibraryManga(allManga)) {
+            Application::getInstance().setConnected(false);
             brls::sync([aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
-                brls::Application::notify("Failed to load library");
+                brls::Application::notify("Failed to load library - check connection");
             });
             return;
         }

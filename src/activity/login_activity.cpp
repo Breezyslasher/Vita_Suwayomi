@@ -23,13 +23,30 @@ brls::View* LoginActivity::createContentView() {
 void LoginActivity::onContentAvailable() {
     brls::Logger::debug("LoginActivity content available");
 
+    // Pre-fill saved connection details from settings
+    const AppSettings& settings = Application::getInstance().getSettings();
+    if (m_serverUrl.empty()) {
+        if (!settings.localServerUrl.empty()) {
+            m_serverUrl = settings.localServerUrl;
+        } else if (!settings.remoteServerUrl.empty()) {
+            m_serverUrl = settings.remoteServerUrl;
+        }
+    }
+    m_username = Application::getInstance().getAuthUsername();
+    m_password = Application::getInstance().getAuthPassword();
+    m_authMode = static_cast<AuthMode>(settings.authMode);
+
     // Set initial values
     if (titleLabel) {
         titleLabel->setText("VitaSuwayomi");
     }
 
     if (statusLabel) {
-        statusLabel->setText("Enter your Suwayomi server URL");
+        if (!m_serverUrl.empty()) {
+            statusLabel->setText("Saved server found - tap Connect or go Offline");
+        } else {
+            statusLabel->setText("Enter your Suwayomi server URL");
+        }
     }
 
     // Server URL input
@@ -47,7 +64,7 @@ void LoginActivity::onContentAvailable() {
 
     // Username input (optional for Suwayomi basic auth)
     if (usernameLabel) {
-        usernameLabel->setText("Username: (optional)");
+        usernameLabel->setText(std::string("Username: ") + (m_username.empty() ? "(optional)" : m_username));
         usernameLabel->registerClickAction([this](brls::View* view) {
             brls::Application::getImeManager()->openForText([this](std::string text) {
                 m_username = text;
@@ -60,7 +77,7 @@ void LoginActivity::onContentAvailable() {
 
     // Password input (optional for Suwayomi basic auth)
     if (passwordLabel) {
-        passwordLabel->setText("Password: (optional)");
+        passwordLabel->setText(std::string("Password: ") + (m_password.empty() ? "(optional)" : "********"));
         passwordLabel->registerClickAction([this](brls::View* view) {
             brls::Application::getImeManager()->openForPassword([this](std::string text) {
                 m_password = text;
@@ -99,6 +116,15 @@ void LoginActivity::onContentAvailable() {
         testButton->setText("Test");
         testButton->registerClickAction([this](brls::View* view) {
             onTestConnectionPressed();
+            return true;
+        });
+    }
+
+    // Offline mode button
+    if (offlineButton) {
+        offlineButton->setText("Offline");
+        offlineButton->registerClickAction([this](brls::View* view) {
+            onOfflinePressed();
             return true;
         });
     }
@@ -270,6 +296,32 @@ void LoginActivity::onConnectPressed() {
     } else {
         if (statusLabel) statusLabel->setText("Connection failed - check URL and server");
     }
+}
+
+void LoginActivity::onOfflinePressed() {
+    brls::Logger::info("LoginActivity: Entering offline mode");
+
+    // Keep the saved server URL so we can reconnect later, but don't require it
+    if (!m_serverUrl.empty()) {
+        Application::getInstance().setServerUrl(m_serverUrl);
+        Application::getInstance().setAuthCredentials(m_username, m_password);
+
+        AppSettings& settings = Application::getInstance().getSettings();
+        settings.authMode = static_cast<int>(m_authMode);
+        if (settings.localServerUrl.empty()) {
+            settings.localServerUrl = m_serverUrl;
+        }
+        Application::getInstance().saveSettings();
+    }
+
+    // Mark as disconnected (offline)
+    Application::getInstance().setConnected(false);
+
+    if (statusLabel) statusLabel->setText("Entering offline mode...");
+
+    brls::sync([]() {
+        Application::getInstance().pushMainActivity();
+    });
 }
 
 std::string LoginActivity::getAuthModeName(AuthMode mode) {

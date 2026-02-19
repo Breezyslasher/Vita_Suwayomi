@@ -73,6 +73,7 @@ void ReaderActivity::onContentAvailable() {
                        appSettings.mangaReaderSettings.size());
 
     // Try to load from server meta first (synchronously for initial display)
+    // Skip when offline to avoid pointless connection errors
     std::map<std::string, std::string> serverMeta;
     bool hasServerSettings = false;
 
@@ -80,8 +81,9 @@ void ReaderActivity::onContentAvailable() {
     bool cropBorders = appSettings.cropBorders;
     int webtoonSidePadding = appSettings.webtoonSidePadding;
 
-    brls::Logger::info("ReaderActivity: fetching server meta for manga {}...", m_mangaId);
-    if (SuwayomiClient::getInstance().fetchMangaMeta(m_mangaId, serverMeta)) {
+    if (Application::getInstance().isConnected()) {
+        brls::Logger::info("ReaderActivity: fetching server meta for manga {}...", m_mangaId);
+        if (SuwayomiClient::getInstance().fetchMangaMeta(m_mangaId, serverMeta)) {
         brls::Logger::info("ReaderActivity: server returned {} meta entries", serverMeta.size());
         for (const auto& entry : serverMeta) {
             brls::Logger::info("ReaderActivity: server meta [{}] = {}", entry.first, entry.second);
@@ -143,6 +145,9 @@ void ReaderActivity::onContentAvailable() {
         if (hasServerSettings) {
             brls::Logger::info("ReaderActivity: loaded settings from server for manga {}", m_mangaId);
         }
+        }
+    } else {
+        brls::Logger::info("ReaderActivity: offline, skipping server meta fetch");
     }
 
     // If no server settings, check local per-manga cache
@@ -169,7 +174,9 @@ void ReaderActivity::onContentAvailable() {
     }
 
     // Auto-detect webtoon format if enabled and no custom settings exist
-    if (!hasServerSettings && !hasLocalSettings && appSettings.webtoonDetection) {
+    // Skip when offline to avoid connection errors
+    if (!hasServerSettings && !hasLocalSettings && appSettings.webtoonDetection &&
+        Application::getInstance().isConnected()) {
         Manga mangaInfo;
         if (SuwayomiClient::getInstance().fetchManga(m_mangaId, mangaInfo)) {
             if (mangaInfo.isWebtoon()) {
@@ -740,10 +747,12 @@ void ReaderActivity::loadPages() {
     auto sharedChapterName = std::make_shared<std::string>();
     auto sharedChapters = std::make_shared<std::vector<Chapter>>();
     auto sharedTotalChapters = std::make_shared<int>(0);
+    auto sharedLoadedFromLocal = std::make_shared<bool>(false);
 
     vitasuwayomi::asyncTask<bool>([isWebtoonMode, mangaId, chapterIndex,
                                     sharedPages, sharedChapterName,
-                                    sharedChapters, sharedTotalChapters]() {
+                                    sharedChapters, sharedTotalChapters,
+                                    sharedLoadedFromLocal]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         DownloadsManager& localMgr = DownloadsManager::getInstance();
         localMgr.init();
@@ -771,6 +780,7 @@ void ReaderActivity::loadPages() {
                     rawPages.push_back(page);
                 }
                 loadedFromLocal = true;
+                *sharedLoadedFromLocal = true;
             } else {
                 brls::Logger::warning("ReaderActivity: Local chapter marked as downloaded but no pages found");
             }
@@ -828,20 +838,21 @@ void ReaderActivity::loadPages() {
             *sharedPages = std::move(rawPages);
         }
 
-        // Also fetch chapter details for the name
-        Chapter chapter;
-        if (client.fetchChapter(mangaId, chapterIndex, chapter)) {
-            *sharedChapterName = chapter.name;
+        // Fetch chapter details and navigation from server (skip when offline)
+        if (Application::getInstance().isConnected()) {
+            Chapter chapter;
+            if (client.fetchChapter(mangaId, chapterIndex, chapter)) {
+                *sharedChapterName = chapter.name;
+            }
+            client.fetchChapters(mangaId, *sharedChapters);
+            *sharedTotalChapters = static_cast<int>(sharedChapters->size());
         }
-
-        // Fetch all chapters for navigation
-        client.fetchChapters(mangaId, *sharedChapters);
-        *sharedTotalChapters = static_cast<int>(sharedChapters->size());
 
         return true;
     }, [this, isWebtoonMode, aliveWeak,
         sharedPages, sharedChapterName,
-        sharedChapters, sharedTotalChapters](bool success) {
+        sharedChapters, sharedTotalChapters,
+        sharedLoadedFromLocal](bool success) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
 
@@ -850,6 +861,7 @@ void ReaderActivity::loadPages() {
         m_chapterName = std::move(*sharedChapterName);
         m_chapters = std::move(*sharedChapters);
         m_totalChapters = *sharedTotalChapters;
+        m_loadedFromLocal = *sharedLoadedFromLocal;
 
         if (!success || m_pages.empty()) {
             brls::Logger::error("No pages to display");
@@ -983,17 +995,20 @@ void ReaderActivity::loadPage(int index) {
         }
 
         // Set up a timeout: if page hasn't loaded after 15 seconds, show error
-        vitasuwayomi::asyncRun([this, aliveWeak, loadGen, index]() {
-            std::this_thread::sleep_for(std::chrono::seconds(15));
-            brls::sync([this, aliveWeak, loadGen, index]() {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-                // Only show error if this is still the same load attempt
-                if (m_pageLoadGeneration == loadGen) {
-                    showPageError("Failed to load page " + std::to_string(index + 1));
-                }
+        // Only for server-streamed pages - local files load instantly from disk
+        if (!m_loadedFromLocal) {
+            vitasuwayomi::asyncRun([this, aliveWeak, loadGen, index]() {
+                std::this_thread::sleep_for(std::chrono::seconds(15));
+                brls::sync([this, aliveWeak, loadGen, index]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    // Only show error if this is still the same load attempt
+                    if (m_pageLoadGeneration == loadGen) {
+                        showPageError("Failed to load page " + std::to_string(index + 1));
+                    }
+                });
             });
-        });
+        }
     }
 
     // Preload adjacent pages
@@ -1183,6 +1198,12 @@ void ReaderActivity::previousChapter() {
 }
 
 void ReaderActivity::markChapterAsRead() {
+    // Skip server call when offline
+    if (!Application::getInstance().isConnected()) {
+        brls::Logger::info("ReaderActivity: offline, skipping mark as read");
+        return;
+    }
+
     int mangaId = m_mangaId;
     int chapterIndex = m_chapterIndex;
     int totalChapters = m_totalChapters;
@@ -1667,6 +1688,10 @@ void ReaderActivity::showPageError(const std::string& message) {
     m_retryButton->setCornerRadius(22);
     m_retryButton->setBackgroundColor(nvgRGBA(0, 150, 136, 255));
     m_retryButton->registerClickAction([this](brls::View* view) {
+        if (!Application::getInstance().isConnected() && !m_loadedFromLocal) {
+            brls::Application::notify("App is offline");
+            return true;
+        }
         hidePageError();
         if (m_pages.empty()) {
             loadPages();

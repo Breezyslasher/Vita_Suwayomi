@@ -606,6 +606,31 @@ void MangaDetailView::loadDetails() {
     // Load tracking data (parallel)
     loadTrackingData();
 
+    // Try loading chapters from cache for instant display
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+    LibraryCache& cache = LibraryCache::getInstance();
+    if (cacheEnabled && cache.hasChaptersCache(m_manga.id)) {
+        std::vector<Chapter> cachedChapters;
+        if (cache.loadChapters(m_manga.id, cachedChapters) && !cachedChapters.empty()) {
+            brls::Logger::info("MangaDetailView: Loaded {} chapters from cache for manga {}",
+                              cachedChapters.size(), m_manga.id);
+            m_chapters = cachedChapters;
+            populateChaptersList();
+            if (m_chapterCountLabel) {
+                std::string info = std::to_string(m_chapters.size()) + " chapters";
+                int unread = 0;
+                for (const auto& ch : m_chapters) {
+                    if (!ch.read) unread++;
+                }
+                if (unread > 0) {
+                    info += " (" + std::to_string(unread) + " unread)";
+                }
+                m_chapterCountLabel->setText(info);
+            }
+            updateReadButtonText();
+        }
+    }
+
     if (m_manga.description.empty()) {
         // Description missing: use combined query to fetch manga details + chapters in one request
         // This saves a network round-trip vs fetching them separately
@@ -691,8 +716,11 @@ void MangaDetailView::loadDetails() {
                         brls::Logger::info("MangaDetailView: Updated and cached manga details from combined query");
                     }
 
-                    // Apply chapters
+                    // Apply chapters and save to cache
                     m_chapters = chapters;
+                    if (Application::getInstance().getSettings().cacheLibraryData) {
+                        LibraryCache::getInstance().saveChapters(m_manga.id, chapters);
+                    }
                     populateChaptersList();
                     if (m_chapterCountLabel) {
                         std::string info = std::to_string(m_chapters.size()) + " chapters";
@@ -803,6 +831,9 @@ void MangaDetailView::loadChapters() {
                 }
 
                 m_chapters = chapters;
+                if (Application::getInstance().getSettings().cacheLibraryData) {
+                    LibraryCache::getInstance().saveChapters(m_manga.id, chapters);
+                }
                 populateChaptersList();
 
                 // Update chapter count label
@@ -919,10 +950,15 @@ void MangaDetailView::populateChaptersList() {
     // Get downloads manager to check local download state
     DownloadsManager& dmForFilter = DownloadsManager::getInstance();
 
+    // Force downloaded filter when downloads-only mode is enabled and app is offline
+    bool filterDownloaded = m_filterDownloaded ||
+                            (Application::getInstance().getSettings().downloadsOnlyMode &&
+                             !Application::getInstance().isConnected());
+
     // Create chapter cells (Komikku-style: rounded, clean design)
     for (const auto& chapter : sortedChapters) {
         // For downloaded filter, only check LOCAL download state (not server)
-        if (m_filterDownloaded) {
+        if (filterDownloaded) {
             DownloadedChapter* localCh = dmForFilter.getChapterDownload(m_manga.id, chapter.index);
             bool isLocallyDownloaded = localCh && localCh->state == LocalDownloadState::COMPLETED;
             if (!isLocallyDownloaded) continue;

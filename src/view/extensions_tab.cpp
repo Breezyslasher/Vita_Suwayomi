@@ -832,6 +832,15 @@ ExtensionsTab::ExtensionsTab() {
         return false;  // Let default behavior handle it (go back)
     }, true);  // Hidden action (don't show in hints)
 
+    // Inline error/offline label (hidden by default)
+    m_errorLabel = new brls::Label();
+    m_errorLabel->setFontSize(16);
+    m_errorLabel->setTextColor(nvgRGB(180, 180, 180));
+    m_errorLabel->setMarginTop(40);
+    m_errorLabel->setMarginLeft(20);
+    m_errorLabel->setVisibility(brls::Visibility::GONE);
+    this->addView(m_errorLabel);
+
     this->addView(m_recycler);
 
     // Load extensions
@@ -851,6 +860,12 @@ void ExtensionsTab::onFocusGained() {
 void ExtensionsTab::loadExtensionsFast() {
     brls::Logger::debug("Loading extensions list (fast mode)...");
 
+    // Show offline message if not connected and no cached data
+    if (!Application::getInstance().isConnected() && !m_cacheLoaded) {
+        showError("App is offline - connect to a server to manage extensions");
+        return;
+    }
+
     showLoading("Loading extensions...");
 
     brls::async([this]() {
@@ -864,7 +879,8 @@ void ExtensionsTab::loadExtensionsFast() {
         } else {
             bool success = client.fetchExtensionList(allExtensions);
             if (!success) {
-                brls::sync([this]() { showError("Failed to load extensions"); });
+                Application::getInstance().setConnected(false);
+                brls::sync([this]() { showError("App is offline - connect to a server to manage extensions"); });
                 return;
             }
             m_cachedExtensions = allExtensions;
@@ -1002,6 +1018,10 @@ void ExtensionsTab::refreshUIFromCache() {
 }
 
 void ExtensionsTab::reloadRecycler() {
+    // Hide error label and show recycler when data loads successfully
+    if (m_errorLabel) m_errorLabel->setVisibility(brls::Visibility::GONE);
+    if (m_recycler) m_recycler->setVisibility(brls::Visibility::VISIBLE);
+
     if (!m_dataSource) {
         m_dataSource = new ExtensionsDataSource(this);
         m_recycler->setDataSource(m_dataSource);
@@ -1048,7 +1068,13 @@ void ExtensionsTab::showLoading(const std::string& message) {
 }
 
 void ExtensionsTab::showError(const std::string& message) {
-    brls::Application::notify(message);
+    if (m_errorLabel) {
+        m_errorLabel->setText(message);
+        m_errorLabel->setVisibility(brls::Visibility::VISIBLE);
+    }
+    if (m_recycler) {
+        m_recycler->setVisibility(brls::Visibility::GONE);
+    }
 }
 
 std::map<std::string, std::vector<Extension>> ExtensionsTab::groupExtensionsByLanguage(
