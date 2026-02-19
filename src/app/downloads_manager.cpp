@@ -658,7 +658,8 @@ void DownloadsManager::updateReadingProgress(int mangaId, int chapterIndex, int 
             manga.lastReadTime = std::time(nullptr);
 
             for (auto& chapter : manga.chapters) {
-                if (chapter.chapterIndex == chapterIndex) {
+                // Match by chapterIndex OR chapterId (reader passes chapter ID)
+                if (chapter.chapterIndex == chapterIndex || chapter.chapterId == chapterIndex) {
                     chapter.lastPageRead = lastPageRead;
                     chapter.lastReadTime = std::time(nullptr);
                     break;

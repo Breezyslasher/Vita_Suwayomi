@@ -1086,14 +1086,20 @@ void ReaderActivity::updateDirectionLabel() {
 }
 
 void ReaderActivity::updateProgress() {
-    // Save reading progress to server - capture values, not 'this'
     int mangaId = m_mangaId;
     int chapterIndex = m_chapterIndex;
     int currentPage = m_currentPage;
-    vitasuwayomi::asyncRun([mangaId, chapterIndex, currentPage]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
-        client.updateChapterProgress(mangaId, chapterIndex, currentPage);
-    });
+
+    if (Application::getInstance().isConnected()) {
+        // Save reading progress to server
+        vitasuwayomi::asyncRun([mangaId, chapterIndex, currentPage]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            client.updateChapterProgress(mangaId, chapterIndex, currentPage);
+        });
+    } else {
+        // Save progress locally when offline
+        DownloadsManager::getInstance().updateReadingProgress(mangaId, chapterIndex, currentPage);
+    }
 }
 
 void ReaderActivity::nextPage() {
