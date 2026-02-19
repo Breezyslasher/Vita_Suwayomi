@@ -1680,18 +1680,22 @@ void LibrarySectionTab::showDownloadSubmenu(const std::vector<Manga>& mangaList)
         "Download",
         options,
         [this, capturedList](int selected) {
-            std::string mode;
-            switch (selected) {
-                case 0: mode = "all"; break;
-                case 1: mode = "unread"; break;
-                case 2: mode = "next1"; break;
-                case 3: mode = "next5"; break;
-                case 4: mode = "next10"; break;
-                case 5: mode = "next25"; break;
-                default: return;
-            }
-            downloadChapters(capturedList, mode);
-            if (m_selectionMode) exitSelectionMode();
+            if (selected < 0 || selected > 5) return;
+            // Defer to next frame so dropdown fully closes first
+            brls::sync([this, capturedList, selected]() {
+                std::string mode;
+                switch (selected) {
+                    case 0: mode = "all"; break;
+                    case 1: mode = "unread"; break;
+                    case 2: mode = "next1"; break;
+                    case 3: mode = "next5"; break;
+                    case 4: mode = "next10"; break;
+                    case 5: mode = "next25"; break;
+                    default: return;
+                }
+                downloadChapters(capturedList, mode);
+                if (m_selectionMode) exitSelectionMode();
+            });
         }
     );
     brls::Application::pushActivity(new brls::Activity(dropdown));
@@ -1715,6 +1719,8 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         catNames,
         [this, capturedList](int selected) {
             if (selected < 0 || selected >= (int)m_categories.size()) return;
+            // Defer to next frame so dropdown fully closes first
+            brls::sync([this, capturedList, selected]() {
             int destCategoryId = m_categories[selected].id;
             std::string catName = m_categories[selected].name;
             int srcCategoryId = m_currentCategoryId;
@@ -1815,6 +1821,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
             });
 
             if (m_selectionMode) exitSelectionMode();
+            });
         }
     );
     brls::Application::pushActivity(new brls::Activity(dropdown));
