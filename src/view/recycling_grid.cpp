@@ -81,6 +81,7 @@ RecyclingGrid::~RecyclingGrid() {
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
     brls::Logger::debug("RecyclingGrid: setDataSource with {} items", items.size());
     m_items = items;
+    m_endReachedFired = false;  // Allow end-reached to fire again with new data
     setupGrid();
 }
 
@@ -223,6 +224,10 @@ void RecyclingGrid::setOnPullToRefresh(std::function<void()> callback) {
 
 void RecyclingGrid::setOnBackPressed(std::function<bool()> callback) {
     m_onBackPressed = callback;
+}
+
+void RecyclingGrid::setOnEndReached(std::function<void()> callback) {
+    m_onEndReached = callback;
 }
 
 void RecyclingGrid::setOnSelectionChanged(std::function<void(int count)> callback) {
@@ -379,6 +384,15 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
             cell->getFocusEvent()->subscribe([this, index](brls::View*) {
                 m_focusedIndex = index;
                 loadThumbnailsNearIndex(index);
+
+                // Fire onEndReached when focus is within 2 rows of the end
+                if (m_onEndReached && !m_endReachedFired) {
+                    int threshold = m_columns * 2;
+                    if (index >= static_cast<int>(m_items.size()) - threshold) {
+                        m_endReachedFired = true;
+                        m_onEndReached();
+                    }
+                }
             });
 
             rowBox->addView(cell);

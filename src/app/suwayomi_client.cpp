@@ -4051,6 +4051,7 @@ Tracker SuwayomiClient::parseTrackerFromGraphQL(const std::string& json) {
     tracker.id = extractJsonInt(json, "id");
     tracker.name = extractJsonValue(json, "name");
     tracker.iconUrl = extractJsonValue(json, "icon");
+    tracker.authUrl = extractJsonValue(json, "authUrl");
     tracker.isLoggedIn = extractJsonBool(json, "isLoggedIn");
     tracker.isTokenExpired = extractJsonBool(json, "isTokenExpired");
     tracker.supportsTrackDeletion = extractJsonBool(json, "supportsTrackDeletion");
@@ -4143,6 +4144,7 @@ bool SuwayomiClient::fetchTrackersGraphQL(std::vector<Tracker>& trackers) {
                     id
                     name
                     icon
+                    authUrl
                     isLoggedIn
                     isTokenExpired
                     supportsTrackDeletion
@@ -4202,6 +4204,7 @@ bool SuwayomiClient::fetchTrackerGraphQL(int trackerId, Tracker& tracker) {
                 id
                 name
                 icon
+                authUrl
                 isLoggedIn
                 isTokenExpired
                 supportsTrackDeletion

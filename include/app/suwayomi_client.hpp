@@ -311,6 +311,7 @@ struct Tracker {
     int id = 0;
     std::string name;
     std::string iconUrl;
+    std::string authUrl;              // OAuth authorization URL (empty when logged in)
     bool isLoggedIn = false;
     bool isTokenExpired = false;
     std::vector<std::string> statuses;    // Status options (e.g., "Reading", "Completed")

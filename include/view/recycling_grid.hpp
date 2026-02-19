@@ -29,6 +29,7 @@ public:
     void setOnItemLongPressed(std::function<void(const Manga&, int index)> callback);
     void setOnPullToRefresh(std::function<void()> callback);
     void setOnBackPressed(std::function<bool()> callback);
+    void setOnEndReached(std::function<void()> callback);  // Fires when focus nears the last row
     void clearViews();
 
     // Grid customization
@@ -81,6 +82,8 @@ private:
     std::function<void(const Manga&, int index)> m_onItemLongPressed;
     std::function<void()> m_onPullToRefresh;
     std::function<bool()> m_onBackPressed;
+    std::function<void()> m_onEndReached;
+    bool m_endReachedFired = false;  // Prevent repeated firing until new data is loaded
     std::function<void(int count)> m_onSelectionChanged;
 
     // Pull-to-refresh state

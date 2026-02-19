@@ -47,6 +47,7 @@ SettingsTab::SettingsTab() {
 
     // Create all sections
     createAccountSection();
+    createTrackingSection();
     createUISection();
     createLibrarySection();
     createReaderSection();
@@ -227,6 +228,123 @@ void SettingsTab::createAccountSection() {
         return true;
     });
     m_contentBox->addView(disconnectCell);
+}
+
+void SettingsTab::createTrackingSection() {
+    auto* header = new brls::Header();
+    header->setTitle("Tracking");
+    m_contentBox->addView(header);
+
+    // "Login to Trackers" cell that fetches trackers and shows login/logout options
+    auto* trackerCell = new brls::DetailCell();
+    trackerCell->setText("Tracker Accounts");
+    trackerCell->setDetailText("Login to MAL, AniList, etc.");
+    trackerCell->registerClickAction([this](brls::View* view) {
+        if (!Application::getInstance().isConnected()) {
+            brls::Application::notify("Connect to server first");
+            return true;
+        }
+
+        brls::Application::notify("Loading trackers...");
+
+        asyncRun([this]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            std::vector<Tracker> trackers;
+
+            if (!client.fetchTrackers(trackers)) {
+                brls::sync([]() {
+                    brls::Application::notify("Failed to load trackers");
+                });
+                return;
+            }
+
+            brls::sync([this, trackers]() {
+                if (trackers.empty()) {
+                    brls::Application::notify("No trackers available on server");
+                    return;
+                }
+
+                // Build tracker options list with login status
+                std::vector<std::string> options;
+                for (const auto& t : trackers) {
+                    std::string label = t.name;
+                    if (t.isLoggedIn) {
+                        label += " (Logged in)";
+                    } else {
+                        label += " (Not logged in)";
+                    }
+                    options.push_back(label);
+                }
+
+                auto* dropdown = new brls::Dropdown(
+                    "Tracker Accounts", options,
+                    [this, trackers](int selected) {
+                        if (selected < 0 || selected >= static_cast<int>(trackers.size())) return;
+                        const Tracker& tracker = trackers[selected];
+
+                        brls::sync([this, tracker]() {
+                            if (tracker.isLoggedIn) {
+                                // Already logged in — offer logout
+                                std::vector<std::string> actions = {"Logout", "Cancel"};
+                                auto* actionDropdown = new brls::Dropdown(
+                                    tracker.name + " (Logged in)", actions,
+                                    [this, tracker](int action) {
+                                        if (action == 0) {
+                                            // Logout
+                                            int trackerId = tracker.id;
+                                            std::string trackerName = tracker.name;
+                                            asyncRun([trackerId, trackerName]() {
+                                                bool ok = SuwayomiClient::getInstance().logoutTracker(trackerId);
+                                                brls::sync([ok, trackerName]() {
+                                                    if (ok) {
+                                                        brls::Application::notify("Logged out of " + trackerName);
+                                                    } else {
+                                                        brls::Application::notify("Failed to log out of " + trackerName);
+                                                    }
+                                                });
+                                            });
+                                        }
+                                    }, 0);
+                                brls::Application::pushActivity(new brls::Activity(actionDropdown));
+                            } else {
+                                // Not logged in — show credential login dialog
+                                // MangaUpdates uses username/password, others use OAuth
+                                // On PS Vita we can only do credential-based login
+                                int trackerId = tracker.id;
+                                std::string trackerName = tracker.name;
+
+                                brls::Application::getImeManager()->openForText(
+                                    [this, trackerId, trackerName](std::string username) {
+                                        if (username.empty()) return;
+
+                                        brls::Application::getImeManager()->openForText(
+                                            [trackerId, trackerName, username](std::string password) {
+                                                if (password.empty()) return;
+
+                                                asyncRun([trackerId, trackerName, username, password]() {
+                                                    bool ok = SuwayomiClient::getInstance()
+                                                        .loginTrackerCredentials(trackerId, username, password);
+                                                    brls::sync([ok, trackerName]() {
+                                                        if (ok) {
+                                                            brls::Application::notify("Logged in to " + trackerName);
+                                                        } else {
+                                                            brls::Application::notify("Login failed for " + trackerName);
+                                                        }
+                                                    });
+                                                });
+                                            },
+                                            "Password", "", 256, "");
+                                    },
+                                    "Username", "", 256, "");
+                            }
+                        });
+                    }, 0);
+                brls::Application::pushActivity(new brls::Activity(dropdown));
+            });
+        });
+        return true;
+    });
+    m_contentBox->addView(trackerCell);
 }
 
 void SettingsTab::createUISection() {
