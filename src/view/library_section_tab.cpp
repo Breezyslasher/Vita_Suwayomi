@@ -648,6 +648,24 @@ void LibrarySectionTab::loadCategories() {
 void LibrarySectionTab::createCategoryTabs() {
     if (!m_categoryScrollContainer) return;
 
+    // Move focus away from tab buttons before destroying them
+    // Otherwise borealis dereferences a dangling focus pointer
+    brls::View* focused = brls::Application::getCurrentFocus();
+    if (focused) {
+        brls::View* parent = focused;
+        while (parent) {
+            if (parent == m_categoryScrollContainer) {
+                if (m_contentGrid) {
+                    brls::Application::giveFocus(m_contentGrid);
+                } else {
+                    brls::Application::giveFocus(this);
+                }
+                break;
+            }
+            parent = parent->hasParent() ? parent->getParent() : nullptr;
+        }
+    }
+
     // Clear existing buttons
     m_categoryScrollContainer->clearViews();
     m_categoryScrollContainer->setTranslationX(0);
@@ -2494,6 +2512,24 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
     Application::getInstance().getSettings().libraryGroupMode = mode;
     Application::getInstance().saveSettings();
 
+    // Move focus away from tab buttons before switching modes
+    // The old tab buttons may be destroyed or hidden during the switch
+    brls::View* focused = brls::Application::getCurrentFocus();
+    if (focused && m_categoryScrollContainer) {
+        brls::View* parent = focused;
+        while (parent) {
+            if (parent == m_categoryScrollContainer) {
+                if (m_contentGrid) {
+                    brls::Application::giveFocus(m_contentGrid);
+                } else {
+                    brls::Application::giveFocus(this);
+                }
+                break;
+            }
+            parent = parent->hasParent() ? parent->getParent() : nullptr;
+        }
+    }
+
     // Reload library with new grouping
     if (mode == LibraryGroupMode::BY_CATEGORY) {
         // Show category tabs and recreate them from categories
@@ -2633,6 +2669,23 @@ void LibrarySectionTab::loadBySource() {
 
 void LibrarySectionTab::createSourceTabs() {
     if (!m_categoryScrollContainer) return;
+
+    // Move focus away from tab buttons before destroying them
+    brls::View* focused = brls::Application::getCurrentFocus();
+    if (focused) {
+        brls::View* parent = focused;
+        while (parent) {
+            if (parent == m_categoryScrollContainer) {
+                if (m_contentGrid) {
+                    brls::Application::giveFocus(m_contentGrid);
+                } else {
+                    brls::Application::giveFocus(this);
+                }
+                break;
+            }
+            parent = parent->hasParent() ? parent->getParent() : nullptr;
+        }
+    }
 
     // Clear existing buttons
     m_categoryScrollContainer->clearViews();
