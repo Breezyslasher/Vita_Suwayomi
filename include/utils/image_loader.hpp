@@ -139,7 +139,7 @@ private:
     static std::queue<PendingTextureUpdate> s_pendingTextures;
     static std::mutex s_pendingMutex;
     static std::atomic<bool> s_pendingScheduled;
-    static constexpr int MAX_TEXTURES_PER_FRAME = 4;  // Limit GPU uploads per frame
+    static constexpr int MAX_TEXTURES_PER_FRAME = 6;  // Limit GPU uploads per frame
 
     // Queue a texture for batched upload on the main thread
     static void queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback);
