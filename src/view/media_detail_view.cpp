@@ -188,6 +188,10 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         });
     }
     m_libraryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_libraryButton));
+    // Hide add/remove library button when offline (server-only action)
+    if (!Application::getInstance().isConnected()) {
+        m_libraryButton->setVisibility(brls::Visibility::GONE);
+    }
     leftPanel->addView(m_libraryButton);
 
     // Tracking button (for MAL, AniList, etc.)
@@ -203,6 +207,10 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         return true;
     });
     m_trackingButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_trackingButton));
+    // Hide tracking button when offline (server-only action)
+    if (!Application::getInstance().isConnected()) {
+        m_trackingButton->setVisibility(brls::Visibility::GONE);
+    }
     leftPanel->addView(m_trackingButton);
 
     this->addView(leftPanel);
@@ -1543,20 +1551,32 @@ void MangaDetailView::showMangaMenu() {
     // Copy chapters data for the callbacks
     std::vector<Chapter> chapters = m_chapters;
 
-    std::vector<std::string> options = {
-        "Download all",
-        "Download unread",
-        "Remove all chapters",
-        "Cancel downloading chapters",
-        "Reset cover"
-    };
+    bool online = Application::getInstance().isConnected();
+
+    // Build options list with action IDs so hidden items don't shift indices
+    struct MenuAction { std::string label; int actionId; };
+    std::vector<MenuAction> actions;
+    std::vector<std::string> options;
+
+    if (online) {
+        actions.push_back({"Download all", 0});
+        actions.push_back({"Download unread", 1});
+    }
+    actions.push_back({"Remove all chapters", 2});
+    if (online) {
+        actions.push_back({"Cancel downloading chapters", 3});
+        actions.push_back({"Reset cover", 4});
+    }
+
+    for (const auto& a : actions) options.push_back(a.label);
 
     brls::Dropdown* dropdown = new brls::Dropdown(
         "Options", options,
-        [this, mangaId, chapters](int selected) {
-            if (selected < 0) return;  // Cancelled
+        [this, mangaId, chapters, actions](int selected) {
+            if (selected < 0 || selected >= static_cast<int>(actions.size())) return;
+            int actionId = actions[selected].actionId;
 
-            switch (selected) {
+            switch (actionId) {
                 case 0:  // Download all
                     brls::sync([this]() {
                         downloadAllChapters();
@@ -2298,19 +2318,34 @@ void MangaDetailView::showChapterMenu(const Chapter& chapter) {
     int chapterIndex = chapter.index;
     bool isRead = chapter.read;
     bool isDownloaded = chapter.downloaded;
+    bool online = Application::getInstance().isConnected();
 
-    std::vector<std::string> options = {
-        "Read",
-        isRead ? "Mark Unread" : "Mark Read",
-        isDownloaded ? "Delete Download" : "Download"
-    };
+    // Build options with action IDs so hidden items don't shift indices
+    struct MenuAction { std::string label; int actionId; };
+    std::vector<MenuAction> actions;
+    std::vector<std::string> options;
+
+    actions.push_back({"Read", 0});
+    if (online) {
+        actions.push_back({isRead ? "Mark Unread" : "Mark Read", 1});
+    }
+    // Show "Delete Download" for already-downloaded chapters even offline;
+    // hide "Download" when offline since it requires the server.
+    if (isDownloaded) {
+        actions.push_back({"Delete Download", 2});
+    } else if (online) {
+        actions.push_back({"Download", 2});
+    }
+
+    for (const auto& a : actions) options.push_back(a.label);
 
     brls::Dropdown* dropdown = new brls::Dropdown(
         chapter.name, options,
-        [this, chapter, mangaId, chapterIndex, isRead, isDownloaded](int selected) {
-            if (selected < 0) return;  // Cancelled
+        [this, chapter, mangaId, chapterIndex, isRead, isDownloaded, actions](int selected) {
+            if (selected < 0 || selected >= static_cast<int>(actions.size())) return;
+            int actionId = actions[selected].actionId;
 
-            switch (selected) {
+            switch (actionId) {
                 case 0:  // Read
                     brls::sync([this, chapter]() {
                         onChapterSelected(chapter);

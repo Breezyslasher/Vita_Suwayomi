@@ -256,8 +256,9 @@ LibrarySectionTab::LibrarySectionTab() {
         }
     });
 
-    // Long-press on a book shows the context menu (same as START button)
+    // Long-press on a book shows the context menu (server-only actions, skip when offline)
     m_contentGrid->setOnItemLongPressed([this](const Manga& manga, int index) {
+        if (!Application::getInstance().isConnected()) return;
         showMangaContextMenu(manga, index);
     });
 
@@ -336,8 +337,9 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
 
-    // Register Start button for context menu on focused manga
+    // Register Start button for context menu on focused manga (server-only actions)
     this->registerAction("Menu", brls::ControllerButton::BUTTON_START, [this](brls::View*) {
+        if (!Application::getInstance().isConnected()) return true;
         if (!m_contentGrid) return true;
         // Only show context menu if a book cell is actually focused
         if (!m_contentGrid->hasCellFocus()) return true;
@@ -380,6 +382,12 @@ LibrarySectionTab::~LibrarySectionTab() {
 
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
+
+    // Show/hide update button based on connectivity
+    if (m_updateBtn) {
+        m_updateBtn->setVisibility(Application::getInstance().isConnected()
+            ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
 
     // Check if group mode was changed externally (e.g. from settings tab)
     LibraryGroupMode savedMode = Application::getInstance().getSettings().libraryGroupMode;
@@ -1115,6 +1123,11 @@ void LibrarySectionTab::onMangaSelected(const Manga& manga) {
 }
 
 void LibrarySectionTab::triggerLibraryUpdate() {
+    if (!Application::getInstance().isConnected()) {
+        brls::Application::notify("Cannot update library while offline");
+        return;
+    }
+
     brls::Logger::info("LibrarySectionTab: Triggering update for category {} ({})",
                       m_currentCategoryId, m_currentCategoryName);
 
