@@ -2551,7 +2551,7 @@ bool SuwayomiClient::addExtensionRepo(const std::string& repoUrl) {
         }
     )";
 
-    std::string variables = "{\"input\":{\"extensionRepos\":" + reposArray + "}}";
+    std::string variables = "{\"input\":{\"settings\":{\"extensionRepos\":" + reposArray + "}}}";
     std::string response = executeGraphQL(query, variables);
     if (response.empty()) {
         brls::Logger::error("Failed to update extension repos");
@@ -2605,7 +2605,7 @@ bool SuwayomiClient::removeExtensionRepo(const std::string& repoUrl) {
         }
     )";
 
-    std::string variables = "{\"input\":{\"extensionRepos\":" + reposArray + "}}";
+    std::string variables = "{\"input\":{\"settings\":{\"extensionRepos\":" + reposArray + "}}}";
     std::string response = executeGraphQL(query, variables);
     if (response.empty()) {
         brls::Logger::error("Failed to update extension repos");
