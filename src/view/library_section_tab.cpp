@@ -2660,6 +2660,18 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
         if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, true);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
+        // Try loading categories from cache if not already available
+        if (m_categories.empty()) {
+            bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+            if (cacheEnabled && LibraryCache::getInstance().hasCategoriesCache()) {
+                std::vector<Category> cachedCategories;
+                if (LibraryCache::getInstance().loadCategories(cachedCategories)) {
+                    std::sort(cachedCategories.begin(), cachedCategories.end(),
+                              [](const Category& a, const Category& b) { return a.order < b.order; });
+                    m_categories = cachedCategories;
+                }
+            }
+        }
         if (!m_categories.empty()) {
             createCategoryTabs();
             selectCategory(m_currentCategoryId);
@@ -2690,9 +2702,33 @@ void LibrarySectionTab::loadAllManga() {
         m_titleLabel->setText("All Manga");
     }
 
+    // Use category ID -1 as a cache key for "all library manga"
+    const int ALL_MANGA_CACHE_ID = -1;
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+    LibraryCache& cache = LibraryCache::getInstance();
+
+    // Try loading from cache first for instant display
+    if (cacheEnabled && cache.hasCategoryCache(ALL_MANGA_CACHE_ID)) {
+        std::vector<Manga> cachedManga;
+        if (cache.loadCategoryManga(ALL_MANGA_CACHE_ID, cachedManga) && !cachedManga.empty()) {
+            brls::Logger::info("LibrarySectionTab: Loaded {} manga from all-library cache", cachedManga.size());
+            m_fullMangaList = cachedManga;
+            m_mangaList = cachedManga;
+            sortMangaList();
+            m_loaded = true;
+        }
+    }
+
+    // If offline, use cache only
+    if (!Application::getInstance().isConnected()) {
+        brls::Logger::info("LibrarySectionTab: Offline, using cached all-manga data");
+        m_loaded = true;
+        return;
+    }
+
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak]() {
+    asyncRun([this, aliveWeak, cacheEnabled, ALL_MANGA_CACHE_ID]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> allManga;
 
@@ -2705,6 +2741,11 @@ void LibrarySectionTab::loadAllManga() {
                 brls::Application::notify("Failed to load library - check connection");
             });
             return;
+        }
+
+        // Cache the result for offline use
+        if (cacheEnabled) {
+            LibraryCache::getInstance().saveCategoryManga(ALL_MANGA_CACHE_ID, allManga);
         }
 
         brls::sync([this, allManga, aliveWeak]() {
@@ -2727,9 +2768,66 @@ void LibrarySectionTab::loadBySource() {
     if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::VISIBLE);
     if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
 
+    // Use category ID -1 as cache key for "all library manga"
+    const int ALL_MANGA_CACHE_ID = -1;
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+    LibraryCache& cache = LibraryCache::getInstance();
+
+    // Helper lambda to group manga by source and apply to UI
+    auto applySourceGrouping = [this](const std::vector<Manga>& allManga) {
+        std::map<std::string, std::vector<Manga>> mangaBySource;
+        for (const auto& manga : allManga) {
+            std::string sourceName = manga.sourceName.empty() ? "Unknown" : manga.sourceName;
+            mangaBySource[sourceName].push_back(manga);
+        }
+        std::vector<std::string> sourceNames;
+        for (const auto& pair : mangaBySource) {
+            sourceNames.push_back(pair.first);
+        }
+        std::sort(sourceNames.begin(), sourceNames.end());
+
+        m_mangaBySource = mangaBySource;
+        m_sourceNames = sourceNames;
+        createSourceTabs();
+
+        if (!m_sourceNames.empty()) {
+            bool foundPrevious = false;
+            if (!m_currentSourceName.empty()) {
+                for (const auto& name : m_sourceNames) {
+                    if (name == m_currentSourceName) { foundPrevious = true; break; }
+                }
+            }
+            selectSource(foundPrevious ? m_currentSourceName : m_sourceNames[0]);
+        } else {
+            if (m_titleLabel) m_titleLabel->setText("Library by Source");
+            m_mangaList.clear();
+            m_fullMangaList.clear();
+            m_loaded = true;
+            if (m_contentGrid) {
+                m_contentGrid->setDataSource(m_mangaList);
+            }
+        }
+    };
+
+    // Try loading from cache first
+    if (cacheEnabled && cache.hasCategoryCache(ALL_MANGA_CACHE_ID)) {
+        std::vector<Manga> cachedManga;
+        if (cache.loadCategoryManga(ALL_MANGA_CACHE_ID, cachedManga) && !cachedManga.empty()) {
+            brls::Logger::info("LibrarySectionTab: Loaded {} manga from cache for source grouping", cachedManga.size());
+            applySourceGrouping(cachedManga);
+        }
+    }
+
+    // If offline, use cache only
+    if (!Application::getInstance().isConnected()) {
+        brls::Logger::info("LibrarySectionTab: Offline, using cached data for source grouping");
+        m_loaded = true;
+        return;
+    }
+
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak]() {
+    asyncRun([this, aliveWeak, cacheEnabled, ALL_MANGA_CACHE_ID]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> allManga;
 
@@ -2742,6 +2840,11 @@ void LibrarySectionTab::loadBySource() {
                 brls::Application::notify("Failed to load library - check connection");
             });
             return;
+        }
+
+        // Cache for offline use
+        if (cacheEnabled) {
+            LibraryCache::getInstance().saveCategoryManga(ALL_MANGA_CACHE_ID, allManga);
         }
 
         // Group by source
