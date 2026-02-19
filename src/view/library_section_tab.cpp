@@ -735,8 +735,9 @@ void LibrarySectionTab::createCategoryTabs() {
     // Filter out empty categories (mangaCount == 0) and hidden categories
     std::vector<Category> visibleCategories;
     const auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
-    bool downloadsOnlyFilter = Application::getInstance().getSettings().downloadsOnlyMode &&
-                               !Application::getInstance().isConnected();
+    bool isOffline = !Application::getInstance().isConnected();
+    bool downloadsOnlyFilter = Application::getInstance().getSettings().downloadsOnlyMode && isOffline;
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
     DownloadsManager* dmPtr = downloadsOnlyFilter ? &DownloadsManager::getInstance() : nullptr;
     if (dmPtr) dmPtr->init();
 
@@ -753,24 +754,39 @@ void LibrarySectionTab::createCategoryTabs() {
                               cat.name, cat.id);
             continue;
         }
-        // In downloads-only mode (offline), hide categories with no local downloads
-        if (downloadsOnlyFilter) {
+
+        // When offline, check cached/downloaded data availability
+        if (isOffline) {
             std::vector<Manga> catManga;
-            LibraryCache::getInstance().loadCategoryManga(cat.id, catManga);
-            bool hasLocalDownloads = false;
-            for (const auto& m : catManga) {
-                DownloadItem* item = dmPtr->getMangaDownload(m.id);
-                if (item && item->completedChapters > 0) {
-                    hasLocalDownloads = true;
-                    break;
-                }
-            }
-            if (!hasLocalDownloads) {
-                brls::Logger::debug("LibrarySectionTab: Hiding category '{}' - no local downloads",
+            bool hasCachedData = cacheEnabled &&
+                                 LibraryCache::getInstance().loadCategoryManga(cat.id, catManga) &&
+                                 !catManga.empty();
+
+            if (!hasCachedData) {
+                // No cache at all - nothing to show offline
+                brls::Logger::debug("LibrarySectionTab: Hiding category '{}' - no cached data (offline)",
                                   cat.name);
                 continue;
             }
+
+            // In downloads-only mode, further filter to only categories with local downloads
+            if (downloadsOnlyFilter) {
+                bool hasLocalDownloads = false;
+                for (const auto& m : catManga) {
+                    DownloadItem* item = dmPtr->getMangaDownload(m.id);
+                    if (item && item->completedChapters > 0) {
+                        hasLocalDownloads = true;
+                        break;
+                    }
+                }
+                if (!hasLocalDownloads) {
+                    brls::Logger::debug("LibrarySectionTab: Hiding category '{}' - no local downloads",
+                                      cat.name);
+                    continue;
+                }
+            }
         }
+
         visibleCategories.push_back(cat);
     }
 

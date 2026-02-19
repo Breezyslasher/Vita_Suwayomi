@@ -572,11 +572,31 @@ void MangaDetailView::willAppear(bool resetState) {
     });
 
     // On first appearance, chapters are loaded via loadDetails().
-    // On subsequent appearances (returning from reader), just update
-    // download states in-place rather than doing a full reload.
+    // On subsequent appearances (returning from reader), apply the reader's
+    // result immediately so the continue reading button and chapter list are correct.
     if (!m_chapters.empty()) {
+        // Apply last reader result to update chapter state immediately
+        const auto& readerResult = Application::getInstance().getLastReaderResult();
+        if (readerResult.mangaId == m_manga.id && readerResult.timestamp > 0) {
+            for (auto& ch : m_chapters) {
+                if (ch.id == readerResult.chapterId) {
+                    ch.lastPageRead = readerResult.lastPageRead;
+                    ch.lastReadAt = readerResult.timestamp;
+                    if (readerResult.markedRead) {
+                        ch.read = true;
+                    }
+                    brls::Logger::info("MangaDetailView: Applied reader result - ch={} page={} read={}",
+                                      ch.id, ch.lastPageRead, ch.read);
+                    break;
+                }
+            }
+            Application::getInstance().clearLastReaderResult();
+        }
+
         updateChapterDownloadStates();
         updateReadButtonText();
+        // Also refresh from server for full accuracy
+        loadChapters();
     } else {
         loadChapters();
     }
@@ -813,9 +833,39 @@ void MangaDetailView::loadCover() {
 void MangaDetailView::loadChapters() {
     brls::Logger::debug("MangaDetailView: Loading chapters for manga {}", m_manga.id);
 
-    // Skip server fetch when offline - cached chapters already loaded in loadDetails()
+    // When offline, update chapters with local reading progress from DownloadsManager
     if (!Application::getInstance().isConnected()) {
-        brls::Logger::info("MangaDetailView: Offline, using cached chapters only");
+        brls::Logger::info("MangaDetailView: Offline, applying local reading progress");
+        if (!m_chapters.empty()) {
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            bool changed = false;
+            for (auto& ch : m_chapters) {
+                DownloadedChapter* dlCh = dm.getChapterDownload(m_manga.id, ch.id);
+                if (!dlCh) dlCh = dm.getChapterDownload(m_manga.id, ch.index);
+                if (dlCh && dlCh->lastReadTime > 0) {
+                    int64_t dlReadAtMs = static_cast<int64_t>(dlCh->lastReadTime) * 1000;
+                    if (dlReadAtMs > ch.lastReadAt) {
+                        ch.lastPageRead = dlCh->lastPageRead;
+                        ch.lastReadAt = dlReadAtMs;
+                        // If they read to the last page, mark as read
+                        if (dlCh->lastPageRead >= dlCh->pageCount - 1 && dlCh->pageCount > 0) {
+                            ch.read = true;
+                        }
+                        changed = true;
+                        brls::Logger::debug("MangaDetailView: Merged local progress for chapter {} page {}",
+                                           ch.id, ch.lastPageRead);
+                    }
+                }
+            }
+            if (changed) {
+                updateReadButtonText();
+                populateChaptersList();
+                // Persist merged progress to cache
+                if (Application::getInstance().getSettings().cacheLibraryData) {
+                    LibraryCache::getInstance().saveChapters(m_manga.id, m_chapters);
+                }
+            }
+        }
         return;
     }
 
@@ -1567,8 +1617,20 @@ void MangaDetailView::showMangaMenu() {
 void MangaDetailView::onChapterSelected(const Chapter& chapter) {
     brls::Logger::debug("MangaDetailView: Selected chapter id={} ({})", chapter.id, chapter.name);
 
-    // Open reader at this chapter - use chapter.id not chapter.index
-    Application::getInstance().pushReaderActivity(m_manga.id, chapter.id, m_manga.title);
+    // Open reader at this chapter with saved reading progress
+    int startPage = chapter.lastPageRead;
+
+    // When offline, also check DownloadsManager for more recent progress
+    if (!Application::getInstance().isConnected()) {
+        DownloadsManager& dm = DownloadsManager::getInstance();
+        DownloadedChapter* dlCh = dm.getChapterDownload(m_manga.id, chapter.id);
+        if (!dlCh) dlCh = dm.getChapterDownload(m_manga.id, chapter.index);
+        if (dlCh && dlCh->lastPageRead > startPage) {
+            startPage = dlCh->lastPageRead;
+        }
+    }
+
+    Application::getInstance().pushReaderActivityAtPage(m_manga.id, chapter.id, startPage, m_manga.title);
 }
 
 void MangaDetailView::onRead(int chapterId) {

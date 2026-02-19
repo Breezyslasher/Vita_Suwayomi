@@ -265,6 +265,18 @@ public:
     void updateReadingStatistics(bool chapterCompleted = false, bool mangaCompleted = false);
     void syncStatisticsFromServer();
 
+    // Last reader session result - updated by reader on close, consumed by detail view
+    struct ReaderResult {
+        int mangaId = 0;
+        int chapterId = 0;       // Chapter ID that was being read
+        int lastPageRead = 0;    // Last page position
+        bool markedRead = false;  // Whether chapter was marked as read
+        int64_t timestamp = 0;   // When this was updated (milliseconds)
+    };
+    void setLastReaderResult(const ReaderResult& result) { m_lastReaderResult = result; }
+    const ReaderResult& getLastReaderResult() const { return m_lastReaderResult; }
+    void clearLastReaderResult() { m_lastReaderResult = {}; }
+
     // Get string for display
     static std::string getThemeString(AppTheme theme);
     static std::string getReadingModeString(ReadingMode mode);
@@ -285,6 +297,7 @@ private:
     int m_currentCategoryId = 0;
     std::set<int> m_recentLibraryAdditions;  // Manga IDs added to library this session
     AppSettings m_settings;
+    ReaderResult m_lastReaderResult;
 };
 
 } // namespace vitasuwayomi
