@@ -1484,8 +1484,8 @@ void ExtensionsTab::showAddRepoDialog() {
             });
         }).detach();
     }, "Add Extension Repository",
-       "https://raw.githubusercontent.com/komikku-app/extensions/repo/index.min.json",
-       256);
+       "", 256,
+       "https://raw.githubusercontent.com/yuzono/manga-repo/repo/index.min.json", 0);
 }
 
 } // namespace vitasuwayomi
