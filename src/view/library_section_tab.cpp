@@ -453,19 +453,21 @@ void LibrarySectionTab::loadCategories() {
         m_categoriesLoaded = true;
         loadAllManga();
         // Still fetch categories in background for potential mode switch later
-        asyncRun([this, aliveWeak]() {
-            SuwayomiClient& client = SuwayomiClient::getInstance();
-            std::vector<Category> categories;
-            if (client.fetchCategories(categories)) {
-                std::sort(categories.begin(), categories.end(),
-                          [](const Category& a, const Category& b) { return a.order < b.order; });
-                brls::sync([this, categories, aliveWeak]() {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) return;
-                    m_categories = categories;
-                });
-            }
-        });
+        if (Application::getInstance().isConnected()) {
+            asyncRun([this, aliveWeak]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                std::vector<Category> categories;
+                if (client.fetchCategories(categories)) {
+                    std::sort(categories.begin(), categories.end(),
+                              [](const Category& a, const Category& b) { return a.order < b.order; });
+                    brls::sync([this, categories, aliveWeak]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
+                        m_categories = categories;
+                    });
+                }
+            });
+        }
         return;
     }
 
@@ -476,19 +478,21 @@ void LibrarySectionTab::loadCategories() {
         m_categoriesLoaded = true;
         loadBySource();
         // Still fetch categories in background for potential mode switch later
-        asyncRun([this, aliveWeak]() {
-            SuwayomiClient& client = SuwayomiClient::getInstance();
-            std::vector<Category> categories;
-            if (client.fetchCategories(categories)) {
-                std::sort(categories.begin(), categories.end(),
-                          [](const Category& a, const Category& b) { return a.order < b.order; });
-                brls::sync([this, categories, aliveWeak]() {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) return;
-                    m_categories = categories;
-                });
-            }
-        });
+        if (Application::getInstance().isConnected()) {
+            asyncRun([this, aliveWeak]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                std::vector<Category> categories;
+                if (client.fetchCategories(categories)) {
+                    std::sort(categories.begin(), categories.end(),
+                              [](const Category& a, const Category& b) { return a.order < b.order; });
+                    brls::sync([this, categories, aliveWeak]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
+                        m_categories = categories;
+                    });
+                }
+            });
+        }
         return;
     }
 
@@ -532,6 +536,19 @@ void LibrarySectionTab::loadCategories() {
             }
             // Continue to try refreshing from server in background
         }
+    }
+
+    // Skip server fetch entirely when offline - cache already loaded above
+    if (!Application::getInstance().isConnected()) {
+        brls::Logger::info("LibrarySectionTab: Offline, using cached categories only");
+        m_combinedQueryCategoryId = -1;
+        if (!m_categoriesLoaded) {
+            // No cache either - create empty tabs
+            m_categoriesLoaded = true;
+            createCategoryTabs();
+            selectCategory(0);
+        }
+        return;
     }
 
     // Determine default category for combined query
@@ -718,6 +735,12 @@ void LibrarySectionTab::createCategoryTabs() {
     // Filter out empty categories (mangaCount == 0) and hidden categories
     std::vector<Category> visibleCategories;
     const auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
+    bool isOffline = !Application::getInstance().isConnected();
+    bool downloadsOnlyFilter = Application::getInstance().getSettings().downloadsOnlyMode && isOffline;
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+    DownloadsManager* dmPtr = downloadsOnlyFilter ? &DownloadsManager::getInstance() : nullptr;
+    if (dmPtr) dmPtr->init();
+
     for (const auto& cat : m_categories) {
         // Skip empty categories
         if (cat.mangaCount <= 0) {
@@ -731,6 +754,39 @@ void LibrarySectionTab::createCategoryTabs() {
                               cat.name, cat.id);
             continue;
         }
+
+        // When offline, check cached/downloaded data availability
+        if (isOffline) {
+            std::vector<Manga> catManga;
+            bool hasCachedData = cacheEnabled &&
+                                 LibraryCache::getInstance().loadCategoryManga(cat.id, catManga) &&
+                                 !catManga.empty();
+
+            if (!hasCachedData) {
+                // No cache at all - nothing to show offline
+                brls::Logger::debug("LibrarySectionTab: Hiding category '{}' - no cached data (offline)",
+                                  cat.name);
+                continue;
+            }
+
+            // In downloads-only mode, further filter to only categories with local downloads
+            if (downloadsOnlyFilter) {
+                bool hasLocalDownloads = false;
+                for (const auto& m : catManga) {
+                    DownloadItem* item = dmPtr->getMangaDownload(m.id);
+                    if (item && item->completedChapters > 0) {
+                        hasLocalDownloads = true;
+                        break;
+                    }
+                }
+                if (!hasLocalDownloads) {
+                    brls::Logger::debug("LibrarySectionTab: Hiding category '{}' - no local downloads",
+                                      cat.name);
+                    continue;
+                }
+            }
+        }
+
         visibleCategories.push_back(cat);
     }
 
@@ -959,9 +1015,9 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
         return;
     }
 
-    // Skip network fetch entirely if we know we're offline and have data to show
-    if (!Application::getInstance().isConnected() && !m_mangaList.empty()) {
-        brls::Logger::info("LibrarySectionTab: Offline with cached data, skipping fetch");
+    // Skip network fetch entirely when offline
+    if (!Application::getInstance().isConnected()) {
+        brls::Logger::info("LibrarySectionTab: Offline, skipping server fetch for category {}", categoryId);
         m_loaded = true;
         return;
     }

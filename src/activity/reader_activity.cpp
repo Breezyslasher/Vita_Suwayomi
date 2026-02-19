@@ -1980,6 +1980,17 @@ void ReaderActivity::updateReaderMode() {
 void ReaderActivity::willDisappear(bool resetState) {
     Activity::willDisappear(resetState);
 
+    // Save reader state so MangaDetailView can immediately update chapters
+    // without waiting for async server refresh
+    Application::ReaderResult result;
+    result.mangaId = m_mangaId;
+    result.chapterId = m_chapterIndex;  // This is actually the chapter ID passed to reader
+    result.lastPageRead = m_currentPage;
+    result.markedRead = (m_currentPage >= static_cast<int>(m_pages.size()) - 1 && !m_pages.empty());
+    result.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    Application::getInstance().setLastReaderResult(result);
+
     // Invalidate alive flag so pending async callbacks bail out safely.
     // This must happen BEFORE any cleanup so that in-flight callbacks
     // (image loader brls::sync, asyncTask completions, etc.) see the

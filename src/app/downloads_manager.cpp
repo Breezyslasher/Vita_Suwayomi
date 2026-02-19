@@ -678,38 +678,78 @@ void DownloadsManager::syncProgressToServer() {
 
     std::lock_guard<std::mutex> lock(m_mutex);
 
+    int syncedCount = 0;
+    int markedReadCount = 0;
+
     for (const auto& manga : m_downloads) {
         for (const auto& chapter : manga.chapters) {
-            if (chapter.state == LocalDownloadState::COMPLETED && chapter.lastPageRead > 0) {
-                client.updateChapterProgress(manga.mangaId, chapter.chapterIndex,
-                                              chapter.lastPageRead);
-            }
-        }
-    }
-}
-
-void DownloadsManager::syncProgressFromServer() {
-    // Sync reading progress from Suwayomi server
-    SuwayomiClient& client = SuwayomiClient::getInstance();
-
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    for (auto& manga : m_downloads) {
-        // Fetch chapters from server to get latest progress
-        std::vector<Chapter> serverChapters;
-        if (client.fetchChapters(manga.mangaId, serverChapters)) {
-            for (auto& localChapter : manga.chapters) {
-                for (const auto& serverChapter : serverChapters) {
-                    if (serverChapter.index == localChapter.chapterIndex) {
-                        localChapter.lastPageRead = serverChapter.lastPageRead;
-                        break;
+            if (chapter.lastPageRead > 0) {
+                // Use chapterId (not chapterIndex) for server API calls
+                int id = chapter.chapterId > 0 ? chapter.chapterId : chapter.chapterIndex;
+                if (client.updateChapterProgress(manga.mangaId, id, chapter.lastPageRead)) {
+                    syncedCount++;
+                }
+                // Mark as read on server if user reached the last page
+                if (chapter.pageCount > 0 && chapter.lastPageRead >= chapter.pageCount - 1) {
+                    if (client.markChapterRead(manga.mangaId, id)) {
+                        markedReadCount++;
                     }
                 }
             }
         }
     }
 
+    brls::Logger::info("DownloadsManager: Synced {} chapter progress, marked {} as read",
+                      syncedCount, markedReadCount);
+}
+
+void DownloadsManager::syncProgressFromServer() {
+    // Bidirectional sync: compare local vs server, take the more advanced progress
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    int updatedLocal = 0;
+    int updatedServer = 0;
+
+    for (auto& manga : m_downloads) {
+        std::vector<Chapter> serverChapters;
+        if (!client.fetchChapters(manga.mangaId, serverChapters)) {
+            continue;
+        }
+
+        for (auto& localChapter : manga.chapters) {
+            for (const auto& serverChapter : serverChapters) {
+                if (serverChapter.id == localChapter.chapterId ||
+                    serverChapter.index == localChapter.chapterIndex) {
+                    // Compare progress — take the more advanced position
+                    if (serverChapter.lastPageRead > localChapter.lastPageRead) {
+                        // Server is ahead — update local
+                        localChapter.lastPageRead = serverChapter.lastPageRead;
+                        if (serverChapter.lastReadAt > 0) {
+                            localChapter.lastReadTime = static_cast<time_t>(serverChapter.lastReadAt / 1000);
+                        }
+                        updatedLocal++;
+                    } else if (localChapter.lastPageRead > serverChapter.lastPageRead &&
+                               localChapter.lastPageRead > 0) {
+                        // Local is ahead — push to server
+                        int id = localChapter.chapterId > 0 ? localChapter.chapterId : localChapter.chapterIndex;
+                        client.updateChapterProgress(manga.mangaId, id, localChapter.lastPageRead);
+                        // Mark as read if at end
+                        if (localChapter.pageCount > 0 && localChapter.lastPageRead >= localChapter.pageCount - 1) {
+                            client.markChapterRead(manga.mangaId, id);
+                        }
+                        updatedServer++;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     saveStateUnlocked();
+    brls::Logger::info("DownloadsManager: Bidirectional sync - {} local updates, {} server updates",
+                      updatedLocal, updatedServer);
 }
 
 void DownloadsManager::saveState() {
