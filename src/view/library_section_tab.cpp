@@ -323,10 +323,11 @@ void LibrarySectionTab::onFocusGained() {
     }
 
     // Apply grouping mode visibility
-    if (m_groupMode == LibraryGroupMode::BY_CATEGORY) {
-        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
-    } else {
+    if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+    } else {
+        // BY_CATEGORY and BY_SOURCE both show tabs
+        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
     }
 
     if (!m_loaded && m_categoriesLoaded) {
@@ -347,7 +348,11 @@ void LibrarySectionTab::refresh() {
     m_categories.clear();
     m_categoryButtons.clear();
 
-    // Clear category tabs
+    // Clear source grouping data
+    m_sourceNames.clear();
+    m_mangaBySource.clear();
+
+    // Clear category/source tabs
     if (m_categoryScrollContainer) {
         m_categoryScrollContainer->clearViews();
         m_categoryScrollContainer->setTranslationX(0);
@@ -364,6 +369,50 @@ void LibrarySectionTab::loadCategories() {
     brls::Logger::debug("LibrarySectionTab: Loading categories...");
     std::weak_ptr<bool> aliveWeak = m_alive;
 
+    // For non-category group modes, dispatch immediately and fetch categories in background
+    if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+        m_categoriesLoaded = true;
+        loadAllManga();
+        // Still fetch categories in background for potential mode switch later
+        asyncRun([this, aliveWeak]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            std::vector<Category> categories;
+            if (client.fetchCategories(categories)) {
+                std::sort(categories.begin(), categories.end(),
+                          [](const Category& a, const Category& b) { return a.order < b.order; });
+                brls::sync([this, categories, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    m_categories = categories;
+                });
+            }
+        });
+        return;
+    }
+
+    if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
+        m_categoriesLoaded = true;
+        loadBySource();
+        // Still fetch categories in background for potential mode switch later
+        asyncRun([this, aliveWeak]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            std::vector<Category> categories;
+            if (client.fetchCategories(categories)) {
+                std::sort(categories.begin(), categories.end(),
+                          [](const Category& a, const Category& b) { return a.order < b.order; });
+                brls::sync([this, categories, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    m_categories = categories;
+                });
+            }
+        });
+        return;
+    }
+
+    // BY_CATEGORY mode: full category loading with tabs
     // Check if we have cached categories for instant loading
     bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
     LibraryCache& cache = LibraryCache::getInstance();
@@ -1350,6 +1399,20 @@ void LibrarySectionTab::updateSortButtonText() {
 }
 
 void LibrarySectionTab::navigateToPreviousCategory() {
+    // Set flag to focus grid after loading the new category/source
+    m_focusGridAfterLoad = true;
+
+    if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+        if (m_sourceNames.empty()) return;
+        int currentIndex = m_selectedCategoryIndex;
+        if (currentIndex > 0) {
+            selectSource(m_sourceNames[currentIndex - 1]);
+        } else {
+            selectSource(m_sourceNames.back());
+        }
+        return;
+    }
+
     if (m_categories.empty()) return;
 
     // Find current category index
@@ -1360,9 +1423,6 @@ void LibrarySectionTab::navigateToPreviousCategory() {
             break;
         }
     }
-
-    // Set flag to focus grid after loading the new category
-    m_focusGridAfterLoad = true;
 
     // Go to previous category (wrap around)
     if (currentIndex > 0) {
@@ -1374,6 +1434,20 @@ void LibrarySectionTab::navigateToPreviousCategory() {
 }
 
 void LibrarySectionTab::navigateToNextCategory() {
+    // Set flag to focus grid after loading the new category/source
+    m_focusGridAfterLoad = true;
+
+    if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+        if (m_sourceNames.empty()) return;
+        int currentIndex = m_selectedCategoryIndex;
+        if (currentIndex < static_cast<int>(m_sourceNames.size()) - 1) {
+            selectSource(m_sourceNames[currentIndex + 1]);
+        } else {
+            selectSource(m_sourceNames[0]);
+        }
+        return;
+    }
+
     if (m_categories.empty()) return;
 
     // Find current category index
@@ -1384,9 +1458,6 @@ void LibrarySectionTab::navigateToNextCategory() {
             break;
         }
     }
-
-    // Set flag to focus grid after loading the new category
-    m_focusGridAfterLoad = true;
 
     // Go to next category (wrap around)
     if (currentIndex >= 0 && currentIndex < static_cast<int>(m_categories.size()) - 1) {
@@ -2374,21 +2445,18 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
 
     // Reload library with new grouping
     if (mode == LibraryGroupMode::BY_CATEGORY) {
-        // Show category tabs
+        // Show category tabs and recreate them from categories
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
-        // Reload current category
         if (!m_categories.empty()) {
+            createCategoryTabs();
             selectCategory(m_currentCategoryId);
         }
     } else if (mode == LibraryGroupMode::NO_GROUPING) {
-        // Hide category tabs
+        // Hide tabs entirely
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
-        // Load all manga
         loadAllManga();
     } else if (mode == LibraryGroupMode::BY_SOURCE) {
-        // Hide category tabs
-        if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
-        // Load all manga grouped by source
+        // loadBySource will show tabs and populate with source names
         loadBySource();
     }
 }
@@ -2432,10 +2500,8 @@ void LibrarySectionTab::loadAllManga() {
 void LibrarySectionTab::loadBySource() {
     brls::Logger::debug("LibrarySectionTab::loadBySource - loading manga grouped by source");
 
-    // Update title
-    if (m_titleLabel) {
-        m_titleLabel->setText("Library by Source");
-    }
+    // Show tabs row for source tabs
+    if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
@@ -2461,39 +2527,150 @@ void LibrarySectionTab::loadBySource() {
         }
 
         // Sort sources alphabetically
-        std::vector<std::pair<std::string, std::vector<Manga>>> sortedSources;
-        for (auto& pair : mangaBySource) {
-            sortedSources.push_back(std::move(pair));
+        std::vector<std::string> sourceNames;
+        for (const auto& pair : mangaBySource) {
+            sourceNames.push_back(pair.first);
         }
-        std::sort(sortedSources.begin(), sortedSources.end(),
-                  [](const auto& a, const auto& b) { return a.first < b.first; });
+        std::sort(sourceNames.begin(), sourceNames.end());
 
-        // Flatten back to a single list with source headers
-        // Note: RecyclingGrid doesn't support section headers yet, so we just sort by source
-        // and the manga will be grouped together visually
-        std::vector<Manga> sortedBySource;
-        for (const auto& sourcePair : sortedSources) {
-            // Sort manga within each source
-            auto sourceManga = sourcePair.second;
-            std::sort(sourceManga.begin(), sourceManga.end(),
-                      [](const Manga& a, const Manga& b) { return a.title < b.title; });
-            sortedBySource.insert(sortedBySource.end(), sourceManga.begin(), sourceManga.end());
-        }
-
-        brls::sync([this, sortedBySource, aliveWeak]() {
+        brls::sync([this, mangaBySource, sourceNames, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
-            m_fullMangaList = sortedBySource;
-            m_mangaList = sortedBySource;
-            // Don't sort again - already sorted by source
-            m_loaded = true;
+            m_mangaBySource = mangaBySource;
+            m_sourceNames = sourceNames;
 
-            if (m_contentGrid) {
-                m_contentGrid->setDataSource(m_mangaList);
+            // Create source name tabs
+            createSourceTabs();
+
+            // Select the first source (or previously selected if still valid)
+            if (!m_sourceNames.empty()) {
+                // Try to keep the previously selected source
+                bool foundPrevious = false;
+                if (!m_currentSourceName.empty()) {
+                    for (const auto& name : m_sourceNames) {
+                        if (name == m_currentSourceName) {
+                            foundPrevious = true;
+                            break;
+                        }
+                    }
+                }
+                if (foundPrevious) {
+                    selectSource(m_currentSourceName);
+                } else {
+                    selectSource(m_sourceNames[0]);
+                }
+            } else {
+                // No sources found
+                if (m_titleLabel) m_titleLabel->setText("Library by Source");
+                m_mangaList.clear();
+                m_fullMangaList.clear();
+                m_loaded = true;
+                if (m_contentGrid) {
+                    m_contentGrid->setDataSource(m_mangaList);
+                }
             }
         });
     });
+}
+
+void LibrarySectionTab::createSourceTabs() {
+    if (!m_categoryScrollContainer) return;
+
+    // Clear existing buttons
+    m_categoryScrollContainer->clearViews();
+    m_categoryScrollContainer->setTranslationX(0);
+    m_categoryButtons.clear();
+    m_selectedCategoryIndex = 0;
+    m_categoryScrollOffset = 0.0f;
+
+    if (m_sourceNames.empty()) return;
+
+    // Calculate total width for all source buttons
+    float totalWidth = 5.0f;
+    std::vector<int> buttonWidths;
+    std::vector<std::string> displayNames;
+
+    for (size_t i = 0; i < m_sourceNames.size(); i++) {
+        std::string name = m_sourceNames[i];
+        if (name.length() > 25) {
+            name = name.substr(0, 23) + "..";
+        }
+        displayNames.push_back(name);
+
+        int textWidth = static_cast<int>(name.length()) * 14 + 24;
+        if (textWidth < 60) textWidth = 60;
+        if (textWidth > 280) textWidth = 280;
+        buttonWidths.push_back(textWidth);
+        totalWidth += textWidth + 8.0f;
+    }
+
+    m_categoryScrollContainer->setWidth(totalWidth);
+
+    for (size_t i = 0; i < m_sourceNames.size(); i++) {
+        auto* btn = new brls::Button();
+
+        btn->setMarginRight(8);
+        btn->setHeight(35);
+        btn->setCornerRadius(6);
+        btn->setJustifyContent(brls::JustifyContent::CENTER);
+        btn->setAlignItems(brls::AlignItems::CENTER);
+        btn->setWidth(buttonWidths[i]);
+        btn->setText(displayNames[i]);
+
+        std::string srcName = m_sourceNames[i];
+        btn->registerClickAction([this, srcName](brls::View* view) {
+            selectSource(srcName);
+            return true;
+        });
+
+        int idx = static_cast<int>(i);
+        btn->getFocusEvent()->subscribe([this, idx](brls::View* view) {
+            scrollToCategoryIndex(idx);
+        });
+
+        m_categoryScrollContainer->addView(btn);
+        m_categoryButtons.push_back(btn);
+    }
+
+    m_categoryScrollContainer->invalidate();
+}
+
+void LibrarySectionTab::selectSource(const std::string& sourceName) {
+    m_currentSourceName = sourceName;
+
+    // Find the index and update selected state
+    m_selectedCategoryIndex = 0;
+    for (size_t i = 0; i < m_sourceNames.size(); i++) {
+        if (m_sourceNames[i] == sourceName) {
+            m_selectedCategoryIndex = static_cast<int>(i);
+            break;
+        }
+    }
+
+    // Update title
+    if (m_titleLabel) {
+        m_titleLabel->setText(sourceName);
+    }
+
+    // Update tab button styles
+    updateCategoryButtonStyles();
+    scrollToCategoryIndex(m_selectedCategoryIndex);
+
+    // Set the manga list to only this source's manga
+    auto it = m_mangaBySource.find(sourceName);
+    if (it != m_mangaBySource.end()) {
+        m_fullMangaList = it->second;
+        m_mangaList = it->second;
+        sortMangaList();
+    } else {
+        m_mangaList.clear();
+        m_fullMangaList.clear();
+        if (m_contentGrid) {
+            m_contentGrid->setDataSource(m_mangaList);
+        }
+    }
+    m_loaded = true;
 }
 
 void LibrarySectionTab::showGroupModeMenu() {
