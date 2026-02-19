@@ -439,8 +439,12 @@ bool Application::loadSettings() {
     if (defaultSortInt >= 0 && defaultSortInt <= 10) {
         m_settings.defaultLibrarySortMode = defaultSortInt;
     }
-    brls::Logger::info("loadSettings: libraryDisplayMode={}, libraryGridSize={}, listRowSize={}, defaultSort={}",
-                       displayModeInt, gridSizeInt, listRowSizeInt, defaultSortInt);
+    int groupModeInt = extractInt("libraryGroupMode");
+    if (groupModeInt >= 0 && groupModeInt <= 2) {
+        m_settings.libraryGroupMode = static_cast<LibraryGroupMode>(groupModeInt);
+    }
+    brls::Logger::info("loadSettings: libraryDisplayMode={}, libraryGridSize={}, listRowSize={}, defaultSort={}, groupMode={}",
+                       displayModeInt, gridSizeInt, listRowSizeInt, defaultSortInt, groupModeInt);
 
     // Load per-category sort modes
     m_settings.categorySortModes.clear();
@@ -789,6 +793,7 @@ bool Application::saveSettings() {
     json += "  \"libraryGridSize\": " + std::to_string(static_cast<int>(m_settings.libraryGridSize)) + ",\n";
     json += "  \"listRowSize\": " + std::to_string(static_cast<int>(m_settings.listRowSize)) + ",\n";
     json += "  \"defaultLibrarySortMode\": " + std::to_string(m_settings.defaultLibrarySortMode) + ",\n";
+    json += "  \"libraryGroupMode\": " + std::to_string(static_cast<int>(m_settings.libraryGroupMode)) + ",\n";
 
     // Per-category sort modes
     json += "  \"categorySortModes\": {";

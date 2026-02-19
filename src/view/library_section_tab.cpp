@@ -315,6 +315,13 @@ LibrarySectionTab::~LibrarySectionTab() {
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
 
+    // Check if group mode was changed externally (e.g. from settings tab)
+    LibraryGroupMode savedMode = Application::getInstance().getSettings().libraryGroupMode;
+    if (savedMode != m_groupMode) {
+        setGroupMode(savedMode);
+        return;
+    }
+
     // Apply grouping mode visibility
     if (m_groupMode == LibraryGroupMode::BY_CATEGORY) {
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);

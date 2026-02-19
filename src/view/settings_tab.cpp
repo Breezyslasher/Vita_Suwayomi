@@ -303,7 +303,7 @@ void SettingsTab::createLibrarySection() {
         [&settings](int index) {
             settings.libraryGroupMode = static_cast<LibraryGroupMode>(index);
             Application::getInstance().saveSettings();
-            brls::Application::notify("Library grouping updated - restart app to apply");
+            brls::Application::notify("Library grouping updated");
         });
     m_contentBox->addView(groupModeSelector);
 
