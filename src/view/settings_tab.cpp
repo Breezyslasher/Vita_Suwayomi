@@ -1444,8 +1444,21 @@ void SettingsTab::runNetworkTest() {
 
         // Show results dialog on main thread
         brls::sync([results]() {
-            brls::Dialog* dialog = new brls::Dialog(results);
+            brls::Dialog* dialog = new brls::Dialog("Network Test");
             dialog->setCancelable(true);
+
+            auto* box = new brls::Box();
+            box->setAxis(brls::Axis::COLUMN);
+            box->setPadding(16);
+            box->setWidth(brls::View::AUTO);
+
+            auto* label = new brls::Label();
+            label->setText(results);
+            label->setFontSize(18);
+            label->setHorizontalAlign(brls::HorizontalAlign::LEFT);
+            box->addView(label);
+
+            dialog->addView(box);
             dialog->addButton("Close", []() {});
             dialog->open();
         });
