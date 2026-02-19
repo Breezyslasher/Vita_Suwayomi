@@ -325,9 +325,13 @@ void LibrarySectionTab::onFocusGained() {
     // Apply grouping mode visibility
     if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
     } else {
         // BY_CATEGORY and BY_SOURCE both show tabs
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_LB, true);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
     }
 
     if (!m_loaded && m_categoriesLoaded) {
@@ -372,6 +376,8 @@ void LibrarySectionTab::loadCategories() {
     // For non-category group modes, dispatch immediately and fetch categories in background
     if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
         m_categoriesLoaded = true;
         loadAllManga();
         // Still fetch categories in background for potential mode switch later
@@ -2447,16 +2453,22 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
     if (mode == LibraryGroupMode::BY_CATEGORY) {
         // Show category tabs and recreate them from categories
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_LB, true);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
         if (!m_categories.empty()) {
             createCategoryTabs();
             selectCategory(m_currentCategoryId);
         }
     } else if (mode == LibraryGroupMode::NO_GROUPING) {
-        // Hide tabs entirely
+        // Hide tabs and L/R bumper hints entirely
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
         loadAllManga();
     } else if (mode == LibraryGroupMode::BY_SOURCE) {
         // loadBySource will show tabs and populate with source names
+        this->setActionAvailable(brls::ControllerButton::BUTTON_LB, true);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
         loadBySource();
     }
 }
