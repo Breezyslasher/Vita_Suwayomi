@@ -375,9 +375,6 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
 
-    // Track initial connectivity for offline→online rebuild detection
-    m_wasOffline = !Application::getInstance().isConnected();
-
     // Load categories first, then create tabs
     loadCategories();
 }
@@ -392,24 +389,10 @@ LibrarySectionTab::~LibrarySectionTab() {
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
 
-    bool online = Application::getInstance().isConnected();
-
     // Show/hide update button + hint icon based on connectivity
     if (m_updateContainer) {
-        m_updateContainer->setVisibility(online
+        m_updateContainer->setVisibility(Application::getInstance().isConnected()
             ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    }
-
-    // Detect offline→online transition: full rebuild when reconnected
-    if (online && m_wasOffline) {
-        brls::Logger::info("LibrarySectionTab: Back online, rebuilding library");
-        m_wasOffline = false;
-        refresh();
-        loadCategories();
-        return;
-    }
-    if (!online) {
-        m_wasOffline = true;
     }
 
     // Check if group mode was changed externally (e.g. from settings tab)

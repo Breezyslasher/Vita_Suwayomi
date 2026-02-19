@@ -108,7 +108,7 @@ bool LibraryCache::ensureDirectoryExists(const std::string& path) {
 
 std::string LibraryCache::serializeManga(const Manga& manga) {
     std::ostringstream ss;
-    // Format: id|title|author|artist|description|thumbnailUrl|status|inLibrary|chapterCount|unreadCount|downloadCount
+    // Format: id|title|author|artist|description|thumbnailUrl|status|inLibrary|chapterCount|unreadCount|downloadCount|sourceName
     ss << manga.id << "|"
        << manga.title << "|"
        << manga.author << "|"
@@ -119,7 +119,8 @@ std::string LibraryCache::serializeManga(const Manga& manga) {
        << (manga.inLibrary ? 1 : 0) << "|"
        << manga.chapterCount << "|"
        << manga.unreadCount << "|"
-       << manga.downloadedCount;
+       << manga.downloadedCount << "|"
+       << manga.sourceName;
     return ss.str();
 }
 
@@ -146,6 +147,8 @@ bool LibraryCache::deserializeManga(const std::string& line, Manga& manga) {
         manga.chapterCount = std::stoi(parts[8]);
         manga.unreadCount = std::stoi(parts[9]);
         manga.downloadedCount = std::stoi(parts[10]);
+        // sourceName added later; old caches have only 11 fields
+        if (parts.size() > 11) manga.sourceName = parts[11];
         return true;
     } catch (...) {
         return false;
