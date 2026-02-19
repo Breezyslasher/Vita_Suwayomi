@@ -62,6 +62,8 @@ private:
     void setGroupMode(LibraryGroupMode mode);
     void loadAllManga();
     void loadBySource();
+    void createSourceTabs();
+    void selectSource(const std::string& sourceName);
     void showGroupModeMenu();
 
     // Context menu (Start button / long-press)
@@ -121,6 +123,11 @@ private:
     std::vector<Manga> m_mangaList;           // Working list (may be filtered)
     std::vector<Manga> m_fullMangaList;       // Complete list (never filtered)
     std::vector<Category> m_categories;       // Visible categories
+
+    // BY_SOURCE grouping data
+    std::vector<std::string> m_sourceNames;                          // Ordered source names
+    std::map<std::string, std::vector<Manga>> m_mangaBySource;       // Source -> manga mapping
+    std::string m_currentSourceName;                                 // Currently selected source
 
     // Cached manga state for incremental updates (like downloads tab)
     struct CachedMangaItem {

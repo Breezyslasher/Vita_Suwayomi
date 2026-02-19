@@ -166,22 +166,29 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     readButtonContainer->addView(m_readButton);
     leftPanel->addView(readButtonContainer);
 
-    // Add to Library button (only shown if not already in library)
-    if (!m_manga.inLibrary) {
-        m_libraryButton = new brls::Button();
-        m_libraryButton->setWidth(220);
-        m_libraryButton->setHeight(44);
-        m_libraryButton->setMarginBottom(10);
-        m_libraryButton->setCornerRadius(22);  // Pill-shaped
+    // Library button (Add or Remove from library)
+    m_libraryButton = new brls::Button();
+    m_libraryButton->setWidth(220);
+    m_libraryButton->setHeight(44);
+    m_libraryButton->setMarginBottom(10);
+    m_libraryButton->setCornerRadius(22);  // Pill-shaped
+    if (m_manga.inLibrary) {
+        m_libraryButton->setBackgroundColor(nvgRGBA(180, 60, 60, 255));  // Red for remove
+        m_libraryButton->setText("Remove from Library");
+        m_libraryButton->registerClickAction([this](brls::View* view) {
+            onRemoveFromLibrary();
+            return true;
+        });
+    } else {
         m_libraryButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
         m_libraryButton->setText("Add to Library");
         m_libraryButton->registerClickAction([this](brls::View* view) {
             onAddToLibrary();
             return true;
         });
-        m_libraryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_libraryButton));
-        leftPanel->addView(m_libraryButton);
     }
+    m_libraryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_libraryButton));
+    leftPanel->addView(m_libraryButton);
 
     // Tracking button (for MAL, AniList, etc.)
     m_trackingButton = new brls::Button();
@@ -1346,6 +1353,21 @@ void MangaDetailView::populateChaptersList() {
         }
     }
 
+    // Hide square icon when focus moves to non-chapter views (buttons in header/left panel)
+    auto hideChapterIcon = [this](brls::View*) {
+        if (m_currentFocusedIcon) {
+            m_currentFocusedIcon->setVisibility(brls::Visibility::INVISIBLE);
+            m_currentFocusedIcon = nullptr;
+        }
+    };
+    if (m_readButton) m_readButton->getFocusEvent()->subscribe(hideChapterIcon);
+    if (m_libraryButton) m_libraryButton->getFocusEvent()->subscribe(hideChapterIcon);
+    if (m_trackingButton) m_trackingButton->getFocusEvent()->subscribe(hideChapterIcon);
+    if (m_sortBtn) m_sortBtn->getFocusEvent()->subscribe(hideChapterIcon);
+    if (m_filterBtn) m_filterBtn->getFocusEvent()->subscribe(hideChapterIcon);
+    if (m_menuBtn) m_menuBtn->getFocusEvent()->subscribe(hideChapterIcon);
+    if (m_selectBtn) m_selectBtn->getFocusEvent()->subscribe(hideChapterIcon);
+
     brls::Logger::debug("MangaDetailView: Populated {} chapters", sortedChapters.size());
 }
 
@@ -1601,17 +1623,14 @@ void MangaDetailView::onAddToLibrary() {
             // Track addition for immediate library UI update
             Application::getInstance().trackLibraryAddition(m_manga.id);
 
-            // Hide the button after adding to library and transfer focus to read button
+            // Switch button to "Remove from Library"
             if (m_libraryButton) {
-                m_libraryButton->setVisibility(brls::Visibility::GONE);
-                // Update read button DOWN route to skip hidden library button
-                if (m_readButton && m_trackingButton) {
-                    m_readButton->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_trackingButton);
-                }
-                // Transfer focus back to read button
-                if (m_readButton) {
-                    brls::Application::giveFocus(m_readButton);
-                }
+                m_libraryButton->setBackgroundColor(nvgRGBA(180, 60, 60, 255));
+                m_libraryButton->setText("Remove from Library");
+                m_libraryButton->registerClickAction([this](brls::View* view) {
+                    onRemoveFromLibrary();
+                    return true;
+                });
             }
 
             // If categories available, show selection dropdown
@@ -1661,7 +1680,12 @@ void MangaDetailView::onRemoveFromLibrary() {
             brls::sync([this]() {
                 m_manga.inLibrary = false;
                 if (m_libraryButton) {
+                    m_libraryButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
                     m_libraryButton->setText("Add to Library");
+                    m_libraryButton->registerClickAction([this](brls::View* view) {
+                        onAddToLibrary();
+                        return true;
+                    });
                 }
                 brls::Application::notify("Removed from library");
             });

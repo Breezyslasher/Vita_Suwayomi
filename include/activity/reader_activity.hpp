@@ -216,6 +216,14 @@ private:
     void handlePinchZoom(float scaleFactor);
     void resetZoom();
     void zoomTo(float level, brls::Point center);
+
+    // Error overlay for failed page loads
+    brls::Box* m_errorOverlay = nullptr;
+    brls::Label* m_errorLabel = nullptr;
+    brls::Button* m_retryButton = nullptr;
+    int m_pageLoadGeneration = 0;  // Track current load to detect stale timeouts
+    void showPageError(const std::string& message);
+    void hidePageError();
 };
 
 } // namespace vitasuwayomi
