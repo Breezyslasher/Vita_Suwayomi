@@ -321,6 +321,14 @@ void SearchTab::loadSources() {
     brls::Logger::debug("SearchTab: Loading sources");
     m_browseMode = BrowseMode::SOURCES;
 
+    // Show offline message if not connected
+    if (!Application::getInstance().isConnected()) {
+        if (m_resultsLabel) {
+            m_resultsLabel->setText("App is offline - connect to a server to browse sources");
+        }
+        return;
+    }
+
     asyncRun([this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Source> sources;
@@ -334,8 +342,9 @@ void SearchTab::loadSources() {
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch sources");
+            Application::getInstance().setConnected(false);
             brls::sync([this]() {
-                m_resultsLabel->setText("Failed to load sources");
+                m_resultsLabel->setText("App is offline - connect to a server to browse sources");
                 // Focus on history button so user can still navigate
                 brls::Application::giveFocus(m_historyBtn);
             });

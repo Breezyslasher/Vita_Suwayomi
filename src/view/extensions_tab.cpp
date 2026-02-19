@@ -851,6 +851,12 @@ void ExtensionsTab::onFocusGained() {
 void ExtensionsTab::loadExtensionsFast() {
     brls::Logger::debug("Loading extensions list (fast mode)...");
 
+    // Show offline message if not connected and no cached data
+    if (!Application::getInstance().isConnected() && !m_cacheLoaded) {
+        showError("App is offline - connect to a server to manage extensions");
+        return;
+    }
+
     showLoading("Loading extensions...");
 
     brls::async([this]() {
@@ -864,7 +870,8 @@ void ExtensionsTab::loadExtensionsFast() {
         } else {
             bool success = client.fetchExtensionList(allExtensions);
             if (!success) {
-                brls::sync([this]() { showError("Failed to load extensions"); });
+                Application::getInstance().setConnected(false);
+                brls::sync([this]() { showError("App is offline - connect to a server to manage extensions"); });
                 return;
             }
             m_cachedExtensions = allExtensions;

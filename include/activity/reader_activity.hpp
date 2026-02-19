@@ -222,6 +222,7 @@ private:
     brls::Label* m_errorLabel = nullptr;
     brls::Button* m_retryButton = nullptr;
     int m_pageLoadGeneration = 0;  // Track current load to detect stale timeouts
+    bool m_loadedFromLocal = false;  // True when current chapter was loaded from local downloads
     void showPageError(const std::string& message);
     void hidePageError();
 };

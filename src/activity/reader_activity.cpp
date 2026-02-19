@@ -740,10 +740,12 @@ void ReaderActivity::loadPages() {
     auto sharedChapterName = std::make_shared<std::string>();
     auto sharedChapters = std::make_shared<std::vector<Chapter>>();
     auto sharedTotalChapters = std::make_shared<int>(0);
+    auto sharedLoadedFromLocal = std::make_shared<bool>(false);
 
     vitasuwayomi::asyncTask<bool>([isWebtoonMode, mangaId, chapterIndex,
                                     sharedPages, sharedChapterName,
-                                    sharedChapters, sharedTotalChapters]() {
+                                    sharedChapters, sharedTotalChapters,
+                                    sharedLoadedFromLocal]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         DownloadsManager& localMgr = DownloadsManager::getInstance();
         localMgr.init();
@@ -771,6 +773,7 @@ void ReaderActivity::loadPages() {
                     rawPages.push_back(page);
                 }
                 loadedFromLocal = true;
+                *sharedLoadedFromLocal = true;
             } else {
                 brls::Logger::warning("ReaderActivity: Local chapter marked as downloaded but no pages found");
             }
@@ -841,7 +844,8 @@ void ReaderActivity::loadPages() {
         return true;
     }, [this, isWebtoonMode, aliveWeak,
         sharedPages, sharedChapterName,
-        sharedChapters, sharedTotalChapters](bool success) {
+        sharedChapters, sharedTotalChapters,
+        sharedLoadedFromLocal](bool success) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
 
@@ -850,6 +854,7 @@ void ReaderActivity::loadPages() {
         m_chapterName = std::move(*sharedChapterName);
         m_chapters = std::move(*sharedChapters);
         m_totalChapters = *sharedTotalChapters;
+        m_loadedFromLocal = *sharedLoadedFromLocal;
 
         if (!success || m_pages.empty()) {
             brls::Logger::error("No pages to display");
@@ -983,17 +988,20 @@ void ReaderActivity::loadPage(int index) {
         }
 
         // Set up a timeout: if page hasn't loaded after 15 seconds, show error
-        vitasuwayomi::asyncRun([this, aliveWeak, loadGen, index]() {
-            std::this_thread::sleep_for(std::chrono::seconds(15));
-            brls::sync([this, aliveWeak, loadGen, index]() {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-                // Only show error if this is still the same load attempt
-                if (m_pageLoadGeneration == loadGen) {
-                    showPageError("Failed to load page " + std::to_string(index + 1));
-                }
+        // Only for server-streamed pages - local files load instantly from disk
+        if (!m_loadedFromLocal) {
+            vitasuwayomi::asyncRun([this, aliveWeak, loadGen, index]() {
+                std::this_thread::sleep_for(std::chrono::seconds(15));
+                brls::sync([this, aliveWeak, loadGen, index]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    // Only show error if this is still the same load attempt
+                    if (m_pageLoadGeneration == loadGen) {
+                        showPageError("Failed to load page " + std::to_string(index + 1));
+                    }
+                });
             });
-        });
+        }
     }
 
     // Preload adjacent pages
