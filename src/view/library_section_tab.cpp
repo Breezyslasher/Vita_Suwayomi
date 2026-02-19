@@ -2737,7 +2737,11 @@ void LibrarySectionTab::showGroupModeMenu() {
         options,
         [this](int selected) {
             if (selected < 0 || selected > 2) return;
-            setGroupMode(static_cast<LibraryGroupMode>(selected));
+            // Defer to next frame so dropdown fully closes first
+            // This fixes crash from UI updates while dropdown is dismissing
+            brls::sync([this, selected]() {
+                setGroupMode(static_cast<LibraryGroupMode>(selected));
+            });
         },
         currentMode
     );
