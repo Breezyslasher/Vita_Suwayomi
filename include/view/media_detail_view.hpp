@@ -14,6 +14,8 @@
 
 namespace vitasuwayomi {
 
+struct DownloadedChapter;
+
 class MangaDetailView : public brls::Box {
 public:
     MangaDetailView(const Manga& manga);
