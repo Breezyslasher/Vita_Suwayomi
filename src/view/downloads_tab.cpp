@@ -223,14 +223,24 @@ DownloadsTab::DownloadsTab() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             DownloadsManager& mgr = DownloadsManager::getInstance();
 
+            // Stop local downloads FIRST to prevent use-after-free
+            // (download thread holds references to chapters in the vector)
+            mgr.pauseDownloads();
+
             // Clear server queue
             bool success = client.clearDownloadQueue();
 
             // Clear local queue - cancel all non-completed chapters
-            auto queuedChapters = mgr.getQueuedChapters();
-            for (const auto& chapter : queuedChapters) {
-                if (chapter.state != LocalDownloadState::COMPLETED) {
-                    mgr.cancelChapterDownload(chapter.mangaId, chapter.chapterIndex);
+            // pauseDownloads() already stopped the thread and marked DOWNLOADING
+            // chapters as PAUSED, so they are now safe to erase.
+            // Use getDownloads() instead of getQueuedChapters() to catch
+            // PAUSED/FAILED chapters too (getQueuedChapters only returns QUEUED/DOWNLOADING).
+            auto downloads = mgr.getDownloads();
+            for (const auto& manga : downloads) {
+                for (const auto& chapter : manga.chapters) {
+                    if (chapter.state != LocalDownloadState::COMPLETED) {
+                        mgr.cancelChapterDownload(manga.mangaId, chapter.chapterIndex);
+                    }
                 }
             }
 

@@ -261,6 +261,7 @@ void DownloadsManager::startDownloads() {
 
     // Run downloads in background thread
     std::thread([this]() {
+        m_downloadThreadActive.store(true);
         while (m_downloading.load()) {
             DownloadedChapter* nextChapter = nullptr;
             int mangaId = 0;
@@ -311,6 +312,7 @@ void DownloadsManager::startDownloads() {
             // Download the chapter
             downloadChapter(mangaId, *nextChapter);
         }
+        m_downloadThreadActive.store(false);
     }).detach();
 }
 
@@ -357,6 +359,19 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
             for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
                 if (it->chapterIndex == chapterIndex || it->chapterId == chapterIndex) {
                     if (it->state != LocalDownloadState::COMPLETED) {
+                        // If the download thread is still active, we cannot
+                        // safely erase ANY chapter from the vector — the thread
+                        // holds a raw pointer/reference into the vector and
+                        // erasing invalidates it (use-after-free crash).
+                        // Instead, signal the thread to stop and mark as FAILED.
+                        if (m_downloadThreadActive.load()) {
+                            m_downloading.store(false);
+                            it->state = LocalDownloadState::FAILED;
+                            saveStateUnlocked();
+                            return true;
+                        }
+
+                        // Thread is not active — safe to erase
                         // Delete any partial download files
                         for (auto& page : it->pages) {
                             if (!page.localPath.empty()) {
@@ -364,7 +379,7 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
                             }
                         }
 
-                        // Remove the chapter entry instead of marking as failed
+                        // Remove the chapter entry
                         manga.chapters.erase(it);
                         manga.totalChapters = static_cast<int>(manga.chapters.size());
 

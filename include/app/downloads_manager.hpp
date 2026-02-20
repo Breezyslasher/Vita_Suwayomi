@@ -215,6 +215,7 @@ private:
     std::vector<DownloadItem> m_downloads;
     mutable std::mutex m_mutex;
     std::atomic<bool> m_downloading{false};
+    std::atomic<bool> m_downloadThreadActive{false};  // True while download thread is running
     bool m_initialized = false;
     DownloadProgressCallback m_progressCallback;
     ChapterCompletionCallback m_chapterCompletionCallback;
