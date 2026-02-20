@@ -1496,14 +1496,29 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
                               static_cast<int>((chapter.downloadedPages * 100) / chapter.pageCount));
 
             std::string localPath;
-            if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, localPath)) {
+            bool pageSuccess = false;
+            const int MAX_PAGE_RETRIES = 2;
+            for (int attempt = 0; attempt <= MAX_PAGE_RETRIES; attempt++) {
+                if (attempt > 0) {
+                    brls::Logger::info("DownloadsManager: Retrying page {} (attempt {}/{})",
+                                      page.index, attempt + 1, MAX_PAGE_RETRIES + 1);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));
+                    if (!m_downloading.load()) break;
+                }
+                if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, localPath)) {
+                    pageSuccess = true;
+                    break;
+                }
+            }
+            if (pageSuccess) {
                 chapter.pages[i].localPath = localPath;
                 chapter.pages[i].downloaded = true;
                 chapter.pages[i].size = getFileSize(localPath);
                 chapter.downloadedPages++;
                 brls::Logger::info("DownloadsManager: Page {} downloaded successfully", page.index);
             } else {
-                brls::Logger::error("DownloadsManager: Page {} download failed", page.index);
+                brls::Logger::error("DownloadsManager: Page {} download failed after {} attempts",
+                                   page.index, MAX_PAGE_RETRIES + 1);
                 chapter.pages[i].downloaded = false;
             }
 

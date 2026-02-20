@@ -246,10 +246,17 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     });
 
     // Download button click
-    cell->dlBtn->registerClickAction([view, capturedChapter, isLocallyDownloaded, dlState](brls::View*) {
-        if (isLocallyDownloaded) {
+    cell->dlBtn->registerClickAction([view, capturedChapter, isLocallyDownloaded, isLocallyQueued,
+                                       isLocallyDownloading, mangaId, chapterIdx, dlState](brls::View*) {
+        if (isLocallyQueued || isLocallyDownloading) {
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
+                brls::Application::notify("Removed from queue");
+                view->updateChapterDownloadStates();
+            }
+        } else if (isLocallyDownloaded) {
             view->deleteChapterDownload(capturedChapter);
-        } else if (dlState == static_cast<int>(LocalDownloadState::FAILED) || dlState == -1) {
+        } else {
             view->downloadChapter(capturedChapter);
         }
         return true;
@@ -1096,19 +1103,39 @@ void MangaDetailView::loadDetails() {
                     }
                 }
 
-                // Handle auto-download
+                // Handle auto-download (respects downloadMode setting)
                 bool autoDownload = Application::getInstance().getSettings().autoDownloadChapters;
+                DownloadMode autoDownloadMode = Application::getInstance().getSettings().downloadMode;
                 std::vector<int> chaptersToDownload;
                 if (autoDownload) {
+                    DownloadsManager& localMgr = DownloadsManager::getInstance();
                     for (const auto& ch : chapters) {
-                        if (!ch.read && !ch.downloaded) {
+                        if (!ch.read && !ch.downloaded &&
+                            !localMgr.isChapterDownloaded(combinedMangaId, ch.index)) {
                             chaptersToDownload.push_back(ch.id);
                         }
                     }
                     if (!chaptersToDownload.empty()) {
                         brls::Logger::info("MangaDetailView: autoDownloadChapters - queuing {} unread chapters",
                                           chaptersToDownload.size());
-                        client.queueChapterDownloads(chaptersToDownload);
+                        if (autoDownloadMode == DownloadMode::SERVER_ONLY || autoDownloadMode == DownloadMode::BOTH) {
+                            client.queueChapterDownloads(chaptersToDownload);
+                            client.startDownloads();
+                        }
+                        if (autoDownloadMode == DownloadMode::LOCAL_ONLY || autoDownloadMode == DownloadMode::BOTH) {
+                            std::vector<std::pair<int, int>> localPairs;
+                            for (const auto& ch : chapters) {
+                                if (!ch.read && !ch.downloaded &&
+                                    !localMgr.isChapterDownloaded(combinedMangaId, ch.index)) {
+                                    localPairs.emplace_back(ch.id, ch.index);
+                                }
+                            }
+                            if (!localPairs.empty()) {
+                                std::string mangaTitle = updatedManga.title.empty() ? "" : updatedManga.title;
+                                localMgr.queueChaptersDownload(combinedMangaId, localPairs, mangaTitle);
+                                localMgr.startDownloads();
+                            }
+                        }
                     }
                 }
 
@@ -1330,14 +1357,17 @@ void MangaDetailView::loadChapters() {
                 brls::Logger::info("MangaDetailView: Synced {} chapters with local offline progress", syncedCount);
             }
 
-            // Check if autoDownloadChapters is enabled
+            // Check if autoDownloadChapters is enabled (respects downloadMode setting)
             bool autoDownload = Application::getInstance().getSettings().autoDownloadChapters;
+            DownloadMode autoDownloadMode = Application::getInstance().getSettings().downloadMode;
             std::vector<int> chaptersToDownload;
 
             if (autoDownload) {
+                DownloadsManager& localMgr = DownloadsManager::getInstance();
                 // Find unread chapters that are not yet downloaded
                 for (const auto& ch : chapters) {
-                    if (!ch.read && !ch.downloaded) {
+                    if (!ch.read && !ch.downloaded &&
+                        !localMgr.isChapterDownloaded(mangaId, ch.index)) {
                         chaptersToDownload.push_back(ch.id);
                     }
                 }
@@ -1346,7 +1376,23 @@ void MangaDetailView::loadChapters() {
                 if (!chaptersToDownload.empty()) {
                     brls::Logger::info("MangaDetailView: autoDownloadChapters - queuing {} unread chapters",
                                       chaptersToDownload.size());
-                    client.queueChapterDownloads(chaptersToDownload);
+                    if (autoDownloadMode == DownloadMode::SERVER_ONLY || autoDownloadMode == DownloadMode::BOTH) {
+                        client.queueChapterDownloads(chaptersToDownload);
+                        client.startDownloads();
+                    }
+                    if (autoDownloadMode == DownloadMode::LOCAL_ONLY || autoDownloadMode == DownloadMode::BOTH) {
+                        std::vector<std::pair<int, int>> localPairs;
+                        for (const auto& ch : chapters) {
+                            if (!ch.read && !ch.downloaded &&
+                                !localMgr.isChapterDownloaded(mangaId, ch.index)) {
+                                localPairs.emplace_back(ch.id, ch.index);
+                            }
+                        }
+                        if (!localPairs.empty()) {
+                            localMgr.queueChaptersDownload(mangaId, localPairs, m_manga.title);
+                            localMgr.startDownloads();
+                        }
+                    }
                 }
             }
 
