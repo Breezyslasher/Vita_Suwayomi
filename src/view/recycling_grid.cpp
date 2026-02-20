@@ -85,6 +85,52 @@ void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
     setupGrid();
 }
 
+void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
+    if (newItems.empty()) return;
+
+    // Cancel any ongoing incremental build before appending
+    m_incrementalBuildActive = false;
+
+    int oldItemCount = static_cast<int>(m_items.size());
+    int oldRowCount = static_cast<int>(m_rows.size());
+
+    // Append to items
+    for (const auto& item : newItems) {
+        m_items.push_back(item);
+    }
+
+    m_endReachedFired = false;  // Allow end-reached to fire again
+
+    int newTotalRows = (m_items.size() + m_columns - 1) / m_columns;
+    m_totalRowsNeeded = newTotalRows;
+
+    // If the last existing row was partial, remove and rebuild it with new items
+    int startRow;
+    if (oldItemCount > 0 && oldItemCount % m_columns != 0 && oldRowCount > 0) {
+        int cellsInLastRow = oldItemCount - (oldRowCount - 1) * m_columns;
+
+        // Remove cell pointers for the partial row (view memory freed by removeView)
+        for (int i = 0; i < cellsInLastRow; i++) {
+            m_cells.pop_back();
+        }
+
+        // Remove last row view (deletes the row box and its children)
+        brls::Box* lastRow = m_rows.back();
+        m_rows.pop_back();
+        m_contentBox->removeView(lastRow);
+
+        startRow = oldRowCount - 1;
+    } else {
+        startRow = oldRowCount;
+    }
+
+    // Create only the new rows
+    createRowRange(startRow, newTotalRows);
+
+    brls::Logger::info("RecyclingGrid: appendItems - added {} items, now {} total ({} rows)",
+                        newItems.size(), m_items.size(), newTotalRows);
+}
+
 void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
     // Update cell data in place without rebuilding the grid structure
     // This is much more efficient for sorting operations
