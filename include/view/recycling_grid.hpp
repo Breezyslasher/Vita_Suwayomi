@@ -22,6 +22,7 @@ public:
     ~RecyclingGrid();
 
     void setDataSource(const std::vector<Manga>& items);
+    void appendItems(const std::vector<Manga>& newItems);   // Append items without rebuilding existing cells
     void updateDataOrder(const std::vector<Manga>& items);  // Update cell data in place without rebuilding grid
     void updateCellData(const std::vector<Manga>& items);   // Update cell metadata in place (unread counts, etc.)
     void removeItems(const std::vector<int>& mangaIdsToRemove);  // Remove specific items without full rebuild
@@ -29,6 +30,7 @@ public:
     void setOnItemLongPressed(std::function<void(const Manga&, int index)> callback);
     void setOnPullToRefresh(std::function<void()> callback);
     void setOnBackPressed(std::function<bool()> callback);
+    void setOnEndReached(std::function<void()> callback);  // Fires when focus nears the last row
     void clearViews();
 
     // Grid customization
@@ -81,6 +83,8 @@ private:
     std::function<void(const Manga&, int index)> m_onItemLongPressed;
     std::function<void()> m_onPullToRefresh;
     std::function<bool()> m_onBackPressed;
+    std::function<void()> m_onEndReached;
+    bool m_endReachedFired = false;  // Prevent repeated firing until new data is loaded
     std::function<void(int count)> m_onSelectionChanged;
 
     // Pull-to-refresh state

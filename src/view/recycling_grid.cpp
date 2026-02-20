@@ -81,7 +81,54 @@ RecyclingGrid::~RecyclingGrid() {
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
     brls::Logger::debug("RecyclingGrid: setDataSource with {} items", items.size());
     m_items = items;
+    m_endReachedFired = false;  // Allow end-reached to fire again with new data
     setupGrid();
+}
+
+void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
+    if (newItems.empty()) return;
+
+    // Cancel any ongoing incremental build before appending
+    m_incrementalBuildActive = false;
+
+    int oldItemCount = static_cast<int>(m_items.size());
+    int oldRowCount = static_cast<int>(m_rows.size());
+
+    // Append to items
+    for (const auto& item : newItems) {
+        m_items.push_back(item);
+    }
+
+    m_endReachedFired = false;  // Allow end-reached to fire again
+
+    int newTotalRows = (m_items.size() + m_columns - 1) / m_columns;
+    m_totalRowsNeeded = newTotalRows;
+
+    // If the last existing row was partial, remove and rebuild it with new items
+    int startRow;
+    if (oldItemCount > 0 && oldItemCount % m_columns != 0 && oldRowCount > 0) {
+        int cellsInLastRow = oldItemCount - (oldRowCount - 1) * m_columns;
+
+        // Remove cell pointers for the partial row (view memory freed by removeView)
+        for (int i = 0; i < cellsInLastRow; i++) {
+            m_cells.pop_back();
+        }
+
+        // Remove last row view (deletes the row box and its children)
+        brls::Box* lastRow = m_rows.back();
+        m_rows.pop_back();
+        m_contentBox->removeView(lastRow);
+
+        startRow = oldRowCount - 1;
+    } else {
+        startRow = oldRowCount;
+    }
+
+    // Create only the new rows
+    createRowRange(startRow, newTotalRows);
+
+    brls::Logger::info("RecyclingGrid: appendItems - added {} items, now {} total ({} rows)",
+                        newItems.size(), m_items.size(), newTotalRows);
 }
 
 void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
@@ -223,6 +270,10 @@ void RecyclingGrid::setOnPullToRefresh(std::function<void()> callback) {
 
 void RecyclingGrid::setOnBackPressed(std::function<bool()> callback) {
     m_onBackPressed = callback;
+}
+
+void RecyclingGrid::setOnEndReached(std::function<void()> callback) {
+    m_onEndReached = callback;
 }
 
 void RecyclingGrid::setOnSelectionChanged(std::function<void(int count)> callback) {
@@ -379,6 +430,15 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
             cell->getFocusEvent()->subscribe([this, index](brls::View*) {
                 m_focusedIndex = index;
                 loadThumbnailsNearIndex(index);
+
+                // Fire onEndReached when focus is within 2 rows of the end
+                if (m_onEndReached && !m_endReachedFired) {
+                    int threshold = m_columns * 2;
+                    if (index >= static_cast<int>(m_items.size()) - threshold) {
+                        m_endReachedFired = true;
+                        m_onEndReached();
+                    }
+                }
             });
 
             rowBox->addView(cell);

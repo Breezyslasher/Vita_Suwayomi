@@ -291,19 +291,14 @@ SearchTab::SearchTab() {
         return false;
     });
 
-    this->addView(m_contentGrid);
-
-    // Load more button (hidden initially)
-    m_loadMoreBtn = new brls::Button();
-    m_loadMoreBtn->setText("Load More");
-    m_loadMoreBtn->setMarginTop(10);
-    m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
-    m_loadMoreBtn->registerClickAction([this](brls::View*) {
-        loadNextPage();
-        return true;
+    // Infinite scroll: auto-load next page when nearing the end
+    m_contentGrid->setOnEndReached([this]() {
+        if (m_hasNextPage && !m_isLoadingPage) {
+            loadNextPage();
+        }
     });
-    m_loadMoreBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_loadMoreBtn));
-    this->addView(m_loadMoreBtn);
+
+    this->addView(m_contentGrid);
 
     // Load sources initially
     loadSources();
@@ -503,7 +498,7 @@ void SearchTab::showSources() {
     m_mangaList.clear();
     m_resultsBySource.clear();
     m_contentGrid->setDataSource(m_mangaList);
-    m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
+    m_hasNextPage = false;
     if (m_searchResultsScrollView) {
         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
     }
@@ -710,7 +705,6 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
-                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 
                 // Transfer focus to first cell in content grid after loading
                 if (!manga.empty()) {
@@ -725,7 +719,6 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
             brls::sync([this, gen]() {
                 if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Failed to load popular manga");
-                m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
                 // Focus on Popular button so user can retry
                 brls::Application::giveFocus(m_popularBtn);
             });
@@ -753,7 +746,6 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
-                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 
                 // Transfer focus to first cell in content grid after loading
                 if (!manga.empty()) {
@@ -768,7 +760,6 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
             brls::sync([this, gen]() {
                 if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Failed to load latest manga");
-                m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
                 // Focus on Latest button so user can retry
                 brls::Application::giveFocus(m_latestBtn);
             });
@@ -920,7 +911,6 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " results");
-                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 
                 // Transfer focus to first cell in content grid after search results load
                 if (!manga.empty()) {
@@ -938,7 +928,6 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
             brls::sync([this, gen]() {
                 if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Search failed");
-                m_loadMoreBtn->setVisibility(brls::Visibility::GONE);
                 // Focus on back button so user can go back
                 brls::Application::giveFocus(m_backBtn);
             });
@@ -1080,13 +1069,11 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
 }
 
 void SearchTab::loadNextPage() {
-    if (!m_hasNextPage) return;
+    if (!m_hasNextPage || m_isLoadingPage) return;
 
+    m_isLoadingPage = true;
     m_currentPage++;
     brls::Logger::debug("SearchTab: Loading page {}", m_currentPage);
-
-    // Show loading state on button
-    m_loadMoreBtn->setText("Loading...");
 
     // Remember the index of first new item (current list size)
     int firstNewItemIndex = static_cast<int>(m_mangaList.size());
@@ -1115,20 +1102,17 @@ void SearchTab::loadNextPage() {
                     m_mangaList.push_back(m);
                 }
                 m_hasNextPage = hasNextPage;
-                m_contentGrid->setDataSource(m_mangaList);
+                m_contentGrid->appendItems(manga);
                 m_resultsLabel->setText(std::to_string(m_mangaList.size()) + " manga");
-                m_loadMoreBtn->setText("Load More");
-                m_loadMoreBtn->setVisibility(hasNextPage ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 
                 // Focus on first newly loaded item so user can continue browsing
                 m_contentGrid->focusIndex(firstNewItemIndex);
+                m_isLoadingPage = false;
             });
         } else {
             brls::sync([this, gen]() {
                 if (gen != m_loadGeneration) return;
-                m_loadMoreBtn->setText("Load More");
-                // Keep focus on Load More button after failure
-                brls::Application::giveFocus(m_loadMoreBtn);
+                m_isLoadingPage = false;
             });
         }
     });

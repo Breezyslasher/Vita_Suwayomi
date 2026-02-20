@@ -439,6 +439,232 @@ assignees: ''
 
 ---
 
+## Offline Mode - Login & Reconnect
+
+### Offline Button on Login Page
+- [ ] "Offline" button visible on login page
+- [ ] Tapping Offline saves entered server URL / credentials
+- [ ] Tapping Offline marks app as disconnected
+- [ ] App navigates to main activity in offline mode
+- [ ] Login page pre-fills saved connection details on next launch (URL, username, auth mode)
+
+### Reconnect in Settings
+- [ ] Connection status indicator shows "Connected" or "Offline"
+- [ ] "Reconnect" button appears in settings
+- [ ] Reconnect attempts to connect to saved server URL asynchronously
+- [ ] Status label updates on successful reconnect
+- [ ] Reconnect failure doesn't crash app
+
+---
+
+## Chapter Caching & Downloads-Only Mode
+
+### Chapter Caching
+- [ ] Chapter list cached after fetch from server
+- [ ] Chapter list loads from cache before server request (faster display)
+- [ ] Cached chapters available when offline
+- [ ] Cache updates after fresh server fetch
+
+### Downloads-Only Mode
+- [ ] "Downloads Only Mode" toggle in library settings works
+- [ ] When enabled + offline, library shows only manga with local downloads
+- [ ] When enabled + offline, chapter list in detail view filters to downloaded chapters
+- [ ] When online, all manga and chapters show normally (setting ignored)
+- [ ] Setting persists across restarts
+
+---
+
+## Offline Mode - Reader
+
+### Offline Reading
+- [ ] Locally downloaded chapters load from disk when offline
+- [ ] No 15s timeout error overlay for locally downloaded pages
+- [ ] Chapter progress saved to DownloadsManager when offline (not server)
+- [ ] Reader shows "App is offline" on retry button when offline
+- [ ] Per-manga reader settings load from local cache when offline
+- [ ] Skip fetchMangaMeta, fetchManga, fetchChapter, fetchChapters when offline
+- [ ] Skip markChapterAsRead when offline
+
+### Chapter ID Matching
+- [ ] Downloaded chapters found by both chapterIndex and chapterId
+- [ ] isChapterDownloaded matches on both identifiers
+- [ ] getChapterPages matches on both identifiers
+- [ ] getPagePath matches on both identifiers
+- [ ] queueChapterDownload duplicate check uses both identifiers
+- [ ] cancelChapterDownload uses both identifiers
+- [ ] deleteChapterDownload uses both identifiers
+
+---
+
+## Offline Mode - Library
+
+### Library Offline Behavior
+- [ ] Library falls back to cached data when server unreachable
+- [ ] Connection failure detected and isConnected set to false
+- [ ] No cascading retry loops when offline
+- [ ] Skip network fetch when offline and cached data available
+
+### Library Grouping Offline
+- [ ] "No Grouping" mode aggregates all cached category manga when offline
+- [ ] "By Source" mode groups cached manga by source name when offline
+- [ ] "By Category" loads categories from cache when offline
+- [ ] Manga deduplicated across categories (std::set)
+- [ ] sourceName field cached in manga serialization (field 12)
+- [ ] By Source shows correct source names (not "Unknown") offline
+
+### Category Visibility Offline
+- [ ] Empty categories hidden when offline in downloads-only mode
+- [ ] Categories with no locally downloaded manga hidden when offline
+- [ ] Categories with no cached data hidden when offline
+
+---
+
+## Offline Mode - Browse & Extensions
+
+### Browse Tab Offline
+- [ ] Shows "App is offline" message instead of attempting server fetch
+- [ ] No crash when navigating browse tab offline
+
+### Extensions Tab Offline
+- [ ] Shows inline "App is offline" message on extensions page
+- [ ] Recycler hidden, message shown directly in content area
+
+---
+
+## Offline Mode - UI Element Hiding
+
+### Library View When Offline
+- [ ] Update/refresh button hidden when offline
+- [ ] Select button hint icon hidden when offline (entire container)
+- [ ] Update button hidden at construction time if starting offline
+- [ ] Update button and hint restore when back online (onFocusGained)
+- [ ] triggerLibraryUpdate() shows notification and returns early when offline
+- [ ] START button context menu blocked entirely when offline
+- [ ] Long-press context menu blocked entirely when offline
+- [ ] Select button (BUTTON_BACK) action disabled when offline
+
+### Book Detail View When Offline
+- [ ] "Add/Remove from Library" button hidden when offline
+- [ ] "Tracking" button hidden when offline
+- [ ] Options menu: Download all, Download unread, Cancel downloading, Reset cover hidden offline
+- [ ] Options menu: "Remove all chapters" still visible offline
+- [ ] Chapter menu: "Mark Read/Unread" hidden when offline
+- [ ] Chapter menu: "Download" hidden when offline
+- [ ] Chapter menu: "Delete Download" still visible for downloaded chapters offline
+- [ ] Action-ID mapping ensures menu dispatch works with hidden items
+
+---
+
+## Offline Progress Sync
+
+### Save Progress Offline
+- [ ] updateProgress() saves to DownloadsManager when offline (not server)
+- [ ] Reading progress persists to disk via DownloadsManager
+- [ ] Chapter lastPageRead and lastReadAt stored locally
+
+### Sync on Reconnect
+- [ ] App boot: syncs all local reading progress to server when connection restored
+- [ ] Bidirectional sync: compares local vs server progress, takes more advanced position
+- [ ] Local-ahead progress pushed to server
+- [ ] Server-ahead progress pulled to local downloads
+- [ ] Chapters marked read on server when user reached last page offline
+- [ ] Uses chapterId (not chapterIndex) for API calls
+
+### Settings Sync
+- [ ] "Sync Progress Now" button in settings runs async (non-blocking)
+- [ ] Uses bidirectional syncProgressFromServer
+- [ ] Notification shows when sync completes
+
+### Per-Book Sync
+- [ ] Opening a book online triggers progress comparison
+- [ ] Local-ahead progress pushed to server per chapter
+- [ ] Server-ahead progress pulled to local per chapter
+
+---
+
+## Continue Reading Improvements
+
+### Chapter Progress Preservation
+- [ ] Clicking a chapter resumes from lastPageRead (not page 0)
+- [ ] Also checks DownloadsManager for more recent offline progress
+- [ ] Reader saves state (chapter ID, page, read status) to ReaderResult on close
+- [ ] MangaDetailView::willAppear consumes ReaderResult to update UI immediately
+- [ ] Continue reading button reflects just-finished session without server refresh
+
+### Offline Continue Reading
+- [ ] loadChapters offline path merges local progress from DownloadsManager
+- [ ] Continue reading button updates correctly when offline
+- [ ] onRead falls back to DownloadsManager progress when m_chapters empty + offline
+
+---
+
+## Infinite Scroll
+
+### Browse Tab (SearchTab)
+- [ ] No "Load More" button visible
+- [ ] Auto-loads next page when scrolling near end of grid
+- [ ] m_isLoadingPage guard prevents concurrent page loads
+- [ ] Works for Popular mode
+- [ ] Works for Latest mode
+- [ ] Works for Search Results mode
+- [ ] New items appended without full grid rebuild (appendItems)
+
+### History Tab
+- [ ] No "Load More" button visible
+- [ ] Auto-loads more items when focus reaches within 5 items of end
+- [ ] m_isLoadingMore guard prevents concurrent loads
+- [ ] New items appear seamlessly
+
+### RecyclingGrid onEndReached
+- [ ] Callback fires when focus is within 2 rows of end
+- [ ] m_endReachedFired flag prevents repeated firing
+- [ ] Flag resets on setDataSource() or appendItems()
+
+---
+
+## Tracker Login in Settings
+
+### Tracking Section
+- [ ] "Tracking" section appears in settings
+- [ ] "Tracker Accounts" cell opens tracker list
+- [ ] All trackers fetched from server and listed
+- [ ] Login status shown per tracker (logged in / not logged in)
+
+### Login Flow
+- [ ] Not-logged-in tracker: opens username IME dialog
+- [ ] After username: opens password IME dialog
+- [ ] Credential login sends to server (loginTrackerCredentials)
+- [ ] Success: shows notification and refreshes tracker list
+- [ ] Failure: shows error notification
+
+### Logout Flow
+- [ ] Logged-in tracker: offers Logout option
+- [ ] Logout sends logoutTracker to server
+- [ ] Success: shows notification and refreshes list
+- [ ] authUrl field fetched for each tracker (for OAuth trackers)
+
+---
+
+## Chapter Loading Performance
+
+### Incremental Chapter Building
+- [ ] Chapter list builds incrementally (not all at once)
+- [ ] First 10 chapters appear immediately
+- [ ] Remaining chapters build in batches of 10 per frame via brls::sync()
+- [ ] No 30-40 second UI freeze on large chapter lists (300+ chapters)
+- [ ] D-pad navigation set up after all chapters are built
+- [ ] Incremental build cancels on view destruction (no dangling callbacks)
+- [ ] Re-calling populateChaptersList cancels previous incremental build
+
+### Browser Append Without Rebuild
+- [ ] RecyclingGrid::appendItems() adds items without destroying existing cells
+- [ ] Existing manga thumbnails preserved during load-more
+- [ ] Partial last row rebuilt correctly when appending
+- [ ] Focus maintained on first new item after append
+- [ ] No visible flicker or full grid rebuild on load-more
+
+---
+
 ## Smoke Test - V2 Features
 
 ### Library Grouping Quick Test
@@ -467,6 +693,26 @@ assignees: ''
 - [ ] Verify library loads instantly from cache
 - [ ] Disable cache, reopen - verify fresh server fetch
 
+### Offline Mode Quick Test
+- [ ] From login page, tap Offline - app enters main screen
+- [ ] Library loads cached data, update button is hidden
+- [ ] Open a downloaded manga - chapter list loads from cache
+- [ ] Read a downloaded chapter - pages load from disk, no errors
+- [ ] Go to settings, tap Reconnect - status changes to Connected
+- [ ] Library update button reappears after reconnect
+
+### Infinite Scroll Quick Test
+- [ ] Browse a source, scroll to bottom - more manga loads automatically
+- [ ] No "Load More" button visible
+- [ ] Existing covers not reloaded during append
+- [ ] Open History tab, scroll to bottom - more items load automatically
+
+### Chapter Loading Quick Test
+- [ ] Open a manga with 100+ chapters
+- [ ] First chapters appear within 1-2 seconds
+- [ ] Remaining chapters populate progressively (no long freeze)
+- [ ] Can scroll and interact while chapters are still building
+
 ---
 
 ## Regression Tests - V2 Edge Cases
@@ -494,3 +740,28 @@ assignees: ''
 - [ ] JWT token expired - handles refresh or re-login
 - [ ] Switch auth mode while connected - reconnects
 - [ ] Server changes auth requirement - detected on next request
+
+### Offline Mode Edge Cases
+- [ ] Start offline, browse library, then reconnect - UI restores all buttons
+- [ ] Start offline with no cached data - no crash, shows empty state
+- [ ] Read chapter offline, close reader, reopen same chapter - progress preserved
+- [ ] Sync progress with conflicting server data - bidirectional merge works
+- [ ] Downloads-only mode with zero local downloads - empty library, no crash
+- [ ] Rapidly toggle online/offline (reconnect/disconnect) - no crash
+- [ ] Open manga detail offline, then reconnect mid-view - buttons remain hidden until next focus
+
+### Infinite Scroll Edge Cases
+- [ ] Scroll to end with no more pages (hasNextPage=false) - no extra load triggered
+- [ ] Navigate away and back during load-more - no duplicate items
+- [ ] Load-more with exactly a full last row (e.g., 24 items, 6 columns) - append starts new row
+- [ ] Load-more with partial last row (e.g., 22 items, 6 columns) - partial row rebuilt correctly
+- [ ] Rapid scroll past end - only one load-more fires (guard flag works)
+
+### Chapter Loading Edge Cases
+- [ ] Open manga with 0 chapters - no crash, empty list
+- [ ] Open manga with 1 chapter - builds immediately, navigation works
+- [ ] Open manga with 500+ chapters - builds incrementally, no freeze
+- [ ] Navigate away during incremental build - build cancels safely
+- [ ] Re-sort chapters during incremental build - old build cancels, new one starts
+- [ ] Filter chapters during incremental build - restarts correctly
+- [ ] D-pad navigation works after incremental build completes

@@ -17,6 +17,7 @@ public:
 
 private:
     void createAccountSection();
+    void createTrackingSection();
     void createUISection();
     void createLibrarySection();
     void createReaderSection();
