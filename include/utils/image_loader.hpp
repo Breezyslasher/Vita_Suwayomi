@@ -38,6 +38,11 @@ public:
     // Load image asynchronously from URL (with thumbnail downscaling) - for brls::Image
     static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target);
 
+    // Load image asynchronously with lifetime tracking - alive flag prevents
+    // writing to destroyed targets when the owning view is destroyed during loading
+    static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target,
+                          std::shared_ptr<bool> alive);
+
     // Load full-size image asynchronously (no downscaling - for manga reader) - for brls::Image
     static void loadAsyncFullSize(const std::string& url, LoadCallback callback, brls::Image* target);
 
@@ -79,6 +84,7 @@ private:
         LoadCallback callback;
         brls::Image* target;
         bool fullSize;  // true = no downscaling
+        std::shared_ptr<bool> alive;  // If set and *alive==false, skip (owner destroyed)
     };
 
     // Pending load request for RotatableImage
@@ -135,6 +141,7 @@ private:
         std::vector<uint8_t> data;
         brls::Image* target;
         LoadCallback callback;
+        std::shared_ptr<bool> alive;  // If set and *alive==false, skip (owner destroyed)
     };
     static std::queue<PendingTextureUpdate> s_pendingTextures;
     static std::mutex s_pendingMutex;
@@ -142,7 +149,8 @@ private:
     static constexpr int MAX_TEXTURES_PER_FRAME = 6;  // Limit GPU uploads per frame
 
     // Queue a texture for batched upload on the main thread
-    static void queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback);
+    static void queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback,
+                                   std::shared_ptr<bool> alive = nullptr);
     // Process a batch of pending texture uploads (called on main thread)
     static void processPendingTextures();
 };

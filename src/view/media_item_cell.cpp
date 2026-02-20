@@ -52,6 +52,8 @@ static void loadLocalCoverToImage(brls::Image* image, const std::string& localPa
 }
 
 MangaItemCell::MangaItemCell() {
+    m_alive = std::make_shared<bool>(true);
+
     // Komikku-style: card with cover filling the space, title at bottom
     this->setAxis(brls::Axis::COLUMN);
     this->setJustifyContent(brls::JustifyContent::FLEX_END);
@@ -172,6 +174,16 @@ MangaItemCell::MangaItemCell() {
     m_startHintIcon->setPositionRight(6);
     m_startHintIcon->setVisibility(brls::Visibility::GONE);
     this->addView(m_startHintIcon);
+}
+
+MangaItemCell::~MangaItemCell() {
+    // Signal to any in-flight ImageLoader callbacks that our m_thumbnailImage
+    // pointer is no longer valid. Without this, a background worker thread
+    // that finishes downloading after this cell is destroyed would write
+    // to freed memory via processPendingTextures() → target->setImageFromMem().
+    if (m_alive) {
+        *m_alive = false;
+    }
 }
 
 void MangaItemCell::updateDisplay() {
@@ -338,7 +350,7 @@ void MangaItemCell::loadThumbnail() {
         url = client.getMangaThumbnailUrl(m_manga.id);
     }
 
-    ImageLoader::loadAsync(url, nullptr, m_thumbnailImage);
+    ImageLoader::loadAsync(url, nullptr, m_thumbnailImage, m_alive);
 }
 
 brls::View* MangaItemCell::create() {

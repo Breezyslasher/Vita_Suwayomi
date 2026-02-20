@@ -7,12 +7,14 @@
 
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
+#include <memory>
 
 namespace vitasuwayomi {
 
 class MangaItemCell : public brls::Box {
 public:
     MangaItemCell();
+    ~MangaItemCell() override;
 
     void setManga(const Manga& manga);
     void setMangaDeferred(const Manga& manga);  // Set data without loading image
@@ -68,6 +70,10 @@ private:
     brls::Label* m_newBadge = nullptr;  // NEW indicator for recently updated
     brls::Image* m_startHintIcon = nullptr;  // Start button hint shown on focus
     brls::Image* m_starBadge = nullptr;  // Star icon for manga in library
+
+    // Shared flag for async callback safety - set to false in destructor
+    // so pending ImageLoader callbacks skip writing to our destroyed m_thumbnailImage
+    std::shared_ptr<bool> m_alive;
 };
 
 // Alias for backward compatibility
