@@ -1238,9 +1238,8 @@ void MangaDetailView::createChapterRow(const Chapter& chapter, int dlState) {
         cdui.dlBtn = dlBtn;
         cdui.dlIcon = dlIcon;
         cdui.dlLabel = dlLabel;
-        cdui.cachedState = localCh ? static_cast<int>(localCh->state) : -1;
-        cdui.cachedPercent = (isLocallyDownloading && localCh)
-            ? localCh->downloadedPages : -1;
+        cdui.cachedState = dlState;
+        cdui.cachedPercent = isLocallyDownloading ? 0 : -1;
         m_chapterDlElements.push_back(cdui);
     }
 
