@@ -151,7 +151,7 @@ int ChaptersDataSource::numberOfRows(brls::RecyclerFrame* recycler, int section)
 }
 
 float ChaptersDataSource::heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {
-    return 60;  // 56px row + 4px margin
+    return 56;  // Match ChapterCell setHeight(56); margin is external
 }
 
 brls::RecyclerCell* ChaptersDataSource::cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) {
@@ -914,7 +914,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_chaptersRecycler = new brls::RecyclerFrame();
     m_chaptersRecycler->setGrow(1.0f);
     m_chaptersRecycler->setPadding(0, 0, 0, 0);
-    m_chaptersRecycler->estimatedRowHeight = 60;  // 56px row + 4px margin
+    m_chaptersRecycler->estimatedRowHeight = 56;  // Match ChapterCell setHeight(56); margin is external
     m_chaptersRecycler->registerCell("chapter", ChapterCell::create);
 
     m_chaptersDataSource = new ChaptersDataSource(this);
@@ -1174,7 +1174,6 @@ void MangaDetailView::loadDetails() {
                     if (Application::getInstance().getSettings().cacheLibraryData) {
                         LibraryCache::getInstance().saveChapters(m_manga.id, chapters);
                     }
-                    populateChaptersList();
                     if (m_chapterCountLabel) {
                         std::string info = std::to_string(m_chapters.size()) + " chapters";
                         int unread = 0;
@@ -1191,6 +1190,18 @@ void MangaDetailView::loadDetails() {
                         brls::Application::notify("Auto-downloading " +
                             std::to_string(chaptersToDownload.size()) + " new chapters");
                     }
+
+                    // Defer populateChaptersList to the next frame so the layout
+                    // settles after the UI label changes above (description, genres,
+                    // etc.).  RecyclerFrame::reloadData() reads getLocalFrame() to
+                    // decide how many cells to create; calling it in the same frame
+                    // as the label updates uses stale dimensions and causes cells to
+                    // be recycled incorrectly, making chapters disappear.
+                    brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
+                        populateChaptersList();
+                    });
                 });
             } else {
                 // Combined query failed - fall back to separate fetches
