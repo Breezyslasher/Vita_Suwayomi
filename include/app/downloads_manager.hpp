@@ -160,6 +160,9 @@ public:
     // Resume incomplete downloads (queues PAUSED/FAILED/interrupted chapters)
     void resumeIncompleteDownloads();
 
+    // Auto-resume downloads if setting enabled and connected (called after connection established)
+    void resumeDownloadsIfNeeded();
+
     // Check if there are any incomplete downloads
     bool hasIncompleteDownloads() const;
 

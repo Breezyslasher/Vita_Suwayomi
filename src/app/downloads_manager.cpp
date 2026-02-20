@@ -124,17 +124,10 @@ bool DownloadsManager::init() {
     m_initialized = true;
     brls::Logger::info("DownloadsManager: Initialized with {} downloads", m_downloads.size());
 
-    // Auto-resume downloads if setting is enabled and there are incomplete downloads
-    if (Application::getInstance().getSettings().autoResumeDownloads && hasIncompleteDownloads()) {
-        int chapterCount = countIncompleteDownloads();
-        brls::Logger::info("DownloadsManager: Auto-resuming {} incomplete downloads", chapterCount);
-        if (chapterCount == 1) {
-            brls::Application::notify("Resuming 1 download...");
-        } else {
-            brls::Application::notify("Resuming " + std::to_string(chapterCount) + " downloads...");
-        }
-        startDownloads();
-    }
+    // NOTE: Auto-resume is NOT triggered here because the network connection
+    // hasn't been established yet (init() runs before connection test in Application::run).
+    // Instead, Application::run() calls resumeDownloadsIfNeeded() after a successful
+    // connection test to avoid immediately failing all downloads.
 
     return true;
 }
@@ -848,6 +841,29 @@ void DownloadsManager::resumeIncompleteDownloads() {
         brls::Logger::info("DownloadsManager: Queued {} incomplete chapters for resumption", queuedCount);
         saveStateUnlocked();
     }
+}
+
+void DownloadsManager::resumeDownloadsIfNeeded() {
+    if (!Application::getInstance().getSettings().autoResumeDownloads) return;
+    if (!Application::getInstance().isConnected()) {
+        brls::Logger::info("DownloadsManager: Skipping auto-resume - not connected");
+        return;
+    }
+    if (!hasIncompleteDownloads()) return;
+
+    // Convert PAUSED/FAILED/DOWNLOADING chapters back to QUEUED so startDownloads() picks them up
+    resumeIncompleteDownloads();
+
+    int chapterCount = countIncompleteDownloads();
+    if (chapterCount <= 0) return;
+
+    brls::Logger::info("DownloadsManager: Auto-resuming {} incomplete downloads", chapterCount);
+    if (chapterCount == 1) {
+        brls::Application::notify("Resuming 1 download...");
+    } else {
+        brls::Application::notify("Resuming " + std::to_string(chapterCount) + " downloads...");
+    }
+    startDownloads();
 }
 
 bool DownloadsManager::hasIncompleteDownloads() const {

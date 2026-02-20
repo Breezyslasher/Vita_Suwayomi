@@ -226,11 +226,10 @@ DownloadsTab::DownloadsTab() {
             // Clear server queue
             bool success = client.clearDownloadQueue();
 
-            // Clear local queue - cancel all queued chapters
+            // Clear local queue - cancel all non-completed chapters
             auto queuedChapters = mgr.getQueuedChapters();
             for (const auto& chapter : queuedChapters) {
-                if (chapter.state == LocalDownloadState::QUEUED ||
-                    chapter.state == LocalDownloadState::DOWNLOADING) {
+                if (chapter.state != LocalDownloadState::COMPLETED) {
                     mgr.cancelChapterDownload(chapter.mangaId, chapter.chapterIndex);
                 }
             }
@@ -679,7 +678,9 @@ void DownloadsTab::refreshLocalDownloads() {
     for (const auto& manga : downloads) {
         for (const auto& chapter : manga.chapters) {
             if (chapter.state == LocalDownloadState::QUEUED ||
-                chapter.state == LocalDownloadState::DOWNLOADING) {
+                chapter.state == LocalDownloadState::DOWNLOADING ||
+                chapter.state == LocalDownloadState::PAUSED ||
+                chapter.state == LocalDownloadState::FAILED) {
                 NewItemInfo info;
                 info.mangaId = manga.mangaId;
                 info.chapterIndex = chapter.chapterIndex;
@@ -752,8 +753,23 @@ void DownloadsTab::refreshLocalDownloads() {
                 m_startStopLabel->setText("Pause");
             }
         } else {
-            m_downloadStatusLabel->setText("• Queued (Local)");
-            m_downloadStatusLabel->setTextColor(nvgRGBA(200, 150, 100, 255));
+            // Check if items are paused or failed vs queued
+            bool hasFailed = false;
+            bool hasPaused = false;
+            for (const auto& item : newItems) {
+                if (item.state == static_cast<int>(LocalDownloadState::FAILED)) hasFailed = true;
+                if (item.state == static_cast<int>(LocalDownloadState::PAUSED)) hasPaused = true;
+            }
+            if (hasFailed) {
+                m_downloadStatusLabel->setText("• Failed (Local)");
+                m_downloadStatusLabel->setTextColor(nvgRGBA(200, 100, 100, 255));
+            } else if (hasPaused) {
+                m_downloadStatusLabel->setText("• Paused (Local)");
+                m_downloadStatusLabel->setTextColor(nvgRGBA(200, 180, 100, 255));
+            } else {
+                m_downloadStatusLabel->setText("• Queued (Local)");
+                m_downloadStatusLabel->setTextColor(nvgRGBA(200, 150, 100, 255));
+            }
         }
     }
 
@@ -899,6 +915,10 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     NVGcolor originalBgColor;
     if (state == static_cast<int>(LocalDownloadState::DOWNLOADING)) {
         originalBgColor = nvgRGBA(30, 60, 30, 200);  // Green tint for active
+    } else if (state == static_cast<int>(LocalDownloadState::FAILED)) {
+        originalBgColor = nvgRGBA(60, 30, 30, 200);  // Red tint for failed
+    } else if (state == static_cast<int>(LocalDownloadState::PAUSED)) {
+        originalBgColor = nvgRGBA(50, 50, 30, 200);  // Amber tint for paused
     } else {
         originalBgColor = nvgRGBA(40, 40, 40, 200);
     }
@@ -955,6 +975,12 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
             progressText = "Downloading...";
         }
         progressLabel->setTextColor(nvgRGBA(100, 200, 100, 255));  // Green
+    } else if (state == static_cast<int>(LocalDownloadState::FAILED)) {
+        progressText = "Failed";
+        progressLabel->setTextColor(nvgRGBA(200, 100, 100, 255));  // Red
+    } else if (state == static_cast<int>(LocalDownloadState::PAUSED)) {
+        progressText = "Paused";
+        progressLabel->setTextColor(nvgRGBA(200, 180, 100, 255));  // Amber
     } else {
         progressText = "Queued";
     }
@@ -1079,6 +1105,12 @@ void DownloadsTab::updateLocalProgress(int mangaId, int chapterIndex, int downlo
                         progressText = "Downloading...";
                     }
                     elem.progressLabel->setTextColor(nvgRGBA(100, 200, 100, 255));
+                } else if (state == static_cast<int>(LocalDownloadState::FAILED)) {
+                    progressText = "Failed";
+                    elem.progressLabel->setTextColor(nvgRGBA(200, 100, 100, 255));
+                } else if (state == static_cast<int>(LocalDownloadState::PAUSED)) {
+                    progressText = "Paused";
+                    elem.progressLabel->setTextColor(nvgRGBA(200, 180, 100, 255));
                 } else {
                     progressText = "Queued";
                     elem.progressLabel->setTextColor(nvgRGBA(255, 255, 255, 255));
@@ -1089,6 +1121,10 @@ void DownloadsTab::updateLocalProgress(int mangaId, int chapterIndex, int downlo
                 if (elem.row) {
                     if (state == static_cast<int>(LocalDownloadState::DOWNLOADING)) {
                         elem.row->setBackgroundColor(nvgRGBA(30, 60, 30, 200));
+                    } else if (state == static_cast<int>(LocalDownloadState::FAILED)) {
+                        elem.row->setBackgroundColor(nvgRGBA(60, 30, 30, 200));
+                    } else if (state == static_cast<int>(LocalDownloadState::PAUSED)) {
+                        elem.row->setBackgroundColor(nvgRGBA(50, 50, 30, 200));
                     } else {
                         elem.row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
                     }
