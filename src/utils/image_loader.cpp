@@ -473,10 +473,11 @@ bool ImageLoader::cacheGet(const std::string& url, std::vector<uint8_t>& data) {
     return true;
 }
 
-void ImageLoader::queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback) {
+void ImageLoader::queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback,
+                                     std::shared_ptr<bool> alive) {
     {
         std::lock_guard<std::mutex> lock(s_pendingMutex);
-        s_pendingTextures.push({data, target, callback});
+        s_pendingTextures.push({data, target, callback, alive});
     }
 
     // Schedule processing if not already scheduled
@@ -503,6 +504,11 @@ void ImageLoader::processPendingTextures() {
         }
 
         if (update.target) {
+            // Skip if the owning view was destroyed while the image was downloading.
+            // Without this check, writing to a freed brls::Image* causes a crash.
+            if (update.alive && !*update.alive) {
+                continue;
+            }
             update.target->setImageFromMem(update.data.data(), update.data.size());
             if (update.callback) update.callback(update.target);
         }
@@ -529,6 +535,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     const std::string& url = request.url;
     brls::Image* target = request.target;
     LoadCallback callback = request.callback;
+    std::shared_ptr<bool> alive = request.alive;
 
     // Check disk cache first (this runs on a background thread, so disk I/O is fine)
     if (Application::getInstance().getSettings().cacheCoverImages) {
@@ -541,7 +548,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
                 // Queue for batched texture upload (prevents main thread freeze
                 // when 50+ covers load from disk cache simultaneously)
                 if (target) {
-                    queueTextureUpdate(diskData, target, callback);
+                    queueTextureUpdate(diskData, target, callback, alive);
                 }
                 return;
             }
@@ -639,7 +646,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
 
     // Queue for batched texture upload on main thread
     if (target) {
-        queueTextureUpdate(imageData, target, callback);
+        queueTextureUpdate(imageData, target, callback, alive);
     }
 }
 
@@ -712,6 +719,11 @@ void ImageLoader::workerThreadFunc(int workerId) {
 }
 
 void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target) {
+    loadAsync(url, callback, target, nullptr);
+}
+
+void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls::Image* target,
+                            std::shared_ptr<bool> alive) {
     if (url.empty() || !target) return;
 
     // Check memory cache first (LRU - promotes to front on hit)
@@ -722,7 +734,7 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
             // Route through batched texture queue even for memory cache hits.
             // Direct setImageFromMem() on the main thread causes a freeze when
             // many cells hit memory cache simultaneously (e.g., after grid rebuild).
-            queueTextureUpdate(cachedData, target, callback);
+            queueTextureUpdate(cachedData, target, callback, alive);
             return;
         }
     }
@@ -731,7 +743,7 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
     // via executeLoad() to avoid blocking the main thread with I/O
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_loadQueue.push({url, callback, target, true});
+        s_loadQueue.push({url, callback, target, true, alive});
     }
     s_queueCV.notify_one();
 
