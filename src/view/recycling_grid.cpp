@@ -6,6 +6,7 @@
 #include "view/recycling_grid.hpp"
 #include "view/media_item_cell.hpp"
 #include "view/long_press_gesture.hpp"
+#include <cmath>
 
 namespace vitasuwayomi {
 
@@ -294,6 +295,9 @@ void RecyclingGrid::setupGrid() {
     // Cancel any ongoing incremental build
     m_incrementalBuildActive = false;
 
+    // Reset scroll-based loading state
+    m_lastScrollLoadY = 0.0f;
+
     // Clear existing views
     m_contentBox->clearViews();
     m_rows.clear();
@@ -509,12 +513,110 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
             m_cells[i]->loadThumbnailIfNeeded();
         }
     }
+
+    // Texture recycling: unload thumbnails far from visible area to free GPU memory
+    // On PS Vita with 128MB RAM, keeping 100+ cover textures loaded wastes VRAM.
+    // Unload cells more than 12 rows away from focus - they'll reload from
+    // ImageLoader's LRU memory cache when scrolled back (fast, no network hit).
+    static constexpr int UNLOAD_DISTANCE_ROWS = 12;
+    int unloadAboveRow = focusedRow - UNLOAD_DISTANCE_ROWS;
+    int unloadBelowRow = focusedRow + UNLOAD_DISTANCE_ROWS;
+
+    // Unload cells far above
+    if (unloadAboveRow > 0) {
+        int unloadEnd = std::min(unloadAboveRow * m_columns, static_cast<int>(m_cells.size()));
+        for (int i = 0; i < unloadEnd; i++) {
+            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
+                m_cells[i]->unloadThumbnail();
+            }
+        }
+    }
+
+    // Unload cells far below
+    if (unloadBelowRow < totalRows) {
+        int unloadStart = std::max(0, unloadBelowRow * m_columns);
+        for (int i = unloadStart; i < static_cast<int>(m_cells.size()); i++) {
+            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
+                m_cells[i]->unloadThumbnail();
+            }
+        }
+    }
 }
 
 void RecyclingGrid::updateVisibleCells() {
     // Load all remaining thumbnails
     for (auto* cell : m_cells) {
         cell->loadThumbnailIfNeeded();
+    }
+}
+
+void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) {
+    // Call parent draw first
+    brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
+
+    // Check scroll position for thumbnail loading during touch scrolling
+    // The focus-based loading (loadThumbnailsNearIndex) handles D-pad navigation,
+    // but during touch scrolling the focus index doesn't change.
+    // Check every ~half row height of scroll movement to avoid excessive work.
+    if (!m_cells.empty() && m_columns > 0) {
+        float scrollY = this->getContentOffsetY();
+        float scrollDelta = std::abs(scrollY - m_lastScrollLoadY);
+        float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
+
+        // Trigger when scrolled more than half a row since last load
+        if (scrollDelta > rowHeight * 0.5f) {
+            m_lastScrollLoadY = scrollY;
+            loadThumbnailsForScrollPosition();
+        }
+    }
+}
+
+void RecyclingGrid::loadThumbnailsForScrollPosition() {
+    if (m_cells.empty() || m_columns <= 0 || m_cellHeight <= 0) return;
+
+    float scrollY = this->getContentOffsetY();
+    float viewHeight = this->getHeight();
+    float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
+    int totalRows = (static_cast<int>(m_cells.size()) + m_columns - 1) / m_columns;
+
+    // Calculate which rows are currently visible based on scroll position
+    int firstVisibleRow = std::max(0, static_cast<int>(scrollY / rowHeight));
+    int lastVisibleRow = std::min(totalRows, static_cast<int>((scrollY + viewHeight) / rowHeight) + 1);
+
+    // Load 2 rows above and 3 rows below the visible area as buffer
+    int loadFromRow = std::max(0, firstVisibleRow - 2);
+    int loadToRow = std::min(totalRows, lastVisibleRow + 3);
+
+    int startCell = loadFromRow * m_columns;
+    int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
+
+    for (int i = startCell; i < endCell; i++) {
+        if (m_cells[i]) {
+            m_cells[i]->loadThumbnailIfNeeded();
+        }
+    }
+
+    // Also apply texture recycling for scroll-based movement (same as focus-based)
+    static constexpr int SCROLL_UNLOAD_DISTANCE_ROWS = 12;
+    int centerRow = (firstVisibleRow + lastVisibleRow) / 2;
+    int unloadAboveRow = centerRow - SCROLL_UNLOAD_DISTANCE_ROWS;
+    int unloadBelowRow = centerRow + SCROLL_UNLOAD_DISTANCE_ROWS;
+
+    if (unloadAboveRow > 0) {
+        int unloadEnd = std::min(unloadAboveRow * m_columns, static_cast<int>(m_cells.size()));
+        for (int i = 0; i < unloadEnd; i++) {
+            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
+                m_cells[i]->unloadThumbnail();
+            }
+        }
+    }
+    if (unloadBelowRow < totalRows) {
+        int unloadStart = std::max(0, unloadBelowRow * m_columns);
+        for (int i = unloadStart; i < static_cast<int>(m_cells.size()); i++) {
+            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
+                m_cells[i]->unloadThumbnail();
+            }
+        }
     }
 }
 

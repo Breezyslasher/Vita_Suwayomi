@@ -293,6 +293,21 @@ void MangaItemCell::loadThumbnailIfNeeded() {
     }
 }
 
+void MangaItemCell::unloadThumbnail() {
+    if (!m_thumbnailLoaded || !m_thumbnailImage) return;
+
+    // Clear the GPU texture by setting a tiny 1x1 transparent TGA image
+    // This frees VRAM on the Vita's limited 128MB while keeping the cell structure intact
+    // The thumbnail can be reloaded later via loadThumbnailIfNeeded() when scrolled back
+    static const unsigned char s_clearPixel[] = {
+        0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // TGA header
+        1, 0, 1, 0, 32, 0,                      // 1x1, 32bpp
+        0, 0, 0, 0                               // 1 transparent pixel (BGRA)
+    };
+    m_thumbnailImage->setImageFromMem(s_clearPixel, sizeof(s_clearPixel));
+    m_thumbnailLoaded = false;
+}
+
 void MangaItemCell::loadThumbnail() {
     if (!m_thumbnailImage || m_thumbnailLoaded) return;
 

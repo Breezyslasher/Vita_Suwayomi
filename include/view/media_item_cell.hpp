@@ -18,6 +18,8 @@ public:
     void setMangaDeferred(const Manga& manga);  // Set data without loading image
     void updateMangaData(const Manga& manga);   // Update data in place without reloading thumbnail
     void loadThumbnailIfNeeded();  // Load image if not already loaded
+    void unloadThumbnail();        // Free GPU texture for off-screen cells (can reload later)
+    bool isThumbnailLoaded() const { return m_thumbnailLoaded; }
     const Manga& getManga() const { return m_manga; }
 
     // Display mode
