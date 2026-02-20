@@ -1,6 +1,7 @@
 /**
  * VitaSuwayomi - Manga Detail View
  * Shows detailed information about a manga including chapters list
+ * Uses RecyclerFrame for efficient virtual chapter list rendering
  */
 
 #pragma once
@@ -14,6 +15,49 @@
 
 namespace vitasuwayomi {
 
+class MangaDetailView;
+class ChaptersDataSource;
+
+// Reusable cell for chapter rows (RecyclerView pattern - only visible rows exist)
+class ChapterCell : public brls::RecyclerCell {
+public:
+    ChapterCell();
+    static ChapterCell* create();
+    void prepareForReuse() override;
+
+    // Public members for data binding by the data source
+    brls::Box* infoBox = nullptr;
+    brls::Label* titleLabel = nullptr;
+    brls::Label* subtitleLabel = nullptr;
+    brls::Label* readLabel = nullptr;
+    brls::Button* dlBtn = nullptr;
+    brls::Image* dlIcon = nullptr;
+    brls::Label* dlLabel = nullptr;
+    brls::Image* xButtonIcon = nullptr;
+
+    // Track which chapter this cell currently represents
+    int chapterIndex = -1;
+    int rowIndex = -1;
+};
+
+// Data source for the chapter RecyclerFrame
+class ChaptersDataSource : public brls::RecyclerDataSource {
+public:
+    ChaptersDataSource(MangaDetailView* view);
+
+    int numberOfSections(brls::RecyclerFrame* recycler) override;
+    int numberOfRows(brls::RecyclerFrame* recycler, int section) override;
+    brls::RecyclerCell* cellForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override;
+    void didSelectRowAt(brls::RecyclerFrame* recycler, brls::IndexPath indexPath) override;
+    float heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override;
+
+private:
+    MangaDetailView* m_view;
+
+    void bindCell(ChapterCell* cell, int row);
+    void applyDownloadState(ChapterCell* cell, int dlState, const Chapter& chapter);
+};
+
 class MangaDetailView : public brls::Box {
 public:
     MangaDetailView(const Manga& manga);
@@ -26,6 +70,16 @@ public:
     // Override to refresh chapter data when returning from reader
     void willAppear(bool resetState) override;
     void willDisappear(bool resetState) override;
+
+    // Public accessors for ChaptersDataSource
+    const std::vector<Chapter>& getSortedFilteredChapters() const { return m_sortedFilteredChapters; }
+    const Manga& getManga() const { return m_manga; }
+    void onChapterSelected(const Chapter& chapter);
+    void downloadChapter(const Chapter& chapter);
+    void deleteChapterDownload(const Chapter& chapter);
+    brls::Image* getCurrentFocusedIcon() const { return m_currentFocusedIcon; }
+    void setCurrentFocusedIcon(brls::Image* icon) { m_currentFocusedIcon = icon; }
+    int getDownloadStateForRow(int row) const;
 
 private:
     void loadDetails();
@@ -62,13 +116,8 @@ private:
 
     // Chapter list display
     void populateChaptersList();
-    void createChapterRow(const Chapter& chapter);
-    void buildNextChapterBatch();
     void setupChapterNavigation();
-    void onChapterSelected(const Chapter& chapter);
     void markChapterRead(const Chapter& chapter);
-    void downloadChapter(const Chapter& chapter);
-    void deleteChapterDownload(const Chapter& chapter);
 
     // Tracking
     void showTrackingDialog();
@@ -108,9 +157,9 @@ private:
     brls::Button* m_libraryButton = nullptr;
     brls::Button* m_trackingButton = nullptr;
 
-    // Chapters list
-    brls::ScrollingFrame* m_chaptersScroll = nullptr;
-    brls::Box* m_chaptersBox = nullptr;
+    // Chapters list (RecyclerFrame - only creates visible rows)
+    brls::RecyclerFrame* m_chaptersRecycler = nullptr;
+    ChaptersDataSource* m_chaptersDataSource = nullptr;
     brls::Label* m_chaptersLabel = nullptr;
 
     // Chapter sort/filter
@@ -135,10 +184,12 @@ private:
     // Currently visible chapter action icon (shown on focused row)
     brls::Image* m_currentFocusedIcon = nullptr;
 
-    // Incremental chapter building state (prevents 30-40s freeze on large chapter lists)
+    // Sorted/filtered chapter data for RecyclerFrame
     std::vector<Chapter> m_sortedFilteredChapters;
-    int m_chapterBuildIndex = 0;
-    bool m_chapterBuildActive = false;
+    std::vector<int> m_chapterDlStates;  // snapshot of download state per filtered chapter
+
+    // Track first appearance to avoid duplicate chapter loading
+    bool m_firstAppearance = true;
 
     // Description expand/collapse
     bool m_descriptionExpanded = false;
@@ -162,17 +213,11 @@ private:
     std::atomic<bool> m_progressCallbackActive{false};
     std::shared_ptr<bool> m_alive;
 
-    // Cached chapter download state for incremental UI updates
-    struct ChapterDownloadUI {
-        int chapterIndex;
-        brls::Button* dlBtn = nullptr;
-        brls::Image* dlIcon = nullptr;    // Icon for state display
-        brls::Label* dlLabel = nullptr;   // Label for x/x progress text
-        int cachedState = -1;       // LocalDownloadState as int, -1 = not local
-        int cachedPercent = -1;     // Downloaded pages count
-    };
-    std::vector<ChapterDownloadUI> m_chapterDlElements;
-    void updateChapterDownloadStates();  // Update download buttons in-place
+    // Update visible chapter cells' download states in-place
+    void updateChapterDownloadStates();
+
+    // Friend for data source access
+    friend class ChaptersDataSource;
 };
 
 // Alias for backward compatibility
