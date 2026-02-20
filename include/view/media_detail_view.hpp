@@ -55,7 +55,7 @@ private:
     MangaDetailView* m_view;
 
     void bindCell(ChapterCell* cell, int row);
-    void applyDownloadState(ChapterCell* cell, int dlState, const Chapter& chapter);
+    void applyDownloadState(ChapterCell* cell, int dlState, int downloadedPages, int pageCount, const Chapter& chapter);
 };
 
 class MangaDetailView : public brls::Box {
@@ -80,6 +80,7 @@ public:
     brls::Image* getCurrentFocusedIcon() const { return m_currentFocusedIcon; }
     void setCurrentFocusedIcon(brls::Image* icon) { m_currentFocusedIcon = icon; }
     int getDownloadStateForRow(int row) const;
+    std::pair<int,int> getDownloadProgressForRow(int row) const;
 
 private:
     void loadDetails();
@@ -187,6 +188,7 @@ private:
     // Sorted/filtered chapter data for RecyclerFrame
     std::vector<Chapter> m_sortedFilteredChapters;
     std::vector<int> m_chapterDlStates;  // snapshot of download state per filtered chapter
+    std::vector<std::pair<int,int>> m_chapterDlProgress;  // {downloadedPages, pageCount} per chapter
 
     // Track first appearance to avoid duplicate chapter loading
     bool m_firstAppearance = true;
@@ -213,11 +215,8 @@ private:
     std::atomic<bool> m_progressCallbackActive{false};
     std::shared_ptr<bool> m_alive;
 
-    // Update visible chapter cells' download states in-place
+    // Refresh download state snapshot and rebind visible cells
     void updateChapterDownloadStates();
-
-    // Lightweight: update only download icons on visible cells (no reloadData)
-    void refreshVisibleDownloadIcons();
 
     // Friend for data source access
     friend class ChaptersDataSource;
