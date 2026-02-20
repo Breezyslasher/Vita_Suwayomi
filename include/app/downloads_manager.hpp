@@ -188,6 +188,9 @@ public:
     int getTotalDownloadedChapters() const;
     int64_t getTotalDownloadSize() const;
 
+    // Wait for the download thread to fully exit (call after pauseDownloads)
+    void waitForDownloadThread(int timeoutMs = 2000);
+
 private:
     DownloadsManager() = default;
     ~DownloadsManager() = default;

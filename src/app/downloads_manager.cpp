@@ -331,6 +331,21 @@ void DownloadsManager::pauseDownloads() {
     saveStateUnlocked();
 }
 
+void DownloadsManager::waitForDownloadThread(int timeoutMs) {
+    if (!m_downloadThreadActive.load()) return;
+
+    const int sleepMs = 10;
+    int elapsed = 0;
+    while (m_downloadThreadActive.load() && elapsed < timeoutMs) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
+        elapsed += sleepMs;
+    }
+
+    if (m_downloadThreadActive.load()) {
+        brls::Logger::warning("DownloadsManager: Download thread did not exit within {}ms", timeoutMs);
+    }
+}
+
 bool DownloadsManager::cancelDownload(int mangaId) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
