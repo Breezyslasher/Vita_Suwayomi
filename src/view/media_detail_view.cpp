@@ -190,9 +190,10 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         cell->readLabel->setVisibility(brls::Visibility::VISIBLE);
     }
 
-    // Download state
+    // Download state with page progress
     int dlState = m_view->getDownloadStateForRow(row);
-    applyDownloadState(cell, dlState, chapter);
+    auto dlProgress = m_view->getDownloadProgressForRow(row);
+    applyDownloadState(cell, dlState, dlProgress.first, dlProgress.second, chapter);
 
     // Focus event: show X button icon
     MangaDetailView* view = m_view;
@@ -401,7 +402,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         }, brls::PanAxis::HORIZONTAL));
 }
 
-void ChaptersDataSource::applyDownloadState(ChapterCell* cell, int dlState, const Chapter& chapter) {
+void ChaptersDataSource::applyDownloadState(ChapterCell* cell, int dlState, int downloadedPages, int pageCount, const Chapter& chapter) {
     bool isLocallyDownloaded = dlState == static_cast<int>(LocalDownloadState::COMPLETED);
     bool isLocallyDownloading = dlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
     bool isLocallyQueued = dlState == static_cast<int>(LocalDownloadState::QUEUED);
@@ -410,7 +411,11 @@ void ChaptersDataSource::applyDownloadState(ChapterCell* cell, int dlState, cons
     if (isLocallyDownloading) {
         cell->dlIcon->setVisibility(brls::Visibility::GONE);
         cell->dlLabel->setVisibility(brls::Visibility::VISIBLE);
-        cell->dlLabel->setText("...");
+        if (pageCount > 0) {
+            cell->dlLabel->setText(std::to_string(downloadedPages) + "/" + std::to_string(pageCount));
+        } else {
+            cell->dlLabel->setText("...");
+        }
         cell->dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
     } else if (isLocallyDownloaded) {
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
@@ -446,6 +451,13 @@ int MangaDetailView::getDownloadStateForRow(int row) const {
         return m_chapterDlStates[row];
     }
     return -1;
+}
+
+std::pair<int,int> MangaDetailView::getDownloadProgressForRow(int row) const {
+    if (row >= 0 && row < static_cast<int>(m_chapterDlProgress.size())) {
+        return m_chapterDlProgress[row];
+    }
+    return {0, 0};
 }
 
 MangaDetailView::MangaDetailView(const Manga& manga)
@@ -971,7 +983,7 @@ void MangaDetailView::willAppear(bool resetState) {
     m_lastProgressRefresh = std::chrono::steady_clock::now();
     DownloadsManager& dm = DownloadsManager::getInstance();
 
-    // Throttled progress callback - refresh only download icons during active downloads
+    // Throttled progress callback - update download icons in-place (no focus loss)
     dm.setProgressCallback([this](int downloadedPages, int totalPages) {
         if (!m_progressCallbackActive.load()) return;
         auto now = std::chrono::steady_clock::now();
@@ -1475,17 +1487,23 @@ void MangaDetailView::updateChapterDownloadStates() {
     std::unique_lock<std::mutex> dlLock;
     auto* dlChapters = dm.getChapterDownloads(m_manga.id, dlLock);
 
+    // Ensure progress vector is same size as states vector
+    m_chapterDlProgress.resize(m_chapterDlStates.size(), {0, 0});
+
     for (size_t i = 0; i < m_sortedFilteredChapters.size(); i++) {
         DownloadedChapter* localCh = findChapterDl(dlChapters, m_sortedFilteredChapters[i].index);
         int newState = localCh ? static_cast<int>(localCh->state) : -1;
         if (i < m_chapterDlStates.size()) {
             m_chapterDlStates[i] = newState;
+            m_chapterDlProgress[i] = localCh
+                ? std::make_pair(localCh->downloadedPages, localCh->pageCount)
+                : std::make_pair(0, 0);
         }
     }
     dlLock.unlock();
 
-    // RecyclerFrame reloadData will re-bind only visible cells with fresh state.
-    // This is cheap since only ~8-10 cells exist at any time.
+    // RecyclerFrame reloadData re-binds only visible cells with fresh state.
+    // Only ~8-10 cells exist at any time so this is cheap.
     m_chaptersRecycler->reloadData();
 }
 
@@ -1494,62 +1512,75 @@ void MangaDetailView::refreshVisibleDownloadIcons() {
     if (!m_chaptersRecycler) return;
     if (m_sortedFilteredChapters.empty()) return;
 
-    // Refresh the download state snapshot
+    // Refresh the download state + progress snapshot
     DownloadsManager& dm = DownloadsManager::getInstance();
     std::unique_lock<std::mutex> dlLock;
     auto* dlChapters = dm.getChapterDownloads(m_manga.id, dlLock);
 
+    m_chapterDlProgress.resize(m_chapterDlStates.size(), {0, 0});
     for (size_t i = 0; i < m_sortedFilteredChapters.size(); i++) {
         DownloadedChapter* localCh = findChapterDl(dlChapters, m_sortedFilteredChapters[i].index);
         int newState = localCh ? static_cast<int>(localCh->state) : -1;
         if (i < m_chapterDlStates.size()) {
             m_chapterDlStates[i] = newState;
+            m_chapterDlProgress[i] = localCh
+                ? std::make_pair(localCh->downloadedPages, localCh->pageCount)
+                : std::make_pair(0, 0);
         }
     }
     dlLock.unlock();
 
-    // Update only the download icon/label/button on visible cells
-    for (auto* child : m_chaptersRecycler->getChildren()) {
-        ChapterCell* cell = dynamic_cast<ChapterCell*>(child);
-        if (!cell || cell->rowIndex < 0) continue;
-        int row = cell->rowIndex;
-        if (row >= static_cast<int>(m_chapterDlStates.size())) continue;
-        if (row >= static_cast<int>(m_sortedFilteredChapters.size())) continue;
+    // Navigate RecyclerFrame hierarchy: RecyclerFrame -> contentBox -> ChapterCells
+    // RecyclerFrame's direct children include its internal contentBox.
+    // The contentBox's children are the actual visible ChapterCell instances.
+    for (auto* container : m_chaptersRecycler->getChildren()) {
+        brls::Box* contentBox = dynamic_cast<brls::Box*>(container);
+        if (!contentBox) continue;
+        for (auto* cellView : contentBox->getChildren()) {
+            ChapterCell* cell = dynamic_cast<ChapterCell*>(cellView);
+            if (!cell || cell->rowIndex < 0) continue;
+            int row = cell->rowIndex;
+            if (row >= static_cast<int>(m_chapterDlStates.size())) continue;
+            if (row >= static_cast<int>(m_sortedFilteredChapters.size())) continue;
 
-        int dlState = m_chapterDlStates[row];
-        const Chapter& chapter = m_sortedFilteredChapters[row];
+            int dlState = m_chapterDlStates[row];
+            auto progress = m_chapterDlProgress[row];
 
-        // Update icon state directly (same logic as applyDownloadState)
-        bool isDownloaded = dlState == static_cast<int>(LocalDownloadState::COMPLETED);
-        bool isDownloading = dlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
-        bool isQueued = dlState == static_cast<int>(LocalDownloadState::QUEUED);
-        bool isFailed = dlState == static_cast<int>(LocalDownloadState::FAILED);
+            bool isDownloaded = dlState == static_cast<int>(LocalDownloadState::COMPLETED);
+            bool isDownloading = dlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
+            bool isQueued = dlState == static_cast<int>(LocalDownloadState::QUEUED);
+            bool isFailed = dlState == static_cast<int>(LocalDownloadState::FAILED);
 
-        if (isDownloading) {
-            cell->dlIcon->setVisibility(brls::Visibility::GONE);
-            cell->dlLabel->setVisibility(brls::Visibility::VISIBLE);
-            cell->dlLabel->setText("...");
-            cell->dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
-        } else if (isDownloaded) {
-            cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-            cell->dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
-            cell->dlLabel->setVisibility(brls::Visibility::GONE);
-            cell->dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));
-        } else if (isQueued) {
-            cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-            cell->dlIcon->setImageFromFile("app0:resources/icons/refresh.png");
-            cell->dlLabel->setVisibility(brls::Visibility::GONE);
-            cell->dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));
-        } else if (isFailed) {
-            cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-            cell->dlIcon->setImageFromFile("app0:resources/icons/cross.png");
-            cell->dlLabel->setVisibility(brls::Visibility::GONE);
-            cell->dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));
-        } else {
-            cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-            cell->dlIcon->setImageFromFile("app0:resources/icons/download.png");
-            cell->dlLabel->setVisibility(brls::Visibility::GONE);
-            cell->dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+            if (isDownloading) {
+                cell->dlIcon->setVisibility(brls::Visibility::GONE);
+                cell->dlLabel->setVisibility(brls::Visibility::VISIBLE);
+                if (progress.second > 0) {
+                    cell->dlLabel->setText(std::to_string(progress.first) + "/" + std::to_string(progress.second));
+                } else {
+                    cell->dlLabel->setText("...");
+                }
+                cell->dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
+            } else if (isDownloaded) {
+                cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
+                cell->dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
+                cell->dlLabel->setVisibility(brls::Visibility::GONE);
+                cell->dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));
+            } else if (isQueued) {
+                cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
+                cell->dlIcon->setImageFromFile("app0:resources/icons/refresh.png");
+                cell->dlLabel->setVisibility(brls::Visibility::GONE);
+                cell->dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));
+            } else if (isFailed) {
+                cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
+                cell->dlIcon->setImageFromFile("app0:resources/icons/cross.png");
+                cell->dlLabel->setVisibility(brls::Visibility::GONE);
+                cell->dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));
+            } else {
+                cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
+                cell->dlIcon->setImageFromFile("app0:resources/icons/download.png");
+                cell->dlLabel->setVisibility(brls::Visibility::GONE);
+                cell->dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+            }
         }
     }
 }
@@ -1559,6 +1590,7 @@ void MangaDetailView::populateChaptersList() {
 
     m_sortedFilteredChapters.clear();
     m_chapterDlStates.clear();
+    m_chapterDlProgress.clear();
 
     // Sort chapters
     std::vector<Chapter> sortedChapters = m_chapters;
@@ -1596,6 +1628,9 @@ void MangaDetailView::populateChaptersList() {
         if (!m_filterScanlator.empty() && chapter.scanlator != m_filterScanlator) continue;
         m_sortedFilteredChapters.push_back(chapter);
         m_chapterDlStates.push_back(localCh ? static_cast<int>(localCh->state) : -1);
+        m_chapterDlProgress.push_back(localCh
+            ? std::make_pair(localCh->downloadedPages, localCh->pageCount)
+            : std::make_pair(0, 0));
     }
     dlLock.unlock();
 
