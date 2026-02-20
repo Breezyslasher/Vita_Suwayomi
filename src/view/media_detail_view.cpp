@@ -76,8 +76,9 @@ ChapterCell::ChapterCell() {
     readLabel->setVisibility(brls::Visibility::GONE);
     statusBox->addView(readLabel);
 
-    // Download button
-    dlBtn = new brls::Button();
+    // Download button (Box instead of Button to avoid Button's internal XML
+    // layout which adds padding and an internal Label that hides our children)
+    dlBtn = new brls::Box();
     dlBtn->setWidth(40);
     dlBtn->setHeight(36);
     dlBtn->setCornerRadius(18);
