@@ -427,8 +427,16 @@ void DownloadsTab::refreshQueue() {
 
         if (!client.fetchDownloadQueue(queue)) {
             brls::sync([this]() {
+                // Check if focus is inside server queue BEFORE destroying views
+                brls::View* currentFocus = brls::Application::getCurrentFocus();
+                bool focusInServerQueue = false;
+                for (const auto& elem : m_serverRowElements) {
+                    if (elem.row == currentFocus) { focusInServerQueue = true; break; }
+                }
+
                 // Hide entire section on fetch failure or empty
                 m_queueSection->setVisibility(brls::Visibility::GONE);
+                m_currentFocusedIcon = nullptr;
                 m_lastServerQueue.clear();
                 m_serverRowElements.clear();
                 while (m_queueContainer->getChildren().size() > 0) {
@@ -444,8 +452,13 @@ void DownloadsTab::refreshQueue() {
                     m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
                 }
 
-                if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
-                    brls::Application::giveFocus(m_startStopBtn);
+                // Transfer focus if it was inside the destroyed server queue
+                if (focusInServerQueue) {
+                    if (!m_localRowElements.empty() && m_localRowElements[0].row) {
+                        brls::Application::giveFocus(m_localRowElements[0].row);
+                    } else if (m_startStopBtn) {
+                        brls::Application::giveFocus(m_startStopBtn);
+                    }
                 }
             });
             return;
@@ -489,14 +502,32 @@ void DownloadsTab::refreshQueue() {
                     m_downloadStatusLabel->setText("• Downloading");
                     m_downloadStatusLabel->setTextColor(nvgRGBA(100, 200, 100, 255));
                 } else {
-                    m_downloadStatusLabel->setText("• Stopped");
-                    m_downloadStatusLabel->setTextColor(nvgRGBA(200, 150, 100, 255));
+                    // Check for error states in server queue
+                    bool hasError = false;
+                    for (const auto& item : queue) {
+                        if (item.state == DownloadState::ERROR) { hasError = true; break; }
+                    }
+                    if (hasError) {
+                        m_downloadStatusLabel->setText("• Error");
+                        m_downloadStatusLabel->setTextColor(nvgRGBA(200, 100, 100, 255));
+                    } else {
+                        m_downloadStatusLabel->setText("• Stopped");
+                        m_downloadStatusLabel->setTextColor(nvgRGBA(200, 150, 100, 255));
+                    }
                 }
             }
 
             // Handle empty queue
             if (queue.empty()) {
+                // Check if focus is inside server queue BEFORE destroying views
+                brls::View* currentFocus = brls::Application::getCurrentFocus();
+                bool focusInServerQueue = false;
+                for (const auto& elem : m_serverRowElements) {
+                    if (elem.row == currentFocus) { focusInServerQueue = true; break; }
+                }
+
                 m_queueSection->setVisibility(brls::Visibility::GONE);
+                m_currentFocusedIcon = nullptr;
                 m_lastServerQueue.clear();
                 m_serverRowElements.clear();
                 while (m_queueContainer->getChildren().size() > 0) {
@@ -508,8 +539,13 @@ void DownloadsTab::refreshQueue() {
                 }
                 // Update navigation routes (may now point to local queue)
                 updateNavigationRoutes();
-                if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
-                    brls::Application::giveFocus(m_startStopBtn);
+                // Transfer focus if it was inside the destroyed server queue
+                if (focusInServerQueue) {
+                    if (!m_localRowElements.empty() && m_localRowElements[0].row) {
+                        brls::Application::giveFocus(m_localRowElements[0].row);
+                    } else if (m_startStopBtn) {
+                        brls::Application::giveFocus(m_startStopBtn);
+                    }
                 }
                 return;
             }
@@ -547,12 +583,14 @@ void DownloadsTab::refreshQueue() {
                                 progressLabel->setTextColor(nvgRGBA(255, 255, 255, 255));
                             } else if (newItem.state == static_cast<int>(DownloadState::DOWNLOADED)) {
                                 progressText = "Done";
+                                progressLabel->setTextColor(nvgRGBA(100, 180, 220, 255));
                             } else if (newItem.state == static_cast<int>(DownloadState::ERROR)) {
                                 progressText = "Error";
                                 progressLabel->setTextColor(nvgRGBA(200, 100, 100, 255));
                             } else {
                                 progressText = std::to_string(newItem.downloadedPages) + "/" +
                                                std::to_string(newItem.pageCount);
+                                progressLabel->setTextColor(nvgRGBA(255, 255, 255, 255));
                             }
                             progressLabel->setText(progressText);
 
@@ -562,6 +600,8 @@ void DownloadsTab::refreshQueue() {
                                     m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(30, 60, 30, 200));
                                 } else if (newItem.state == static_cast<int>(DownloadState::ERROR)) {
                                     m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(60, 30, 30, 200));
+                                } else if (newItem.state == static_cast<int>(DownloadState::DOWNLOADED)) {
+                                    m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(30, 50, 60, 200));
                                 } else {
                                     m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
                                 }
@@ -633,6 +673,16 @@ void DownloadsTab::refreshQueue() {
                 }
             } else {
                 // Order changed: full rebuild needed to update currentIndex in actions
+                // Save focus state before destroying views
+                brls::View* currentFocus = brls::Application::getCurrentFocus();
+                int focusedIdx = -1;
+                for (size_t i = 0; i < m_serverRowElements.size(); i++) {
+                    if (m_serverRowElements[i].row == currentFocus) {
+                        focusedIdx = static_cast<int>(i);
+                        break;
+                    }
+                }
+
                 m_serverRowElements.clear();
                 while (m_queueContainer->getChildren().size() > 0) {
                     m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
@@ -646,6 +696,14 @@ void DownloadsTab::refreshQueue() {
                                   item.downloadedPages, item.pageCount,
                                   static_cast<int>(item.state),
                                   queueIndex++, totalQueueSize);
+                }
+
+                // Restore focus to same index position after rebuild
+                if (focusedIdx >= 0 && !m_serverRowElements.empty()) {
+                    int newIdx = std::min(focusedIdx, static_cast<int>(m_serverRowElements.size()) - 1);
+                    if (m_serverRowElements[newIdx].row) {
+                        brls::Application::giveFocus(m_serverRowElements[newIdx].row);
+                    }
                 }
             }
 
@@ -697,7 +755,15 @@ void DownloadsTab::refreshLocalDownloads() {
 
     // Handle empty state
     if (newItems.empty()) {
+        // Check if focus is inside local queue BEFORE destroying views
+        brls::View* currentFocus = brls::Application::getCurrentFocus();
+        bool focusInLocalQueue = false;
+        for (const auto& elem : m_localRowElements) {
+            if (elem.row == currentFocus) { focusInLocalQueue = true; break; }
+        }
+
         // Clear all items
+        m_currentFocusedIcon = nullptr;
         m_localRowElements.clear();
         m_lastLocalQueue.clear();
         while (m_localContainer && m_localContainer->getChildren().size() > 0) {
@@ -718,9 +784,13 @@ void DownloadsTab::refreshLocalDownloads() {
             m_downloadStatusLabel->setText("");
         }
 
-        // Transfer focus
-        if (m_startStopBtn && brls::Application::getCurrentFocus() == nullptr) {
-            brls::Application::giveFocus(m_startStopBtn);
+        // Transfer focus if it was inside the destroyed local queue
+        if (focusInLocalQueue) {
+            if (!m_serverRowElements.empty() && m_serverRowElements.back().row) {
+                brls::Application::giveFocus(m_serverRowElements.back().row);
+            } else if (m_startStopBtn) {
+                brls::Application::giveFocus(m_startStopBtn);
+            }
         }
         return;
     }
@@ -1322,9 +1392,11 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
 
     NVGcolor originalBgColor;
     if (state == static_cast<int>(DownloadState::DOWNLOADING)) {
-        originalBgColor = nvgRGBA(30, 60, 30, 200);
+        originalBgColor = nvgRGBA(30, 60, 30, 200);  // Green tint for active
     } else if (state == static_cast<int>(DownloadState::ERROR)) {
-        originalBgColor = nvgRGBA(60, 30, 30, 200);
+        originalBgColor = nvgRGBA(60, 30, 30, 200);  // Red tint for error
+    } else if (state == static_cast<int>(DownloadState::DOWNLOADED)) {
+        originalBgColor = nvgRGBA(30, 50, 60, 200);  // Blue tint for done
     } else {
         originalBgColor = nvgRGBA(40, 40, 40, 200);
     }
@@ -1366,16 +1438,19 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     if (state == static_cast<int>(DownloadState::DOWNLOADING)) {
         progressText = std::to_string(downloadedPages) + "/" +
                        std::to_string(pageCount) + " pages";
-        progressLabel->setTextColor(nvgRGBA(100, 200, 100, 255));
+        progressLabel->setTextColor(nvgRGBA(100, 200, 100, 255));  // Green
     } else if (state == static_cast<int>(DownloadState::QUEUED)) {
         progressText = "Queued";
+        progressLabel->setTextColor(nvgRGBA(255, 255, 255, 255));  // White
     } else if (state == static_cast<int>(DownloadState::DOWNLOADED)) {
         progressText = "Done";
+        progressLabel->setTextColor(nvgRGBA(100, 180, 220, 255));  // Light blue
     } else if (state == static_cast<int>(DownloadState::ERROR)) {
         progressText = "Error";
-        progressLabel->setTextColor(nvgRGBA(200, 100, 100, 255));
+        progressLabel->setTextColor(nvgRGBA(200, 100, 100, 255));  // Red
     } else {
         progressText = std::to_string(downloadedPages) + "/" + std::to_string(pageCount);
+        progressLabel->setTextColor(nvgRGBA(255, 255, 255, 255));
     }
     progressLabel->setText(progressText);
     outProgressLabel = progressLabel;
