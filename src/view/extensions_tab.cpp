@@ -111,65 +111,50 @@ void ExtensionCell::prepareForReuse() {
 }
 
 brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::View* currentView) {
-    // Check if the settings button is visible
     bool settingsVisible = settingsBtn->getVisibility() == brls::Visibility::VISIBLE;
 
-    // If pressing RIGHT and settings button is visible, go to settings button
-    if (direction == brls::FocusDirection::RIGHT && settingsVisible) {
-        // If focus is on the cell itself, move to settings button
-        if (currentView == this) {
-            s_preferSettingsFocus = true;
-            return settingsBtn;
-        }
+    // currentView != this means focus is inside the cell (on the settings button side),
+    // because settingsBtn is the only other focusable child. Borealis passes the
+    // direct child (rightBox) as currentView, not settingsBtn itself.
+    bool focusOnSettings = settingsVisible && (currentView != this);
+
+    // RIGHT on cell: move to settings button
+    if (direction == brls::FocusDirection::RIGHT && settingsVisible && currentView == this) {
+        s_preferSettingsFocus = true;
+        return settingsBtn;
     }
 
-    // If pressing LEFT and currently on settings button, go back to parent item (cell)
-    if (direction == brls::FocusDirection::LEFT && currentView == settingsBtn) {
+    // LEFT from settings: go back to extension cell
+    if (direction == brls::FocusDirection::LEFT && focusOnSettings) {
         s_preferSettingsFocus = false;
-        // Delegate to parent for proper navigation back
-        if (hasParent()) {
-            return getParent()->getNextFocus(direction, this);
-        }
         return this;
     }
 
-    // If pressing UP or DOWN while on settings button, skip to next/previous settings button
+    // UP/DOWN from settings: skip to next/prev row that has a settings icon
     if ((direction == brls::FocusDirection::UP || direction == brls::FocusDirection::DOWN) &&
-        currentView == settingsBtn) {
+        focusOnSettings) {
         s_preferSettingsFocus = true;
 
-        // Try to find the next row with a settings button
         if (s_dataSource && s_recycler && rowIndex >= 0) {
             bool searchDown = (direction == brls::FocusDirection::DOWN);
             int targetRow = s_dataSource->findNextSettingsRow(rowIndex, searchDown);
 
             if (targetRow >= 0 && targetRow != rowIndex) {
-                // Navigate to the target row
-                brls::IndexPath targetPath(0, targetRow);
-                s_recycler->selectRowAt(targetPath, false);
+                // Scroll to make the target row visible
+                s_recycler->selectRowAt(brls::IndexPath(0, targetRow), false);
 
-                // After selectRowAt, we need to find the cell and return its settings button
-                // Use sync to defer focus setting after the recycler has updated
-                brls::sync([targetRow]() {
-                    // The cell should now be visible, find it and focus on settings button
+                // After layout, getDefaultFocus will return the target cell's
+                // settings button (because s_preferSettingsFocus is true)
+                brls::sync([]() {
                     if (s_recycler) {
-                        // Get focus on the selected row's settings button via getDefaultFocus
-                        brls::View* focused = brls::Application::getCurrentFocus();
-                        if (focused) {
-                            ExtensionCell* cell = dynamic_cast<ExtensionCell*>(focused);
-                            if (!cell) {
-                                // Focus might be on the cell, check parent
-                                cell = dynamic_cast<ExtensionCell*>(focused->getParent());
-                            }
-                            if (cell && cell->settingsBtn->getVisibility() == brls::Visibility::VISIBLE) {
-                                brls::Application::giveFocus(cell->settingsBtn);
-                            }
+                        brls::View* target = s_recycler->getDefaultFocus();
+                        if (target) {
+                            brls::Application::giveFocus(target);
                         }
                     }
                 });
 
-                // Return current view to prevent default navigation
-                // The deferred sync will handle the actual focus change
+                // Hold focus on current settings button until sync fires
                 return settingsBtn;
             }
         }
@@ -178,7 +163,7 @@ brls::View* ExtensionCell::getNextFocus(brls::FocusDirection direction, brls::Vi
         return settingsBtn;
     }
 
-    // Default behavior for other cases
+    // Default behavior
     return brls::RecyclerCell::getNextFocus(direction, currentView);
 }
 
