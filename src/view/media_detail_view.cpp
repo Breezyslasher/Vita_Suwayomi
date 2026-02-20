@@ -911,36 +911,35 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     rightPanel->addView(chaptersHeader);
 
     // Chapters list (RecyclerFrame - only creates visible rows, like NOBORU)
+    // Wrap in a dedicated Box so RecyclerFrame is the sole child.
+    // RecyclerFrame::getLocalFrame() returns the Y offset within its parent;
+    // if siblings above push it to Y=250, cellsRecyclingLoop() wrongly removes
+    // top cells whose content-space positions are below that Y.  A wrapper Box
+    // keeps getLocalFrame().y == 0.
+    auto* recyclerContainer = new brls::Box();
+    recyclerContainer->setGrow(1.0f);
+
     m_chaptersRecycler = new brls::RecyclerFrame();
     m_chaptersRecycler->setGrow(1.0f);
-    m_chaptersRecycler->setPadding(0, 0, 0, 0);
     m_chaptersRecycler->estimatedRowHeight = 56;  // Match ChapterCell setHeight(56); margin is external
     m_chaptersRecycler->registerCell("chapter", ChapterCell::create);
 
     m_chaptersDataSource = new ChaptersDataSource(this);
     m_chaptersRecycler->setDataSource(m_chaptersDataSource);
 
-    rightPanel->addView(m_chaptersRecycler);
+    recyclerContainer->addView(m_chaptersRecycler);
+    rightPanel->addView(recyclerContainer);
 
     this->addView(rightPanel);
 
-    // Defer constructor icon loading to next frame to unblock view creation.
-    // These 7 synchronous file reads + texture uploads add ~200-400ms on Vita.
-    {
-        std::weak_ptr<bool> iconAlive = m_alive;
-        brls::sync([this, iconAlive, selectIcon, rButtonIcon, yButtonIcon,
-                    filterIcon, startButtonIcon, menuIcon]() {
-            auto alive = iconAlive.lock();
-            if (!alive || !*alive) return;
-            selectIcon->setImageFromFile("app0:resources/images/select_button.png");
-            rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
-            updateSortIcon();
-            yButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
-            filterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
-            startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
-            menuIcon->setImageFromFile("app0:resources/icons/menu.png");
-        });
-    }
+    // Load button icons immediately (avoids blank→loaded flash)
+    selectIcon->setImageFromFile("app0:resources/images/select_button.png");
+    rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
+    updateSortIcon();
+    yButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    filterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
+    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
+    menuIcon->setImageFromFile("app0:resources/icons/menu.png");
 
     // Load full details
     loadDetails();
@@ -1067,29 +1066,30 @@ void MangaDetailView::loadDetails() {
         // Description missing: use combined query to fetch manga details + chapters in one request
         // This saves a network round-trip vs fetching them separately
         brls::Logger::info("MangaDetailView: Using combined query for details + chapters");
-        asyncRun([this]() {
+        int combinedMangaId = m_manga.id;
+        asyncRun([this, combinedMangaId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             Manga updatedManga;
             std::vector<Chapter> chapters;
 
-            if (client.fetchMangaWithChapters(m_manga.id, updatedManga, chapters)) {
+            if (client.fetchMangaWithChapters(combinedMangaId, updatedManga, chapters)) {
                 brls::Logger::info("MangaDetailView: Combined query got manga details + {} chapters", chapters.size());
 
                 // Sync local offline progress with server chapters
                 {
                     DownloadsManager& dm = DownloadsManager::getInstance();
                     for (auto& ch : chapters) {
-                        DownloadedChapter* dlCh = dm.getChapterDownload(m_manga.id, ch.id);
-                        if (!dlCh) dlCh = dm.getChapterDownload(m_manga.id, ch.index);
+                        DownloadedChapter* dlCh = dm.getChapterDownload(combinedMangaId, ch.id);
+                        if (!dlCh) dlCh = dm.getChapterDownload(combinedMangaId, ch.index);
                         if (dlCh && dlCh->lastPageRead > 0 && dlCh->lastPageRead > ch.lastPageRead) {
                             int id = ch.id > 0 ? ch.id : ch.index;
-                            client.updateChapterProgress(m_manga.id, id, dlCh->lastPageRead);
+                            client.updateChapterProgress(combinedMangaId, id, dlCh->lastPageRead);
                             ch.lastPageRead = dlCh->lastPageRead;
                             if (dlCh->lastReadTime > 0) {
                                 ch.lastReadAt = static_cast<int64_t>(dlCh->lastReadTime) * 1000;
                             }
                             if (dlCh->pageCount > 0 && dlCh->lastPageRead >= dlCh->pageCount - 1) {
-                                client.markChapterRead(m_manga.id, id);
+                                client.markChapterRead(combinedMangaId, id);
                                 ch.read = true;
                             }
                         }
@@ -1112,8 +1112,7 @@ void MangaDetailView::loadDetails() {
                     }
                 }
 
-                brls::sync([this, updatedManga, chapters, chaptersToDownload,
-                            aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                brls::sync([this, updatedManga, chapters, chaptersToDownload, aliveWeak]() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
 
@@ -1191,22 +1190,12 @@ void MangaDetailView::loadDetails() {
                             std::to_string(chaptersToDownload.size()) + " new chapters");
                     }
 
-                    // Defer populateChaptersList to the next frame so the layout
-                    // settles after the UI label changes above (description, genres,
-                    // etc.).  RecyclerFrame::reloadData() reads getLocalFrame() to
-                    // decide how many cells to create; calling it in the same frame
-                    // as the label updates uses stale dimensions and causes cells to
-                    // be recycled incorrectly, making chapters disappear.
-                    brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-                        auto alive = aliveWeak.lock();
-                        if (!alive || !*alive) return;
-                        populateChaptersList();
-                    });
+                    populateChaptersList();
                 });
             } else {
                 // Combined query failed - fall back to separate fetches
                 brls::Logger::warning("MangaDetailView: Combined query failed, using separate fetches");
-                brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                brls::sync([this, aliveWeak]() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
                     loadChapters();
@@ -1214,8 +1203,8 @@ void MangaDetailView::loadDetails() {
 
                 // Also try fetching manga details separately
                 Manga fallbackManga;
-                if (client.fetchManga(m_manga.id, fallbackManga)) {
-                    brls::sync([this, fallbackManga, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                if (client.fetchManga(combinedMangaId, fallbackManga)) {
+                    brls::sync([this, fallbackManga, aliveWeak]() {
                         auto alive = aliveWeak.lock();
                         if (!alive || !*alive) return;
                         bool needsUpdate = false;
@@ -1300,7 +1289,7 @@ void MangaDetailView::loadChapters() {
     }
 
     int mangaId = m_manga.id;
-    asyncRun([this, mangaId]() {
+    asyncRun([this, mangaId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Chapter> chapters;
 
@@ -1361,7 +1350,7 @@ void MangaDetailView::loadChapters() {
                 }
             }
 
-            brls::sync([this, chapters, chaptersToDownload, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            brls::sync([this, chapters, chaptersToDownload, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) {
                     return;
@@ -1585,12 +1574,16 @@ void MangaDetailView::showMangaMenu() {
 
             switch (actionId) {
                 case 0:  // Download all
-                    brls::sync([this]() {
+                    brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         downloadAllChapters();
                     });
                     break;
                 case 1:  // Download unread
-                    brls::sync([this]() {
+                    brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         downloadUnreadChapters();
                     });
                     break;
@@ -1683,12 +1676,16 @@ void MangaDetailView::showMangaMenu() {
                     break;
                 }
                 case 3:  // Cancel downloading chapters
-                    brls::sync([this]() {
+                    brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         cancelAllDownloading();
                     });
                     break;
                 case 4:  // Reset cover
-                    brls::sync([this]() {
+                    brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         resetCover();
                     });
                     break;
@@ -1834,10 +1831,11 @@ void MangaDetailView::onAddToLibrary() {
     brls::Logger::info("MangaDetailView: Adding to library with category selection");
 
     // First add to library, then show category picker
-    asyncRun([this]() {
+    int mangaId = m_manga.id;
+    asyncRun([this, mangaId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        if (!client.addMangaToLibrary(m_manga.id)) {
+        if (!client.addMangaToLibrary(mangaId)) {
             brls::sync([]() {
                 brls::Application::notify("Failed to add to library");
             });
@@ -1848,7 +1846,10 @@ void MangaDetailView::onAddToLibrary() {
         std::vector<Category> categories;
         client.fetchCategories(categories);
 
-        brls::sync([this, categories]() {
+        brls::sync([this, categories, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
             m_manga.inLibrary = true;
 
             // Track addition for immediate library UI update
@@ -1872,17 +1873,20 @@ void MangaDetailView::onAddToLibrary() {
                     options.push_back(cat.name);
                 }
 
+                int mangaId = m_manga.id;
                 brls::Dropdown* dropdown = new brls::Dropdown(
                     "Select Category", options,
-                    [this](int selected) {
+                    [this, mangaId, aliveWeak](int selected) {
                         if (selected < 0 || selected >= static_cast<int>(m_categories.size())) return;
 
                         int categoryId = m_categories[selected].id;
-                        brls::sync([this, categoryId]() {
-                            asyncRun([this, categoryId]() {
+                        brls::sync([mangaId, categoryId, aliveWeak]() {
+                            auto alive = aliveWeak.lock();
+                            if (!alive || !*alive) return;
+                            asyncRun([mangaId, categoryId]() {
                                 SuwayomiClient& client = SuwayomiClient::getInstance();
-                                if (client.setMangaCategories(m_manga.id, {categoryId})) {
-                                    brls::sync([this]() {
+                                if (client.setMangaCategories(mangaId, {categoryId})) {
+                                    brls::sync([]() {
                                         brls::Application::notify("Added to library");
                                     });
                                 } else {
@@ -1904,11 +1908,14 @@ void MangaDetailView::onAddToLibrary() {
 void MangaDetailView::onRemoveFromLibrary() {
     brls::Logger::info("MangaDetailView: Removing from library");
 
-    asyncRun([this]() {
+    int mangaId = m_manga.id;
+    asyncRun([this, mangaId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        if (client.removeMangaFromLibrary(m_manga.id)) {
-            brls::sync([this]() {
+        if (client.removeMangaFromLibrary(mangaId)) {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 m_manga.inLibrary = false;
                 if (m_libraryButton) {
                     m_libraryButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
@@ -2257,18 +2264,22 @@ void MangaDetailView::deleteAllDownloads() {
 void MangaDetailView::markAllRead() {
     brls::Logger::info("MangaDetailView: Marking all chapters as read");
 
-    asyncRun([this]() {
+    // Copy data before async to avoid accessing member variables on background thread
+    int mangaId = m_manga.id;
+    std::vector<int> chapterIndexes;
+    for (const auto& ch : m_chapters) {
+        if (!ch.read) {
+            chapterIndexes.push_back(ch.index);
+        }
+    }
+
+    asyncRun([this, mangaId, chapterIndexes, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        std::vector<int> chapterIndexes;
-        for (const auto& ch : m_chapters) {
-            if (!ch.read) {
-                chapterIndexes.push_back(ch.index);
-            }
-        }
-
-        if (client.markChaptersRead(m_manga.id, chapterIndexes)) {
-            brls::sync([this]() {
+        if (client.markChaptersRead(mangaId, chapterIndexes)) {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Marked all as read");
                 loadChapters();  // Refresh
             });
@@ -2279,18 +2290,22 @@ void MangaDetailView::markAllRead() {
 void MangaDetailView::markAllUnread() {
     brls::Logger::info("MangaDetailView: Marking all chapters as unread");
 
-    asyncRun([this]() {
+    // Copy data before async to avoid accessing member variables on background thread
+    int mangaId = m_manga.id;
+    std::vector<int> chapterIndexes;
+    for (const auto& ch : m_chapters) {
+        if (ch.read) {
+            chapterIndexes.push_back(ch.index);
+        }
+    }
+
+    asyncRun([this, mangaId, chapterIndexes, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-        std::vector<int> chapterIndexes;
-        for (const auto& ch : m_chapters) {
-            if (ch.read) {
-                chapterIndexes.push_back(ch.index);
-            }
-        }
-
-        if (client.markChaptersUnread(m_manga.id, chapterIndexes)) {
-            brls::sync([this]() {
+        if (client.markChaptersUnread(mangaId, chapterIndexes)) {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Marked all as unread");
                 loadChapters();  // Refresh
             });
@@ -2354,7 +2369,9 @@ void MangaDetailView::showChapterMenu(const Chapter& chapter) {
 
             switch (actionId) {
                 case 0:  // Read
-                    brls::sync([this, chapter]() {
+                    brls::sync([this, chapter, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         onChapterSelected(chapter);
                     });
                     break;
@@ -2377,11 +2394,15 @@ void MangaDetailView::showChapterMenu(const Chapter& chapter) {
                     break;
                 case 2:  // Download/Delete
                     if (isDownloaded) {
-                        brls::sync([this, chapter]() {
+                        brls::sync([this, chapter, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                            auto alive = aliveWeak.lock();
+                            if (!alive || !*alive) return;
                             deleteChapterDownload(chapter);
                         });
                     } else {
-                        brls::sync([this, chapter]() {
+                        brls::sync([this, chapter, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                            auto alive = aliveWeak.lock();
+                            if (!alive || !*alive) return;
                             downloadChapter(chapter);
                         });
                     }
@@ -2416,7 +2437,8 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
     // Get download mode setting
     DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
 
-    asyncRun([this, mangaId, chapterId, chapterIndex, mangaTitle, chapterName, downloadMode]() {
+    asyncRun([this, mangaId, chapterId, chapterIndex, mangaTitle, chapterName, downloadMode,
+              aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         bool serverQueued = false;
         bool localQueued = false;
 
@@ -2437,7 +2459,9 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
             }
         }
 
-        brls::sync([this, downloadMode, serverQueued, localQueued]() {
+        brls::sync([this, downloadMode, serverQueued, localQueued, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             if (serverQueued || localQueued) {
                 std::string msg = "Queued";
                 if (serverQueued) msg += " server";
@@ -2466,7 +2490,8 @@ void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
     DownloadsManager& dm = DownloadsManager::getInstance();
     bool localDownloaded = dm.isChapterDownloaded(mangaId, chapterIndex);
 
-    asyncRun([this, mangaId, chapterId, chapterIndex, downloadMode, serverDownloaded, localDownloaded]() {
+    asyncRun([this, mangaId, chapterId, chapterIndex, downloadMode, serverDownloaded, localDownloaded,
+              aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         int serverDeleted = 0;
         int localDeleted = 0;
 
@@ -2490,7 +2515,9 @@ void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
             }
         }
 
-        brls::sync([this, downloadMode, serverDeleted, localDeleted]() {
+        brls::sync([this, downloadMode, serverDeleted, localDeleted, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             if (serverDeleted > 0 || localDeleted > 0) {
                 std::string msg = "Deleted";
                 if (serverDeleted > 0) msg += " server";
@@ -2507,12 +2534,15 @@ void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
 }
 
 void MangaDetailView::showCategoryDialog() {
-    asyncRun([this]() {
+    asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Category> categories;
         client.fetchCategories(categories);
 
-        brls::sync([this, categories]() {
+        brls::sync([this, categories, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
             if (categories.empty()) {
                 brls::Application::notify("No categories found");
                 return;
@@ -2524,16 +2554,19 @@ void MangaDetailView::showCategoryDialog() {
                 options.push_back(cat.name);
             }
 
+            int mangaId = m_manga.id;
             brls::Dropdown* dropdown = new brls::Dropdown(
                 "Move to Category", options,
-                [this](int selected) {
+                [this, mangaId, aliveWeak](int selected) {
                     if (selected < 0 || selected >= static_cast<int>(m_categories.size())) return;
 
                     int categoryId = m_categories[selected].id;
-                    brls::sync([this, categoryId]() {
-                        asyncRun([this, categoryId]() {
+                    brls::sync([mangaId, categoryId, aliveWeak]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
+                        asyncRun([mangaId, categoryId]() {
                             SuwayomiClient& client = SuwayomiClient::getInstance();
-                            if (client.setMangaCategories(m_manga.id, {categoryId})) {
+                            if (client.setMangaCategories(mangaId, {categoryId})) {
                                 brls::sync([]() {
                                     brls::Application::notify("Category updated");
                                 });
@@ -2555,7 +2588,7 @@ void MangaDetailView::showTrackingDialog() {
 
     // Load tracking data asynchronously
     int mangaId = m_manga.id;
-    asyncRun([this, mangaId]() {
+    asyncRun([this, mangaId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         std::vector<Tracker> trackers;
@@ -2564,7 +2597,10 @@ void MangaDetailView::showTrackingDialog() {
         bool trackersOk = client.fetchTrackers(trackers);
         bool recordsOk = client.fetchMangaTracking(mangaId, records);
 
-        brls::sync([this, trackers, records, trackersOk, recordsOk]() {
+        brls::sync([this, trackers, records, trackersOk, recordsOk, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
             if (!trackersOk) {
                 brls::Application::notify("Failed to load trackers");
                 return;
@@ -2659,7 +2695,9 @@ void MangaDetailView::showTrackingDialog() {
                     TrackRecord selectedRecord = capturedRecords[selected];
                     bool hasRecord = hasRecords[selected];
 
-                    brls::sync([this, selectedTracker, selectedRecord, hasRecord]() {
+                    brls::sync([this, selectedTracker, selectedRecord, hasRecord, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         if (hasRecord && selectedRecord.id > 0) {
                             showTrackEditDialog(selectedRecord, selectedTracker);
                         } else {
@@ -2693,7 +2731,7 @@ void MangaDetailView::showTrackerSearchDialog(const Tracker& tracker, const std:
 
     brls::Application::notify("Searching " + trackerName + "...");
 
-    asyncRun([this, trackerId, mangaId, searchQuery, trackerName]() {
+    asyncRun([this, trackerId, mangaId, searchQuery, trackerName, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<TrackSearchResult> results;
 
@@ -2704,7 +2742,10 @@ void MangaDetailView::showTrackerSearchDialog(const Tracker& tracker, const std:
             return;
         }
 
-        brls::sync([this, results, trackerId, mangaId, trackerName]() {
+        brls::sync([this, results, trackerId, mangaId, trackerName, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
             if (results.empty()) {
                 brls::Application::notify("No results found on " + trackerName);
                 return;
@@ -2714,15 +2755,17 @@ void MangaDetailView::showTrackerSearchDialog(const Tracker& tracker, const std:
             auto* searchView = new TrackingSearchView(trackerName, trackerId, mangaId, results);
 
             // Set callback to update tracking button when result is selected
-            searchView->setOnResultSelected([this, trackerId, mangaId, trackerName](const TrackSearchResult& result) {
+            searchView->setOnResultSelected([this, trackerId, mangaId, trackerName, aliveWeak](const TrackSearchResult& result) {
                 brls::Application::notify("Adding to " + trackerName + "...");
 
                 int64_t remoteId = result.remoteId;
-                asyncRun([this, trackerId, mangaId, remoteId, trackerName]() {
+                asyncRun([this, trackerId, mangaId, remoteId, trackerName, aliveWeak]() {
                     SuwayomiClient& client = SuwayomiClient::getInstance();
 
                     if (client.bindTracker(mangaId, trackerId, remoteId)) {
-                        brls::sync([this, trackerName]() {
+                        brls::sync([this, trackerName, aliveWeak]() {
+                            auto alive = aliveWeak.lock();
+                            if (!alive || !*alive) return;
                             brls::Application::notify("Added to " + trackerName);
                             updateTrackingButtonText();
                             brls::Application::popActivity();
@@ -2781,7 +2824,9 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
 
             switch (selected) {
                 case 0: {  // Status
-                    brls::sync([this, recordId, statuses, trackerName]() {
+                    brls::sync([this, recordId, statuses, trackerName, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         brls::Dropdown* statusDropdown = new brls::Dropdown(
                             "Select Status", statuses,
                             [this, recordId, trackerName](int sel) {
@@ -2804,7 +2849,9 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                     break;
                 }
                 case 1: {  // Chapter
-                    brls::sync([this, recordId, currentChapter, trackerName]() {
+                    brls::sync([this, recordId, currentChapter, trackerName, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         std::string defaultValue = std::to_string(static_cast<int>(currentChapter));
                         brls::Application::getImeManager()->openForText([recordId, trackerName](std::string text) {
                             if (text.empty()) return;
@@ -2835,7 +2882,9 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                     break;
                 }
                 case 2: {  // Score
-                    brls::sync([this, recordId, scores, currentScore, trackerName]() {
+                    brls::sync([this, recordId, scores, currentScore, trackerName, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         std::vector<std::string> scoreOptions = scores;
                         scoreOptions.push_back("Custom...");
                         brls::Dropdown* scoreDropdown = new brls::Dropdown(
@@ -2882,7 +2931,9 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                     break;
                 }
                 case 3: {  // Start Date
-                    brls::sync([this, recordId, currentStartDate, trackerName]() {
+                    brls::sync([this, recordId, currentStartDate, trackerName, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         std::vector<std::string> dateOptions = {"Set to Today", "Clear"};
                         brls::Dropdown* dateDropdown = new brls::Dropdown(
                             "Set Start Date", dateOptions,
@@ -2922,7 +2973,9 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                     break;
                 }
                 case 4: {  // Finish Date
-                    brls::sync([this, recordId, currentFinishDate, trackerName]() {
+                    brls::sync([this, recordId, currentFinishDate, trackerName, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         std::vector<std::string> dateOptions = {"Set to Today", "Clear"};
                         brls::Dropdown* dateDropdown = new brls::Dropdown(
                             "Set Finish Date", dateOptions,
@@ -2962,7 +3015,9 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                     break;
                 }
                 case 5: {  // Remove Tracking
-                    brls::sync([this, recordId, trackerName]() {
+                    brls::sync([this, recordId, trackerName, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
                         // Show removal options
                         std::vector<std::string> removeOptions = {
                             "Remove from app only",
@@ -2985,23 +3040,23 @@ void MangaDetailView::showTrackEditDialog(const TrackRecord& record, const Track
                                     "Remove from " + trackerName + "?\n\n" + message);
                                 confirmDialog->setCancelable(false);
 
-                                confirmDialog->addButton("Remove", [this, confirmDialog, recordId, trackerName, deleteRemote]() {
+                                confirmDialog->addButton("Remove", [this, confirmDialog, recordId, trackerName, deleteRemote,
+                                                                        aliveWeak = std::weak_ptr<bool>(m_alive)]() {
                                     confirmDialog->close();
 
-                                    asyncRun([this, recordId, trackerName, deleteRemote]() {
+                                    asyncRun([this, recordId, trackerName, deleteRemote, aliveWeak]() {
                                         SuwayomiClient& client = SuwayomiClient::getInstance();
 
                                         if (client.unbindTracker(recordId, deleteRemote)) {
-                                            // Remove from local tracking list immediately
-                                            auto it = std::find_if(m_trackRecords.begin(), m_trackRecords.end(),
-                                                [recordId](const TrackRecord& r) { return r.id == recordId; });
-                                            if (it != m_trackRecords.end()) {
-                                                brls::sync([this, it]() {
+                                            brls::sync([this, recordId, trackerName, deleteRemote, aliveWeak]() {
+                                                auto alive = aliveWeak.lock();
+                                                if (!alive || !*alive) return;
+                                                // Remove from local tracking list on main thread
+                                                auto it = std::find_if(m_trackRecords.begin(), m_trackRecords.end(),
+                                                    [recordId](const TrackRecord& r) { return r.id == recordId; });
+                                                if (it != m_trackRecords.end()) {
                                                     m_trackRecords.erase(it);
-                                                });
-                                            }
-
-                                            brls::sync([this, trackerName, deleteRemote]() {
+                                                }
                                                 std::string msg = deleteRemote
                                                     ? "Removed from " + trackerName + " and app"
                                                     : "Removed from app (kept on " + trackerName + ")";
@@ -3044,12 +3099,14 @@ void MangaDetailView::loadTrackingData() {
     if (!Application::getInstance().isConnected()) return;
 
     int mangaId = m_manga.id;
-    asyncRun([this, mangaId]() {
+    asyncRun([this, mangaId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<TrackRecord> records;
 
         if (client.fetchMangaTracking(mangaId, records)) {
-            brls::sync([this, records]() {
+            brls::sync([this, records, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 m_trackRecords = records;
                 updateTrackingButtonText();
             });
@@ -3217,12 +3274,13 @@ void MangaDetailView::cancelAllDownloading() {
 void MangaDetailView::resetCover() {
     brls::Logger::info("MangaDetailView: Resetting cover for manga {}", m_manga.id);
 
-    asyncRun([this]() {
+    int mangaId = m_manga.id;
+    asyncRun([this, mangaId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         DownloadsManager& dm = DownloadsManager::getInstance();
         dm.init();
 
         // Get the manga download item to find and delete local cover
-        DownloadItem* mangaDl = dm.getMangaDownload(m_manga.id);
+        DownloadItem* mangaDl = dm.getMangaDownload(mangaId);
         if (mangaDl && !mangaDl->localCoverPath.empty()) {
             // Delete the local cover file
             brls::Logger::info("MangaDetailView: Deleting local cover at {}", mangaDl->localCoverPath);
@@ -3233,9 +3291,11 @@ void MangaDetailView::resetCover() {
 
         // Re-download cover from server
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        std::string coverUrl = client.getMangaThumbnailUrl(m_manga.id);
+        std::string coverUrl = client.getMangaThumbnailUrl(mangaId);
 
-        brls::sync([this, coverUrl]() {
+        brls::sync([this, coverUrl, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             brls::Application::notify("Refreshing cover...");
 
             // Reload cover image from server
@@ -3313,11 +3373,13 @@ void MangaDetailView::markSelectedRead() {
     }
 
     int mangaId = m_manga.id;
-    asyncRun([this, mangaId, chapterIndexes]() {
+    asyncRun([this, mangaId, chapterIndexes, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         if (client.markChaptersRead(mangaId, chapterIndexes)) {
-            brls::sync([this, count = chapterIndexes.size()]() {
+            brls::sync([this, count = chapterIndexes.size(), aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Marked " + std::to_string(count) + " chapters as read");
                 clearSelection();
                 loadChapters();
@@ -3348,11 +3410,13 @@ void MangaDetailView::markSelectedUnread() {
     }
 
     int mangaId = m_manga.id;
-    asyncRun([this, mangaId, chapterIndexes]() {
+    asyncRun([this, mangaId, chapterIndexes, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         if (client.markChaptersUnread(mangaId, chapterIndexes)) {
-            brls::sync([this, count = chapterIndexes.size()]() {
+            brls::sync([this, count = chapterIndexes.size(), aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Marked " + std::to_string(count) + " chapters as unread");
                 clearSelection();
                 loadChapters();
