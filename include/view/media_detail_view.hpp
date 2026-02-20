@@ -216,6 +216,9 @@ private:
     // Update visible chapter cells' download states in-place
     void updateChapterDownloadStates();
 
+    // Lightweight: update only download icons on visible cells (no reloadData)
+    void refreshVisibleDownloadIcons();
+
     // Friend for data source access
     friend class ChaptersDataSource;
 };
