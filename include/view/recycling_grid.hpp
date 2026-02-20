@@ -69,6 +69,9 @@ public:
     // Load thumbnails around a specific cell index (called on focus change)
     void loadThumbnailsNearIndex(int index);
 
+    // Override draw to check scroll position and load visible thumbnails
+    void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) override;
+
     static brls::View* create();
 
 private:
@@ -76,6 +79,7 @@ private:
     void createRowRange(int startRow, int endRow);  // Create rows [startRow, endRow)
     void buildNextRowBatch();  // Continue incremental grid building
     void updateVisibleCells();
+    void loadThumbnailsForScrollPosition();  // Scroll-position-based thumbnail loading
     void onItemClicked(int index);
 
     std::vector<Manga> m_items;
@@ -114,6 +118,7 @@ private:
     int m_visibleStartRow = 0;
     int m_lastScrollY = 0;
     bool m_needsUpdate = false;
+    float m_lastScrollLoadY = 0.0f;  // Last scroll Y where we triggered thumbnail loading
 
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;

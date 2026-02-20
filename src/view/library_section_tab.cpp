@@ -15,7 +15,10 @@
 #include "utils/image_loader.hpp"
 #include "utils/library_cache.hpp"
 #include "view/migrate_search_view.hpp"
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <set>
 #include <thread>
 
@@ -584,27 +587,57 @@ void LibrarySectionTab::loadCategories() {
             brls::Logger::info("LibrarySectionTab: Combined query got {} categories + {} manga",
                               categories.size(), prefetchedManga.size());
             usedCombinedQuery = true;
-        } else if (client.fetchCategories(categories)) {
-            // Fallback to categories-only fetch
-            brls::Logger::info("LibrarySectionTab: Got {} categories from server (separate fetch)", categories.size());
         } else {
-            brls::Logger::warning("LibrarySectionTab: Failed to fetch categories from server");
+            // Combined query failed - fetch categories and default category manga in parallel
+            // This saves a full network round-trip compared to sequential fallback
+            brls::Logger::info("LibrarySectionTab: Combined query failed, fetching categories + manga in parallel");
+            std::vector<Category> parallelCategories;
+            std::vector<Manga> parallelManga;
+            std::atomic<bool> categoriesOk{false};
+            std::atomic<bool> mangaOk{false};
 
-            // Mark connection as lost to prevent cascading retries
-            Application::getInstance().setConnected(false);
-
-            brls::sync([this, aliveWeak]() {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-
-                if (!m_categoriesLoaded) {
-                    m_categoriesLoaded = true;
-                    createCategoryTabs();
-                    selectCategory(0);
-                }
-                m_combinedQueryCategoryId = -1;
+            // Thread 1: fetch categories
+            std::thread catThread([&]() {
+                SuwayomiClient& catClient = SuwayomiClient::getInstance();
+                categoriesOk.store(catClient.fetchCategories(parallelCategories));
             });
-            return;
+
+            // Thread 2: fetch default category manga (runs simultaneously)
+            std::thread mangaThread([&]() {
+                SuwayomiClient& mangaClient = SuwayomiClient::getInstance();
+                mangaOk.store(mangaClient.fetchCategoryManga(prefetchCategoryId, parallelManga));
+            });
+
+            catThread.join();
+            mangaThread.join();
+
+            if (categoriesOk.load()) {
+                categories = std::move(parallelCategories);
+                brls::Logger::info("LibrarySectionTab: Parallel fetch got {} categories", categories.size());
+                if (mangaOk.load()) {
+                    prefetchedManga = std::move(parallelManga);
+                    usedCombinedQuery = true;  // Treat as combined since we have both
+                    brls::Logger::info("LibrarySectionTab: Parallel fetch also got {} manga", prefetchedManga.size());
+                }
+            } else {
+                brls::Logger::warning("LibrarySectionTab: Failed to fetch categories from server");
+
+                // Mark connection as lost to prevent cascading retries
+                Application::getInstance().setConnected(false);
+
+                brls::sync([this, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+
+                    if (!m_categoriesLoaded) {
+                        m_categoriesLoaded = true;
+                        createCategoryTabs();
+                        selectCategory(0);
+                    }
+                    m_combinedQueryCategoryId = -1;
+                });
+                return;
+            }
         }
 
         // Sort categories by order
