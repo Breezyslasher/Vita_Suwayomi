@@ -539,56 +539,9 @@ void MangaDetailView::willAppear(bool resetState) {
     // Restore alive flag (cleared by willDisappear to cancel in-flight async ops)
     *m_alive = true;
 
-    // Register progress callback for live download updates
-    m_progressCallbackActive.store(true);
-    m_lastProgressRefresh = std::chrono::steady_clock::now();
-
-    std::weak_ptr<bool> aliveWeak = m_alive;
-    int mangaId = m_manga.id;
-
-    DownloadsManager& dm = DownloadsManager::getInstance();
-
-    dm.setProgressCallback([this, aliveWeak, mangaId](int downloadedPages, int totalPages) {
-        auto alive = aliveWeak.lock();
-        if (!alive || !*alive || !m_progressCallbackActive.load()) {
-            return;
-        }
-
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            now - m_lastProgressRefresh).count();
-
-        // Update every 200ms for smooth progress, or immediately for completion
-        const int PROGRESS_INTERVAL_MS = 200;
-        if (elapsed >= PROGRESS_INTERVAL_MS || downloadedPages == totalPages) {
-            m_lastProgressRefresh = now;
-            brls::sync([this, aliveWeak]() {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive || !m_progressCallbackActive.load()) {
-                    return;
-                }
-                updateChapterDownloadStates();
-            });
-        }
-    });
-
-    dm.setChapterCompletionCallback([this, aliveWeak, mangaId](int completedMangaId, int chapterIndex, bool success) {
-        auto alive = aliveWeak.lock();
-        if (!alive || !*alive || !m_progressCallbackActive.load()) {
-            return;
-        }
-
-        // Only refresh if the completed chapter belongs to this manga
-        if (completedMangaId == mangaId) {
-            brls::sync([this, aliveWeak]() {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive || !m_progressCallbackActive.load()) {
-                    return;
-                }
-                updateChapterDownloadStates();
-            });
-        }
-    });
+    // Live download progress updates disabled - too expensive on Vita.
+    // Download states are refreshed on view re-entry instead.
+    m_progressCallbackActive.store(false);
 
     // On first appearance, chapters are loaded via loadDetails() (called from constructor).
     // Skip loadChapters() here to avoid duplicate network requests and UI rebuilds.
@@ -1131,15 +1084,15 @@ void MangaDetailView::populateChaptersList() {
         m_sortedFilteredChapters.push_back(chapter);
     }
 
-    // Build all chapter rows at once, passing cached download state
-    for (int i = 0; i < static_cast<int>(m_sortedFilteredChapters.size()); i++) {
-        auto it = dlMap.find(m_sortedFilteredChapters[i].index);
-        DownloadedChapter* localCh = (it != dlMap.end()) ? it->second : nullptr;
-        createChapterRow(m_sortedFilteredChapters[i], localCh);
-    }
-    setupChapterNavigation();
+    // Cache download map for incremental batch building
+    m_chapterDlMap = std::move(dlMap);
 
-    brls::Logger::debug("MangaDetailView: Built {} chapters",
+    // Build chapters incrementally (15 per frame) to avoid 30s UI freeze on Vita
+    m_chapterBuildIndex = 0;
+    m_chapterBuildActive = true;
+    buildNextChapterBatch();
+
+    brls::Logger::debug("MangaDetailView: Started incremental build of {} chapters",
                         m_sortedFilteredChapters.size());
 }
 
@@ -1490,18 +1443,21 @@ void MangaDetailView::createChapterRow(const Chapter& chapter, DownloadedChapter
 void MangaDetailView::buildNextChapterBatch() {
     if (!m_chapterBuildActive) return;
 
-    // Build 10 chapter rows per frame to keep UI responsive
-    int batchSize = 10;
+    // Build 15 chapter rows per frame to keep UI responsive on Vita (444MHz ARM).
+    // 300 chapters / 15 per frame = 20 frames ~= 0.7s at 30fps
+    int batchSize = 15;
     int end = std::min(m_chapterBuildIndex + batchSize,
                        static_cast<int>(m_sortedFilteredChapters.size()));
 
     for (int i = m_chapterBuildIndex; i < end; i++) {
-        createChapterRow(m_sortedFilteredChapters[i]);
+        auto it = m_chapterDlMap.find(m_sortedFilteredChapters[i].index);
+        DownloadedChapter* localCh = (it != m_chapterDlMap.end()) ? it->second : nullptr;
+        createChapterRow(m_sortedFilteredChapters[i], localCh);
     }
     m_chapterBuildIndex = end;
 
     if (m_chapterBuildIndex < static_cast<int>(m_sortedFilteredChapters.size())) {
-        // More chapters to build - schedule next batch
+        // More chapters to build - schedule next batch on next frame
         std::weak_ptr<bool> aliveWeak = m_alive;
         brls::sync([this, aliveWeak]() {
             auto alive = aliveWeak.lock();
@@ -1509,8 +1465,9 @@ void MangaDetailView::buildNextChapterBatch() {
             buildNextChapterBatch();
         });
     } else {
-        // All chapters built - set up navigation
+        // All chapters built - set up navigation and free the map
         m_chapterBuildActive = false;
+        m_chapterDlMap.clear();
         setupChapterNavigation();
         brls::Logger::debug("MangaDetailView: Chapter build complete - {} rows",
                             m_sortedFilteredChapters.size());

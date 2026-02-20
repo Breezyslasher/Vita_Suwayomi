@@ -7,6 +7,7 @@
 
 #include <borealis.hpp>
 #include <set>
+#include <unordered_map>
 #include <chrono>
 #include <atomic>
 #include <memory>
@@ -137,8 +138,9 @@ private:
     // Currently visible chapter action icon (shown on focused row)
     brls::Image* m_currentFocusedIcon = nullptr;
 
-    // Chapter building state
+    // Incremental chapter building state
     std::vector<Chapter> m_sortedFilteredChapters;
+    std::unordered_map<int, DownloadedChapter*> m_chapterDlMap;  // cached for batch use
     int m_chapterBuildIndex = 0;
     bool m_chapterBuildActive = false;
 
