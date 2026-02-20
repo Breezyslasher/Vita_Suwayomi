@@ -246,10 +246,17 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     });
 
     // Download button click
-    cell->dlBtn->registerClickAction([view, capturedChapter, isLocallyDownloaded, dlState](brls::View*) {
-        if (isLocallyDownloaded) {
+    cell->dlBtn->registerClickAction([view, capturedChapter, isLocallyDownloaded, isLocallyQueued,
+                                       isLocallyDownloading, mangaId, chapterIdx, dlState](brls::View*) {
+        if (isLocallyQueued || isLocallyDownloading) {
+            DownloadsManager& dm = DownloadsManager::getInstance();
+            if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
+                brls::Application::notify("Removed from queue");
+                view->updateChapterDownloadStates();
+            }
+        } else if (isLocallyDownloaded) {
             view->deleteChapterDownload(capturedChapter);
-        } else if (dlState == static_cast<int>(LocalDownloadState::FAILED) || dlState == -1) {
+        } else {
             view->downloadChapter(capturedChapter);
         }
         return true;
@@ -959,9 +966,37 @@ void MangaDetailView::willAppear(bool resetState) {
     // Restore alive flag (cleared by willDisappear to cancel in-flight async ops)
     *m_alive = true;
 
-    // Live download progress updates disabled - too expensive on Vita.
-    // Download states are refreshed on view re-entry instead.
-    m_progressCallbackActive.store(false);
+    // Register live download callbacks for chapter icon updates
+    m_progressCallbackActive.store(true);
+    m_lastProgressRefresh = std::chrono::steady_clock::now();
+    DownloadsManager& dm = DownloadsManager::getInstance();
+
+    // Throttled progress callback - refresh only download icons during active downloads
+    dm.setProgressCallback([this](int downloadedPages, int totalPages) {
+        if (!m_progressCallbackActive.load()) return;
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - m_lastProgressRefresh).count();
+        // Throttle to every 2 seconds to keep it lightweight on Vita
+        if (elapsed >= 2000 || downloadedPages == totalPages) {
+            m_lastProgressRefresh = now;
+            brls::sync([this]() {
+                if (!m_progressCallbackActive.load()) return;
+                if (!m_alive || !*m_alive) return;
+                refreshVisibleDownloadIcons();
+            });
+        }
+    });
+
+    // Chapter completion callback - immediate icon refresh when a chapter finishes
+    dm.setChapterCompletionCallback([this](int mangaId, int chapterIndex, bool success) {
+        if (!m_progressCallbackActive.load()) return;
+        brls::sync([this]() {
+            if (!m_progressCallbackActive.load()) return;
+            if (!m_alive || !*m_alive) return;
+            refreshVisibleDownloadIcons();
+        });
+    });
 
     // On first appearance, chapters are loaded via loadDetails() (called from constructor).
     // Skip loadChapters() here to avoid duplicate network requests and UI rebuilds.
@@ -1096,19 +1131,39 @@ void MangaDetailView::loadDetails() {
                     }
                 }
 
-                // Handle auto-download
+                // Handle auto-download (respects downloadMode setting)
                 bool autoDownload = Application::getInstance().getSettings().autoDownloadChapters;
+                DownloadMode autoDownloadMode = Application::getInstance().getSettings().downloadMode;
                 std::vector<int> chaptersToDownload;
                 if (autoDownload) {
+                    DownloadsManager& localMgr = DownloadsManager::getInstance();
                     for (const auto& ch : chapters) {
-                        if (!ch.read && !ch.downloaded) {
+                        if (!ch.read && !ch.downloaded &&
+                            !localMgr.isChapterDownloaded(combinedMangaId, ch.index)) {
                             chaptersToDownload.push_back(ch.id);
                         }
                     }
                     if (!chaptersToDownload.empty()) {
                         brls::Logger::info("MangaDetailView: autoDownloadChapters - queuing {} unread chapters",
                                           chaptersToDownload.size());
-                        client.queueChapterDownloads(chaptersToDownload);
+                        if (autoDownloadMode == DownloadMode::SERVER_ONLY || autoDownloadMode == DownloadMode::BOTH) {
+                            client.queueChapterDownloads(chaptersToDownload);
+                            client.startDownloads();
+                        }
+                        if (autoDownloadMode == DownloadMode::LOCAL_ONLY || autoDownloadMode == DownloadMode::BOTH) {
+                            std::vector<std::pair<int, int>> localPairs;
+                            for (const auto& ch : chapters) {
+                                if (!ch.read && !ch.downloaded &&
+                                    !localMgr.isChapterDownloaded(combinedMangaId, ch.index)) {
+                                    localPairs.emplace_back(ch.id, ch.index);
+                                }
+                            }
+                            if (!localPairs.empty()) {
+                                std::string mangaTitle = updatedManga.title.empty() ? "" : updatedManga.title;
+                                localMgr.queueChaptersDownload(combinedMangaId, localPairs, mangaTitle);
+                                localMgr.startDownloads();
+                            }
+                        }
                     }
                 }
 
@@ -1330,14 +1385,17 @@ void MangaDetailView::loadChapters() {
                 brls::Logger::info("MangaDetailView: Synced {} chapters with local offline progress", syncedCount);
             }
 
-            // Check if autoDownloadChapters is enabled
+            // Check if autoDownloadChapters is enabled (respects downloadMode setting)
             bool autoDownload = Application::getInstance().getSettings().autoDownloadChapters;
+            DownloadMode autoDownloadMode = Application::getInstance().getSettings().downloadMode;
             std::vector<int> chaptersToDownload;
 
             if (autoDownload) {
+                DownloadsManager& localMgr = DownloadsManager::getInstance();
                 // Find unread chapters that are not yet downloaded
                 for (const auto& ch : chapters) {
-                    if (!ch.read && !ch.downloaded) {
+                    if (!ch.read && !ch.downloaded &&
+                        !localMgr.isChapterDownloaded(mangaId, ch.index)) {
                         chaptersToDownload.push_back(ch.id);
                     }
                 }
@@ -1346,7 +1404,23 @@ void MangaDetailView::loadChapters() {
                 if (!chaptersToDownload.empty()) {
                     brls::Logger::info("MangaDetailView: autoDownloadChapters - queuing {} unread chapters",
                                       chaptersToDownload.size());
-                    client.queueChapterDownloads(chaptersToDownload);
+                    if (autoDownloadMode == DownloadMode::SERVER_ONLY || autoDownloadMode == DownloadMode::BOTH) {
+                        client.queueChapterDownloads(chaptersToDownload);
+                        client.startDownloads();
+                    }
+                    if (autoDownloadMode == DownloadMode::LOCAL_ONLY || autoDownloadMode == DownloadMode::BOTH) {
+                        std::vector<std::pair<int, int>> localPairs;
+                        for (const auto& ch : chapters) {
+                            if (!ch.read && !ch.downloaded &&
+                                !localMgr.isChapterDownloaded(mangaId, ch.index)) {
+                                localPairs.emplace_back(ch.id, ch.index);
+                            }
+                        }
+                        if (!localPairs.empty()) {
+                            localMgr.queueChaptersDownload(mangaId, localPairs, m_manga.title);
+                            localMgr.startDownloads();
+                        }
+                    }
                 }
             }
 
@@ -1413,6 +1487,71 @@ void MangaDetailView::updateChapterDownloadStates() {
     // RecyclerFrame reloadData will re-bind only visible cells with fresh state.
     // This is cheap since only ~8-10 cells exist at any time.
     m_chaptersRecycler->reloadData();
+}
+
+void MangaDetailView::refreshVisibleDownloadIcons() {
+    if (!m_alive || !*m_alive) return;
+    if (!m_chaptersRecycler) return;
+    if (m_sortedFilteredChapters.empty()) return;
+
+    // Refresh the download state snapshot
+    DownloadsManager& dm = DownloadsManager::getInstance();
+    std::unique_lock<std::mutex> dlLock;
+    auto* dlChapters = dm.getChapterDownloads(m_manga.id, dlLock);
+
+    for (size_t i = 0; i < m_sortedFilteredChapters.size(); i++) {
+        DownloadedChapter* localCh = findChapterDl(dlChapters, m_sortedFilteredChapters[i].index);
+        int newState = localCh ? static_cast<int>(localCh->state) : -1;
+        if (i < m_chapterDlStates.size()) {
+            m_chapterDlStates[i] = newState;
+        }
+    }
+    dlLock.unlock();
+
+    // Update only the download icon/label/button on visible cells
+    for (auto* child : m_chaptersRecycler->getChildren()) {
+        ChapterCell* cell = dynamic_cast<ChapterCell*>(child);
+        if (!cell || cell->rowIndex < 0) continue;
+        int row = cell->rowIndex;
+        if (row >= static_cast<int>(m_chapterDlStates.size())) continue;
+        if (row >= static_cast<int>(m_sortedFilteredChapters.size())) continue;
+
+        int dlState = m_chapterDlStates[row];
+        const Chapter& chapter = m_sortedFilteredChapters[row];
+
+        // Update icon state directly (same logic as applyDownloadState)
+        bool isDownloaded = dlState == static_cast<int>(LocalDownloadState::COMPLETED);
+        bool isDownloading = dlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
+        bool isQueued = dlState == static_cast<int>(LocalDownloadState::QUEUED);
+        bool isFailed = dlState == static_cast<int>(LocalDownloadState::FAILED);
+
+        if (isDownloading) {
+            cell->dlIcon->setVisibility(brls::Visibility::GONE);
+            cell->dlLabel->setVisibility(brls::Visibility::VISIBLE);
+            cell->dlLabel->setText("...");
+            cell->dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
+        } else if (isDownloaded) {
+            cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
+            cell->dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
+            cell->dlLabel->setVisibility(brls::Visibility::GONE);
+            cell->dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));
+        } else if (isQueued) {
+            cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
+            cell->dlIcon->setImageFromFile("app0:resources/icons/refresh.png");
+            cell->dlLabel->setVisibility(brls::Visibility::GONE);
+            cell->dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));
+        } else if (isFailed) {
+            cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
+            cell->dlIcon->setImageFromFile("app0:resources/icons/cross.png");
+            cell->dlLabel->setVisibility(brls::Visibility::GONE);
+            cell->dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));
+        } else {
+            cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
+            cell->dlIcon->setImageFromFile("app0:resources/icons/download.png");
+            cell->dlLabel->setVisibility(brls::Visibility::GONE);
+            cell->dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+        }
+    }
 }
 
 void MangaDetailView::populateChaptersList() {

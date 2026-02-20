@@ -392,9 +392,6 @@ bool Application::loadSettings() {
     m_settings.downloadMode = static_cast<DownloadMode>(downloadModeInt);
     brls::Logger::info("loadSettings: downloadMode = {} (0=Server, 1=Local, 2=Both)", downloadModeInt);
     m_settings.autoDownloadChapters = extractBool("autoDownloadChapters", false);
-    m_settings.downloadOverWifiOnly = extractBool("downloadOverWifiOnly", true);
-    m_settings.maxConcurrentDownloads = extractInt("maxConcurrentDownloads");
-    if (m_settings.maxConcurrentDownloads <= 0) m_settings.maxConcurrentDownloads = 2;
     m_settings.deleteAfterRead = extractBool("deleteAfterRead", false);
     m_settings.autoResumeDownloads = extractBool("autoResumeDownloads", true);
 
@@ -780,8 +777,6 @@ bool Application::saveSettings() {
     // Download settings
     json += "  \"downloadMode\": " + std::to_string(static_cast<int>(m_settings.downloadMode)) + ",\n";
     json += "  \"autoDownloadChapters\": " + std::string(m_settings.autoDownloadChapters ? "true" : "false") + ",\n";
-    json += "  \"downloadOverWifiOnly\": " + std::string(m_settings.downloadOverWifiOnly ? "true" : "false") + ",\n";
-    json += "  \"maxConcurrentDownloads\": " + std::to_string(m_settings.maxConcurrentDownloads) + ",\n";
     json += "  \"deleteAfterRead\": " + std::string(m_settings.deleteAfterRead ? "true" : "false") + ",\n";
     json += "  \"autoResumeDownloads\": " + std::string(m_settings.autoResumeDownloads ? "true" : "false") + ",\n";
 

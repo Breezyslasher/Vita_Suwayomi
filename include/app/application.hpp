@@ -164,8 +164,6 @@ struct AppSettings {
     // Download Settings
     DownloadMode downloadMode = DownloadMode::SERVER_ONLY;  // Where to download chapters
     bool autoDownloadChapters = false;
-    bool downloadOverWifiOnly = true;
-    int maxConcurrentDownloads = 2;
     bool deleteAfterRead = false;
     bool autoResumeDownloads = true;  // Auto-resume queued downloads on app restart
 
