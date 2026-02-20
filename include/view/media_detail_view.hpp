@@ -30,7 +30,7 @@ public:
     brls::Label* titleLabel = nullptr;
     brls::Label* subtitleLabel = nullptr;
     brls::Label* readLabel = nullptr;
-    brls::Button* dlBtn = nullptr;
+    brls::Box* dlBtn = nullptr;
     brls::Image* dlIcon = nullptr;
     brls::Label* dlLabel = nullptr;
     brls::Image* xButtonIcon = nullptr;
