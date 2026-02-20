@@ -7,15 +7,12 @@
 
 #include <borealis.hpp>
 #include <set>
-#include <unordered_map>
 #include <chrono>
 #include <atomic>
 #include <memory>
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
-
-struct DownloadedChapter;
 
 class MangaDetailView : public brls::Box {
 public:
@@ -65,7 +62,7 @@ private:
 
     // Chapter list display
     void populateChaptersList();
-    void createChapterRow(const Chapter& chapter, DownloadedChapter* localCh = nullptr);
+    void createChapterRow(const Chapter& chapter, int dlState = -1);
     void buildNextChapterBatch();
     void setupChapterNavigation();
     void onChapterSelected(const Chapter& chapter);
@@ -140,7 +137,7 @@ private:
 
     // Incremental chapter building state
     std::vector<Chapter> m_sortedFilteredChapters;
-    std::unordered_map<int, DownloadedChapter*> m_chapterDlMap;  // cached for batch use
+    std::vector<int> m_chapterDlStates;  // snapshot of download state per filtered chapter
     int m_chapterBuildIndex = 0;
     bool m_chapterBuildActive = false;
 

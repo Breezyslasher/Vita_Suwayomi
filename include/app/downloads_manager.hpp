@@ -131,9 +131,10 @@ public:
     // Get a specific chapter download
     DownloadedChapter* getChapterDownload(int mangaId, int chapterIndex);
 
-    // Get all chapter downloads for a manga as a map (chapterIndex -> pointer)
-    // Single mutex lock instead of per-chapter linear scan
-    std::unordered_map<int, DownloadedChapter*> getChapterDownloadsMap(int mangaId);
+    // Get all downloaded chapters for a manga (single mutex lock, zero allocations).
+    // Returns pointer to the internal chapter vector, or nullptr if manga not found.
+    // Caller must use the returned lock_guard to keep the data valid.
+    std::vector<DownloadedChapter>* getChapterDownloads(int mangaId, std::unique_lock<std::mutex>& lock);
 
     // Check if manga/chapter is downloaded
     bool isMangaDownloaded(int mangaId) const;

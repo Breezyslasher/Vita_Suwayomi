@@ -22,6 +22,15 @@
 
 namespace vitasuwayomi {
 
+// Find a chapter in a download list by index or id (linear scan, typically <50 elements)
+static DownloadedChapter* findChapterDl(std::vector<DownloadedChapter>* chapters, int key) {
+    if (!chapters) return nullptr;
+    for (auto& ch : *chapters) {
+        if (ch.chapterIndex == key || ch.chapterId == key) return &ch;
+    }
+    return nullptr;
+}
+
 MangaDetailView::MangaDetailView(const Manga& manga)
     : m_manga(manga), m_alive(std::make_shared<bool>(true)) {
     brls::Logger::info("MangaDetailView: Creating for '{}' id={}", manga.title, manga.id);
@@ -613,10 +622,10 @@ void MangaDetailView::loadDetails() {
             if (!Application::getInstance().isConnected()) {
                 DownloadsManager& dm = DownloadsManager::getInstance();
                 dm.init();
-                auto dlMap = dm.getChapterDownloadsMap(m_manga.id);
+                std::unique_lock<std::mutex> dlLock;
+                auto* dlChapters = dm.getChapterDownloads(m_manga.id, dlLock);
                 for (auto& ch : m_chapters) {
-                    auto it = dlMap.find(ch.id);
-                    DownloadedChapter* dlCh = (it != dlMap.end()) ? it->second : nullptr;
+                    DownloadedChapter* dlCh = findChapterDl(dlChapters, ch.id);
                     if (dlCh && dlCh->lastPageRead > ch.lastPageRead) {
                         ch.lastPageRead = dlCh->lastPageRead;
                         ch.lastReadAt = static_cast<int64_t>(dlCh->lastReadTime);
@@ -834,12 +843,12 @@ void MangaDetailView::loadChapters() {
         brls::Logger::info("MangaDetailView: Offline, applying local reading progress");
         if (!m_chapters.empty()) {
             DownloadsManager& dm = DownloadsManager::getInstance();
-            auto dlMap = dm.getChapterDownloadsMap(m_manga.id);
+            std::unique_lock<std::mutex> dlLock;
+            auto* dlChapters = dm.getChapterDownloads(m_manga.id, dlLock);
             bool changed = false;
             for (auto& ch : m_chapters) {
-                auto it = dlMap.find(ch.id);
-                if (it == dlMap.end()) it = dlMap.find(ch.index);
-                DownloadedChapter* dlCh = (it != dlMap.end()) ? it->second : nullptr;
+                DownloadedChapter* dlCh = findChapterDl(dlChapters, ch.id);
+                if (!dlCh) dlCh = findChapterDl(dlChapters, ch.index);
                 if (dlCh && dlCh->lastReadTime > 0) {
                     int64_t dlReadAtMs = static_cast<int64_t>(dlCh->lastReadTime) * 1000;
                     if (dlReadAtMs > ch.lastReadAt) {
@@ -975,16 +984,16 @@ void MangaDetailView::updateChapterDownloadStates() {
     if (m_chapterDlElements.empty()) return;
     if (!m_chaptersBox) return;
 
-    // Build map once instead of per-element linear scan + mutex lock
+    // Single lock, then linear scan per element (typically <50 downloaded chapters)
     DownloadsManager& dm = DownloadsManager::getInstance();
-    auto dlMap = dm.getChapterDownloadsMap(m_manga.id);
+    std::unique_lock<std::mutex> dlLock;
+    auto* dlChapters = dm.getChapterDownloads(m_manga.id, dlLock);
 
     for (auto& elem : m_chapterDlElements) {
         // Null check: ensure button is still valid
         if (!elem.dlBtn) continue;
 
-        auto it = dlMap.find(elem.chapterIndex);
-        DownloadedChapter* localCh = (it != dlMap.end()) ? it->second : nullptr;
+        DownloadedChapter* localCh = findChapterDl(dlChapters, elem.chapterIndex);
 
         int newState = -1;  // not local
         int newPages = -1;
@@ -1061,20 +1070,22 @@ void MangaDetailView::populateChaptersList() {
                   });
     }
 
-    // Build download state map once (single mutex lock) instead of per-chapter linear scan
+    // Single lock for filtering + snapshot download states for batch building
     DownloadsManager& dmForFilter = DownloadsManager::getInstance();
-    auto dlMap = dmForFilter.getChapterDownloadsMap(m_manga.id);
+    std::unique_lock<std::mutex> dlLock;
+    auto* dlChapters = dmForFilter.getChapterDownloads(m_manga.id, dlLock);
 
     // Force downloaded filter when downloads-only mode is enabled and app is offline
     bool filterDownloaded = m_filterDownloaded ||
                             (Application::getInstance().getSettings().downloadsOnlyMode &&
                              !Application::getInstance().isConnected());
 
-    // Filter chapters into m_sortedFilteredChapters
+    // Filter chapters and snapshot their download state (int) for batch building.
+    // We can't hold the mutex across frames, so store the state value per chapter.
+    m_chapterDlStates.clear();
     for (const auto& chapter : sortedChapters) {
+        DownloadedChapter* localCh = findChapterDl(dlChapters, chapter.index);
         if (filterDownloaded) {
-            auto it = dlMap.find(chapter.index);
-            DownloadedChapter* localCh = (it != dlMap.end()) ? it->second : nullptr;
             bool isLocallyDownloaded = localCh && localCh->state == LocalDownloadState::COMPLETED;
             if (!isLocallyDownloaded) continue;
         }
@@ -1082,10 +1093,10 @@ void MangaDetailView::populateChaptersList() {
         if (m_filterBookmarked && !chapter.bookmarked) continue;
         if (!m_filterScanlator.empty() && chapter.scanlator != m_filterScanlator) continue;
         m_sortedFilteredChapters.push_back(chapter);
+        // Snapshot download state: -1 = not local, else the enum value
+        m_chapterDlStates.push_back(localCh ? static_cast<int>(localCh->state) : -1);
     }
-
-    // Cache download map for incremental batch building
-    m_chapterDlMap = std::move(dlMap);
+    dlLock.unlock();  // Release lock before batch building
 
     // Build chapters incrementally (15 per frame) to avoid 30s UI freeze on Vita
     m_chapterBuildIndex = 0;
@@ -1096,7 +1107,7 @@ void MangaDetailView::populateChaptersList() {
                         m_sortedFilteredChapters.size());
 }
 
-void MangaDetailView::createChapterRow(const Chapter& chapter, DownloadedChapter* localCh) {
+void MangaDetailView::createChapterRow(const Chapter& chapter, int dlState) {
     auto* chapterRow = new brls::Box();
     chapterRow->setAxis(brls::Axis::ROW);
     chapterRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -1163,11 +1174,11 @@ void MangaDetailView::createChapterRow(const Chapter& chapter, DownloadedChapter
     dlBtn->setJustifyContent(brls::JustifyContent::CENTER);
     dlBtn->setAlignItems(brls::AlignItems::CENTER);
 
-    // Use pre-looked-up download state (passed from populateChaptersList)
-    bool isLocallyDownloaded = localCh && localCh->state == LocalDownloadState::COMPLETED;
-    bool isLocallyDownloading = localCh && localCh->state == LocalDownloadState::DOWNLOADING;
-    bool isLocallyQueued = localCh && localCh->state == LocalDownloadState::QUEUED;
-    bool isLocallyFailed = localCh && localCh->state == LocalDownloadState::FAILED;
+    // Use snapshot download state (int): -1 = not local, else LocalDownloadState enum
+    bool isLocallyDownloaded = dlState == static_cast<int>(LocalDownloadState::COMPLETED);
+    bool isLocallyDownloading = dlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
+    bool isLocallyQueued = dlState == static_cast<int>(LocalDownloadState::QUEUED);
+    bool isLocallyFailed = dlState == static_cast<int>(LocalDownloadState::FAILED);
 
     // Create icon and progress label for this button.
     auto* dlIcon = new brls::Image();
@@ -1185,11 +1196,10 @@ void MangaDetailView::createChapterRow(const Chapter& chapter, DownloadedChapter
 
     // Set initial state - only load images for non-default states to avoid
     // N synchronous file reads for the common "not downloaded" case
-    if (isLocallyDownloading && localCh) {
+    if (isLocallyDownloading) {
         dlIcon->setVisibility(brls::Visibility::GONE);
         dlLabel->setVisibility(brls::Visibility::VISIBLE);
-        dlLabel->setText(std::to_string(localCh->downloadedPages) + "/" +
-                         std::to_string(localCh->pageCount));
+        dlLabel->setText("...");
         dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
     } else if (isLocallyDownloaded) {
         dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
@@ -1450,9 +1460,8 @@ void MangaDetailView::buildNextChapterBatch() {
                        static_cast<int>(m_sortedFilteredChapters.size()));
 
     for (int i = m_chapterBuildIndex; i < end; i++) {
-        auto it = m_chapterDlMap.find(m_sortedFilteredChapters[i].index);
-        DownloadedChapter* localCh = (it != m_chapterDlMap.end()) ? it->second : nullptr;
-        createChapterRow(m_sortedFilteredChapters[i], localCh);
+        int dlState = (i < static_cast<int>(m_chapterDlStates.size())) ? m_chapterDlStates[i] : -1;
+        createChapterRow(m_sortedFilteredChapters[i], dlState);
     }
     m_chapterBuildIndex = end;
 
@@ -1465,9 +1474,9 @@ void MangaDetailView::buildNextChapterBatch() {
             buildNextChapterBatch();
         });
     } else {
-        // All chapters built - set up navigation and free the map
+        // All chapters built - set up navigation and free state cache
         m_chapterBuildActive = false;
-        m_chapterDlMap.clear();
+        m_chapterDlStates.clear();
         setupChapterNavigation();
         brls::Logger::debug("MangaDetailView: Chapter build complete - {} rows",
                             m_sortedFilteredChapters.size());

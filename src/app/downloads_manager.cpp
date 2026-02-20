@@ -569,25 +569,14 @@ DownloadedChapter* DownloadsManager::getChapterDownload(int mangaId, int chapter
     return nullptr;
 }
 
-std::unordered_map<int, DownloadedChapter*> DownloadsManager::getChapterDownloadsMap(int mangaId) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    std::unordered_map<int, DownloadedChapter*> result;
-
+std::vector<DownloadedChapter>* DownloadsManager::getChapterDownloads(int mangaId, std::unique_lock<std::mutex>& lock) {
+    lock = std::unique_lock<std::mutex>(m_mutex);
     for (auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {
-            result.reserve(manga.chapters.size() * 2);
-            for (auto& chapter : manga.chapters) {
-                result[chapter.chapterIndex] = &chapter;
-                // Also index by chapterId for lookups that use ID
-                if (chapter.chapterId != chapter.chapterIndex && chapter.chapterId > 0) {
-                    result[chapter.chapterId] = &chapter;
-                }
-            }
-            break;
+            return &manga.chapters;
         }
     }
-
-    return result;
+    return nullptr;
 }
 
 bool DownloadsManager::isMangaDownloaded(int mangaId) const {
