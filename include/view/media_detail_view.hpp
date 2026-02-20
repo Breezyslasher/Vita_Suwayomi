@@ -215,8 +215,11 @@ private:
     std::atomic<bool> m_progressCallbackActive{false};
     std::shared_ptr<bool> m_alive;
 
-    // Refresh download state snapshot and rebind visible cells
+    // Refresh download state snapshot and rebind visible cells (full rebuild)
     void updateChapterDownloadStates();
+
+    // Lightweight: update only download icons on visible cells (no reloadData, no focus loss)
+    void refreshVisibleDownloadIcons();
 
     // Friend for data source access
     friend class ChaptersDataSource;
