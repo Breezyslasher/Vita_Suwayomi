@@ -160,6 +160,9 @@ public:
     // Resume incomplete downloads (queues PAUSED/FAILED/interrupted chapters)
     void resumeIncompleteDownloads();
 
+    // Auto-resume downloads if setting enabled and connected (called after connection established)
+    void resumeDownloadsIfNeeded();
+
     // Check if there are any incomplete downloads
     bool hasIncompleteDownloads() const;
 
@@ -184,6 +187,9 @@ public:
     // Get total download statistics
     int getTotalDownloadedChapters() const;
     int64_t getTotalDownloadSize() const;
+
+    // Wait for the download thread to fully exit (call after pauseDownloads)
+    void waitForDownloadThread(int timeoutMs = 2000);
 
 private:
     DownloadsManager() = default;
@@ -212,6 +218,7 @@ private:
     std::vector<DownloadItem> m_downloads;
     mutable std::mutex m_mutex;
     std::atomic<bool> m_downloading{false};
+    std::atomic<bool> m_downloadThreadActive{false};  // True while download thread is running
     bool m_initialized = false;
     DownloadProgressCallback m_progressCallback;
     ChapterCompletionCallback m_chapterCompletionCallback;

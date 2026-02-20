@@ -124,17 +124,10 @@ bool DownloadsManager::init() {
     m_initialized = true;
     brls::Logger::info("DownloadsManager: Initialized with {} downloads", m_downloads.size());
 
-    // Auto-resume downloads if setting is enabled and there are incomplete downloads
-    if (Application::getInstance().getSettings().autoResumeDownloads && hasIncompleteDownloads()) {
-        int chapterCount = countIncompleteDownloads();
-        brls::Logger::info("DownloadsManager: Auto-resuming {} incomplete downloads", chapterCount);
-        if (chapterCount == 1) {
-            brls::Application::notify("Resuming 1 download...");
-        } else {
-            brls::Application::notify("Resuming " + std::to_string(chapterCount) + " downloads...");
-        }
-        startDownloads();
-    }
+    // NOTE: Auto-resume is NOT triggered here because the network connection
+    // hasn't been established yet (init() runs before connection test in Application::run).
+    // Instead, Application::run() calls resumeDownloadsIfNeeded() after a successful
+    // connection test to avoid immediately failing all downloads.
 
     return true;
 }
@@ -268,6 +261,7 @@ void DownloadsManager::startDownloads() {
 
     // Run downloads in background thread
     std::thread([this]() {
+        m_downloadThreadActive.store(true);
         while (m_downloading.load()) {
             DownloadedChapter* nextChapter = nullptr;
             int mangaId = 0;
@@ -318,6 +312,7 @@ void DownloadsManager::startDownloads() {
             // Download the chapter
             downloadChapter(mangaId, *nextChapter);
         }
+        m_downloadThreadActive.store(false);
     }).detach();
 }
 
@@ -334,6 +329,21 @@ void DownloadsManager::pauseDownloads() {
     }
 
     saveStateUnlocked();
+}
+
+void DownloadsManager::waitForDownloadThread(int timeoutMs) {
+    if (!m_downloadThreadActive.load()) return;
+
+    const int sleepMs = 10;
+    int elapsed = 0;
+    while (m_downloadThreadActive.load() && elapsed < timeoutMs) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleepMs));
+        elapsed += sleepMs;
+    }
+
+    if (m_downloadThreadActive.load()) {
+        brls::Logger::warning("DownloadsManager: Download thread did not exit within {}ms", timeoutMs);
+    }
 }
 
 bool DownloadsManager::cancelDownload(int mangaId) {
@@ -363,8 +373,20 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
         if (manga.mangaId == mangaId) {
             for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
                 if (it->chapterIndex == chapterIndex || it->chapterId == chapterIndex) {
-                    if (it->state == LocalDownloadState::QUEUED ||
-                        it->state == LocalDownloadState::DOWNLOADING) {
+                    if (it->state != LocalDownloadState::COMPLETED) {
+                        // If the download thread is still active, we cannot
+                        // safely erase ANY chapter from the vector — the thread
+                        // holds a raw pointer/reference into the vector and
+                        // erasing invalidates it (use-after-free crash).
+                        // Instead, signal the thread to stop and mark as FAILED.
+                        if (m_downloadThreadActive.load()) {
+                            m_downloading.store(false);
+                            it->state = LocalDownloadState::FAILED;
+                            saveStateUnlocked();
+                            return true;
+                        }
+
+                        // Thread is not active — safe to erase
                         // Delete any partial download files
                         for (auto& page : it->pages) {
                             if (!page.localPath.empty()) {
@@ -372,7 +394,7 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
                             }
                         }
 
-                        // Remove the chapter entry instead of marking as failed
+                        // Remove the chapter entry
                         manga.chapters.erase(it);
                         manga.totalChapters = static_cast<int>(manga.chapters.size());
 
@@ -848,6 +870,29 @@ void DownloadsManager::resumeIncompleteDownloads() {
         brls::Logger::info("DownloadsManager: Queued {} incomplete chapters for resumption", queuedCount);
         saveStateUnlocked();
     }
+}
+
+void DownloadsManager::resumeDownloadsIfNeeded() {
+    if (!Application::getInstance().getSettings().autoResumeDownloads) return;
+    if (!Application::getInstance().isConnected()) {
+        brls::Logger::info("DownloadsManager: Skipping auto-resume - not connected");
+        return;
+    }
+    if (!hasIncompleteDownloads()) return;
+
+    // Convert PAUSED/FAILED/DOWNLOADING chapters back to QUEUED so startDownloads() picks them up
+    resumeIncompleteDownloads();
+
+    int chapterCount = countIncompleteDownloads();
+    if (chapterCount <= 0) return;
+
+    brls::Logger::info("DownloadsManager: Auto-resuming {} incomplete downloads", chapterCount);
+    if (chapterCount == 1) {
+        brls::Application::notify("Resuming 1 download...");
+    } else {
+        brls::Application::notify("Resuming " + std::to_string(chapterCount) + " downloads...");
+    }
+    startDownloads();
 }
 
 bool DownloadsManager::hasIncompleteDownloads() const {

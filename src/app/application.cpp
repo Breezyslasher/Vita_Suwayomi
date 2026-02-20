@@ -107,6 +107,10 @@ void Application::run() {
                 });
             }
 
+            // Now that connection is confirmed, auto-resume incomplete downloads
+            // This must happen AFTER connection test - otherwise downloads fail immediately
+            dm.resumeDownloadsIfNeeded();
+
             pushMainActivity();
         } else {
             // Connection failed - could be offline or auth expired
