@@ -356,8 +356,7 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
         if (manga.mangaId == mangaId) {
             for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
                 if (it->chapterIndex == chapterIndex || it->chapterId == chapterIndex) {
-                    if (it->state == LocalDownloadState::QUEUED ||
-                        it->state == LocalDownloadState::DOWNLOADING) {
+                    if (it->state != LocalDownloadState::COMPLETED) {
                         // Delete any partial download files
                         for (auto& page : it->pages) {
                             if (!page.localPath.empty()) {
