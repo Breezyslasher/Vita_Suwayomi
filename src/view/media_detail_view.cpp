@@ -418,8 +418,10 @@ void ChaptersDataSource::applyDownloadState(ChapterCell* cell, int dlState, cons
         cell->dlIcon->setImageFromFile("app0:resources/icons/cross.png");
         cell->dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));
     } else {
-        // Default "not downloaded" state
-        cell->dlIcon->setVisibility(brls::Visibility::GONE);
+        // Default "not downloaded" state - show download arrow icon.
+        // With RecyclerFrame only ~8 cells exist, so loading icons is cheap.
+        cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
+        cell->dlIcon->setImageFromFile("app0:resources/icons/download.png");
         cell->dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
     }
 }
@@ -911,6 +913,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     // Chapters list (RecyclerFrame - only creates visible rows, like NOBORU)
     m_chaptersRecycler = new brls::RecyclerFrame();
     m_chaptersRecycler->setGrow(1.0f);
+    m_chaptersRecycler->setPadding(0, 0, 0, 0);
     m_chaptersRecycler->estimatedRowHeight = 60;  // 56px row + 4px margin
     m_chaptersRecycler->registerCell("chapter", ChapterCell::create);
 
