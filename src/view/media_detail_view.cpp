@@ -92,9 +92,10 @@ ChapterCell::ChapterCell() {
     dlBtn->addView(dlIcon);
 
     dlLabel = new brls::Label();
-    dlLabel->setFontSize(9);
+    dlLabel->setFontSize(10);
     dlLabel->setTextColor(nvgRGB(255, 255, 255));
     dlLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    dlLabel->setWidthPercentage(100);
     dlLabel->setVisibility(brls::Visibility::GONE);
     dlBtn->addView(dlLabel);
 
@@ -420,20 +421,24 @@ void ChaptersDataSource::applyDownloadState(ChapterCell* cell, int dlState, int 
     } else if (isLocallyDownloaded) {
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
         cell->dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
+        cell->dlLabel->setVisibility(brls::Visibility::GONE);
         cell->dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));
     } else if (isLocallyQueued) {
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
         cell->dlIcon->setImageFromFile("app0:resources/icons/refresh.png");
+        cell->dlLabel->setVisibility(brls::Visibility::GONE);
         cell->dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));
     } else if (isLocallyFailed) {
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
         cell->dlIcon->setImageFromFile("app0:resources/icons/cross.png");
+        cell->dlLabel->setVisibility(brls::Visibility::GONE);
         cell->dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));
     } else {
         // Default "not downloaded" state - show download arrow icon.
         // With RecyclerFrame only ~8 cells exist, so loading icons is cheap.
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
         cell->dlIcon->setImageFromFile("app0:resources/icons/download.png");
+        cell->dlLabel->setVisibility(brls::Visibility::GONE);
         cell->dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
     }
 }
@@ -1560,6 +1565,7 @@ void MangaDetailView::refreshVisibleDownloadIcons() {
                     cell->dlLabel->setText("...");
                 }
                 cell->dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
+                cell->dlBtn->invalidate();
             } else if (isDownloaded) {
                 cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
                 cell->dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
