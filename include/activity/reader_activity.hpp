@@ -103,6 +103,7 @@ private:
     void showPageCounter();
     void hidePageCounter();
     void schedulePageCounterHide();
+    int m_pageCounterHideGeneration = 0;  // Generation counter to cancel stale auto-hide
 
     // Update page counter rotation/position
     void updatePageCounterRotation();
@@ -175,8 +176,7 @@ private:
     // Image caching (preloaded pages)
     std::map<int, std::string> m_cachedImages;
 
-    // Dark mode support
-    bool m_isDarkMode = true;
+    // Reader background color support
     void updateMarginColors();
 
     // Touch gesture tracking
