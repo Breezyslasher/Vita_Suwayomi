@@ -569,6 +569,27 @@ DownloadedChapter* DownloadsManager::getChapterDownload(int mangaId, int chapter
     return nullptr;
 }
 
+std::unordered_map<int, DownloadedChapter*> DownloadsManager::getChapterDownloadsMap(int mangaId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::unordered_map<int, DownloadedChapter*> result;
+
+    for (auto& manga : m_downloads) {
+        if (manga.mangaId == mangaId) {
+            result.reserve(manga.chapters.size() * 2);
+            for (auto& chapter : manga.chapters) {
+                result[chapter.chapterIndex] = &chapter;
+                // Also index by chapterId for lookups that use ID
+                if (chapter.chapterId != chapter.chapterIndex && chapter.chapterId > 0) {
+                    result[chapter.chapterId] = &chapter;
+                }
+            }
+            break;
+        }
+    }
+
+    return result;
+}
+
 bool DownloadsManager::isMangaDownloaded(int mangaId) const {
     std::lock_guard<std::mutex> lock(m_mutex);
 

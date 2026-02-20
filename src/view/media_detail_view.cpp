@@ -143,7 +143,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     selectIcon->setWidth(80);
     selectIcon->setHeight(20);
     selectIcon->setScalingType(brls::ImageScalingType::FIT);
-    selectIcon->setImageFromFile("app0:resources/images/select_button.png");
     selectIcon->setMarginBottom(2);
     readButtonContainer->addView(selectIcon);
 
@@ -367,7 +366,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     rButtonIcon->setWidth(36);
     rButtonIcon->setHeight(24);
     rButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
     rButtonIcon->setMarginBottom(2);
     sortContainer->addView(rButtonIcon);
 
@@ -380,7 +378,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_sortIcon->setWidth(24);
     m_sortIcon->setHeight(24);
     m_sortIcon->setScalingType(brls::ImageScalingType::FIT);
-    updateSortIcon();
     m_sortBtn->addView(m_sortIcon);
 
     m_sortBtn->registerClickAction([this](brls::View* view) {
@@ -403,7 +400,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     yButtonIcon->setWidth(24);
     yButtonIcon->setHeight(24);
     yButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    yButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
     yButtonIcon->setMarginBottom(2);
     filterContainer->addView(yButtonIcon);
 
@@ -419,7 +415,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     filterIcon->setWidth(24);
     filterIcon->setHeight(24);
     filterIcon->setScalingType(brls::ImageScalingType::FIT);
-    filterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
     m_filterBtn->addView(filterIcon);
 
     m_filterBtn->registerClickAction([this](brls::View* view) {
@@ -469,7 +464,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     startButtonIcon->setWidth(80);
     startButtonIcon->setHeight(20);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
     startButtonIcon->setMarginBottom(2);
     menuContainer->addView(startButtonIcon);
 
@@ -484,7 +478,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     menuIcon->setWidth(24);
     menuIcon->setHeight(24);
     menuIcon->setScalingType(brls::ImageScalingType::FIT);
-    menuIcon->setImageFromFile("app0:resources/icons/menu.png");
     m_menuBtn->addView(menuIcon);
 
     m_menuBtn->registerClickAction([this](brls::View* view) {
@@ -509,6 +502,24 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     rightPanel->addView(m_chaptersScroll);
 
     this->addView(rightPanel);
+
+    // Defer constructor icon loading to next frame to unblock view creation.
+    // These 7 synchronous file reads + texture uploads add ~200-400ms on Vita.
+    {
+        std::weak_ptr<bool> iconAlive = m_alive;
+        brls::sync([this, iconAlive, selectIcon, rButtonIcon, yButtonIcon,
+                    filterIcon, startButtonIcon, menuIcon]() {
+            auto alive = iconAlive.lock();
+            if (!alive || !*alive) return;
+            selectIcon->setImageFromFile("app0:resources/images/select_button.png");
+            rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
+            updateSortIcon();
+            yButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+            filterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
+            startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
+            menuIcon->setImageFromFile("app0:resources/icons/menu.png");
+        });
+    }
 
     // Load full details
     loadDetails();
@@ -579,35 +590,36 @@ void MangaDetailView::willAppear(bool resetState) {
         }
     });
 
-    // On first appearance, chapters are loaded via loadDetails().
-    // On subsequent appearances (returning from reader), apply the reader's
-    // result immediately so the continue reading button and chapter list are correct.
-    if (!m_chapters.empty()) {
-        // Apply last reader result to update chapter state immediately
-        const auto& readerResult = Application::getInstance().getLastReaderResult();
-        if (readerResult.mangaId == m_manga.id && readerResult.timestamp > 0) {
-            for (auto& ch : m_chapters) {
-                if (ch.id == readerResult.chapterId) {
-                    ch.lastPageRead = readerResult.lastPageRead;
-                    ch.lastReadAt = readerResult.timestamp;
-                    if (readerResult.markedRead) {
-                        ch.read = true;
+    // On first appearance, chapters are loaded via loadDetails() (called from constructor).
+    // Skip loadChapters() here to avoid duplicate network requests and UI rebuilds.
+    // On subsequent appearances (returning from reader), refresh chapters from server.
+    if (!m_firstAppearance) {
+        if (!m_chapters.empty()) {
+            // Apply last reader result to update chapter state immediately
+            const auto& readerResult = Application::getInstance().getLastReaderResult();
+            if (readerResult.mangaId == m_manga.id && readerResult.timestamp > 0) {
+                for (auto& ch : m_chapters) {
+                    if (ch.id == readerResult.chapterId) {
+                        ch.lastPageRead = readerResult.lastPageRead;
+                        ch.lastReadAt = readerResult.timestamp;
+                        if (readerResult.markedRead) {
+                            ch.read = true;
+                        }
+                        brls::Logger::info("MangaDetailView: Applied reader result - ch={} page={} read={}",
+                                          ch.id, ch.lastPageRead, ch.read);
+                        break;
                     }
-                    brls::Logger::info("MangaDetailView: Applied reader result - ch={} page={} read={}",
-                                      ch.id, ch.lastPageRead, ch.read);
-                    break;
                 }
+                Application::getInstance().clearLastReaderResult();
             }
-            Application::getInstance().clearLastReaderResult();
-        }
 
-        updateChapterDownloadStates();
-        updateReadButtonText();
-        // Also refresh from server for full accuracy
-        loadChapters();
-    } else {
+            updateChapterDownloadStates();
+            updateReadButtonText();
+        }
+        // Refresh from server for full accuracy
         loadChapters();
     }
+    m_firstAppearance = false;
 }
 
 void MangaDetailView::willDisappear(bool resetState) {
@@ -648,8 +660,10 @@ void MangaDetailView::loadDetails() {
             if (!Application::getInstance().isConnected()) {
                 DownloadsManager& dm = DownloadsManager::getInstance();
                 dm.init();
+                auto dlMap = dm.getChapterDownloadsMap(m_manga.id);
                 for (auto& ch : m_chapters) {
-                    DownloadedChapter* dlCh = dm.getChapterDownload(m_manga.id, ch.id);
+                    auto it = dlMap.find(ch.id);
+                    DownloadedChapter* dlCh = (it != dlMap.end()) ? it->second : nullptr;
                     if (dlCh && dlCh->lastPageRead > ch.lastPageRead) {
                         ch.lastPageRead = dlCh->lastPageRead;
                         ch.lastReadAt = static_cast<int64_t>(dlCh->lastReadTime);
@@ -867,10 +881,12 @@ void MangaDetailView::loadChapters() {
         brls::Logger::info("MangaDetailView: Offline, applying local reading progress");
         if (!m_chapters.empty()) {
             DownloadsManager& dm = DownloadsManager::getInstance();
+            auto dlMap = dm.getChapterDownloadsMap(m_manga.id);
             bool changed = false;
             for (auto& ch : m_chapters) {
-                DownloadedChapter* dlCh = dm.getChapterDownload(m_manga.id, ch.id);
-                if (!dlCh) dlCh = dm.getChapterDownload(m_manga.id, ch.index);
+                auto it = dlMap.find(ch.id);
+                if (it == dlMap.end()) it = dlMap.find(ch.index);
+                DownloadedChapter* dlCh = (it != dlMap.end()) ? it->second : nullptr;
                 if (dlCh && dlCh->lastReadTime > 0) {
                     int64_t dlReadAtMs = static_cast<int64_t>(dlCh->lastReadTime) * 1000;
                     if (dlReadAtMs > ch.lastReadAt) {
@@ -1006,13 +1022,16 @@ void MangaDetailView::updateChapterDownloadStates() {
     if (m_chapterDlElements.empty()) return;
     if (!m_chaptersBox) return;
 
+    // Build map once instead of per-element linear scan + mutex lock
     DownloadsManager& dm = DownloadsManager::getInstance();
+    auto dlMap = dm.getChapterDownloadsMap(m_manga.id);
 
     for (auto& elem : m_chapterDlElements) {
         // Null check: ensure button is still valid
         if (!elem.dlBtn) continue;
 
-        DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, elem.chapterIndex);
+        auto it = dlMap.find(elem.chapterIndex);
+        DownloadedChapter* localCh = (it != dlMap.end()) ? it->second : nullptr;
 
         int newState = -1;  // not local
         int newPages = -1;
@@ -1040,22 +1059,24 @@ void MangaDetailView::updateChapterDownloadStates() {
             }
             elem.dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 220));  // Blue
         } else {
-            // Show icon, hide progress label
+            // Hide progress label
             if (elem.dlLabel) elem.dlLabel->setVisibility(brls::Visibility::GONE);
             if (elem.dlIcon) {
-                elem.dlIcon->setVisibility(brls::Visibility::VISIBLE);
-
                 if (localCh && localCh->state == LocalDownloadState::COMPLETED) {
+                    elem.dlIcon->setVisibility(brls::Visibility::VISIBLE);
                     elem.dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
                     elem.dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));  // Green
                 } else if (localCh && localCh->state == LocalDownloadState::QUEUED) {
+                    elem.dlIcon->setVisibility(brls::Visibility::VISIBLE);
                     elem.dlIcon->setImageFromFile("app0:resources/icons/refresh.png");
                     elem.dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));  // Yellow
                 } else if (localCh && localCh->state == LocalDownloadState::FAILED) {
+                    elem.dlIcon->setVisibility(brls::Visibility::VISIBLE);
                     elem.dlIcon->setImageFromFile("app0:resources/icons/cross.png");
                     elem.dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));  // Red
                 } else {
-                    elem.dlIcon->setImageFromFile("app0:resources/icons/download.png");
+                    // Default "not downloaded": keep icon hidden, just gray button
+                    elem.dlIcon->setVisibility(brls::Visibility::GONE);
                     elem.dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
                 }
             }
@@ -1087,8 +1108,9 @@ void MangaDetailView::populateChaptersList() {
                   });
     }
 
-    // Get downloads manager to check local download state
+    // Build download state map once (single mutex lock) instead of per-chapter linear scan
     DownloadsManager& dmForFilter = DownloadsManager::getInstance();
+    auto dlMap = dmForFilter.getChapterDownloadsMap(m_manga.id);
 
     // Force downloaded filter when downloads-only mode is enabled and app is offline
     bool filterDownloaded = m_filterDownloaded ||
@@ -1098,7 +1120,8 @@ void MangaDetailView::populateChaptersList() {
     // Filter chapters into m_sortedFilteredChapters
     for (const auto& chapter : sortedChapters) {
         if (filterDownloaded) {
-            DownloadedChapter* localCh = dmForFilter.getChapterDownload(m_manga.id, chapter.index);
+            auto it = dlMap.find(chapter.index);
+            DownloadedChapter* localCh = (it != dlMap.end()) ? it->second : nullptr;
             bool isLocallyDownloaded = localCh && localCh->state == LocalDownloadState::COMPLETED;
             if (!isLocallyDownloaded) continue;
         }
@@ -1108,9 +1131,11 @@ void MangaDetailView::populateChaptersList() {
         m_sortedFilteredChapters.push_back(chapter);
     }
 
-    // Build all chapter rows at once
+    // Build all chapter rows at once, passing cached download state
     for (int i = 0; i < static_cast<int>(m_sortedFilteredChapters.size()); i++) {
-        createChapterRow(m_sortedFilteredChapters[i]);
+        auto it = dlMap.find(m_sortedFilteredChapters[i].index);
+        DownloadedChapter* localCh = (it != dlMap.end()) ? it->second : nullptr;
+        createChapterRow(m_sortedFilteredChapters[i], localCh);
     }
     setupChapterNavigation();
 
@@ -1118,7 +1143,7 @@ void MangaDetailView::populateChaptersList() {
                         m_sortedFilteredChapters.size());
 }
 
-void MangaDetailView::createChapterRow(const Chapter& chapter) {
+void MangaDetailView::createChapterRow(const Chapter& chapter, DownloadedChapter* localCh) {
     auto* chapterRow = new brls::Box();
     chapterRow->setAxis(brls::Axis::ROW);
     chapterRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
@@ -1185,10 +1210,7 @@ void MangaDetailView::createChapterRow(const Chapter& chapter) {
     dlBtn->setJustifyContent(brls::JustifyContent::CENTER);
     dlBtn->setAlignItems(brls::AlignItems::CENTER);
 
-    // Check local download state first
-    DownloadsManager& dm = DownloadsManager::getInstance();
-    DownloadedChapter* localCh = dm.getChapterDownload(m_manga.id, chapter.index);
-
+    // Use pre-looked-up download state (passed from populateChaptersList)
     bool isLocallyDownloaded = localCh && localCh->state == LocalDownloadState::COMPLETED;
     bool isLocallyDownloading = localCh && localCh->state == LocalDownloadState::DOWNLOADING;
     bool isLocallyQueued = localCh && localCh->state == LocalDownloadState::QUEUED;
@@ -1208,7 +1230,8 @@ void MangaDetailView::createChapterRow(const Chapter& chapter) {
     dlLabel->setVisibility(brls::Visibility::GONE);
     dlBtn->addView(dlLabel);
 
-    // Set initial state
+    // Set initial state - only load images for non-default states to avoid
+    // N synchronous file reads for the common "not downloaded" case
     if (isLocallyDownloading && localCh) {
         dlIcon->setVisibility(brls::Visibility::GONE);
         dlLabel->setVisibility(brls::Visibility::VISIBLE);
@@ -1233,7 +1256,10 @@ void MangaDetailView::createChapterRow(const Chapter& chapter) {
             return true;
         });
     } else {
-        dlIcon->setImageFromFile("app0:resources/icons/download.png");
+        // Default "not downloaded" state: skip image loading entirely.
+        // The gray button background serves as the visual indicator.
+        // updateChapterDownloadStates() will load the icon if state changes.
+        dlIcon->setVisibility(brls::Visibility::GONE);
         dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
         dlBtn->registerClickAction([this, capturedChapter](brls::View* view) {
             downloadChapter(capturedChapter);

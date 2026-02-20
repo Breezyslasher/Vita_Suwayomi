@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <functional>
 #include <mutex>
 #include <atomic>
@@ -129,6 +130,10 @@ public:
 
     // Get a specific chapter download
     DownloadedChapter* getChapterDownload(int mangaId, int chapterIndex);
+
+    // Get all chapter downloads for a manga as a map (chapterIndex -> pointer)
+    // Single mutex lock instead of per-chapter linear scan
+    std::unordered_map<int, DownloadedChapter*> getChapterDownloadsMap(int mangaId);
 
     // Check if manga/chapter is downloaded
     bool isMangaDownloaded(int mangaId) const;

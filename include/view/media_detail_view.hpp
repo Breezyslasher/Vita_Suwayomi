@@ -62,7 +62,7 @@ private:
 
     // Chapter list display
     void populateChaptersList();
-    void createChapterRow(const Chapter& chapter);
+    void createChapterRow(const Chapter& chapter, DownloadedChapter* localCh = nullptr);
     void buildNextChapterBatch();
     void setupChapterNavigation();
     void onChapterSelected(const Chapter& chapter);
@@ -135,10 +135,13 @@ private:
     // Currently visible chapter action icon (shown on focused row)
     brls::Image* m_currentFocusedIcon = nullptr;
 
-    // Incremental chapter building state (prevents 30-40s freeze on large chapter lists)
+    // Chapter building state
     std::vector<Chapter> m_sortedFilteredChapters;
     int m_chapterBuildIndex = 0;
     bool m_chapterBuildActive = false;
+
+    // Track first appearance to avoid duplicate chapter loading
+    bool m_firstAppearance = true;
 
     // Description expand/collapse
     bool m_descriptionExpanded = false;
