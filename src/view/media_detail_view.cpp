@@ -1108,30 +1108,14 @@ void MangaDetailView::populateChaptersList() {
         m_sortedFilteredChapters.push_back(chapter);
     }
 
-    // Build chapter rows incrementally to prevent UI freeze on large lists
-    // Each chapter row creates ~10 views; 300 chapters = 3000 views = 30-40s freeze on 444MHz CPU
-    // Build first 10 immediately (visible content), schedule rest in batches per frame
-    int immediateCount = std::min(10, static_cast<int>(m_sortedFilteredChapters.size()));
-    for (int i = 0; i < immediateCount; i++) {
+    // Build all chapter rows at once
+    for (int i = 0; i < static_cast<int>(m_sortedFilteredChapters.size()); i++) {
         createChapterRow(m_sortedFilteredChapters[i]);
     }
+    setupChapterNavigation();
 
-    if (immediateCount < static_cast<int>(m_sortedFilteredChapters.size())) {
-        m_chapterBuildIndex = immediateCount;
-        m_chapterBuildActive = true;
-        std::weak_ptr<bool> aliveWeak = m_alive;
-        brls::sync([this, aliveWeak]() {
-            auto alive = aliveWeak.lock();
-            if (!alive || !*alive) return;
-            buildNextChapterBatch();
-        });
-    } else {
-        // Small chapter list - all built, set up navigation now
-        setupChapterNavigation();
-    }
-
-    brls::Logger::debug("MangaDetailView: Building {} chapters (first {} immediate)",
-                        m_sortedFilteredChapters.size(), immediateCount);
+    brls::Logger::debug("MangaDetailView: Built {} chapters",
+                        m_sortedFilteredChapters.size());
 }
 
 void MangaDetailView::createChapterRow(const Chapter& chapter) {
@@ -1274,11 +1258,11 @@ void MangaDetailView::createChapterRow(const Chapter& chapter) {
     statusBox->addView(dlBtn);
 
     // X button icon indicator (shows X button action is available) - only visible when focused
+    // Image is loaded lazily on first focus to avoid N synchronous file reads during build
     auto* xButtonIcon = new brls::Image();
     xButtonIcon->setWidth(24);
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
     xButtonIcon->setMarginLeft(8);
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     statusBox->addView(xButtonIcon);
@@ -1289,6 +1273,10 @@ void MangaDetailView::createChapterRow(const Chapter& chapter) {
     chapterRow->getFocusEvent()->subscribe([this, xButtonIcon](brls::View* view) {
         if (m_currentFocusedIcon && m_currentFocusedIcon != xButtonIcon) {
             m_currentFocusedIcon->setVisibility(brls::Visibility::INVISIBLE);
+        }
+        // Load image on first focus (lazy load)
+        if (xButtonIcon->getVisibility() != brls::Visibility::VISIBLE) {
+            xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
         }
         xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
         m_currentFocusedIcon = xButtonIcon;
