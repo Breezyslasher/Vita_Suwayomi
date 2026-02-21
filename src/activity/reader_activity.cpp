@@ -274,10 +274,16 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // D-pad for page navigation (direction-aware)
+    // D-pad for page navigation (rotation-aware)
+    // LEFT/RIGHT only active at 0° and 180° rotation (horizontal reading axis)
     this->registerAction("", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
-        if (m_controlsVisible || m_settingsVisible) return false;  // Let UI handle it
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
+        if (m_controlsVisible || m_settingsVisible) return false;
+        if (m_settings.rotation == ImageRotation::ROTATE_90 ||
+            m_settings.rotation == ImageRotation::ROTATE_270) return false;
+        bool inverted = (m_settings.rotation == ImageRotation::ROTATE_180);
+        bool rtl = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT);
+        // LEFT = prev in normal LTR; invert for RTL or 180° (XOR)
+        if (rtl != inverted)
             nextPage();
         else
             previousPage();
@@ -286,22 +292,39 @@ void ReaderActivity::onContentAvailable() {
 
     this->registerAction("", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
         if (m_controlsVisible || m_settingsVisible) return false;
-        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
+        if (m_settings.rotation == ImageRotation::ROTATE_90 ||
+            m_settings.rotation == ImageRotation::ROTATE_270) return false;
+        bool inverted = (m_settings.rotation == ImageRotation::ROTATE_180);
+        bool rtl = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT);
+        if (rtl != inverted)
             previousPage();
         else
             nextPage();
         return true;
     });
 
+    // UP/DOWN only active at 90° and 270° rotation (vertical reading axis)
     this->registerAction("", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
         if (m_controlsVisible || m_settingsVisible) return false;
-        previousPage();
+        if (m_settings.rotation == ImageRotation::ROTATE_0 ||
+            m_settings.rotation == ImageRotation::ROTATE_180) return false;
+        bool inverted = (m_settings.rotation == ImageRotation::ROTATE_270);
+        if (inverted)
+            nextPage();
+        else
+            previousPage();
         return true;
     });
 
     this->registerAction("", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
         if (m_controlsVisible || m_settingsVisible) return false;
-        nextPage();
+        if (m_settings.rotation == ImageRotation::ROTATE_0 ||
+            m_settings.rotation == ImageRotation::ROTATE_180) return false;
+        bool inverted = (m_settings.rotation == ImageRotation::ROTATE_270);
+        if (inverted)
+            previousPage();
+        else
+            nextPage();
         return true;
     });
 
