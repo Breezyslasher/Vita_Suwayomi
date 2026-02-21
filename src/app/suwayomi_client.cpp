@@ -288,9 +288,15 @@ std::string SuwayomiClient::extractJsonArray(const std::string& json, const std:
 
     int bracketCount = 1;
     size_t arrEnd = arrStart + 1;
+    bool inString = false;
     while (bracketCount > 0 && arrEnd < json.length()) {
-        if (json[arrEnd] == '[') bracketCount++;
-        else if (json[arrEnd] == ']') bracketCount--;
+        char c = json[arrEnd];
+        if (c == '"' && (arrEnd == 0 || json[arrEnd - 1] != '\\')) {
+            inString = !inString;
+        } else if (!inString) {
+            if (c == '[') bracketCount++;
+            else if (c == ']') bracketCount--;
+        }
         arrEnd++;
     }
 
@@ -318,9 +324,15 @@ std::string SuwayomiClient::extractJsonObject(const std::string& json, const std
 
     int braceCount = 1;
     size_t objEnd = objStart + 1;
+    bool inString = false;
     while (braceCount > 0 && objEnd < json.length()) {
-        if (json[objEnd] == '{') braceCount++;
-        else if (json[objEnd] == '}') braceCount--;
+        char c = json[objEnd];
+        if (c == '"' && (objEnd == 0 || json[objEnd - 1] != '\\')) {
+            inString = !inString;
+        } else if (!inString) {
+            if (c == '{') braceCount++;
+            else if (c == '}') braceCount--;
+        }
         objEnd++;
     }
 
