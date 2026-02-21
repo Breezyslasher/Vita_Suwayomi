@@ -175,6 +175,13 @@ private:
     bool m_nextChapterLoaded = false;
     void preloadNextChapter();
 
+    // Seamless chapter append for webtoon mode
+    bool m_nextChapterAppended = false;       // Whether next chapter pages have been appended to scroll
+    int m_chapterPageOffset = 0;              // Scroll view index where current chapter starts
+    int m_currentChapterPageCount = 0;        // Page count for current chapter only
+    void appendNextChapterToScroll();         // Append preloaded pages to webtoon scroll view
+    void handleChapterBoundaryCrossing();     // Called when user scrolls into appended chapter
+
     // Reader background color support
     void updateMarginColors();
 

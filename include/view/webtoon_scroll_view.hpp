@@ -42,6 +42,12 @@ public:
     void clearPages();
 
     /**
+     * Append pages to the end of the current scroll view without resetting.
+     * Returns the starting index of the appended pages.
+     */
+    int appendPages(const std::vector<Page>& pages);
+
+    /**
      * Scroll to a specific page index
      */
     void scrollToPage(int pageIndex);

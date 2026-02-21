@@ -991,6 +991,11 @@ void ReaderActivity::loadPages() {
         // Reset m_startPage so subsequent loadPages() calls (from chapter nav) start fresh
         m_startPage = 0;
 
+        // Initialize chapter tracking for page count display
+        m_chapterPageOffset = 0;
+        m_currentChapterPageCount = static_cast<int>(m_pages.size());
+        m_nextChapterAppended = false;
+
         // Set up the correct reader mode (webtoon scroll vs single page)
         setupReaderMode(isWebtoonMode);
 
@@ -1086,22 +1091,34 @@ void ReaderActivity::preloadAdjacentPages() {
 }
 
 void ReaderActivity::updatePageDisplay() {
+    // In webtoon mode with seamless chapter transitions, show page relative to current chapter
+    int displayPage = m_currentPage;
+    int displayTotal = static_cast<int>(m_pages.size());
+
+    if (m_continuousScrollMode && m_currentChapterPageCount > 0) {
+        displayPage = m_currentPage - m_chapterPageOffset;
+        displayTotal = m_currentChapterPageCount;
+        // Clamp to valid range
+        if (displayPage < 0) displayPage = 0;
+        if (displayPage >= displayTotal) displayPage = displayTotal - 1;
+    }
+
     // Update page counter (top-right overlay with rotation support)
     if (pageCounter) {
-        pageCounter->setText(std::to_string(m_currentPage + 1) + "/" +
-                          std::to_string(m_pages.size()));
+        pageCounter->setText(std::to_string(displayPage + 1) + "/" +
+                          std::to_string(displayTotal));
     }
 
     // Update slider page label (in bottom bar)
     if (sliderPageLabel) {
-        sliderPageLabel->setText("Page " + std::to_string(m_currentPage + 1) +
-                                 " of " + std::to_string(m_pages.size()));
+        sliderPageLabel->setText("Page " + std::to_string(displayPage + 1) +
+                                 " of " + std::to_string(displayTotal));
     }
 
     // Update slider position
-    if (pageSlider && !m_pages.empty()) {
-        float progress = static_cast<float>(m_currentPage) /
-                        static_cast<float>(std::max(1, static_cast<int>(m_pages.size()) - 1));
+    if (pageSlider && displayTotal > 0) {
+        float progress = static_cast<float>(displayPage) /
+                        static_cast<float>(std::max(1, displayTotal - 1));
         pageSlider->setProgress(progress);
     }
 }
@@ -1172,7 +1189,13 @@ void ReaderActivity::updateProgress() {
 
     int mangaId = m_mangaId;
     int chapterIndex = m_chapterIndex;
+    // Save progress relative to current chapter, not absolute scroll index
     int currentPage = m_currentPage;
+    if (m_continuousScrollMode && m_currentChapterPageCount > 0) {
+        currentPage = m_currentPage - m_chapterPageOffset;
+        if (currentPage < 0) currentPage = 0;
+        if (currentPage >= m_currentChapterPageCount) currentPage = m_currentChapterPageCount - 1;
+    }
 
     if (Application::getInstance().isConnected()) {
         // Save reading progress to server
@@ -1238,11 +1261,16 @@ void ReaderActivity::nextChapter() {
     m_chapterName = m_chapters[m_chapterListPosition].name;
     m_currentPage = 0;
 
+    // Reset chapter tracking for clean state
+    m_chapterPageOffset = 0;
+    m_nextChapterAppended = false;
+
     // Use preloaded pages if available for instant transition
     if (m_nextChapterLoaded && !m_nextChapterPages.empty()) {
         m_pages = std::move(m_nextChapterPages);
         m_nextChapterLoaded = false;
         m_nextChapterPages.clear();
+        m_currentChapterPageCount = static_cast<int>(m_pages.size());
 
         // Update UI with correct chapter info
         updateChapterDisplay();
@@ -1278,9 +1306,11 @@ void ReaderActivity::previousChapter(bool scrollToEnd) {
     m_chapterIndex = m_chapters[m_chapterListPosition].id;
     m_chapterName = m_chapters[m_chapterListPosition].name;
 
-    // Reset preloaded chapter since we're going backwards
+    // Reset preloaded chapter and chapter tracking since we're going backwards
     m_nextChapterLoaded = false;
     m_nextChapterPages.clear();
+    m_nextChapterAppended = false;
+    m_chapterPageOffset = 0;
     m_currentPage = 0;
     m_pages.clear();
 
@@ -2145,8 +2175,70 @@ void ReaderActivity::preloadNextChapter() {
             for (size_t i = 0; i < std::min(size_t(3), m_nextChapterPages.size()); i++) {
                 ImageLoader::preloadFullSize(m_nextChapterPages[i].imageUrl);
             }
+
+            // In webtoon mode, append to scroll view immediately if near end
+            appendNextChapterToScroll();
         }
     });
+}
+
+void ReaderActivity::appendNextChapterToScroll() {
+    if (!m_continuousScrollMode || !webtoonScroll) return;
+    if (!m_nextChapterLoaded || m_nextChapterAppended) return;
+    if (m_nextChapterPages.empty()) return;
+
+    // Only append when user is near the end of the current chapter
+    int currentChapterEnd = m_chapterPageOffset + m_currentChapterPageCount;
+    if (m_currentPage < currentChapterEnd - 3) return;
+
+    // Append the preloaded pages to the scroll view
+    webtoonScroll->appendPages(m_nextChapterPages);
+    m_nextChapterAppended = true;
+
+    brls::Logger::info("ReaderActivity: Appended {} pages from next chapter to scroll view",
+                       m_nextChapterPages.size());
+}
+
+void ReaderActivity::handleChapterBoundaryCrossing() {
+    if (!m_nextChapterAppended) return;
+
+    // Check if there actually is a next chapter
+    bool hasNext = !m_chapters.empty() && m_chapterListPosition >= 0 &&
+        m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1;
+    if (!hasNext) return;
+
+    // Build transition notification before updating state
+    std::string finishedName = m_chapterName;
+    std::string nextName = m_chapters[m_chapterListPosition + 1].name;
+
+    // Mark old chapter as read
+    markChapterAsRead();
+
+    // Show transition notification
+    brls::Application::notify("Finished: " + finishedName + " | Next: " + nextName);
+
+    // Advance to next chapter
+    m_chapterListPosition++;
+    m_chapterIndex = m_chapters[m_chapterListPosition].id;
+    m_chapterName = m_chapters[m_chapterListPosition].name;
+
+    // Update the page offset to where the new chapter starts in the scroll view
+    m_chapterPageOffset += m_currentChapterPageCount;
+    m_currentChapterPageCount = static_cast<int>(m_nextChapterPages.size());
+
+    // Reset preload state so we can preload the NEXT chapter
+    m_nextChapterPages.clear();
+    m_nextChapterLoaded = false;
+    m_nextChapterAppended = false;
+
+    // Update UI with new chapter info
+    updateChapterDisplay();
+
+    brls::Logger::info("ReaderActivity: Seamless transition to chapter '{}' (offset={}, pages={})",
+                       m_chapterName, m_chapterPageOffset, m_currentChapterPageCount);
+
+    // Start preloading the next chapter after this one
+    preloadNextChapter();
 }
 
 void ReaderActivity::updateReaderMode() {
@@ -2178,6 +2270,11 @@ void ReaderActivity::setupReaderMode(bool webtoonMode) {
             webtoonScroll->setSidePadding(m_settings.webtoonSidePadding);
             webtoonScroll->setRotation(static_cast<float>(m_settings.rotation));
 
+            // Initialize chapter tracking for seamless transitions
+            m_chapterPageOffset = 0;
+            m_currentChapterPageCount = static_cast<int>(m_pages.size());
+            m_nextChapterAppended = false;
+
             // Set up callbacks with alive guard
             std::weak_ptr<bool> cbAlive = m_alive;
             webtoonScroll->setProgressCallback([this, cbAlive](int currentPage, int totalPages, float scrollPercent) {
@@ -2187,8 +2284,18 @@ void ReaderActivity::setupReaderMode(bool webtoonMode) {
                 updatePageDisplay();
                 updateProgress();
 
-                if (currentPage >= totalPages - 3) {
+                // Check if user has scrolled into the appended next chapter
+                if (m_nextChapterAppended &&
+                    currentPage >= m_chapterPageOffset + m_currentChapterPageCount) {
+                    handleChapterBoundaryCrossing();
+                }
+
+                // When near the end of current chapter, preload and append next chapter
+                int currentChapterEnd = m_chapterPageOffset + m_currentChapterPageCount;
+                if (currentPage >= currentChapterEnd - 3) {
                     preloadNextChapter();
+                    // Append to scroll as soon as preloaded
+                    appendNextChapterToScroll();
                 }
             });
 
@@ -2201,7 +2308,13 @@ void ReaderActivity::setupReaderMode(bool webtoonMode) {
             webtoonScroll->setEndReachedCallback([this, cbAlive]() {
                 auto a = cbAlive.lock();
                 if (!a || !*a) return;
-                nextChapter();
+                // Only trigger for actual end of manga (no more chapters to append)
+                bool hasNext = !m_chapters.empty() && m_chapterListPosition >= 0 &&
+                    m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1;
+                if (!hasNext) {
+                    markChapterAsRead();
+                    brls::Application::notify("End of manga");
+                }
             });
 
             webtoonScroll->setStartReachedCallback([this, cbAlive]() {

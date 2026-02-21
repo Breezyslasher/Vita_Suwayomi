@@ -224,6 +224,57 @@ void WebtoonScrollView::clearPages() {
     m_startOvershoot = 0.0f;
 }
 
+int WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
+    if (pages.empty()) return static_cast<int>(m_pages.size());
+
+    int startIndex = static_cast<int>(m_pages.size());
+
+    // Calculate available width and default height (same logic as setPages)
+    float availableWidth = m_viewWidth - (m_sidePadding * 2);
+    if (availableWidth <= 0) availableWidth = m_viewWidth;
+    float defaultHeight = availableWidth * 1.5f;  // 2:3 aspect ratio
+
+    // Calculate image rotation (swap 90/270 for webtoon mode)
+    float imageRotation = m_rotationDegrees;
+    if (m_rotationDegrees == 90.0f) {
+        imageRotation = 270.0f;
+    } else if (m_rotationDegrees == 270.0f) {
+        imageRotation = 90.0f;
+    }
+
+    // Add gap before the first appended page if there are existing pages
+    if (!m_pages.empty() && m_pageGap > 0) {
+        m_totalHeight += m_pageGap;
+    }
+
+    for (size_t i = 0; i < pages.size(); i++) {
+        auto pageImg = std::make_shared<RotatableImage>();
+        pageImg->setWidth(availableWidth);
+        pageImg->setHeight(defaultHeight);
+        pageImg->setScalingType(brls::ImageScalingType::FIT);
+        pageImg->setBackgroundFillColor(m_bgColor);
+        pageImg->setRotation(imageRotation);
+
+        m_pages.push_back(pages[i]);
+        m_pageImages.push_back(pageImg);
+        m_pageHeights.push_back(defaultHeight);
+        m_totalHeight += defaultHeight;
+        if (i < pages.size() - 1) {
+            m_totalHeight += m_pageGap;
+        }
+    }
+
+    // Reset end-of-scroll flags since we now have more content
+    m_endReached = false;
+    m_endOvershoot = 0.0f;
+
+    // Trigger loading for any newly visible/near-visible pages
+    updateVisibleImages();
+
+    brls::Logger::info("WebtoonScrollView: Appended {} pages (total now {})", pages.size(), m_pages.size());
+    return startIndex;
+}
+
 void WebtoonScrollView::scrollToPage(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= static_cast<int>(m_pages.size())) {
         return;
