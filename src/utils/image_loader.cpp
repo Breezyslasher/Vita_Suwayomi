@@ -644,6 +644,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     const std::string& url = request.url;
     RotatableLoadCallback callback = request.callback;
     RotatableImage* target = request.target;
+    std::shared_ptr<bool> alive = request.alive;
 
     std::string imageBody;
     bool loadSuccess = false;
@@ -786,8 +787,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         cachePut(cacheKey, imageData);
 
         // Update UI on main thread
-        brls::sync([imageData, callback, target]() {
+        brls::sync([imageData, callback, target, alive]() {
             if (target) {
+                // Skip if the owning view was destroyed while the image was downloading
+                if (alive && !*alive) return;
                 target->setImageFromMem(imageData.data(), imageData.size());
                 if (callback) callback(target);
             }
@@ -797,7 +800,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     }
 }
 
-void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target) {
+void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target,
+                                    std::shared_ptr<bool> alive) {
     if (url.empty() || !target) return;
 
     // Check LRU cache first
@@ -814,7 +818,7 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
     // Add to rotatable queue
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_rotatableLoadQueue.push({url, callback, target});
+        s_rotatableLoadQueue.push({url, callback, target, alive});
     }
 
     s_queueCV.notify_one();

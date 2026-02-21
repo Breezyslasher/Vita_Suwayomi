@@ -450,7 +450,7 @@ void WebtoonScrollView::updateVisibleImages() {
                 }
 
                 brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
-            }, img);
+            }, img, m_alive);
     }
 }
 

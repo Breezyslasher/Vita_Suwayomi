@@ -1033,7 +1033,7 @@ void ReaderActivity::loadPage(int index) {
             }
         };
 
-        ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage);
+        ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage, m_alive);
 
         // Set up a timeout: if page hasn't loaded after 15 seconds, show error
         // Only for server-streamed pages - local files load instantly from disk
@@ -1829,7 +1829,7 @@ void ReaderActivity::loadPreviewPage(int index) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
         brls::Logger::debug("Preview page {} loaded", index);
-    }, previewImage);
+    }, previewImage, m_alive);
 }
 
 void ReaderActivity::completeSwipeAnimation(bool turnPage) {

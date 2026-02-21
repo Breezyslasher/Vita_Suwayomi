@@ -47,7 +47,8 @@ public:
     static void loadAsyncFullSize(const std::string& url, LoadCallback callback, brls::Image* target);
 
     // Load full-size image asynchronously for RotatableImage (custom rendering)
-    static void loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target);
+    static void loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target,
+                                  std::shared_ptr<bool> alive = nullptr);
 
     // Preload image to cache without displaying
     static void preload(const std::string& url);
@@ -82,6 +83,7 @@ private:
         std::string url;
         RotatableLoadCallback callback;
         RotatableImage* target;
+        std::shared_ptr<bool> alive;  // If set and *alive==false, skip (owner destroyed)
     };
 
     static void executeLoad(const LoadRequest& request);
