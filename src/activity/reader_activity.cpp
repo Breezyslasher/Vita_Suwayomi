@@ -868,9 +868,6 @@ void ReaderActivity::loadPages() {
                     page.index = static_cast<int>(i);
                     page.url = localPaths[i];      // Use local path as URL
                     page.imageUrl = localPaths[i]; // Local file path
-                    page.segment = 0;
-                    page.totalSegments = 1;
-                    page.originalIndex = static_cast<int>(i);
                     rawPages.push_back(page);
                 }
                 loadedFromLocal = true;
@@ -889,48 +886,8 @@ void ReaderActivity::loadPages() {
             }
         }
 
-        // For webtoon mode, check for tall images that need splitting
-        if (isWebtoonMode && !rawPages.empty()) {
-            brls::Logger::info("Webtoon mode: checking {} pages for tall images", rawPages.size());
-
-            for (size_t i = 0; i < rawPages.size(); i++) {
-                const Page& rawPage = rawPages[i];
-                int width, height, suggestedSegments;
-
-                // Get image dimensions to check if splitting is needed
-                if (ImageLoader::getImageDimensions(rawPage.imageUrl, width, height, suggestedSegments) &&
-                    suggestedSegments > 1) {
-                    // Split this page into multiple segments
-                    brls::Logger::info("Page {} ({}x{}) split into {} segments",
-                                       i, width, height, suggestedSegments);
-
-                    for (int seg = 0; seg < suggestedSegments; seg++) {
-                        Page segmentPage;
-                        segmentPage.index = static_cast<int>(sharedPages->size());
-                        segmentPage.url = rawPage.url;
-                        segmentPage.imageUrl = rawPage.imageUrl;
-                        segmentPage.segment = seg;
-                        segmentPage.totalSegments = suggestedSegments;
-                        segmentPage.originalIndex = static_cast<int>(i);
-                        sharedPages->push_back(segmentPage);
-                    }
-                } else {
-                    // Single page (no splitting needed)
-                    Page singlePage = rawPage;
-                    singlePage.index = static_cast<int>(sharedPages->size());
-                    singlePage.segment = 0;
-                    singlePage.totalSegments = 1;
-                    singlePage.originalIndex = static_cast<int>(i);
-                    sharedPages->push_back(singlePage);
-                }
-            }
-
-            brls::Logger::info("Webtoon mode: {} raw pages expanded to {} virtual pages",
-                               rawPages.size(), sharedPages->size());
-        } else {
-            // Normal mode - use pages as-is
-            *sharedPages = std::move(rawPages);
-        }
+        // Use pages as-is (no splitting - webtoon images load whole)
+        *sharedPages = std::move(rawPages);
 
         // Fetch chapter details and navigation from server (skip when offline)
         if (Application::getInstance().isConnected()) {
@@ -1050,12 +1007,7 @@ void ReaderActivity::loadPage(int index) {
     const Page& page = m_pages[index];
     std::string imageUrl = page.imageUrl;
 
-    if (page.totalSegments > 1) {
-        brls::Logger::debug("Loading page {} segment {}/{} from: {}",
-                           index, page.segment + 1, page.totalSegments, imageUrl);
-    } else {
-        brls::Logger::debug("Loading page {} from: {}", index, imageUrl);
-    }
+    brls::Logger::debug("Loading page {} from: {}", index, imageUrl);
 
     // Show page counter when navigating
     showPageCounter();
@@ -1081,12 +1033,7 @@ void ReaderActivity::loadPage(int index) {
             }
         };
 
-        if (page.totalSegments > 1) {
-            ImageLoader::loadAsyncFullSizeSegment(
-                imageUrl, page.segment, page.totalSegments, onLoaded, pageImage);
-        } else {
-            ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage);
-        }
+        ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage);
 
         // Set up a timeout: if page hasn't loaded after 15 seconds, show error
         // Only for server-streamed pages - local files load instantly from disk
@@ -1129,29 +1076,14 @@ void ReaderActivity::preloadAdjacentPages() {
 void ReaderActivity::updatePageDisplay() {
     // Update page counter (top-right overlay with rotation support)
     if (pageCounter) {
-        const Page& page = m_pages[m_currentPage];
-        if (page.totalSegments > 1) {
-            // Show segment info: "Page-Segment/Total" e.g. "1-2/10"
-            pageCounter->setText(std::to_string(page.originalIndex + 1) + "-" +
-                              std::to_string(page.segment + 1) + "/" +
-                              std::to_string(m_pages.size()));
-        } else {
-            pageCounter->setText(std::to_string(m_currentPage + 1) + "/" +
-                              std::to_string(m_pages.size()));
-        }
+        pageCounter->setText(std::to_string(m_currentPage + 1) + "/" +
+                          std::to_string(m_pages.size()));
     }
 
     // Update slider page label (in bottom bar)
     if (sliderPageLabel) {
-        const Page& page = m_pages[m_currentPage];
-        if (page.totalSegments > 1) {
-            // Show more detail: "Page X-Y of Z"
-            sliderPageLabel->setText("Page " + std::to_string(page.originalIndex + 1) + "-" +
-                                     std::to_string(page.segment + 1) +
-                                     " of " + std::to_string(m_pages.size()));
-        } else {
-            sliderPageLabel->setText("Page " + std::to_string(m_currentPage + 1) +
-                                     " of " + std::to_string(m_pages.size()));
+        sliderPageLabel->setText("Page " + std::to_string(m_currentPage + 1) +
+                                 " of " + std::to_string(m_pages.size()));
         }
     }
 
@@ -1891,28 +1823,14 @@ void ReaderActivity::loadPreviewPage(int index) {
     std::string imageUrl = page.imageUrl;
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    if (page.totalSegments > 1) {
-        brls::Logger::debug("Loading preview page {} segment {}/{}",
-                           index, page.segment + 1, page.totalSegments);
+    brls::Logger::debug("Loading preview page {}", index);
 
-        // Load specific segment for webtoon splitting
-        ImageLoader::loadAsyncFullSizeSegment(
-            imageUrl, page.segment, page.totalSegments,
-            [aliveWeak, index](RotatableImage* img) {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-                brls::Logger::debug("Preview page {} (segment) loaded", index);
-            }, previewImage);
-    } else {
-        brls::Logger::debug("Loading preview page {}", index);
-
-        // Load the preview image (full size for manga reader)
-        ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
-            auto alive = aliveWeak.lock();
-            if (!alive || !*alive) return;
-            brls::Logger::debug("Preview page {} loaded", index);
-        }, previewImage);
-    }
+    // Load the preview image (full size for manga reader)
+    ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive) return;
+        brls::Logger::debug("Preview page {} loaded", index);
+    }, previewImage);
 }
 
 void ReaderActivity::completeSwipeAnimation(bool turnPage) {
@@ -2013,9 +1931,6 @@ void ReaderActivity::preloadNextChapter() {
                     page.index = static_cast<int>(i);
                     page.url = localPaths[i];
                     page.imageUrl = localPaths[i];
-                    page.segment = 0;
-                    page.totalSegments = 1;
-                    page.originalIndex = static_cast<int>(i);
                     sharedNextPages->push_back(page);
                 }
                 return true;

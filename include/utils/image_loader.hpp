@@ -49,21 +49,11 @@ public:
     // Load full-size image asynchronously for RotatableImage (custom rendering)
     static void loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target);
 
-    // Load a specific segment of a tall image (for webtoon splitting)
-    // segment: which segment (0-based), totalSegments: total number of segments
-    static void loadAsyncFullSizeSegment(const std::string& url, int segment, int totalSegments,
-                                         RotatableLoadCallback callback, RotatableImage* target);
-
     // Preload image to cache without displaying
     static void preload(const std::string& url);
 
     // Preload full-size image to cache (for manga reader)
     static void preloadFullSize(const std::string& url);
-
-    // Get image dimensions and suggested segment count for a URL (downloads image temporarily)
-    // Returns true if dimensions were obtained, false on error
-    // suggestedSegments will be > 1 if the image is taller than MAX_TEXTURE_SIZE (2048)
-    static bool getImageDimensions(const std::string& url, int& width, int& height, int& suggestedSegments);
 
     // Clear image cache
     static void clearCache();
@@ -92,8 +82,6 @@ private:
         std::string url;
         RotatableLoadCallback callback;
         RotatableImage* target;
-        int segment = 0;        // Segment index (0 = first/only)
-        int totalSegments = 1;  // Total segments (1 = no splitting)
     };
 
     static void executeLoad(const LoadRequest& request);

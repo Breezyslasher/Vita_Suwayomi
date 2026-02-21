@@ -424,65 +424,33 @@ void WebtoonScrollView::updateVisibleImages() {
         RotatableImage* img = imgPtr.get();
         int pageIndex = i;
 
-        // Load the image
-        if (page.totalSegments > 1) {
-            // Segmented webtoon page
-            ImageLoader::loadAsyncFullSizeSegment(
-                page.imageUrl, page.segment, page.totalSegments,
-                [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) return;
+        // Load the whole image
+        ImageLoader::loadAsyncFullSize(page.imageUrl,
+            [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
 
-                    m_loadingPages.erase(pageIndex);
-                    m_loadedPages.insert(pageIndex);
+                m_loadingPages.erase(pageIndex);
+                m_loadedPages.insert(pageIndex);
 
-                    if (imgPtr->hasImage()) {
-                        float imageWidth = static_cast<float>(imgPtr->getImageWidth());
-                        float imageHeight = static_cast<float>(imgPtr->getImageHeight());
+                if (imgPtr->hasImage()) {
+                    float imageWidth = static_cast<float>(imgPtr->getImageWidth());
+                    float imageHeight = static_cast<float>(imgPtr->getImageHeight());
 
-                        if (imageWidth > 0 && imageHeight > 0) {
-                            float availableWidth = m_viewWidth - (m_sidePadding * 2);
-                            float aspectRatio = imageHeight / imageWidth;
-                            float newHeight = availableWidth * aspectRatio;
+                    if (imageWidth > 0 && imageHeight > 0) {
+                        float availableWidth = m_viewWidth - (m_sidePadding * 2);
+                        float aspectRatio = imageHeight / imageWidth;
+                        float newHeight = availableWidth * aspectRatio;
 
-                            float oldHeight = m_pageHeights[pageIndex];
-                            m_totalHeight += (newHeight - oldHeight);
-                            m_pageHeights[pageIndex] = newHeight;
-                            imgPtr->setHeight(newHeight);
-                        }
+                        float oldHeight = m_pageHeights[pageIndex];
+                        m_totalHeight += (newHeight - oldHeight);
+                        m_pageHeights[pageIndex] = newHeight;
+                        imgPtr->setHeight(newHeight);
                     }
+                }
 
-                    brls::Logger::debug("WebtoonScrollView: Loaded segment page {}", pageIndex);
-                }, img);
-        } else {
-            // Regular page
-            ImageLoader::loadAsyncFullSize(page.imageUrl,
-                [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) return;
-
-                    m_loadingPages.erase(pageIndex);
-                    m_loadedPages.insert(pageIndex);
-
-                    if (imgPtr->hasImage()) {
-                        float imageWidth = static_cast<float>(imgPtr->getImageWidth());
-                        float imageHeight = static_cast<float>(imgPtr->getImageHeight());
-
-                        if (imageWidth > 0 && imageHeight > 0) {
-                            float availableWidth = m_viewWidth - (m_sidePadding * 2);
-                            float aspectRatio = imageHeight / imageWidth;
-                            float newHeight = availableWidth * aspectRatio;
-
-                            float oldHeight = m_pageHeights[pageIndex];
-                            m_totalHeight += (newHeight - oldHeight);
-                            m_pageHeights[pageIndex] = newHeight;
-                            imgPtr->setHeight(newHeight);
-                        }
-                    }
-
-                    brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
-                }, img);
-        }
+                brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
+            }, img);
     }
 }
 
