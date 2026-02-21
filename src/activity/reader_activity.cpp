@@ -175,6 +175,7 @@ void ReaderActivity::onContentAvailable() {
 
     // Auto-detect webtoon format if enabled and no custom settings exist
     // Skip when offline to avoid connection errors
+    bool autoDetectedWebtoon = false;
     if (!hasServerSettings && !hasLocalSettings && appSettings.webtoonDetection &&
         Application::getInstance().isConnected()) {
         Manga mangaInfo;
@@ -185,6 +186,7 @@ void ReaderActivity::onContentAvailable() {
                 pageScaleMode = PageScaleMode::FIT_WIDTH;
                 imageRotation = 0;  // No rotation for webtoons
                 m_settings.isWebtoonFormat = true;  // Set webtoon format flag for page splitting
+                autoDetectedWebtoon = true;
                 brls::Logger::info("ReaderActivity: auto-detected webtoon format for '{}', applying webtoon defaults", mangaInfo.title);
             }
         }
@@ -260,7 +262,7 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Set up controller input - L/R for chapter navigation only
+    // Set up controller input - L/R for chapter navigation
     this->registerAction("Previous Chapter", brls::ControllerButton::BUTTON_LB, [this](brls::View*) {
         previousChapter();
         return true;
@@ -268,6 +270,37 @@ void ReaderActivity::onContentAvailable() {
 
     this->registerAction("Next Chapter", brls::ControllerButton::BUTTON_RB, [this](brls::View*) {
         nextChapter();
+        return true;
+    });
+
+    // D-pad for page navigation (direction-aware)
+    this->registerAction("", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
+        if (m_controlsVisible || m_settingsVisible) return false;  // Let UI handle it
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
+            nextPage();
+        else
+            previousPage();
+        return true;
+    });
+
+    this->registerAction("", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
+        if (m_controlsVisible || m_settingsVisible) return false;
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
+            previousPage();
+        else
+            nextPage();
+        return true;
+    });
+
+    this->registerAction("", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
+        if (m_controlsVisible || m_settingsVisible) return false;
+        previousPage();
+        return true;
+    });
+
+    this->registerAction("", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
+        if (m_controlsVisible || m_settingsVisible) return false;
+        nextPage();
         return true;
     });
 
@@ -304,7 +337,7 @@ void ReaderActivity::onContentAvailable() {
         m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
         m_lastTapPosition = {0, 0};
 
-        // Tap gesture for instant controls toggle (no hold delay)
+        // Tap gesture for controls toggle and optional tap-to-navigate zones
         pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::END) {
@@ -323,10 +356,40 @@ void ReaderActivity::onContentAvailable() {
                         handleDoubleTap(status.position);
                         m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
                     } else {
-                        // Single tap - toggle controls immediately
                         m_lastTapTime = now;
                         m_lastTapPosition = status.position;
-                        toggleControls();
+
+                        // Tap-to-navigate: left 1/3 = prev, right 1/3 = next, center = toggle
+                        // Respects reading direction (RTL: right=prev, left=next)
+                        AppSettings& appSettings = Application::getInstance().getSettings();
+                        if (appSettings.tapToNavigate && !m_isZoomed && !m_continuousScrollMode) {
+                            const float SCREEN_WIDTH = 960.0f;
+                            float tapX = status.position.x;
+                            float leftZone = SCREEN_WIDTH / 3.0f;
+                            float rightZone = SCREEN_WIDTH * 2.0f / 3.0f;
+
+                            if (tapX < leftZone) {
+                                // Left zone
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                    nextPage();
+                                } else {
+                                    previousPage();
+                                }
+                            } else if (tapX > rightZone) {
+                                // Right zone
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                    previousPage();
+                                } else {
+                                    nextPage();
+                                }
+                            } else {
+                                // Center zone - toggle controls
+                                toggleControls();
+                            }
+                        } else {
+                            // Tap-to-navigate disabled - toggle controls
+                            toggleControls();
+                        }
                     }
                 }
             }));
@@ -527,7 +590,33 @@ void ReaderActivity::onContentAvailable() {
                     } else {
                         m_lastTapTime = now;
                         m_lastTapPosition = status.position;
-                        toggleControls();
+
+                        // Same tap-to-navigate logic as pageImage
+                        AppSettings& appSettings = Application::getInstance().getSettings();
+                        if (appSettings.tapToNavigate && !m_isZoomed && !m_continuousScrollMode) {
+                            const float SCREEN_WIDTH = 960.0f;
+                            float tapX = status.position.x;
+                            float leftZone = SCREEN_WIDTH / 3.0f;
+                            float rightZone = SCREEN_WIDTH * 2.0f / 3.0f;
+
+                            if (tapX < leftZone) {
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                    nextPage();
+                                } else {
+                                    previousPage();
+                                }
+                            } else if (tapX > rightZone) {
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                    previousPage();
+                                } else {
+                                    nextPage();
+                                }
+                            } else {
+                                toggleControls();
+                            }
+                        } else {
+                            toggleControls();
+                        }
                     }
                 }
             }));
@@ -727,6 +816,11 @@ void ReaderActivity::onContentAvailable() {
 
     // Apply loaded settings (rotation, scaling, etc.)
     applySettings();
+
+    // Persist auto-detected webtoon settings so they survive across reads
+    if (autoDetectedWebtoon) {
+        saveSettingsToApp();
+    }
 
     // Load pages asynchronously
     loadPages();
@@ -969,6 +1063,7 @@ void ReaderActivity::loadPage(int index) {
 
     // Track this load generation for timeout detection
     int loadGen = ++m_pageLoadGeneration;
+    m_pageLoadSucceeded = false;
 
     // Load image using RotatableImage
     if (pageImage) {
@@ -980,9 +1075,8 @@ void ReaderActivity::loadPage(int index) {
             if (!alive || !*alive) return;
             if (index == currentPageAtLoad) {
                 brls::Logger::debug("ReaderActivity: Page {} loaded", index);
-                // Mark this generation as loaded by advancing past it
                 if (m_pageLoadGeneration == loadGen) {
-                    m_pageLoadGeneration = loadGen + 1000;  // Signal success
+                    m_pageLoadSucceeded = true;
                 }
             }
         };
@@ -1002,8 +1096,8 @@ void ReaderActivity::loadPage(int index) {
                 brls::sync([this, aliveWeak, loadGen, index]() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
-                    // Only show error if this is still the same load attempt
-                    if (m_pageLoadGeneration == loadGen) {
+                    // Only show error if this is still the same load attempt and it hasn't succeeded
+                    if (m_pageLoadGeneration == loadGen && !m_pageLoadSucceeded) {
                         showPageError("Failed to load page " + std::to_string(index + 1));
                     }
                 });
@@ -1147,7 +1241,6 @@ void ReaderActivity::nextChapter() {
 
         m_chapterIndex++;
         m_currentPage = 0;
-        m_cachedImages.clear();
 
         // Use preloaded pages if available for instant transition
         if (m_nextChapterLoaded && !m_nextChapterPages.empty()) {
@@ -1192,7 +1285,6 @@ void ReaderActivity::previousChapter() {
         m_nextChapterPages.clear();
         m_currentPage = 0;
         m_pages.clear();
-        m_cachedImages.clear();
 
         // Clear webtoon scroll view to reset scroll position for new chapter
         if (m_continuousScrollMode && webtoonScroll) {
@@ -1315,6 +1407,13 @@ void ReaderActivity::hideControls() {
 
 void ReaderActivity::showPageCounter() {
     if (pageCounter) {
+        // Respect the showPageNumber setting
+        AppSettings& appSettings = Application::getInstance().getSettings();
+        if (!appSettings.showPageNumber) {
+            pageCounter->setAlpha(0.0f);
+            pageCounter->setVisibility(brls::Visibility::GONE);
+            return;
+        }
         pageCounter->setAlpha(1.0f);
         pageCounter->setVisibility(brls::Visibility::VISIBLE);
     }
@@ -1328,9 +1427,21 @@ void ReaderActivity::hidePageCounter() {
 }
 
 void ReaderActivity::schedulePageCounterHide() {
-    // Auto-hide page counter after 1.5 seconds (like NOBORU)
-    // Note: In a real implementation, you'd use a timer/delayed callback
-    // For now, the page counter stays visible until controls are shown
+    // Auto-hide page counter after 2 seconds (NOBORU style)
+    int generation = ++m_pageCounterHideGeneration;
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    vitasuwayomi::asyncRun([this, aliveWeak, generation]() {
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        brls::sync([this, aliveWeak, generation]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            // Only hide if no newer show/page-turn happened since we were scheduled
+            if (generation == m_pageCounterHideGeneration && !m_controlsVisible) {
+                hidePageCounter();
+            }
+        });
+    });
 }
 
 void ReaderActivity::updatePageCounterRotation() {
@@ -1574,21 +1685,7 @@ void ReaderActivity::saveSettingsToApp() {
     });
 }
 
-void ReaderActivity::handleTouch(brls::Point point) {
-    // Reserved for advanced touch handling (pinch-to-zoom, etc.)
-}
-
-void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
-    // Touch navigation via tap zones is disabled
-    // Tapping anywhere now only toggles controls
-    // Page navigation is done via swipe gestures or controller buttons
-    toggleControls();
-}
-
-void ReaderActivity::handleSwipe(brls::Point delta) {
-    // Legacy function - swipe handling is now inline in gesture recognizers
-    // Kept for compatibility with header declaration
-}
+// Touch handling is now implemented inline in gesture recognizers (onContentAvailable)
 
 void ReaderActivity::handleDoubleTap(brls::Point position) {
     if (m_isZoomed) {
@@ -1856,15 +1953,21 @@ void ReaderActivity::resetSwipeState() {
 }
 
 void ReaderActivity::updateMarginColors() {
-    // Set background color based on dark/light mode
+    // Set background color based on reader background setting
     // This shows when the manga page doesn't fill the screen
+    AppSettings& appSettings = Application::getInstance().getSettings();
     NVGcolor bgColor;
-    if (m_isDarkMode) {
-        // Dark mode - dark gray background
-        bgColor = nvgRGBA(26, 26, 46, 255);  // #1a1a2e
-    } else {
-        // Light mode - light gray/white background
-        bgColor = nvgRGBA(240, 240, 245, 255);  // #f0f0f5
+    switch (appSettings.readerBackground) {
+        case ReaderBackground::WHITE:
+            bgColor = nvgRGBA(240, 240, 245, 255);  // #f0f0f5
+            break;
+        case ReaderBackground::GRAY:
+            bgColor = nvgRGBA(80, 80, 90, 255);  // Mid-gray
+            break;
+        case ReaderBackground::BLACK:
+        default:
+            bgColor = nvgRGBA(26, 26, 46, 255);  // #1a1a2e
+            break;
     }
 
     // Set container background
@@ -1878,6 +1981,11 @@ void ReaderActivity::updateMarginColors() {
     }
     if (previewImage) {
         previewImage->setBackgroundFillColor(bgColor);
+    }
+
+    // Update webtoon scroll view background
+    if (webtoonScroll) {
+        webtoonScroll->setBackgroundColor(bgColor);
     }
 }
 
@@ -1895,6 +2003,29 @@ void ReaderActivity::preloadNextChapter() {
     std::weak_ptr<bool> aliveWeak = m_alive;
 
     vitasuwayomi::asyncTask<bool>([mangaId, nextChapterIndex, sharedNextPages]() {
+        // First check if next chapter is downloaded locally
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+        if (localMgr.isChapterDownloaded(mangaId, nextChapterIndex)) {
+            std::vector<std::string> localPaths = localMgr.getChapterPages(mangaId, nextChapterIndex);
+            if (!localPaths.empty()) {
+                for (size_t i = 0; i < localPaths.size(); i++) {
+                    Page page;
+                    page.index = static_cast<int>(i);
+                    page.url = localPaths[i];
+                    page.imageUrl = localPaths[i];
+                    page.segment = 0;
+                    page.totalSegments = 1;
+                    page.originalIndex = static_cast<int>(i);
+                    sharedNextPages->push_back(page);
+                }
+                return true;
+            }
+        }
+
+        // Fall back to server
+        if (!Application::getInstance().isConnected()) {
+            return false;
+        }
         SuwayomiClient& client = SuwayomiClient::getInstance();
         return client.fetchChapterPages(mangaId, nextChapterIndex, *sharedNextPages);
     }, [this, aliveWeak, sharedNextPages](bool success) {

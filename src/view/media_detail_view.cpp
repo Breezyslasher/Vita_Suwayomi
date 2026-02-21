@@ -79,10 +79,11 @@ ChapterCell::ChapterCell() {
     // Download button (Box instead of Button to avoid Button's internal XML
     // layout which adds padding and an internal Label that hides our children)
     dlBtn = new brls::Box();
-    dlBtn->setWidth(40);
+    dlBtn->setWidth(55);
     dlBtn->setHeight(36);
     dlBtn->setCornerRadius(18);
     dlBtn->setFocusable(true);
+    dlBtn->setAxis(brls::Axis::COLUMN);
     dlBtn->setJustifyContent(brls::JustifyContent::CENTER);
     dlBtn->setAlignItems(brls::AlignItems::CENTER);
 
@@ -96,7 +97,6 @@ ChapterCell::ChapterCell() {
     dlLabel->setFontSize(10);
     dlLabel->setTextColor(nvgRGB(255, 255, 255));
     dlLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    dlLabel->setWidthPercentage(100);
     dlLabel->setVisibility(brls::Visibility::GONE);
     dlBtn->addView(dlLabel);
 
