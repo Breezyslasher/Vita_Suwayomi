@@ -246,6 +246,7 @@ int WebtoonScrollView::appendPages(const std::vector<Page>& pages,
     }
 
     // Add chapter separator card if chapter info is provided
+    bool hasSeparator = false;
     if (!finishedChapter.empty() && !m_pages.empty()) {
         ChapterSeparator sep;
         sep.finishedChapter = finishedChapter;
@@ -253,10 +254,12 @@ int WebtoonScrollView::appendPages(const std::vector<Page>& pages,
         sep.height = SEPARATOR_HEIGHT;
         m_separators[startIndex] = sep;
         m_totalHeight += SEPARATOR_HEIGHT;
+        hasSeparator = true;
     }
 
     // Add gap before the first appended page if there are existing pages
-    if (!m_pages.empty() && m_pageGap > 0) {
+    // but only if no separator was added (separator provides the visual break)
+    if (!hasSeparator && !m_pages.empty() && m_pageGap > 0) {
         m_totalHeight += m_pageGap;
     }
 
@@ -649,17 +652,26 @@ void WebtoonScrollView::updateVisibleImages() {
                         float newHeight = availableWidth * aspectRatio;
 
                         float oldHeight = m_pageHeights[pageIndex];
-                        m_totalHeight += (newHeight - oldHeight);
+                        float heightDiff = newHeight - oldHeight;
+                        m_totalHeight += heightDiff;
                         m_pageHeights[pageIndex] = newHeight;
                         imgPtr->setHeight(newHeight);
 
-                        // Clamp scroll position after height change to prevent
-                        // false boundary triggers from estimated-to-actual height shifts
+                        // If the loaded page is ABOVE the current view, adjust scroll
+                        // so the visible content stays in place instead of jumping
+                        if (heightDiff != 0.0f && pageIndex < m_currentPage) {
+                            m_scrollY -= heightDiff;
+                        }
+
+                        // Clamp scroll position to valid range
                         float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
                         float minScroll = -(m_totalHeight - viewSize);
                         if (minScroll > 0.0f) minScroll = 0.0f;
                         if (m_scrollY < minScroll) {
                             m_scrollY = minScroll;
+                        }
+                        if (m_scrollY > 0.0f) {
+                            m_scrollY = 0.0f;
                         }
                     }
 
@@ -762,18 +774,10 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         float currentX = x + m_scrollY;  // scrollY is used as horizontal offset
 
         for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
-            // Draw separator before this page if one exists
+            // Skip separator space in horizontal mode (text doesn't render well rotated)
             float sepH = getSeparatorHeightBefore(i);
             if (sepH > 0.0f) {
-                auto it = m_separators.find(i);
-                if (it != m_separators.end()) {
-                    float sepRight = currentX + sepH;
-                    if (sepRight >= x - 100 && currentX <= x + width + 100) {
-                        drawSeparator(vg, currentX, pageY, sepH, availableHeight,
-                                      it->second.finishedChapter, it->second.nextChapter);
-                    }
-                    currentX += sepH;
-                }
+                currentX += sepH;
             }
 
             RotatableImage* img = m_pageImages[i].get();

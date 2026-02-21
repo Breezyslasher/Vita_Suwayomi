@@ -1315,6 +1315,7 @@ void ReaderActivity::nextChapter() {
         preloadNextChapter();
     } else {
         m_pages.clear();
+        m_currentChapterPageCount = 0;  // Will be set when loadPages completes
         loadPages();
     }
 }
@@ -1337,6 +1338,7 @@ void ReaderActivity::previousChapter(bool scrollToEnd) {
     m_nextChapterPages.clear();
     m_nextChapterAppended = false;
     m_chapterPageOffset = 0;
+    m_currentChapterPageCount = 0;  // Will be set when loadPages completes
     m_currentPage = 0;
     m_pages.clear();
 
@@ -2380,20 +2382,21 @@ void ReaderActivity::setupReaderMode(bool webtoonMode) {
                 auto a = cbAlive.lock();
                 if (!a || !*a) return;
                 m_currentPage = currentPage;
-                updatePageDisplay();
-                updateProgress();
 
-                // Check if user has scrolled into the appended next chapter
+                // Check chapter boundary crossing FIRST before display/progress
+                // so chapter metadata is correct for the page display and progress save
                 if (m_nextChapterAppended &&
                     currentPage >= m_chapterPageOffset + m_currentChapterPageCount) {
                     handleChapterBoundaryCrossing();
                 }
 
+                updatePageDisplay();
+                updateProgress();
+
                 // When near the end of current chapter, preload and append next chapter
                 int currentChapterEnd = m_chapterPageOffset + m_currentChapterPageCount;
                 if (currentPage >= currentChapterEnd - 3) {
                     preloadNextChapter();
-                    // Append to scroll as soon as preloaded
                     appendNextChapterToScroll();
                 }
             });
@@ -2449,14 +2452,27 @@ void ReaderActivity::willDisappear(bool resetState) {
 
     // Save reader state so MangaDetailView can immediately update chapters
     // without waiting for async server refresh
+    // Save progress relative to current chapter (not absolute scroll index)
+    int lastPage = m_currentPage;
+    if (m_continuousScrollMode && m_currentChapterPageCount > 0) {
+        lastPage = m_currentPage - m_chapterPageOffset;
+        if (lastPage < 0) lastPage = 0;
+        if (lastPage >= m_currentChapterPageCount) lastPage = m_currentChapterPageCount - 1;
+    }
+
     Application::ReaderResult result;
     result.mangaId = m_mangaId;
-    result.chapterId = m_chapterIndex;  // This is actually the chapter ID passed to reader
-    result.lastPageRead = m_currentPage;
-    result.markedRead = (m_currentPage >= static_cast<int>(m_pages.size()) - 1 && !m_pages.empty());
+    result.chapterId = m_chapterIndex;
+    result.lastPageRead = lastPage;
+    result.markedRead = (lastPage >= m_currentChapterPageCount - 1 && m_currentChapterPageCount > 0) ||
+                        (m_currentPage >= static_cast<int>(m_pages.size()) - 1 && !m_pages.empty());
     result.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     Application::getInstance().setLastReaderResult(result);
+
+    // Clean up overlays before invalidating alive flag
+    hideChapterTransition();
+    hidePageError();
 
     // Invalidate alive flag so pending async callbacks bail out safely.
     // This must happen BEFORE any cleanup so that in-flight callbacks
