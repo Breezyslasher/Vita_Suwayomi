@@ -203,7 +203,7 @@ void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
     std::weak_ptr<bool> aliveWeak = m_alive;
     // Capture values needed in worker by copy to avoid accessing this in worker thread
     BrowseMode mode = m_browseMode;
-    std::string sourceId = m_source.id;
+    int64_t sourceId = m_source.id;
     int page = m_currentPage;
     std::string searchQuery = m_searchQuery;
 
