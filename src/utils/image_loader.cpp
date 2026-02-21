@@ -769,6 +769,11 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
 
         if (!isValidImage) {
             brls::Logger::warning("ImageLoader: Invalid image format for {}", url);
+            // Call callback on failure so caller can clean up loading state
+            brls::sync([callback, target, alive]() {
+                if (alive && !*alive) return;
+                if (callback) callback(target);
+            });
             return;
         }
 
@@ -784,6 +789,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             );
             if (imageData.empty()) {
                 brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
+                brls::sync([callback, target, alive]() {
+                    if (alive && !*alive) return;
+                    if (callback) callback(target);
+                });
                 return;
             }
         } else if (isJpegOrPng) {
@@ -794,6 +803,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             );
             if (imageData.empty()) {
                 brls::Logger::error("ImageLoader: JPEG/PNG conversion failed for {}", url);
+                brls::sync([callback, target, alive]() {
+                    if (alive && !*alive) return;
+                    if (callback) callback(target);
+                });
                 return;
             }
         } else {
@@ -817,6 +830,11 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         });
     } else {
         brls::Logger::error("ImageLoader: Failed to load {}", url);
+        // Call callback on failure so caller can clean up loading state and retry
+        brls::sync([callback, target, alive]() {
+            if (alive && !*alive) return;
+            if (callback) callback(target);
+        });
     }
 }
 

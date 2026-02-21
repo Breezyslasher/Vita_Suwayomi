@@ -65,7 +65,7 @@ void WebtoonScrollView::setupGestures() {
                 }
 
                 // Update scroll position
-                m_scrollY += scrollDelta;
+                float desiredScrollY = m_scrollY + scrollDelta;
 
                 // Clamp scroll position based on layout direction
                 float maxScroll = 0.0f;
@@ -75,7 +75,38 @@ void WebtoonScrollView::setupGestures() {
                 float minScroll = -(totalContentSize - viewSize);
                 if (minScroll > maxScroll) minScroll = maxScroll;
 
-                m_scrollY = std::max(minScroll, std::min(maxScroll, m_scrollY));
+                m_scrollY = std::max(minScroll, std::min(maxScroll, desiredScrollY));
+
+                // Track overscroll for chapter navigation (user dragging past boundary)
+                if (desiredScrollY < minScroll && scrollDelta < 0) {
+                    m_endOvershoot += std::abs(scrollDelta);
+                } else {
+                    m_endOvershoot = 0.0f;
+                }
+                if (desiredScrollY > maxScroll && scrollDelta > 0) {
+                    m_startOvershoot += std::abs(scrollDelta);
+                } else {
+                    m_startOvershoot = 0.0f;
+                }
+
+                // Trigger chapter navigation on sufficient overscroll
+                if (m_endOvershoot > OVERSCROLL_TRIGGER && !m_endReached) {
+                    bool atLastPages = m_currentPage >= static_cast<int>(m_pages.size()) - 2;
+                    bool lastPageLoaded = !m_pages.empty() &&
+                        m_loadedPages.count(static_cast<int>(m_pages.size()) - 1) > 0;
+                    if (atLastPages && lastPageLoaded && m_endReachedCallback) {
+                        m_endReached = true;
+                        m_endReachedCallback();
+                    }
+                }
+                if (m_startOvershoot > OVERSCROLL_TRIGGER && !m_startReached) {
+                    bool atFirstPages = m_currentPage <= 1;
+                    bool firstPageLoaded = !m_pages.empty() && m_loadedPages.count(0) > 0;
+                    if (atFirstPages && firstPageLoaded && m_startReachedCallback) {
+                        m_startReached = true;
+                        m_startReachedCallback();
+                    }
+                }
 
                 // Calculate velocity for momentum
                 auto now = std::chrono::steady_clock::now();
@@ -92,6 +123,8 @@ void WebtoonScrollView::setupGestures() {
                 updateCurrentPage();
             } else if (status.state == brls::GestureState::END) {
                 m_isTouching = false;
+                m_endOvershoot = 0.0f;
+                m_startOvershoot = 0.0f;
 
                 // Check if it was a tap (minimal movement)
                 float dx = status.position.x - m_touchStart.x;
@@ -186,6 +219,8 @@ void WebtoonScrollView::clearPages() {
     m_currentPage = 0;
     m_endReached = false;
     m_startReached = false;
+    m_endOvershoot = 0.0f;
+    m_startOvershoot = 0.0f;
 }
 
 void WebtoonScrollView::scrollToPage(int pageIndex) {
@@ -336,9 +371,12 @@ void WebtoonScrollView::onFrame() {
         if (minScroll > maxScroll) minScroll = maxScroll;
 
         // Check boundary hits and trigger chapter navigation callbacks
+        // Safety: only trigger if actually at the first/last pages AND those pages are loaded
         if (m_scrollY > maxScroll) {
             // Hit start boundary (top/left) - go to previous chapter
-            if (!m_startReached && m_startReachedCallback) {
+            bool atFirstPages = m_currentPage <= 1;
+            bool firstPageLoaded = !m_pages.empty() && m_loadedPages.count(0) > 0;
+            if (!m_startReached && m_startReachedCallback && atFirstPages && firstPageLoaded) {
                 m_startReached = true;
                 m_startReachedCallback();
             }
@@ -346,7 +384,10 @@ void WebtoonScrollView::onFrame() {
             m_scrollVelocity = 0.0f;
         } else if (m_scrollY < minScroll) {
             // Hit end boundary (bottom/right) - go to next chapter
-            if (!m_endReached && m_endReachedCallback) {
+            bool atLastPages = m_currentPage >= static_cast<int>(m_pages.size()) - 2;
+            bool lastPageLoaded = !m_pages.empty() &&
+                m_loadedPages.count(static_cast<int>(m_pages.size()) - 1) > 0;
+            if (!m_endReached && m_endReachedCallback && atLastPages && lastPageLoaded) {
                 m_endReached = true;
                 m_endReachedCallback();
             }
@@ -468,9 +509,11 @@ void WebtoonScrollView::updateVisibleImages() {
                 if (!alive || !*alive) return;
 
                 m_loadingPages.erase(pageIndex);
-                m_loadedPages.insert(pageIndex);
 
                 if (imgPtr->hasImage()) {
+                    // Success - mark as loaded and update dimensions
+                    m_loadedPages.insert(pageIndex);
+
                     float imageWidth = static_cast<float>(imgPtr->getImageWidth());
                     float imageHeight = static_cast<float>(imgPtr->getImageHeight());
 
@@ -483,10 +526,22 @@ void WebtoonScrollView::updateVisibleImages() {
                         m_totalHeight += (newHeight - oldHeight);
                         m_pageHeights[pageIndex] = newHeight;
                         imgPtr->setHeight(newHeight);
-                    }
-                }
 
-                brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
+                        // Clamp scroll position after height change to prevent
+                        // false boundary triggers from estimated-to-actual height shifts
+                        float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+                        float minScroll = -(m_totalHeight - viewSize);
+                        if (minScroll > 0.0f) minScroll = 0.0f;
+                        if (m_scrollY < minScroll) {
+                            m_scrollY = minScroll;
+                        }
+                    }
+
+                    brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
+                } else {
+                    // Load failed - leave out of both sets so it will be retried
+                    brls::Logger::warning("WebtoonScrollView: Failed to load page {}, will retry", pageIndex);
+                }
             }, img, m_alive);
     }
 

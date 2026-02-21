@@ -185,6 +185,11 @@ private:
     bool m_endReached = false;
     bool m_startReached = false;
 
+    // Overscroll tracking for chapter navigation via touch drag
+    float m_endOvershoot = 0.0f;
+    float m_startOvershoot = 0.0f;
+    static constexpr float OVERSCROLL_TRIGGER = 80.0f;  // Pixels of drag past boundary to trigger
+
     // Alive flag for async callback safety (cleared in clearPages/destructor)
     std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 

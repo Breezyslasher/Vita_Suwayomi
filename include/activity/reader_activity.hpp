@@ -164,6 +164,10 @@ private:
     // Chapter navigation
     std::vector<Chapter> m_chapters;
     int m_totalChapters = 0;
+    int m_chapterListPosition = -1;  // Position of current chapter in m_chapters list
+
+    // Update chapter label and progress display from m_chapters data
+    void updateChapterDisplay();
 
     // Next chapter preloading
     std::vector<Page> m_nextChapterPages;
