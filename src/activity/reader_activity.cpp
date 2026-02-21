@@ -528,7 +528,7 @@ void ReaderActivity::onContentAvailable() {
                                 if (m_swipingToNext) {
                                     nextChapter();
                                 } else {
-                                    previousChapter();
+                                    previousChapter(true);
                                 }
                             }
                         } else {
@@ -1020,16 +1020,23 @@ void ReaderActivity::loadPage(int index) {
 
     // Load image using RotatableImage
     if (pageImage) {
-        int currentPageAtLoad = m_currentPage;
         std::weak_ptr<bool> aliveWeak = m_alive;
 
-        auto onLoaded = [this, aliveWeak, index, currentPageAtLoad, loadGen](RotatableImage* img) {
+        auto onLoaded = [this, aliveWeak, index, loadGen](RotatableImage* img) {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
-            if (index == currentPageAtLoad) {
+            if (m_pageLoadGeneration == loadGen) {
+                // This is still the current page load - success
                 brls::Logger::debug("ReaderActivity: Page {} loaded", index);
-                if (m_pageLoadGeneration == loadGen) {
-                    m_pageLoadSucceeded = true;
+                m_pageLoadSucceeded = true;
+            } else {
+                // Stale page load completed and overwrote the current page's image.
+                // Reload the correct current page (should be instant from cache).
+                brls::Logger::debug("ReaderActivity: Stale page {} loaded (current={}), reloading correct page",
+                                    index, m_currentPage);
+                int correctPage = m_currentPage;
+                if (correctPage >= 0 && correctPage < static_cast<int>(m_pages.size()) && img) {
+                    ImageLoader::loadAsyncFullSize(m_pages[correctPage].imageUrl, nullptr, img, alive);
                 }
             }
         };
@@ -1194,8 +1201,8 @@ void ReaderActivity::previousPage() {
         loadPage(m_currentPage);
         updateProgress();
     } else {
-        // Beginning of chapter - previousChapter() checks if there is one
-        previousChapter();
+        // Beginning of chapter - go to last page of previous chapter
+        previousChapter(true);
     }
 }
 
@@ -1820,8 +1827,20 @@ void ReaderActivity::updateSwipePreview(float offset) {
 
     if (!pageImage || !previewImage) return;
 
-    // Show preview image
-    previewImage->setVisibility(brls::Visibility::VISIBLE);
+    // Only show preview image if a valid preview page was loaded.
+    // At chapter boundaries (first/last page), there's no preview page,
+    // so hide it to avoid showing stale content from a previous swipe.
+    if (m_previewPageIndex >= 0) {
+        previewImage->setVisibility(brls::Visibility::VISIBLE);
+    } else {
+        previewImage->setVisibility(brls::Visibility::GONE);
+    }
+
+    // At chapter boundaries (no preview page), apply resistance/dampening
+    // so the page feels like it's at the edge rather than sliding freely
+    if (m_previewPageIndex < 0) {
+        offset *= 0.3f;  // 30% of finger movement for rubber-band feel
+    }
 
     // Determine if we should use vertical swipe based on rotation
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
@@ -1838,14 +1857,16 @@ void ReaderActivity::updateSwipePreview(float offset) {
 
         // PUSH EFFECT: Preview page is always one screen behind current page
         // When current page is pushed off, preview slides in from behind
-        if (offset > 0) {
-            // Swiping down - preview pushes from top (above current page)
-            previewImage->setTranslationY(offset - SCREEN_HEIGHT);
-        } else {
-            // Swiping up - preview pushes from bottom (below current page)
-            previewImage->setTranslationY(offset + SCREEN_HEIGHT);
+        if (m_previewPageIndex >= 0) {
+            if (offset > 0) {
+                // Swiping down - preview pushes from top (above current page)
+                previewImage->setTranslationY(offset - SCREEN_HEIGHT);
+            } else {
+                // Swiping up - preview pushes from bottom (below current page)
+                previewImage->setTranslationY(offset + SCREEN_HEIGHT);
+            }
+            previewImage->setTranslationX(0.0f);
         }
-        previewImage->setTranslationX(0.0f);
     } else {
         // Horizontal swipe for 0/180 rotation
         // Clamp offset to screen width
@@ -1857,14 +1878,16 @@ void ReaderActivity::updateSwipePreview(float offset) {
 
         // PUSH EFFECT: Preview page is always one screen behind current page
         // When current page is pushed off, preview slides in from behind
-        if (offset > 0) {
-            // Swiping right - preview pushes from left (behind current page)
-            previewImage->setTranslationX(offset - SCREEN_WIDTH);
-        } else {
-            // Swiping left - preview pushes from right (behind current page)
-            previewImage->setTranslationX(offset + SCREEN_WIDTH);
+        if (m_previewPageIndex >= 0) {
+            if (offset > 0) {
+                // Swiping right - preview pushes from left (behind current page)
+                previewImage->setTranslationX(offset - SCREEN_WIDTH);
+            } else {
+                // Swiping left - preview pushes from right (behind current page)
+                previewImage->setTranslationX(offset + SCREEN_WIDTH);
+            }
+            previewImage->setTranslationY(0.0f);
         }
-        previewImage->setTranslationY(0.0f);
     }
 }
 
@@ -1940,7 +1963,7 @@ void ReaderActivity::animatePageTurn(bool forward) {
         if (forward)
             nextChapter();
         else
-            previousChapter();
+            previousChapter(true);
         return;
     }
 
