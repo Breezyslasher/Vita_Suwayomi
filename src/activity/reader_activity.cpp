@@ -274,7 +274,7 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // D-pad for page navigation (rotation-aware)
+    // D-pad for page navigation (rotation-aware, animated slide)
     // LEFT/RIGHT only active at 0° and 180° rotation (horizontal reading axis)
     this->registerAction("", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
         if (m_controlsVisible || m_settingsVisible) return false;
@@ -282,11 +282,9 @@ void ReaderActivity::onContentAvailable() {
             m_settings.rotation == ImageRotation::ROTATE_270) return false;
         bool inverted = (m_settings.rotation == ImageRotation::ROTATE_180);
         bool rtl = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT);
-        // LEFT = prev in normal LTR; invert for RTL or 180° (XOR)
-        if (rtl != inverted)
-            nextPage();
-        else
-            previousPage();
+        // LEFT = next in RTL (XOR with inverted for 180°)
+        bool forward = (rtl != inverted);
+        animatePageTurn(forward);
         return true;
     });
 
@@ -296,10 +294,8 @@ void ReaderActivity::onContentAvailable() {
             m_settings.rotation == ImageRotation::ROTATE_270) return false;
         bool inverted = (m_settings.rotation == ImageRotation::ROTATE_180);
         bool rtl = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT);
-        if (rtl != inverted)
-            previousPage();
-        else
-            nextPage();
+        bool forward = !(rtl != inverted);
+        animatePageTurn(forward);
         return true;
     });
 
@@ -309,10 +305,7 @@ void ReaderActivity::onContentAvailable() {
         if (m_settings.rotation == ImageRotation::ROTATE_0 ||
             m_settings.rotation == ImageRotation::ROTATE_180) return false;
         bool inverted = (m_settings.rotation == ImageRotation::ROTATE_270);
-        if (inverted)
-            nextPage();
-        else
-            previousPage();
+        animatePageTurn(inverted);
         return true;
     });
 
@@ -321,10 +314,7 @@ void ReaderActivity::onContentAvailable() {
         if (m_settings.rotation == ImageRotation::ROTATE_0 ||
             m_settings.rotation == ImageRotation::ROTATE_180) return false;
         bool inverted = (m_settings.rotation == ImageRotation::ROTATE_270);
-        if (inverted)
-            previousPage();
-        else
-            nextPage();
+        animatePageTurn(!inverted);
         return true;
     });
 
@@ -1934,6 +1924,87 @@ void ReaderActivity::resetSwipeState() {
         previewImage->setTranslationX(0.0f);
         previewImage->setTranslationY(0.0f);
     }
+}
+
+void ReaderActivity::animatePageTurn(bool forward) {
+    // Animated page slide for d-pad navigation (same push effect as touch swipe)
+    if (m_isDpadAnimating || m_isSwipeAnimating || m_continuousScrollMode) return;
+
+    int targetPage = forward ? m_currentPage + 1 : m_currentPage - 1;
+
+    // If out of bounds, go to next/previous chapter (no animation needed)
+    if (targetPage < 0 || targetPage >= static_cast<int>(m_pages.size())) {
+        if (forward)
+            nextChapter();
+        else
+            previousChapter();
+        return;
+    }
+
+    m_isDpadAnimating = true;
+    m_previewPageIndex = targetPage;
+    m_swipingToNext = forward;
+    loadPreviewPage(targetPage);
+
+    // Determine animation direction based on rotation
+    bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
+                             m_settings.rotation == ImageRotation::ROTATE_270);
+    bool invertDirection = (m_settings.rotation == ImageRotation::ROTATE_180 ||
+                            m_settings.rotation == ImageRotation::ROTATE_270);
+    bool rtl = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT);
+
+    // Compute the sign of the slide: which way the current page moves off-screen
+    // For forward page turn in LTR at 0°: slide left (negative offset)
+    float sign;
+    if (useVerticalSwipe) {
+        // Vertical axis: forward = slide up (negative), backward = slide down (positive)
+        sign = forward ? -1.0f : 1.0f;
+        if (invertDirection) sign = -sign;
+    } else {
+        // Horizontal axis: account for RTL and rotation inversion
+        bool effectiveForward = (rtl != invertDirection) ? !forward : forward;
+        sign = effectiveForward ? 1.0f : -1.0f;
+    }
+
+    float totalDistance = useVerticalSwipe ? 544.0f : 960.0f;
+    float targetOffset = sign * totalDistance;
+
+    // Animate over ~200ms using async thread posting sync updates
+    const int ANIM_DURATION_MS = 200;
+    const int FRAME_INTERVAL_MS = 16;  // ~60fps
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    vitasuwayomi::asyncRun([this, aliveWeak, targetOffset, ANIM_DURATION_MS, FRAME_INTERVAL_MS]() {
+        auto startTime = std::chrono::steady_clock::now();
+
+        while (true) {
+            auto now = std::chrono::steady_clock::now();
+            int elapsed = static_cast<int>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count());
+
+            float t = std::min(1.0f, static_cast<float>(elapsed) / ANIM_DURATION_MS);
+            // Ease-out cubic for smooth deceleration
+            float eased = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+            float currentOffset = targetOffset * eased;
+            bool done = (t >= 1.0f);
+
+            brls::sync([this, aliveWeak, currentOffset, done]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+
+                if (done) {
+                    // Animation complete - finalize page turn
+                    completeSwipeAnimation(true);
+                    m_isDpadAnimating = false;
+                } else {
+                    updateSwipePreview(currentOffset);
+                }
+            });
+
+            if (done) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(FRAME_INTERVAL_MS));
+        }
+    });
 }
 
 void ReaderActivity::updateMarginColors() {

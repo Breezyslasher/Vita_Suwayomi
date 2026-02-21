@@ -192,6 +192,8 @@ private:
     void loadPreviewPage(int index);
     void completeSwipeAnimation(bool turnPage);
     void resetSwipeState();
+    void animatePageTurn(bool forward);  // D-pad animated page slide
+    bool m_isDpadAnimating = false;      // Guard against overlapping d-pad animations
 
     // NOBORU-style touch controls
     // Double-tap detection
