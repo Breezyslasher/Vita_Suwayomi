@@ -966,6 +966,11 @@ void ReaderActivity::loadPages() {
                     m_currentPage = currentPage;
                     updatePageDisplay();
                     updateProgress();
+
+                    // Preload next chapter when near end of current chapter
+                    if (currentPage >= totalPages - 3) {
+                        preloadNextChapter();
+                    }
                 });
 
                 // Set up tap callback with alive guard
@@ -975,8 +980,35 @@ void ReaderActivity::loadPages() {
                     toggleControls();
                 });
 
+                // Set up end-reached callback for auto chapter advance
+                webtoonScroll->setEndReachedCallback([this, cbAlive]() {
+                    auto a = cbAlive.lock();
+                    if (!a || !*a) return;
+                    markChapterAsRead();
+                    if (m_chapterIndex < m_totalChapters - 1) {
+                        nextChapter();
+                    } else {
+                        brls::Application::notify("End of manga");
+                    }
+                });
+
+                // Set up start-reached callback for previous chapter
+                webtoonScroll->setStartReachedCallback([this, cbAlive]() {
+                    auto a = cbAlive.lock();
+                    if (!a || !*a) return;
+                    if (m_chapterIndex > 0) {
+                        previousChapter(true);  // scroll to end of previous chapter
+                    }
+                });
+
                 // Load all pages into the scroll view
                 webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
+
+                // Scroll to end if navigating back from next chapter
+                if (m_scrollToEndOnLoad) {
+                    m_currentPage = static_cast<int>(m_pages.size()) - 1;
+                    m_scrollToEndOnLoad = false;
+                }
                 webtoonScroll->scrollToPage(m_currentPage);
             }
         } else {
@@ -1111,6 +1143,15 @@ void ReaderActivity::updateDirectionLabel() {
 }
 
 void ReaderActivity::updateProgress() {
+    // Throttle progress saves in webtoon mode to avoid excessive network/disk I/O
+    // (page boundary changes fire rapidly during continuous scrolling)
+    if (m_continuousScrollMode) {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - m_lastProgressSaveTime).count();
+        if (elapsed < 2) return;
+        m_lastProgressSaveTime = now;
+    }
+
     int mangaId = m_mangaId;
     int chapterIndex = m_chapterIndex;
     int currentPage = m_currentPage;
@@ -1208,7 +1249,7 @@ void ReaderActivity::nextChapter() {
     }
 }
 
-void ReaderActivity::previousChapter() {
+void ReaderActivity::previousChapter(bool scrollToEnd) {
     if (m_chapterIndex > 0) {
         m_chapterIndex--;
         // Reset preloaded chapter since we're going backwards
@@ -1216,6 +1257,11 @@ void ReaderActivity::previousChapter() {
         m_nextChapterPages.clear();
         m_currentPage = 0;
         m_pages.clear();
+
+        // When scrolling back from webtoon start, go to end of previous chapter
+        if (scrollToEnd) {
+            m_scrollToEndOnLoad = true;
+        }
 
         // Clear webtoon scroll view to reset scroll position for new chapter
         if (m_continuousScrollMode && webtoonScroll) {
@@ -1994,6 +2040,11 @@ void ReaderActivity::updateReaderMode() {
                 m_currentPage = currentPage;
                 updatePageDisplay();
                 updateProgress();
+
+                // Preload next chapter when near end
+                if (currentPage >= totalPages - 3) {
+                    preloadNextChapter();
+                }
             });
 
             // Set up tap callback with alive guard
@@ -2001,6 +2052,27 @@ void ReaderActivity::updateReaderMode() {
                 auto a = cbAlive.lock();
                 if (!a || !*a) return;
                 toggleControls();
+            });
+
+            // Set up end-reached callback for auto chapter advance
+            webtoonScroll->setEndReachedCallback([this, cbAlive]() {
+                auto a = cbAlive.lock();
+                if (!a || !*a) return;
+                markChapterAsRead();
+                if (m_chapterIndex < m_totalChapters - 1) {
+                    nextChapter();
+                } else {
+                    brls::Application::notify("End of manga");
+                }
+            });
+
+            // Set up start-reached callback for previous chapter
+            webtoonScroll->setStartReachedCallback([this, cbAlive]() {
+                auto a = cbAlive.lock();
+                if (!a || !*a) return;
+                if (m_chapterIndex > 0) {
+                    previousChapter(true);
+                }
             });
 
             // Load pages into the scroll view
@@ -2050,6 +2122,8 @@ void ReaderActivity::willDisappear(bool resetState) {
     if (webtoonScroll) {
         webtoonScroll->setProgressCallback(nullptr);
         webtoonScroll->setTapCallback(nullptr);
+        webtoonScroll->setEndReachedCallback(nullptr);
+        webtoonScroll->setStartReachedCallback(nullptr);
         webtoonScroll->clearPages();
     }
 

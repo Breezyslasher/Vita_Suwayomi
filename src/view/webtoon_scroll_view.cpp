@@ -184,6 +184,8 @@ void WebtoonScrollView::clearPages() {
     m_scrollY = 0.0f;
     m_scrollVelocity = 0.0f;
     m_currentPage = 0;
+    m_endReached = false;
+    m_startReached = false;
 }
 
 void WebtoonScrollView::scrollToPage(int pageIndex) {
@@ -333,13 +335,31 @@ void WebtoonScrollView::onFrame() {
         float minScroll = -(totalContentSize - viewSize);
         if (minScroll > maxScroll) minScroll = maxScroll;
 
-        // Bounce back if out of bounds
+        // Check boundary hits and trigger chapter navigation callbacks
         if (m_scrollY > maxScroll) {
+            // Hit start boundary (top/left) - go to previous chapter
+            if (!m_startReached && m_startReachedCallback) {
+                m_startReached = true;
+                m_startReachedCallback();
+            }
             m_scrollY = maxScroll;
             m_scrollVelocity = 0.0f;
         } else if (m_scrollY < minScroll) {
+            // Hit end boundary (bottom/right) - go to next chapter
+            if (!m_endReached && m_endReachedCallback) {
+                m_endReached = true;
+                m_endReachedCallback();
+            }
             m_scrollY = minScroll;
             m_scrollVelocity = 0.0f;
+        } else {
+            // Reset boundary flags when scrolled away from edges
+            if (m_scrollY < maxScroll - 100.0f) {
+                m_startReached = false;
+            }
+            if (m_scrollY > minScroll + 100.0f) {
+                m_endReached = false;
+            }
         }
 
         updateVisibleImages();
@@ -386,15 +406,32 @@ bool WebtoonScrollView::isPageVisible(int pageIndex) const {
 }
 
 void WebtoonScrollView::updateVisibleImages() {
-    // Find visible pages and preload nearby pages
+    int size = static_cast<int>(m_pages.size());
+    if (size == 0) return;
+
     int firstVisible = -1;
     int lastVisible = -1;
 
-    for (int i = 0; i < static_cast<int>(m_pages.size()); i++) {
-        if (isPageVisible(i)) {
+    // Single-pass O(n) visibility check instead of calling getPageOffset() per page
+    float offset = 0.0f;
+    float viewStart = -m_scrollY;
+    bool horizontal = isHorizontalLayout();
+    float viewSize = horizontal ? m_viewWidth : m_viewHeight;
+    float viewEnd = viewStart + viewSize;
+
+    for (int i = 0; i < size; i++) {
+        float pageSize = getEffectivePageSize(i);
+        float pageEnd = offset + pageSize;
+
+        if (pageEnd > viewStart && offset < viewEnd) {
             if (firstVisible < 0) firstVisible = i;
             lastVisible = i;
         }
+
+        offset = pageEnd + m_pageGap;
+
+        // Early exit once we've passed the visible area
+        if (offset > viewEnd && firstVisible >= 0) break;
     }
 
     if (firstVisible < 0) {
@@ -403,7 +440,7 @@ void WebtoonScrollView::updateVisibleImages() {
 
     // Expand range for preloading
     int loadStart = std::max(0, firstVisible - PRELOAD_PAGES);
-    int loadEnd = std::min(static_cast<int>(m_pages.size()) - 1, lastVisible + PRELOAD_PAGES);
+    int loadEnd = std::min(size - 1, lastVisible + PRELOAD_PAGES);
 
     // Capture alive flag for async callbacks
     std::weak_ptr<bool> aliveWeak = m_alive;
@@ -451,6 +488,35 @@ void WebtoonScrollView::updateVisibleImages() {
 
                 brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
             }, img, m_alive);
+    }
+
+    // Unload textures for distant pages to save GPU memory
+    unloadDistantPages(firstVisible, lastVisible);
+}
+
+void WebtoonScrollView::unloadDistantPages(int firstVisible, int lastVisible) {
+    int size = static_cast<int>(m_pageImages.size());
+    int keepStart = std::max(0, firstVisible - PRELOAD_PAGES - UNLOAD_DISTANCE);
+    int keepEnd = std::min(size - 1, lastVisible + PRELOAD_PAGES + UNLOAD_DISTANCE);
+
+    // Find pages to unload (outside the keep range)
+    std::vector<int> toUnload;
+    for (int page : m_loadedPages) {
+        if (page < keepStart || page > keepEnd) {
+            toUnload.push_back(page);
+        }
+    }
+
+    // Unload - clear GPU texture but keep height data for scroll calculations
+    for (int page : toUnload) {
+        if (page >= 0 && page < size) {
+            m_pageImages[page]->clearImage();
+        }
+        m_loadedPages.erase(page);
+    }
+
+    if (!toUnload.empty()) {
+        brls::Logger::debug("WebtoonScrollView: Unloaded {} distant pages", toUnload.size());
     }
 }
 

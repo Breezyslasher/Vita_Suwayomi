@@ -21,6 +21,9 @@ using ScrollProgressCallback = std::function<void(int currentPage, int totalPage
 // Callback when user taps (for toggling controls)
 using TapCallback = std::function<void()>;
 
+// Callback when scroll reaches end (bottom/right) or start (top/left)
+using EndReachedCallback = std::function<void()>;
+
 class WebtoonScrollView : public brls::Box {
 public:
     WebtoonScrollView();
@@ -67,6 +70,16 @@ public:
      * Set callback for tap gesture (to toggle controls)
      */
     void setTapCallback(TapCallback callback) { m_tapCallback = callback; }
+
+    /**
+     * Set callback when scroll reaches the end (bottom/right) - for auto chapter advance
+     */
+    void setEndReachedCallback(EndReachedCallback callback) { m_endReachedCallback = callback; }
+
+    /**
+     * Set callback when scroll reaches the start (top/left) - for previous chapter
+     */
+    void setStartReachedCallback(EndReachedCallback callback) { m_startReachedCallback = callback; }
 
     /**
      * Set side padding percentage (0-20)
@@ -123,6 +136,9 @@ private:
     // Update current page based on scroll position
     void updateCurrentPage();
 
+    // Unload textures for pages far from visible area to save GPU memory
+    void unloadDistantPages(int firstVisible, int lastVisible);
+
     // Apply momentum scrolling
     void applyMomentum();
 
@@ -164,12 +180,19 @@ private:
     // Callbacks
     ScrollProgressCallback m_progressCallback;
     TapCallback m_tapCallback;
+    EndReachedCallback m_endReachedCallback;
+    EndReachedCallback m_startReachedCallback;
+    bool m_endReached = false;
+    bool m_startReached = false;
 
     // Alive flag for async callback safety (cleared in clearPages/destructor)
     std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 
     // Preload buffer - how many pages ahead/behind to load
-    static constexpr int PRELOAD_PAGES = 3;
+    static constexpr int PRELOAD_PAGES = 5;
+
+    // Pages beyond preload range to keep textures before unloading
+    static constexpr int UNLOAD_DISTANCE = 8;
 
     // Momentum friction
     static constexpr float MOMENTUM_FRICTION = 0.95f;

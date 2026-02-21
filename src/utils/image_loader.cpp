@@ -85,7 +85,8 @@ static int extractMangaIdFromUrl(const std::string& url) {
     return 0;
 }
 
-// Helper function to downscale RGBA image
+// Helper function to downscale RGBA image using box filtering (area averaging)
+// Produces much better quality than nearest-neighbor for manga/webtoon images
 static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
                           uint8_t* dst, int dstW, int dstH) {
     float scaleX = (float)srcW / dstW;
@@ -93,18 +94,37 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
 
     for (int y = 0; y < dstH; y++) {
         for (int x = 0; x < dstW; x++) {
-            int srcX = (int)(x * scaleX);
-            int srcY = (int)(y * scaleY);
-            if (srcX >= srcW) srcX = srcW - 1;
-            if (srcY >= srcH) srcY = srcH - 1;
+            // Box filter: average all source pixels that map to this destination pixel
+            int sx0 = (int)(x * scaleX);
+            int sy0 = (int)(y * scaleY);
+            int sx1 = std::min((int)((x + 1) * scaleX), srcW);
+            int sy1 = std::min((int)((y + 1) * scaleY), srcH);
 
-            int srcIdx = (srcY * srcW + srcX) * 4;
+            // Ensure at least one pixel
+            if (sx1 <= sx0) sx1 = sx0 + 1;
+            if (sy1 <= sy0) sy1 = sy0 + 1;
+            if (sx1 > srcW) sx1 = srcW;
+            if (sy1 > srcH) sy1 = srcH;
+
+            unsigned int sumR = 0, sumG = 0, sumB = 0, sumA = 0;
+            int count = 0;
+
+            for (int sy = sy0; sy < sy1; sy++) {
+                for (int sx = sx0; sx < sx1; sx++) {
+                    int srcIdx = (sy * srcW + sx) * 4;
+                    sumR += src[srcIdx + 0];
+                    sumG += src[srcIdx + 1];
+                    sumB += src[srcIdx + 2];
+                    sumA += src[srcIdx + 3];
+                    count++;
+                }
+            }
+
             int dstIdx = (y * dstW + x) * 4;
-
-            dst[dstIdx + 0] = src[srcIdx + 0];
-            dst[dstIdx + 1] = src[srcIdx + 1];
-            dst[dstIdx + 2] = src[srcIdx + 2];
-            dst[dstIdx + 3] = src[srcIdx + 3];
+            dst[dstIdx + 0] = static_cast<uint8_t>(sumR / count);
+            dst[dstIdx + 1] = static_cast<uint8_t>(sumG / count);
+            dst[dstIdx + 2] = static_cast<uint8_t>(sumB / count);
+            dst[dstIdx + 3] = static_cast<uint8_t>(sumA / count);
         }
     }
 }
@@ -753,7 +773,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
 
         // Convert images to TGA for Vita GPU compatibility
-        const int MAX_TEXTURE_SIZE = 2048;
+        const int MAX_TEXTURE_SIZE = 4096;
         std::vector<uint8_t> imageData;
 
         if (isWebP) {

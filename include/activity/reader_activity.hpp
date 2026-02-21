@@ -67,7 +67,7 @@ public:
     void previousPage();
     void goToPage(int pageIndex);
     void nextChapter();
-    void previousChapter();
+    void previousChapter(bool scrollToEnd = false);
 
     // Controls
     void toggleControls();
@@ -218,6 +218,12 @@ private:
     int m_pageLoadGeneration = 0;   // Track current load to detect stale timeouts
     bool m_pageLoadSucceeded = false; // Set true when current page loads successfully
     bool m_loadedFromLocal = false;  // True when current chapter was loaded from local downloads
+
+    // Progress save throttling for webtoon mode (avoids excessive network/disk I/O)
+    std::chrono::steady_clock::time_point m_lastProgressSaveTime;
+
+    // When true, scroll to end of chapter on next load (for previous chapter navigation)
+    bool m_scrollToEndOnLoad = false;
     void showPageError(const std::string& message);
     void hidePageError();
 };
