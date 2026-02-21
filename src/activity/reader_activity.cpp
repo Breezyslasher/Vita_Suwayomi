@@ -36,7 +36,7 @@ ReaderActivity::ReaderActivity(int mangaId, int chapterIndex, const std::string&
     : m_mangaId(mangaId)
     , m_chapterIndex(chapterIndex)
     , m_mangaTitle(mangaTitle)
-    , m_startPage(0) {
+    , m_startPage(-1) {  // -1 = use server's lastPageRead as resume point
     brls::Logger::info("ReaderActivity: manga={}, chapter={}", mangaId, chapterIndex);
 }
 
@@ -465,11 +465,13 @@ void ReaderActivity::onContentAvailable() {
 
                         int previewIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
 
-                        // Load preview page if not already loaded
+                        // Always track swipe direction (needed for chapter boundary detection)
+                        m_swipingToNext = wantNextPage;
+
+                        // Load preview page if not already loaded and in bounds
                         if (previewIndex != m_previewPageIndex && previewIndex >= 0 &&
                             previewIndex < static_cast<int>(m_pages.size())) {
                             m_previewPageIndex = previewIndex;
-                            m_swipingToNext = wantNextPage;
                             loadPreviewPage(previewIndex);
                         }
 
@@ -500,9 +502,19 @@ void ReaderActivity::onContentAvailable() {
                         // Complete swipe animation - use raw delta for threshold
                         float absSwipe = std::abs(rawDelta);
 
-                        if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
-                            // Swipe was long enough - turn the page
-                            completeSwipeAnimation(true);
+                        if (absSwipe >= PAGE_TURN_THRESHOLD) {
+                            if (m_previewPageIndex >= 0) {
+                                // Swipe was long enough and preview page loaded - turn the page
+                                completeSwipeAnimation(true);
+                            } else {
+                                // Swiped past chapter boundary (no preview page exists)
+                                resetSwipeState();
+                                if (m_swipingToNext) {
+                                    nextChapter();
+                                } else {
+                                    previousChapter();
+                                }
+                            }
                         } else {
                             // Swipe too short - snap back
                             completeSwipeAnimation(false);
@@ -843,11 +855,12 @@ void ReaderActivity::loadPages() {
     auto sharedChapters = std::make_shared<std::vector<Chapter>>();
     auto sharedTotalChapters = std::make_shared<int>(0);
     auto sharedLoadedFromLocal = std::make_shared<bool>(false);
+    auto sharedLastPageRead = std::make_shared<int>(0);
 
     vitasuwayomi::asyncTask<bool>([isWebtoonMode, mangaId, chapterIndex,
                                     sharedPages, sharedChapterName,
                                     sharedChapters, sharedTotalChapters,
-                                    sharedLoadedFromLocal]() {
+                                    sharedLoadedFromLocal, sharedLastPageRead]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         DownloadsManager& localMgr = DownloadsManager::getInstance();
         localMgr.init();
@@ -895,6 +908,7 @@ void ReaderActivity::loadPages() {
             Chapter chapter;
             if (client.fetchChapter(mangaId, chapterIndex, chapter)) {
                 *sharedChapterName = chapter.name;
+                *sharedLastPageRead = chapter.lastPageRead;
             }
             client.fetchChapters(mangaId, *sharedChapters);
             *sharedTotalChapters = static_cast<int>(sharedChapters->size());
@@ -904,7 +918,7 @@ void ReaderActivity::loadPages() {
     }, [this, isWebtoonMode, aliveWeak,
         sharedPages, sharedChapterName,
         sharedChapters, sharedTotalChapters,
-        sharedLoadedFromLocal](bool success) {
+        sharedLoadedFromLocal, sharedLastPageRead](bool success) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
 
@@ -939,9 +953,27 @@ void ReaderActivity::loadPages() {
         // Update UI labels using chapter data
         updateChapterDisplay();
 
-        // Start from saved position or beginning
-        m_currentPage = std::min(m_startPage, static_cast<int>(m_pages.size()) - 1);
-        m_currentPage = std::max(0, m_currentPage);
+        // Determine starting page:
+        // Priority: scrollToEnd (prev chapter nav) > explicit startPage > server lastPageRead > 0
+        int lastPage = static_cast<int>(m_pages.size()) - 1;
+        if (m_scrollToEndOnLoad) {
+            // Going to previous chapter - start at end
+            m_currentPage = lastPage;
+            m_scrollToEndOnLoad = false;
+            brls::Logger::info("ReaderActivity: Starting at end of chapter (scroll to end)");
+        } else if (m_startPage > 0) {
+            // Explicit start page from constructor or caller
+            m_currentPage = std::min(m_startPage, lastPage);
+            brls::Logger::info("ReaderActivity: Starting at explicit page {}", m_currentPage);
+        } else if (m_startPage == -1 && *sharedLastPageRead > 0) {
+            // Resume from server's saved progress (first constructor, no explicit page)
+            m_currentPage = std::min(*sharedLastPageRead, lastPage);
+            brls::Logger::info("ReaderActivity: Resuming from server progress page {}", m_currentPage);
+        } else {
+            m_currentPage = 0;
+        }
+        // Reset m_startPage so subsequent loadPages() calls (from chapter nav) start fresh
+        m_startPage = 0;
 
         // Check if we should use continuous scroll mode for webtoon
         if (isWebtoonMode) {
@@ -999,12 +1031,6 @@ void ReaderActivity::loadPages() {
 
                 // Load all pages into the scroll view
                 webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
-
-                // Scroll to end if navigating back from next chapter
-                if (m_scrollToEndOnLoad) {
-                    m_currentPage = static_cast<int>(m_pages.size()) - 1;
-                    m_scrollToEndOnLoad = false;
-                }
                 webtoonScroll->scrollToPage(m_currentPage);
             }
         } else {
