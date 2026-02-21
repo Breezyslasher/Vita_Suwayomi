@@ -1084,7 +1084,6 @@ void ReaderActivity::updatePageDisplay() {
     if (sliderPageLabel) {
         sliderPageLabel->setText("Page " + std::to_string(m_currentPage + 1) +
                                  " of " + std::to_string(m_pages.size()));
-        }
     }
 
     // Update slider position
