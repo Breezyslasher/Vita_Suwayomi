@@ -16,12 +16,14 @@
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "view/recycling_grid.hpp"
+#include <memory>
 
 namespace vitasuwayomi {
 
 class SourceBrowseTab : public brls::Box {
 public:
     SourceBrowseTab(const Source& source);
+    ~SourceBrowseTab() override;
 
     void onFocusGained() override;
 
@@ -59,6 +61,9 @@ private:
     brls::Button* m_searchBtn = nullptr;
     brls::Button* m_loadMoreBtn = nullptr;
     RecyclingGrid* m_contentGrid = nullptr;
+
+    // Lifetime tracking for async operations
+    std::shared_ptr<bool> m_alive;
 };
 
 } // namespace vitasuwayomi

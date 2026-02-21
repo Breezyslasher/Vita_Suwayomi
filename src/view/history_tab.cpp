@@ -151,6 +151,7 @@ void HistoryTab::refresh() {
     }
 
     m_loaded = false;
+    m_isLoading = false;  // Reset so loadHistory can proceed
     m_currentOffset = 0;
     m_hasMoreItems = true;
     m_historyItems.clear();
@@ -158,6 +159,9 @@ void HistoryTab::refresh() {
 }
 
 void HistoryTab::loadHistory() {
+    if (m_isLoading) return;  // Prevent duplicate loads
+    m_isLoading = true;
+
     brls::Logger::debug("HistoryTab: Loading history...");
 
     // Show loading indicator
@@ -179,6 +183,7 @@ void HistoryTab::loadHistory() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
+            m_isLoading = false;
             m_loaded = true;
             m_loadingLabel->setVisibility(brls::Visibility::GONE);
 
@@ -210,11 +215,13 @@ void HistoryTab::loadMoreHistory() {
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak, firstNewItemIndex]() {
+    int offset = m_currentOffset;  // Capture by value to avoid accessing this in worker
+
+    asyncRun([this, aliveWeak, firstNewItemIndex, offset]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<ReadingHistoryItem> moreHistory;
 
-        bool success = client.fetchReadingHistory(m_currentOffset, ITEMS_PER_PAGE, moreHistory);
+        bool success = client.fetchReadingHistory(offset, ITEMS_PER_PAGE, moreHistory);
 
         brls::sync([this, moreHistory, success, aliveWeak, firstNewItemIndex]() {
             auto alive = aliveWeak.lock();
@@ -480,7 +487,7 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
         if (url[0] == '/') {
             url = SuwayomiClient::getInstance().getServerUrl() + url;
         }
-        ImageLoader::loadAsync(url, nullptr, coverImage);
+        ImageLoader::loadAsync(url, [](brls::Image*) {}, coverImage, m_alive);
     }
     itemRow->addView(coverImage);
 

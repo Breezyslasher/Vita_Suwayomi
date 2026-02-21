@@ -37,6 +37,7 @@ private:
     brls::Box* m_contentBox = nullptr;
     brls::Box* m_emptyStateBox = nullptr;
     brls::Label* m_loadingLabel = nullptr;
+    bool m_isLoading = false;      // Guard against concurrent initial loads
     bool m_isLoadingMore = false;  // Guard against concurrent load-more
     brls::Button* m_refreshBtn = nullptr;
     std::vector<brls::Box*> m_itemRows;

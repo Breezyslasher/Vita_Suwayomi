@@ -19,6 +19,8 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     , m_hasNextPage(false)
     , m_browseMode(BrowseMode::POPULAR) {
 
+    m_alive = std::make_shared<bool>(true);
+
     this->setAxis(brls::Axis::COLUMN);
     this->setPadding(20, 30, 20, 30);
 
@@ -39,7 +41,7 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     // Load icon asynchronously
     if (!source.iconUrl.empty()) {
         std::string iconUrl = Application::getInstance().getServerUrl() + source.iconUrl;
-        ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, m_sourceIcon);
+        ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, m_sourceIcon, m_alive);
     }
 
     // Title
@@ -138,6 +140,13 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     loadPopular();
 }
 
+SourceBrowseTab::~SourceBrowseTab() {
+    if (m_alive) {
+        *m_alive = false;
+    }
+    brls::Logger::debug("SourceBrowseTab: Destroyed");
+}
+
 void SourceBrowseTab::onFocusGained() {
     brls::Box::onFocusGained();
 }
@@ -191,25 +200,35 @@ void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
         m_contentGrid->setVisibility(brls::Visibility::GONE);
     }
 
-    brls::async([this, focusIndexAfterLoad]() {
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    // Capture values needed in worker by copy to avoid accessing this in worker thread
+    BrowseMode mode = m_browseMode;
+    std::string sourceId = m_source.id;
+    int page = m_currentPage;
+    std::string searchQuery = m_searchQuery;
+
+    brls::async([this, focusIndexAfterLoad, aliveWeak, mode, sourceId, page, searchQuery]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> newManga;
         bool hasNext = false;
         bool success = false;
 
-        switch (m_browseMode) {
+        switch (mode) {
             case BrowseMode::POPULAR:
-                success = client.fetchPopularManga(m_source.id, m_currentPage, newManga, hasNext);
+                success = client.fetchPopularManga(sourceId, page, newManga, hasNext);
                 break;
             case BrowseMode::LATEST:
-                success = client.fetchLatestManga(m_source.id, m_currentPage, newManga, hasNext);
+                success = client.fetchLatestManga(sourceId, page, newManga, hasNext);
                 break;
             case BrowseMode::SEARCH:
-                success = client.searchManga(m_source.id, m_searchQuery, m_currentPage, newManga, hasNext);
+                success = client.searchManga(sourceId, searchQuery, page, newManga, hasNext);
                 break;
         }
 
-        brls::sync([this, success, newManga, hasNext, focusIndexAfterLoad]() {
+        brls::sync([this, success, newManga, hasNext, focusIndexAfterLoad, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+
             // Hide loading indicator
             m_loadingLabel->setVisibility(brls::Visibility::GONE);
             m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
