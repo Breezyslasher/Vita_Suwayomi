@@ -1917,6 +1917,15 @@ void ReaderActivity::loadPreviewPage(int index) {
 
 void ReaderActivity::completeSwipeAnimation(bool turnPage) {
     if (turnPage && m_previewPageIndex >= 0) {
+        // Instantly transfer the preview texture to the main page image so the
+        // user sees the new page the moment positions reset to zero.
+        // Without this, resetSwipeState() snaps the old image back to center
+        // while the async loadPage() hasn't finished yet, causing a visual
+        // "snap-back" to the previous page.
+        if (pageImage && previewImage && previewImage->hasImage()) {
+            pageImage->takeImageFrom(previewImage);
+        }
+
         // Turn to the preview page
         m_currentPage = m_previewPageIndex;
         updatePageDisplay();

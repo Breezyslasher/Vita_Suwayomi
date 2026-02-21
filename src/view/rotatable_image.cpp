@@ -275,6 +275,26 @@ void RotatableImage::resetZoom() {
     this->invalidate();
 }
 
+void RotatableImage::takeImageFrom(RotatableImage* other) {
+    if (!other) return;
+
+    // Clear our existing image
+    clearImage();
+
+    // Take the other image's NVG handle (move, not copy)
+    m_nvgImage = other->m_nvgImage;
+    m_imageWidth = other->m_imageWidth;
+    m_imageHeight = other->m_imageHeight;
+
+    // Clear the source without deleting the NVG image (we own it now)
+    other->m_nvgImage = 0;
+    other->m_imageWidth = 0;
+    other->m_imageHeight = 0;
+    other->invalidate();
+
+    this->invalidate();
+}
+
 brls::View* RotatableImage::create() {
     return new RotatableImage();
 }

@@ -113,6 +113,13 @@ public:
      */
     void resetZoom();
 
+    /**
+     * Transfer the NVG image handle from another RotatableImage to this one.
+     * The source image is left empty (handle moved, not copied).
+     * Used to instantly swap the preview page into the main page after a swipe.
+     */
+    void takeImageFrom(RotatableImage* other);
+
     static brls::View* create();
 
 private:
