@@ -1673,7 +1673,7 @@ void ReaderActivity::applySettings() {
 }
 
 void ReaderActivity::saveSettingsToApp() {
-    brls::Logger::info("DEBUG: saveSettingsToApp() - direction={}, rotation={}, scaleMode={}", static_cast<int>(m_settings.direction), m_settings.rotation, static_cast<int>(m_settings.scaleMode));
+    brls::Logger::info("DEBUG: saveSettingsToApp() - direction={}, rotation={}, scaleMode={}", static_cast<int>(m_settings.direction), static_cast<int>(m_settings.rotation), static_cast<int>(m_settings.scaleMode));
     AppSettings& appSettings = Application::getInstance().getSettings();
 
     // Save per-manga settings (not global defaults)
