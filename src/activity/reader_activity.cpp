@@ -526,7 +526,7 @@ void ReaderActivity::onContentAvailable() {
                                 // Swiped past chapter boundary (no preview page exists)
                                 resetSwipeState();
                                 if (m_swipingToNext) {
-                                    nextChapter();
+                                    nextPage();  // Shows transition screen or advances
                                 } else {
                                     previousChapter(true);
                                 }
@@ -1210,18 +1210,41 @@ void ReaderActivity::updateProgress() {
 }
 
 void ReaderActivity::nextPage() {
+    if (m_showingChapterTransition) {
+        // User pressed next on the transition screen — advance to next chapter
+        hideChapterTransition();
+        nextChapter();
+        return;
+    }
+
     if (m_currentPage < static_cast<int>(m_pages.size()) - 1) {
         m_currentPage++;
         updatePageDisplay();
         loadPage(m_currentPage);
         updateProgress();
+    } else if (!m_continuousScrollMode) {
+        // End of chapter in single-page mode — show transition card
+        bool hasNext = !m_chapters.empty() && m_chapterListPosition >= 0 &&
+            m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1;
+        if (hasNext) {
+            showChapterTransition();
+        } else {
+            markChapterAsRead();
+            brls::Application::notify("End of manga");
+        }
     } else {
-        // End of chapter - nextChapter() handles marking as read and end-of-manga
+        // End of chapter in webtoon mode (fallback, shouldn't normally hit this)
         nextChapter();
     }
 }
 
 void ReaderActivity::previousPage() {
+    if (m_showingChapterTransition) {
+        // Go back to last page of current chapter
+        hideChapterTransition();
+        return;
+    }
+
     if (m_currentPage > 0) {
         m_currentPage--;
         updatePageDisplay();
@@ -1243,6 +1266,9 @@ void ReaderActivity::goToPage(int pageIndex) {
 }
 
 void ReaderActivity::nextChapter() {
+    // Clean up transition overlay if showing
+    hideChapterTransition();
+
     // Use chapter list for navigation (m_chapterIndex is a DB ID, not sequential)
     bool hasNext = !m_chapters.empty() && m_chapterListPosition >= 0 &&
         m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1;
@@ -1859,6 +1885,79 @@ void ReaderActivity::hidePageError() {
     }
 }
 
+void ReaderActivity::showChapterTransition() {
+    if (!container || m_showingChapterTransition) return;
+
+    m_showingChapterTransition = true;
+
+    // Get chapter names
+    std::string finishedName = m_chapterName;
+    std::string nextName;
+    if (!m_chapters.empty() && m_chapterListPosition >= 0 &&
+        m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1) {
+        nextName = m_chapters[m_chapterListPosition + 1].name;
+    }
+
+    // Create full-screen transition overlay
+    m_transitionOverlay = new brls::Box();
+    m_transitionOverlay->setAxis(brls::Axis::COLUMN);
+    m_transitionOverlay->setJustifyContent(brls::JustifyContent::CENTER);
+    m_transitionOverlay->setAlignItems(brls::AlignItems::CENTER);
+    m_transitionOverlay->setWidth(960);
+    m_transitionOverlay->setHeight(544);
+    m_transitionOverlay->setPositionType(brls::PositionType::ABSOLUTE);
+    m_transitionOverlay->setPositionTop(0);
+    m_transitionOverlay->setPositionLeft(0);
+    m_transitionOverlay->setBackgroundColor(nvgRGBA(26, 26, 46, 240));
+
+    // "Finished" label
+    auto* finishedLabel = new brls::Label();
+    finishedLabel->setText("Finished: " + finishedName);
+    finishedLabel->setFontSize(20);
+    finishedLabel->setTextColor(nvgRGB(160, 160, 180));
+    finishedLabel->setMarginBottom(15);
+    finishedLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    m_transitionOverlay->addView(finishedLabel);
+
+    // Divider
+    auto* divider = new brls::Box();
+    divider->setWidth(400);
+    divider->setHeight(1);
+    divider->setBackgroundColor(nvgRGBA(80, 80, 120, 180));
+    divider->setMarginBottom(15);
+    m_transitionOverlay->addView(divider);
+
+    // "Next" label
+    auto* nextLabel = new brls::Label();
+    nextLabel->setText("Next: " + nextName);
+    nextLabel->setFontSize(22);
+    nextLabel->setTextColor(nvgRGB(220, 220, 240));
+    nextLabel->setMarginBottom(30);
+    nextLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    m_transitionOverlay->addView(nextLabel);
+
+    // Hint label
+    auto* hintLabel = new brls::Label();
+    hintLabel->setText("Swipe or press next to continue");
+    hintLabel->setFontSize(14);
+    hintLabel->setTextColor(nvgRGB(120, 120, 140));
+    hintLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    m_transitionOverlay->addView(hintLabel);
+
+    container->addView(m_transitionOverlay);
+
+    // Start preloading the next chapter while showing transition
+    preloadNextChapter();
+}
+
+void ReaderActivity::hideChapterTransition() {
+    m_showingChapterTransition = false;
+    if (m_transitionOverlay && container) {
+        container->removeView(m_transitionOverlay);
+        m_transitionOverlay = nullptr;
+    }
+}
+
 // NOBORU-style swipe methods
 
 void ReaderActivity::updateSwipePreview(float offset) {
@@ -2009,10 +2108,10 @@ void ReaderActivity::animatePageTurn(bool forward) {
 
     int targetPage = forward ? m_currentPage + 1 : m_currentPage - 1;
 
-    // If out of bounds, go to next/previous chapter (no animation needed)
+    // If out of bounds, show transition screen or go to previous chapter
     if (targetPage < 0 || targetPage >= static_cast<int>(m_pages.size())) {
         if (forward)
-            nextChapter();
+            nextPage();  // Shows transition screen or advances chapter
         else
             previousChapter(true);
         return;
@@ -2191,8 +2290,15 @@ void ReaderActivity::appendNextChapterToScroll() {
     int currentChapterEnd = m_chapterPageOffset + m_currentChapterPageCount;
     if (m_currentPage < currentChapterEnd - 3) return;
 
-    // Append the preloaded pages to the scroll view
-    webtoonScroll->appendPages(m_nextChapterPages);
+    // Get next chapter name for the separator card
+    std::string nextName;
+    if (!m_chapters.empty() && m_chapterListPosition >= 0 &&
+        m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1) {
+        nextName = m_chapters[m_chapterListPosition + 1].name;
+    }
+
+    // Append pages with separator card showing chapter transition info
+    webtoonScroll->appendPages(m_nextChapterPages, m_chapterName, nextName);
     m_nextChapterAppended = true;
 
     brls::Logger::info("ReaderActivity: Appended {} pages from next chapter to scroll view",
@@ -2207,15 +2313,8 @@ void ReaderActivity::handleChapterBoundaryCrossing() {
         m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1;
     if (!hasNext) return;
 
-    // Build transition notification before updating state
-    std::string finishedName = m_chapterName;
-    std::string nextName = m_chapters[m_chapterListPosition + 1].name;
-
     // Mark old chapter as read
     markChapterAsRead();
-
-    // Show transition notification
-    brls::Application::notify("Finished: " + finishedName + " | Next: " + nextName);
 
     // Advance to next chapter
     m_chapterListPosition++;

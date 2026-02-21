@@ -240,6 +240,12 @@ private:
     bool m_scrollToEndOnLoad = false;
     void showPageError(const std::string& message);
     void hidePageError();
+
+    // Chapter transition screen for single-page mode
+    bool m_showingChapterTransition = false;
+    brls::Box* m_transitionOverlay = nullptr;
+    void showChapterTransition();
+    void hideChapterTransition();
 };
 
 } // namespace vitasuwayomi

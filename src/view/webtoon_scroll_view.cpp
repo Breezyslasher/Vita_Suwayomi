@@ -214,6 +214,7 @@ void WebtoonScrollView::clearPages() {
     m_pages.clear();
     m_loadedPages.clear();
     m_loadingPages.clear();
+    m_separators.clear();
     m_totalHeight = 0.0f;
     m_scrollY = 0.0f;
     m_scrollVelocity = 0.0f;
@@ -224,7 +225,9 @@ void WebtoonScrollView::clearPages() {
     m_startOvershoot = 0.0f;
 }
 
-int WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
+int WebtoonScrollView::appendPages(const std::vector<Page>& pages,
+                                    const std::string& finishedChapter,
+                                    const std::string& nextChapter) {
     if (pages.empty()) return static_cast<int>(m_pages.size());
 
     int startIndex = static_cast<int>(m_pages.size());
@@ -240,6 +243,16 @@ int WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
         imageRotation = 270.0f;
     } else if (m_rotationDegrees == 270.0f) {
         imageRotation = 90.0f;
+    }
+
+    // Add chapter separator card if chapter info is provided
+    if (!finishedChapter.empty() && !m_pages.empty()) {
+        ChapterSeparator sep;
+        sep.finishedChapter = finishedChapter;
+        sep.nextChapter = nextChapter;
+        sep.height = SEPARATOR_HEIGHT;
+        m_separators[startIndex] = sep;
+        m_totalHeight += SEPARATOR_HEIGHT;
     }
 
     // Add gap before the first appended page if there are existing pages
@@ -273,6 +286,60 @@ int WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
 
     brls::Logger::info("WebtoonScrollView: Appended {} pages (total now {})", pages.size(), m_pages.size());
     return startIndex;
+}
+
+float WebtoonScrollView::getSeparatorHeightBefore(int pageIndex) const {
+    auto it = m_separators.find(pageIndex);
+    if (it != m_separators.end()) {
+        return it->second.height;
+    }
+    return 0.0f;
+}
+
+void WebtoonScrollView::drawSeparator(NVGcontext* vg, float x, float y, float width, float sepHeight,
+                                       const std::string& finishedChapter, const std::string& nextChapter) {
+    float cardMargin = 20.0f;
+    float cardWidth = width - cardMargin * 2;
+    float cardX = x + cardMargin;
+    float cardY = y + 10.0f;
+    float cardHeight = sepHeight - 20.0f;
+    float cornerRadius = 8.0f;
+
+    // Card background (slightly lighter than reader background)
+    nvgBeginPath(vg);
+    nvgRoundedRect(vg, cardX, cardY, cardWidth, cardHeight, cornerRadius);
+    nvgFillColor(vg, nvgRGBA(40, 40, 60, 240));
+    nvgFill(vg);
+
+    // Subtle border
+    nvgBeginPath(vg);
+    nvgRoundedRect(vg, cardX, cardY, cardWidth, cardHeight, cornerRadius);
+    nvgStrokeColor(vg, nvgRGBA(80, 80, 120, 180));
+    nvgStrokeWidth(vg, 1.0f);
+    nvgStroke(vg);
+
+    // "Finished" line
+    float textX = cardX + 20.0f;
+    float lineHeight = cardHeight / 2.0f;
+
+    nvgFontSize(vg, 16.0f);
+    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+
+    // Finished chapter label
+    nvgFillColor(vg, nvgRGBA(160, 160, 180, 255));
+    nvgText(vg, textX, cardY + lineHeight * 0.5f, ("Finished: " + finishedChapter).c_str(), nullptr);
+
+    // Divider line
+    nvgBeginPath(vg);
+    nvgMoveTo(vg, cardX + 15.0f, cardY + lineHeight);
+    nvgLineTo(vg, cardX + cardWidth - 15.0f, cardY + lineHeight);
+    nvgStrokeColor(vg, nvgRGBA(80, 80, 120, 120));
+    nvgStrokeWidth(vg, 1.0f);
+    nvgStroke(vg);
+
+    // Next chapter label
+    nvgFillColor(vg, nvgRGBA(220, 220, 240, 255));
+    nvgText(vg, textX, cardY + lineHeight * 1.5f, ("Next: " + nextChapter).c_str(), nullptr);
 }
 
 void WebtoonScrollView::scrollToPage(int pageIndex) {
@@ -394,13 +461,14 @@ float WebtoonScrollView::getEffectivePageSize(int pageIndex) const {
 
 float WebtoonScrollView::getTotalContentSize() const {
     if (!isHorizontalLayout()) {
-        // Vertical layout: use stored total height
+        // Vertical layout: use stored total height (includes separator heights)
         return m_totalHeight;
     }
 
-    // Horizontal layout: recalculate total width
+    // Horizontal layout: recalculate total width including separators
     float totalWidth = 0.0f;
     for (size_t i = 0; i < m_pageHeights.size(); i++) {
+        totalWidth += getSeparatorHeightBefore(static_cast<int>(i));
         totalWidth += getEffectivePageSize(static_cast<int>(i));
         if (i < m_pageHeights.size() - 1) {
             totalWidth += m_pageGap;
@@ -467,8 +535,11 @@ float WebtoonScrollView::getPageOffset(int pageIndex) const {
 
     float offset = 0.0f;
     for (int i = 0; i < pageIndex; i++) {
+        offset += getSeparatorHeightBefore(i);
         offset += getEffectivePageSize(i) + m_pageGap;
     }
+    // Add separator for this page itself (it appears before the page)
+    offset += getSeparatorHeightBefore(pageIndex);
     return offset;
 }
 
@@ -513,6 +584,9 @@ void WebtoonScrollView::updateVisibleImages() {
     float viewEnd = viewStart + viewSize;
 
     for (int i = 0; i < size; i++) {
+        // Account for separator before this page
+        offset += getSeparatorHeightBefore(i);
+
         float pageSize = getEffectivePageSize(i);
         float pageEnd = offset + pageSize;
 
@@ -636,6 +710,9 @@ void WebtoonScrollView::updateCurrentPage() {
     float offset = 0.0f;
 
     for (int i = 0; i < static_cast<int>(m_pageHeights.size()); i++) {
+        // Account for separator before this page
+        offset += getSeparatorHeightBefore(i);
+
         float pageSize = getEffectivePageSize(i);
         float pageEnd = offset + pageSize;
 
@@ -685,25 +762,33 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         float currentX = x + m_scrollY;  // scrollY is used as horizontal offset
 
         for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
+            // Draw separator before this page if one exists
+            float sepH = getSeparatorHeightBefore(i);
+            if (sepH > 0.0f) {
+                auto it = m_separators.find(i);
+                if (it != m_separators.end()) {
+                    float sepRight = currentX + sepH;
+                    if (sepRight >= x - 100 && currentX <= x + width + 100) {
+                        drawSeparator(vg, currentX, pageY, sepH, availableHeight,
+                                      it->second.finishedChapter, it->second.nextChapter);
+                    }
+                    currentX += sepH;
+                }
+            }
+
             RotatableImage* img = m_pageImages[i].get();
 
             // Calculate the correct page width for the rotated image
-            // When rotated 90/270, the effective aspect ratio is imageHeight/imageWidth
-            // The page width should fill the available height: availableHeight * (imageH/imageW)
             float pageWidth;
             if (img && img->hasImage() && img->getImageWidth() > 0 && img->getImageHeight() > 0) {
-                // For 90/270 rotation, the rotated aspect ratio is height/width
                 float rotatedAspect = static_cast<float>(img->getImageHeight()) / static_cast<float>(img->getImageWidth());
                 pageWidth = availableHeight * rotatedAspect;
             } else {
-                // Fallback: use stored height scaled by aspect ratio
-                // m_pageHeights was calculated as availableWidth * aspectRatio
-                // For horizontal, we need availableHeight * aspectRatio
                 float availableWidth = width - (m_sidePadding * 2);
                 if (availableWidth > 0) {
                     pageWidth = m_pageHeights[i] * (availableHeight / availableWidth);
                 } else {
-                    pageWidth = availableHeight * 1.5f;  // Default 2:3 aspect ratio
+                    pageWidth = availableHeight * 1.5f;
                 }
             }
 
@@ -711,13 +796,9 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
 
             // Check if page is in visible area (with some margin for smooth scrolling)
             if (pageRight >= x - 100 && currentX <= x + width + 100) {
-                // Draw this page
                 if (img) {
-                    // Update image size for horizontal layout
                     img->setWidth(pageWidth);
                     img->setHeight(availableHeight);
-
-                    // Draw the image
                     img->draw(vg, currentX, pageY, pageWidth, availableHeight, style, ctx);
                 }
             }
@@ -726,7 +807,6 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         }
     } else {
         // Vertical layout (for 0/180 rotation)
-        // Calculate the X position for centered pages
         float availableWidth = width - (m_sidePadding * 2);
         float pageX = x + m_sidePadding;
 
@@ -734,18 +814,28 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         float currentY = y + m_scrollY;  // Start position adjusted by scroll
 
         for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
+            // Draw separator before this page if one exists
+            float sepH = getSeparatorHeightBefore(i);
+            if (sepH > 0.0f) {
+                auto it = m_separators.find(i);
+                if (it != m_separators.end()) {
+                    float sepBottom = currentY + sepH;
+                    if (sepBottom >= y - 100 && currentY <= y + height + 100) {
+                        drawSeparator(vg, pageX, currentY, availableWidth, sepH,
+                                      it->second.finishedChapter, it->second.nextChapter);
+                    }
+                    currentY += sepH;
+                }
+            }
+
             float pageHeight = m_pageHeights[i];
             float pageBottom = currentY + pageHeight;
 
             // Check if page is in visible area (with some margin for smooth scrolling)
             if (pageBottom >= y - 100 && currentY <= y + height + 100) {
-                // Draw this page
                 RotatableImage* img = m_pageImages[i].get();
                 if (img) {
-                    // Update image width in case view resized
                     img->setWidth(availableWidth);
-
-                    // Draw the image
                     img->draw(vg, pageX, currentY, availableWidth, pageHeight, style, ctx);
                 }
             }

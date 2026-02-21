@@ -8,6 +8,7 @@
 #include <borealis.hpp>
 #include <vector>
 #include <set>
+#include <map>
 #include <functional>
 #include <memory>
 #include "view/rotatable_image.hpp"
@@ -43,9 +44,12 @@ public:
 
     /**
      * Append pages to the end of the current scroll view without resetting.
+     * If finishedChapter/nextChapter are provided, draws a separator card between chapters.
      * Returns the starting index of the appended pages.
      */
-    int appendPages(const std::vector<Page>& pages);
+    int appendPages(const std::vector<Page>& pages,
+                    const std::string& finishedChapter = "",
+                    const std::string& nextChapter = "");
 
     /**
      * Scroll to a specific page index
@@ -148,6 +152,13 @@ private:
     // Apply momentum scrolling
     void applyMomentum();
 
+    // Draw a chapter separator card at the given position
+    void drawSeparator(NVGcontext* vg, float x, float y, float width, float height,
+                       const std::string& finishedChapter, const std::string& nextChapter);
+
+    // Get separator height before a given page index (0 if none)
+    float getSeparatorHeightBefore(int pageIndex) const;
+
     // Pages data
     std::vector<Page> m_pages;
 
@@ -190,6 +201,15 @@ private:
     EndReachedCallback m_startReachedCallback;
     bool m_endReached = false;
     bool m_startReached = false;
+
+    // Chapter separators between appended chapters
+    struct ChapterSeparator {
+        std::string finishedChapter;
+        std::string nextChapter;
+        float height = 120.0f;
+    };
+    std::map<int, ChapterSeparator> m_separators;  // key = page index the separator appears before
+    static constexpr float SEPARATOR_HEIGHT = 120.0f;
 
     // Overscroll tracking for chapter navigation via touch drag
     float m_endOvershoot = 0.0f;
