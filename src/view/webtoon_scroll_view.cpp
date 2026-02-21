@@ -96,6 +96,7 @@ void WebtoonScrollView::setupGestures() {
                     bool lastPageLoaded = !m_pages.empty() &&
                         m_loadedPages.count(static_cast<int>(m_pages.size()) - 1) > 0;
                     if (atLastPages && lastPageLoaded && m_endReachedCallback) {
+                        brls::Logger::info("DEBUG: WebtoonScroll::gesture - END OVERSCROLL TRIGGER, overshoot={:.1f}, currentPage={}", m_endOvershoot, m_currentPage);
                         m_endReached = true;
                         m_endReachedCallback();
                     }
@@ -104,6 +105,7 @@ void WebtoonScrollView::setupGestures() {
                     bool atFirstPages = m_currentPage <= 1;
                     bool firstPageLoaded = !m_pages.empty() && m_loadedPages.count(0) > 0;
                     if (atFirstPages && firstPageLoaded && m_startReachedCallback) {
+                        brls::Logger::info("DEBUG: WebtoonScroll::gesture - START OVERSCROLL TRIGGER, overshoot={:.1f}, currentPage={}", m_startOvershoot, m_currentPage);
                         m_startReached = true;
                         m_startReachedCallback();
                     }
@@ -145,6 +147,7 @@ void WebtoonScrollView::setupGestures() {
 }
 
 void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWidth) {
+    brls::Logger::info("DEBUG: WebtoonScroll::setPages() - pageCount={}, screenWidth={}", static_cast<int>(pages.size()), screenWidth);
     clearPages();
 
     m_pages = pages;
@@ -204,6 +207,7 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
 }
 
 void WebtoonScrollView::clearPages() {
+    brls::Logger::info("DEBUG: WebtoonScroll::clearPages() - currentPageCount={}, loadedPages={}", static_cast<int>(m_pages.size()), static_cast<int>(m_loadedPages.size()));
     // Invalidate alive flag so pending async callbacks don't mutate our state.
     // Image objects stay alive via shared_ptr until all async callbacks complete.
     *m_alive = false;
@@ -228,6 +232,7 @@ void WebtoonScrollView::clearPages() {
 int WebtoonScrollView::appendPages(const std::vector<Page>& pages,
                                     const std::string& finishedChapter,
                                     const std::string& nextChapter) {
+    brls::Logger::info("DEBUG: WebtoonScroll::appendPages() - newPages={}, existingPages={}, finishedChapter='{}', nextChapter='{}'", static_cast<int>(pages.size()), static_cast<int>(m_pages.size()), finishedChapter, nextChapter);
     if (pages.empty()) return static_cast<int>(m_pages.size());
 
     int startIndex = static_cast<int>(m_pages.size());
@@ -346,7 +351,9 @@ void WebtoonScrollView::drawSeparator(NVGcontext* vg, float x, float y, float wi
 }
 
 void WebtoonScrollView::scrollToPage(int pageIndex) {
+    brls::Logger::info("DEBUG: WebtoonScroll::scrollToPage() - pageIndex={}, totalPages={}", pageIndex, static_cast<int>(m_pages.size()));
     if (pageIndex < 0 || pageIndex >= static_cast<int>(m_pages.size())) {
+        brls::Logger::info("DEBUG: WebtoonScroll::scrollToPage() - index out of range, returning");
         return;
     }
 
@@ -389,6 +396,7 @@ void WebtoonScrollView::setBackgroundColor(NVGcolor color) {
 }
 
 void WebtoonScrollView::setSidePadding(int percent) {
+    brls::Logger::info("DEBUG: WebtoonScroll::setSidePadding() - percent={}", percent);
     if (percent < 0 || percent > 20) {
         percent = 0;
     }
@@ -397,6 +405,7 @@ void WebtoonScrollView::setSidePadding(int percent) {
 }
 
 void WebtoonScrollView::setRotation(float degrees) {
+    brls::Logger::info("DEBUG: WebtoonScroll::setRotation() - degrees={}", degrees);
     // Normalize to 0, 90, 180, 270
     int normalized = static_cast<int>(degrees) % 360;
     if (normalized < 0) normalized += 360;
@@ -500,6 +509,7 @@ void WebtoonScrollView::onFrame() {
             bool atFirstPages = m_currentPage <= 1;
             bool firstPageLoaded = !m_pages.empty() && m_loadedPages.count(0) > 0;
             if (!m_startReached && m_startReachedCallback && atFirstPages && firstPageLoaded) {
+                brls::Logger::info("DEBUG: WebtoonScroll::onFrame() - START BOUNDARY HIT, currentPage={}", m_currentPage);
                 m_startReached = true;
                 m_startReachedCallback();
             }
@@ -511,6 +521,7 @@ void WebtoonScrollView::onFrame() {
             bool lastPageLoaded = !m_pages.empty() &&
                 m_loadedPages.count(static_cast<int>(m_pages.size()) - 1) > 0;
             if (!m_endReached && m_endReachedCallback && atLastPages && lastPageLoaded) {
+                brls::Logger::info("DEBUG: WebtoonScroll::onFrame() - END BOUNDARY HIT, currentPage={}, totalPages={}", m_currentPage, static_cast<int>(m_pages.size()));
                 m_endReached = true;
                 m_endReachedCallback();
             }
@@ -573,6 +584,7 @@ bool WebtoonScrollView::isPageVisible(int pageIndex) const {
 }
 
 void WebtoonScrollView::updateVisibleImages() {
+    brls::Logger::info("DEBUG: WebtoonScroll::updateVisibleImages() - totalPages={}, scrollY={:.1f}, loadedPages={}", static_cast<int>(m_pages.size()), m_scrollY, static_cast<int>(m_loadedPages.size()));
     int size = static_cast<int>(m_pages.size());
     if (size == 0) return;
 
@@ -642,6 +654,7 @@ void WebtoonScrollView::updateVisibleImages() {
                 if (imgPtr->hasImage()) {
                     // Success - mark as loaded and update dimensions
                     m_loadedPages.insert(pageIndex);
+                    brls::Logger::info("DEBUG: WebtoonScroll::imageLoaded - page={}, loadedCount={}", pageIndex, static_cast<int>(m_loadedPages.size()));
 
                     float imageWidth = static_cast<float>(imgPtr->getImageWidth());
                     float imageHeight = static_cast<float>(imgPtr->getImageHeight());
@@ -660,6 +673,7 @@ void WebtoonScrollView::updateVisibleImages() {
                         // If the loaded page is ABOVE the current view, adjust scroll
                         // so the visible content stays in place instead of jumping
                         if (heightDiff != 0.0f && pageIndex < m_currentPage) {
+                            brls::Logger::info("DEBUG: WebtoonScroll::imageLoaded - adjusting scroll for page {} above view: heightDiff={:.1f}, scrollY {:.1f} -> {:.1f}", pageIndex, heightDiff, m_scrollY, m_scrollY - heightDiff);
                             m_scrollY -= heightDiff;
                         }
 
@@ -688,6 +702,7 @@ void WebtoonScrollView::updateVisibleImages() {
 }
 
 void WebtoonScrollView::unloadDistantPages(int firstVisible, int lastVisible) {
+    brls::Logger::info("DEBUG: WebtoonScroll::unloadDistantPages() - firstVisible={}, lastVisible={}, loadedPages={}", firstVisible, lastVisible, static_cast<int>(m_loadedPages.size()));
     int size = static_cast<int>(m_pageImages.size());
     int keepStart = std::max(0, firstVisible - PRELOAD_PAGES - UNLOAD_DISTANCE);
     int keepEnd = std::min(size - 1, lastVisible + PRELOAD_PAGES + UNLOAD_DISTANCE);
@@ -714,6 +729,7 @@ void WebtoonScrollView::unloadDistantPages(int firstVisible, int lastVisible) {
 }
 
 void WebtoonScrollView::updateCurrentPage() {
+    brls::Logger::info("DEBUG: WebtoonScroll::updateCurrentPage() - scrollY={:.1f}, currentPage={}", m_scrollY, m_currentPage);
     // Find the page at the start of the visible area
     // (top for vertical layout, left for horizontal layout)
     float visibleStart = -m_scrollY;

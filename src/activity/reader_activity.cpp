@@ -856,6 +856,7 @@ void ReaderActivity::onContentAvailable() {
 }
 
 void ReaderActivity::loadPages() {
+    brls::Logger::info("DEBUG: loadPages() - chapterIndex={}, mangaId={}, chapterName='{}'", m_chapterIndex, m_mangaId, m_chapterName);
     brls::Logger::debug("Loading pages for chapter {}", m_chapterIndex);
 
     // Capture webtoon mode flag for async task - use format setting
@@ -1004,7 +1005,9 @@ void ReaderActivity::loadPages() {
 }
 
 void ReaderActivity::loadPage(int index) {
+    brls::Logger::info("DEBUG: loadPage() - index={}, totalPages={}", index, static_cast<int>(m_pages.size()));
     if (index < 0 || index >= static_cast<int>(m_pages.size())) {
+        brls::Logger::info("DEBUG: loadPage() - index out of range, returning");
         return;
     }
 
@@ -1074,6 +1077,7 @@ void ReaderActivity::loadPage(int index) {
 }
 
 void ReaderActivity::preloadAdjacentPages() {
+    brls::Logger::info("DEBUG: preloadAdjacentPages() - currentPage={}, totalPages={}", m_currentPage, static_cast<int>(m_pages.size()));
     // Preload next 3 pages for smoother swiping/reading
     for (int i = 1; i <= 3; i++) {
         int nextIdx = m_currentPage + i;
@@ -1091,6 +1095,7 @@ void ReaderActivity::preloadAdjacentPages() {
 }
 
 void ReaderActivity::updatePageDisplay() {
+    brls::Logger::info("DEBUG: updatePageDisplay() - currentPage={}, chapterPageOffset={}, chapterPageCount={}, totalPages={}", m_currentPage, m_chapterPageOffset, m_currentChapterPageCount, static_cast<int>(m_pages.size()));
     // In webtoon mode with seamless chapter transitions, show page relative to current chapter
     int displayPage = m_currentPage;
     int displayTotal = static_cast<int>(m_pages.size());
@@ -1124,6 +1129,7 @@ void ReaderActivity::updatePageDisplay() {
 }
 
 void ReaderActivity::updateDirectionLabel() {
+    brls::Logger::info("DEBUG: updateDirectionLabel() - direction={}", static_cast<int>(m_settings.direction));
     if (directionLabel) {
         switch (m_settings.direction) {
             case ReaderDirection::LEFT_TO_RIGHT:
@@ -1140,6 +1146,7 @@ void ReaderActivity::updateDirectionLabel() {
 }
 
 void ReaderActivity::updateChapterDisplay() {
+    brls::Logger::info("DEBUG: updateChapterDisplay() - chapterListPosition={}, totalChapters={}, chapterName='{}'", m_chapterListPosition, static_cast<int>(m_chapters.size()), m_chapterName);
     if (!m_chapters.empty() && m_chapterListPosition >= 0 &&
         m_chapterListPosition < static_cast<int>(m_chapters.size())) {
         const Chapter& ch = m_chapters[m_chapterListPosition];
@@ -1178,6 +1185,7 @@ void ReaderActivity::updateChapterDisplay() {
 }
 
 void ReaderActivity::updateProgress() {
+    brls::Logger::info("DEBUG: updateProgress() - currentPage={}, chapterIndex={}, continuousScroll={}", m_currentPage, m_chapterIndex, m_continuousScrollMode);
     // Throttle progress saves in webtoon mode to avoid excessive network/disk I/O
     // (page boundary changes fire rapidly during continuous scrolling)
     if (m_continuousScrollMode) {
@@ -1210,6 +1218,7 @@ void ReaderActivity::updateProgress() {
 }
 
 void ReaderActivity::nextPage() {
+    brls::Logger::info("DEBUG: nextPage() - currentPage={}, totalPages={}, showingTransition={}, continuousScroll={}", m_currentPage, static_cast<int>(m_pages.size()), m_showingChapterTransition, m_continuousScrollMode);
     if (m_showingChapterTransition) {
         // User pressed next on the transition screen — advance to next chapter
         hideChapterTransition();
@@ -1239,6 +1248,7 @@ void ReaderActivity::nextPage() {
 }
 
 void ReaderActivity::previousPage() {
+    brls::Logger::info("DEBUG: previousPage() - currentPage={}, showingTransition={}", m_currentPage, m_showingChapterTransition);
     if (m_showingChapterTransition) {
         // Go back to last page of current chapter
         hideChapterTransition();
@@ -1257,6 +1267,7 @@ void ReaderActivity::previousPage() {
 }
 
 void ReaderActivity::goToPage(int pageIndex) {
+    brls::Logger::info("DEBUG: goToPage() - targetPage={}, totalPages={}", pageIndex, static_cast<int>(m_pages.size()));
     if (pageIndex >= 0 && pageIndex < static_cast<int>(m_pages.size())) {
         m_currentPage = pageIndex;
         updatePageDisplay();
@@ -1266,6 +1277,7 @@ void ReaderActivity::goToPage(int pageIndex) {
 }
 
 void ReaderActivity::nextChapter() {
+    brls::Logger::info("DEBUG: nextChapter() - chapterListPosition={}, totalChapters={}, nextChapterLoaded={}, nextChapterAppended={}", m_chapterListPosition, static_cast<int>(m_chapters.size()), m_nextChapterLoaded, m_nextChapterAppended);
     // Clean up transition overlay if showing
     hideChapterTransition();
 
@@ -1321,6 +1333,7 @@ void ReaderActivity::nextChapter() {
 }
 
 void ReaderActivity::previousChapter(bool scrollToEnd) {
+    brls::Logger::info("DEBUG: previousChapter() - scrollToEnd={}, chapterListPosition={}, totalChapters={}", scrollToEnd, m_chapterListPosition, static_cast<int>(m_chapters.size()));
     // Use chapter list for navigation (m_chapterIndex is a DB ID, not sequential)
     bool hasPrev = !m_chapters.empty() && m_chapterListPosition > 0;
 
@@ -1356,6 +1369,7 @@ void ReaderActivity::previousChapter(bool scrollToEnd) {
 }
 
 void ReaderActivity::markChapterAsRead() {
+    brls::Logger::info("DEBUG: markChapterAsRead() - chapterIndex={}, chapterName='{}'", m_chapterIndex, m_chapterName);
     // Skip server call when offline
     if (!Application::getInstance().isConnected()) {
         brls::Logger::info("ReaderActivity: offline, skipping mark as read");
@@ -1408,6 +1422,7 @@ void ReaderActivity::markChapterAsRead() {
 }
 
 void ReaderActivity::toggleControls() {
+    brls::Logger::info("DEBUG: toggleControls() - controlsVisible={} -> {}", m_controlsVisible, !m_controlsVisible);
     m_controlsVisible = !m_controlsVisible;
 
     if (m_controlsVisible) {
@@ -1418,6 +1433,7 @@ void ReaderActivity::toggleControls() {
 }
 
 void ReaderActivity::showControls() {
+    brls::Logger::info("DEBUG: showControls()");
     // Instant show - no animation delay
     if (topBar) {
         topBar->setAlpha(1.0f);
@@ -1439,6 +1455,7 @@ void ReaderActivity::showControls() {
 }
 
 void ReaderActivity::hideControls() {
+    brls::Logger::info("DEBUG: hideControls()");
     // Instant hide - no animation delay
     if (topBar) {
         topBar->setAlpha(0.0f);
@@ -1523,6 +1540,7 @@ void ReaderActivity::updatePageCounterRotation() {
 }
 
 void ReaderActivity::showSettings() {
+    brls::Logger::info("DEBUG: showSettings() - settingsVisible={}", m_settingsVisible);
     if (m_settingsVisible) return;
 
     // Update labels before showing
@@ -1547,6 +1565,7 @@ void ReaderActivity::showSettings() {
 }
 
 void ReaderActivity::hideSettings() {
+    brls::Logger::info("DEBUG: hideSettings() - settingsVisible={}", m_settingsVisible);
     if (!m_settingsVisible) return;
 
     if (settingsOverlay) {
@@ -1611,6 +1630,7 @@ void ReaderActivity::updateSettingsLabels() {
 }
 
 void ReaderActivity::applySettings() {
+    brls::Logger::info("DEBUG: applySettings() - scaleMode={}, rotation={}", static_cast<int>(m_settings.scaleMode), m_settings.rotation);
     if (!pageImage) return;
 
     // Map reader scale mode to image scale mode
@@ -1653,6 +1673,7 @@ void ReaderActivity::applySettings() {
 }
 
 void ReaderActivity::saveSettingsToApp() {
+    brls::Logger::info("DEBUG: saveSettingsToApp() - direction={}, rotation={}, scaleMode={}", static_cast<int>(m_settings.direction), m_settings.rotation, static_cast<int>(m_settings.scaleMode));
     AppSettings& appSettings = Application::getInstance().getSettings();
 
     // Save per-manga settings (not global defaults)
@@ -1748,6 +1769,7 @@ void ReaderActivity::saveSettingsToApp() {
 // Touch handling is now implemented inline in gesture recognizers (onContentAvailable)
 
 void ReaderActivity::handleDoubleTap(brls::Point position) {
+    brls::Logger::info("DEBUG: handleDoubleTap() - position=({}, {}), isZoomed={}, zoomLevel={}", position.x, position.y, m_isZoomed, m_zoomLevel);
     if (m_isZoomed) {
         // Zoomed in - reset to normal view
         resetZoom();
@@ -1758,6 +1780,7 @@ void ReaderActivity::handleDoubleTap(brls::Point position) {
 }
 
 void ReaderActivity::resetZoom() {
+    brls::Logger::info("DEBUG: resetZoom() - was zoomLevel={}", m_zoomLevel);
     m_isZoomed = false;
     m_zoomLevel = 1.0f;
     m_zoomOffset = {0, 0};
@@ -1770,6 +1793,7 @@ void ReaderActivity::resetZoom() {
 }
 
 void ReaderActivity::zoomTo(float level, brls::Point center) {
+    brls::Logger::info("DEBUG: zoomTo() - level={}, center=({}, {})", level, center.x, center.y);
     m_isZoomed = true;
     m_zoomLevel = level;
 
@@ -1797,6 +1821,7 @@ void ReaderActivity::zoomTo(float level, brls::Point center) {
 }
 
 void ReaderActivity::handlePinchZoom(float scaleFactor) {
+    brls::Logger::info("DEBUG: handlePinchZoom() - scaleFactor={}, currentZoom={}", scaleFactor, m_zoomLevel);
     // Pinch-to-zoom - scale by the pinch factor
     float newZoom = m_zoomLevel * scaleFactor;
 
@@ -1822,6 +1847,7 @@ void ReaderActivity::handlePinchZoom(float scaleFactor) {
 }
 
 void ReaderActivity::showPageError(const std::string& message) {
+    brls::Logger::info("DEBUG: showPageError() - message='{}'", message);
     if (!container) return;
 
     hidePageError();  // Remove any existing error overlay
@@ -1879,6 +1905,7 @@ void ReaderActivity::showPageError(const std::string& message) {
 }
 
 void ReaderActivity::hidePageError() {
+    brls::Logger::info("DEBUG: hidePageError() - hasOverlay={}", m_errorOverlay != nullptr);
     if (m_errorOverlay && container) {
         container->removeView(m_errorOverlay);
         m_errorOverlay = nullptr;
@@ -1888,6 +1915,7 @@ void ReaderActivity::hidePageError() {
 }
 
 void ReaderActivity::showChapterTransition() {
+    brls::Logger::info("DEBUG: showChapterTransition() - alreadyShowing={}, chapterName='{}'", m_showingChapterTransition, m_chapterName);
     if (!container || m_showingChapterTransition) return;
 
     m_showingChapterTransition = true;
@@ -1953,6 +1981,7 @@ void ReaderActivity::showChapterTransition() {
 }
 
 void ReaderActivity::hideChapterTransition() {
+    brls::Logger::info("DEBUG: hideChapterTransition() - wasShowing={}, hasOverlay={}", m_showingChapterTransition, m_transitionOverlay != nullptr);
     m_showingChapterTransition = false;
     if (m_transitionOverlay && container) {
         container->removeView(m_transitionOverlay);
@@ -1963,6 +1992,7 @@ void ReaderActivity::hideChapterTransition() {
 // NOBORU-style swipe methods
 
 void ReaderActivity::updateSwipePreview(float offset) {
+    brls::Logger::info("DEBUG: updateSwipePreview() - offset={}, previewPageIndex={}", offset, m_previewPageIndex);
     // Update visual positions during swipe - PUSH EFFECT
     // Current page is pushed off screen, preview page follows behind pushing it
     const float SCREEN_WIDTH = 960.0f;
@@ -2035,7 +2065,9 @@ void ReaderActivity::updateSwipePreview(float offset) {
 }
 
 void ReaderActivity::loadPreviewPage(int index) {
+    brls::Logger::info("DEBUG: loadPreviewPage() - index={}, totalPages={}", index, static_cast<int>(m_pages.size()));
     if (index < 0 || index >= static_cast<int>(m_pages.size())) {
+        brls::Logger::info("DEBUG: loadPreviewPage() - index out of range, returning");
         return;
     }
 
@@ -2059,6 +2091,7 @@ void ReaderActivity::loadPreviewPage(int index) {
 }
 
 void ReaderActivity::completeSwipeAnimation(bool turnPage) {
+    brls::Logger::info("DEBUG: completeSwipeAnimation() - turnPage={}, previewPageIndex={}", turnPage, m_previewPageIndex);
     if (turnPage && m_previewPageIndex >= 0) {
         // Instantly transfer the preview texture to the main page image so the
         // user sees the new page the moment positions reset to zero.
@@ -2086,6 +2119,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
 }
 
 void ReaderActivity::resetSwipeState() {
+    brls::Logger::info("DEBUG: resetSwipeState()");
     m_isSwipeAnimating = false;
     m_swipeOffset = 0.0f;
     m_previewPageIndex = -1;
@@ -2105,6 +2139,7 @@ void ReaderActivity::resetSwipeState() {
 }
 
 void ReaderActivity::animatePageTurn(bool forward) {
+    brls::Logger::info("DEBUG: animatePageTurn() - forward={}, currentPage={}, isDpadAnimating={}, isSwipeAnimating={}", forward, m_currentPage, m_isDpadAnimating, m_isSwipeAnimating);
     // Animated page slide for d-pad navigation (same push effect as touch swipe)
     if (m_isDpadAnimating || m_isSwipeAnimating || m_continuousScrollMode) return;
 
@@ -2186,6 +2221,7 @@ void ReaderActivity::animatePageTurn(bool forward) {
 }
 
 void ReaderActivity::updateMarginColors() {
+    brls::Logger::info("DEBUG: updateMarginColors()");
     // Set background color based on reader background setting
     // This shows when the manga page doesn't fill the screen
     AppSettings& appSettings = Application::getInstance().getSettings();
@@ -2223,6 +2259,7 @@ void ReaderActivity::updateMarginColors() {
 }
 
 void ReaderActivity::preloadNextChapter() {
+    brls::Logger::info("DEBUG: preloadNextChapter() - nextChapterLoaded={}, chapterListPosition={}, totalChapters={}", m_nextChapterLoaded, m_chapterListPosition, static_cast<int>(m_chapters.size()));
     // Preload next chapter pages for seamless transition
     if (m_nextChapterLoaded) return;
 
@@ -2284,6 +2321,7 @@ void ReaderActivity::preloadNextChapter() {
 }
 
 void ReaderActivity::appendNextChapterToScroll() {
+    brls::Logger::info("DEBUG: appendNextChapterToScroll() - continuousScroll={}, nextLoaded={}, nextAppended={}, nextPages={}, currentPage={}, chapterEnd={}", m_continuousScrollMode, m_nextChapterLoaded, m_nextChapterAppended, static_cast<int>(m_nextChapterPages.size()), m_currentPage, m_chapterPageOffset + m_currentChapterPageCount);
     if (!m_continuousScrollMode || !webtoonScroll) return;
     if (!m_nextChapterLoaded || m_nextChapterAppended) return;
     if (m_nextChapterPages.empty()) return;
@@ -2308,6 +2346,7 @@ void ReaderActivity::appendNextChapterToScroll() {
 }
 
 void ReaderActivity::handleChapterBoundaryCrossing() {
+    brls::Logger::info("DEBUG: handleChapterBoundaryCrossing() - nextAppended={}, currentPage={}, chapterPageOffset={}, chapterPageCount={}", m_nextChapterAppended, m_currentPage, m_chapterPageOffset, m_currentChapterPageCount);
     if (!m_nextChapterAppended) return;
 
     // Check if there actually is a next chapter
@@ -2343,6 +2382,7 @@ void ReaderActivity::handleChapterBoundaryCrossing() {
 }
 
 void ReaderActivity::updateReaderMode() {
+    brls::Logger::info("DEBUG: updateReaderMode() - isWebtoonFormat={}, currentContinuousScroll={}", m_settings.isWebtoonFormat, m_continuousScrollMode);
     bool shouldUseContinuousScroll = m_settings.isWebtoonFormat;
 
     if (shouldUseContinuousScroll == m_continuousScrollMode) {
@@ -2356,6 +2396,7 @@ void ReaderActivity::updateReaderMode() {
 }
 
 void ReaderActivity::setupReaderMode(bool webtoonMode) {
+    brls::Logger::info("DEBUG: setupReaderMode() - webtoonMode={}, totalPages={}", webtoonMode, static_cast<int>(m_pages.size()));
     m_continuousScrollMode = webtoonMode;
 
     if (webtoonMode) {
@@ -2381,12 +2422,14 @@ void ReaderActivity::setupReaderMode(bool webtoonMode) {
             webtoonScroll->setProgressCallback([this, cbAlive](int currentPage, int totalPages, float scrollPercent) {
                 auto a = cbAlive.lock();
                 if (!a || !*a) return;
+                brls::Logger::info("DEBUG: progressCallback - page={}/{}, scroll={:.1f}%, chapterOffset={}, chapterCount={}, nextAppended={}", currentPage, totalPages, scrollPercent * 100.0f, m_chapterPageOffset, m_currentChapterPageCount, m_nextChapterAppended);
                 m_currentPage = currentPage;
 
                 // Check chapter boundary crossing FIRST before display/progress
                 // so chapter metadata is correct for the page display and progress save
                 if (m_nextChapterAppended &&
                     currentPage >= m_chapterPageOffset + m_currentChapterPageCount) {
+                    brls::Logger::info("DEBUG: progressCallback - BOUNDARY CROSSED at page {}, chapterEnd={}", currentPage, m_chapterPageOffset + m_currentChapterPageCount);
                     handleChapterBoundaryCrossing();
                 }
 
@@ -2396,6 +2439,7 @@ void ReaderActivity::setupReaderMode(bool webtoonMode) {
                 // When near the end of current chapter, preload and append next chapter
                 int currentChapterEnd = m_chapterPageOffset + m_currentChapterPageCount;
                 if (currentPage >= currentChapterEnd - 3) {
+                    brls::Logger::info("DEBUG: progressCallback - NEAR END at page {}, chapterEnd={}, triggering preload", currentPage, currentChapterEnd);
                     preloadNextChapter();
                     appendNextChapterToScroll();
                 }
@@ -2448,6 +2492,7 @@ void ReaderActivity::setupReaderMode(bool webtoonMode) {
 }
 
 void ReaderActivity::willDisappear(bool resetState) {
+    brls::Logger::info("DEBUG: willDisappear() - resetState={}, currentPage={}, chapterIndex={}, chapterPageOffset={}, chapterPageCount={}", resetState, m_currentPage, m_chapterIndex, m_chapterPageOffset, m_currentChapterPageCount);
     Activity::willDisappear(resetState);
 
     // Save reader state so MangaDetailView can immediately update chapters
