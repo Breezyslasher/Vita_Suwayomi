@@ -94,10 +94,7 @@ private:
     void applySettings();
     void saveSettingsToApp();  // Persist settings to AppSettings
 
-    // Touch handling
-    void handleTouch(brls::Point point);
-    void handleTouchNavigation(float x, float screenWidth);
-    void handleSwipe(brls::Point delta);
+    // Touch handling (implemented inline in gesture recognizers)
 
     // Page counter auto-hide
     void showPageCounter();
@@ -173,9 +170,6 @@ private:
     bool m_nextChapterLoaded = false;
     void preloadNextChapter();
 
-    // Image caching (preloaded pages)
-    std::map<int, std::string> m_cachedImages;
-
     // Reader background color support
     void updateMarginColors();
 
@@ -221,7 +215,8 @@ private:
     brls::Box* m_errorOverlay = nullptr;
     brls::Label* m_errorLabel = nullptr;
     brls::Button* m_retryButton = nullptr;
-    int m_pageLoadGeneration = 0;  // Track current load to detect stale timeouts
+    int m_pageLoadGeneration = 0;   // Track current load to detect stale timeouts
+    bool m_pageLoadSucceeded = false; // Set true when current page loads successfully
     bool m_loadedFromLocal = false;  // True when current chapter was loaded from local downloads
     void showPageError(const std::string& message);
     void hidePageError();

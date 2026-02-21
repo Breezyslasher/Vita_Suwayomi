@@ -143,7 +143,7 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
         pageImg->setWidth(availableWidth);
         pageImg->setHeight(defaultHeight);  // Will be adjusted when image loads
         pageImg->setScalingType(brls::ImageScalingType::FIT);
-        pageImg->setBackgroundFillColor(nvgRGBA(26, 26, 46, 255));
+        pageImg->setBackgroundFillColor(m_bgColor);
         pageImg->setRotation(imageRotation);  // Apply corrected rotation for webtoon mode
 
         m_pageImages.push_back(pageImg);
@@ -216,6 +216,17 @@ float WebtoonScrollView::getScrollProgress() const {
     }
     float scrollable = totalContentSize - viewSize;
     return std::min(1.0f, std::max(0.0f, -m_scrollY / scrollable));
+}
+
+void WebtoonScrollView::setBackgroundColor(NVGcolor color) {
+    m_bgColor = color;
+
+    // Update background on all existing page images
+    for (auto& img : m_pageImages) {
+        if (img) {
+            img->setBackgroundFillColor(color);
+        }
+    }
 }
 
 void WebtoonScrollView::setSidePadding(int percent) {
@@ -514,7 +525,7 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
     // Draw background
     nvgBeginPath(vg);
     nvgRect(vg, x, y, width, height);
-    nvgFillColor(vg, nvgRGBA(26, 26, 46, 255));
+    nvgFillColor(vg, m_bgColor);
     nvgFill(vg);
 
     // Save state and set scissor for clipping

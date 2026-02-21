@@ -351,14 +351,6 @@ bool Application::loadSettings() {
         m_settings.webtoonSidePadding = 0;
     }
 
-    // Load auto-chapter advance settings
-    m_settings.autoChapterAdvance = extractBool("autoChapterAdvance", false);
-    m_settings.autoAdvanceDelay = extractInt("autoAdvanceDelay");
-    if (m_settings.autoAdvanceDelay < 0 || m_settings.autoAdvanceDelay > 10) {
-        m_settings.autoAdvanceDelay = 3;
-    }
-    m_settings.showAdvanceCountdown = extractBool("showAdvanceCountdown", true);
-
     // Load library settings
     m_settings.updateOnStart = extractBool("updateOnStart", false);
     m_settings.updateOnlyWifi = extractBool("updateOnlyWifi", true);
@@ -748,11 +740,6 @@ bool Application::saveSettings() {
     json += "  \"cropBorders\": " + std::string(m_settings.cropBorders ? "true" : "false") + ",\n";
     json += "  \"webtoonDetection\": " + std::string(m_settings.webtoonDetection ? "true" : "false") + ",\n";
     json += "  \"webtoonSidePadding\": " + std::to_string(m_settings.webtoonSidePadding) + ",\n";
-
-    // Auto-chapter advance settings
-    json += "  \"autoChapterAdvance\": " + std::string(m_settings.autoChapterAdvance ? "true" : "false") + ",\n";
-    json += "  \"autoAdvanceDelay\": " + std::to_string(m_settings.autoAdvanceDelay) + ",\n";
-    json += "  \"showAdvanceCountdown\": " + std::string(m_settings.showAdvanceCountdown ? "true" : "false") + ",\n";
 
     // Library settings
     json += "  \"updateOnStart\": " + std::string(m_settings.updateOnStart ? "true" : "false") + ",\n";

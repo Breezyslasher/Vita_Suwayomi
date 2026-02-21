@@ -123,11 +123,6 @@ struct AppSettings {
     bool webtoonDetection = true;       // Auto-detect webtoon format (aspect ratio based)
     int webtoonSidePadding = 0;         // Side padding percentage (0-20%)
 
-    // Auto-Chapter Advance
-    bool autoChapterAdvance = false;    // Automatically advance to next chapter
-    int autoAdvanceDelay = 3;           // Seconds to wait before advancing (0-10)
-    bool showAdvanceCountdown = true;   // Show countdown before advancing
-
     // Library Settings
     bool updateOnStart = false;
     bool updateOnlyWifi = true;

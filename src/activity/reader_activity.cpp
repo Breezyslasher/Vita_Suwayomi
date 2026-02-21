@@ -262,7 +262,7 @@ void ReaderActivity::onContentAvailable() {
         return true;
     });
 
-    // Set up controller input - L/R for chapter navigation only
+    // Set up controller input - L/R for chapter navigation
     this->registerAction("Previous Chapter", brls::ControllerButton::BUTTON_LB, [this](brls::View*) {
         previousChapter();
         return true;
@@ -270,6 +270,37 @@ void ReaderActivity::onContentAvailable() {
 
     this->registerAction("Next Chapter", brls::ControllerButton::BUTTON_RB, [this](brls::View*) {
         nextChapter();
+        return true;
+    });
+
+    // D-pad for page navigation (direction-aware)
+    this->registerAction("", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
+        if (m_controlsVisible || m_settingsVisible) return false;  // Let UI handle it
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
+            nextPage();
+        else
+            previousPage();
+        return true;
+    });
+
+    this->registerAction("", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
+        if (m_controlsVisible || m_settingsVisible) return false;
+        if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
+            previousPage();
+        else
+            nextPage();
+        return true;
+    });
+
+    this->registerAction("", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
+        if (m_controlsVisible || m_settingsVisible) return false;
+        previousPage();
+        return true;
+    });
+
+    this->registerAction("", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
+        if (m_controlsVisible || m_settingsVisible) return false;
+        nextPage();
         return true;
     });
 
@@ -1006,6 +1037,7 @@ void ReaderActivity::loadPage(int index) {
 
     // Track this load generation for timeout detection
     int loadGen = ++m_pageLoadGeneration;
+    m_pageLoadSucceeded = false;
 
     // Load image using RotatableImage
     if (pageImage) {
@@ -1017,9 +1049,8 @@ void ReaderActivity::loadPage(int index) {
             if (!alive || !*alive) return;
             if (index == currentPageAtLoad) {
                 brls::Logger::debug("ReaderActivity: Page {} loaded", index);
-                // Mark this generation as loaded by advancing past it
                 if (m_pageLoadGeneration == loadGen) {
-                    m_pageLoadGeneration = loadGen + 1000;  // Signal success
+                    m_pageLoadSucceeded = true;
                 }
             }
         };
@@ -1039,8 +1070,8 @@ void ReaderActivity::loadPage(int index) {
                 brls::sync([this, aliveWeak, loadGen, index]() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
-                    // Only show error if this is still the same load attempt
-                    if (m_pageLoadGeneration == loadGen) {
+                    // Only show error if this is still the same load attempt and it hasn't succeeded
+                    if (m_pageLoadGeneration == loadGen && !m_pageLoadSucceeded) {
                         showPageError("Failed to load page " + std::to_string(index + 1));
                     }
                 });
@@ -1184,7 +1215,6 @@ void ReaderActivity::nextChapter() {
 
         m_chapterIndex++;
         m_currentPage = 0;
-        m_cachedImages.clear();
 
         // Use preloaded pages if available for instant transition
         if (m_nextChapterLoaded && !m_nextChapterPages.empty()) {
@@ -1229,7 +1259,6 @@ void ReaderActivity::previousChapter() {
         m_nextChapterPages.clear();
         m_currentPage = 0;
         m_pages.clear();
-        m_cachedImages.clear();
 
         // Clear webtoon scroll view to reset scroll position for new chapter
         if (m_continuousScrollMode && webtoonScroll) {
@@ -1630,21 +1659,7 @@ void ReaderActivity::saveSettingsToApp() {
     });
 }
 
-void ReaderActivity::handleTouch(brls::Point point) {
-    // Reserved for advanced touch handling (pinch-to-zoom, etc.)
-}
-
-void ReaderActivity::handleTouchNavigation(float x, float screenWidth) {
-    // Touch navigation via tap zones is disabled
-    // Tapping anywhere now only toggles controls
-    // Page navigation is done via swipe gestures or controller buttons
-    toggleControls();
-}
-
-void ReaderActivity::handleSwipe(brls::Point delta) {
-    // Legacy function - swipe handling is now inline in gesture recognizers
-    // Kept for compatibility with header declaration
-}
+// Touch handling is now implemented inline in gesture recognizers (onContentAvailable)
 
 void ReaderActivity::handleDoubleTap(brls::Point position) {
     if (m_isZoomed) {
@@ -1941,6 +1956,11 @@ void ReaderActivity::updateMarginColors() {
     if (previewImage) {
         previewImage->setBackgroundFillColor(bgColor);
     }
+
+    // Update webtoon scroll view background
+    if (webtoonScroll) {
+        webtoonScroll->setBackgroundColor(bgColor);
+    }
 }
 
 void ReaderActivity::preloadNextChapter() {
@@ -1957,6 +1977,29 @@ void ReaderActivity::preloadNextChapter() {
     std::weak_ptr<bool> aliveWeak = m_alive;
 
     vitasuwayomi::asyncTask<bool>([mangaId, nextChapterIndex, sharedNextPages]() {
+        // First check if next chapter is downloaded locally
+        DownloadsManager& localMgr = DownloadsManager::getInstance();
+        if (localMgr.isChapterDownloaded(mangaId, nextChapterIndex)) {
+            std::vector<std::string> localPaths = localMgr.getChapterPages(mangaId, nextChapterIndex);
+            if (!localPaths.empty()) {
+                for (size_t i = 0; i < localPaths.size(); i++) {
+                    Page page;
+                    page.index = static_cast<int>(i);
+                    page.url = localPaths[i];
+                    page.imageUrl = localPaths[i];
+                    page.segment = 0;
+                    page.totalSegments = 1;
+                    page.originalIndex = static_cast<int>(i);
+                    sharedNextPages->push_back(page);
+                }
+                return true;
+            }
+        }
+
+        // Fall back to server
+        if (!Application::getInstance().isConnected()) {
+            return false;
+        }
         SuwayomiClient& client = SuwayomiClient::getInstance();
         return client.fetchChapterPages(mangaId, nextChapterIndex, *sharedNextPages);
     }, [this, aliveWeak, sharedNextPages](bool success) {

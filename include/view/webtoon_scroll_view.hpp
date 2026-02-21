@@ -74,6 +74,11 @@ public:
     void setSidePadding(int percent);
 
     /**
+     * Set background color (visible in margins and between pages)
+     */
+    void setBackgroundColor(NVGcolor color);
+
+    /**
      * Set rotation for all page images (0, 90, 180, 270 degrees)
      */
     void setRotation(float degrees);
@@ -150,6 +155,7 @@ private:
     std::set<int> m_loadingPages;     // Pages currently being loaded
 
     // Layout
+    NVGcolor m_bgColor = nvgRGBA(26, 26, 46, 255);  // Background color (default dark)
     float m_sidePadding = 0.0f;       // Padding on each side
     float m_pageGap = 0.0f;           // Gap between pages (0 for seamless webtoon)
     std::vector<float> m_pageHeights; // Height of each page
