@@ -772,7 +772,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             // Call callback on failure so caller can clean up loading state
             brls::sync([callback, target, alive]() {
                 if (alive && !*alive) return;
-                if (callback) callback(target);
+                if (callback) callback(target, false);
             });
             return;
         }
@@ -791,7 +791,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
                 brls::sync([callback, target, alive]() {
                     if (alive && !*alive) return;
-                    if (callback) callback(target);
+                    if (callback) callback(target, false);
                 });
                 return;
             }
@@ -805,7 +805,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 brls::Logger::error("ImageLoader: JPEG/PNG conversion failed for {}", url);
                 brls::sync([callback, target, alive]() {
                     if (alive && !*alive) return;
-                    if (callback) callback(target);
+                    if (callback) callback(target, false);
                 });
                 return;
             }
@@ -825,7 +825,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 // Skip if the owning view was destroyed while the image was downloading
                 if (alive && !*alive) return;
                 target->setImageFromMem(imageData.data(), imageData.size());
-                if (callback) callback(target);
+                if (callback) callback(target, true);
             }
         });
     } else {
@@ -833,7 +833,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         // Call callback on failure so caller can clean up loading state and retry
         brls::sync([callback, target, alive]() {
             if (alive && !*alive) return;
-            if (callback) callback(target);
+            if (callback) callback(target, false);
         });
     }
 }
@@ -848,7 +848,7 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
         std::vector<uint8_t> cachedData;
         if (cacheGet(cacheKey, cachedData)) {
             target->setImageFromMem(cachedData.data(), cachedData.size());
-            if (callback) callback(target);
+            if (callback) callback(target, true);
             return;
         }
     }

@@ -1022,14 +1022,18 @@ void ReaderActivity::loadPage(int index) {
     if (pageImage) {
         std::weak_ptr<bool> aliveWeak = m_alive;
 
-        auto onLoaded = [this, aliveWeak, index, loadGen](RotatableImage* img) {
+        auto onLoaded = [this, aliveWeak, index, loadGen](RotatableImage* img, bool success) {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
-            if (m_pageLoadGeneration == loadGen) {
-                // This is still the current page load - success
+            if (m_pageLoadGeneration == loadGen && success) {
+                // This is still the current page load and it succeeded
                 brls::Logger::debug("ReaderActivity: Page {} loaded", index);
                 m_pageLoadSucceeded = true;
-            } else {
+            } else if (m_pageLoadGeneration == loadGen && !success) {
+                // Current page load failed - show error immediately
+                brls::Logger::error("ReaderActivity: Page {} failed to load", index);
+                showPageError("Failed to load page " + std::to_string(index + 1));
+            } else if (success) {
                 // Stale page load completed and overwrote the current page's image.
                 // Reload the correct current page (should be instant from cache).
                 brls::Logger::debug("ReaderActivity: Stale page {} loaded (current={}), reloading correct page",
@@ -1793,12 +1797,20 @@ void ReaderActivity::showPageError(const std::string& message) {
             brls::Application::notify("App is offline");
             return true;
         }
-        hidePageError();
-        if (m_pages.empty()) {
-            loadPages();
-        } else {
-            loadPage(m_currentPage);
-        }
+        // Defer to next frame: hidePageError() (called directly and inside
+        // loadPage) destroys this button, so we cannot run it from within
+        // the button's own click handler without a use-after-free crash.
+        std::weak_ptr<bool> aliveWeak = m_alive;
+        brls::sync([this, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            hidePageError();
+            if (m_pages.empty()) {
+                loadPages();
+            } else {
+                loadPage(m_currentPage);
+            }
+        });
         return true;
     });
     m_retryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_retryButton));
@@ -1908,10 +1920,10 @@ void ReaderActivity::loadPreviewPage(int index) {
     brls::Logger::debug("Loading preview page {}", index);
 
     // Load the preview image (full size for manga reader)
-    ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
+    ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img, bool success) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
-        brls::Logger::debug("Preview page {} loaded", index);
+        brls::Logger::debug("Preview page {} {}", index, success ? "loaded" : "failed");
     }, previewImage, m_alive);
 }
 

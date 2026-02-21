@@ -22,7 +22,7 @@ namespace vitasuwayomi {
 class ImageLoader {
 public:
     using LoadCallback = std::function<void(brls::Image*)>;
-    using RotatableLoadCallback = std::function<void(RotatableImage*)>;
+    using RotatableLoadCallback = std::function<void(RotatableImage*, bool success)>;
 
     // Set authentication credentials for image loading
     static void setAuthCredentials(const std::string& username, const std::string& password);

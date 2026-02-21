@@ -505,7 +505,7 @@ void WebtoonScrollView::updateVisibleImages() {
 
         // Load the whole image
         ImageLoader::loadAsyncFullSize(page.imageUrl,
-            [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
+            [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg, bool success) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
