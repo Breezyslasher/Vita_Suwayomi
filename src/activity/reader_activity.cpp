@@ -590,7 +590,33 @@ void ReaderActivity::onContentAvailable() {
                     } else {
                         m_lastTapTime = now;
                         m_lastTapPosition = status.position;
-                        toggleControls();
+
+                        // Same tap-to-navigate logic as pageImage
+                        AppSettings& appSettings = Application::getInstance().getSettings();
+                        if (appSettings.tapToNavigate && !m_isZoomed && !m_continuousScrollMode) {
+                            const float SCREEN_WIDTH = 960.0f;
+                            float tapX = status.position.x;
+                            float leftZone = SCREEN_WIDTH / 3.0f;
+                            float rightZone = SCREEN_WIDTH * 2.0f / 3.0f;
+
+                            if (tapX < leftZone) {
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                    nextPage();
+                                } else {
+                                    previousPage();
+                                }
+                            } else if (tapX > rightZone) {
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                                    previousPage();
+                                } else {
+                                    nextPage();
+                                }
+                            } else {
+                                toggleControls();
+                            }
+                        } else {
+                            toggleControls();
+                        }
                     }
                 }
             }));
