@@ -1630,7 +1630,7 @@ void ReaderActivity::updateSettingsLabels() {
 }
 
 void ReaderActivity::applySettings() {
-    brls::Logger::info("DEBUG: applySettings() - scaleMode={}, rotation={}", static_cast<int>(m_settings.scaleMode), m_settings.rotation);
+    brls::Logger::info("DEBUG: applySettings() - scaleMode={}, rotation={}", static_cast<int>(m_settings.scaleMode), static_cast<int>(m_settings.rotation));
     if (!pageImage) return;
 
     // Map reader scale mode to image scale mode
