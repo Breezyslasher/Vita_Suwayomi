@@ -160,6 +160,7 @@ private:
 
     // Switch between single-page and continuous scroll modes
     void updateReaderMode();
+    void setupReaderMode(bool webtoonMode);
 
     // Chapter navigation
     std::vector<Chapter> m_chapters;

@@ -998,77 +998,8 @@ void ReaderActivity::loadPages() {
         // Reset m_startPage so subsequent loadPages() calls (from chapter nav) start fresh
         m_startPage = 0;
 
-        // Check if we should use continuous scroll mode for webtoon
-        if (isWebtoonMode) {
-            m_continuousScrollMode = true;
-
-            // Hide single-page views, show scroll view
-            if (pageImage) {
-                pageImage->setVisibility(brls::Visibility::GONE);
-            }
-            if (previewImage) {
-                previewImage->setVisibility(brls::Visibility::GONE);
-            }
-            if (webtoonScroll) {
-                webtoonScroll->setVisibility(brls::Visibility::VISIBLE);
-                webtoonScroll->setSidePadding(m_settings.webtoonSidePadding);
-                webtoonScroll->setRotation(static_cast<float>(m_settings.rotation));
-
-                // Set up progress callback with alive guard
-                std::weak_ptr<bool> cbAlive = m_alive;
-                webtoonScroll->setProgressCallback([this, cbAlive](int currentPage, int totalPages, float scrollPercent) {
-                    auto a = cbAlive.lock();
-                    if (!a || !*a) return;
-                    m_currentPage = currentPage;
-                    updatePageDisplay();
-                    updateProgress();
-
-                    // Preload next chapter when near end of current chapter
-                    if (currentPage >= totalPages - 3) {
-                        preloadNextChapter();
-                    }
-                });
-
-                // Set up tap callback with alive guard
-                webtoonScroll->setTapCallback([this, cbAlive]() {
-                    auto a = cbAlive.lock();
-                    if (!a || !*a) return;
-                    toggleControls();
-                });
-
-                // Set up end-reached callback for auto chapter advance
-                // nextChapter() handles mark-as-read, navigation, and end-of-manga
-                webtoonScroll->setEndReachedCallback([this, cbAlive]() {
-                    auto a = cbAlive.lock();
-                    if (!a || !*a) return;
-                    nextChapter();
-                });
-
-                // Set up start-reached callback for previous chapter
-                // previousChapter() checks if there's a previous chapter
-                webtoonScroll->setStartReachedCallback([this, cbAlive]() {
-                    auto a = cbAlive.lock();
-                    if (!a || !*a) return;
-                    previousChapter(true);  // scroll to end of previous chapter
-                });
-
-                // Load all pages into the scroll view
-                webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
-                webtoonScroll->scrollToPage(m_currentPage);
-            }
-        } else {
-            m_continuousScrollMode = false;
-
-            // Use single-page mode
-            if (webtoonScroll) {
-                webtoonScroll->setVisibility(brls::Visibility::GONE);
-            }
-            if (pageImage) {
-                pageImage->setVisibility(brls::Visibility::VISIBLE);
-            }
-
-            loadPage(m_currentPage);
-        }
+        // Set up the correct reader mode (webtoon scroll vs single page)
+        setupReaderMode(isWebtoonMode);
 
         updatePageDisplay();
     });
@@ -2101,21 +2032,23 @@ void ReaderActivity::preloadNextChapter() {
 }
 
 void ReaderActivity::updateReaderMode() {
-    // Determine if we should use continuous scroll mode
-    // Continuous scroll is used for Webtoon format
     bool shouldUseContinuousScroll = m_settings.isWebtoonFormat;
 
     if (shouldUseContinuousScroll == m_continuousScrollMode) {
         return;  // Mode hasn't changed
     }
 
-    m_continuousScrollMode = shouldUseContinuousScroll;
-
     brls::Logger::info("ReaderActivity: Switching to {} mode",
-                       m_continuousScrollMode ? "continuous scroll" : "single page");
+                       shouldUseContinuousScroll ? "continuous scroll" : "single page");
 
-    if (m_continuousScrollMode) {
-        // Switch to continuous scroll (WebtoonScrollView)
+    setupReaderMode(shouldUseContinuousScroll);
+}
+
+void ReaderActivity::setupReaderMode(bool webtoonMode) {
+    m_continuousScrollMode = webtoonMode;
+
+    if (webtoonMode) {
+        // Hide single-page views, show scroll view
         if (pageImage) {
             pageImage->setVisibility(brls::Visibility::GONE);
         }
@@ -2127,7 +2060,7 @@ void ReaderActivity::updateReaderMode() {
             webtoonScroll->setSidePadding(m_settings.webtoonSidePadding);
             webtoonScroll->setRotation(static_cast<float>(m_settings.rotation));
 
-            // Set up progress callback with alive guard
+            // Set up callbacks with alive guard
             std::weak_ptr<bool> cbAlive = m_alive;
             webtoonScroll->setProgressCallback([this, cbAlive](int currentPage, int totalPages, float scrollPercent) {
                 auto a = cbAlive.lock();
@@ -2136,27 +2069,23 @@ void ReaderActivity::updateReaderMode() {
                 updatePageDisplay();
                 updateProgress();
 
-                // Preload next chapter when near end
                 if (currentPage >= totalPages - 3) {
                     preloadNextChapter();
                 }
             });
 
-            // Set up tap callback with alive guard
             webtoonScroll->setTapCallback([this, cbAlive]() {
                 auto a = cbAlive.lock();
                 if (!a || !*a) return;
                 toggleControls();
             });
 
-            // Set up end-reached callback for auto chapter advance
             webtoonScroll->setEndReachedCallback([this, cbAlive]() {
                 auto a = cbAlive.lock();
                 if (!a || !*a) return;
                 nextChapter();
             });
 
-            // Set up start-reached callback for previous chapter
             webtoonScroll->setStartReachedCallback([this, cbAlive]() {
                 auto a = cbAlive.lock();
                 if (!a || !*a) return;
@@ -2170,13 +2099,16 @@ void ReaderActivity::updateReaderMode() {
             }
         }
     } else {
-        // Switch to single page mode
+        // Single page mode
         if (webtoonScroll) {
             webtoonScroll->setVisibility(brls::Visibility::GONE);
             webtoonScroll->clearPages();
         }
         if (pageImage) {
             pageImage->setVisibility(brls::Visibility::VISIBLE);
+        }
+
+        if (!m_pages.empty()) {
             loadPage(m_currentPage);
         }
     }
