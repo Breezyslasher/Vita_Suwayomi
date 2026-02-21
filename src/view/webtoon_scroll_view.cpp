@@ -27,6 +27,7 @@ WebtoonScrollView::~WebtoonScrollView() {
 
 void WebtoonScrollView::setupGestures() {
     this->setFocusable(true);
+    this->setHideHighlight(true);  // No focus border in full-screen reader
 
     // Pan gesture for scrolling (ANY axis to support rotated views)
     this->addGestureRecognizer(new brls::PanGestureRecognizer(

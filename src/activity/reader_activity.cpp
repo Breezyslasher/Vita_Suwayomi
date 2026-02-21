@@ -347,6 +347,9 @@ void ReaderActivity::onContentAvailable() {
     if (pageImage) {
         pageImage->setFocusable(true);
 
+        // Hide the blue focus highlight border (full-screen reader doesn't need it)
+        pageImage->setHideHighlight(true);
+
         // Initialize double-tap tracking
         m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
         m_lastTapPosition = {0, 0};
