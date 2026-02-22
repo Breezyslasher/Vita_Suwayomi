@@ -1258,8 +1258,9 @@ void ReaderActivity::nextPage() {
         loadPage(m_currentPage);
         updateProgress();
     } else {
-        // End of chapter - show transition page
-        if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+        // End of chapter - show transition page if there's a next chapter
+        // In DESC list, next chapter (higher number) is at position - 1
+        if (m_chapterPosition > 0) {
             showTransitionPage(TransitionType::NEXT_CHAPTER);
         } else {
             showTransitionPage(TransitionType::END_OF_MANGA);
@@ -1280,8 +1281,9 @@ void ReaderActivity::previousPage() {
         updatePageDisplay();
         loadPage(m_currentPage);
         updateProgress();
-    } else if (m_chapterPosition > 0) {
-        // First page of chapter - show transition page
+    } else if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+        // First page of chapter - show transition page if there's a previous chapter
+        // In DESC list, previous chapter (lower number) is at position + 1
         showTransitionPage(TransitionType::PREV_CHAPTER);
     }
 }
@@ -1296,10 +1298,11 @@ void ReaderActivity::goToPage(int pageIndex) {
 }
 
 void ReaderActivity::nextChapter() {
-    if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+    // In DESC list, next chapter (higher number) is at position - 1
+    if (m_chapterPosition > 0) {
         markChapterAsRead();
 
-        m_chapterPosition++;
+        m_chapterPosition--;
         m_chapterIndex = m_chapters[m_chapterPosition].id;
         m_chapterName = m_chapters[m_chapterPosition].name;
         m_currentPage = 0;
@@ -1342,8 +1345,9 @@ void ReaderActivity::nextChapter() {
 }
 
 void ReaderActivity::previousChapter() {
-    if (m_chapterPosition > 0) {
-        m_chapterPosition--;
+    // In DESC list, previous chapter (lower number) is at position + 1
+    if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+        m_chapterPosition++;
         m_chapterIndex = m_chapters[m_chapterPosition].id;
         m_chapterName = m_chapters[m_chapterPosition].name;
         // Reset preloaded chapter since we're going backwards
@@ -1379,7 +1383,8 @@ void ReaderActivity::markChapterAsRead() {
             // Update reading statistics on the main thread
             brls::sync([chapterPos, totalChapters]() {
                 // Check if this was the last chapter (manga completed)
-                bool mangaCompleted = (chapterPos == totalChapters - 1);
+                // In DESC list, the last (highest) chapter is at position 0
+                bool mangaCompleted = (chapterPos == 0);
                 Application::getInstance().updateReadingStatistics(true, mangaCompleted);
             });
 
@@ -1906,8 +1911,9 @@ void ReaderActivity::showTransitionPage(TransitionType type) {
     switch (type) {
         case TransitionType::NEXT_CHAPTER: {
             finishedText = "Finished: " + currentChapterDisplay;
-            if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
-                const Chapter& nextCh = m_chapters[m_chapterPosition + 1];
+            // In DESC list, next chapter (higher number) is at position - 1
+            if (m_chapterPosition > 0) {
+                const Chapter& nextCh = m_chapters[m_chapterPosition - 1];
                 std::string nextName = nextCh.name;
                 if (nextName.empty()) {
                     float num = nextCh.chapterNumber;
@@ -1924,8 +1930,9 @@ void ReaderActivity::showTransitionPage(TransitionType type) {
             break;
         }
         case TransitionType::PREV_CHAPTER: {
-            if (m_chapterPosition > 0) {
-                const Chapter& prevCh = m_chapters[m_chapterPosition - 1];
+            // In DESC list, previous chapter (lower number) is at position + 1
+            if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+                const Chapter& prevCh = m_chapters[m_chapterPosition + 1];
                 std::string prevName = prevCh.name;
                 if (prevName.empty()) {
                     float num = prevCh.chapterNumber;
@@ -2175,11 +2182,12 @@ void ReaderActivity::updateMarginColors() {
 
 void ReaderActivity::preloadNextChapter() {
     // Preload next chapter pages for seamless transition
-    if (m_nextChapterLoaded || m_chapterPosition < 0 || m_chapterPosition >= m_totalChapters - 1) {
+    // In DESC list, next chapter (higher number) is at position - 1
+    if (m_nextChapterLoaded || m_chapterPosition <= 0) {
         return;  // Already loaded or no next chapter
     }
 
-    int nextChapterId = m_chapters[m_chapterPosition + 1].id;
+    int nextChapterId = m_chapters[m_chapterPosition - 1].id;
     brls::Logger::info("Preloading next chapter id={}", nextChapterId);
 
     int mangaId = m_mangaId;
