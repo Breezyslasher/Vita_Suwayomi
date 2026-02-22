@@ -173,6 +173,7 @@ private:
     // Next chapter preloading
     std::vector<Page> m_nextChapterPages;
     bool m_nextChapterLoaded = false;
+    bool m_preloadingNextChapter = false;  // Guard against duplicate async preloads
     void preloadNextChapter();
 
     // Seamless chapter append for webtoon mode
@@ -238,6 +239,10 @@ private:
 
     // When true, scroll to end of chapter on next load (for previous chapter navigation)
     bool m_scrollToEndOnLoad = false;
+
+    // Guard against overlapping chapter loads (prevents race when rapidly pressing prev/next chapter)
+    bool m_isLoadingChapter = false;
+    int m_loadingChapterId = 0;  // Track which chapter the pending load is for
     void showPageError(const std::string& message);
     void hidePageError();
 

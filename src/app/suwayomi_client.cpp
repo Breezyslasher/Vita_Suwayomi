@@ -2132,7 +2132,12 @@ bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
 
 bool SuwayomiClient::testConnection() {
     ServerInfo info;
-    return fetchServerInfo(info);
+    if (fetchServerInfo(info)) {
+        m_isConnected = true;
+        m_serverInfo = info;
+        return true;
+    }
+    return false;
 }
 
 void SuwayomiClient::setAuthCredentials(const std::string& username, const std::string& password) {

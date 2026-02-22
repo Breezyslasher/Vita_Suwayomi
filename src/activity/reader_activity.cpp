@@ -878,6 +878,9 @@ void ReaderActivity::loadPages() {
     brls::Logger::info("DEBUG: loadPages() - chapterIndex={}, mangaId={}, chapterName='{}'", m_chapterIndex, m_mangaId, m_chapterName);
     brls::Logger::debug("Loading pages for chapter {}", m_chapterIndex);
 
+    m_isLoadingChapter = true;
+    m_loadingChapterId = m_chapterIndex;
+
     // Capture webtoon mode flag for async task - use format setting
     bool isWebtoonMode = m_settings.isWebtoonFormat;
     int mangaId = m_mangaId;
@@ -954,9 +957,17 @@ void ReaderActivity::loadPages() {
     }, [this, isWebtoonMode, aliveWeak,
         sharedPages, sharedChapterName,
         sharedChapters, sharedTotalChapters,
-        sharedLoadedFromLocal, sharedLastPageRead](bool success) {
+        sharedLoadedFromLocal, sharedLastPageRead, chapterIndex](bool success) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
+
+        m_isLoadingChapter = false;
+
+        // Discard stale result if user navigated to a different chapter while we loaded
+        if (m_chapterIndex != chapterIndex) {
+            brls::Logger::info("DEBUG: loadPages callback - stale result for chapter {}, current is {}, discarding", chapterIndex, m_chapterIndex);
+            return;
+        }
 
         // Copy results from shared containers into our members (safe - we're alive)
         m_pages = std::move(*sharedPages);
@@ -1296,9 +1307,12 @@ void ReaderActivity::goToPage(int pageIndex) {
 }
 
 void ReaderActivity::nextChapter() {
-    brls::Logger::info("DEBUG: nextChapter() - chapterListPosition={}, totalChapters={}, nextChapterLoaded={}, nextChapterAppended={}", m_chapterListPosition, static_cast<int>(m_chapters.size()), m_nextChapterLoaded, m_nextChapterAppended);
+    brls::Logger::info("DEBUG: nextChapter() - chapterListPosition={}, totalChapters={}, nextChapterLoaded={}, nextChapterAppended={}, isLoadingChapter={}", m_chapterListPosition, static_cast<int>(m_chapters.size()), m_nextChapterLoaded, m_nextChapterAppended, m_isLoadingChapter);
     // Clean up transition overlay if showing
     hideChapterTransition();
+
+    // Block if a chapter load is already in-flight to prevent race conditions
+    if (m_isLoadingChapter) return;
 
     // Use chapter list for navigation (m_chapterIndex is a DB ID, not sequential)
     bool hasNext = !m_chapters.empty() && m_chapterListPosition >= 0 &&
@@ -1326,6 +1340,7 @@ void ReaderActivity::nextChapter() {
     if (m_nextChapterLoaded && !m_nextChapterPages.empty()) {
         m_pages = std::move(m_nextChapterPages);
         m_nextChapterLoaded = false;
+        m_preloadingNextChapter = false;
         m_nextChapterPages.clear();
         m_currentChapterPageCount = static_cast<int>(m_pages.size());
 
@@ -1352,7 +1367,10 @@ void ReaderActivity::nextChapter() {
 }
 
 void ReaderActivity::previousChapter(bool scrollToEnd) {
-    brls::Logger::info("DEBUG: previousChapter() - scrollToEnd={}, chapterListPosition={}, totalChapters={}", scrollToEnd, m_chapterListPosition, static_cast<int>(m_chapters.size()));
+    brls::Logger::info("DEBUG: previousChapter() - scrollToEnd={}, chapterListPosition={}, totalChapters={}, isLoadingChapter={}", scrollToEnd, m_chapterListPosition, static_cast<int>(m_chapters.size()), m_isLoadingChapter);
+    // Block if a chapter load is already in-flight to prevent race conditions
+    if (m_isLoadingChapter) return;
+
     // Use chapter list for navigation (m_chapterIndex is a DB ID, not sequential)
     bool hasPrev = !m_chapters.empty() && m_chapterListPosition > 0;
 
@@ -1367,6 +1385,7 @@ void ReaderActivity::previousChapter(bool scrollToEnd) {
 
     // Reset preloaded chapter and chapter tracking since we're going backwards
     m_nextChapterLoaded = false;
+    m_preloadingNextChapter = false;
     m_nextChapterPages.clear();
     m_nextChapterAppended = false;
     m_chapterPageOffset = 0;
@@ -2280,7 +2299,8 @@ void ReaderActivity::updateMarginColors() {
 void ReaderActivity::preloadNextChapter() {
     brls::Logger::info("DEBUG: preloadNextChapter() - nextChapterLoaded={}, chapterListPosition={}, totalChapters={}", m_nextChapterLoaded, m_chapterListPosition, static_cast<int>(m_chapters.size()));
     // Preload next chapter pages for seamless transition
-    if (m_nextChapterLoaded) return;
+    if (m_nextChapterLoaded || m_preloadingNextChapter) return;
+    m_preloadingNextChapter = true;
 
     // Use chapter list to find next chapter ID
     if (m_chapters.empty() || m_chapterListPosition < 0 ||
@@ -2322,6 +2342,8 @@ void ReaderActivity::preloadNextChapter() {
     }, [this, aliveWeak, sharedNextPages](bool success) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
+
+        m_preloadingNextChapter = false;
 
         if (success && !sharedNextPages->empty()) {
             m_nextChapterPages = std::move(*sharedNextPages);
