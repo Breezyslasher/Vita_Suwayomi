@@ -2311,7 +2311,13 @@ void ReaderActivity::resetSwipeState() {
 void ReaderActivity::animatePageTurn(bool forward) {
     brls::Logger::info("DEBUG: animatePageTurn() - forward={}, currentPage={}, isDpadAnimating={}, isSwipeAnimating={}, showingTransition={}", forward, m_currentPage, m_isDpadAnimating, m_isSwipeAnimating, m_showingChapterTransition);
     // Animated page slide for d-pad navigation (same push effect as touch swipe)
-    if (m_isDpadAnimating || m_isSwipeAnimating || m_continuousScrollMode) return;
+    if (m_isSwipeAnimating || m_continuousScrollMode) return;
+
+    // If already animating, queue this press so it fires when current animation ends
+    if (m_isDpadAnimating) {
+        m_queuedDpadDirection = forward ? 1 : -1;
+        return;
+    }
 
     // If showing the transition page, handle next/back from there
     if (m_showingChapterTransition) {
@@ -2414,6 +2420,13 @@ void ReaderActivity::tickDpadAnimation() {
             // Animation complete - finalize page turn
             completeSwipeAnimation(true);
             m_isDpadAnimating = false;
+
+            // Process queued d-pad input (user pressed during animation)
+            if (m_queuedDpadDirection != 0) {
+                bool queuedForward = (m_queuedDpadDirection > 0);
+                m_queuedDpadDirection = 0;
+                animatePageTurn(queuedForward);
+            }
         } else {
             updateSwipePreview(currentOffset);
             // Schedule next tick (self-chaining on main thread, no new threads)

@@ -205,6 +205,7 @@ private:
     bool m_isDpadAnimating = false;      // Guard against overlapping d-pad animations
     float m_dpadAnimTargetOffset = 0.0f; // Target slide distance for d-pad animation
     std::chrono::steady_clock::time_point m_dpadAnimStartTime;  // When the animation started
+    int m_queuedDpadDirection = 0;       // Queued d-pad input: +1=forward, -1=back, 0=none
 
     // NOBORU-style touch controls
     // Double-tap detection
