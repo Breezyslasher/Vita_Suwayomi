@@ -2117,7 +2117,7 @@ void ReaderActivity::renderTransitionPage(int index) {
     std::string line2;
 
     if (url == TRANSITION_NEXT) {
-        line1 = "Finished: " + currentChapterDisplay;
+        line1 = "End of: " + currentChapterDisplay;
         if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
             const Chapter& nextCh = m_chapters[m_chapterPosition + 1];
             std::string nextName = nextCh.name;
@@ -2134,7 +2134,7 @@ void ReaderActivity::renderTransitionPage(int index) {
             line2 = "Next: " + nextName;
         }
     } else if (url == TRANSITION_PREV) {
-        line1 = "Current: " + currentChapterDisplay;
+        line1 = "Beginning of: " + currentChapterDisplay;
         if (m_chapterPosition > 0) {
             const Chapter& prevCh = m_chapters[m_chapterPosition - 1];
             std::string prevName = prevCh.name;
@@ -2151,7 +2151,7 @@ void ReaderActivity::renderTransitionPage(int index) {
             line2 = "Previous: " + prevName;
         }
     } else if (url == TRANSITION_END) {
-        line1 = "Finished: " + currentChapterDisplay;
+        line1 = "End of: " + currentChapterDisplay;
         line2 = "You've reached the end!";
     }
 
