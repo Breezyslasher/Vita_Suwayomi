@@ -47,6 +47,7 @@ std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
 std::string ImageLoader::s_accessToken;
+std::mutex ImageLoader::s_tokenMutex;
 std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
@@ -259,6 +260,7 @@ void ImageLoader::setAuthCredentials(const std::string& username, const std::str
 }
 
 void ImageLoader::setAccessToken(const std::string& token) {
+    std::lock_guard<std::mutex> lock(s_tokenMutex);
     s_accessToken = token;
 }
 

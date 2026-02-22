@@ -2289,6 +2289,11 @@ bool SuwayomiClient::loginGraphQL(const std::string& username, const std::string
 }
 
 bool SuwayomiClient::refreshToken() {
+    // Serialize token refresh across threads. Multiple ImageLoader workers
+    // and async GraphQL calls can hit 401 simultaneously; only the first
+    // caller should actually refresh, the rest just pick up the new token.
+    std::lock_guard<std::mutex> lock(m_tokenMutex);
+
     if (m_authMode != AuthMode::UI_LOGIN && m_authMode != AuthMode::SIMPLE_LOGIN) {
         return true;  // No token refresh needed for basic auth or no auth
     }

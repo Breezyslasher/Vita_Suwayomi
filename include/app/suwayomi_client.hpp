@@ -12,6 +12,7 @@
 #include <memory>
 #include <map>
 #include <set>
+#include <mutex>
 #include "utils/http_client.hpp"
 
 namespace vitasuwayomi {
@@ -709,6 +710,7 @@ private:
     std::string m_accessToken;       // JWT access token (ui_login)
     std::string m_refreshToken;      // JWT refresh token (ui_login)
     std::string m_sessionCookie;     // Session cookie (simple_login)
+    mutable std::mutex m_tokenMutex; // Protects token refresh from concurrent callers
 
     // Login GraphQL methods
     bool loginGraphQL(const std::string& username, const std::string& password);
