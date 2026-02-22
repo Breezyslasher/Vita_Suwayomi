@@ -227,17 +227,15 @@ private:
     void showPageError(const std::string& message);
     void hidePageError();
 
-    // Chapter transition overlay (shown between chapters)
-    enum class TransitionType {
-        NEXT_CHAPTER,      // "Finished Chapter X — Next: Chapter Y"
-        PREV_CHAPTER,      // "Go back to previous chapter"
-        END_OF_MANGA       // "You've reached the end"
-    };
-    brls::Box* m_transitionOverlay = nullptr;
-    bool m_showingTransition = false;
-    TransitionType m_transitionType = TransitionType::NEXT_CHAPTER;
-    void showTransitionPage(TransitionType type);
-    void hideTransitionPage();
+    // Fake transition pages inserted into m_pages at chapter boundaries
+    // They use special imageUrl markers and are rendered as text pages
+    static constexpr const char* TRANSITION_NEXT = "__transition:next";
+    static constexpr const char* TRANSITION_PREV = "__transition:prev";
+    static constexpr const char* TRANSITION_END  = "__transition:end";
+    bool isTransitionPage(int index) const;
+    void insertTransitionPages();
+    void renderTransitionPage(int index);
+    int m_realPageCount = 0;  // Actual page count excluding transition pages
 };
 
 } // namespace vitasuwayomi

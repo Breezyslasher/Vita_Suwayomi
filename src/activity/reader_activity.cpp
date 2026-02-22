@@ -368,12 +368,6 @@ void ReaderActivity::onContentAvailable() {
         pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::END) {
-                    // If showing a transition page, any tap continues
-                    if (m_showingTransition) {
-                        nextPage();  // nextPage handles transition continuation
-                        return;
-                    }
-
                     // Check for double-tap
                     auto now = std::chrono::steady_clock::now();
                     auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -536,13 +530,9 @@ void ReaderActivity::onContentAvailable() {
                             // Swipe was long enough - turn the page
                             completeSwipeAnimation(true);
                         } else if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex < 0) {
-                            // Swiped past chapter boundary - show transition
-                            resetSwipeState();
-                            if (m_swipingToNext) {
-                                nextPage();
-                            } else {
-                                previousPage();
-                            }
+                            // No page exists in that direction (e.g. first page of first chapter,
+                            // or last page of last chapter) - just snap back
+                            completeSwipeAnimation(false);
                         } else {
                             // Swipe too short - snap back
                             completeSwipeAnimation(false);
@@ -1020,6 +1010,11 @@ void ReaderActivity::loadPages() {
 
         brls::Logger::info("Loaded {} pages", m_pages.size());
 
+        // Insert fake transition pages at chapter boundaries
+        // (must be done before calculating start page)
+        m_realPageCount = static_cast<int>(m_pages.size());
+        insertTransitionPages();
+
         // Update UI labels
         if (chapterLabel) {
             std::string label = m_chapterName.empty() ?
@@ -1033,8 +1028,13 @@ void ReaderActivity::loadPages() {
         }
 
         // Start from saved position or beginning
+        // (startPage was adjusted by insertTransitionPages if prev page was added)
         m_currentPage = std::min(m_startPage, static_cast<int>(m_pages.size()) - 1);
         m_currentPage = std::max(0, m_currentPage);
+        // Make sure we don't start on a transition page
+        if (isTransitionPage(m_currentPage) && m_currentPage > 0) {
+            m_currentPage--;
+        }
 
         // Check if we should use continuous scroll mode for webtoon
         if (isWebtoonMode) {
@@ -1096,7 +1096,18 @@ void ReaderActivity::loadPage(int index) {
         return;
     }
 
-    hidePageError();  // Clear any previous error
+    hidePageError();  // Clear any previous error/transition box
+
+    // Handle fake transition pages
+    if (isTransitionPage(index)) {
+        renderTransitionPage(index);
+        return;
+    }
+
+    // Restore page image if it was hidden by a transition page
+    if (pageImage && pageImage->getVisibility() != brls::Visibility::VISIBLE) {
+        pageImage->setVisibility(brls::Visibility::VISIBLE);
+    }
 
     const Page& page = m_pages[index];
     std::string imageUrl = page.imageUrl;
@@ -1164,31 +1175,38 @@ void ReaderActivity::preloadAdjacentPages() {
     // Preload next 3 pages for smoother swiping/reading
     for (int i = 1; i <= 3; i++) {
         int nextIdx = m_currentPage + i;
-        if (nextIdx < static_cast<int>(m_pages.size())) {
-            // Note: For segmented pages, preloadFullSize loads the full image which will be
-            // segmented on demand. This is acceptable since the raw image needs to be fetched anyway.
+        if (nextIdx < static_cast<int>(m_pages.size()) && !isTransitionPage(nextIdx)) {
             ImageLoader::preloadFullSize(m_pages[nextIdx].imageUrl);
         }
     }
 
     // Preload previous page (for going back)
-    if (m_currentPage > 0) {
+    if (m_currentPage > 0 && !isTransitionPage(m_currentPage - 1)) {
         ImageLoader::preloadFullSize(m_pages[m_currentPage - 1].imageUrl);
     }
 }
 
 void ReaderActivity::updatePageDisplay() {
+    // Don't update counters for transition pages
+    if (isTransitionPage(m_currentPage)) return;
+
+    // Calculate display page number (exclude transition pages from count)
+    int displayPage = m_currentPage;
+    // If a prev transition page was inserted at index 0, adjust
+    if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
+        displayPage = m_currentPage - 1;
+    }
+
     // Update page counter (top-right overlay with rotation support)
     if (pageCounter) {
         const Page& page = m_pages[m_currentPage];
         if (page.totalSegments > 1) {
-            // Show segment info: "Page-Segment/Total" e.g. "1-2/10"
             pageCounter->setText(std::to_string(page.originalIndex + 1) + "-" +
                               std::to_string(page.segment + 1) + "/" +
-                              std::to_string(m_pages.size()));
+                              std::to_string(m_realPageCount));
         } else {
-            pageCounter->setText(std::to_string(m_currentPage + 1) + "/" +
-                              std::to_string(m_pages.size()));
+            pageCounter->setText(std::to_string(displayPage + 1) + "/" +
+                              std::to_string(m_realPageCount));
         }
     }
 
@@ -1196,20 +1214,19 @@ void ReaderActivity::updatePageDisplay() {
     if (sliderPageLabel) {
         const Page& page = m_pages[m_currentPage];
         if (page.totalSegments > 1) {
-            // Show more detail: "Page X-Y of Z"
             sliderPageLabel->setText("Page " + std::to_string(page.originalIndex + 1) + "-" +
                                      std::to_string(page.segment + 1) +
-                                     " of " + std::to_string(m_pages.size()));
+                                     " of " + std::to_string(m_realPageCount));
         } else {
-            sliderPageLabel->setText("Page " + std::to_string(m_currentPage + 1) +
-                                     " of " + std::to_string(m_pages.size()));
+            sliderPageLabel->setText("Page " + std::to_string(displayPage + 1) +
+                                     " of " + std::to_string(m_realPageCount));
         }
     }
 
-    // Update slider position
-    if (pageSlider && !m_pages.empty()) {
-        float progress = static_cast<float>(m_currentPage) /
-                        static_cast<float>(std::max(1, static_cast<int>(m_pages.size()) - 1));
+    // Update slider position (based on real pages only)
+    if (pageSlider && m_realPageCount > 0) {
+        float progress = static_cast<float>(displayPage) /
+                        static_cast<float>(std::max(1, m_realPageCount - 1));
         pageSlider->setProgress(progress);
     }
 }
@@ -1231,9 +1248,16 @@ void ReaderActivity::updateDirectionLabel() {
 }
 
 void ReaderActivity::updateProgress() {
+    // Don't save progress for transition pages
+    if (isTransitionPage(m_currentPage)) return;
+
     int mangaId = m_mangaId;
     int chapterIndex = m_chapterIndex;
+    // Adjust page index to exclude the prepended transition page
     int currentPage = m_currentPage;
+    if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
+        currentPage = m_currentPage - 1;
+    }
 
     if (Application::getInstance().isConnected()) {
         // Save reading progress to server
@@ -1248,55 +1272,62 @@ void ReaderActivity::updateProgress() {
 }
 
 void ReaderActivity::nextPage() {
-    // If showing transition, confirm the transition
-    if (m_showingTransition) {
-        TransitionType type = m_transitionType;
-        hideTransitionPage();
-        if (type == TransitionType::NEXT_CHAPTER) {
-            nextChapter();  // nextChapter() already calls markChapterAsRead()
-        } else if (type == TransitionType::PREV_CHAPTER) {
-            previousChapter();
-        }
+    if (m_pages.empty()) return;
+
+    // If currently on the "next chapter" transition page, do the navigation
+    if (isTransitionPage(m_currentPage) &&
+        m_pages[m_currentPage].imageUrl == TRANSITION_NEXT) {
+        nextChapter();
         return;
     }
-
-    // Don't navigate if pages haven't loaded yet
-    if (m_pages.empty()) return;
+    // If on the "prev chapter" transition page, confirm going back
+    if (isTransitionPage(m_currentPage) &&
+        m_pages[m_currentPage].imageUrl == TRANSITION_PREV) {
+        previousChapter();
+        return;
+    }
+    // If on end-of-manga page, do nothing
+    if (isTransitionPage(m_currentPage) &&
+        m_pages[m_currentPage].imageUrl == TRANSITION_END) {
+        return;
+    }
 
     if (m_currentPage < static_cast<int>(m_pages.size()) - 1) {
         m_currentPage++;
         updatePageDisplay();
         loadPage(m_currentPage);
-        updateProgress();
-    } else {
-        // End of chapter - show transition page if there's a next chapter
-        if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
-            showTransitionPage(TransitionType::NEXT_CHAPTER);
-        } else {
-            showTransitionPage(TransitionType::END_OF_MANGA);
+        // Don't save progress for transition pages
+        if (!isTransitionPage(m_currentPage)) {
+            updateProgress();
         }
     }
 }
 
 void ReaderActivity::previousPage() {
-    // If showing transition, dismiss it and go back to current page
-    if (m_showingTransition) {
-        hideTransitionPage();
+    if (m_pages.empty()) return;
+
+    // If on any transition page, go back to the nearest real page
+    if (isTransitionPage(m_currentPage)) {
+        // Find the nearest real page
+        if (m_currentPage > 0 && !isTransitionPage(m_currentPage - 1)) {
+            m_currentPage--;
+        } else if (m_currentPage < static_cast<int>(m_pages.size()) - 1 &&
+                   !isTransitionPage(m_currentPage + 1)) {
+            m_currentPage++;
+        }
+        updatePageDisplay();
         loadPage(m_currentPage);
         return;
     }
-
-    // Don't navigate if pages haven't loaded yet
-    if (m_pages.empty()) return;
 
     if (m_currentPage > 0) {
         m_currentPage--;
         updatePageDisplay();
         loadPage(m_currentPage);
-        updateProgress();
-    } else if (m_chapterPosition > 0) {
-        // First page of non-first chapter - show transition page
-        showTransitionPage(TransitionType::PREV_CHAPTER);
+        // Don't save progress for transition pages
+        if (!isTransitionPage(m_currentPage)) {
+            updateProgress();
+        }
     }
 }
 
@@ -1324,6 +1355,13 @@ void ReaderActivity::nextChapter() {
             m_nextChapterLoaded = false;
             m_nextChapterPages.clear();
 
+            // Insert fake transition pages at chapter boundaries
+            m_realPageCount = static_cast<int>(m_pages.size());
+            m_startPage = 0;
+            insertTransitionPages();
+            // Start on first real page (skip prev transition if present)
+            m_currentPage = isTransitionPage(0) ? 1 : 0;
+
             // Update UI
             if (chapterLabel) {
                 std::string label = m_chapterName.empty() ?
@@ -1339,7 +1377,7 @@ void ReaderActivity::nextChapter() {
             if (m_continuousScrollMode && webtoonScroll) {
                 // Update webtoon scroll view with new pages and scroll to beginning
                 webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
-                webtoonScroll->scrollToPage(0);
+                webtoonScroll->scrollToPage(m_currentPage);
             } else {
                 loadPage(m_currentPage);
             }
@@ -1890,130 +1928,132 @@ void ReaderActivity::hidePageError() {
     }
 }
 
-void ReaderActivity::showTransitionPage(TransitionType type) {
+bool ReaderActivity::isTransitionPage(int index) const {
+    if (index < 0 || index >= static_cast<int>(m_pages.size())) return false;
+    const std::string& url = m_pages[index].imageUrl;
+    return url == TRANSITION_NEXT || url == TRANSITION_PREV || url == TRANSITION_END;
+}
+
+void ReaderActivity::insertTransitionPages() {
+    // Insert a fake "previous chapter" page at the beginning
+    if (m_chapterPosition > 0) {
+        Page prevPage;
+        prevPage.imageUrl = TRANSITION_PREV;
+        prevPage.index = -1;
+        m_pages.insert(m_pages.begin(), prevPage);
+        // Shift start page to account for inserted page
+        m_startPage++;
+    }
+
+    // Insert a fake "next chapter" or "end" page at the end
+    Page endPage;
+    if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+        endPage.imageUrl = TRANSITION_NEXT;
+    } else {
+        endPage.imageUrl = TRANSITION_END;
+    }
+    endPage.index = -1;
+    m_pages.push_back(endPage);
+
+    m_realPageCount = static_cast<int>(m_pages.size());
+    // Subtract the fake pages from the real count
+    if (m_chapterPosition > 0) m_realPageCount--;
+    m_realPageCount--;  // End page is always inserted
+}
+
+void ReaderActivity::renderTransitionPage(int index) {
     if (!container) return;
 
-    hideTransitionPage();  // Remove any existing transition
-    hidePageError();       // Also clear error overlays
+    // Hide the manga page image
+    if (pageImage) {
+        pageImage->setVisibility(brls::Visibility::GONE);
+    }
 
-    m_showingTransition = true;
-    m_transitionType = type;
+    // Remove any existing transition box (reuse tag approach)
+    hidePageError();
 
-    m_transitionOverlay = new brls::Box();
-    m_transitionOverlay->setAxis(brls::Axis::COLUMN);
-    m_transitionOverlay->setJustifyContent(brls::JustifyContent::CENTER);
-    m_transitionOverlay->setAlignItems(brls::AlignItems::CENTER);
-    m_transitionOverlay->setWidth(960);
-    m_transitionOverlay->setHeight(544);
-    m_transitionOverlay->setPositionType(brls::PositionType::ABSOLUTE);
-    m_transitionOverlay->setPositionTop(0);
-    m_transitionOverlay->setPositionLeft(0);
-    m_transitionOverlay->setBackgroundColor(nvgRGBA(20, 20, 30, 255));
-
-    // Build text based on transition type
-    std::string finishedText;
-    std::string actionText;
+    const std::string& url = m_pages[index].imageUrl;
 
     std::string currentChapterDisplay = m_chapterName.empty() ?
         "Chapter " + getChapterDisplayNumber() : m_chapterName;
 
-    switch (type) {
-        case TransitionType::NEXT_CHAPTER: {
-            finishedText = "Finished: " + currentChapterDisplay;
-            if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
-                const Chapter& nextCh = m_chapters[m_chapterPosition + 1];
-                std::string nextName = nextCh.name;
-                if (nextName.empty()) {
-                    float num = nextCh.chapterNumber;
-                    if (num == static_cast<int>(num))
-                        nextName = "Chapter " + std::to_string(static_cast<int>(num));
-                    else {
-                        char buf[32];
-                        snprintf(buf, sizeof(buf), "Chapter %.1f", num);
-                        nextName = buf;
-                    }
+    std::string line1;
+    std::string line2;
+
+    if (url == TRANSITION_NEXT) {
+        line1 = "Finished: " + currentChapterDisplay;
+        if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+            const Chapter& nextCh = m_chapters[m_chapterPosition + 1];
+            std::string nextName = nextCh.name;
+            if (nextName.empty()) {
+                float num = nextCh.chapterNumber;
+                if (num == static_cast<int>(num))
+                    nextName = "Chapter " + std::to_string(static_cast<int>(num));
+                else {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                    nextName = buf;
                 }
-                actionText = "Next: " + nextName;
             }
-            break;
+            line2 = "Next: " + nextName;
         }
-        case TransitionType::PREV_CHAPTER: {
-            if (m_chapterPosition > 0) {
-                const Chapter& prevCh = m_chapters[m_chapterPosition - 1];
-                std::string prevName = prevCh.name;
-                if (prevName.empty()) {
-                    float num = prevCh.chapterNumber;
-                    if (num == static_cast<int>(num))
-                        prevName = "Chapter " + std::to_string(static_cast<int>(num));
-                    else {
-                        char buf[32];
-                        snprintf(buf, sizeof(buf), "Chapter %.1f", num);
-                        prevName = buf;
-                    }
+    } else if (url == TRANSITION_PREV) {
+        line1 = "Current: " + currentChapterDisplay;
+        if (m_chapterPosition > 0) {
+            const Chapter& prevCh = m_chapters[m_chapterPosition - 1];
+            std::string prevName = prevCh.name;
+            if (prevName.empty()) {
+                float num = prevCh.chapterNumber;
+                if (num == static_cast<int>(num))
+                    prevName = "Chapter " + std::to_string(static_cast<int>(num));
+                else {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                    prevName = buf;
                 }
-                finishedText = "Current: " + currentChapterDisplay;
-                actionText = "Previous: " + prevName;
             }
-            break;
+            line2 = "Previous: " + prevName;
         }
-        case TransitionType::END_OF_MANGA: {
-            finishedText = "Finished: " + currentChapterDisplay;
-            actionText = "You've reached the end!";
-            break;
-        }
+    } else if (url == TRANSITION_END) {
+        line1 = "Finished: " + currentChapterDisplay;
+        line2 = "You've reached the end!";
     }
 
-    // "Finished Chapter X" label
-    auto* finishedLabel = new brls::Label();
-    finishedLabel->setText(finishedText);
-    finishedLabel->setFontSize(22);
-    finishedLabel->setTextColor(nvgRGB(220, 220, 220));
-    finishedLabel->setMarginBottom(12);
-    m_transitionOverlay->addView(finishedLabel);
+    // Build a simple box with text, placed absolutely over the page area
+    auto* box = new brls::Box();
+    box->setAxis(brls::Axis::COLUMN);
+    box->setJustifyContent(brls::JustifyContent::CENTER);
+    box->setAlignItems(brls::AlignItems::CENTER);
+    box->setWidth(960);
+    box->setHeight(544);
+    box->setPositionType(brls::PositionType::ABSOLUTE);
+    box->setPositionTop(0);
+    box->setPositionLeft(0);
+    box->setBackgroundColor(nvgRGBA(20, 20, 30, 255));
 
-    // Separator line
+    auto* label1 = new brls::Label();
+    label1->setText(line1);
+    label1->setFontSize(22);
+    label1->setTextColor(nvgRGB(220, 220, 220));
+    label1->setMarginBottom(12);
+    box->addView(label1);
+
     auto* separator = new brls::Box();
     separator->setWidth(300);
     separator->setHeight(1);
     separator->setBackgroundColor(nvgRGBA(150, 150, 150, 100));
     separator->setMarginBottom(12);
-    m_transitionOverlay->addView(separator);
+    box->addView(separator);
 
-    // "Next: Chapter Y" or end text
-    auto* actionLabel = new brls::Label();
-    actionLabel->setText(actionText);
-    actionLabel->setFontSize(18);
-    actionLabel->setTextColor(nvgRGB(180, 180, 180));
-    actionLabel->setMarginBottom(24);
-    m_transitionOverlay->addView(actionLabel);
+    auto* label2 = new brls::Label();
+    label2->setText(line2);
+    label2->setFontSize(18);
+    label2->setTextColor(nvgRGB(180, 180, 180));
+    box->addView(label2);
 
-    // Hint text
-    if (type != TransitionType::END_OF_MANGA) {
-        auto* hintLabel = new brls::Label();
-        hintLabel->setText("Tap or press a button to continue");
-        hintLabel->setFontSize(14);
-        hintLabel->setTextColor(nvgRGBA(140, 140, 140, 200));
-        m_transitionOverlay->addView(hintLabel);
-    }
-
-    // Add tap recognizer to the overlay itself so touch works on it
-    // (pageImage's gesture recognizer won't fire if the overlay is on top)
-    m_transitionOverlay->addGestureRecognizer(new brls::TapGestureRecognizer(
-        [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
-            if (status.state == brls::GestureState::END) {
-                nextPage();  // nextPage handles transition confirmation
-            }
-        }));
-
-    container->addView(m_transitionOverlay);
-}
-
-void ReaderActivity::hideTransitionPage() {
-    if (m_transitionOverlay && container) {
-        container->removeView(m_transitionOverlay);
-        m_transitionOverlay = nullptr;
-    }
-    m_showingTransition = false;
+    // Store as error overlay so hidePageError() cleans it up on next loadPage
+    m_errorOverlay = box;
+    container->addView(box);
 }
 
 // NOBORU-style swipe methods
@@ -2080,6 +2120,13 @@ void ReaderActivity::loadPreviewPage(int index) {
     }
 
     if (!previewImage) return;
+
+    // Transition pages have no image — hide preview, the swipe will just
+    // push the current page off-screen revealing the dark background
+    if (isTransitionPage(index)) {
+        previewImage->setVisibility(brls::Visibility::GONE);
+        return;
+    }
 
     // Apply current rotation to preview image before loading
     previewImage->setRotation(static_cast<float>(m_settings.rotation));
@@ -2314,8 +2361,14 @@ void ReaderActivity::willDisappear(bool resetState) {
     Application::ReaderResult result;
     result.mangaId = m_mangaId;
     result.chapterId = m_chapterIndex;  // This is actually the chapter ID passed to reader
-    result.lastPageRead = m_currentPage;
-    result.markedRead = (m_currentPage >= static_cast<int>(m_pages.size()) - 1 && !m_pages.empty());
+
+    // Adjust page index to exclude the prepended transition page
+    int adjustedPage = m_currentPage;
+    if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
+        adjustedPage = m_currentPage - 1;
+    }
+    result.lastPageRead = std::max(0, adjustedPage);
+    result.markedRead = (!m_pages.empty() && adjustedPage >= m_realPageCount - 1);
     result.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     Application::getInstance().setLastReaderResult(result);
