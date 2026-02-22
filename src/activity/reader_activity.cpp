@@ -1244,8 +1244,7 @@ void ReaderActivity::nextPage() {
     if (m_showingTransition) {
         hideTransitionPage();
         if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
-            markChapterAsRead();
-            nextChapter();
+            nextChapter();  // nextChapter() already calls markChapterAsRead()
         }
         return;
     }
