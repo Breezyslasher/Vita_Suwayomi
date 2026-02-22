@@ -47,12 +47,14 @@ public:
     static void loadAsyncFullSize(const std::string& url, LoadCallback callback, brls::Image* target);
 
     // Load full-size image asynchronously for RotatableImage (custom rendering)
-    static void loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target);
+    static void loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target,
+                                  std::shared_ptr<bool> alive = nullptr);
 
     // Load a specific segment of a tall image (for webtoon splitting)
     // segment: which segment (0-based), totalSegments: total number of segments
     static void loadAsyncFullSizeSegment(const std::string& url, int segment, int totalSegments,
-                                         RotatableLoadCallback callback, RotatableImage* target);
+                                         RotatableLoadCallback callback, RotatableImage* target,
+                                         std::shared_ptr<bool> alive = nullptr);
 
     // Preload image to cache without displaying
     static void preload(const std::string& url);
@@ -94,6 +96,7 @@ private:
         RotatableImage* target;
         int segment = 0;        // Segment index (0 = first/only)
         int totalSegments = 1;  // Total segments (1 = no splitting)
+        std::shared_ptr<bool> alive;  // If set and *alive==false, skip (owner destroyed)
     };
 
     static void executeLoad(const LoadRequest& request);

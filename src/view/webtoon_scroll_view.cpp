@@ -453,7 +453,7 @@ void WebtoonScrollView::updateVisibleImages() {
                     }
 
                     brls::Logger::debug("WebtoonScrollView: Loaded segment page {}", pageIndex);
-                }, img);
+                }, img, m_alive);
         } else {
             // Regular page
             ImageLoader::loadAsyncFullSize(page.imageUrl,
@@ -481,7 +481,7 @@ void WebtoonScrollView::updateVisibleImages() {
                     }
 
                     brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
-                }, img);
+                }, img, m_alive);
         }
     }
 }

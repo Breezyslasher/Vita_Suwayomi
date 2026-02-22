@@ -1268,9 +1268,9 @@ void ReaderActivity::loadPage(int index) {
 
         if (page.totalSegments > 1) {
             ImageLoader::loadAsyncFullSizeSegment(
-                imageUrl, page.segment, page.totalSegments, onLoaded, pageImage);
+                imageUrl, page.segment, page.totalSegments, onLoaded, pageImage, m_alive);
         } else {
-            ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage);
+            ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage, m_alive);
         }
 
         // Set up a timeout: if page hasn't loaded after 15 seconds, show error
@@ -2243,7 +2243,7 @@ void ReaderActivity::loadPreviewPage(int index) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
                 brls::Logger::debug("Preview page {} (segment) loaded", index);
-            }, previewImage);
+            }, previewImage, m_alive);
     } else {
         brls::Logger::debug("Loading preview page {}", index);
 
@@ -2252,7 +2252,7 @@ void ReaderActivity::loadPreviewPage(int index) {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
             brls::Logger::debug("Preview page {} loaded", index);
-        }, previewImage);
+        }, previewImage, m_alive);
     }
 }
 

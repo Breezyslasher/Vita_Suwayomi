@@ -88,6 +88,7 @@ static int extractMangaIdFromUrl(const std::string& url) {
 // Helper function to downscale RGBA image
 static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
                           uint8_t* dst, int dstW, int dstH) {
+    if (!src || !dst || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0) return;
     float scaleX = (float)srcW / dstW;
     float scaleY = (float)srcH / dstH;
 
@@ -111,7 +112,10 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
 
 // Helper to create TGA from RGBA data
 static std::vector<uint8_t> createTGAFromRGBA(const uint8_t* rgba, int width, int height) {
-    size_t imageSize = width * height * 4;
+    if (width <= 0 || height <= 0 || !rgba) return {};
+    size_t imageSize = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
+    // Sanity check: reject absurdly large images (>256MB pixel data)
+    if (imageSize > 256 * 1024 * 1024) return {};
     std::vector<uint8_t> tgaData(18 + imageSize);
 
     uint8_t* header = tgaData.data();
@@ -152,10 +156,14 @@ static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, siz
                                                      int segment, int totalSegments, int maxSize) {
     std::vector<uint8_t> tgaData;
 
+    if (totalSegments < 1 || segment < 0 || segment >= totalSegments) return tgaData;
+
     int width, height;
     if (!WebPGetInfo(webpData, webpSize, &width, &height)) {
         return tgaData;
     }
+
+    if (width <= 0 || height <= 0) return tgaData;
 
     uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &width, &height);
     if (!rgba) {
@@ -167,6 +175,11 @@ static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, siz
     int startY = segment * segmentHeight;
     int endY = std::min(startY + segmentHeight, height);
     int actualHeight = endY - startY;
+
+    if (actualHeight <= 0 || startY >= height) {
+        WebPFree(rgba);
+        return tgaData;
+    }
 
     // Scale down if still too wide
     int targetW = width;
@@ -205,6 +218,8 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
                                                       int segment, int totalSegments, int maxSize) {
     std::vector<uint8_t> tgaData;
 
+    if (totalSegments < 1 || segment < 0 || segment >= totalSegments) return tgaData;
+
     int width, height, channels;
     // Force 4 channels (RGBA)
     uint8_t* rgba = stbi_load_from_memory(data, static_cast<int>(dataSize), &width, &height, &channels, 4);
@@ -213,11 +228,21 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
         return tgaData;
     }
 
+    if (width <= 0 || height <= 0) {
+        stbi_image_free(rgba);
+        return tgaData;
+    }
+
     // Calculate segment bounds
     int segmentHeight = (height + totalSegments - 1) / totalSegments;
     int startY = segment * segmentHeight;
     int endY = std::min(startY + segmentHeight, height);
     int actualHeight = endY - startY;
+
+    if (actualHeight <= 0 || startY >= height) {
+        stbi_image_free(rgba);
+        return tgaData;
+    }
 
     // Scale down if still too wide
     int targetW = width;
@@ -757,6 +782,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     RotatableImage* target = request.target;
     int segment = request.segment;
     int totalSegments = request.totalSegments;
+    std::shared_ptr<bool> alive = request.alive;
+
+    // Early out if owner was destroyed before we started
+    if (alive && !*alive) return;
 
     std::string imageBody;
     bool loadSuccess = false;
@@ -929,8 +958,9 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
         cachePut(cacheKey, imageData);
 
-        // Update UI on main thread
-        brls::sync([imageData, callback, target]() {
+        // Update UI on main thread (check alive flag to prevent use-after-free)
+        brls::sync([imageData, callback, target, alive]() {
+            if (alive && !*alive) return;  // Owner destroyed, skip
             if (target) {
                 target->setImageFromMem(imageData.data(), imageData.size());
                 if (callback) callback(target);
@@ -941,8 +971,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     }
 }
 
-void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target) {
+void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target,
+                                    std::shared_ptr<bool> alive) {
     if (url.empty() || !target) return;
+    if (alive && !*alive) return;
 
     // Check LRU cache first
     std::string cacheKey = url + "_full";
@@ -958,7 +990,7 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
     // Add to rotatable queue
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_rotatableLoadQueue.push({url, callback, target, 0, 1});  // segment=0, totalSegments=1
+        s_rotatableLoadQueue.push({url, callback, target, 0, 1, alive});
     }
 
     s_queueCV.notify_one();
@@ -966,8 +998,17 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
 }
 
 void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, int totalSegments,
-                                            RotatableLoadCallback callback, RotatableImage* target) {
+                                            RotatableLoadCallback callback, RotatableImage* target,
+                                            std::shared_ptr<bool> alive) {
     if (url.empty() || !target) return;
+    if (alive && !*alive) return;
+
+    // Validate segment parameters to prevent divide-by-zero and out-of-bounds
+    if (totalSegments < 1) totalSegments = 1;
+    if (segment < 0 || segment >= totalSegments) {
+        brls::Logger::error("ImageLoader: Invalid segment {}/{}", segment, totalSegments);
+        return;
+    }
 
     // Check LRU cache first (with segment key)
     std::string cacheKey = url + "_full_seg" + std::to_string(segment);
@@ -983,7 +1024,7 @@ void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, 
     // Add to rotatable queue with segment info
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_rotatableLoadQueue.push({url, callback, target, segment, totalSegments});
+        s_rotatableLoadQueue.push({url, callback, target, segment, totalSegments, alive});
     }
 
     s_queueCV.notify_one();
