@@ -1240,11 +1240,14 @@ void ReaderActivity::updateProgress() {
 }
 
 void ReaderActivity::nextPage() {
-    // If showing transition, the next action continues navigation
+    // If showing transition, confirm the transition
     if (m_showingTransition) {
+        TransitionType type = m_transitionType;
         hideTransitionPage();
-        if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+        if (type == TransitionType::NEXT_CHAPTER) {
             nextChapter();  // nextChapter() already calls markChapterAsRead()
+        } else if (type == TransitionType::PREV_CHAPTER) {
+            previousChapter();
         }
         return;
     }
@@ -1265,12 +1268,10 @@ void ReaderActivity::nextPage() {
 }
 
 void ReaderActivity::previousPage() {
-    // If showing transition, the prev action continues navigation
+    // If showing transition, dismiss it and go back to current page
     if (m_showingTransition) {
         hideTransitionPage();
-        if (m_chapterPosition > 0) {
-            previousChapter();
-        }
+        loadPage(m_currentPage);
         return;
     }
 
@@ -1882,6 +1883,7 @@ void ReaderActivity::showTransitionPage(TransitionType type) {
     hidePageError();       // Also clear error overlays
 
     m_showingTransition = true;
+    m_transitionType = type;
 
     m_transitionOverlay = new brls::Box();
     m_transitionOverlay->setAxis(brls::Axis::COLUMN);
@@ -1892,7 +1894,7 @@ void ReaderActivity::showTransitionPage(TransitionType type) {
     m_transitionOverlay->setPositionType(brls::PositionType::ABSOLUTE);
     m_transitionOverlay->setPositionTop(0);
     m_transitionOverlay->setPositionLeft(0);
-    m_transitionOverlay->setBackgroundColor(nvgRGBA(20, 20, 30, 240));
+    m_transitionOverlay->setBackgroundColor(nvgRGBA(20, 20, 30, 255));
 
     // Build text based on transition type
     std::string finishedText;

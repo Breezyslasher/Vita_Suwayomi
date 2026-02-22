@@ -235,6 +235,7 @@ private:
     };
     brls::Box* m_transitionOverlay = nullptr;
     bool m_showingTransition = false;
+    TransitionType m_transitionType = TransitionType::NEXT_CHAPTER;
     void showTransitionPage(TransitionType type);
     void hideTransitionPage();
 };
