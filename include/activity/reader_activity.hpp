@@ -143,6 +143,7 @@ private:
     BRLS_BIND(RotatableBox, transitionBox, "reader/transition_box");
     BRLS_BIND(brls::Label, transitionLine1, "reader/transition_line1");
     BRLS_BIND(brls::Label, transitionLine2, "reader/transition_line2");
+    BRLS_BIND(brls::Image, transitionPreview, "reader/transition_preview");
 
     // Manga/Chapter info
     int m_mangaId = 0;

@@ -68,7 +68,16 @@
             fontSize="18"
             textColor="#b4b4b4"
             horizontalAlign="center"
-            width="80%"/>
+            width="80%"
+            marginBottom="16"/>
+
+        <!-- Preview of the next/previous chapter's page -->
+        <brls:Image
+            id="reader/transition_preview"
+            width="200"
+            height="280"
+            scalingType="fit"
+            visibility="gone"/>
     </RotatableBox>
 
     <!-- Page counter overlay (top-right, auto-hides, rotates with content) -->

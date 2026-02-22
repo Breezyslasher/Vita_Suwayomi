@@ -2160,6 +2160,79 @@ void ReaderActivity::renderTransitionPage(int index) {
     if (transitionLine2) transitionLine2->setText(line2);
     transitionBox->setVisibility(brls::Visibility::VISIBLE);
 
+    // Load a preview of the target chapter's first page
+    if (transitionPreview) {
+        transitionPreview->setVisibility(brls::Visibility::GONE);
+
+        std::string previewUrl;
+
+        if (url == TRANSITION_NEXT && m_nextChapterLoaded && !m_nextChapterPages.empty()) {
+            // Use preloaded next chapter data directly
+            previewUrl = m_nextChapterPages[0].imageUrl;
+        }
+
+        if (!previewUrl.empty()) {
+            // Load immediately from known URL
+            transitionPreview->setVisibility(brls::Visibility::VISIBLE);
+            ImageLoader::loadAsync(previewUrl, nullptr, transitionPreview, m_alive);
+        } else if (url == TRANSITION_NEXT &&
+                   m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+            // Fetch first page of next chapter async
+            int targetChapterId = m_chapters[m_chapterPosition + 1].id;
+            int mangaId = m_mangaId;
+            auto sharedPages = std::make_shared<std::vector<Page>>();
+            std::weak_ptr<bool> aliveWeak = m_alive;
+
+            vitasuwayomi::asyncTask<bool>([mangaId, targetChapterId, sharedPages]() {
+                DownloadsManager& localMgr = DownloadsManager::getInstance();
+                if (localMgr.isChapterDownloaded(mangaId, targetChapterId)) {
+                    auto localPaths = localMgr.getChapterPages(mangaId, targetChapterId);
+                    if (!localPaths.empty()) {
+                        Page p; p.imageUrl = localPaths[0];
+                        sharedPages->push_back(p);
+                        return true;
+                    }
+                }
+                if (!Application::getInstance().isConnected()) return false;
+                return SuwayomiClient::getInstance().fetchChapterPages(mangaId, targetChapterId, *sharedPages);
+            }, [this, aliveWeak, sharedPages](bool success) {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                if (success && !sharedPages->empty() && transitionPreview) {
+                    transitionPreview->setVisibility(brls::Visibility::VISIBLE);
+                    ImageLoader::loadAsync(sharedPages->at(0).imageUrl, nullptr, transitionPreview, m_alive);
+                }
+            });
+        } else if (url == TRANSITION_PREV && m_chapterPosition > 0) {
+            // Fetch first page of previous chapter async
+            int targetChapterId = m_chapters[m_chapterPosition - 1].id;
+            int mangaId = m_mangaId;
+            auto sharedPages = std::make_shared<std::vector<Page>>();
+            std::weak_ptr<bool> aliveWeak = m_alive;
+
+            vitasuwayomi::asyncTask<bool>([mangaId, targetChapterId, sharedPages]() {
+                DownloadsManager& localMgr = DownloadsManager::getInstance();
+                if (localMgr.isChapterDownloaded(mangaId, targetChapterId)) {
+                    auto localPaths = localMgr.getChapterPages(mangaId, targetChapterId);
+                    if (!localPaths.empty()) {
+                        Page p; p.imageUrl = localPaths[0];
+                        sharedPages->push_back(p);
+                        return true;
+                    }
+                }
+                if (!Application::getInstance().isConnected()) return false;
+                return SuwayomiClient::getInstance().fetchChapterPages(mangaId, targetChapterId, *sharedPages);
+            }, [this, aliveWeak, sharedPages](bool success) {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                if (success && !sharedPages->empty() && transitionPreview) {
+                    transitionPreview->setVisibility(brls::Visibility::VISIBLE);
+                    ImageLoader::loadAsync(sharedPages->at(0).imageUrl, nullptr, transitionPreview, m_alive);
+                }
+            });
+        }
+    }
+
     // Transfer focus to transitionBox so dpad registerAction callbacks fire
     brls::Application::giveFocus(transitionBox);
 }
