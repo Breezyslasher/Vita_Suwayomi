@@ -1134,25 +1134,37 @@ void ReaderActivity::loadPage(int index) {
 
         ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage, m_alive);
 
-        // Set up a timeout: if page hasn't loaded after 15 seconds, show error
-        // Only for server-streamed pages - local files load instantly from disk
+        // Set up a timeout: if page hasn't loaded after 15 seconds, show error.
+        // Uses a single brls::sync chain instead of spawning a detached thread per
+        // page — rapid d-pad pressing would exhaust Vita thread resources otherwise.
         if (!m_loadedFromLocal) {
-            vitasuwayomi::asyncRun([this, aliveWeak, loadGen, index]() {
-                std::this_thread::sleep_for(std::chrono::seconds(15));
-                brls::sync([this, aliveWeak, loadGen, index]() {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) return;
-                    // Only show error if this is still the same load attempt and it hasn't succeeded
-                    if (m_pageLoadGeneration == loadGen && !m_pageLoadSucceeded) {
-                        showPageError("Failed to load page " + std::to_string(index + 1));
-                    }
-                });
-            });
+            m_pageLoadTimeoutStart = std::chrono::steady_clock::now();
+            tickPageLoadTimeout(loadGen, index);
         }
     }
 
     // Preload adjacent pages
     preloadAdjacentPages();
+}
+
+void ReaderActivity::tickPageLoadTimeout(int loadGen, int pageIndex) {
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    brls::sync([this, aliveWeak, loadGen, pageIndex]() {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive) return;
+        // If loadGen doesn't match, a newer page load started — stop checking
+        if (m_pageLoadGeneration != loadGen) return;
+        // If already succeeded, nothing to do
+        if (m_pageLoadSucceeded) return;
+
+        auto elapsed = std::chrono::steady_clock::now() - m_pageLoadTimeoutStart;
+        if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() >= 15) {
+            showPageError("Failed to load page " + std::to_string(pageIndex + 1));
+        } else {
+            // Check again in ~1 second
+            tickPageLoadTimeout(loadGen, pageIndex);
+        }
+    });
 }
 
 void ReaderActivity::preloadAdjacentPages() {

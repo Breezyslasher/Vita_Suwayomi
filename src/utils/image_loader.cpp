@@ -42,7 +42,9 @@ namespace vitasuwayomi {
 // Static member initialization
 std::list<ImageLoader::CacheEntry> ImageLoader::s_cacheList;
 std::map<std::string, std::list<ImageLoader::CacheEntry>::iterator> ImageLoader::s_cacheMap;
-size_t ImageLoader::s_maxCacheSize = 200;  // LRU cache: 200 entries for large libraries
+size_t ImageLoader::s_maxCacheSize = 200;  // LRU cache: 200 entries for thumbnails
+size_t ImageLoader::s_maxFullSizeCacheSize = 10;  // Full-size reader pages: keep only ~10 to avoid RAM exhaustion
+int ImageLoader::s_fullSizeCacheCount = 0;
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
@@ -354,13 +356,36 @@ void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& d
     // If key already exists, move to front and update data
     auto it = s_cacheMap.find(url);
     if (it != s_cacheMap.end()) {
+        // Track counts
+        if (it->first.find("_full") != std::string::npos) s_fullSizeCacheCount--;
         s_cacheList.erase(it->second);
         s_cacheMap.erase(it);
     }
 
-    // Evict oldest entries (back of list) if over capacity
+    bool isFullSize = (url.find("_full") != std::string::npos);
+
+    if (isFullSize) {
+        // Full-size images are large (~5MB TGA each). Enforce a strict limit
+        // to prevent RAM exhaustion on the Vita (512MB total).
+        while (s_fullSizeCacheCount >= static_cast<int>(s_maxFullSizeCacheSize)) {
+            // Evict oldest full-size entry (search from back)
+            for (auto rit = s_cacheList.end(); rit != s_cacheList.begin(); ) {
+                --rit;
+                if (rit->url.find("_full") != std::string::npos) {
+                    s_cacheMap.erase(rit->url);
+                    s_cacheList.erase(rit);
+                    s_fullSizeCacheCount--;
+                    break;
+                }
+            }
+        }
+        s_fullSizeCacheCount++;
+    }
+
+    // Evict oldest entries (back of list) if over total capacity
     while (s_cacheList.size() >= s_maxCacheSize) {
         auto& oldest = s_cacheList.back();
+        if (oldest.url.find("_full") != std::string::npos) s_fullSizeCacheCount--;
         s_cacheMap.erase(oldest.url);
         s_cacheList.pop_back();
     }
@@ -851,8 +876,14 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
     {
         std::vector<uint8_t> cachedData;
         if (cacheGet(cacheKey, cachedData)) {
-            target->setImageFromMem(cachedData.data(), cachedData.size());
-            if (callback) callback(target, true);
+            // Defer texture upload to next frame via brls::sync instead of blocking
+            // the main thread now. Synchronous nvgCreateImageMem takes 10-50ms on Vita
+            // and stalls page turn animations when called during d-pad navigation.
+            brls::sync([cachedData = std::move(cachedData), callback, target, alive]() {
+                if (alive && !*alive) return;
+                target->setImageFromMem(cachedData.data(), cachedData.size());
+                if (callback) callback(target, true);
+            });
             return;
         }
     }
@@ -914,6 +945,7 @@ void ImageLoader::clearCache() {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
     s_cacheList.clear();
     s_cacheMap.clear();
+    s_fullSizeCacheCount = 0;
 }
 
 void ImageLoader::cancelAll() {

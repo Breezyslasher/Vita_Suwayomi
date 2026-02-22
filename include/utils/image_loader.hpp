@@ -98,6 +98,8 @@ private:
     static std::list<CacheEntry> s_cacheList;
     static std::map<std::string, std::list<CacheEntry>::iterator> s_cacheMap;
     static size_t s_maxCacheSize;
+    static size_t s_maxFullSizeCacheSize;  // Separate limit for large reader images
+    static int s_fullSizeCacheCount;       // Current number of full-size entries
     static std::mutex s_cacheMutex;
 
     // LRU cache helpers

@@ -236,6 +236,8 @@ private:
     brls::Button* m_retryButton = nullptr;
     int m_pageLoadGeneration = 0;   // Track current load to detect stale timeouts
     bool m_pageLoadSucceeded = false; // Set true when current page loads successfully
+    std::chrono::steady_clock::time_point m_pageLoadTimeoutStart;  // When current page load started
+    void tickPageLoadTimeout(int loadGen, int pageIndex);  // Main-thread timeout checker
     bool m_loadedFromLocal = false;  // True when current chapter was loaded from local downloads
 
     // Progress save throttling for webtoon mode (avoids excessive network/disk I/O)
