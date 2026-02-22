@@ -601,6 +601,119 @@ void ReaderActivity::onContentAvailable() {
             }));
     }
 
+    // Transition page gestures - tap and swipe like a regular page
+    if (transitionBox) {
+        transitionBox->setFocusable(true);
+
+        // Tap gesture on transition page - toggle controls or tap-to-navigate
+        transitionBox->addGestureRecognizer(new brls::TapGestureRecognizer(
+            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (status.state == brls::GestureState::END) {
+                    AppSettings& appSettings = Application::getInstance().getSettings();
+                    if (appSettings.tapToNavigate) {
+                        const float SCREEN_WIDTH = 960.0f;
+                        float tapX = status.position.x;
+                        float leftZone = SCREEN_WIDTH / 3.0f;
+                        float rightZone = SCREEN_WIDTH * 2.0f / 3.0f;
+
+                        if (tapX < leftZone) {
+                            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
+                                nextPage();
+                            else
+                                previousPage();
+                        } else if (tapX > rightZone) {
+                            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
+                                previousPage();
+                            else
+                                nextPage();
+                        } else {
+                            toggleControls();
+                        }
+                    } else {
+                        toggleControls();
+                    }
+                }
+            }, brls::TapGestureConfig(false, brls::SOUND_NONE, brls::SOUND_NONE, brls::SOUND_NONE)));
+
+        // Pan/swipe gesture on transition page - same logic as pageImage
+        transitionBox->addGestureRecognizer(new brls::PanGestureRecognizer(
+            [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                const float TAP_THRESHOLD = 15.0f;
+                const float PAGE_TURN_THRESHOLD = 80.0f;
+                const float SWIPE_START_THRESHOLD = 20.0f;
+
+                bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
+                                         m_settings.rotation == ImageRotation::ROTATE_270);
+                bool invertDirection = (m_settings.rotation == ImageRotation::ROTATE_180 ||
+                                        m_settings.rotation == ImageRotation::ROTATE_270);
+
+                if (status.state == brls::GestureState::START) {
+                    m_isPanning = false;
+                    m_isSwipeAnimating = false;
+                    m_touchStart = status.position;
+                    m_touchCurrent = status.position;
+                    m_swipeOffset = 0.0f;
+                    m_previewPageIndex = -1;
+                } else if (status.state == brls::GestureState::STAY) {
+                    m_touchCurrent = status.position;
+                    float dx = m_touchCurrent.x - m_touchStart.x;
+                    float dy = m_touchCurrent.y - m_touchStart.y;
+
+                    float rawDelta = useVerticalSwipe ? dy : dx;
+                    float crossDelta = useVerticalSwipe ? dx : dy;
+                    float logicalDelta = invertDirection ? -rawDelta : rawDelta;
+
+                    if (std::abs(rawDelta) > std::abs(crossDelta) && std::abs(rawDelta) > SWIPE_START_THRESHOLD) {
+                        m_isSwipeAnimating = true;
+                        m_swipeOffset = rawDelta;
+
+                        bool swipingPositive = logicalDelta > 0;
+                        bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingPositive : !swipingPositive;
+
+                        int previewIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
+
+                        if (previewIndex != m_previewPageIndex && previewIndex >= 0 &&
+                            previewIndex < static_cast<int>(m_pages.size())) {
+                            m_previewPageIndex = previewIndex;
+                            m_swipingToNext = wantNextPage;
+                            loadPreviewPage(previewIndex);
+                        }
+
+                        updateSwipePreview(rawDelta);
+                    }
+                } else if (status.state == brls::GestureState::END) {
+                    m_touchCurrent = status.position;
+                    float dx = m_touchCurrent.x - m_touchStart.x;
+                    float dy = m_touchCurrent.y - m_touchStart.y;
+                    float distance = std::sqrt(dx * dx + dy * dy);
+                    float rawDelta = useVerticalSwipe ? dy : dx;
+
+                    if (distance < TAP_THRESHOLD) {
+                        resetSwipeState();
+                    } else if (m_isSwipeAnimating) {
+                        float absSwipe = std::abs(rawDelta);
+                        if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
+                            completeSwipeAnimation(true);
+                        } else {
+                            completeSwipeAnimation(false);
+                        }
+                    } else {
+                        float crossDelta = useVerticalSwipe ? dx : dy;
+                        float logicalCross = invertDirection ? -crossDelta : crossDelta;
+
+                        if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
+                            if (logicalCross > 0)
+                                previousPage();
+                            else
+                                nextPage();
+                        }
+                        resetSwipeState();
+                    }
+                    m_isPanning = false;
+                }
+            }, brls::PanAxis::ANY));
+    }
+
     // Container fallback - simpler touch handling without preview
     if (container) {
         // Tap gesture for instant controls toggle on container
@@ -1033,9 +1146,14 @@ void ReaderActivity::loadPages() {
         // (startPage was adjusted by insertTransitionPages if prev page was added)
         m_currentPage = std::min(m_startPage, static_cast<int>(m_pages.size()) - 1);
         m_currentPage = std::max(0, m_currentPage);
-        // Make sure we don't start on a transition page
-        if (isTransitionPage(m_currentPage) && m_currentPage > 0) {
-            m_currentPage--;
+        // Make sure we don't start on a transition page - skip forward to first real page
+        if (isTransitionPage(m_currentPage)) {
+            for (int i = m_currentPage + 1; i < static_cast<int>(m_pages.size()); i++) {
+                if (!isTransitionPage(i)) {
+                    m_currentPage = i;
+                    break;
+                }
+            }
         }
 
         // Check if we should use continuous scroll mode for webtoon
@@ -2042,9 +2160,12 @@ void ReaderActivity::updateSwipePreview(float offset) {
     const float SCREEN_WIDTH = 960.0f;
     const float SCREEN_HEIGHT = 544.0f;
 
-    if (!pageImage || !previewImage) return;
+    if (!previewImage) return;
 
-    // Show preview image
+    // Determine which view is the "current page" being swiped away
+    bool onTransition = transitionBox && transitionBox->getVisibility() == brls::Visibility::VISIBLE;
+
+    // Show preview image (for real page previews)
     previewImage->setVisibility(brls::Visibility::VISIBLE);
 
     // Determine if we should use vertical swipe based on rotation
@@ -2052,40 +2173,38 @@ void ReaderActivity::updateSwipePreview(float offset) {
                              m_settings.rotation == ImageRotation::ROTATE_270);
 
     if (useVerticalSwipe) {
-        // Vertical swipe for 90/270 rotation
-        // Clamp offset to screen height
         offset = std::max(-SCREEN_HEIGHT, std::min(SCREEN_HEIGHT, offset));
 
-        // Move current page with finger (vertically)
-        pageImage->setTranslationY(offset);
-        pageImage->setTranslationX(0.0f);
+        // Move the active view with finger
+        if (onTransition) {
+            transitionBox->setTranslationY(offset);
+            transitionBox->setTranslationX(0.0f);
+        } else if (pageImage) {
+            pageImage->setTranslationY(offset);
+            pageImage->setTranslationX(0.0f);
+        }
 
-        // PUSH EFFECT: Preview page is always one screen behind current page
-        // When current page is pushed off, preview slides in from behind
         if (offset > 0) {
-            // Swiping down - preview pushes from top (above current page)
             previewImage->setTranslationY(offset - SCREEN_HEIGHT);
         } else {
-            // Swiping up - preview pushes from bottom (below current page)
             previewImage->setTranslationY(offset + SCREEN_HEIGHT);
         }
         previewImage->setTranslationX(0.0f);
     } else {
-        // Horizontal swipe for 0/180 rotation
-        // Clamp offset to screen width
         offset = std::max(-SCREEN_WIDTH, std::min(SCREEN_WIDTH, offset));
 
-        // Move current page with finger (horizontally)
-        pageImage->setTranslationX(offset);
-        pageImage->setTranslationY(0.0f);
+        // Move the active view with finger
+        if (onTransition) {
+            transitionBox->setTranslationX(offset);
+            transitionBox->setTranslationY(0.0f);
+        } else if (pageImage) {
+            pageImage->setTranslationX(offset);
+            pageImage->setTranslationY(0.0f);
+        }
 
-        // PUSH EFFECT: Preview page is always one screen behind current page
-        // When current page is pushed off, preview slides in from behind
         if (offset > 0) {
-            // Swiping right - preview pushes from left (behind current page)
             previewImage->setTranslationX(offset - SCREEN_WIDTH);
         } else {
-            // Swiping left - preview pushes from right (behind current page)
             previewImage->setTranslationX(offset + SCREEN_WIDTH);
         }
         previewImage->setTranslationY(0.0f);
@@ -2164,6 +2283,12 @@ void ReaderActivity::resetSwipeState() {
     if (pageImage) {
         pageImage->setTranslationX(0.0f);
         pageImage->setTranslationY(0.0f);
+    }
+
+    // Reset transition box position
+    if (transitionBox) {
+        transitionBox->setTranslationX(0.0f);
+        transitionBox->setTranslationY(0.0f);
     }
 
     // Hide preview image
