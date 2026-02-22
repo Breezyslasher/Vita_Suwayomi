@@ -2381,40 +2381,43 @@ void ReaderActivity::animatePageTurn(bool forward) {
     float totalDistance = useVerticalSwipe ? 544.0f : 960.0f;
     float targetOffset = sign * totalDistance;
 
-    // Animate over ~200ms using async thread posting sync updates
-    const int ANIM_DURATION_MS = 200;
-    const int FRAME_INTERVAL_MS = 16;  // ~60fps
+    // Start animation - store state and kick off main-thread tick chain
+    m_dpadAnimTargetOffset = targetOffset;
+    m_dpadAnimStartTime = std::chrono::steady_clock::now();
+
+    // Schedule the first tick on the main thread
+    tickDpadAnimation();
+}
+
+void ReaderActivity::tickDpadAnimation() {
+    if (!m_isDpadAnimating) return;
+
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    vitasuwayomi::asyncRun([this, aliveWeak, targetOffset, ANIM_DURATION_MS, FRAME_INTERVAL_MS]() {
-        auto startTime = std::chrono::steady_clock::now();
+    brls::sync([this, aliveWeak]() {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive) return;
+        if (!m_isDpadAnimating) return;
 
-        while (true) {
-            auto now = std::chrono::steady_clock::now();
-            int elapsed = static_cast<int>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count());
+        const int ANIM_DURATION_MS = 200;
 
-            float t = std::min(1.0f, static_cast<float>(elapsed) / ANIM_DURATION_MS);
-            // Ease-out cubic for smooth deceleration
-            float eased = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
-            float currentOffset = targetOffset * eased;
-            bool done = (t >= 1.0f);
+        auto now = std::chrono::steady_clock::now();
+        int elapsed = static_cast<int>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - m_dpadAnimStartTime).count());
 
-            brls::sync([this, aliveWeak, currentOffset, done]() {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
+        float t = std::min(1.0f, static_cast<float>(elapsed) / ANIM_DURATION_MS);
+        // Ease-out cubic for smooth deceleration
+        float eased = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+        float currentOffset = m_dpadAnimTargetOffset * eased;
 
-                if (done) {
-                    // Animation complete - finalize page turn
-                    completeSwipeAnimation(true);
-                    m_isDpadAnimating = false;
-                } else {
-                    updateSwipePreview(currentOffset);
-                }
-            });
-
-            if (done) break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(FRAME_INTERVAL_MS));
+        if (t >= 1.0f) {
+            // Animation complete - finalize page turn
+            completeSwipeAnimation(true);
+            m_isDpadAnimating = false;
+        } else {
+            updateSwipePreview(currentOffset);
+            // Schedule next tick (self-chaining on main thread, no new threads)
+            tickDpadAnimation();
         }
     });
 }

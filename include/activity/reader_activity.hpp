@@ -201,7 +201,10 @@ private:
     void completeSwipeAnimation(bool turnPage);
     void resetSwipeState();
     void animatePageTurn(bool forward);  // D-pad animated page slide
+    void tickDpadAnimation();            // Drive d-pad animation from main thread
     bool m_isDpadAnimating = false;      // Guard against overlapping d-pad animations
+    float m_dpadAnimTargetOffset = 0.0f; // Target slide distance for d-pad animation
+    std::chrono::steady_clock::time_point m_dpadAnimStartTime;  // When the animation started
 
     // NOBORU-style touch controls
     // Double-tap detection
