@@ -1148,14 +1148,23 @@ void ReaderActivity::loadPages() {
 
         // Start from saved position or beginning
         // (startPage was adjusted by insertTransitionPages if prev page was added)
-        m_currentPage = std::min(m_startPage, static_cast<int>(m_pages.size()) - 1);
-        m_currentPage = std::max(0, m_currentPage);
-        // Make sure we don't start on a transition page - skip forward to first real page
-        if (isTransitionPage(m_currentPage)) {
-            for (int i = m_currentPage + 1; i < static_cast<int>(m_pages.size()); i++) {
-                if (!isTransitionPage(i)) {
-                    m_currentPage = i;
-                    break;
+        if (m_goToEndAfterLoad) {
+            // Jump to the last real page (skip trailing transition pages)
+            m_goToEndAfterLoad = false;
+            m_currentPage = static_cast<int>(m_pages.size()) - 1;
+            while (m_currentPage > 0 && isTransitionPage(m_currentPage)) {
+                m_currentPage--;
+            }
+        } else {
+            m_currentPage = std::min(m_startPage, static_cast<int>(m_pages.size()) - 1);
+            m_currentPage = std::max(0, m_currentPage);
+            // Make sure we don't start on a transition page - skip forward to first real page
+            if (isTransitionPage(m_currentPage)) {
+                for (int i = m_currentPage + 1; i < static_cast<int>(m_pages.size()); i++) {
+                    if (!isTransitionPage(i)) {
+                        m_currentPage = i;
+                        break;
+                    }
                 }
             }
         }
@@ -1537,6 +1546,10 @@ void ReaderActivity::previousChapter() {
         m_currentPage = 0;
         m_startPage = 0;
         m_pages.clear();
+
+        // Check if we should land at the end of the chapter
+        AppSettings& appSettings = Application::getInstance().getSettings();
+        m_goToEndAfterLoad = appSettings.goToEndOnPrevChapter;
 
         // Clear webtoon scroll view to reset scroll position for new chapter
         if (m_continuousScrollMode && webtoonScroll) {

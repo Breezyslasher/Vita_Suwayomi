@@ -181,6 +181,7 @@ private:
     // Next chapter preloading
     std::vector<Page> m_nextChapterPages;
     bool m_nextChapterLoaded = false;
+    bool m_goToEndAfterLoad = false;  // When true, jump to last page after chapter loads
     void preloadNextChapter();
 
     // Reader background color support

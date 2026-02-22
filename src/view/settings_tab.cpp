@@ -920,6 +920,14 @@ void SettingsTab::createReaderSection() {
     });
     m_contentBox->addView(tapNavToggle);
 
+    // Go to end of prev chapter toggle
+    auto* prevChapterEndToggle = new brls::BooleanCell();
+    prevChapterEndToggle->init("Go to End on Prev Chapter", settings.goToEndOnPrevChapter, [&settings](bool value) {
+        settings.goToEndOnPrevChapter = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(prevChapterEndToggle);
+
     // Webtoon section header
     auto* webtoonHeader = new brls::Header();
     webtoonHeader->setTitle("Webtoon / Long Strip");
