@@ -417,7 +417,9 @@ void ImageLoader::processPendingTextures() {
         if (update.target) {
             // Skip if the owning view was destroyed while the image was downloading.
             // Without this check, writing to a freed brls::Image* causes a crash.
-            if (update.alive && !*update.alive) {
+            // Also skip if no alive flag was provided — we have no way to know
+            // if the target pointer is still valid.
+            if (!update.alive || !*update.alive) {
                 continue;
             }
             update.target->setImageFromMem(update.data.data(), update.data.size());
