@@ -1104,7 +1104,10 @@ void ReaderActivity::loadPage(int index) {
         return;
     }
 
-    // Restore page image if it was hidden by a transition page
+    // Hide transition page and restore page image if it was hidden
+    if (transitionBox && transitionBox->getVisibility() != brls::Visibility::GONE) {
+        transitionBox->setVisibility(brls::Visibility::GONE);
+    }
     if (pageImage && pageImage->getVisibility() != brls::Visibility::VISIBLE) {
         pageImage->setVisibility(brls::Visibility::VISIBLE);
     }
@@ -1387,6 +1390,7 @@ void ReaderActivity::nextChapter() {
             // Start preloading next chapter
             preloadNextChapter();
         } else {
+            m_startPage = 0;
             m_pages.clear();
             loadPages();
         }
@@ -1402,6 +1406,7 @@ void ReaderActivity::previousChapter() {
         m_nextChapterLoaded = false;
         m_nextChapterPages.clear();
         m_currentPage = 0;
+        m_startPage = 0;
         m_pages.clear();
 
         // Clear webtoon scroll view to reset scroll position for new chapter
@@ -1962,15 +1967,12 @@ void ReaderActivity::insertTransitionPages() {
 }
 
 void ReaderActivity::renderTransitionPage(int index) {
-    if (!container) return;
+    if (!transitionBox) return;
 
-    // Hide the manga page image
+    // Hide the manga page image, show the transition page
     if (pageImage) {
         pageImage->setVisibility(brls::Visibility::GONE);
     }
-
-    // Remove any existing transition box (reuse tag approach)
-    hidePageError();
 
     const std::string& url = m_pages[index].imageUrl;
 
@@ -2019,41 +2021,10 @@ void ReaderActivity::renderTransitionPage(int index) {
         line2 = "You've reached the end!";
     }
 
-    // Build a simple box with text, placed absolutely over the page area
-    auto* box = new brls::Box();
-    box->setAxis(brls::Axis::COLUMN);
-    box->setJustifyContent(brls::JustifyContent::CENTER);
-    box->setAlignItems(brls::AlignItems::CENTER);
-    box->setWidth(960);
-    box->setHeight(544);
-    box->setPositionType(brls::PositionType::ABSOLUTE);
-    box->setPositionTop(0);
-    box->setPositionLeft(0);
-    box->setBackgroundColor(nvgRGBA(20, 20, 30, 255));
-
-    auto* label1 = new brls::Label();
-    label1->setText(line1);
-    label1->setFontSize(22);
-    label1->setTextColor(nvgRGB(220, 220, 220));
-    label1->setMarginBottom(12);
-    box->addView(label1);
-
-    auto* separator = new brls::Box();
-    separator->setWidth(300);
-    separator->setHeight(1);
-    separator->setBackgroundColor(nvgRGBA(150, 150, 150, 100));
-    separator->setMarginBottom(12);
-    box->addView(separator);
-
-    auto* label2 = new brls::Label();
-    label2->setText(line2);
-    label2->setFontSize(18);
-    label2->setTextColor(nvgRGB(180, 180, 180));
-    box->addView(label2);
-
-    // Store as error overlay so hidePageError() cleans it up on next loadPage
-    m_errorOverlay = box;
-    container->addView(box);
+    // Update the permanent transition page labels and show it
+    if (transitionLine1) transitionLine1->setText(line1);
+    if (transitionLine2) transitionLine2->setText(line2);
+    transitionBox->setVisibility(brls::Visibility::VISIBLE);
 }
 
 // NOBORU-style swipe methods

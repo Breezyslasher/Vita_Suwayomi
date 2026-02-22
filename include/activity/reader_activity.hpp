@@ -138,6 +138,11 @@ private:
     // Webtoon continuous scroll view
     BRLS_BIND(WebtoonScrollView, webtoonScroll, "reader/webtoon_scroll");
 
+    // Transition page (between chapters)
+    BRLS_BIND(brls::Box, transitionBox, "reader/transition_box");
+    BRLS_BIND(brls::Label, transitionLine1, "reader/transition_line1");
+    BRLS_BIND(brls::Label, transitionLine2, "reader/transition_line2");
+
     // Manga/Chapter info
     int m_mangaId = 0;
     int m_chapterIndex = 0;      // Chapter ID (server ID, NOT sequential number)
