@@ -633,7 +633,7 @@ void ReaderActivity::onContentAvailable() {
                         toggleControls();
                     }
                 }
-            }, brls::TapGestureConfig(false, brls::SOUND_NONE, brls::SOUND_NONE, brls::SOUND_NONE)));
+            }));
 
         // Pan/swipe gesture on transition page - same logic as pageImage
         transitionBox->addGestureRecognizer(new brls::PanGestureRecognizer(
