@@ -367,6 +367,12 @@ void ReaderActivity::onContentAvailable() {
         pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::END) {
+                    // If showing a transition page, any tap continues
+                    if (m_showingTransition) {
+                        nextPage();  // nextPage handles transition continuation
+                        return;
+                    }
+
                     // Check for double-tap
                     auto now = std::chrono::steady_clock::now();
                     auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -528,6 +534,14 @@ void ReaderActivity::onContentAvailable() {
                         if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
                             // Swipe was long enough - turn the page
                             completeSwipeAnimation(true);
+                        } else if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex < 0) {
+                            // Swiped past chapter boundary - show transition
+                            resetSwipeState();
+                            if (m_swipingToNext) {
+                                nextPage();
+                            } else {
+                                previousPage();
+                            }
                         } else {
                             // Swipe too short - snap back
                             completeSwipeAnimation(false);
@@ -1226,32 +1240,49 @@ void ReaderActivity::updateProgress() {
 }
 
 void ReaderActivity::nextPage() {
+    // If showing transition, the next action continues navigation
+    if (m_showingTransition) {
+        hideTransitionPage();
+        if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+            markChapterAsRead();
+            nextChapter();
+        }
+        return;
+    }
+
     if (m_currentPage < static_cast<int>(m_pages.size()) - 1) {
         m_currentPage++;
         updatePageDisplay();
         loadPage(m_currentPage);
         updateProgress();
     } else {
-        // End of chapter - mark as read and go to next automatically
-        markChapterAsRead();
-
+        // End of chapter - show transition page
         if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
-            nextChapter();
+            showTransitionPage(TransitionType::NEXT_CHAPTER);
         } else {
-            brls::Application::notify("End of manga");
+            showTransitionPage(TransitionType::END_OF_MANGA);
         }
     }
 }
 
 void ReaderActivity::previousPage() {
+    // If showing transition, the prev action continues navigation
+    if (m_showingTransition) {
+        hideTransitionPage();
+        if (m_chapterPosition > 0) {
+            previousChapter();
+        }
+        return;
+    }
+
     if (m_currentPage > 0) {
         m_currentPage--;
         updatePageDisplay();
         loadPage(m_currentPage);
         updateProgress();
     } else if (m_chapterPosition > 0) {
-        // Beginning of chapter - go to previous chapter automatically
-        previousChapter();
+        // First page of chapter - show transition page
+        showTransitionPage(TransitionType::PREV_CHAPTER);
     }
 }
 
@@ -1842,6 +1873,132 @@ void ReaderActivity::hidePageError() {
         m_errorOverlay = nullptr;
         m_errorLabel = nullptr;
         m_retryButton = nullptr;
+    }
+}
+
+void ReaderActivity::showTransitionPage(TransitionType type) {
+    if (!container) return;
+
+    hideTransitionPage();  // Remove any existing transition
+    hidePageError();       // Also clear error overlays
+
+    m_showingTransition = true;
+
+    m_transitionOverlay = new brls::Box();
+    m_transitionOverlay->setAxis(brls::Axis::COLUMN);
+    m_transitionOverlay->setJustifyContent(brls::JustifyContent::CENTER);
+    m_transitionOverlay->setAlignItems(brls::AlignItems::CENTER);
+    m_transitionOverlay->setWidth(960);
+    m_transitionOverlay->setHeight(544);
+    m_transitionOverlay->setPositionType(brls::PositionType::ABSOLUTE);
+    m_transitionOverlay->setPositionTop(0);
+    m_transitionOverlay->setPositionLeft(0);
+    m_transitionOverlay->setBackgroundColor(nvgRGBA(20, 20, 30, 240));
+
+    // Build text based on transition type
+    std::string finishedText;
+    std::string actionText;
+
+    std::string currentChapterDisplay = m_chapterName.empty() ?
+        "Chapter " + getChapterDisplayNumber() : m_chapterName;
+
+    switch (type) {
+        case TransitionType::NEXT_CHAPTER: {
+            finishedText = "Finished: " + currentChapterDisplay;
+            if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+                const Chapter& nextCh = m_chapters[m_chapterPosition + 1];
+                std::string nextName = nextCh.name;
+                if (nextName.empty()) {
+                    float num = nextCh.chapterNumber;
+                    if (num == static_cast<int>(num))
+                        nextName = "Chapter " + std::to_string(static_cast<int>(num));
+                    else {
+                        char buf[32];
+                        snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                        nextName = buf;
+                    }
+                }
+                actionText = "Next: " + nextName;
+            }
+            break;
+        }
+        case TransitionType::PREV_CHAPTER: {
+            if (m_chapterPosition > 0) {
+                const Chapter& prevCh = m_chapters[m_chapterPosition - 1];
+                std::string prevName = prevCh.name;
+                if (prevName.empty()) {
+                    float num = prevCh.chapterNumber;
+                    if (num == static_cast<int>(num))
+                        prevName = "Chapter " + std::to_string(static_cast<int>(num));
+                    else {
+                        char buf[32];
+                        snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                        prevName = buf;
+                    }
+                }
+                finishedText = "Current: " + currentChapterDisplay;
+                actionText = "Previous: " + prevName;
+            }
+            break;
+        }
+        case TransitionType::END_OF_MANGA: {
+            finishedText = "Finished: " + currentChapterDisplay;
+            actionText = "You've reached the end!";
+            break;
+        }
+    }
+
+    // "Finished Chapter X" label
+    auto* finishedLabel = new brls::Label();
+    finishedLabel->setText(finishedText);
+    finishedLabel->setFontSize(22);
+    finishedLabel->setTextColor(nvgRGB(220, 220, 220));
+    finishedLabel->setMarginBottom(12);
+    m_transitionOverlay->addView(finishedLabel);
+
+    // Separator line
+    auto* separator = new brls::Box();
+    separator->setWidth(300);
+    separator->setHeight(1);
+    separator->setBackgroundColor(nvgRGBA(150, 150, 150, 100));
+    separator->setMarginBottom(12);
+    m_transitionOverlay->addView(separator);
+
+    // "Next: Chapter Y" or end text
+    auto* actionLabel = new brls::Label();
+    actionLabel->setText(actionText);
+    actionLabel->setFontSize(18);
+    actionLabel->setTextColor(nvgRGB(180, 180, 180));
+    actionLabel->setMarginBottom(24);
+    m_transitionOverlay->addView(actionLabel);
+
+    // Hint text
+    if (type != TransitionType::END_OF_MANGA) {
+        auto* hintLabel = new brls::Label();
+        hintLabel->setText("Tap or press a button to continue");
+        hintLabel->setFontSize(14);
+        hintLabel->setTextColor(nvgRGBA(140, 140, 140, 200));
+        m_transitionOverlay->addView(hintLabel);
+    }
+
+    // Hide the page image so transition is cleanly visible
+    if (pageImage) {
+        pageImage->setVisibility(brls::Visibility::INVISIBLE);
+    }
+
+    container->addView(m_transitionOverlay);
+}
+
+void ReaderActivity::hideTransitionPage() {
+    if (m_transitionOverlay && container) {
+        container->removeView(m_transitionOverlay);
+        m_transitionOverlay = nullptr;
+    }
+    m_showingTransition = false;
+
+    // Restore page image visibility
+    if (pageImage) {
+        pageImage->setVisibility(brls::Visibility::VISIBLE);
     }
 }
 
