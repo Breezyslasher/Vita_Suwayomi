@@ -37,7 +37,7 @@
         visibility="gone"/>
 
     <!-- Transition page (shown between chapters, hidden by default) -->
-    <brls:Box
+    <RotatableBox
         id="reader/transition_box"
         width="100%"
         height="100%"
@@ -69,7 +69,7 @@
             textColor="#b4b4b4"
             horizontalAlign="center"
             width="80%"/>
-    </brls:Box>
+    </RotatableBox>
 
     <!-- Page counter overlay (top-right, auto-hides, rotates with content) -->
     <RotatableLabel

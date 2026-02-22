@@ -80,6 +80,7 @@ set(APP_SOURCES
     src/view/media_detail_view.cpp
     src/view/media_item_cell.cpp
     src/view/recycling_grid.cpp
+    src/view/rotatable_box.cpp
     src/view/rotatable_image.cpp
     src/view/rotatable_label.cpp
     src/view/webtoon_scroll_view.cpp

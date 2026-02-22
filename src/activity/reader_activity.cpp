@@ -6,6 +6,7 @@
 #include "activity/reader_activity.hpp"
 #include "view/pinch_gesture.hpp"
 #include "view/rotatable_label.hpp"
+#include "view/rotatable_box.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
@@ -25,6 +26,7 @@ namespace {
         RegisterCustomViews() {
             brls::Application::registerXMLView("WebtoonScrollView", vitasuwayomi::WebtoonScrollView::create);
             brls::Application::registerXMLView("RotatableLabel", vitasuwayomi::RotatableLabel::create);
+            brls::Application::registerXMLView("RotatableBox", vitasuwayomi::RotatableBox::create);
         }
     };
     static RegisterCustomViews __registerCustomViews;
@@ -1700,6 +1702,11 @@ void ReaderActivity::applySettings() {
     // Apply rotation to webtoon scroll view if in continuous mode
     if (webtoonScroll) {
         webtoonScroll->setRotation(rotation);
+    }
+
+    // Apply rotation to transition page
+    if (transitionBox) {
+        transitionBox->setRotation(rotation);
     }
 
     // Update page counter position to stay upright relative to content
