@@ -48,6 +48,32 @@ ReaderActivity::ReaderActivity(int mangaId, int chapterIndex, int startPage, con
                        mangaId, chapterIndex, startPage);
 }
 
+void ReaderActivity::findChapterPosition() {
+    m_chapterPosition = -1;
+    for (int i = 0; i < static_cast<int>(m_chapters.size()); i++) {
+        if (m_chapters[i].id == m_chapterIndex) {
+            m_chapterPosition = i;
+            break;
+        }
+    }
+}
+
+std::string ReaderActivity::getChapterDisplayNumber() const {
+    if (m_chapterPosition >= 0 && m_chapterPosition < static_cast<int>(m_chapters.size())) {
+        float num = m_chapters[m_chapterPosition].chapterNumber;
+        // Show as integer if whole number (e.g. "5" not "5.0")
+        if (num == static_cast<int>(num)) {
+            return std::to_string(static_cast<int>(num));
+        }
+        // Show one decimal for half-chapters (e.g. "5.5")
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.1f", num);
+        return buf;
+    }
+    // Fallback if chapter not found in list
+    return std::to_string(m_chapterIndex);
+}
+
 brls::View* ReaderActivity::createContentView() {
     return brls::View::createFromXMLResource("activity/reader.xml");
 }
@@ -957,6 +983,9 @@ void ReaderActivity::loadPages() {
         m_totalChapters = *sharedTotalChapters;
         m_loadedFromLocal = *sharedLoadedFromLocal;
 
+        // Find current chapter's position in the chapters list
+        findChapterPosition();
+
         if (!success || m_pages.empty()) {
             brls::Logger::error("No pages to display");
 
@@ -972,12 +1001,12 @@ void ReaderActivity::loadPages() {
         // Update UI labels
         if (chapterLabel) {
             std::string label = m_chapterName.empty() ?
-                "Chapter " + std::to_string(m_chapterIndex + 1) : m_chapterName;
+                "Chapter " + getChapterDisplayNumber() : m_chapterName;
             chapterLabel->setText(label);
         }
 
         if (chapterProgress) {
-            chapterProgress->setText("Ch. " + std::to_string(m_chapterIndex + 1) +
+            chapterProgress->setText("Ch. " + getChapterDisplayNumber() +
                                      " of " + std::to_string(m_totalChapters));
         }
 
@@ -1206,7 +1235,7 @@ void ReaderActivity::nextPage() {
         // End of chapter - mark as read and go to next automatically
         markChapterAsRead();
 
-        if (m_chapterIndex < m_totalChapters - 1) {
+        if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
             nextChapter();
         } else {
             brls::Application::notify("End of manga");
@@ -1220,7 +1249,7 @@ void ReaderActivity::previousPage() {
         updatePageDisplay();
         loadPage(m_currentPage);
         updateProgress();
-    } else if (m_chapterIndex > 0) {
+    } else if (m_chapterPosition > 0) {
         // Beginning of chapter - go to previous chapter automatically
         previousChapter();
     }
@@ -1236,10 +1265,12 @@ void ReaderActivity::goToPage(int pageIndex) {
 }
 
 void ReaderActivity::nextChapter() {
-    if (m_chapterIndex < m_totalChapters - 1) {
+    if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
         markChapterAsRead();
 
-        m_chapterIndex++;
+        m_chapterPosition++;
+        m_chapterIndex = m_chapters[m_chapterPosition].id;
+        m_chapterName = m_chapters[m_chapterPosition].name;
         m_currentPage = 0;
 
         // Use preloaded pages if available for instant transition
@@ -1250,10 +1281,12 @@ void ReaderActivity::nextChapter() {
 
             // Update UI
             if (chapterLabel) {
-                chapterLabel->setText("Chapter " + std::to_string(m_chapterIndex + 1));
+                std::string label = m_chapterName.empty() ?
+                    "Chapter " + getChapterDisplayNumber() : m_chapterName;
+                chapterLabel->setText(label);
             }
             if (chapterProgress) {
-                chapterProgress->setText("Ch. " + std::to_string(m_chapterIndex + 1) +
+                chapterProgress->setText("Ch. " + getChapterDisplayNumber() +
                                          " of " + std::to_string(m_totalChapters));
             }
 
@@ -1278,8 +1311,10 @@ void ReaderActivity::nextChapter() {
 }
 
 void ReaderActivity::previousChapter() {
-    if (m_chapterIndex > 0) {
-        m_chapterIndex--;
+    if (m_chapterPosition > 0) {
+        m_chapterPosition--;
+        m_chapterIndex = m_chapters[m_chapterPosition].id;
+        m_chapterName = m_chapters[m_chapterPosition].name;
         // Reset preloaded chapter since we're going backwards
         m_nextChapterLoaded = false;
         m_nextChapterPages.clear();
@@ -1303,16 +1338,17 @@ void ReaderActivity::markChapterAsRead() {
     }
 
     int mangaId = m_mangaId;
-    int chapterIndex = m_chapterIndex;
+    int chapterId = m_chapterIndex;  // This is the chapter ID
+    int chapterPos = m_chapterPosition;
     int totalChapters = m_totalChapters;
 
-    vitasuwayomi::asyncRun([mangaId, chapterIndex, totalChapters]() {
+    vitasuwayomi::asyncRun([mangaId, chapterId, chapterPos, totalChapters]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
-        if (client.markChapterRead(mangaId, chapterIndex)) {
+        if (client.markChapterRead(mangaId, chapterId)) {
             // Update reading statistics on the main thread
-            brls::sync([chapterIndex, totalChapters]() {
-                // Check if this was the last unread chapter (manga completed)
-                bool mangaCompleted = (chapterIndex == totalChapters - 1);
+            brls::sync([chapterPos, totalChapters]() {
+                // Check if this was the last chapter (manga completed)
+                bool mangaCompleted = (chapterPos == totalChapters - 1);
                 Application::getInstance().updateReadingStatistics(true, mangaCompleted);
             });
 
@@ -1322,26 +1358,16 @@ void ReaderActivity::markChapterAsRead() {
 
                 // Delete from local downloads
                 DownloadsManager& dm = DownloadsManager::getInstance();
-                if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
+                if (dm.deleteChapterDownload(mangaId, chapterId)) {
                     brls::Logger::info("ReaderActivity: Deleted local chapter download (manga={}, chapter={})",
-                                      mangaId, chapterIndex);
+                                      mangaId, chapterId);
                 }
 
-                // Also delete from server download queue if applicable
-                // Get chapter ID from pages if available
-                std::vector<Chapter> chapters;
-                if (client.fetchChapters(mangaId, chapters)) {
-                    for (const auto& ch : chapters) {
-                        if (ch.chapterNumber == chapterIndex || ch.index == chapterIndex) {
-                            std::vector<int> chapterIds = {ch.id};
-                            std::vector<int> chapterIndexes = {chapterIndex};
-                            client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes);
-                            brls::Logger::info("ReaderActivity: Requested server to delete chapter download (id={})",
-                                              ch.id);
-                            break;
-                        }
-                    }
-                }
+                // Also delete from server download queue
+                std::vector<int> chapterIds = {chapterId};
+                std::vector<int> chapterIndexes = {chapterId};
+                client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes);
+                brls::Logger::info("ReaderActivity: Requested server to delete chapter download (id={})", chapterId);
             }
         }
     });
@@ -1991,14 +2017,15 @@ void ReaderActivity::updateMarginColors() {
 
 void ReaderActivity::preloadNextChapter() {
     // Preload next chapter pages for seamless transition
-    if (m_nextChapterLoaded || m_chapterIndex >= m_totalChapters - 1) {
+    if (m_nextChapterLoaded || m_chapterPosition < 0 || m_chapterPosition >= m_totalChapters - 1) {
         return;  // Already loaded or no next chapter
     }
 
-    brls::Logger::info("Preloading next chapter {}", m_chapterIndex + 1);
+    int nextChapterId = m_chapters[m_chapterPosition + 1].id;
+    brls::Logger::info("Preloading next chapter id={}", nextChapterId);
 
     int mangaId = m_mangaId;
-    int nextChapterIndex = m_chapterIndex + 1;
+    int nextChapterIndex = nextChapterId;
     auto sharedNextPages = std::make_shared<std::vector<Page>>();
     std::weak_ptr<bool> aliveWeak = m_alive;
 

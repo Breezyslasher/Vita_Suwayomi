@@ -140,9 +140,15 @@ private:
 
     // Manga/Chapter info
     int m_mangaId = 0;
-    int m_chapterIndex = 0;
+    int m_chapterIndex = 0;      // Chapter ID (server ID, NOT sequential number)
+    int m_chapterPosition = -1;  // Position of current chapter in m_chapters list
     std::string m_mangaTitle;
     std::string m_chapterName;
+
+    // Find position of current chapter in m_chapters by matching chapter ID
+    void findChapterPosition();
+    // Get display string for current chapter number
+    std::string getChapterDisplayNumber() const;
 
     // Pages
     std::vector<Page> m_pages;
