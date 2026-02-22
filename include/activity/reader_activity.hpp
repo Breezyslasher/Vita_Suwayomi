@@ -140,9 +140,15 @@ private:
 
     // Manga/Chapter info
     int m_mangaId = 0;
-    int m_chapterIndex = 0;
+    int m_chapterIndex = 0;      // Chapter ID (server ID, NOT sequential number)
+    int m_chapterPosition = -1;  // Position of current chapter in m_chapters list
     std::string m_mangaTitle;
     std::string m_chapterName;
+
+    // Find position of current chapter in m_chapters by matching chapter ID
+    void findChapterPosition();
+    // Get display string for current chapter number
+    std::string getChapterDisplayNumber() const;
 
     // Pages
     std::vector<Page> m_pages;
@@ -220,6 +226,17 @@ private:
     bool m_loadedFromLocal = false;  // True when current chapter was loaded from local downloads
     void showPageError(const std::string& message);
     void hidePageError();
+
+    // Chapter transition overlay (shown between chapters)
+    enum class TransitionType {
+        NEXT_CHAPTER,      // "Finished Chapter X — Next: Chapter Y"
+        PREV_CHAPTER,      // "Go back to previous chapter"
+        END_OF_MANGA       // "You've reached the end"
+    };
+    brls::Box* m_transitionOverlay = nullptr;
+    bool m_showingTransition = false;
+    void showTransitionPage(TransitionType type);
+    void hideTransitionPage();
 };
 
 } // namespace vitasuwayomi
