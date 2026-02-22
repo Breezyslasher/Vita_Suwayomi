@@ -475,9 +475,28 @@ void ReaderActivity::onContentAvailable() {
                         m_isSwipeAnimating = true;
                         m_swipeOffset = rawDelta;  // Store raw for visual
 
-                        // Determine which page we're swiping to based on logical direction
-                        bool swipingPositive = logicalDelta > 0;
-                        bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingPositive : !swipingPositive;
+                        // Determine which page we're swiping to.
+                        // Swipe direction matches d-pad direction (same physical direction
+                        // = same page action), so the logic mirrors the d-pad handlers:
+                        //
+                        //   Horizontal (0°/180°):
+                        //     D-pad RIGHT = forward when !(rtl XOR inverted)
+                        //     Swipe right (rawDelta>0) = forward with same condition
+                        //   Vertical (90°/270°):
+                        //     D-pad DOWN = forward when !inverted
+                        //     Swipe down (rawDelta>0) = forward with same condition
+                        bool wantNextPage;
+                        bool swipedPositive = rawDelta > 0;  // right or down on screen
+                        if (useVerticalSwipe) {
+                            // Swipe down (positive) = forward when !inverted
+                            bool downIsForward = !invertDirection;
+                            wantNextPage = (swipedPositive == downIsForward);
+                        } else {
+                            bool rtl = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT);
+                            // Swipe right (positive) = forward when !(rtl XOR inverted)
+                            bool rightIsForward = !(rtl != invertDirection);
+                            wantNextPage = (swipedPositive == rightIsForward);
+                        }
 
                         int previewIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
 
