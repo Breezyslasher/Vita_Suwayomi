@@ -1260,6 +1260,9 @@ void ReaderActivity::nextPage() {
         return;
     }
 
+    // Don't navigate if pages haven't loaded yet
+    if (m_pages.empty()) return;
+
     if (m_currentPage < static_cast<int>(m_pages.size()) - 1) {
         m_currentPage++;
         updatePageDisplay();
@@ -1283,13 +1286,16 @@ void ReaderActivity::previousPage() {
         return;
     }
 
+    // Don't navigate if pages haven't loaded yet
+    if (m_pages.empty()) return;
+
     if (m_currentPage > 0) {
         m_currentPage--;
         updatePageDisplay();
         loadPage(m_currentPage);
         updateProgress();
     } else if (m_chapterPosition > 0) {
-        // First page of chapter - show transition page if there's a previous chapter
+        // First page of non-first chapter - show transition page
         showTransitionPage(TransitionType::PREV_CHAPTER);
     }
 }
@@ -1990,10 +1996,14 @@ void ReaderActivity::showTransitionPage(TransitionType type) {
         m_transitionOverlay->addView(hintLabel);
     }
 
-    // Hide the page image so transition is cleanly visible
-    if (pageImage) {
-        pageImage->setVisibility(brls::Visibility::INVISIBLE);
-    }
+    // Add tap recognizer to the overlay itself so touch works on it
+    // (pageImage's gesture recognizer won't fire if the overlay is on top)
+    m_transitionOverlay->addGestureRecognizer(new brls::TapGestureRecognizer(
+        [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+            if (status.state == brls::GestureState::END) {
+                nextPage();  // nextPage handles transition confirmation
+            }
+        }));
 
     container->addView(m_transitionOverlay);
 }
@@ -2004,11 +2014,6 @@ void ReaderActivity::hideTransitionPage() {
         m_transitionOverlay = nullptr;
     }
     m_showingTransition = false;
-
-    // Restore page image visibility
-    if (pageImage) {
-        pageImage->setVisibility(brls::Visibility::VISIBLE);
-    }
 }
 
 // NOBORU-style swipe methods
