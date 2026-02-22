@@ -45,6 +45,9 @@
         justifyContent="center"
         alignItems="center"
         backgroundColor="#14141e"
+        positionType="absolute"
+        positionTop="0"
+        positionLeft="0"
         visibility="gone">
 
         <brls:Label

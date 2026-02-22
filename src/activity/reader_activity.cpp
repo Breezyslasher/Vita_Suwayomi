@@ -532,9 +532,9 @@ void ReaderActivity::onContentAvailable() {
                             // Swipe was long enough - turn the page
                             completeSwipeAnimation(true);
                         } else if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex < 0) {
-                            // No page exists in that direction (e.g. first page of first chapter,
-                            // or last page of last chapter) - just snap back
-                            completeSwipeAnimation(false);
+                            // No preview page in that direction — on a transition page
+                            // this triggers chapter navigation, otherwise just snap back
+                            completeSwipeAnimation(isTransitionPage(m_currentPage));
                         } else {
                             // Swipe too short - snap back
                             completeSwipeAnimation(false);
@@ -599,119 +599,6 @@ void ReaderActivity::onContentAvailable() {
                     }
                 }
             }));
-    }
-
-    // Transition page gestures - tap and swipe like a regular page
-    if (transitionBox) {
-        transitionBox->setFocusable(true);
-
-        // Tap gesture on transition page - toggle controls or tap-to-navigate
-        transitionBox->addGestureRecognizer(new brls::TapGestureRecognizer(
-            [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
-                if (status.state == brls::GestureState::END) {
-                    AppSettings& appSettings = Application::getInstance().getSettings();
-                    if (appSettings.tapToNavigate) {
-                        const float SCREEN_WIDTH = 960.0f;
-                        float tapX = status.position.x;
-                        float leftZone = SCREEN_WIDTH / 3.0f;
-                        float rightZone = SCREEN_WIDTH * 2.0f / 3.0f;
-
-                        if (tapX < leftZone) {
-                            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
-                                nextPage();
-                            else
-                                previousPage();
-                        } else if (tapX > rightZone) {
-                            if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
-                                previousPage();
-                            else
-                                nextPage();
-                        } else {
-                            toggleControls();
-                        }
-                    } else {
-                        toggleControls();
-                    }
-                }
-            }));
-
-        // Pan/swipe gesture on transition page - same logic as pageImage
-        transitionBox->addGestureRecognizer(new brls::PanGestureRecognizer(
-            [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-                const float TAP_THRESHOLD = 15.0f;
-                const float PAGE_TURN_THRESHOLD = 80.0f;
-                const float SWIPE_START_THRESHOLD = 20.0f;
-
-                bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
-                                         m_settings.rotation == ImageRotation::ROTATE_270);
-                bool invertDirection = (m_settings.rotation == ImageRotation::ROTATE_180 ||
-                                        m_settings.rotation == ImageRotation::ROTATE_270);
-
-                if (status.state == brls::GestureState::START) {
-                    m_isPanning = false;
-                    m_isSwipeAnimating = false;
-                    m_touchStart = status.position;
-                    m_touchCurrent = status.position;
-                    m_swipeOffset = 0.0f;
-                    m_previewPageIndex = -1;
-                } else if (status.state == brls::GestureState::STAY) {
-                    m_touchCurrent = status.position;
-                    float dx = m_touchCurrent.x - m_touchStart.x;
-                    float dy = m_touchCurrent.y - m_touchStart.y;
-
-                    float rawDelta = useVerticalSwipe ? dy : dx;
-                    float crossDelta = useVerticalSwipe ? dx : dy;
-                    float logicalDelta = invertDirection ? -rawDelta : rawDelta;
-
-                    if (std::abs(rawDelta) > std::abs(crossDelta) && std::abs(rawDelta) > SWIPE_START_THRESHOLD) {
-                        m_isSwipeAnimating = true;
-                        m_swipeOffset = rawDelta;
-
-                        bool swipingPositive = logicalDelta > 0;
-                        bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingPositive : !swipingPositive;
-
-                        int previewIndex = wantNextPage ? m_currentPage + 1 : m_currentPage - 1;
-
-                        if (previewIndex != m_previewPageIndex && previewIndex >= 0 &&
-                            previewIndex < static_cast<int>(m_pages.size())) {
-                            m_previewPageIndex = previewIndex;
-                            m_swipingToNext = wantNextPage;
-                            loadPreviewPage(previewIndex);
-                        }
-
-                        updateSwipePreview(rawDelta);
-                    }
-                } else if (status.state == brls::GestureState::END) {
-                    m_touchCurrent = status.position;
-                    float dx = m_touchCurrent.x - m_touchStart.x;
-                    float dy = m_touchCurrent.y - m_touchStart.y;
-                    float distance = std::sqrt(dx * dx + dy * dy);
-                    float rawDelta = useVerticalSwipe ? dy : dx;
-
-                    if (distance < TAP_THRESHOLD) {
-                        resetSwipeState();
-                    } else if (m_isSwipeAnimating) {
-                        float absSwipe = std::abs(rawDelta);
-                        if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex >= 0) {
-                            completeSwipeAnimation(true);
-                        } else {
-                            completeSwipeAnimation(false);
-                        }
-                    } else {
-                        float crossDelta = useVerticalSwipe ? dx : dy;
-                        float logicalCross = invertDirection ? -crossDelta : crossDelta;
-
-                        if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
-                            if (logicalCross > 0)
-                                previousPage();
-                            else
-                                nextPage();
-                        }
-                        resetSwipeState();
-                    }
-                    m_isPanning = false;
-                }
-            }, brls::PanAxis::ANY));
     }
 
     // Container fallback - simpler touch handling without preview
@@ -2094,9 +1981,10 @@ void ReaderActivity::insertTransitionPages() {
 void ReaderActivity::renderTransitionPage(int index) {
     if (!transitionBox) return;
 
-    // Hide the manga page image, show the transition page
+    // Clear pageImage but keep it visible so it retains focus and gesture handling.
+    // The transitionBox overlays on top as an absolute-positioned view.
     if (pageImage) {
-        pageImage->setVisibility(brls::Visibility::GONE);
+        pageImage->clearImage();
     }
 
     const std::string& url = m_pages[index].imageUrl;
@@ -2267,6 +2155,26 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
         // Preload next chapter if near end
         if (m_currentPage >= static_cast<int>(m_pages.size()) - 3) {
             preloadNextChapter();
+        }
+    } else if (turnPage && m_previewPageIndex < 0 && isTransitionPage(m_currentPage)) {
+        // Swiped past a transition page boundary with no preview page available.
+        // Trigger the same chapter navigation as nextPage()/previousPage().
+        const std::string& url = m_pages[m_currentPage].imageUrl;
+        if (m_swipingToNext) {
+            if (url == TRANSITION_NEXT) {
+                resetSwipeState();
+                nextChapter();
+                return;
+            } else if (url == TRANSITION_PREV) {
+                resetSwipeState();
+                previousChapter();
+                return;
+            }
+        } else {
+            // Swiping back from transition → go to nearest real page
+            previousPage();
+            resetSwipeState();
+            return;
         }
     }
 
