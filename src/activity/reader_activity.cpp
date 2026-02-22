@@ -439,6 +439,9 @@ void ReaderActivity::onContentAvailable() {
                     // Suppress page navigation while pinch-to-zoom is active
                     if (m_isPinching) return;
 
+                    // If transition page is showing, don't do normal swipe tracking
+                    if (m_showingChapterTransition) return;
+
                     // Real-time swipe tracking (STAY = finger still on screen)
                     m_touchCurrent = status.position;
                     float dx = m_touchCurrent.x - m_touchStart.x;
@@ -503,11 +506,27 @@ void ReaderActivity::onContentAvailable() {
                         // Always track swipe direction (needed for chapter boundary detection)
                         m_swipingToNext = wantNextPage;
 
-                        // Load preview page if not already loaded and in bounds
-                        if (previewIndex != m_previewPageIndex && previewIndex >= 0 &&
-                            previewIndex < static_cast<int>(m_pages.size())) {
-                            m_previewPageIndex = previewIndex;
-                            loadPreviewPage(previewIndex);
+                        // Load preview page or transition page
+                        if (previewIndex >= 0 && previewIndex < static_cast<int>(m_pages.size())) {
+                            // Normal page preview
+                            if (previewIndex != m_previewPageIndex) {
+                                m_previewPageIndex = previewIndex;
+                                loadPreviewPage(previewIndex);
+                            }
+                        } else if (wantNextPage && previewIndex >= static_cast<int>(m_pages.size())) {
+                            // Past last page — show transition page as preview
+                            if (m_previewPageIndex != TRANSITION_PAGE_INDEX) {
+                                m_previewPageIndex = TRANSITION_PAGE_INDEX;
+                                // Build/rebuild the transition page and make it visible for sliding
+                                buildTransitionPage();
+                                if (m_transitionPage) {
+                                    m_transitionPage->setVisibility(brls::Visibility::VISIBLE);
+                                }
+                                // Hide the preview image (we use the transition box instead)
+                                if (previewImage) {
+                                    previewImage->setVisibility(brls::Visibility::GONE);
+                                }
+                            }
                         }
 
                         // Update visual positions - page follows finger (use raw delta)
@@ -517,6 +536,36 @@ void ReaderActivity::onContentAvailable() {
                     // Don't turn the page if we were just pinch-zooming
                     if (m_isPinching) {
                         resetSwipeState();
+                        return;
+                    }
+
+                    // Handle swipe end while transition page is showing
+                    if (m_showingChapterTransition) {
+                        m_touchCurrent = status.position;
+                        float dx = m_touchCurrent.x - m_touchStart.x;
+                        float dy = m_touchCurrent.y - m_touchStart.y;
+                        float distance = std::sqrt(dx * dx + dy * dy);
+                        float rawDelta = useVerticalSwipe ? dy : dx;
+                        bool swipedPositive = rawDelta > 0;
+                        bool wantNextPage;
+                        if (useVerticalSwipe) {
+                            bool downIsForward = !invertDirection;
+                            wantNextPage = (swipedPositive == downIsForward);
+                        } else {
+                            bool rtl = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT);
+                            bool rightIsForward = !(rtl != invertDirection);
+                            wantNextPage = (swipedPositive == rightIsForward);
+                        }
+
+                        if (distance > TAP_THRESHOLD && std::abs(rawDelta) > 80.0f) {
+                            if (wantNextPage) {
+                                hideChapterTransition();
+                                nextChapter();
+                            } else {
+                                // Swipe back — return to last page
+                                hideChapterTransition();
+                            }
+                        }
                         return;
                     }
 
@@ -1262,10 +1311,11 @@ void ReaderActivity::nextPage() {
         loadPage(m_currentPage);
         updateProgress();
     } else if (!m_continuousScrollMode) {
-        // End of chapter in single-page mode — show transition card
+        // End of chapter in single-page mode — show transition page
         bool hasNext = !m_chapters.empty() && m_chapterListPosition >= 0 &&
             m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1;
         if (hasNext) {
+            buildTransitionPage();
             showChapterTransition();
         } else {
             markChapterAsRead();
@@ -1952,40 +2002,81 @@ void ReaderActivity::hidePageError() {
     }
 }
 
-void ReaderActivity::showChapterTransition() {
-    brls::Logger::info("DEBUG: showChapterTransition() - alreadyShowing={}, chapterName='{}'", m_showingChapterTransition, m_chapterName);
-    if (!container || m_showingChapterTransition) return;
+void ReaderActivity::buildTransitionPage() {
+    // Build (or rebuild) the transition page content with current chapter info
+    if (!container) return;
 
-    m_showingChapterTransition = true;
+    // Remove old transition page if it exists
+    if (m_transitionPage) {
+        container->removeView(m_transitionPage);
+        m_transitionPage = nullptr;
+    }
 
-    // Get chapter names
-    std::string finishedName = m_chapterName;
+    // Get current chapter name (with fallback like updateChapterDisplay)
+    std::string currentName;
+    if (!m_chapters.empty() && m_chapterListPosition >= 0 &&
+        m_chapterListPosition < static_cast<int>(m_chapters.size())) {
+        const Chapter& ch = m_chapters[m_chapterListPosition];
+        if (!ch.name.empty()) {
+            currentName = ch.name;
+        } else if (ch.chapterNumber > 0) {
+            if (ch.chapterNumber == static_cast<float>(static_cast<int>(ch.chapterNumber))) {
+                currentName = "Chapter " + std::to_string(static_cast<int>(ch.chapterNumber));
+            } else {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "Chapter %.1f", ch.chapterNumber);
+                currentName = buf;
+            }
+        } else {
+            currentName = "Chapter " + std::to_string(m_chapterListPosition + 1);
+        }
+    } else if (!m_chapterName.empty()) {
+        currentName = m_chapterName;
+    } else {
+        currentName = "Current chapter";
+    }
+
+    // Get next chapter name
     std::string nextName;
     if (!m_chapters.empty() && m_chapterListPosition >= 0 &&
         m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1) {
-        nextName = m_chapters[m_chapterListPosition + 1].name;
+        const Chapter& nextCh = m_chapters[m_chapterListPosition + 1];
+        if (!nextCh.name.empty()) {
+            nextName = nextCh.name;
+        } else if (nextCh.chapterNumber > 0) {
+            if (nextCh.chapterNumber == static_cast<float>(static_cast<int>(nextCh.chapterNumber))) {
+                nextName = "Chapter " + std::to_string(static_cast<int>(nextCh.chapterNumber));
+            } else {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "Chapter %.1f", nextCh.chapterNumber);
+                nextName = buf;
+            }
+        } else {
+            nextName = "Chapter " + std::to_string(m_chapterListPosition + 2);
+        }
     }
 
-    // Create full-screen transition overlay
-    m_transitionOverlay = new brls::Box();
-    m_transitionOverlay->setAxis(brls::Axis::COLUMN);
-    m_transitionOverlay->setJustifyContent(brls::JustifyContent::CENTER);
-    m_transitionOverlay->setAlignItems(brls::AlignItems::CENTER);
-    m_transitionOverlay->setWidth(960);
-    m_transitionOverlay->setHeight(544);
-    m_transitionOverlay->setPositionType(brls::PositionType::ABSOLUTE);
-    m_transitionOverlay->setPositionTop(0);
-    m_transitionOverlay->setPositionLeft(0);
-    m_transitionOverlay->setBackgroundColor(nvgRGBA(26, 26, 46, 240));
+    // Create the transition page box (same size/position as previewImage)
+    m_transitionPage = new brls::Box();
+    m_transitionPage->setAxis(brls::Axis::COLUMN);
+    m_transitionPage->setJustifyContent(brls::JustifyContent::CENTER);
+    m_transitionPage->setAlignItems(brls::AlignItems::CENTER);
+    m_transitionPage->setWidth(960);
+    m_transitionPage->setHeight(544);
+    m_transitionPage->setPositionType(brls::PositionType::ABSOLUTE);
+    m_transitionPage->setPositionTop(0);
+    m_transitionPage->setPositionLeft(0);
+    m_transitionPage->setBackgroundColor(nvgRGBA(26, 26, 46, 255));
+    m_transitionPage->setVisibility(brls::Visibility::GONE);
 
     // "Finished" label
     auto* finishedLabel = new brls::Label();
-    finishedLabel->setText("Finished: " + finishedName);
+    finishedLabel->setText("Finished: " + currentName);
     finishedLabel->setFontSize(20);
     finishedLabel->setTextColor(nvgRGB(160, 160, 180));
     finishedLabel->setMarginBottom(15);
     finishedLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    m_transitionOverlay->addView(finishedLabel);
+    m_transitionPage->addView(finishedLabel);
 
     // Divider
     auto* divider = new brls::Box();
@@ -1993,16 +2084,20 @@ void ReaderActivity::showChapterTransition() {
     divider->setHeight(1);
     divider->setBackgroundColor(nvgRGBA(80, 80, 120, 180));
     divider->setMarginBottom(15);
-    m_transitionOverlay->addView(divider);
+    m_transitionPage->addView(divider);
 
     // "Next" label
     auto* nextLabel = new brls::Label();
-    nextLabel->setText("Next: " + nextName);
+    if (!nextName.empty()) {
+        nextLabel->setText("Next: " + nextName);
+    } else {
+        nextLabel->setText("End of manga");
+    }
     nextLabel->setFontSize(22);
     nextLabel->setTextColor(nvgRGB(220, 220, 240));
     nextLabel->setMarginBottom(30);
     nextLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    m_transitionOverlay->addView(nextLabel);
+    m_transitionPage->addView(nextLabel);
 
     // Hint label
     auto* hintLabel = new brls::Label();
@@ -2010,17 +2105,49 @@ void ReaderActivity::showChapterTransition() {
     hintLabel->setFontSize(14);
     hintLabel->setTextColor(nvgRGB(120, 120, 140));
     hintLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    m_transitionOverlay->addView(hintLabel);
+    m_transitionPage->addView(hintLabel);
 
-    container->addView(m_transitionOverlay);
+    container->addView(m_transitionPage);
 
-    // Start preloading the next chapter while showing transition
+    // Start preloading the next chapter while we build this
     preloadNextChapter();
 }
 
+void ReaderActivity::showChapterTransition() {
+    brls::Logger::info("DEBUG: showChapterTransition() - alreadyShowing={}, chapterName='{}'", m_showingChapterTransition, m_chapterName);
+    if (!container || m_showingChapterTransition) return;
+
+    m_showingChapterTransition = true;
+
+    // Show the transition page centered (it was slid in by animation)
+    if (m_transitionPage) {
+        m_transitionPage->setVisibility(brls::Visibility::VISIBLE);
+        m_transitionPage->setTranslationX(0.0f);
+        m_transitionPage->setTranslationY(0.0f);
+    }
+
+    // Hide the main page image so the transition page is visible
+    if (pageImage) {
+        pageImage->setVisibility(brls::Visibility::GONE);
+    }
+}
+
 void ReaderActivity::hideChapterTransition() {
-    brls::Logger::info("DEBUG: hideChapterTransition() - wasShowing={}, hasOverlay={}", m_showingChapterTransition, m_transitionOverlay != nullptr);
+    brls::Logger::info("DEBUG: hideChapterTransition() - wasShowing={}, hasTransitionPage={}", m_showingChapterTransition, m_transitionPage != nullptr);
     m_showingChapterTransition = false;
+
+    // Remove transition page from container
+    if (m_transitionPage && container) {
+        container->removeView(m_transitionPage);
+        m_transitionPage = nullptr;
+    }
+
+    // Show the main page image again
+    if (pageImage) {
+        pageImage->setVisibility(brls::Visibility::VISIBLE);
+    }
+
+    // Legacy overlay cleanup (in case old overlays exist)
     if (m_transitionOverlay && container) {
         container->removeView(m_transitionOverlay);
         m_transitionOverlay = nullptr;
@@ -2036,20 +2163,23 @@ void ReaderActivity::updateSwipePreview(float offset) {
     const float SCREEN_WIDTH = 960.0f;
     const float SCREEN_HEIGHT = 544.0f;
 
-    if (!pageImage || !previewImage) return;
+    if (!pageImage) return;
 
-    // Only show preview image if a valid preview page was loaded.
-    // At chapter boundaries (first/last page), there's no preview page,
-    // so hide it to avoid showing stale content from a previous swipe.
-    if (m_previewPageIndex >= 0) {
+    // Determine which view is the preview: transition page or preview image
+    bool isTransitionPreview = (m_previewPageIndex == TRANSITION_PAGE_INDEX);
+    bool hasPreview = isTransitionPreview ? (m_transitionPage != nullptr) :
+                      (m_previewPageIndex >= 0 && previewImage != nullptr);
+
+    // Show/hide the appropriate preview view
+    if (hasPreview && !isTransitionPreview && previewImage) {
         previewImage->setVisibility(brls::Visibility::VISIBLE);
-    } else {
+    } else if (previewImage) {
         previewImage->setVisibility(brls::Visibility::GONE);
     }
+    // Transition page visibility is managed by the swipe STAY handler
 
-    // At chapter boundaries (no preview page), apply resistance/dampening
-    // so the page feels like it's at the edge rather than sliding freely
-    if (m_previewPageIndex < 0) {
+    // At chapter boundaries (no preview at all), apply resistance/dampening
+    if (!hasPreview) {
         offset *= 0.3f;  // 30% of finger movement for rubber-band feel
     }
 
@@ -2058,46 +2188,34 @@ void ReaderActivity::updateSwipePreview(float offset) {
                              m_settings.rotation == ImageRotation::ROTATE_270);
 
     if (useVerticalSwipe) {
-        // Vertical swipe for 90/270 rotation
-        // Clamp offset to screen height
         offset = std::max(-SCREEN_HEIGHT, std::min(SCREEN_HEIGHT, offset));
-
-        // Move current page with finger (vertically)
         pageImage->setTranslationY(offset);
         pageImage->setTranslationX(0.0f);
 
-        // PUSH EFFECT: Preview page is always one screen behind current page
-        // When current page is pushed off, preview slides in from behind
-        if (m_previewPageIndex >= 0) {
-            if (offset > 0) {
-                // Swiping down - preview pushes from top (above current page)
-                previewImage->setTranslationY(offset - SCREEN_HEIGHT);
-            } else {
-                // Swiping up - preview pushes from bottom (below current page)
-                previewImage->setTranslationY(offset + SCREEN_HEIGHT);
+        if (hasPreview) {
+            float previewY = (offset > 0) ? (offset - SCREEN_HEIGHT) : (offset + SCREEN_HEIGHT);
+            if (isTransitionPreview && m_transitionPage) {
+                m_transitionPage->setTranslationY(previewY);
+                m_transitionPage->setTranslationX(0.0f);
+            } else if (previewImage) {
+                previewImage->setTranslationY(previewY);
+                previewImage->setTranslationX(0.0f);
             }
-            previewImage->setTranslationX(0.0f);
         }
     } else {
-        // Horizontal swipe for 0/180 rotation
-        // Clamp offset to screen width
         offset = std::max(-SCREEN_WIDTH, std::min(SCREEN_WIDTH, offset));
-
-        // Move current page with finger (horizontally)
         pageImage->setTranslationX(offset);
         pageImage->setTranslationY(0.0f);
 
-        // PUSH EFFECT: Preview page is always one screen behind current page
-        // When current page is pushed off, preview slides in from behind
-        if (m_previewPageIndex >= 0) {
-            if (offset > 0) {
-                // Swiping right - preview pushes from left (behind current page)
-                previewImage->setTranslationX(offset - SCREEN_WIDTH);
-            } else {
-                // Swiping left - preview pushes from right (behind current page)
-                previewImage->setTranslationX(offset + SCREEN_WIDTH);
+        if (hasPreview) {
+            float previewX = (offset > 0) ? (offset - SCREEN_WIDTH) : (offset + SCREEN_WIDTH);
+            if (isTransitionPreview && m_transitionPage) {
+                m_transitionPage->setTranslationX(previewX);
+                m_transitionPage->setTranslationY(0.0f);
+            } else if (previewImage) {
+                previewImage->setTranslationX(previewX);
+                previewImage->setTranslationY(0.0f);
             }
-            previewImage->setTranslationY(0.0f);
         }
     }
 }
@@ -2130,6 +2248,13 @@ void ReaderActivity::loadPreviewPage(int index) {
 
 void ReaderActivity::completeSwipeAnimation(bool turnPage) {
     brls::Logger::info("DEBUG: completeSwipeAnimation() - turnPage={}, previewPageIndex={}", turnPage, m_previewPageIndex);
+    if (turnPage && m_previewPageIndex == TRANSITION_PAGE_INDEX) {
+        // Completed swipe to the transition page — show it as the current view
+        showChapterTransition();
+        resetSwipeState();
+        return;
+    }
+
     if (turnPage && m_previewPageIndex >= 0) {
         // Instantly transfer the preview texture to the main page image so the
         // user sees the new page the moment positions reset to zero.
@@ -2174,28 +2299,64 @@ void ReaderActivity::resetSwipeState() {
         previewImage->setTranslationX(0.0f);
         previewImage->setTranslationY(0.0f);
     }
+
+    // Reset transition page position (but don't hide it if showing transition)
+    if (m_transitionPage && !m_showingChapterTransition) {
+        m_transitionPage->setVisibility(brls::Visibility::GONE);
+        m_transitionPage->setTranslationX(0.0f);
+        m_transitionPage->setTranslationY(0.0f);
+    }
 }
 
 void ReaderActivity::animatePageTurn(bool forward) {
-    brls::Logger::info("DEBUG: animatePageTurn() - forward={}, currentPage={}, isDpadAnimating={}, isSwipeAnimating={}", forward, m_currentPage, m_isDpadAnimating, m_isSwipeAnimating);
+    brls::Logger::info("DEBUG: animatePageTurn() - forward={}, currentPage={}, isDpadAnimating={}, isSwipeAnimating={}, showingTransition={}", forward, m_currentPage, m_isDpadAnimating, m_isSwipeAnimating, m_showingChapterTransition);
     // Animated page slide for d-pad navigation (same push effect as touch swipe)
     if (m_isDpadAnimating || m_isSwipeAnimating || m_continuousScrollMode) return;
 
+    // If showing the transition page, handle next/back from there
+    if (m_showingChapterTransition) {
+        if (forward) {
+            hideChapterTransition();
+            nextChapter();
+        } else {
+            // Go back to last page of current chapter
+            hideChapterTransition();
+        }
+        return;
+    }
+
     int targetPage = forward ? m_currentPage + 1 : m_currentPage - 1;
 
-    // If out of bounds, show transition screen or go to previous chapter
+    // If out of bounds, handle chapter boundary
     if (targetPage < 0 || targetPage >= static_cast<int>(m_pages.size())) {
-        if (forward)
-            nextPage();  // Shows transition screen or advances chapter
-        else
+        if (forward) {
+            // Check if there's a next chapter — animate transition page in
+            bool hasNext = !m_chapters.empty() && m_chapterListPosition >= 0 &&
+                m_chapterListPosition < static_cast<int>(m_chapters.size()) - 1;
+            if (hasNext && !m_continuousScrollMode) {
+                // Set up the transition page as the preview target
+                targetPage = TRANSITION_PAGE_INDEX;
+                buildTransitionPage();
+                if (m_transitionPage) {
+                    m_transitionPage->setVisibility(brls::Visibility::VISIBLE);
+                }
+                // Fall through to the animation code below
+            } else {
+                nextPage();  // End of manga or continuous scroll fallback
+                return;
+            }
+        } else {
             previousChapter(true);
-        return;
+            return;
+        }
     }
 
     m_isDpadAnimating = true;
     m_previewPageIndex = targetPage;
     m_swipingToNext = forward;
-    loadPreviewPage(targetPage);
+    if (targetPage != TRANSITION_PAGE_INDEX) {
+        loadPreviewPage(targetPage);
+    }
 
     // Determine animation direction based on rotation
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||

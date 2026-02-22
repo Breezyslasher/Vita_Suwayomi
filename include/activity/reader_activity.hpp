@@ -246,11 +246,14 @@ private:
     void showPageError(const std::string& message);
     void hidePageError();
 
-    // Chapter transition screen for single-page mode
+    // Chapter transition screen for single-page mode (shown as a fake swipeable page)
     bool m_showingChapterTransition = false;
     brls::Box* m_transitionOverlay = nullptr;
     void showChapterTransition();
     void hideChapterTransition();
+    void buildTransitionPage();      // Build the transition box content
+    brls::Box* m_transitionPage = nullptr;  // The transition "page" box (lives in container)
+    static constexpr int TRANSITION_PAGE_INDEX = 99999;  // Virtual page index for transition
 };
 
 } // namespace vitasuwayomi
