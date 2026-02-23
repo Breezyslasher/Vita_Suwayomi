@@ -272,8 +272,11 @@ void ReaderActivity::onContentAvailable() {
     // Apply keepScreenOn setting - prevent screen timeout during reading
     m_settings.keepScreenOn = appSettings.keepScreenOn;
     if (m_settings.keepScreenOn) {
-        brls::Application::getPlatform()->disableScreenDimming(true, "Reading manga", "VitaSuwayomi");
-        brls::Logger::info("ReaderActivity: keepScreenOn enabled, disabled screen dimming");
+        auto* platform = brls::Application::getPlatform();
+        if (platform) {
+            platform->disableScreenDimming(true, "Reading manga", "VitaSuwayomi");
+            brls::Logger::info("ReaderActivity: keepScreenOn enabled, disabled screen dimming");
+        }
     }
 
     // Set manga title in top bar
@@ -2938,8 +2941,11 @@ void ReaderActivity::willDisappear(bool resetState) {
 
     // Restore screen dimming when leaving the reader
     if (m_settings.keepScreenOn) {
-        brls::Application::getPlatform()->disableScreenDimming(false, "Reading manga", "VitaSuwayomi");
-        brls::Logger::info("ReaderActivity: willDisappear, restored screen dimming");
+        auto* platform = brls::Application::getPlatform();
+        if (platform) {
+            platform->disableScreenDimming(false, "Reading manga", "VitaSuwayomi");
+            brls::Logger::info("ReaderActivity: willDisappear, restored screen dimming");
+        }
     }
 }
 
