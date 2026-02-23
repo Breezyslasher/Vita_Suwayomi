@@ -42,9 +42,9 @@ namespace vitasuwayomi {
 // Static member initialization
 std::list<ImageLoader::CacheEntry> ImageLoader::s_cacheList;
 std::map<std::string, std::list<ImageLoader::CacheEntry>::iterator> ImageLoader::s_cacheMap;
-size_t ImageLoader::s_maxCacheSize = 50;  // LRU cache: 50 entries to limit PS Vita memory usage
+size_t ImageLoader::s_maxCacheSize = 30;  // LRU cache: 30 entries to limit PS Vita memory usage
 size_t ImageLoader::s_currentCacheMemory = 0;
-static const size_t MAX_CACHE_MEMORY = 40 * 1024 * 1024;  // 40MB max cache memory
+static const size_t MAX_CACHE_MEMORY = 25 * 1024 * 1024;  // 25MB max cache memory (Vita has ~192MB total)
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
@@ -54,7 +54,7 @@ std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
 std::condition_variable ImageLoader::s_queueCV;
-int ImageLoader::s_maxConcurrentLoads = 20;  // Worker thread count for concurrent downloads
+int ImageLoader::s_maxConcurrentLoads = 3;  // Worker thread count - kept low for PS Vita memory limits
 int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
 // Worker thread pool
@@ -475,7 +475,7 @@ static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2)
 }
 
 void ImageLoader::setMaxConcurrentLoads(int max) {
-    s_maxConcurrentLoads = std::max(1, std::min(max, 20));
+    s_maxConcurrentLoads = std::max(1, std::min(max, 6));
 }
 
 void ImageLoader::setMaxThumbnailSize(int maxSize) {
@@ -611,6 +611,9 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         brls::Logger::warning("ImageLoader: Failed to load {} (status {})", url, resp.statusCode);
         return;
     }
+
+    // Check alive flag after download - skip decode if owner was destroyed
+    if (alive && !*alive) return;
 
     // Check image format
     bool isWebP = false;
@@ -862,6 +865,13 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     }
 
     if (loadSuccess && !imageBody.empty()) {
+        // Check alive flag again after download - if the reader was closed while
+        // we were downloading, skip the expensive decode/conversion to save memory
+        if (alive && !*alive) {
+            brls::Logger::debug("ImageLoader: Skipping decode for {} (owner destroyed during download)", url);
+            return;
+        }
+
         brls::Logger::debug("ImageLoader: Loaded {} bytes from {} for RotatableImage", imageBody.size(), url);
 
         // Check image format

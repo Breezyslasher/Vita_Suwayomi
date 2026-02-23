@@ -2936,6 +2936,11 @@ void ReaderActivity::willDisappear(bool resetState) {
     // callbacks calling target->setImageFromMem() on our destroyed views.
     ImageLoader::cancelAll();
 
+    // Clear the full-size image cache to free memory before a new reader
+    // potentially starts loading. Reader images are ~4MB each in TGA format
+    // and keeping them cached while opening a new chapter risks OOM on Vita.
+    ImageLoader::clearCache();
+
     // Clear webtoon scroll view callbacks and pages so it stops referencing us
     if (webtoonScroll) {
         webtoonScroll->setProgressCallback(nullptr);
