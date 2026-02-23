@@ -1505,24 +1505,22 @@ void ReaderActivity::nextPage() {
         m_currentPage, static_cast<int>(m_pages.size()),
         m_currentPage < static_cast<int>(m_pages.size()) ? m_pages[m_currentPage].imageUrl : "?");
 
-    // If currently on the "next chapter" transition page, do the navigation
-    if (isTransitionPage(m_currentPage) &&
-        m_pages[m_currentPage].imageUrl == TRANSITION_NEXT) {
-        brls::Logger::info("NEXTPAGE: on TRANSITION_NEXT → nextChapter()");
-        nextChapter();
-        return;
-    }
-    // If on the "prev chapter" transition page, confirm going back
-    if (isTransitionPage(m_currentPage) &&
-        m_pages[m_currentPage].imageUrl == TRANSITION_PREV) {
-        brls::Logger::info("NEXTPAGE: on TRANSITION_PREV → previousChapter()");
-        previousChapter();
-        return;
-    }
-    // If on end-of-manga page, do nothing
-    if (isTransitionPage(m_currentPage) &&
-        m_pages[m_currentPage].imageUrl == TRANSITION_END) {
-        brls::Logger::info("NEXTPAGE: on TRANSITION_END → no-op");
+    if (isTransitionPage(m_currentPage)) {
+        const std::string& url = m_pages[m_currentPage].imageUrl;
+        if (url == TRANSITION_NEXT) {
+            // End-of-chapter transition: "next" means go to next chapter
+            brls::Logger::info("NEXTPAGE: on TRANSITION_NEXT → nextChapter()");
+            nextChapter();
+        } else if (url == TRANSITION_PREV) {
+            // Beginning-of-chapter transition: "next" means go to first real page
+            brls::Logger::info("NEXTPAGE: on TRANSITION_PREV → first real page");
+            if (m_currentPage < static_cast<int>(m_pages.size()) - 1) {
+                m_currentPage++;
+                updatePageDisplay();
+                loadPage(m_currentPage);
+            }
+        }
+        // TRANSITION_END: no-op
         return;
     }
 
@@ -1545,19 +1543,21 @@ void ReaderActivity::previousPage() {
         m_currentPage, static_cast<int>(m_pages.size()),
         m_currentPage < static_cast<int>(m_pages.size()) ? m_pages[m_currentPage].imageUrl : "?");
 
-    // If on any transition page, go back to the nearest real page
     if (isTransitionPage(m_currentPage)) {
-        // Find the nearest real page
-        if (m_currentPage > 0 && !isTransitionPage(m_currentPage - 1)) {
-            brls::Logger::info("PREVPAGE: on transition, going back to page {}", m_currentPage - 1);
-            m_currentPage--;
-        } else if (m_currentPage < static_cast<int>(m_pages.size()) - 1 &&
-                   !isTransitionPage(m_currentPage + 1)) {
-            brls::Logger::info("PREVPAGE: on transition, going forward to page {}", m_currentPage + 1);
-            m_currentPage++;
+        const std::string& url = m_pages[m_currentPage].imageUrl;
+        if (url == TRANSITION_PREV) {
+            // Beginning-of-chapter transition: "prev" means go to previous chapter
+            brls::Logger::info("PREVPAGE: on TRANSITION_PREV → previousChapter()");
+            previousChapter();
+        } else if (url == TRANSITION_NEXT || url == TRANSITION_END) {
+            // End-of-chapter transition: "prev" means go to last real page
+            brls::Logger::info("PREVPAGE: on end transition → last real page");
+            if (m_currentPage > 0) {
+                m_currentPage--;
+                updatePageDisplay();
+                loadPage(m_currentPage);
+            }
         }
-        updatePageDisplay();
-        loadPage(m_currentPage);
         return;
     }
 
