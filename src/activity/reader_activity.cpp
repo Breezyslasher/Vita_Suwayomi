@@ -712,9 +712,6 @@ void ReaderActivity::onContentAvailable() {
                                 chapterPageUrl = m_prevChapterPages.back().imageUrl;
                             }
 
-                            brls::Logger::info("TSWIPE OOB: previewIdx={} wantNext={} chapterPage={}",
-                                previewIndex, wantNextPage, chapterPageUrl.empty() ? "(none)" : chapterPageUrl);
-
                             if (!chapterPageUrl.empty() && previewImage) {
                                 m_previewPageIndex = previewIndex;  // mark as loaded (out of bounds value)
                                 m_swipeToChapter = true;
@@ -730,6 +727,9 @@ void ReaderActivity::onContentAvailable() {
                                 // Store the OOB index so previewIndex != m_previewPageIndex fails next time.
                                 m_previewPageIndex = previewIndex;
                             }
+
+                            brls::Logger::info("TSWIPE OOB: previewIdx={} wantNext={} swipeToChapter={}",
+                                previewIndex, wantNextPage, m_swipeToChapter);
                         }
 
                         updateSwipePreview(rawDelta);
@@ -751,7 +751,6 @@ void ReaderActivity::onContentAvailable() {
                         m_previewPageIndex, m_swipeToChapter, m_swipingToNext, m_previewIsTransition);
 
                     if (distance < TAP_THRESHOLD) {
-                        brls::Logger::info("TSWIPE END: TAP detected, resetting");
                         resetSwipeState();
                     } else if (m_isSwipeAnimating) {
                         float absSwipe = std::abs(rawDelta);
@@ -770,7 +769,6 @@ void ReaderActivity::onContentAvailable() {
                         float crossDelta = useVerticalSwipe ? dx : dy;
                         float logicalCross = invertDirection ? -crossDelta : crossDelta;
 
-                        brls::Logger::info("TSWIPE END: cross-axis swipe crossDelta={:.1f}", crossDelta);
                         if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
                             if (logicalCross > 0)
                                 previousPage();
