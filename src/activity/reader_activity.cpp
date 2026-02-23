@@ -1583,7 +1583,8 @@ void ReaderActivity::goToPage(int pageIndex) {
 
 void ReaderActivity::nextChapter() {
     brls::Logger::info("NEXTCHAPTER: chapterPos={}/{} nextPreloaded={}", m_chapterPosition, m_totalChapters, m_nextChapterLoaded);
-    if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+    if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1 &&
+        m_chapterPosition + 1 < static_cast<int>(m_chapters.size())) {
         markChapterAsRead();
 
         m_chapterPosition++;
@@ -1642,29 +1643,79 @@ void ReaderActivity::nextChapter() {
 
 void ReaderActivity::previousChapter() {
     brls::Logger::info("PREVCHAPTER: chapterPos={}/{} prevPreloaded={}", m_chapterPosition, m_totalChapters, m_prevChapterLoaded);
-    if (m_chapterPosition > 0) {
+    if (m_chapterPosition > 0 &&
+        m_chapterPosition - 1 < static_cast<int>(m_chapters.size())) {
         m_chapterPosition--;
         m_chapterIndex = m_chapters[m_chapterPosition].id;
         m_chapterName = m_chapters[m_chapterPosition].name;
-        // Reset preloaded chapters since we're changing position
+        // Reset next chapter preload since we're changing position
         m_nextChapterLoaded = false;
         m_nextChapterPages.clear();
-        m_prevChapterLoaded = false;
-        m_prevChapterPages.clear();
         m_currentPage = 0;
-        m_startPage = 0;
-        m_pages.clear();
 
         // Check if we should land at the end of the chapter
         AppSettings& appSettings = Application::getInstance().getSettings();
         m_goToEndAfterLoad = appSettings.goToEndOnPrevChapter;
 
-        // Clear webtoon scroll view to reset scroll position for new chapter
-        if (m_continuousScrollMode && webtoonScroll) {
-            webtoonScroll->clearPages();
-        }
+        // Use preloaded pages if available for instant transition (avoids memory spike)
+        if (m_prevChapterLoaded && !m_prevChapterPages.empty()) {
+            m_pages = std::move(m_prevChapterPages);
+            m_prevChapterLoaded = false;
+            m_prevChapterPages.clear();
 
-        loadPages();
+            // Insert fake transition pages at chapter boundaries
+            m_realPageCount = static_cast<int>(m_pages.size());
+            m_startPage = 0;
+            insertTransitionPages();
+
+            // Land at end or beginning depending on setting
+            if (m_goToEndAfterLoad) {
+                m_goToEndAfterLoad = false;
+                m_currentPage = static_cast<int>(m_pages.size()) - 1;
+                while (m_currentPage > 0 && isTransitionPage(m_currentPage)) {
+                    m_currentPage--;
+                }
+            } else {
+                m_currentPage = isTransitionPage(0) ? 1 : 0;
+            }
+
+            // Update UI
+            if (chapterLabel) {
+                std::string label = m_chapterName.empty() ?
+                    "Chapter " + getChapterDisplayNumber() : m_chapterName;
+                chapterLabel->setText(label);
+            }
+            if (chapterProgress) {
+                chapterProgress->setText("Ch. " + getChapterDisplayNumber() +
+                                         " of " + std::to_string(m_totalChapters));
+            }
+
+            // Handle webtoon mode vs single-page mode
+            if (m_continuousScrollMode && webtoonScroll) {
+                webtoonScroll->setPages(m_pages, 960.0f);
+                webtoonScroll->scrollToPage(m_currentPage);
+            } else {
+                loadPage(m_currentPage);
+            }
+
+            updatePageDisplay();
+
+            // Start preloading adjacent chapters
+            preloadNextChapter();
+            preloadPrevChapter();
+        } else {
+            m_prevChapterLoaded = false;
+            m_prevChapterPages.clear();
+            m_startPage = 0;
+            m_pages.clear();
+
+            // Clear webtoon scroll view to reset scroll position for new chapter
+            if (m_continuousScrollMode && webtoonScroll) {
+                webtoonScroll->clearPages();
+            }
+
+            loadPages();
+        }
     }
 }
 
@@ -2673,6 +2724,9 @@ void ReaderActivity::preloadNextChapter() {
     if (m_nextChapterLoaded || m_chapterPosition < 0 || m_chapterPosition >= m_totalChapters - 1) {
         return;  // Already loaded or no next chapter
     }
+    if (m_chapterPosition + 1 >= static_cast<int>(m_chapters.size())) {
+        return;  // Bounds check
+    }
 
     int nextChapterId = m_chapters[m_chapterPosition + 1].id;
     brls::Logger::info("Preloading next chapter id={}", nextChapterId);
@@ -2728,6 +2782,9 @@ void ReaderActivity::preloadNextChapter() {
 void ReaderActivity::preloadPrevChapter() {
     if (m_prevChapterLoaded || m_chapterPosition <= 0) {
         return;
+    }
+    if (m_chapterPosition - 1 >= static_cast<int>(m_chapters.size())) {
+        return;  // Bounds check
     }
 
     int prevChapterId = m_chapters[m_chapterPosition - 1].id;
