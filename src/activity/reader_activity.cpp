@@ -2212,77 +2212,9 @@ void ReaderActivity::renderTransitionPage(int index) {
     if (transitionLine2) transitionLine2->setText(line2);
     transitionBox->setVisibility(brls::Visibility::VISIBLE);
 
-    // Load a preview of the target chapter's first page
+    // Hide the preview thumbnail — not needed on the transition page
     if (transitionPreview) {
         transitionPreview->setVisibility(brls::Visibility::GONE);
-
-        std::string previewUrl;
-
-        if (url == TRANSITION_NEXT && m_nextChapterLoaded && !m_nextChapterPages.empty()) {
-            // Use preloaded next chapter data directly
-            previewUrl = m_nextChapterPages[0].imageUrl;
-        }
-
-        if (!previewUrl.empty()) {
-            // Load immediately from known URL
-            transitionPreview->setVisibility(brls::Visibility::VISIBLE);
-            ImageLoader::loadAsync(previewUrl, nullptr, transitionPreview, m_alive);
-        } else if (url == TRANSITION_NEXT &&
-                   m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
-            // Fetch first page of next chapter async
-            int targetChapterId = m_chapters[m_chapterPosition + 1].id;
-            int mangaId = m_mangaId;
-            auto sharedPages = std::make_shared<std::vector<Page>>();
-            std::weak_ptr<bool> aliveWeak = m_alive;
-
-            vitasuwayomi::asyncTask<bool>([mangaId, targetChapterId, sharedPages]() {
-                DownloadsManager& localMgr = DownloadsManager::getInstance();
-                if (localMgr.isChapterDownloaded(mangaId, targetChapterId)) {
-                    auto localPaths = localMgr.getChapterPages(mangaId, targetChapterId);
-                    if (!localPaths.empty()) {
-                        Page p; p.imageUrl = localPaths[0];
-                        sharedPages->push_back(p);
-                        return true;
-                    }
-                }
-                if (!Application::getInstance().isConnected()) return false;
-                return SuwayomiClient::getInstance().fetchChapterPages(mangaId, targetChapterId, *sharedPages);
-            }, [this, aliveWeak, sharedPages](bool success) {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-                if (success && !sharedPages->empty() && transitionPreview) {
-                    transitionPreview->setVisibility(brls::Visibility::VISIBLE);
-                    ImageLoader::loadAsync(sharedPages->at(0).imageUrl, nullptr, transitionPreview, m_alive);
-                }
-            });
-        } else if (url == TRANSITION_PREV && m_chapterPosition > 0) {
-            // Fetch first page of previous chapter async
-            int targetChapterId = m_chapters[m_chapterPosition - 1].id;
-            int mangaId = m_mangaId;
-            auto sharedPages = std::make_shared<std::vector<Page>>();
-            std::weak_ptr<bool> aliveWeak = m_alive;
-
-            vitasuwayomi::asyncTask<bool>([mangaId, targetChapterId, sharedPages]() {
-                DownloadsManager& localMgr = DownloadsManager::getInstance();
-                if (localMgr.isChapterDownloaded(mangaId, targetChapterId)) {
-                    auto localPaths = localMgr.getChapterPages(mangaId, targetChapterId);
-                    if (!localPaths.empty()) {
-                        Page p; p.imageUrl = localPaths[0];
-                        sharedPages->push_back(p);
-                        return true;
-                    }
-                }
-                if (!Application::getInstance().isConnected()) return false;
-                return SuwayomiClient::getInstance().fetchChapterPages(mangaId, targetChapterId, *sharedPages);
-            }, [this, aliveWeak, sharedPages](bool success) {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-                if (success && !sharedPages->empty() && transitionPreview) {
-                    transitionPreview->setVisibility(brls::Visibility::VISIBLE);
-                    ImageLoader::loadAsync(sharedPages->at(0).imageUrl, nullptr, transitionPreview, m_alive);
-                }
-            });
-        }
     }
 
     // Transfer focus to transitionBox so dpad registerAction callbacks fire
@@ -2425,17 +2357,9 @@ void ReaderActivity::loadPreviewPage(int index) {
         if (transitionLine1) transitionLine1->setText(line1);
         if (transitionLine2) transitionLine2->setText(line2);
 
-        // Load transition preview thumbnail
+        // Hide preview thumbnail on transition swipe preview
         if (transitionPreview) {
             transitionPreview->setVisibility(brls::Visibility::GONE);
-            std::string previewUrl;
-            if (url == TRANSITION_NEXT && m_nextChapterLoaded && !m_nextChapterPages.empty()) {
-                previewUrl = m_nextChapterPages[0].imageUrl;
-            }
-            if (!previewUrl.empty()) {
-                transitionPreview->setVisibility(brls::Visibility::VISIBLE);
-                ImageLoader::loadAsync(previewUrl, nullptr, transitionPreview, m_alive);
-            }
         }
 
         // Make transitionBox visible but it will be positioned off-screen by updateSwipePreview
@@ -2484,15 +2408,33 @@ void ReaderActivity::loadPreviewPage(int index) {
 void ReaderActivity::completeSwipeAnimation(bool turnPage) {
     if (turnPage && m_swipeToChapter) {
         // Swiped on a transition page showing a chapter page preview —
-        // navigate to that chapter directly
+        // navigate to that chapter directly.
+        // Hide everything cleanly BEFORE navigating to avoid visual snap-back.
         m_swipeToChapter = false;
+        m_previewIsTransition = false;
+        m_isSwipeAnimating = false;
+        m_swipeOffset = 0.0f;
+        m_previewPageIndex = -1;
+
+        if (transitionBox) {
+            transitionBox->setTranslationX(0.0f);
+            transitionBox->setTranslationY(0.0f);
+            transitionBox->setVisibility(brls::Visibility::GONE);
+        }
+        if (previewImage) {
+            previewImage->setTranslationX(0.0f);
+            previewImage->setTranslationY(0.0f);
+            previewImage->setVisibility(brls::Visibility::GONE);
+        }
+        if (pageImage) {
+            pageImage->setTranslationX(0.0f);
+            pageImage->setTranslationY(0.0f);
+        }
 
         if (m_swipingToNext) {
-            resetSwipeState();
             nextChapter();
             return;
         } else {
-            resetSwipeState();
             previousChapter();
             return;
         }
