@@ -872,8 +872,20 @@ void ReaderActivity::onContentAvailable() {
     // Page slider in bottom bar
     if (pageSlider) {
         pageSlider->getProgressEvent()->subscribe([this](float progress) {
-            if (m_pages.empty()) return;
-            int targetPage = static_cast<int>(progress * (m_pages.size() - 1));
+            if (m_updatingSlider) return;  // Ignore programmatic setProgress
+            if (m_pages.empty() || m_realPageCount <= 0) return;
+            // Convert slider progress back to internal page index.
+            // Progress was calculated as displayPage / (m_realPageCount - 1),
+            // so reverse that to get the display page, then add the transition offset.
+            int displayPage = static_cast<int>(progress * std::max(1, m_realPageCount - 1) + 0.5f);
+            int targetPage = displayPage;
+            // Adjust for the transition page prepended at index 0
+            if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
+                targetPage = displayPage + 1;
+            }
+            // Clamp to valid range and skip transition pages
+            targetPage = std::max(0, std::min(targetPage, static_cast<int>(m_pages.size()) - 1));
+            if (isTransitionPage(targetPage)) return;
             if (targetPage != m_currentPage) {
                 goToPage(targetPage);
             }
@@ -1440,7 +1452,9 @@ void ReaderActivity::updatePageDisplay() {
     if (pageSlider && m_realPageCount > 0) {
         float progress = static_cast<float>(displayPage) /
                         static_cast<float>(std::max(1, m_realPageCount - 1));
+        m_updatingSlider = true;
         pageSlider->setProgress(progress);
+        m_updatingSlider = false;
     }
 }
 

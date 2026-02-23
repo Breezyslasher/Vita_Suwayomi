@@ -255,6 +255,9 @@ private:
     void insertTransitionPages();
     void renderTransitionPage(int index);
     int m_realPageCount = 0;  // Actual page count excluding transition pages
+
+    // Guard flag: prevents slider callback from firing during programmatic setProgress
+    bool m_updatingSlider = false;
 };
 
 } // namespace vitasuwayomi
