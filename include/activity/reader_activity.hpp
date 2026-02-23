@@ -12,6 +12,7 @@
 #include "app/application.hpp"
 #include "view/rotatable_image.hpp"
 #include "view/rotatable_label.hpp"
+#include "view/rotatable_box.hpp"
 #include "view/webtoon_scroll_view.hpp"
 
 namespace vitasuwayomi {
@@ -138,11 +139,23 @@ private:
     // Webtoon continuous scroll view
     BRLS_BIND(WebtoonScrollView, webtoonScroll, "reader/webtoon_scroll");
 
+    // Transition page (between chapters)
+    BRLS_BIND(RotatableBox, transitionBox, "reader/transition_box");
+    BRLS_BIND(brls::Label, transitionLine1, "reader/transition_line1");
+    BRLS_BIND(brls::Label, transitionLine2, "reader/transition_line2");
+    BRLS_BIND(brls::Image, transitionPreview, "reader/transition_preview");
+
     // Manga/Chapter info
     int m_mangaId = 0;
-    int m_chapterIndex = 0;
+    int m_chapterIndex = 0;      // Chapter ID (server ID, NOT sequential number)
+    int m_chapterPosition = -1;  // Position of current chapter in m_chapters list
     std::string m_mangaTitle;
     std::string m_chapterName;
+
+    // Find position of current chapter in m_chapters by matching chapter ID
+    void findChapterPosition();
+    // Get display string for current chapter number
+    std::string getChapterDisplayNumber() const;
 
     // Pages
     std::vector<Page> m_pages;
@@ -168,7 +181,19 @@ private:
     // Next chapter preloading
     std::vector<Page> m_nextChapterPages;
     bool m_nextChapterLoaded = false;
+    bool m_goToEndAfterLoad = false;  // When true, jump to last page after chapter loads
     void preloadNextChapter();
+
+    // Previous chapter preloading (for smooth backward swipe preview)
+    std::vector<Page> m_prevChapterPages;
+    bool m_prevChapterLoaded = false;
+    void preloadPrevChapter();
+
+    // Swipe-to-chapter tracking: when swiping shows a cross-chapter preview,
+    // completing the swipe should trigger chapter navigation instead of page nav
+    bool m_swipeToChapter = false;
+    // When true, the incoming preview is the transitionBox (not previewImage)
+    bool m_previewIsTransition = false;
 
     // Reader background color support
     void updateMarginColors();
@@ -220,6 +245,19 @@ private:
     bool m_loadedFromLocal = false;  // True when current chapter was loaded from local downloads
     void showPageError(const std::string& message);
     void hidePageError();
+
+    // Fake transition pages inserted into m_pages at chapter boundaries
+    // They use special imageUrl markers and are rendered as text pages
+    static constexpr const char* TRANSITION_NEXT = "__transition:next";
+    static constexpr const char* TRANSITION_PREV = "__transition:prev";
+    static constexpr const char* TRANSITION_END  = "__transition:end";
+    bool isTransitionPage(int index) const;
+    void insertTransitionPages();
+    void renderTransitionPage(int index);
+    int m_realPageCount = 0;  // Actual page count excluding transition pages
+
+    // Guard flag: prevents slider callback from firing during programmatic setProgress
+    bool m_updatingSlider = false;
 };
 
 } // namespace vitasuwayomi
