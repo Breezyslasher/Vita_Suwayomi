@@ -42,16 +42,19 @@ namespace vitasuwayomi {
 // Static member initialization
 std::list<ImageLoader::CacheEntry> ImageLoader::s_cacheList;
 std::map<std::string, std::list<ImageLoader::CacheEntry>::iterator> ImageLoader::s_cacheMap;
-size_t ImageLoader::s_maxCacheSize = 200;  // LRU cache: 200 entries for large libraries
+size_t ImageLoader::s_maxCacheSize = 30;  // LRU cache: 30 entries to limit PS Vita memory usage
+size_t ImageLoader::s_currentCacheMemory = 0;
+static const size_t MAX_CACHE_MEMORY = 25 * 1024 * 1024;  // 25MB max cache memory (Vita has ~192MB total)
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
 std::string ImageLoader::s_accessToken;
+std::mutex ImageLoader::s_authMutex;
 std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
 std::condition_variable ImageLoader::s_queueCV;
-int ImageLoader::s_maxConcurrentLoads = 20;  // Worker thread count for concurrent downloads
+int ImageLoader::s_maxConcurrentLoads = 3;  // Worker thread count - kept low for PS Vita memory limits
 int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
 // Worker thread pool
@@ -88,6 +91,7 @@ static int extractMangaIdFromUrl(const std::string& url) {
 // Helper function to downscale RGBA image
 static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
                           uint8_t* dst, int dstW, int dstH) {
+    if (!src || !dst || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0) return;
     float scaleX = (float)srcW / dstW;
     float scaleY = (float)srcH / dstH;
 
@@ -111,7 +115,10 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
 
 // Helper to create TGA from RGBA data
 static std::vector<uint8_t> createTGAFromRGBA(const uint8_t* rgba, int width, int height) {
-    size_t imageSize = width * height * 4;
+    if (width <= 0 || height <= 0 || !rgba) return {};
+    size_t imageSize = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
+    // Sanity check: reject absurdly large images (>256MB pixel data)
+    if (imageSize > 256 * 1024 * 1024) return {};
     std::vector<uint8_t> tgaData(18 + imageSize);
 
     uint8_t* header = tgaData.data();
@@ -152,10 +159,14 @@ static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, siz
                                                      int segment, int totalSegments, int maxSize) {
     std::vector<uint8_t> tgaData;
 
+    if (totalSegments < 1 || segment < 0 || segment >= totalSegments) return tgaData;
+
     int width, height;
     if (!WebPGetInfo(webpData, webpSize, &width, &height)) {
         return tgaData;
     }
+
+    if (width <= 0 || height <= 0) return tgaData;
 
     uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &width, &height);
     if (!rgba) {
@@ -167,6 +178,11 @@ static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, siz
     int startY = segment * segmentHeight;
     int endY = std::min(startY + segmentHeight, height);
     int actualHeight = endY - startY;
+
+    if (actualHeight <= 0 || startY >= height) {
+        WebPFree(rgba);
+        return tgaData;
+    }
 
     // Scale down if still too wide
     int targetW = width;
@@ -205,6 +221,8 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
                                                       int segment, int totalSegments, int maxSize) {
     std::vector<uint8_t> tgaData;
 
+    if (totalSegments < 1 || segment < 0 || segment >= totalSegments) return tgaData;
+
     int width, height, channels;
     // Force 4 channels (RGBA)
     uint8_t* rgba = stbi_load_from_memory(data, static_cast<int>(dataSize), &width, &height, &channels, 4);
@@ -213,11 +231,21 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
         return tgaData;
     }
 
+    if (width <= 0 || height <= 0) {
+        stbi_image_free(rgba);
+        return tgaData;
+    }
+
     // Calculate segment bounds
     int segmentHeight = (height + totalSegments - 1) / totalSegments;
     int startY = segment * segmentHeight;
     int endY = std::min(startY + segmentHeight, height);
     int actualHeight = endY - startY;
+
+    if (actualHeight <= 0 || startY >= height) {
+        stbi_image_free(rgba);
+        return tgaData;
+    }
 
     // Scale down if still too wide
     int targetW = width;
@@ -345,12 +373,29 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
 }
 
 void ImageLoader::setAuthCredentials(const std::string& username, const std::string& password) {
+    std::lock_guard<std::mutex> lock(s_authMutex);
     s_authUsername = username;
     s_authPassword = password;
 }
 
 void ImageLoader::setAccessToken(const std::string& token) {
+    std::lock_guard<std::mutex> lock(s_authMutex);
     s_accessToken = token;
+}
+
+std::string ImageLoader::getAuthUsername() {
+    std::lock_guard<std::mutex> lock(s_authMutex);
+    return s_authUsername;
+}
+
+std::string ImageLoader::getAuthPassword() {
+    std::lock_guard<std::mutex> lock(s_authMutex);
+    return s_authPassword;
+}
+
+std::string ImageLoader::getAccessToken() {
+    std::lock_guard<std::mutex> lock(s_authMutex);
+    return s_accessToken;
 }
 
 // Helper for Base64 encoding
@@ -430,7 +475,7 @@ static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2)
 }
 
 void ImageLoader::setMaxConcurrentLoads(int max) {
-    s_maxConcurrentLoads = std::max(1, std::min(max, 20));
+    s_maxConcurrentLoads = std::max(1, std::min(max, 6));
 }
 
 void ImageLoader::setMaxThumbnailSize(int maxSize) {
@@ -440,16 +485,19 @@ void ImageLoader::setMaxThumbnailSize(int maxSize) {
 void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& data) {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
 
-    // If key already exists, move to front and update data
+    // If key already exists, remove old entry and track memory
     auto it = s_cacheMap.find(url);
     if (it != s_cacheMap.end()) {
+        s_currentCacheMemory -= it->second->data.size();
         s_cacheList.erase(it->second);
         s_cacheMap.erase(it);
     }
 
-    // Evict oldest entries (back of list) if over capacity
-    while (s_cacheList.size() >= s_maxCacheSize) {
+    // Evict oldest entries if over count limit OR memory limit
+    while (s_cacheList.size() >= s_maxCacheSize ||
+           (s_currentCacheMemory + data.size() > MAX_CACHE_MEMORY && !s_cacheList.empty())) {
         auto& oldest = s_cacheList.back();
+        s_currentCacheMemory -= oldest.data.size();
         s_cacheMap.erase(oldest.url);
         s_cacheList.pop_back();
     }
@@ -457,6 +505,7 @@ void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& d
     // Insert at front (most recently used)
     s_cacheList.push_front({url, data});
     s_cacheMap[url] = s_cacheList.begin();
+    s_currentCacheMemory += data.size();
 }
 
 bool ImageLoader::cacheGet(const std::string& url, std::vector<uint8_t>& data) {
@@ -562,6 +611,9 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         brls::Logger::warning("ImageLoader: Failed to load {} (status {})", url, resp.statusCode);
         return;
     }
+
+    // Check alive flag after download - skip decode if owner was destroyed
+    if (alive && !*alive) return;
 
     // Check image format
     bool isWebP = false;
@@ -757,6 +809,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     RotatableImage* target = request.target;
     int segment = request.segment;
     int totalSegments = request.totalSegments;
+    std::shared_ptr<bool> alive = request.alive;
+
+    // Early out if owner was destroyed before we started
+    if (alive && !*alive) return;
 
     std::string imageBody;
     bool loadSuccess = false;
@@ -809,6 +865,13 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     }
 
     if (loadSuccess && !imageBody.empty()) {
+        // Check alive flag again after download - if the reader was closed while
+        // we were downloading, skip the expensive decode/conversion to save memory
+        if (alive && !*alive) {
+            brls::Logger::debug("ImageLoader: Skipping decode for {} (owner destroyed during download)", url);
+            return;
+        }
+
         brls::Logger::debug("ImageLoader: Loaded {} bytes from {} for RotatableImage", imageBody.size(), url);
 
         // Check image format
@@ -929,20 +992,28 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
         cachePut(cacheKey, imageData);
 
-        // Update UI on main thread
-        brls::sync([imageData, callback, target]() {
-            if (target) {
-                target->setImageFromMem(imageData.data(), imageData.size());
-                if (callback) callback(target);
-            }
-        });
+        // Update UI on main thread (check alive flag to prevent use-after-free)
+        // Skip sync callback entirely for preload-only requests (no target/callback)
+        // to avoid copying large image data into the sync queue unnecessarily
+        if (target || callback) {
+            // Move imageData into the lambda to avoid expensive copy (C++14 init-capture)
+            brls::sync([imageData = std::move(imageData), callback, target, alive]() {
+                if (alive && !*alive) return;  // Owner destroyed, skip
+                if (target) {
+                    target->setImageFromMem(imageData.data(), imageData.size());
+                    if (callback) callback(target);
+                }
+            });
+        }
     } else {
         brls::Logger::error("ImageLoader: Failed to load {}", url);
     }
 }
 
-void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target) {
+void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallback callback, RotatableImage* target,
+                                    std::shared_ptr<bool> alive) {
     if (url.empty() || !target) return;
+    if (alive && !*alive) return;
 
     // Check LRU cache first
     std::string cacheKey = url + "_full";
@@ -958,7 +1029,7 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
     // Add to rotatable queue
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_rotatableLoadQueue.push({url, callback, target, 0, 1});  // segment=0, totalSegments=1
+        s_rotatableLoadQueue.push({url, callback, target, 0, 1, alive});
     }
 
     s_queueCV.notify_one();
@@ -966,8 +1037,17 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
 }
 
 void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, int totalSegments,
-                                            RotatableLoadCallback callback, RotatableImage* target) {
+                                            RotatableLoadCallback callback, RotatableImage* target,
+                                            std::shared_ptr<bool> alive) {
     if (url.empty() || !target) return;
+    if (alive && !*alive) return;
+
+    // Validate segment parameters to prevent divide-by-zero and out-of-bounds
+    if (totalSegments < 1) totalSegments = 1;
+    if (segment < 0 || segment >= totalSegments) {
+        brls::Logger::error("ImageLoader: Invalid segment {}/{}", segment, totalSegments);
+        return;
+    }
 
     // Check LRU cache first (with segment key)
     std::string cacheKey = url + "_full_seg" + std::to_string(segment);
@@ -983,7 +1063,7 @@ void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, 
     // Add to rotatable queue with segment info
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
-        s_rotatableLoadQueue.push({url, callback, target, segment, totalSegments});
+        s_rotatableLoadQueue.push({url, callback, target, segment, totalSegments, alive});
     }
 
     s_queueCV.notify_one();
@@ -1151,6 +1231,7 @@ void ImageLoader::clearCache() {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
     s_cacheList.clear();
     s_cacheMap.clear();
+    s_currentCacheMemory = 0;
 }
 
 void ImageLoader::cancelAll() {

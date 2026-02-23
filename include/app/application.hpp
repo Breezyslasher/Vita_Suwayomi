@@ -117,6 +117,7 @@ struct AppSettings {
     bool keepScreenOn = true;
     bool showPageNumber = true;
     bool tapToNavigate = true;
+    bool goToEndOnPrevChapter = true;  // When going back to prev chapter, land on last page instead of first
 
     // Webtoon Settings (also applies to vertical mode)
     bool cropBorders = false;           // Auto-crop white/black borders from pages

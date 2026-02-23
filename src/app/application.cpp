@@ -342,6 +342,7 @@ bool Application::loadSettings() {
     m_settings.keepScreenOn = extractBool("keepScreenOn", true);
     m_settings.showPageNumber = extractBool("showPageNumber", true);
     m_settings.tapToNavigate = extractBool("tapToNavigate", true);
+    m_settings.goToEndOnPrevChapter = extractBool("goToEndOnPrevChapter", true);
 
     // Load webtoon settings
     m_settings.cropBorders = extractBool("cropBorders", false);
@@ -735,6 +736,7 @@ bool Application::saveSettings() {
     json += "  \"keepScreenOn\": " + std::string(m_settings.keepScreenOn ? "true" : "false") + ",\n";
     json += "  \"showPageNumber\": " + std::string(m_settings.showPageNumber ? "true" : "false") + ",\n";
     json += "  \"tapToNavigate\": " + std::string(m_settings.tapToNavigate ? "true" : "false") + ",\n";
+    json += "  \"goToEndOnPrevChapter\": " + std::string(m_settings.goToEndOnPrevChapter ? "true" : "false") + ",\n";
 
     // Webtoon settings
     json += "  \"cropBorders\": " + std::string(m_settings.cropBorders ? "true" : "false") + ",\n";
