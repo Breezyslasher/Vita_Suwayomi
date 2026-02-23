@@ -184,9 +184,16 @@ private:
     bool m_goToEndAfterLoad = false;  // When true, jump to last page after chapter loads
     void preloadNextChapter();
 
+    // Previous chapter preloading (for smooth backward swipe preview)
+    std::vector<Page> m_prevChapterPages;
+    bool m_prevChapterLoaded = false;
+    void preloadPrevChapter();
+
     // Swipe-to-chapter tracking: when swiping shows a cross-chapter preview,
     // completing the swipe should trigger chapter navigation instead of page nav
     bool m_swipeToChapter = false;
+    // When true, the incoming preview is the transitionBox (not previewImage)
+    bool m_previewIsTransition = false;
 
     // Reader background color support
     void updateMarginColors();
