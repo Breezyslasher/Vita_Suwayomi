@@ -703,26 +703,21 @@ void ReaderActivity::onContentAvailable() {
                             m_previewIsTransition = false;
                             const std::string& tUrl = m_pages[m_currentPage].imageUrl;
 
-                            brls::Logger::info("TSWIPE OOB: previewIdx={} wantNext={} tUrl={} nextLoaded={} prevLoaded={}",
-                                previewIndex, wantNextPage, tUrl, m_nextChapterLoaded, m_prevChapterLoaded);
-
                             std::string chapterPageUrl;
                             if (wantNextPage && tUrl == TRANSITION_NEXT &&
                                 m_nextChapterLoaded && !m_nextChapterPages.empty()) {
                                 chapterPageUrl = m_nextChapterPages[0].imageUrl;
-                                brls::Logger::info("TSWIPE OOB: using next chapter page: {}", chapterPageUrl);
                             } else if (!wantNextPage && tUrl == TRANSITION_PREV &&
                                        m_prevChapterLoaded && !m_prevChapterPages.empty()) {
                                 chapterPageUrl = m_prevChapterPages.back().imageUrl;
-                                brls::Logger::info("TSWIPE OOB: using prev chapter page: {}", chapterPageUrl);
-                            } else {
-                                brls::Logger::info("TSWIPE OOB: no chapter page available");
                             }
+
+                            brls::Logger::info("TSWIPE OOB: previewIdx={} wantNext={} chapterPage={}",
+                                previewIndex, wantNextPage, chapterPageUrl.empty() ? "(none)" : chapterPageUrl);
 
                             if (!chapterPageUrl.empty() && previewImage) {
                                 m_previewPageIndex = previewIndex;  // mark as loaded (out of bounds value)
                                 m_swipeToChapter = true;
-                                brls::Logger::info("TSWIPE OOB: set m_swipeToChapter=true m_previewPageIndex={}", previewIndex);
                                 previewImage->setRotation(static_cast<float>(m_settings.rotation));
                                 std::weak_ptr<bool> aliveWeak = m_alive;
                                 ImageLoader::loadAsyncFullSize(chapterPageUrl,
@@ -763,15 +758,12 @@ void ReaderActivity::onContentAvailable() {
                         bool hasValidPreview = m_previewPageIndex >= 0 &&
                             m_previewPageIndex < static_cast<int>(m_pages.size());
                         if (absSwipe >= PAGE_TURN_THRESHOLD && (hasValidPreview || m_swipeToChapter)) {
-                            brls::Logger::info("TSWIPE END: completing swipe (preview or chapter)");
                             completeSwipeAnimation(true);
                         } else if (absSwipe >= PAGE_TURN_THRESHOLD) {
                             // No preview page in that direction — on a transition page
                             // this triggers chapter navigation, otherwise just snap back
-                            brls::Logger::info("TSWIPE END: completing swipe (fallback chapter nav)");
                             completeSwipeAnimation(true);
                         } else {
-                            brls::Logger::info("TSWIPE END: snap back (absSwipe={:.1f} < threshold={})", absSwipe, PAGE_TURN_THRESHOLD);
                             completeSwipeAnimation(false);
                         }
                     } else {
@@ -1229,6 +1221,7 @@ void ReaderActivity::loadPages() {
             while (m_currentPage > 0 && isTransitionPage(m_currentPage)) {
                 m_currentPage--;
             }
+            brls::Logger::info("loadPages: goToEnd → page {}/{}", m_currentPage, static_cast<int>(m_pages.size()));
         } else {
             m_currentPage = std::min(m_startPage, static_cast<int>(m_pages.size()) - 1);
             m_currentPage = std::max(0, m_currentPage);
@@ -1241,6 +1234,9 @@ void ReaderActivity::loadPages() {
                     }
                 }
             }
+            brls::Logger::info("loadPages: startPage={} → page {}/{} url={}",
+                m_startPage, m_currentPage, static_cast<int>(m_pages.size()),
+                m_currentPage < static_cast<int>(m_pages.size()) ? m_pages[m_currentPage].imageUrl : "?");
         }
 
         // Check if we should use continuous scroll mode for webtoon
@@ -1582,6 +1578,7 @@ void ReaderActivity::nextChapter() {
         m_chapterIndex = m_chapters[m_chapterPosition].id;
         m_chapterName = m_chapters[m_chapterPosition].name;
         m_currentPage = 0;
+        m_goToEndAfterLoad = false;  // Always start at the beginning for next chapter
         m_prevChapterLoaded = false;
         m_prevChapterPages.clear();
 
@@ -1620,8 +1617,9 @@ void ReaderActivity::nextChapter() {
 
             updatePageDisplay();
 
-            // Start preloading next chapter
+            // Start preloading adjacent chapters
             preloadNextChapter();
+            preloadPrevChapter();
         } else {
             m_startPage = 0;
             m_pages.clear();
@@ -2580,16 +2578,17 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
     }
 
     // Reset positions
-    brls::Logger::info("COMPLETE: taking DEFAULT reset path");
     resetSwipeState();
 }
 
 void ReaderActivity::resetSwipeState() {
-    brls::Logger::info("RESET: wasTransitionPreview={} currentPage={} isTransition={}",
-        m_previewIsTransition, m_currentPage, isTransitionPage(m_currentPage));
     // If transitionBox was shown as a preview for an incoming transition page,
     // hide it again since we're snapping back to the current real page
     bool wasTransitionPreview = m_previewIsTransition;
+    if (wasTransitionPreview) {
+        brls::Logger::info("RESET: wasTransitionPreview=true currentPage={} isTransition={}",
+            m_currentPage, isTransitionPage(m_currentPage));
+    }
 
     m_swipeToChapter = false;
     m_previewIsTransition = false;
