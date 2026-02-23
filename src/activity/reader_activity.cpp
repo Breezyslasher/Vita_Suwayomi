@@ -2316,9 +2316,45 @@ void ReaderActivity::loadPreviewPage(int index) {
 
     if (!previewImage) return;
 
-    // Transition pages have no image — hide preview, the swipe will just
-    // push the current page off-screen revealing the dark background
+    m_swipeToChapter = false;
+    std::string imageUrl;
+
+    // For transition pages, try to show the first page of the target chapter
     if (isTransitionPage(index)) {
+        const std::string& url = m_pages[index].imageUrl;
+
+        if (url == TRANSITION_NEXT && m_nextChapterLoaded && !m_nextChapterPages.empty()) {
+            // Show first page of next chapter
+            imageUrl = m_nextChapterPages[0].imageUrl;
+            m_swipeToChapter = true;
+        } else if (url == TRANSITION_PREV || url == TRANSITION_NEXT || url == TRANSITION_END) {
+            // No preloaded data available — fall back to no preview
+            previewImage->setVisibility(brls::Visibility::GONE);
+            return;
+        }
+    } else {
+        const Page& page = m_pages[index];
+        imageUrl = page.imageUrl;
+
+        if (page.totalSegments > 1) {
+            // Apply current rotation to preview image before loading
+            previewImage->setRotation(static_cast<float>(m_settings.rotation));
+
+            brls::Logger::debug("Loading preview page {} segment {}/{}",
+                               index, page.segment + 1, page.totalSegments);
+            std::weak_ptr<bool> aliveWeak = m_alive;
+            ImageLoader::loadAsyncFullSizeSegment(
+                imageUrl, page.segment, page.totalSegments,
+                [aliveWeak, index](RotatableImage* img) {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    brls::Logger::debug("Preview page {} (segment) loaded", index);
+                }, previewImage, m_alive);
+            return;
+        }
+    }
+
+    if (imageUrl.empty()) {
         previewImage->setVisibility(brls::Visibility::GONE);
         return;
     }
@@ -2326,35 +2362,30 @@ void ReaderActivity::loadPreviewPage(int index) {
     // Apply current rotation to preview image before loading
     previewImage->setRotation(static_cast<float>(m_settings.rotation));
 
-    const Page& page = m_pages[index];
-    std::string imageUrl = page.imageUrl;
+    brls::Logger::debug("Loading preview page {}{}", index, m_swipeToChapter ? " (chapter preview)" : "");
+
     std::weak_ptr<bool> aliveWeak = m_alive;
-
-    if (page.totalSegments > 1) {
-        brls::Logger::debug("Loading preview page {} segment {}/{}",
-                           index, page.segment + 1, page.totalSegments);
-
-        // Load specific segment for webtoon splitting
-        ImageLoader::loadAsyncFullSizeSegment(
-            imageUrl, page.segment, page.totalSegments,
-            [aliveWeak, index](RotatableImage* img) {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-                brls::Logger::debug("Preview page {} (segment) loaded", index);
-            }, previewImage, m_alive);
-    } else {
-        brls::Logger::debug("Loading preview page {}", index);
-
-        // Load the preview image (full size for manga reader)
-        ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
-            auto alive = aliveWeak.lock();
-            if (!alive || !*alive) return;
-            brls::Logger::debug("Preview page {} loaded", index);
-        }, previewImage, m_alive);
-    }
+    ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive) return;
+        brls::Logger::debug("Preview page {} loaded", index);
+    }, previewImage, m_alive);
 }
 
 void ReaderActivity::completeSwipeAnimation(bool turnPage) {
+    if (turnPage && m_swipeToChapter && m_previewPageIndex >= 0) {
+        // Swiped into a transition page with a chapter preview showing —
+        // go straight to the chapter instead of landing on the transition page
+        if (m_swipingToNext && isTransitionPage(m_previewPageIndex) &&
+            m_pages[m_previewPageIndex].imageUrl == TRANSITION_NEXT) {
+            m_swipeToChapter = false;
+            resetSwipeState();
+            nextChapter();
+            return;
+        }
+        // Fallthrough for other cases
+        m_swipeToChapter = false;
+    }
     if (turnPage && m_previewPageIndex >= 0) {
         // Turn to the preview page
         m_currentPage = m_previewPageIndex;
@@ -2393,6 +2424,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
 }
 
 void ReaderActivity::resetSwipeState() {
+    m_swipeToChapter = false;
     m_isSwipeAnimating = false;
     m_swipeOffset = 0.0f;
     m_previewPageIndex = -1;
@@ -2510,6 +2542,8 @@ void ReaderActivity::preloadNextChapter() {
         }
     });
 }
+
+
 
 void ReaderActivity::updateReaderMode() {
     // Determine if we should use continuous scroll mode

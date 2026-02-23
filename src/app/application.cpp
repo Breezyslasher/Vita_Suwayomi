@@ -342,7 +342,7 @@ bool Application::loadSettings() {
     m_settings.keepScreenOn = extractBool("keepScreenOn", true);
     m_settings.showPageNumber = extractBool("showPageNumber", true);
     m_settings.tapToNavigate = extractBool("tapToNavigate", true);
-    m_settings.goToEndOnPrevChapter = extractBool("goToEndOnPrevChapter", false);
+    m_settings.goToEndOnPrevChapter = extractBool("goToEndOnPrevChapter", true);
 
     // Load webtoon settings
     m_settings.cropBorders = extractBool("cropBorders", false);
