@@ -534,11 +534,13 @@ void ReaderActivity::onContentAvailable() {
                         // Complete swipe animation - use raw delta for threshold
                         float absSwipe = std::abs(rawDelta);
 
-                        if (absSwipe >= PAGE_TURN_THRESHOLD && (m_previewPageIndex >= 0 || m_swipeToChapter)) {
+                        bool hasValidPreview = m_previewPageIndex >= 0 &&
+                            m_previewPageIndex < static_cast<int>(m_pages.size());
+                        if (absSwipe >= PAGE_TURN_THRESHOLD && (hasValidPreview || m_swipeToChapter)) {
                             // Swipe was long enough - turn the page
                             completeSwipeAnimation(true);
-                        } else if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex < 0) {
-                            // No preview page in that direction — on a transition page
+                        } else if (absSwipe >= PAGE_TURN_THRESHOLD) {
+                            // No valid preview in that direction — on a transition page
                             // this triggers chapter navigation, otherwise just snap back
                             completeSwipeAnimation(isTransitionPage(m_currentPage));
                         } else {
@@ -729,7 +731,9 @@ void ReaderActivity::onContentAvailable() {
                                         if (!alive || !*alive) return;
                                     }, previewImage, m_alive);
                             } else {
-                                m_previewPageIndex = -1;
+                                // Mark as checked to prevent re-entry on every STAY event.
+                                // Store the OOB index so previewIndex != m_previewPageIndex fails next time.
+                                m_previewPageIndex = previewIndex;
                             }
                         }
 
@@ -756,10 +760,12 @@ void ReaderActivity::onContentAvailable() {
                         resetSwipeState();
                     } else if (m_isSwipeAnimating) {
                         float absSwipe = std::abs(rawDelta);
-                        if (absSwipe >= PAGE_TURN_THRESHOLD && (m_previewPageIndex >= 0 || m_swipeToChapter)) {
+                        bool hasValidPreview = m_previewPageIndex >= 0 &&
+                            m_previewPageIndex < static_cast<int>(m_pages.size());
+                        if (absSwipe >= PAGE_TURN_THRESHOLD && (hasValidPreview || m_swipeToChapter)) {
                             brls::Logger::info("TSWIPE END: completing swipe (preview or chapter)");
                             completeSwipeAnimation(true);
-                        } else if (absSwipe >= PAGE_TURN_THRESHOLD && m_previewPageIndex < 0) {
+                        } else if (absSwipe >= PAGE_TURN_THRESHOLD) {
                             // No preview page in that direction — on a transition page
                             // this triggers chapter navigation, otherwise just snap back
                             brls::Logger::info("TSWIPE END: completing swipe (fallback chapter nav)");
@@ -2508,8 +2514,9 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
         resetSwipeState();
         return;
     }
-    if (turnPage && m_previewPageIndex >= 0) {
-        // Turn to the preview page
+    if (turnPage && m_previewPageIndex >= 0 &&
+        m_previewPageIndex < static_cast<int>(m_pages.size())) {
+        // Turn to the preview page (must be a valid in-bounds index)
         brls::Logger::info("COMPLETE: taking NORMAL_PAGE path, going to page {}", m_previewPageIndex);
         m_currentPage = m_previewPageIndex;
         updatePageDisplay();
@@ -2520,7 +2527,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
         if (m_currentPage >= static_cast<int>(m_pages.size()) - 3) {
             preloadNextChapter();
         }
-    } else if (turnPage && m_previewPageIndex < 0 && isTransitionPage(m_currentPage)) {
+    } else if (turnPage && isTransitionPage(m_currentPage)) {
         // Swiped past a transition page boundary with no preview page available.
         // Trigger the same chapter navigation as nextPage()/previousPage().
         // Hide everything cleanly to avoid visual snap-back.
