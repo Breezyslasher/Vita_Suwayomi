@@ -1416,6 +1416,7 @@ void ReaderActivity::preloadAdjacentPages() {
 
 void ReaderActivity::updatePageDisplay() {
     // Don't update counters for transition pages
+    if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
     if (isTransitionPage(m_currentPage)) return;
 
     // Calculate display page number (exclude transition pages from count)
@@ -1479,13 +1480,14 @@ void ReaderActivity::updateDirectionLabel() {
 
 void ReaderActivity::updateProgress() {
     // Don't save progress for transition pages
+    if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
     if (isTransitionPage(m_currentPage)) return;
 
     int mangaId = m_mangaId;
     int chapterIndex = m_chapterIndex;
     // Adjust page index to exclude the prepended transition page
     int currentPage = m_currentPage;
-    if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
+    if (m_pages[0].imageUrl == TRANSITION_PREV) {
         currentPage = m_currentPage - 1;
     }
 
@@ -1503,10 +1505,11 @@ void ReaderActivity::updateProgress() {
 
 void ReaderActivity::nextPage() {
     if (m_pages.empty()) return;
+    if (m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
 
     brls::Logger::info("NEXTPAGE: currentPage={}/{} url={}",
         m_currentPage, static_cast<int>(m_pages.size()),
-        m_currentPage < static_cast<int>(m_pages.size()) ? m_pages[m_currentPage].imageUrl : "?");
+        m_pages[m_currentPage].imageUrl);
 
     if (isTransitionPage(m_currentPage)) {
         const std::string& url = m_pages[m_currentPage].imageUrl;
@@ -1541,10 +1544,11 @@ void ReaderActivity::nextPage() {
 
 void ReaderActivity::previousPage() {
     if (m_pages.empty()) return;
+    if (m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
 
     brls::Logger::info("PREVPAGE: currentPage={}/{} url={}",
         m_currentPage, static_cast<int>(m_pages.size()),
-        m_currentPage < static_cast<int>(m_pages.size()) ? m_pages[m_currentPage].imageUrl : "?");
+        m_pages[m_currentPage].imageUrl);
 
     if (isTransitionPage(m_currentPage)) {
         const std::string& url = m_pages[m_currentPage].imageUrl;

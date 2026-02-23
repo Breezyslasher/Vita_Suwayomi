@@ -30,10 +30,10 @@ public:
     // Set JWT access token for Bearer auth
     static void setAccessToken(const std::string& token);
 
-    // Get authentication credentials (for other components that need to download)
-    static const std::string& getAuthUsername() { return s_authUsername; }
-    static const std::string& getAuthPassword() { return s_authPassword; }
-    static const std::string& getAccessToken() { return s_accessToken; }
+    // Get authentication credentials (thread-safe copies for use from worker threads)
+    static std::string getAuthUsername();
+    static std::string getAuthPassword();
+    static std::string getAccessToken();
 
     // Load image asynchronously from URL (with thumbnail downscaling) - for brls::Image
     static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target);
@@ -111,6 +111,7 @@ private:
     static std::list<CacheEntry> s_cacheList;
     static std::map<std::string, std::list<CacheEntry>::iterator> s_cacheMap;
     static size_t s_maxCacheSize;
+    static size_t s_currentCacheMemory;
     static std::mutex s_cacheMutex;
 
     // LRU cache helpers
@@ -119,6 +120,7 @@ private:
     static std::string s_authUsername;
     static std::string s_authPassword;
     static std::string s_accessToken;  // JWT access token for Bearer auth
+    static std::mutex s_authMutex;     // Protects s_authUsername/Password/AccessToken
 
     // Worker thread pool - persistent threads that reuse HTTP connections
     // Each worker has its own HttpClient for TCP connection reuse (keep-alive)

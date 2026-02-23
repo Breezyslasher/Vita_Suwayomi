@@ -42,11 +42,14 @@ namespace vitasuwayomi {
 // Static member initialization
 std::list<ImageLoader::CacheEntry> ImageLoader::s_cacheList;
 std::map<std::string, std::list<ImageLoader::CacheEntry>::iterator> ImageLoader::s_cacheMap;
-size_t ImageLoader::s_maxCacheSize = 200;  // LRU cache: 200 entries for large libraries
+size_t ImageLoader::s_maxCacheSize = 50;  // LRU cache: 50 entries to limit PS Vita memory usage
+size_t ImageLoader::s_currentCacheMemory = 0;
+static const size_t MAX_CACHE_MEMORY = 40 * 1024 * 1024;  // 40MB max cache memory
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
 std::string ImageLoader::s_accessToken;
+std::mutex ImageLoader::s_authMutex;
 std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
 std::mutex ImageLoader::s_queueMutex;
@@ -370,12 +373,29 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
 }
 
 void ImageLoader::setAuthCredentials(const std::string& username, const std::string& password) {
+    std::lock_guard<std::mutex> lock(s_authMutex);
     s_authUsername = username;
     s_authPassword = password;
 }
 
 void ImageLoader::setAccessToken(const std::string& token) {
+    std::lock_guard<std::mutex> lock(s_authMutex);
     s_accessToken = token;
+}
+
+std::string ImageLoader::getAuthUsername() {
+    std::lock_guard<std::mutex> lock(s_authMutex);
+    return s_authUsername;
+}
+
+std::string ImageLoader::getAuthPassword() {
+    std::lock_guard<std::mutex> lock(s_authMutex);
+    return s_authPassword;
+}
+
+std::string ImageLoader::getAccessToken() {
+    std::lock_guard<std::mutex> lock(s_authMutex);
+    return s_accessToken;
 }
 
 // Helper for Base64 encoding
@@ -465,16 +485,19 @@ void ImageLoader::setMaxThumbnailSize(int maxSize) {
 void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& data) {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
 
-    // If key already exists, move to front and update data
+    // If key already exists, remove old entry and track memory
     auto it = s_cacheMap.find(url);
     if (it != s_cacheMap.end()) {
+        s_currentCacheMemory -= it->second->data.size();
         s_cacheList.erase(it->second);
         s_cacheMap.erase(it);
     }
 
-    // Evict oldest entries (back of list) if over capacity
-    while (s_cacheList.size() >= s_maxCacheSize) {
+    // Evict oldest entries if over count limit OR memory limit
+    while (s_cacheList.size() >= s_maxCacheSize ||
+           (s_currentCacheMemory + data.size() > MAX_CACHE_MEMORY && !s_cacheList.empty())) {
         auto& oldest = s_cacheList.back();
+        s_currentCacheMemory -= oldest.data.size();
         s_cacheMap.erase(oldest.url);
         s_cacheList.pop_back();
     }
@@ -482,6 +505,7 @@ void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& d
     // Insert at front (most recently used)
     s_cacheList.push_front({url, data});
     s_cacheMap[url] = s_cacheList.begin();
+    s_currentCacheMemory += data.size();
 }
 
 bool ImageLoader::cacheGet(const std::string& url, std::vector<uint8_t>& data) {
@@ -959,13 +983,18 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         cachePut(cacheKey, imageData);
 
         // Update UI on main thread (check alive flag to prevent use-after-free)
-        brls::sync([imageData, callback, target, alive]() {
-            if (alive && !*alive) return;  // Owner destroyed, skip
-            if (target) {
-                target->setImageFromMem(imageData.data(), imageData.size());
-                if (callback) callback(target);
-            }
-        });
+        // Skip sync callback entirely for preload-only requests (no target/callback)
+        // to avoid copying large image data into the sync queue unnecessarily
+        if (target || callback) {
+            // Move imageData into the lambda to avoid expensive copy (C++14 init-capture)
+            brls::sync([imageData = std::move(imageData), callback, target, alive]() {
+                if (alive && !*alive) return;  // Owner destroyed, skip
+                if (target) {
+                    target->setImageFromMem(imageData.data(), imageData.size());
+                    if (callback) callback(target);
+                }
+            });
+        }
     } else {
         brls::Logger::error("ImageLoader: Failed to load {}", url);
     }
@@ -1192,6 +1221,7 @@ void ImageLoader::clearCache() {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
     s_cacheList.clear();
     s_cacheMap.clear();
+    s_currentCacheMemory = 0;
 }
 
 void ImageLoader::cancelAll() {

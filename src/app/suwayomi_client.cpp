@@ -27,6 +27,7 @@ SuwayomiClient& SuwayomiClient::getInstance() {
 }
 
 std::string SuwayomiClient::buildApiUrl(const std::string& endpoint) {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     std::string url = m_serverUrl;
 
     // Remove trailing slash
@@ -41,6 +42,7 @@ std::string SuwayomiClient::buildApiUrl(const std::string& endpoint) {
 }
 
 std::string SuwayomiClient::buildGraphQLUrl() {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     std::string url = m_serverUrl;
 
     // Remove trailing slash
@@ -151,6 +153,8 @@ static std::string base64Encode(const std::string& input) {
 
 // Helper to create an HTTP client with authentication headers
 vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
     vitasuwayomi::HttpClient http;
     http.setDefaultHeader("Accept", "application/json");
 
@@ -2124,6 +2128,7 @@ bool SuwayomiClient::testConnection() {
 }
 
 void SuwayomiClient::setAuthCredentials(const std::string& username, const std::string& password) {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_authUsername = username;
     m_authPassword = password;
 
@@ -2132,6 +2137,7 @@ void SuwayomiClient::setAuthCredentials(const std::string& username, const std::
 }
 
 void SuwayomiClient::clearAuth() {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_authUsername.clear();
     m_authPassword.clear();
     m_accessToken.clear();
@@ -2143,6 +2149,7 @@ void SuwayomiClient::clearAuth() {
 }
 
 void SuwayomiClient::setTokens(const std::string& accessToken, const std::string& refreshToken) {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_accessToken = accessToken;
     m_refreshToken = refreshToken;
     // Also update ImageLoader with access token
@@ -2152,6 +2159,7 @@ void SuwayomiClient::setTokens(const std::string& accessToken, const std::string
 }
 
 void SuwayomiClient::setSessionCookie(const std::string& cookie) {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_sessionCookie = cookie;
 }
 
@@ -2171,6 +2179,7 @@ bool SuwayomiClient::isAuthenticated() const {
 }
 
 void SuwayomiClient::logout() {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_accessToken.clear();
     m_refreshToken.clear();
     m_sessionCookie.clear();
@@ -2277,6 +2286,8 @@ bool SuwayomiClient::loginGraphQL(const std::string& username, const std::string
 }
 
 bool SuwayomiClient::refreshToken() {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
     if (m_authMode != AuthMode::UI_LOGIN && m_authMode != AuthMode::SIMPLE_LOGIN) {
         return true;  // No token refresh needed for basic auth or no auth
     }
