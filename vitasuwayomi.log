@@ -1,86 +1,159 @@
-01:35:03.312 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
-01:35:03.903 [INFO] DownloadsManager: Initializing...
-01:35:03.909 [DEBUG] DownloadsManager: No saved state found
-01:35:03.909 [INFO] DownloadsManager: Initialized with 0 downloads
-01:35:03.909 [INFO] VitaSuwayomi 1.0.0 initializing...
-01:35:03.911 [DEBUG] sceIoMkdir result: -0x7ffeffef
-01:35:03.911 [INFO] Loading saved settings...
-01:35:03.912 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
-01:35:03.913 [DEBUG] loadSettings: File size = 3457
-01:35:03.926 [DEBUG] loadSettings: Read 3457 bytes
-01:35:03.933 [INFO] loadSettings: serverUrl=http://192.168.1.28:4568
-01:35:03.944 [DEBUG] Loaded 4 hidden categories
-01:35:03.954 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
-01:35:03.968 [INFO] loadSettings: enabledSourceLanguages count = 2
-01:35:03.973 [INFO] loadSettings: localUrl=http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
-01:35:03.978 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=3, defaultSort=0, groupMode=0
-01:35:03.985 [DEBUG] Loaded 2 per-category sort modes
-01:35:03.994 [DEBUG] Loaded 2 search history entries
-01:35:04.004 [DEBUG] Loaded 10 per-manga reader settings
-01:35:04.015 [INFO] Restored auth credentials for user: Breezyslasher
-01:35:04.026 [INFO] Restored auth tokens
-01:35:04.037 [INFO] Settings loaded successfully
-01:35:04.043 [INFO] Settings load result: success
-01:35:04.048 [INFO] Applied theme: Dark
-01:35:04.055 [INFO] Debug logging disabled
-01:35:04.061 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
-01:35:04.069 [INFO] Application::run - isConnected=false, serverUrl=http://192.168.1.28:4568
-01:35:04.078 [INFO] Restoring saved connection...
-01:35:04.089 [INFO] Attempting to refresh JWT tokens...
-01:35:04.130 [INFO] Token refreshed successfully
-01:35:04.139 [INFO] Token refresh successful
-01:35:04.145 [INFO] Fetching server info via GraphQL...
-01:35:04.186 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2085
-01:35:04.194 [INFO] Connection restored successfully
-01:35:04.309 [INFO] MainActivity: Tabs created, isOnline=false
-01:35:04.485 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
-01:35:04.505 [INFO] LibrarySectionTab: Loaded 13 categories from cache
-01:35:04.669 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
-01:35:04.682 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
-01:35:04.738 [INFO] ImageLoader: Starting 20 worker threads
-01:35:05.553 [INFO] GraphQL: Fetching manga for category 1 with filter
-01:35:05.554 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
-01:35:06.054 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
-01:35:06.537 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
-01:35:06.769 [INFO] GraphQL: Fetching manga for category 1 with filter
-01:35:06.859 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
-01:35:06.864 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
-01:35:07.714 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
-01:35:07.721 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
-01:35:35.728 [INFO] MangaDetailView: Creating for 'A Bride’s Story' id=269
-01:35:36.437 [INFO] GraphQL: Fetched 0 track records for manga 269
-01:35:36.442 [INFO] MangaDetailView: Loaded 107 chapters from cache for manga 269
-01:35:36.889 [INFO] MangaDetailView: Got 107 chapters
-01:35:41.582 [INFO] ReaderActivity: manga=269, chapter=31414, startPage=0
-01:35:41.975 [INFO] ReaderActivity: content available for manga 269
-01:35:41.989 [INFO] ReaderActivity: global defaults - readingMode=1, pageScaleMode=0, rotation=90
-01:35:41.994 [INFO] ReaderActivity: local cache has 10 per-manga settings
-01:35:42.000 [INFO] ReaderActivity: fetching server meta for manga 269...
-01:35:42.504 [INFO] ReaderActivity: server returned 6 meta entries
-01:35:42.513 [INFO] ReaderActivity: server meta [cropBorders] = false
-01:35:42.522 [INFO] ReaderActivity: server meta [isWebtoonFormat] = false
-01:35:42.533 [INFO] ReaderActivity: server meta [readerMode] = 1
-01:35:42.544 [INFO] ReaderActivity: server meta [rotation] = 90
-01:35:42.555 [INFO] ReaderActivity: server meta [scaleType] = 0
-01:35:42.560 [INFO] ReaderActivity: server meta [webtoonSidePadding] = 0
-01:35:42.566 [INFO] ReaderActivity: loaded settings from server for manga 269
-01:35:42.572 [INFO] ReaderActivity: using server settings (skipping local cache)
-01:35:42.581 [INFO] ReaderActivity: keepScreenOn enabled, disabled screen dimming
-01:35:42.599 [INFO] ReaderActivity: Fetching chapter 31414 from server
-01:35:42.610 [INFO] GraphQL: Fetching pages for chapter id=31414
-01:35:42.832 [INFO] GraphQL: Fetched 25 pages for chapter 31414
-01:35:44.165 [INFO] Loaded 25 pages
-01:35:44.171 [INFO] loadPages: startPage=1 → page 1/27 url=http://192.168.1.28:4568/api/v1/manga/269/chapter/99/page/0
-01:35:44.182 [INFO] Preloading next chapter id=31413
-01:35:44.192 [INFO] Preloading prev chapter id=31415
-01:35:44.192 [INFO] GraphQL: Fetching pages for chapter id=31413
-01:35:44.204 [INFO] GraphQL: Fetching pages for chapter id=31415
-01:35:44.778 [INFO] GraphQL: Fetched 6 pages for chapter 31415
-01:35:44.779 [INFO] GraphQL: Fetched 26 pages for chapter 31413
-01:35:44.798 [INFO] Prev chapter preloaded: 6 pages
-01:35:44.807 [INFO] Next chapter preloaded: 26 pages
-01:35:54.775 [INFO] PREVPAGE: currentPage=1/27 url=http://192.168.1.28:4568/api/v1/manga/269/chapter/99/page/0
-01:35:57.845 [INFO] NEXTPAGE: currentPage=0/27 url=__transition:prev
-01:35:57.850 [INFO] NEXTPAGE: on TRANSITION_PREV → first real page
-01:35:59.463 [INFO] NEXTPAGE: currentPage=1/27 url=http://192.168.1.28:4568/api/v1/manga/269/chapter/99/page/0
-01:35:59.472 [INFO] NEXTPAGE: advancing to page 2
+02:11:12.275 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+02:11:12.841 [INFO] DownloadsManager: Initializing...
+02:11:12.847 [DEBUG] DownloadsManager: No saved state found
+02:11:12.848 [INFO] DownloadsManager: Initialized with 0 downloads
+02:11:12.848 [INFO] VitaSuwayomi 1.0.0 initializing...
+02:11:12.849 [DEBUG] sceIoMkdir result: -0x7ffeffef
+02:11:12.850 [INFO] Loading saved settings...
+02:11:12.850 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+02:11:12.852 [DEBUG] loadSettings: File size = 3457
+02:11:12.864 [DEBUG] loadSettings: Read 3457 bytes
+02:11:12.872 [INFO] loadSettings: serverUrl=http://192.168.1.28:4568
+02:11:12.883 [DEBUG] Loaded 4 hidden categories
+02:11:12.894 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+02:11:12.957 [INFO] loadSettings: enabledSourceLanguages count = 2
+02:11:12.962 [INFO] loadSettings: localUrl=http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+02:11:12.967 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=3, defaultSort=0, groupMode=0
+02:11:12.977 [DEBUG] Loaded 2 per-category sort modes
+02:11:12.986 [DEBUG] Loaded 2 search history entries
+02:11:12.997 [DEBUG] Loaded 10 per-manga reader settings
+02:11:13.008 [INFO] Restored auth credentials for user: Breezyslasher
+02:11:13.019 [INFO] Restored auth tokens
+02:11:13.027 [INFO] Settings loaded successfully
+02:11:13.032 [INFO] Settings load result: success
+02:11:13.038 [INFO] Applied theme: Dark
+02:11:13.047 [INFO] Debug logging disabled
+02:11:13.053 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+02:11:13.061 [INFO] Application::run - isConnected=false, serverUrl=http://192.168.1.28:4568
+02:11:13.072 [INFO] Restoring saved connection...
+02:11:13.083 [INFO] Attempting to refresh JWT tokens...
+02:11:13.287 [INFO] Token refreshed successfully
+02:11:13.293 [INFO] Token refresh successful
+02:11:13.298 [INFO] Fetching server info via GraphQL...
+02:11:13.344 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2085
+02:11:13.352 [INFO] Connection restored successfully
+02:11:13.466 [INFO] MainActivity: Tabs created, isOnline=false
+02:11:13.640 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
+02:11:13.660 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+02:11:13.825 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+02:11:13.834 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+02:11:13.889 [INFO] ImageLoader: Starting 20 worker threads
+02:11:14.682 [INFO] GraphQL: Fetching manga for category 1 with filter
+02:11:14.682 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+02:11:14.794 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+02:11:14.805 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+02:11:14.817 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+02:11:15.347 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+02:11:15.570 [INFO] GraphQL: Fetching manga for category 1 with filter
+02:11:15.721 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+02:11:15.727 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+02:11:18.525 [INFO] MangaDetailView: Creating for 'A Bride’s Story' id=269
+02:11:19.239 [INFO] MangaDetailView: Loaded 107 chapters from cache for manga 269
+02:11:19.243 [INFO] GraphQL: Fetched 0 track records for manga 269
+02:11:19.699 [INFO] MangaDetailView: Got 107 chapters
+02:11:22.625 [INFO] MangaDetailView: Continuing from chapter id=31412, page=0
+02:11:22.632 [INFO] MangaDetailView: Reading chapter id=31412, startPage=0
+02:11:22.638 [INFO] ReaderActivity: manga=269, chapter=31412, startPage=0
+02:11:23.016 [INFO] ReaderActivity: content available for manga 269
+02:11:23.026 [INFO] ReaderActivity: global defaults - readingMode=1, pageScaleMode=0, rotation=90
+02:11:23.035 [INFO] ReaderActivity: local cache has 10 per-manga settings
+02:11:23.046 [INFO] ReaderActivity: fetching server meta for manga 269...
+02:11:23.071 [INFO] ReaderActivity: server returned 6 meta entries
+02:11:23.082 [INFO] ReaderActivity: server meta [cropBorders] = false
+02:11:23.089 [INFO] ReaderActivity: server meta [isWebtoonFormat] = false
+02:11:23.095 [INFO] ReaderActivity: server meta [readerMode] = 1
+02:11:23.100 [INFO] ReaderActivity: server meta [rotation] = 90
+02:11:23.109 [INFO] ReaderActivity: server meta [scaleType] = 0
+02:11:23.118 [INFO] ReaderActivity: server meta [webtoonSidePadding] = 0
+02:11:23.128 [INFO] ReaderActivity: loaded settings from server for manga 269
+02:11:23.139 [INFO] ReaderActivity: using server settings (skipping local cache)
+02:11:23.151 [INFO] ReaderActivity: keepScreenOn enabled, disabled screen dimming
+02:11:23.165 [INFO] ReaderActivity: Fetching chapter 31412 from server
+02:11:23.171 [INFO] GraphQL: Fetching pages for chapter id=31412
+02:11:23.203 [INFO] GraphQL: Fetched 28 pages for chapter 31412
+02:11:23.324 [INFO] Loaded 28 pages
+02:11:23.336 [INFO] loadPages: startPage=1 → page 1/30 url=http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/0
+02:11:23.357 [INFO] Preloading next chapter id=31411
+02:11:23.363 [INFO] GraphQL: Fetching pages for chapter id=31411
+02:11:23.363 [INFO] Preloading prev chapter id=31413
+02:11:23.378 [INFO] GraphQL: Fetching pages for chapter id=31413
+02:11:23.408 [INFO] GraphQL: Fetched 31 pages for chapter 31411
+02:11:23.423 [INFO] Next chapter preloaded: 31 pages
+02:11:23.492 [INFO] GraphQL: Fetched 26 pages for chapter 31413
+02:11:23.507 [INFO] Prev chapter preloaded: 26 pages
+02:11:37.488 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=2 swipingToNext=true currentPage=1
+02:11:37.491 [INFO] COMPLETE: taking NORMAL_PAGE path, going to page 2
+02:11:44.528 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=1 swipingToNext=false currentPage=2
+02:11:44.539 [INFO] COMPLETE: taking NORMAL_PAGE path, going to page 1
+02:11:46.647 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=true previewIdx=0 swipingToNext=false currentPage=1
+02:11:46.653 [INFO] COMPLETE: taking TRANSITION_PREVIEW path, going to page 0
+02:11:48.115 [INFO] TSWIPE START: page=0/30 url=__transition:prev
+02:11:48.182 [INFO] TSWIPE OOB: previewIdx=-1 wantNext=false swipeToChapter=true
+02:11:48.799 [INFO] TSWIPE END: rawDelta=-491.6 distance=492.9 isSwipeAnim=true previewIdx=-1 swipeToChapter=true swipingToNext=false previewIsTransition=false
+02:11:48.810 [INFO] COMPLETE: turnPage=true swipeToChapter=true previewIsTransition=false previewIdx=-1 swipingToNext=false currentPage=0
+02:11:48.822 [INFO] COMPLETE: taking CHAPTER path, swipingToNext=false
+02:11:48.832 [INFO] PREVCHAPTER: chapterPos=100/107 prevPreloaded=true
+02:11:48.841 [INFO] Preloading next chapter id=31412
+02:11:48.850 [INFO] Preloading prev chapter id=31414
+02:11:51.944 [INFO] GraphQL: Fetching pages for chapter id=31412
+02:11:51.945 [INFO] GraphQL: Fetching pages for chapter id=31414
+02:11:52.147 [INFO] GraphQL: Fetched 28 pages for chapter 31412
+02:11:52.155 [INFO] GraphQL: Fetched 25 pages for chapter 31414
+02:11:52.169 [INFO] Next chapter preloaded: 28 pages
+02:11:52.177 [INFO] Prev chapter preloaded: 25 pages
+02:12:03.564 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=25 swipingToNext=false currentPage=26
+02:12:03.575 [INFO] COMPLETE: taking NORMAL_PAGE path, going to page 25
+02:12:05.516 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=26 swipingToNext=true currentPage=25
+02:12:05.522 [INFO] COMPLETE: taking NORMAL_PAGE path, going to page 26
+02:12:12.205 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=true previewIdx=27 swipingToNext=true currentPage=26
+02:12:12.214 [INFO] COMPLETE: taking TRANSITION_PREVIEW path, going to page 27
+02:12:16.360 [INFO] TSWIPE START: page=27/28 url=__transition:next
+02:12:16.427 [INFO] TSWIPE OOB: previewIdx=28 wantNext=true swipeToChapter=true
+02:12:16.960 [INFO] TSWIPE END: rawDelta=368.0 distance=400.8 isSwipeAnim=true previewIdx=28 swipeToChapter=true swipingToNext=true previewIsTransition=false
+02:12:17.019 [INFO] COMPLETE: turnPage=true swipeToChapter=true previewIsTransition=false previewIdx=28 swipingToNext=true currentPage=27
+02:12:17.025 [INFO] COMPLETE: taking CHAPTER path, swipingToNext=true
+02:12:17.035 [INFO] NEXTCHAPTER: chapterPos=99/107 nextPreloaded=true
+02:12:17.051 [INFO] Preloading next chapter id=31411
+02:12:17.063 [INFO] GraphQL: Fetching pages for chapter id=31411
+02:12:17.063 [INFO] Preloading prev chapter id=31413
+02:12:17.082 [INFO] GraphQL: Fetching pages for chapter id=31413
+02:12:17.945 [INFO] Statistics: chapters read = 72
+02:12:17.954 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+02:12:17.990 [INFO] Settings saved successfully (3457 bytes)
+02:12:18.070 [INFO] GraphQL: Fetched 26 pages for chapter 31413
+02:12:18.078 [INFO] Prev chapter preloaded: 26 pages
+02:12:25.410 [INFO] GraphQL: Fetched 31 pages for chapter 31411
+02:12:25.603 [INFO] Next chapter preloaded: 31 pages
+02:12:26.904 [INFO] NEXTPAGE: currentPage=1/30 url=http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/0
+02:12:26.910 [INFO] NEXTPAGE: advancing to page 2
+02:12:27.538 [INFO] NEXTPAGE: currentPage=2/30 url=http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/1
+02:12:27.547 [INFO] NEXTPAGE: advancing to page 3
+02:12:28.856 [INFO] ReaderActivity: willDisappear, restored screen dimming
+02:12:31.793 [INFO] ReaderActivity: manga=269, chapter=31409, startPage=0
+02:12:32.081 [INFO] ReaderActivity: content available for manga 269
+02:12:32.090 [INFO] ReaderActivity: global defaults - readingMode=1, pageScaleMode=0, rotation=90
+02:12:32.100 [INFO] ReaderActivity: local cache has 10 per-manga settings
+02:12:32.112 [INFO] ReaderActivity: fetching server meta for manga 269...
+02:12:34.326 [INFO] ReaderActivity: server returned 6 meta entries
+02:12:34.333 [INFO] ReaderActivity: server meta [cropBorders] = false
+02:12:34.342 [INFO] ReaderActivity: server meta [isWebtoonFormat] = false
+02:12:34.352 [INFO] ReaderActivity: server meta [readerMode] = 1
+02:12:34.364 [INFO] ReaderActivity: server meta [rotation] = 90
+02:12:34.373 [INFO] ReaderActivity: server meta [scaleType] = 0
+02:12:34.379 [INFO] ReaderActivity: server meta [webtoonSidePadding] = 0
+02:12:34.388 [INFO] ReaderActivity: loaded settings from server for manga 269
+02:12:34.399 [INFO] ReaderActivity: using server settings (skipping local cache)
+02:12:34.411 [INFO] ReaderActivity: keepScreenOn enabled, disabled screen dimming
+02:12:37.567 [INFO] ReaderActivity: Fetching chapter 31409 from server
+02:12:37.584 [INFO] GraphQL: Fetching pages for chapter id=31409
+02:12:38.057 [INFO] GraphQL: Fetched 33 pages for chapter 31409
+02:12:41.936 [INFO] Loaded 33 pages
+02:12:41.951 [INFO] loadPages: startPage=1 → page 1/35 url=http://192.168.1.28:4568/api/v1/manga/269/chapter/104/page/0
+02:12:41.958 [INFO] Preloading next chapter id=31408
+02:12:41.967 [INFO] Preloading prev chapter id=31410
+02:12:41.968 [INFO] GraphQL: Fetching pages for chapter id=31408
+02:12:41.979 [INFO] GraphQL: Fetching pages for chapter id=31410
+02:12:43.001 [INFO] GraphQL: Fetched 24 pages for chapter 31410
+02:12:43.003 [INFO] GraphQL: Fetched 17 pages for chapter 31408
+02:12:43.020 [INFO] Prev chapter preloaded: 24 pages
+02:12:43.030 [INFO] Next chapter preloaded: 17 pages
