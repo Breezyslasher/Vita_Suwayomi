@@ -1473,26 +1473,34 @@ void ReaderActivity::updateProgress() {
 void ReaderActivity::nextPage() {
     if (m_pages.empty()) return;
 
+    brls::Logger::info("NEXTPAGE: currentPage={}/{} url={}",
+        m_currentPage, static_cast<int>(m_pages.size()),
+        m_currentPage < static_cast<int>(m_pages.size()) ? m_pages[m_currentPage].imageUrl : "?");
+
     // If currently on the "next chapter" transition page, do the navigation
     if (isTransitionPage(m_currentPage) &&
         m_pages[m_currentPage].imageUrl == TRANSITION_NEXT) {
+        brls::Logger::info("NEXTPAGE: on TRANSITION_NEXT → nextChapter()");
         nextChapter();
         return;
     }
     // If on the "prev chapter" transition page, confirm going back
     if (isTransitionPage(m_currentPage) &&
         m_pages[m_currentPage].imageUrl == TRANSITION_PREV) {
+        brls::Logger::info("NEXTPAGE: on TRANSITION_PREV → previousChapter()");
         previousChapter();
         return;
     }
     // If on end-of-manga page, do nothing
     if (isTransitionPage(m_currentPage) &&
         m_pages[m_currentPage].imageUrl == TRANSITION_END) {
+        brls::Logger::info("NEXTPAGE: on TRANSITION_END → no-op");
         return;
     }
 
     if (m_currentPage < static_cast<int>(m_pages.size()) - 1) {
         m_currentPage++;
+        brls::Logger::info("NEXTPAGE: advancing to page {}", m_currentPage);
         updatePageDisplay();
         loadPage(m_currentPage);
         // Don't save progress for transition pages
@@ -1505,13 +1513,19 @@ void ReaderActivity::nextPage() {
 void ReaderActivity::previousPage() {
     if (m_pages.empty()) return;
 
+    brls::Logger::info("PREVPAGE: currentPage={}/{} url={}",
+        m_currentPage, static_cast<int>(m_pages.size()),
+        m_currentPage < static_cast<int>(m_pages.size()) ? m_pages[m_currentPage].imageUrl : "?");
+
     // If on any transition page, go back to the nearest real page
     if (isTransitionPage(m_currentPage)) {
         // Find the nearest real page
         if (m_currentPage > 0 && !isTransitionPage(m_currentPage - 1)) {
+            brls::Logger::info("PREVPAGE: on transition, going back to page {}", m_currentPage - 1);
             m_currentPage--;
         } else if (m_currentPage < static_cast<int>(m_pages.size()) - 1 &&
                    !isTransitionPage(m_currentPage + 1)) {
+            brls::Logger::info("PREVPAGE: on transition, going forward to page {}", m_currentPage + 1);
             m_currentPage++;
         }
         updatePageDisplay();
@@ -1540,6 +1554,7 @@ void ReaderActivity::goToPage(int pageIndex) {
 }
 
 void ReaderActivity::nextChapter() {
+    brls::Logger::info("NEXTCHAPTER: chapterPos={}/{} nextPreloaded={}", m_chapterPosition, m_totalChapters, m_nextChapterLoaded);
     if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
         markChapterAsRead();
 
@@ -1596,6 +1611,7 @@ void ReaderActivity::nextChapter() {
 }
 
 void ReaderActivity::previousChapter() {
+    brls::Logger::info("PREVCHAPTER: chapterPos={}/{} prevPreloaded={}", m_chapterPosition, m_totalChapters, m_prevChapterLoaded);
     if (m_chapterPosition > 0) {
         m_chapterPosition--;
         m_chapterIndex = m_chapters[m_chapterPosition].id;
