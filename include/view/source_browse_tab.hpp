@@ -26,6 +26,7 @@ public:
     ~SourceBrowseTab();
 
     void onFocusGained() override;
+    void willDisappear(bool resetState) override;
 
 private:
     enum class BrowseMode {

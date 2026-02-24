@@ -105,7 +105,8 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     // Register Start button to open search dialog
     // Use brls::sync to defer IME opening to avoid crash during controller input handling
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showSearchDialog();
         });
         return true;
@@ -141,6 +142,13 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
 }
 
 SourceBrowseTab::~SourceBrowseTab() {
+    if (m_alive) *m_alive = false;
+}
+
+void SourceBrowseTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
     if (m_alive) *m_alive = false;
 }
 

@@ -114,6 +114,7 @@ public:
     ~ExtensionsTab();
 
     void onFocusGained() override;
+    void willDisappear(bool resetState) override;
 
     // Called by data source
     void onExtensionClicked(const Extension& ext);

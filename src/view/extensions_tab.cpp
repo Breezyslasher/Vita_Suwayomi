@@ -391,7 +391,8 @@ void ExtensionsDataSource::didSelectRowAt(brls::RecyclerFrame* recycler, brls::I
 
     switch (row.type) {
         case ExtensionRow::Type::SearchHeader:
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_tab->getAlive())]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
                 m_tab->onSearchHeaderClicked();
             });
             break;
@@ -707,7 +708,7 @@ ExtensionsTab::ExtensionsTab() {
     repoIcon->setImageFromFile("app0:resources/icons/import.png");
     repoBox->addView(repoIcon);
     repoBox->registerClickAction([this](brls::View*) {
-        brls::sync([this]() { showAddRepoDialog(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showAddRepoDialog(); });
         return true;
     });
     repoBox->addGestureRecognizer(new brls::TapGestureRecognizer(repoBox));
@@ -738,7 +739,7 @@ ExtensionsTab::ExtensionsTab() {
     m_searchIcon->setImageFromFile("app0:resources/icons/search.png");
     searchBox->addView(m_searchIcon);
     searchBox->registerClickAction([this](brls::View*) {
-        brls::sync([this]() { showSearchDialog(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showSearchDialog(); });
         return true;
     });
     searchBox->addGestureRecognizer(new brls::TapGestureRecognizer(searchBox));
@@ -768,7 +769,7 @@ ExtensionsTab::ExtensionsTab() {
     m_refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
     m_refreshBox->addView(m_refreshIcon);
     m_refreshBox->registerClickAction([this](brls::View*) {
-        brls::sync([this]() { refreshExtensions(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; refreshExtensions(); });
         return true;
     });
     m_refreshBox->addGestureRecognizer(new brls::TapGestureRecognizer(m_refreshBox));
@@ -780,24 +781,24 @@ ExtensionsTab::ExtensionsTab() {
 
     // Register hotkeys
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View*) {
-        brls::sync([this]() { showSearchDialog(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showSearchDialog(); });
         return true;
     });
 
     this->registerAction("Refresh", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
-        brls::sync([this]() { refreshExtensions(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; refreshExtensions(); });
         return true;
     });
 
     this->registerAction("Add Repo", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
-        brls::sync([this]() { showAddRepoDialog(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showAddRepoDialog(); });
         return true;
     });
 
     // Circle button (B) - exit search if active, otherwise default behavior
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         if (m_isSearchActive) {
-            brls::sync([this]() { hideSearchResults(); });
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; hideSearchResults(); });
             return true;  // Consume the event
         }
         return false;  // Let default behavior handle it (go back)
@@ -813,7 +814,7 @@ ExtensionsTab::ExtensionsTab() {
     // Register circle button on recycler to exit search (since focus is on recycler items)
     m_recycler->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         if (m_isSearchActive) {
-            brls::sync([this]() { hideSearchResults(); });
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; hideSearchResults(); });
             return true;  // Consume the event
         }
         return false;  // Let default behavior handle it (go back)
@@ -835,6 +836,13 @@ ExtensionsTab::ExtensionsTab() {
 }
 
 ExtensionsTab::~ExtensionsTab() {
+    if (m_alive) *m_alive = false;
+}
+
+void ExtensionsTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
     if (m_alive) *m_alive = false;
 }
 

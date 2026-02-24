@@ -71,7 +71,8 @@ SearchTab::SearchTab() {
     m_historyBtn->addView(historyIcon);
 
     m_historyBtn->registerClickAction([this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showSearchHistoryDialog();
         });
         return true;
@@ -80,7 +81,7 @@ SearchTab::SearchTab() {
     // B button on History goes back when not on sources list
     m_historyBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         if (m_browseMode != BrowseMode::SOURCES) {
-            brls::sync([this]() { handleBackNavigation(); });
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
             return true;
         }
         return false;
@@ -117,7 +118,8 @@ SearchTab::SearchTab() {
     m_globalSearchBtn->addView(searchIcon);
 
     m_globalSearchBtn->registerClickAction([this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showGlobalSearchDialog();
         });
         return true;
@@ -126,7 +128,7 @@ SearchTab::SearchTab() {
     // B button on Search goes back when not on sources list
     m_globalSearchBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         if (m_browseMode != BrowseMode::SOURCES) {
-            brls::sync([this]() { handleBackNavigation(); });
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
             return true;
         }
         return false;
@@ -141,7 +143,8 @@ SearchTab::SearchTab() {
     // Register Start button to open global search dialog
     // Use brls::sync to defer IME opening to avoid crash during controller input handling
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showGlobalSearchDialog();
         });
         return true;
@@ -149,7 +152,8 @@ SearchTab::SearchTab() {
 
     // Register Select button to open search history
     this->registerAction("History", brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showSearchHistoryDialog();
         });
         return true;
@@ -159,7 +163,8 @@ SearchTab::SearchTab() {
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
         // Only handle if we're not on the sources list
         if (m_browseMode != BrowseMode::SOURCES) {
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
                 handleBackNavigation();
             });
             return true;
@@ -196,7 +201,7 @@ SearchTab::SearchTab() {
     m_popularBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_popularBtn));
     // B button on Popular goes back
     m_popularBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        brls::sync([this]() { handleBackNavigation(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
         return true;
     }, true);
     m_modeBox->addView(m_popularBtn);
@@ -215,7 +220,7 @@ SearchTab::SearchTab() {
     m_latestBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_latestBtn));
     // B button on Latest goes back
     m_latestBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        brls::sync([this]() { handleBackNavigation(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
         return true;
     }, true);
     m_modeBox->addView(m_latestBtn);
@@ -244,7 +249,7 @@ SearchTab::SearchTab() {
     m_filterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_filterBtn));
     // B button on Filter goes back
     m_filterBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        brls::sync([this]() { handleBackNavigation(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
         return true;
     }, true);
     m_modeBox->addView(m_filterBtn);
@@ -260,7 +265,7 @@ SearchTab::SearchTab() {
     m_backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_backBtn));
     // B button on Back also goes back
     m_backBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        brls::sync([this]() { handleBackNavigation(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
         return true;
     }, true);
     m_modeBox->addView(m_backBtn);
@@ -285,7 +290,8 @@ SearchTab::SearchTab() {
     // Set up B button callback for back navigation from grid cells
     m_contentGrid->setOnBackPressed([this]() {
         if (m_browseMode != BrowseMode::SOURCES) {
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
                 handleBackNavigation();
             });
             return true;
@@ -308,6 +314,17 @@ SearchTab::SearchTab() {
 
 SearchTab::~SearchTab() {
     if (m_alive) *m_alive = false;
+}
+
+void SearchTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Invalidate alive flag BEFORE destruction so all pending async callbacks
+    // (image loader, brls::sync from asyncRun, deferred button handlers) bail out
+    if (m_alive) *m_alive = false;
+
+    // Invalidate load generation so any in-flight async results are ignored
+    m_loadGeneration++;
 }
 
 void SearchTab::onFocusGained() {
@@ -991,7 +1008,8 @@ void SearchTab::populateSearchResultsBySource() {
         // Register B button on search results scroll view to handle back navigation
         m_searchResultsScrollView->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
             if (m_browseMode != BrowseMode::SOURCES) {
-                brls::sync([this]() {
+                brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                    auto a = aliveWeak.lock(); if (!a || !*a) return;
                     handleBackNavigation();
                 });
                 return true;
@@ -1072,7 +1090,8 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
         // Register B button on cell to handle back navigation
         cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
             if (m_browseMode != BrowseMode::SOURCES) {
-                brls::sync([this]() {
+                brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                    auto a = aliveWeak.lock(); if (!a || !*a) return;
                     handleBackNavigation();
                 });
                 return true;
