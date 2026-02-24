@@ -641,16 +641,16 @@ void DownloadsTab::refreshQueue() {
                             }
                             progressLabel->setText(progressText);
 
-                            // Update background color
-                            if (m_serverRowElements[i].row) {
+                            // Update content box background color
+                            if (m_serverRowElements[i].contentBox) {
                                 if (newItem.state == static_cast<int>(DownloadState::DOWNLOADING)) {
-                                    m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(30, 60, 30, 200));
+                                    m_serverRowElements[i].contentBox->setBackgroundColor(nvgRGBA(30, 60, 30, 200));
                                 } else if (newItem.state == static_cast<int>(DownloadState::ERROR)) {
-                                    m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(60, 30, 30, 200));
+                                    m_serverRowElements[i].contentBox->setBackgroundColor(nvgRGBA(60, 30, 30, 200));
                                 } else if (newItem.state == static_cast<int>(DownloadState::DOWNLOADED)) {
-                                    m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(30, 50, 60, 200));
+                                    m_serverRowElements[i].contentBox->setBackgroundColor(nvgRGBA(30, 50, 60, 200));
                                 } else {
-                                    m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
+                                    m_serverRowElements[i].contentBox->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
                                 }
                             }
                         }
@@ -1022,15 +1022,38 @@ void DownloadsTab::stopAutoRefresh() {
 brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std::string& mangaTitle,
                                         const std::string& chapterName, float chapterNumber,
                                         int downloadedPages, int pageCount, int state,
-                                        brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon) {
+                                        brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon,
+                                        brls::Box*& outContentBox) {
+    // Outer container: clips children so the sliding content stays within bounds
     auto row = new brls::Box();
     row->setAxis(brls::Axis::ROW);
-    row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    row->setAlignItems(brls::AlignItems::CENTER);
-    row->setPadding(8);
     row->setMargins(0, 0, 8, 0);
     row->setCornerRadius(6);
     row->setFocusable(true);
+    row->setClipsToBounds(true);
+    row->setBackgroundColor(nvgRGBA(200, 60, 50, 255));  // Red delete background
+
+    // "Remove" label visible when content slides away
+    auto* deleteLabel = new brls::Label();
+    deleteLabel->setText("Remove");
+    deleteLabel->setFontSize(16);
+    deleteLabel->setTextColor(nvgRGB(255, 255, 255));
+    deleteLabel->setPositionType(brls::PositionType::ABSOLUTE);
+    deleteLabel->setPositionRight(20);
+    deleteLabel->setPositionTop(0);
+    deleteLabel->setPositionBottom(0);
+    deleteLabel->setVerticalAlign(brls::VerticalAlign::CENTER);
+    row->addView(deleteLabel);
+
+    // Content layer: holds all the actual row content, slides on swipe
+    // Not absolute — this child determines the row's natural height
+    auto contentBox = new brls::Box();
+    contentBox->setAxis(brls::Axis::ROW);
+    contentBox->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    contentBox->setAlignItems(brls::AlignItems::CENTER);
+    contentBox->setPadding(8);
+    contentBox->setGrow(1.0f);
+    contentBox->setCornerRadius(6);
 
     // Background color based on state
     NVGcolor originalBgColor;
@@ -1043,7 +1066,7 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     } else {
         originalBgColor = nvgRGBA(40, 40, 40, 200);
     }
-    row->setBackgroundColor(originalBgColor);
+    contentBox->setBackgroundColor(originalBgColor);
 
     // Info box
     auto infoBox = new brls::Box();
@@ -1075,7 +1098,7 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     chapterLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
     infoBox->addView(chapterLabel);
 
-    row->addView(infoBox);
+    contentBox->addView(infoBox);
 
     // Status box (progress + X button icon)
     auto statusBox = new brls::Box();
@@ -1121,7 +1144,10 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     outXButtonIcon = xButtonIcon;
     statusBox->addView(xButtonIcon);
 
-    row->addView(statusBox);
+    contentBox->addView(statusBox);
+
+    row->addView(contentBox);
+    outContentBox = contentBox;
 
     // Show X button icon when this row gets focus
     row->getFocusEvent()->subscribe([this, xButtonIcon](brls::View* view) {
@@ -1175,11 +1201,11 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
             return true;
         });
 
-    // Add swipe gesture for removal
+    // Add swipe gesture for removal - slides content to reveal red "Remove" background
     auto localSwipeState = std::make_shared<SwipeState>();
     row->addGestureRecognizer(new brls::PanGestureRecognizer(
-        [this, row, mangaId, chapterIndex, originalBgColor, localSwipeState](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-            const float SWIPE_THRESHOLD = 60.0f;
+        [this, mangaId, chapterIndex, contentBox, localSwipeState](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            const float SWIPE_THRESHOLD = 100.0f;
             const float TAP_THRESHOLD = 15.0f;
 
             if (status.state == brls::GestureState::START) {
@@ -1191,20 +1217,19 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
 
                 if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
                     localSwipeState->isValidSwipe = true;
-                    if (dx < -SWIPE_THRESHOLD * 0.5f) {
-                        row->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
-                    } else {
-                        row->setBackgroundColor(originalBgColor);
-                    }
+                    // Slide content with finger (only leftward, clamped to 0)
+                    float offset = std::min(0.0f, dx);
+                    contentBox->setTranslationX(offset);
                 }
             } else if (status.state == brls::GestureState::END) {
-                row->setBackgroundColor(originalBgColor);
-
                 float dx = status.position.x - localSwipeState->touchStart.x;
                 if (localSwipeState->isValidSwipe && dx < -SWIPE_THRESHOLD) {
                     DownloadsManager& mgr = DownloadsManager::getInstance();
                     mgr.cancelChapterDownload(mangaId, chapterIndex);
                     removeLocalItem(mangaId, chapterIndex);
+                } else {
+                    // Snap back
+                    contentBox->setTranslationX(0);
                 }
             }
         }, brls::PanAxis::HORIZONTAL));
@@ -1238,16 +1263,16 @@ void DownloadsTab::updateLocalProgress(int mangaId, int chapterIndex, int downlo
                 }
                 elem.progressLabel->setText(progressText);
 
-                // Update background color based on state
-                if (elem.row) {
+                // Update content box background color based on state
+                if (elem.contentBox) {
                     if (state == static_cast<int>(LocalDownloadState::DOWNLOADING)) {
-                        elem.row->setBackgroundColor(nvgRGBA(30, 60, 30, 200));
+                        elem.contentBox->setBackgroundColor(nvgRGBA(30, 60, 30, 200));
                     } else if (state == static_cast<int>(LocalDownloadState::FAILED)) {
-                        elem.row->setBackgroundColor(nvgRGBA(60, 30, 30, 200));
+                        elem.contentBox->setBackgroundColor(nvgRGBA(60, 30, 30, 200));
                     } else if (state == static_cast<int>(LocalDownloadState::PAUSED)) {
-                        elem.row->setBackgroundColor(nvgRGBA(50, 50, 30, 200));
+                        elem.contentBox->setBackgroundColor(nvgRGBA(50, 50, 30, 200));
                     } else {
-                        elem.row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
+                        elem.contentBox->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
                     }
                 }
             }
@@ -1331,9 +1356,10 @@ void DownloadsTab::addLocalItem(int mangaId, int chapterIndex, const std::string
                                 int downloadedPages, int pageCount, int state) {
     brls::Label* progressLabel = nullptr;
     brls::Image* xButtonIcon = nullptr;
+    brls::Box* contentBox = nullptr;
 
     auto* row = createLocalRow(mangaId, chapterIndex, mangaTitle, chapterName, chapterNumber,
-                               downloadedPages, pageCount, state, progressLabel, xButtonIcon);
+                               downloadedPages, pageCount, state, progressLabel, xButtonIcon, contentBox);
 
     // Add to container
     m_localContainer->addView(row);
@@ -1341,6 +1367,7 @@ void DownloadsTab::addLocalItem(int mangaId, int chapterIndex, const std::string
     // Track the elements
     LocalRowElements elem;
     elem.row = row;
+    elem.contentBox = contentBox;
     elem.progressLabel = progressLabel;
     elem.xButtonIcon = xButtonIcon;
     elem.mangaId = mangaId;
@@ -1431,15 +1458,37 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
                                          const std::string& chapterName, float chapterNumber,
                                          int downloadedPages, int pageCount, int state,
                                          int currentIndex, int queueSize,
-                                         brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon) {
+                                         brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon,
+                                         brls::Box*& outContentBox) {
+    // Outer container: clips children so sliding content stays within bounds
     auto row = new brls::Box();
     row->setAxis(brls::Axis::ROW);
-    row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    row->setAlignItems(brls::AlignItems::CENTER);
-    row->setPadding(8);
     row->setMargins(0, 0, 8, 0);
     row->setCornerRadius(6);
     row->setFocusable(true);
+    row->setClipsToBounds(true);
+    row->setBackgroundColor(nvgRGBA(200, 60, 50, 255));  // Red delete background
+
+    // "Remove" label visible when content slides away
+    auto* deleteLabel = new brls::Label();
+    deleteLabel->setText("Remove");
+    deleteLabel->setFontSize(16);
+    deleteLabel->setTextColor(nvgRGB(255, 255, 255));
+    deleteLabel->setPositionType(brls::PositionType::ABSOLUTE);
+    deleteLabel->setPositionRight(20);
+    deleteLabel->setPositionTop(0);
+    deleteLabel->setPositionBottom(0);
+    deleteLabel->setVerticalAlign(brls::VerticalAlign::CENTER);
+    row->addView(deleteLabel);
+
+    // Content layer: slides on swipe to reveal the red background
+    auto contentBox = new brls::Box();
+    contentBox->setAxis(brls::Axis::ROW);
+    contentBox->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    contentBox->setAlignItems(brls::AlignItems::CENTER);
+    contentBox->setPadding(8);
+    contentBox->setGrow(1.0f);
+    contentBox->setCornerRadius(6);
 
     NVGcolor originalBgColor;
     if (state == static_cast<int>(DownloadState::DOWNLOADING)) {
@@ -1451,7 +1500,7 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     } else {
         originalBgColor = nvgRGBA(40, 40, 40, 200);
     }
-    row->setBackgroundColor(originalBgColor);
+    contentBox->setBackgroundColor(originalBgColor);
 
     auto infoBox = new brls::Box();
     infoBox->setAxis(brls::Axis::COLUMN);
@@ -1475,7 +1524,7 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     chapterLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
     infoBox->addView(chapterLabel);
 
-    row->addView(infoBox);
+    contentBox->addView(infoBox);
 
     auto statusBox = new brls::Box();
     statusBox->setAxis(brls::Axis::ROW);
@@ -1518,7 +1567,10 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     outXButtonIcon = xButtonIcon;
     statusBox->addView(xButtonIcon);
 
-    row->addView(statusBox);
+    contentBox->addView(statusBox);
+
+    row->addView(contentBox);
+    outContentBox = contentBox;
 
     // FIX 2: Focus handler with null-check validation to guard against dangling pointer
     row->getFocusEvent()->subscribe([this, xButtonIcon](brls::View* view) {
@@ -1592,10 +1644,11 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
             return true;
         });
 
+    // Swipe gesture - slides content to reveal red "Remove" background
     auto swipeState = std::make_shared<SwipeState>();
     row->addGestureRecognizer(new brls::PanGestureRecognizer(
-        [this, row, mangaId, chapterId, originalBgColor, swipeState](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-            const float SWIPE_THRESHOLD = 60.0f;
+        [this, mangaId, chapterId, contentBox, swipeState](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            const float SWIPE_THRESHOLD = 100.0f;
             const float TAP_THRESHOLD = 15.0f;
 
             if (status.state == brls::GestureState::START) {
@@ -1607,15 +1660,11 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
 
                 if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
                     swipeState->isValidSwipe = true;
-                    if (dx < -SWIPE_THRESHOLD * 0.5f) {
-                        row->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
-                    } else {
-                        row->setBackgroundColor(originalBgColor);
-                    }
+                    // Slide content with finger (only leftward, clamped to 0)
+                    float offset = std::min(0.0f, dx);
+                    contentBox->setTranslationX(offset);
                 }
             } else if (status.state == brls::GestureState::END) {
-                row->setBackgroundColor(originalBgColor);
-
                 float dx = status.position.x - swipeState->touchStart.x;
                 if (swipeState->isValidSwipe && dx < -SWIPE_THRESHOLD) {
                     asyncRun([this, mangaId, chapterId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
@@ -1628,6 +1677,9 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
                             refreshQueue();
                         });
                     });
+                } else {
+                    // Snap back
+                    contentBox->setTranslationX(0);
                 }
             }
         }, brls::PanAxis::HORIZONTAL));
@@ -1642,15 +1694,17 @@ void DownloadsTab::addServerItem(int chapterId, int mangaId, const std::string& 
                                   int currentIndex, int queueSize) {
     brls::Label* progressLabel = nullptr;
     brls::Image* xButtonIcon = nullptr;
+    brls::Box* contentBox = nullptr;
 
     auto* row = createServerRow(chapterId, mangaId, mangaTitle, chapterName, chapterNumber,
                                 downloadedPages, pageCount, state, currentIndex, queueSize,
-                                progressLabel, xButtonIcon);
+                                progressLabel, xButtonIcon, contentBox);
 
     m_queueContainer->addView(row);
 
     ServerRowElements elem;
     elem.row = row;
+    elem.contentBox = contentBox;
     elem.progressLabel = progressLabel;
     elem.xButtonIcon = xButtonIcon;
     elem.chapterId = chapterId;
