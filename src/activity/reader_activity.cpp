@@ -308,6 +308,7 @@ void ReaderActivity::onContentAvailable() {
     // D-pad for page navigation (direction-aware)
     this->registerAction("", brls::ControllerButton::BUTTON_LEFT, [this](brls::View*) {
         if (m_controlsVisible || m_settingsVisible) return false;  // Let UI handle it
+        if (m_errorOverlay) return true;  // Block navigation while error overlay is shown
         if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
             nextPage();
         else
@@ -317,6 +318,7 @@ void ReaderActivity::onContentAvailable() {
 
     this->registerAction("", brls::ControllerButton::BUTTON_RIGHT, [this](brls::View*) {
         if (m_controlsVisible || m_settingsVisible) return false;
+        if (m_errorOverlay) return true;  // Block navigation while error overlay is shown
         if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
             previousPage();
         else
@@ -326,12 +328,14 @@ void ReaderActivity::onContentAvailable() {
 
     this->registerAction("", brls::ControllerButton::BUTTON_UP, [this](brls::View*) {
         if (m_controlsVisible || m_settingsVisible) return false;
+        if (m_errorOverlay) return true;  // Block navigation while error overlay is shown
         previousPage();
         return true;
     });
 
     this->registerAction("", brls::ControllerButton::BUTTON_DOWN, [this](brls::View*) {
         if (m_controlsVisible || m_settingsVisible) return false;
+        if (m_errorOverlay) return true;  // Block navigation while error overlay is shown
         nextPage();
         return true;
     });
@@ -372,6 +376,7 @@ void ReaderActivity::onContentAvailable() {
         // Tap gesture for controls toggle and optional tap-to-navigate zones
         pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (m_errorOverlay) return;  // Don't handle taps while error overlay is shown
                 if (status.state == brls::GestureState::END) {
                     // Check for double-tap
                     auto now = std::chrono::steady_clock::now();
@@ -433,6 +438,7 @@ void ReaderActivity::onContentAvailable() {
         // - 180°/270°: inverted direction compared to 0°/90°
         pageImage->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                if (m_errorOverlay) return;  // Don't handle swipes while error overlay is shown
                 const float TAP_THRESHOLD = 15.0f;       // Max movement for tap
                 const float PAGE_TURN_THRESHOLD = 80.0f; // Threshold to complete page turn
                 const float SWIPE_START_THRESHOLD = 20.0f; // When to start showing preview
@@ -790,6 +796,7 @@ void ReaderActivity::onContentAvailable() {
         // Tap gesture for instant controls toggle on container
         container->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                if (m_errorOverlay) return;  // Don't handle taps while error overlay is shown
                 if (status.state == brls::GestureState::END) {
                     // Check for double-tap
                     auto now = std::chrono::steady_clock::now();
@@ -841,6 +848,7 @@ void ReaderActivity::onContentAvailable() {
         // Pan gesture for swipe navigation on container
         container->addGestureRecognizer(new brls::PanGestureRecognizer(
             [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                if (m_errorOverlay) return;  // Don't handle swipes while error overlay is shown
                 const float PAGE_TURN_THRESHOLD = 80.0f;
 
                 if (status.state == brls::GestureState::START) {
@@ -1770,6 +1778,8 @@ void ReaderActivity::markChapterAsRead() {
 }
 
 void ReaderActivity::toggleControls() {
+    if (m_errorOverlay) return;  // Don't toggle controls while error overlay is shown
+
     m_controlsVisible = !m_controlsVisible;
 
     if (m_controlsVisible) {
@@ -2217,21 +2227,42 @@ void ReaderActivity::showPageError(const std::string& message) {
     m_retryButton->setHeight(44);
     m_retryButton->setCornerRadius(22);
     m_retryButton->setBackgroundColor(nvgRGBA(0, 150, 136, 255));
-    m_retryButton->registerClickAction([this](brls::View* view) {
+    std::weak_ptr<bool> retryAlive = m_alive;
+    m_retryButton->registerClickAction([this, retryAlive](brls::View* view) {
         if (!Application::getInstance().isConnected() && !m_loadedFromLocal) {
             brls::Application::notify("App is offline");
             return true;
         }
-        hidePageError();
-        if (m_pages.empty()) {
-            loadPages();
-        } else {
-            loadPage(m_currentPage);
-        }
+        // Defer to next frame so the click event finishes processing before
+        // the button is removed from the view hierarchy. Without this,
+        // hidePageError() destroys the button mid-callback, and borealis's
+        // hover/focus state machine accesses the freed view.
+        brls::sync([this, retryAlive]() {
+            auto alive = retryAlive.lock();
+            if (!alive || !*alive) return;
+            hidePageError();
+            if (m_pages.empty()) {
+                loadPages();
+            } else {
+                loadPage(m_currentPage);
+            }
+        });
         return true;
     });
     m_retryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_retryButton));
     m_errorOverlay->addView(m_retryButton);
+
+    // Intercept all touch events on the overlay so they don't pass through
+    // to the container/pageImage behind it (prevents hover transfer errors)
+    m_errorOverlay->addGestureRecognizer(new brls::TapGestureRecognizer(
+        [](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+            // Consume the tap - do nothing
+        }));
+    m_errorOverlay->addGestureRecognizer(new brls::PanGestureRecognizer(
+        [](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            // Consume the swipe - do nothing
+        }, brls::PanAxis::ANY));
+    m_errorOverlay->setFocusable(false);
 
     container->addView(m_errorOverlay);
     brls::Application::giveFocus(m_retryButton);
@@ -2243,6 +2274,13 @@ void ReaderActivity::hidePageError() {
         m_errorOverlay = nullptr;
         m_errorLabel = nullptr;
         m_retryButton = nullptr;
+
+        // Restore focus to the appropriate content view
+        if (m_continuousScrollMode && webtoonScroll) {
+            brls::Application::giveFocus(webtoonScroll);
+        } else if (pageImage) {
+            brls::Application::giveFocus(pageImage);
+        }
     }
 }
 
