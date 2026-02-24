@@ -19,6 +19,8 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     , m_hasNextPage(false)
     , m_browseMode(BrowseMode::POPULAR) {
 
+    m_alive = std::make_shared<bool>(true);
+
     this->setAxis(brls::Axis::COLUMN);
     this->setPadding(20, 30, 20, 30);
 
@@ -138,6 +140,10 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     loadPopular();
 }
 
+SourceBrowseTab::~SourceBrowseTab() {
+    if (m_alive) *m_alive = false;
+}
+
 void SourceBrowseTab::onFocusGained() {
     brls::Box::onFocusGained();
 }
@@ -191,7 +197,7 @@ void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
         m_contentGrid->setVisibility(brls::Visibility::GONE);
     }
 
-    brls::async([this, focusIndexAfterLoad]() {
+    brls::async([this, focusIndexAfterLoad, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> newManga;
         bool hasNext = false;
@@ -209,7 +215,9 @@ void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
                 break;
         }
 
-        brls::sync([this, success, newManga, hasNext, focusIndexAfterLoad]() {
+        brls::sync([this, success, newManga, hasNext, focusIndexAfterLoad, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             // Hide loading indicator
             m_loadingLabel->setVisibility(brls::Visibility::GONE);
             m_contentGrid->setVisibility(brls::Visibility::VISIBLE);

@@ -13,6 +13,7 @@
 #pragma once
 
 #include <borealis.hpp>
+#include <memory>
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "view/recycling_grid.hpp"
@@ -22,6 +23,7 @@ namespace vitasuwayomi {
 class SourceBrowseTab : public brls::Box {
 public:
     SourceBrowseTab(const Source& source);
+    ~SourceBrowseTab();
 
     void onFocusGained() override;
 
@@ -59,6 +61,9 @@ private:
     brls::Button* m_searchBtn = nullptr;
     brls::Button* m_loadMoreBtn = nullptr;
     RecyclingGrid* m_contentGrid = nullptr;
+
+    // Async lifetime guard
+    std::shared_ptr<bool> m_alive;
 };
 
 } // namespace vitasuwayomi
