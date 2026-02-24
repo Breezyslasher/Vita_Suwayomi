@@ -844,6 +844,9 @@ void ExtensionsTab::willDisappear(bool resetState) {
 
     // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
     if (m_alive) *m_alive = false;
+
+    // Cancel pending image loads to free up worker threads and network bandwidth
+    ImageLoader::cancelAll();
 }
 
 void ExtensionsTab::onFocusGained() {

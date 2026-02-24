@@ -423,17 +423,20 @@ DownloadsTab::~DownloadsTab() {
 void DownloadsTab::willDisappear(bool resetState) {
     brls::Box::willDisappear(resetState);
 
+    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
+    if (m_alive) *m_alive = false;
+
     // IMPORTANT: Stop auto-refresh FIRST to signal all callbacks to stop
     // This must happen before clearing callbacks to prevent race conditions
     stopAutoRefresh();
-
-    // Small delay to allow any pending brls::sync calls to complete
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     // Clear callbacks to avoid updates when tab is not visible
     DownloadsManager& mgr = DownloadsManager::getInstance();
     mgr.setProgressCallback(nullptr);
     mgr.setChapterCompletionCallback(nullptr);
+
+    // Cancel pending image loads to free up worker threads and network bandwidth
+    ImageLoader::cancelAll();
 
     // Clear tracking vectors to free memory
     m_localRowElements.clear();

@@ -3071,25 +3071,24 @@ bool SuwayomiClient::markChaptersUnread(int mangaId, const std::vector<int>& cha
 }
 
 bool SuwayomiClient::markAllChaptersRead(int mangaId) {
-    // Fetch all chapters, then mark them all read via GraphQL
+    // Fetch all chapters, then mark them all read and clear progress via GraphQL
     std::vector<Chapter> chapters;
     if (!fetchChapters(mangaId, chapters)) return false;
 
     std::vector<int> chapterIds;
     for (const auto& ch : chapters) {
-        if (!ch.read) {
-            chapterIds.push_back(ch.id);
-        }
+        chapterIds.push_back(ch.id);
     }
     if (chapterIds.empty()) return true;
 
-    // Use GraphQL batch update
+    // Use GraphQL batch update - also clear lastPageRead
     const char* query = R"(
-        mutation UpdateChapters($ids: [Int!]!, $isRead: Boolean!) {
-            updateChapters(input: { ids: $ids, patch: { isRead: $isRead } }) {
+        mutation UpdateChapters($ids: [Int!]!) {
+            updateChapters(input: { ids: $ids, patch: { isRead: true, lastPageRead: 0 } }) {
                 chapters {
                     id
                     isRead
+                    lastPageRead
                 }
             }
         }
@@ -3102,29 +3101,30 @@ bool SuwayomiClient::markAllChaptersRead(int mangaId) {
     }
     idList += "]";
 
-    std::string variables = "{\"ids\":" + idList + ",\"isRead\":true}";
+    std::string variables = "{\"ids\":" + idList + "}";
     std::string response = executeGraphQL(query, variables);
     return !response.empty();
 }
 
 bool SuwayomiClient::markAllChaptersUnread(int mangaId) {
+    // Fetch all chapters, then mark them all unread and clear progress via GraphQL
     std::vector<Chapter> chapters;
     if (!fetchChapters(mangaId, chapters)) return false;
 
     std::vector<int> chapterIds;
     for (const auto& ch : chapters) {
-        if (ch.read) {
-            chapterIds.push_back(ch.id);
-        }
+        chapterIds.push_back(ch.id);
     }
     if (chapterIds.empty()) return true;
 
+    // Use GraphQL batch update - also clear lastPageRead
     const char* query = R"(
-        mutation UpdateChapters($ids: [Int!]!, $isRead: Boolean!) {
-            updateChapters(input: { ids: $ids, patch: { isRead: $isRead } }) {
+        mutation UpdateChapters($ids: [Int!]!) {
+            updateChapters(input: { ids: $ids, patch: { isRead: false, lastPageRead: 0 } }) {
                 chapters {
                     id
                     isRead
+                    lastPageRead
                 }
             }
         }
@@ -3137,7 +3137,7 @@ bool SuwayomiClient::markAllChaptersUnread(int mangaId) {
     }
     idList += "]";
 
-    std::string variables = "{\"ids\":" + idList + ",\"isRead\":false}";
+    std::string variables = "{\"ids\":" + idList + "}";
     std::string response = executeGraphQL(query, variables);
     return !response.empty();
 }

@@ -17,6 +17,8 @@ public:
     SettingsTab();
     ~SettingsTab();
 
+    void willDisappear(bool resetState) override;
+
 private:
     void createAccountSection();
     void createTrackingSection();

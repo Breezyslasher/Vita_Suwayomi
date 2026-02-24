@@ -325,6 +325,10 @@ void SearchTab::willDisappear(bool resetState) {
 
     // Invalidate load generation so any in-flight async results are ignored
     m_loadGeneration++;
+
+    // Cancel pending image loads to free up worker threads and network bandwidth
+    ImageLoader::cancelAll();
+    m_isLoadingPage = false;
 }
 
 void SearchTab::onFocusGained() {
