@@ -41,7 +41,7 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     // Load icon asynchronously
     if (!source.iconUrl.empty()) {
         std::string iconUrl = Application::getInstance().getServerUrl() + source.iconUrl;
-        ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, m_sourceIcon);
+        ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, m_sourceIcon, m_alive);
     }
 
     // Title

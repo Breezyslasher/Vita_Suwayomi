@@ -14,6 +14,8 @@ namespace vitasuwayomi {
 // =====================
 
 TrackingSearchResultCell::TrackingSearchResultCell() {
+    m_alive = std::make_shared<bool>(true);
+
     // Horizontal list item layout: [Cover] [Text content]
     this->setAxis(brls::Axis::ROW);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
@@ -170,7 +172,7 @@ void TrackingSearchResultCell::loadCoverImage() {
     ImageLoader::loadAsync(proxiedUrl, [this](brls::Image* img) {
         // Successfully loaded - callback invoked by ImageLoader
         brls::Logger::debug("TrackingSearchResultCell: Cover loaded successfully");
-    }, m_coverImage);
+    }, m_coverImage, m_alive);
 
     // Note: If loading fails (retry exhausted), the placeholder will remain visible
 }
@@ -193,6 +195,10 @@ void TrackingSearchResultCell::onFocusLost() {
     }
     // Reset background
     this->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+}
+
+TrackingSearchResultCell::~TrackingSearchResultCell() {
+    if (m_alive) *m_alive = false;
 }
 
 brls::View* TrackingSearchResultCell::create() {

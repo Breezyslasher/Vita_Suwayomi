@@ -584,7 +584,7 @@ void SearchTab::showSources() {
             if (!source.iconUrl.empty()) {
                 // Load icon asynchronously from server
                 std::string iconUrl = Application::getInstance().getServerUrl() + source.iconUrl;
-                ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, sourceIcon);
+                ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, sourceIcon, m_alive);
             }
             sourceRow->addView(sourceIcon);
 

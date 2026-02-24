@@ -1316,7 +1316,7 @@ void MangaDetailView::loadCover() {
     if (!coverUrl.empty()) {
         ImageLoader::loadAsync(coverUrl, [this](brls::Image* image) {
             brls::Logger::debug("MangaDetailView: Cover loaded");
-        }, m_coverImage);
+        }, m_coverImage, m_alive);
     }
 }
 
@@ -3483,7 +3483,7 @@ void MangaDetailView::resetCover() {
             if (m_coverImage && !coverUrl.empty()) {
                 ImageLoader::loadAsync(coverUrl, [](brls::Image* image) {
                     brls::Logger::debug("MangaDetailView: Cover refreshed");
-                }, m_coverImage);
+                }, m_coverImage, m_alive);
             }
 
             brls::Application::notify("Cover reset");

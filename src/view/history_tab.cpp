@@ -481,7 +481,7 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
         if (url[0] == '/') {
             url = SuwayomiClient::getInstance().getServerUrl() + url;
         }
-        ImageLoader::loadAsync(url, nullptr, coverImage);
+        ImageLoader::loadAsync(url, nullptr, coverImage, m_alive);
     }
     itemRow->addView(coverImage);
 

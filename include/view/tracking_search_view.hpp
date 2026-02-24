@@ -8,6 +8,7 @@
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
 #include <functional>
+#include <memory>
 #include <vector>
 
 namespace vitasuwayomi {
@@ -19,6 +20,7 @@ namespace vitasuwayomi {
 class TrackingSearchResultCell : public brls::Box {
 public:
     TrackingSearchResultCell();
+    ~TrackingSearchResultCell();
 
     void setResult(const TrackSearchResult& result);
     const TrackSearchResult& getResult() const { return m_result; }
@@ -40,6 +42,9 @@ private:
     brls::Label* m_titleLabel = nullptr;
     brls::Label* m_descriptionLabel = nullptr;
     brls::Label* m_statusLabel = nullptr;
+
+    // Async lifetime guard - prevents image loader from writing to freed targets
+    std::shared_ptr<bool> m_alive;
 };
 
 /**

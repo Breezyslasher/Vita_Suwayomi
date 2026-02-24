@@ -147,6 +147,9 @@ public:
     // Language name helper (used by data source)
     std::string getLanguageDisplayName(const std::string& langCode);
 
+    // Alive flag accessor (used by data source for image loader safety)
+    std::shared_ptr<bool> getAlive() const { return m_alive; }
+
 private:
     // Data loading
     void loadExtensionsFast();

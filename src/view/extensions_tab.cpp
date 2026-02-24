@@ -374,7 +374,7 @@ brls::RecyclerCell* ExtensionsDataSource::cellForRow(brls::RecyclerFrame* recycl
             if (!ext.iconUrl.empty() && !cell->iconLoaded) {
                 std::string fullUrl = Application::getInstance().getServerUrl() + ext.iconUrl;
                 cell->iconLoaded = true;
-                ImageLoader::loadAsync(fullUrl, [](brls::Image* img) {}, cell->icon);
+                ImageLoader::loadAsync(fullUrl, [](brls::Image* img) {}, cell->icon, m_tab->getAlive());
             }
 
             return cell;
