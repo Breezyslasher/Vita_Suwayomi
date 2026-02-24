@@ -136,6 +136,13 @@ HistoryTab::~HistoryTab() {
     brls::Logger::debug("HistoryTab: Destroyed");
 }
 
+void HistoryTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
+    if (m_alive) *m_alive = false;
+}
+
 void HistoryTab::onFocusGained() {
     brls::Box::onFocusGained();
     if (!m_loaded) {
@@ -209,12 +216,13 @@ void HistoryTab::loadMoreHistory() {
     size_t firstNewItemIndex = m_historyItems.size();
 
     std::weak_ptr<bool> aliveWeak = m_alive;
+    int offset = m_currentOffset;  // Capture by value for safe background access
 
-    asyncRun([this, aliveWeak, firstNewItemIndex]() {
+    asyncRun([this, aliveWeak, firstNewItemIndex, offset]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<ReadingHistoryItem> moreHistory;
 
-        bool success = client.fetchReadingHistory(m_currentOffset, ITEMS_PER_PAGE, moreHistory);
+        bool success = client.fetchReadingHistory(offset, ITEMS_PER_PAGE, moreHistory);
 
         brls::sync([this, moreHistory, success, aliveWeak, firstNewItemIndex]() {
             auto alive = aliveWeak.lock();
@@ -327,7 +335,8 @@ void HistoryTab::showHistoryItemMenu(const ReadingHistoryItem& item, int index) 
         [this, item](int selected) {
             if (selected < 0) return;
 
-            brls::sync([this, item, selected]() {
+            brls::sync([this, item, selected, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
                 switch (selected) {
                     case 0:  // Continue Reading
                         onHistoryItemSelected(item);
@@ -480,7 +489,7 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
         if (url[0] == '/') {
             url = SuwayomiClient::getInstance().getServerUrl() + url;
         }
-        ImageLoader::loadAsync(url, nullptr, coverImage);
+        ImageLoader::loadAsync(url, nullptr, coverImage, m_alive);
     }
     itemRow->addView(coverImage);
 

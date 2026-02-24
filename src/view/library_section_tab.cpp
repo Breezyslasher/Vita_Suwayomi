@@ -389,6 +389,13 @@ LibrarySectionTab::~LibrarySectionTab() {
     brls::Logger::debug("LibrarySectionTab: Destroyed");
 }
 
+void LibrarySectionTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
+    if (m_alive) *m_alive = false;
+}
+
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
 

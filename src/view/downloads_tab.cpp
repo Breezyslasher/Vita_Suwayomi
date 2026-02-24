@@ -61,6 +61,8 @@ static void loadLocalCoverImage(brls::Image* image, const std::string& localPath
 }
 
 DownloadsTab::DownloadsTab() {
+    m_alive = std::make_shared<bool>(true);
+
     this->setAxis(brls::Axis::COLUMN);
     this->setPadding(20);
     this->setGrow(1.0f);
@@ -120,12 +122,13 @@ DownloadsTab::DownloadsTab() {
     // Start/Stop button action - toggle downloader state for both server and local
     // brls::Button handles both touch and controller input via registerClickAction
     m_startStopBtn->registerClickAction([this](brls::View*) {
-        asyncRun([this]() {
+        // Capture member value by value for safe background thread access
+        bool wasRunning = m_downloaderRunning;
+        asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive), wasRunning]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             DownloadsManager& mgr = DownloadsManager::getInstance();
             bool success = false;
-            bool wasRunning = m_downloaderRunning;
-            if (m_downloaderRunning) {
+            if (wasRunning) {
                 // Stop both server and local downloads
                 success = client.stopDownloads();
                 mgr.pauseDownloads();
@@ -134,7 +137,9 @@ DownloadsTab::DownloadsTab() {
                 success = client.startDownloads();
                 mgr.startDownloads();
             }
-            brls::sync([this, success, wasRunning]() {
+            brls::sync([this, success, wasRunning, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (success) {
                     brls::Application::notify(wasRunning ? "Downloads paused" : "Downloads started");
                 }
@@ -165,7 +170,7 @@ DownloadsTab::DownloadsTab() {
     // Pause button action - stop both server and local downloads
     // brls::Button handles both touch and controller input via registerClickAction
     m_pauseBtn->registerClickAction([this](brls::View*) {
-        asyncRun([this]() {
+        asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             DownloadsManager& mgr = DownloadsManager::getInstance();
 
@@ -173,7 +178,9 @@ DownloadsTab::DownloadsTab() {
             bool success = client.stopDownloads();
             mgr.pauseDownloads();
 
-            brls::sync([this, success]() {
+            brls::sync([this, success, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 m_downloaderRunning = false;
                 if (m_startStopLabel) {
                     m_startStopLabel->setText("Start");
@@ -219,7 +226,7 @@ DownloadsTab::DownloadsTab() {
     // Clear button action - clear both server and local download queues
     // brls::Button handles both touch and controller input via registerClickAction
     m_clearBtn->registerClickAction([this](brls::View*) {
-        asyncRun([this]() {
+        asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             DownloadsManager& mgr = DownloadsManager::getInstance();
 
@@ -242,7 +249,9 @@ DownloadsTab::DownloadsTab() {
                 }
             }
 
-            brls::sync([this, success]() {
+            brls::sync([this, success, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 m_downloaderRunning = false;
                 if (m_startStopLabel) {
                     m_startStopLabel->setText("Start");
@@ -363,7 +372,8 @@ void DownloadsTab::willAppear(bool resetState) {
     // Register progress callback for real-time UI updates during local downloads
     // Now uses incremental updates instead of full refresh
     DownloadsManager& mgr = DownloadsManager::getInstance();
-    mgr.setProgressCallback([this](int downloadedPages, int totalPages) {
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    mgr.setProgressCallback([this, aliveWeak](int downloadedPages, int totalPages) {
         // For local downloads, we can update more frequently since we're just updating labels
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastProgressRefresh).count();
@@ -373,7 +383,9 @@ void DownloadsTab::willAppear(bool resetState) {
         if (elapsed >= FAST_PROGRESS_INTERVAL_MS || downloadedPages == totalPages) {
             m_lastProgressRefresh = now;
             if (m_autoRefreshEnabled.load()) {
-                brls::sync([this]() {
+                brls::sync([this, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
                     if (m_autoRefreshEnabled.load()) {
                         // Use incremental refresh - much faster than full rebuild
                         refreshLocalDownloads();
@@ -384,12 +396,14 @@ void DownloadsTab::willAppear(bool resetState) {
     });
 
     // Register chapter completion callback - remove completed chapter from UI directly
-    mgr.setChapterCompletionCallback([this](int mangaId, int chapterIndex, bool success) {
+    mgr.setChapterCompletionCallback([this, aliveWeak](int mangaId, int chapterIndex, bool success) {
         if (!m_autoRefreshEnabled.load()) {
             return;
         }
 
-        brls::sync([this, mangaId, chapterIndex]() {
+        brls::sync([this, mangaId, chapterIndex, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             if (!m_autoRefreshEnabled.load() || !m_localContainer) {
                 return;
             }
@@ -400,6 +414,10 @@ void DownloadsTab::willAppear(bool resetState) {
 
     refresh();
     startAutoRefresh();
+}
+
+DownloadsTab::~DownloadsTab() {
+    if (m_alive) *m_alive = false;
 }
 
 void DownloadsTab::willDisappear(bool resetState) {
@@ -429,12 +447,14 @@ void DownloadsTab::refresh() {
 
 void DownloadsTab::refreshQueue() {
     // Fetch download queue and status from server
-    asyncRun([this]() {
+    asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<DownloadQueueItem> queue;
 
         if (!client.fetchDownloadQueue(queue)) {
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 // Check if focus is inside server queue BEFORE destroying views
                 brls::View* currentFocus = brls::Application::getCurrentFocus();
                 bool focusInServerQueue = false;
@@ -494,7 +514,9 @@ void DownloadsTab::refreshQueue() {
             }
         }
 
-        brls::sync([this, queue, isDownloading, newCache]() {
+        brls::sync([this, queue, isDownloading, newCache, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             m_downloaderRunning = isDownloading;
             if (m_startStopLabel && m_lastLocalQueue.empty()) {
                 m_startStopLabel->setText(m_downloaderRunning ? "Pause" : "Start");
@@ -939,31 +961,33 @@ void DownloadsTab::startAutoRefresh() {
     m_autoRefreshEnabled.store(true);
 
     // Start auto-refresh loop in background thread
-    asyncRun([this]() {
-        while (m_autoRefreshEnabled.load()) {
-            // Adaptive interval - use longer interval for large queues to reduce UI thread pressure
-            int totalItems = static_cast<int>(m_lastServerQueue.size() + m_lastLocalQueue.size());
-            int refreshInterval = (totalItems > LARGE_QUEUE_THRESHOLD) ?
-                                  AUTO_REFRESH_INTERVAL_LARGE_MS : AUTO_REFRESH_INTERVAL_MS;
+    // Use shared_ptr to m_alive for loop termination (safe even after object destruction)
+    auto aliveShared = m_alive;
+    asyncRun([this, aliveShared]() {
+        while (true) {
+            // Check if object is still alive before accessing any members
+            if (!aliveShared || !*aliveShared) break;
+
+            // Use default interval - avoid accessing member vectors on background thread
+            int refreshInterval = AUTO_REFRESH_INTERVAL_MS;
 
             // Sleep for the interval
             std::this_thread::sleep_for(std::chrono::milliseconds(refreshInterval));
 
-            // Check if still enabled after sleep (use atomic load)
-            if (!m_autoRefreshEnabled.load()) {
-                break;
-            }
+            // Check again after sleep
+            if (!aliveShared || !*aliveShared) break;
 
             // Trigger refresh on main thread for both server and local queues
-            // Capture enabled state check inside sync to prevent use-after-free
-            brls::sync([this]() {
+            std::weak_ptr<bool> aliveWeak = aliveShared;
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (m_autoRefreshEnabled.load() && this->getVisibility() == brls::Visibility::VISIBLE) {
                     refreshQueue();
                     refreshLocalDownloads();
                 }
             });
         }
-        m_autoRefreshTimerActive.store(false);
     });
 }
 
@@ -1502,11 +1526,13 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
 
     row->registerAction("Remove", brls::ControllerButton::BUTTON_X,
         [this, mangaId, chapterId](brls::View* view) {
-            asyncRun([this, mangaId, chapterId]() {
+            asyncRun([this, mangaId, chapterId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
                 SuwayomiClient& client = SuwayomiClient::getInstance();
                 std::vector<int> chapterIds = {chapterId};
                 client.deleteChapterDownloads(chapterIds, mangaId);
-                brls::sync([this]() {
+                brls::sync([this, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
                     refreshQueue();
                 });
             });
@@ -1516,10 +1542,12 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     row->registerAction("Move Up", brls::ControllerButton::BUTTON_LB,
         [this, chapterId, mangaId, currentIndex](brls::View* view) {
             if (currentIndex > 0) {
-                asyncRun([this, chapterId, mangaId, currentIndex]() {
+                asyncRun([this, chapterId, mangaId, currentIndex, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
                     SuwayomiClient& client = SuwayomiClient::getInstance();
                     if (client.reorderDownload(chapterId, mangaId, 0, currentIndex - 1)) {
-                        brls::sync([this]() {
+                        brls::sync([this, aliveWeak]() {
+                            auto alive = aliveWeak.lock();
+                            if (!alive || !*alive) return;
                             refreshQueue();
                         });
                     }
@@ -1531,10 +1559,12 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     row->registerAction("Move Down", brls::ControllerButton::BUTTON_RB,
         [this, chapterId, mangaId, currentIndex, queueSize](brls::View* view) {
             if (currentIndex < queueSize - 1) {
-                asyncRun([this, chapterId, mangaId, currentIndex]() {
+                asyncRun([this, chapterId, mangaId, currentIndex, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
                     SuwayomiClient& client = SuwayomiClient::getInstance();
                     if (client.reorderDownload(chapterId, mangaId, 0, currentIndex + 1)) {
-                        brls::sync([this]() {
+                        brls::sync([this, aliveWeak]() {
+                            auto alive = aliveWeak.lock();
+                            if (!alive || !*alive) return;
                             refreshQueue();
                         });
                     }
@@ -1569,11 +1599,13 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
 
                 float dx = status.position.x - swipeState->touchStart.x;
                 if (swipeState->isValidSwipe && dx < -SWIPE_THRESHOLD) {
-                    asyncRun([this, mangaId, chapterId]() {
+                    asyncRun([this, mangaId, chapterId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
                         SuwayomiClient& client = SuwayomiClient::getInstance();
                         std::vector<int> chapterIds = {chapterId};
                         client.deleteChapterDownloads(chapterIds, mangaId);
-                        brls::sync([this]() {
+                        brls::sync([this, aliveWeak]() {
+                            auto alive = aliveWeak.lock();
+                            if (!alive || !*alive) return;
                             refreshQueue();
                         });
                     });

@@ -19,6 +19,8 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     , m_hasNextPage(false)
     , m_browseMode(BrowseMode::POPULAR) {
 
+    m_alive = std::make_shared<bool>(true);
+
     this->setAxis(brls::Axis::COLUMN);
     this->setPadding(20, 30, 20, 30);
 
@@ -39,7 +41,7 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     // Load icon asynchronously
     if (!source.iconUrl.empty()) {
         std::string iconUrl = Application::getInstance().getServerUrl() + source.iconUrl;
-        ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, m_sourceIcon);
+        ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, m_sourceIcon, m_alive);
     }
 
     // Title
@@ -103,7 +105,8 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     // Register Start button to open search dialog
     // Use brls::sync to defer IME opening to avoid crash during controller input handling
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showSearchDialog();
         });
         return true;
@@ -136,6 +139,17 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
 
     // Initial load
     loadPopular();
+}
+
+SourceBrowseTab::~SourceBrowseTab() {
+    if (m_alive) *m_alive = false;
+}
+
+void SourceBrowseTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
+    if (m_alive) *m_alive = false;
 }
 
 void SourceBrowseTab::onFocusGained() {
@@ -191,25 +205,34 @@ void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
         m_contentGrid->setVisibility(brls::Visibility::GONE);
     }
 
-    brls::async([this, focusIndexAfterLoad]() {
+    // Capture member values by value for safe background thread access
+    auto browseMode = m_browseMode;
+    auto sourceId = m_source.id;
+    auto page = m_currentPage;
+    auto query = m_searchQuery;
+
+    brls::async([this, focusIndexAfterLoad, aliveWeak = std::weak_ptr<bool>(m_alive),
+                 browseMode, sourceId, page, query]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> newManga;
         bool hasNext = false;
         bool success = false;
 
-        switch (m_browseMode) {
+        switch (browseMode) {
             case BrowseMode::POPULAR:
-                success = client.fetchPopularManga(m_source.id, m_currentPage, newManga, hasNext);
+                success = client.fetchPopularManga(sourceId, page, newManga, hasNext);
                 break;
             case BrowseMode::LATEST:
-                success = client.fetchLatestManga(m_source.id, m_currentPage, newManga, hasNext);
+                success = client.fetchLatestManga(sourceId, page, newManga, hasNext);
                 break;
             case BrowseMode::SEARCH:
-                success = client.searchManga(m_source.id, m_searchQuery, m_currentPage, newManga, hasNext);
+                success = client.searchManga(sourceId, query, page, newManga, hasNext);
                 break;
         }
 
-        brls::sync([this, success, newManga, hasNext, focusIndexAfterLoad]() {
+        brls::sync([this, success, newManga, hasNext, focusIndexAfterLoad, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             // Hide loading indicator
             m_loadingLabel->setVisibility(brls::Visibility::GONE);
             m_contentGrid->setVisibility(brls::Visibility::VISIBLE);

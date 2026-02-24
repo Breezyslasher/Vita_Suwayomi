@@ -16,6 +16,8 @@
 namespace vitasuwayomi {
 
 SearchTab::SearchTab() {
+    m_alive = std::make_shared<bool>(true);
+
     this->setAxis(brls::Axis::COLUMN);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
@@ -69,7 +71,8 @@ SearchTab::SearchTab() {
     m_historyBtn->addView(historyIcon);
 
     m_historyBtn->registerClickAction([this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showSearchHistoryDialog();
         });
         return true;
@@ -78,7 +81,7 @@ SearchTab::SearchTab() {
     // B button on History goes back when not on sources list
     m_historyBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         if (m_browseMode != BrowseMode::SOURCES) {
-            brls::sync([this]() { handleBackNavigation(); });
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
             return true;
         }
         return false;
@@ -115,7 +118,8 @@ SearchTab::SearchTab() {
     m_globalSearchBtn->addView(searchIcon);
 
     m_globalSearchBtn->registerClickAction([this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showGlobalSearchDialog();
         });
         return true;
@@ -124,7 +128,7 @@ SearchTab::SearchTab() {
     // B button on Search goes back when not on sources list
     m_globalSearchBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         if (m_browseMode != BrowseMode::SOURCES) {
-            brls::sync([this]() { handleBackNavigation(); });
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
             return true;
         }
         return false;
@@ -139,7 +143,8 @@ SearchTab::SearchTab() {
     // Register Start button to open global search dialog
     // Use brls::sync to defer IME opening to avoid crash during controller input handling
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showGlobalSearchDialog();
         });
         return true;
@@ -147,7 +152,8 @@ SearchTab::SearchTab() {
 
     // Register Select button to open search history
     this->registerAction("History", brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
             showSearchHistoryDialog();
         });
         return true;
@@ -157,7 +163,8 @@ SearchTab::SearchTab() {
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
         // Only handle if we're not on the sources list
         if (m_browseMode != BrowseMode::SOURCES) {
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
                 handleBackNavigation();
             });
             return true;
@@ -194,7 +201,7 @@ SearchTab::SearchTab() {
     m_popularBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_popularBtn));
     // B button on Popular goes back
     m_popularBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        brls::sync([this]() { handleBackNavigation(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
         return true;
     }, true);
     m_modeBox->addView(m_popularBtn);
@@ -213,7 +220,7 @@ SearchTab::SearchTab() {
     m_latestBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_latestBtn));
     // B button on Latest goes back
     m_latestBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        brls::sync([this]() { handleBackNavigation(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
         return true;
     }, true);
     m_modeBox->addView(m_latestBtn);
@@ -242,7 +249,7 @@ SearchTab::SearchTab() {
     m_filterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_filterBtn));
     // B button on Filter goes back
     m_filterBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        brls::sync([this]() { handleBackNavigation(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
         return true;
     }, true);
     m_modeBox->addView(m_filterBtn);
@@ -258,7 +265,7 @@ SearchTab::SearchTab() {
     m_backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_backBtn));
     // B button on Back also goes back
     m_backBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        brls::sync([this]() { handleBackNavigation(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
         return true;
     }, true);
     m_modeBox->addView(m_backBtn);
@@ -283,7 +290,8 @@ SearchTab::SearchTab() {
     // Set up B button callback for back navigation from grid cells
     m_contentGrid->setOnBackPressed([this]() {
         if (m_browseMode != BrowseMode::SOURCES) {
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
                 handleBackNavigation();
             });
             return true;
@@ -302,6 +310,21 @@ SearchTab::SearchTab() {
 
     // Load sources initially
     loadSources();
+}
+
+SearchTab::~SearchTab() {
+    if (m_alive) *m_alive = false;
+}
+
+void SearchTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Invalidate alive flag BEFORE destruction so all pending async callbacks
+    // (image loader, brls::sync from asyncRun, deferred button handlers) bail out
+    if (m_alive) *m_alive = false;
+
+    // Invalidate load generation so any in-flight async results are ignored
+    m_loadGeneration++;
 }
 
 void SearchTab::onFocusGained() {
@@ -324,21 +347,25 @@ void SearchTab::loadSources() {
         return;
     }
 
-    asyncRun([this]() {
+    asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Source> sources;
 
         if (client.fetchSourceList(sources)) {
             brls::Logger::info("SearchTab: Got {} sources", sources.size());
 
-            brls::sync([this, sources]() {
+            brls::sync([this, sources, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 m_sources = sources;
                 showSources();
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch sources");
             Application::getInstance().setConnected(false);
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 m_resultsLabel->setText("App is offline - connect to a server to browse sources");
                 // Focus on history button so user can still navigate
                 brls::Application::giveFocus(m_historyBtn);
@@ -574,7 +601,7 @@ void SearchTab::showSources() {
             if (!source.iconUrl.empty()) {
                 // Load icon asynchronously from server
                 std::string iconUrl = Application::getInstance().getServerUrl() + source.iconUrl;
-                ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, sourceIcon);
+                ImageLoader::loadAsync(iconUrl, [](brls::Image* img) {}, sourceIcon, m_alive);
             }
             sourceRow->addView(sourceIcon);
 
@@ -691,7 +718,7 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
     m_currentPage = 1;
     int gen = ++m_loadGeneration;
 
-    asyncRun([this, sourceId, gen]() {
+    asyncRun([this, sourceId, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -699,7 +726,9 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
         if (client.fetchPopularManga(sourceId, 1, manga, hasNextPage)) {
             brls::Logger::info("SearchTab: Got {} popular manga", manga.size());
 
-            brls::sync([this, manga, hasNextPage, gen]() {
+            brls::sync([this, manga, hasNextPage, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;  // Stale callback, user navigated away
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
@@ -716,7 +745,9 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch popular manga");
-            brls::sync([this, gen]() {
+            brls::sync([this, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Failed to load popular manga");
                 // Focus on Popular button so user can retry
@@ -732,7 +763,7 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
     m_currentPage = 1;
     int gen = ++m_loadGeneration;
 
-    asyncRun([this, sourceId, gen]() {
+    asyncRun([this, sourceId, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -740,7 +771,9 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
         if (client.fetchLatestManga(sourceId, 1, manga, hasNextPage)) {
             brls::Logger::info("SearchTab: Got {} latest manga", manga.size());
 
-            brls::sync([this, manga, hasNextPage, gen]() {
+            brls::sync([this, manga, hasNextPage, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
@@ -757,7 +790,9 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch latest manga");
-            brls::sync([this, gen]() {
+            brls::sync([this, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Failed to load latest manga");
                 // Focus on Latest button so user can retry
@@ -814,7 +849,7 @@ void SearchTab::performSearch(const std::string& query) {
     std::vector<Source> sourcesToSearch = m_filteredSources;
     int gen = ++m_loadGeneration;
 
-    asyncRun([this, query, sourcesToSearch, gen]() {
+    asyncRun([this, query, sourcesToSearch, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         // Map to group results by source
@@ -858,7 +893,9 @@ void SearchTab::performSearch(const std::string& query) {
             }
         }
 
-        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources, gen]() {
+        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources, gen, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             if (gen != m_loadGeneration) return;  // Stale callback, user navigated away
             m_mangaList = allResults;
             m_resultsBySource = resultsBySource;
@@ -897,7 +934,7 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
     m_currentPage = 1;
     int gen = ++m_loadGeneration;
 
-    asyncRun([this, sourceId, query, gen]() {
+    asyncRun([this, sourceId, query, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -905,7 +942,9 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
         if (client.searchManga(sourceId, query, 1, manga, hasNextPage)) {
             brls::Logger::info("SearchTab: Found {} results for '{}'", manga.size(), query);
 
-            brls::sync([this, manga, hasNextPage, gen]() {
+            brls::sync([this, manga, hasNextPage, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
@@ -925,7 +964,9 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
             });
         } else {
             brls::Logger::error("SearchTab: Failed to search manga");
-            brls::sync([this, gen]() {
+            brls::sync([this, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Search failed");
                 // Focus on back button so user can go back
@@ -967,7 +1008,8 @@ void SearchTab::populateSearchResultsBySource() {
         // Register B button on search results scroll view to handle back navigation
         m_searchResultsScrollView->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
             if (m_browseMode != BrowseMode::SOURCES) {
-                brls::sync([this]() {
+                brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                    auto a = aliveWeak.lock(); if (!a || !*a) return;
                     handleBackNavigation();
                 });
                 return true;
@@ -1048,7 +1090,8 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
         // Register B button on cell to handle back navigation
         cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
             if (m_browseMode != BrowseMode::SOURCES) {
-                brls::sync([this]() {
+                brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                    auto a = aliveWeak.lock(); if (!a || !*a) return;
                     handleBackNavigation();
                 });
                 return true;
@@ -1080,22 +1123,31 @@ void SearchTab::loadNextPage() {
 
     int gen = m_loadGeneration;  // Don't increment - loadNextPage appends, not a new navigation
 
-    asyncRun([this, firstNewItemIndex, gen]() {
+    // Capture member values by value for safe background thread access
+    auto browseMode = m_browseMode;
+    auto sourceId = m_currentSourceId;
+    auto page = m_currentPage;
+    auto query = m_searchQuery;
+
+    asyncRun([this, firstNewItemIndex, gen, aliveWeak = std::weak_ptr<bool>(m_alive),
+              browseMode, sourceId, page, query]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
 
         bool success = false;
-        if (m_browseMode == BrowseMode::POPULAR) {
-            success = client.fetchPopularManga(m_currentSourceId, m_currentPage, manga, hasNextPage);
-        } else if (m_browseMode == BrowseMode::LATEST) {
-            success = client.fetchLatestManga(m_currentSourceId, m_currentPage, manga, hasNextPage);
-        } else if (m_browseMode == BrowseMode::SEARCH_RESULTS && !m_searchQuery.empty()) {
-            success = client.searchManga(m_currentSourceId, m_searchQuery, m_currentPage, manga, hasNextPage);
+        if (browseMode == BrowseMode::POPULAR) {
+            success = client.fetchPopularManga(sourceId, page, manga, hasNextPage);
+        } else if (browseMode == BrowseMode::LATEST) {
+            success = client.fetchLatestManga(sourceId, page, manga, hasNextPage);
+        } else if (browseMode == BrowseMode::SEARCH_RESULTS && !query.empty()) {
+            success = client.searchManga(sourceId, query, page, manga, hasNextPage);
         }
 
         if (success) {
-            brls::sync([this, manga, hasNextPage, firstNewItemIndex, gen]() {
+            brls::sync([this, manga, hasNextPage, firstNewItemIndex, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 // Append to existing list
                 for (const auto& m : manga) {
@@ -1110,7 +1162,9 @@ void SearchTab::loadNextPage() {
                 m_isLoadingPage = false;
             });
         } else {
-            brls::sync([this, gen]() {
+            brls::sync([this, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_isLoadingPage = false;
             });

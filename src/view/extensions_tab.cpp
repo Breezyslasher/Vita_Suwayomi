@@ -374,7 +374,7 @@ brls::RecyclerCell* ExtensionsDataSource::cellForRow(brls::RecyclerFrame* recycl
             if (!ext.iconUrl.empty() && !cell->iconLoaded) {
                 std::string fullUrl = Application::getInstance().getServerUrl() + ext.iconUrl;
                 cell->iconLoaded = true;
-                ImageLoader::loadAsync(fullUrl, [](brls::Image* img) {}, cell->icon);
+                ImageLoader::loadAsync(fullUrl, [](brls::Image* img) {}, cell->icon, m_tab->getAlive());
             }
 
             return cell;
@@ -391,7 +391,8 @@ void ExtensionsDataSource::didSelectRowAt(brls::RecyclerFrame* recycler, brls::I
 
     switch (row.type) {
         case ExtensionRow::Type::SearchHeader:
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_tab->getAlive())]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
                 m_tab->onSearchHeaderClicked();
             });
             break;
@@ -660,6 +661,8 @@ bool ExtensionsTab::isLanguageExpanded(const std::string& lang) const {
 }
 
 ExtensionsTab::ExtensionsTab() {
+    m_alive = std::make_shared<bool>(true);
+
     this->setAxis(brls::Axis::COLUMN);
     this->setPadding(20, 30, 20, 30);
 
@@ -705,7 +708,7 @@ ExtensionsTab::ExtensionsTab() {
     repoIcon->setImageFromFile("app0:resources/icons/import.png");
     repoBox->addView(repoIcon);
     repoBox->registerClickAction([this](brls::View*) {
-        brls::sync([this]() { showAddRepoDialog(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showAddRepoDialog(); });
         return true;
     });
     repoBox->addGestureRecognizer(new brls::TapGestureRecognizer(repoBox));
@@ -736,7 +739,7 @@ ExtensionsTab::ExtensionsTab() {
     m_searchIcon->setImageFromFile("app0:resources/icons/search.png");
     searchBox->addView(m_searchIcon);
     searchBox->registerClickAction([this](brls::View*) {
-        brls::sync([this]() { showSearchDialog(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showSearchDialog(); });
         return true;
     });
     searchBox->addGestureRecognizer(new brls::TapGestureRecognizer(searchBox));
@@ -766,7 +769,7 @@ ExtensionsTab::ExtensionsTab() {
     m_refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
     m_refreshBox->addView(m_refreshIcon);
     m_refreshBox->registerClickAction([this](brls::View*) {
-        brls::sync([this]() { refreshExtensions(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; refreshExtensions(); });
         return true;
     });
     m_refreshBox->addGestureRecognizer(new brls::TapGestureRecognizer(m_refreshBox));
@@ -778,24 +781,24 @@ ExtensionsTab::ExtensionsTab() {
 
     // Register hotkeys
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View*) {
-        brls::sync([this]() { showSearchDialog(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showSearchDialog(); });
         return true;
     });
 
     this->registerAction("Refresh", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
-        brls::sync([this]() { refreshExtensions(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; refreshExtensions(); });
         return true;
     });
 
     this->registerAction("Add Repo", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
-        brls::sync([this]() { showAddRepoDialog(); });
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showAddRepoDialog(); });
         return true;
     });
 
     // Circle button (B) - exit search if active, otherwise default behavior
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         if (m_isSearchActive) {
-            brls::sync([this]() { hideSearchResults(); });
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; hideSearchResults(); });
             return true;  // Consume the event
         }
         return false;  // Let default behavior handle it (go back)
@@ -811,7 +814,7 @@ ExtensionsTab::ExtensionsTab() {
     // Register circle button on recycler to exit search (since focus is on recycler items)
     m_recycler->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         if (m_isSearchActive) {
-            brls::sync([this]() { hideSearchResults(); });
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; hideSearchResults(); });
             return true;  // Consume the event
         }
         return false;  // Let default behavior handle it (go back)
@@ -830,6 +833,17 @@ ExtensionsTab::ExtensionsTab() {
 
     // Load extensions
     loadExtensionsFast();
+}
+
+ExtensionsTab::~ExtensionsTab() {
+    if (m_alive) *m_alive = false;
+}
+
+void ExtensionsTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
+    if (m_alive) *m_alive = false;
 }
 
 void ExtensionsTab::onFocusGained() {
@@ -853,24 +867,31 @@ void ExtensionsTab::loadExtensionsFast() {
 
     showLoading("Loading extensions...");
 
-    brls::async([this]() {
+    // Capture cache state by value for safe background thread access
+    bool cacheLoaded = m_cacheLoaded;
+    std::vector<Extension> cachedCopy = m_cachedExtensions;
+
+    brls::async([this, aliveWeak = std::weak_ptr<bool>(m_alive), cacheLoaded, cachedCopy]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         const AppSettings& settings = Application::getInstance().getSettings();
 
+        // Work entirely with local variables on the background thread
         std::vector<Extension> allExtensions;
-        if (m_cacheLoaded && !m_cachedExtensions.empty()) {
-            allExtensions = m_cachedExtensions;
+        if (cacheLoaded && !cachedCopy.empty()) {
+            allExtensions = cachedCopy;
             brls::Logger::debug("Using cached extensions ({} total)", allExtensions.size());
         } else {
             bool success = client.fetchExtensionList(allExtensions);
             if (!success) {
                 Application::getInstance().setConnected(false);
-                brls::sync([this]() { showError("App is offline - connect to a server to manage extensions"); });
+                brls::sync([this, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    showError("App is offline - connect to a server to manage extensions");
+                });
                 return;
             }
-            m_cachedExtensions = allExtensions;
-            m_cacheLoaded = true;
-            brls::Logger::debug("Fetched and cached {} extensions", allExtensions.size());
+            brls::Logger::debug("Fetched {} extensions", allExtensions.size());
         }
 
         std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
@@ -878,16 +899,17 @@ void ExtensionsTab::loadExtensionsFast() {
             filterLanguages.insert("en");
         }
 
-        m_updates.clear();
-        m_installed.clear();
-        m_uninstalled.clear();
+        // Use local vectors, not member variables
+        std::vector<Extension> updates;
+        std::vector<Extension> installed;
+        std::vector<Extension> uninstalled;
 
         for (const auto& ext : allExtensions) {
             if (ext.installed) {
                 if (ext.hasUpdate) {
-                    m_updates.push_back(ext);
+                    updates.push_back(ext);
                 } else {
-                    m_installed.push_back(ext);
+                    installed.push_back(ext);
                 }
             } else {
                 bool languageMatch = false;
@@ -907,7 +929,7 @@ void ExtensionsTab::loadExtensionsFast() {
                     languageMatch = true;
                 }
                 if (languageMatch) {
-                    m_uninstalled.push_back(ext);
+                    uninstalled.push_back(ext);
                 }
             }
         }
@@ -916,18 +938,31 @@ void ExtensionsTab::loadExtensionsFast() {
         auto sortByName = [](const Extension& a, const Extension& b) {
             return a.name < b.name;
         };
-        std::sort(m_updates.begin(), m_updates.end(), sortByName);
-        std::sort(m_installed.begin(), m_installed.end(), sortByName);
-        std::sort(m_uninstalled.begin(), m_uninstalled.end(), sortByName);
+        std::sort(updates.begin(), updates.end(), sortByName);
+        std::sort(installed.begin(), installed.end(), sortByName);
+        std::sort(uninstalled.begin(), uninstalled.end(), sortByName);
 
         // Group uninstalled by language
-        m_cachedGrouped = groupExtensionsByLanguage(m_uninstalled);
-        m_cachedSortedLanguages = getSortedLanguageKeys(m_cachedGrouped);
+        auto grouped = groupExtensionsByLanguage(uninstalled);
+        auto sortedLangs = getSortedLanguageKeys(grouped);
 
         brls::Logger::debug("Fast mode: {} updates, {} installed, {} uninstalled",
-            m_updates.size(), m_installed.size(), m_uninstalled.size());
+            updates.size(), installed.size(), uninstalled.size());
 
-        brls::sync([this]() {
+        // Transfer all results to member variables on UI thread only
+        brls::sync([this, aliveWeak, allExtensions = std::move(allExtensions),
+                    updates = std::move(updates), installed = std::move(installed),
+                    uninstalled = std::move(uninstalled), grouped = std::move(grouped),
+                    sortedLangs = std::move(sortedLangs), cacheLoaded]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            m_cachedExtensions = std::move(allExtensions);
+            m_cacheLoaded = true;
+            m_updates = std::move(updates);
+            m_installed = std::move(installed);
+            m_uninstalled = std::move(uninstalled);
+            m_cachedGrouped = std::move(grouped);
+            m_cachedSortedLanguages = std::move(sortedLangs);
             reloadRecycler();
         });
     });
@@ -1152,7 +1187,7 @@ void ExtensionsTab::installExtension(const Extension& ext) {
     brls::Logger::info("Installing extension: {}", ext.name);
     brls::Application::notify("Installing " + ext.name + "...");
 
-    brls::async([this, ext]() {
+    brls::async([this, ext, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         bool success = false;
@@ -1166,21 +1201,24 @@ void ExtensionsTab::installExtension(const Extension& ext) {
         }
 
         if (success) {
-            // Update cache
-            for (auto& cachedExt : m_cachedExtensions) {
-                if (cachedExt.pkgName == ext.pkgName) {
-                    cachedExt.installed = true;
-                    cachedExt.hasUpdate = false;
-                    break;
+            brls::sync([this, ext, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                // Update cache on UI thread only
+                for (auto& cachedExt : m_cachedExtensions) {
+                    if (cachedExt.pkgName == ext.pkgName) {
+                        cachedExt.installed = true;
+                        cachedExt.hasUpdate = false;
+                        break;
+                    }
                 }
-            }
-
-            brls::sync([this, ext]() {
                 brls::Application::notify(ext.name + " installed");
                 refreshUIFromCache();
             });
         } else {
-            brls::sync([this, ext]() {
+            brls::sync([this, ext, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Failed to install " + ext.name);
             });
         }
@@ -1191,7 +1229,7 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
     brls::Logger::info("Updating extension: {}", ext.name);
     brls::Application::notify("Updating " + ext.name + "...");
 
-    brls::async([this, ext]() {
+    brls::async([this, ext, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         bool success = false;
@@ -1205,19 +1243,23 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
         }
 
         if (success) {
-            for (auto& cachedExt : m_cachedExtensions) {
-                if (cachedExt.pkgName == ext.pkgName) {
-                    cachedExt.hasUpdate = false;
-                    break;
+            brls::sync([this, ext, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                // Update cache on UI thread only
+                for (auto& cachedExt : m_cachedExtensions) {
+                    if (cachedExt.pkgName == ext.pkgName) {
+                        cachedExt.hasUpdate = false;
+                        break;
+                    }
                 }
-            }
-
-            brls::sync([this, ext]() {
                 brls::Application::notify(ext.name + " updated");
                 refreshUIFromCache();
             });
         } else {
-            brls::sync([this, ext]() {
+            brls::sync([this, ext, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Failed to update " + ext.name);
             });
         }
@@ -1237,7 +1279,7 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
         brls::Logger::info("Uninstalling extension: {}", ext.name);
         brls::Application::notify("Uninstalling " + ext.name + "...");
 
-        brls::async([this, ext]() {
+        brls::async([this, ext, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
 
             bool success = false;
@@ -1251,20 +1293,24 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
             }
 
             if (success) {
-                for (auto& cachedExt : m_cachedExtensions) {
-                    if (cachedExt.pkgName == ext.pkgName) {
-                        cachedExt.installed = false;
-                        cachedExt.hasUpdate = false;
-                        break;
+                brls::sync([this, ext, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    // Update cache on UI thread only
+                    for (auto& cachedExt : m_cachedExtensions) {
+                        if (cachedExt.pkgName == ext.pkgName) {
+                            cachedExt.installed = false;
+                            cachedExt.hasUpdate = false;
+                            break;
+                        }
                     }
-                }
-
-                brls::sync([this, ext]() {
                     brls::Application::notify(ext.name + " uninstalled");
                     refreshUIFromCache();
                 });
             } else {
-                brls::sync([this, ext]() {
+                brls::sync([this, ext, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
                     brls::Application::notify("Failed to uninstall " + ext.name);
                 });
             }
@@ -1277,20 +1323,24 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
 void ExtensionsTab::showSourceSettings(const Extension& ext) {
     brls::Logger::info("Opening settings for extension: {}", ext.name);
 
-    brls::async([this, ext]() {
+    brls::async([this, ext, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         std::vector<Source> sources;
         bool success = client.fetchSourcesForExtension(ext.pkgName, sources);
 
         if (!success || sources.empty()) {
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("No configurable sources found");
             });
             return;
         }
 
-        brls::sync([this, sources, ext]() {
+        brls::sync([this, sources, ext, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             if (sources.size() == 1) {
                 showSourcePreferencesDialog(sources[0]);
             } else {
@@ -1339,27 +1389,33 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
 void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
     brls::Logger::info("Fetching preferences for source: {}", source.name);
 
-    brls::async([this, source]() {
+    brls::async([this, source, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         std::vector<SourcePreference> prefs;
         bool success = client.fetchSourcePreferences(source.id, prefs);
 
         if (!success) {
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Failed to load source settings");
             });
             return;
         }
 
         if (prefs.empty()) {
-            brls::sync([this, source]() {
+            brls::sync([this, source, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify(source.name + " has no configurable settings");
             });
             return;
         }
 
-        brls::sync([this, source, prefs]() {
+        brls::sync([this, source, prefs, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             auto* dialog = new brls::Dialog(source.name + " Settings");
             dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
@@ -1480,11 +1536,13 @@ void ExtensionsTab::showAddRepoDialog() {
         brls::Application::notify("Adding extension repository...");
 
         // Add repository in background thread
-        std::thread([this, text]() {
+        std::thread([this, text, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             bool success = client.addExtensionRepo(text);
 
-            brls::sync([this, success, text]() {
+            brls::sync([this, success, text, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (success) {
                     brls::Application::notify("Repository added successfully!");
                     // Refresh extension list to load from new repository

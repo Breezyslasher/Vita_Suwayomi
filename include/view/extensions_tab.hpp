@@ -10,6 +10,7 @@
 #include "app/suwayomi_client.hpp"
 #include <map>
 #include <functional>
+#include <memory>
 
 namespace vitasuwayomi {
 
@@ -110,8 +111,10 @@ private:
 class ExtensionsTab : public brls::Box {
 public:
     ExtensionsTab();
+    ~ExtensionsTab();
 
     void onFocusGained() override;
+    void willDisappear(bool resetState) override;
 
     // Called by data source
     void onExtensionClicked(const Extension& ext);
@@ -144,6 +147,9 @@ public:
 
     // Language name helper (used by data source)
     std::string getLanguageDisplayName(const std::string& langCode);
+
+    // Alive flag accessor (used by data source for image loader safety)
+    std::shared_ptr<bool> getAlive() const { return m_alive; }
 
 private:
     // Data loading
@@ -217,6 +223,9 @@ private:
 
     // Data source (owned by recycler, but we need to trigger rebuilds)
     ExtensionsDataSource* m_dataSource = nullptr;
+
+    // Async lifetime guard
+    std::shared_ptr<bool> m_alive;
 };
 
 } // namespace vitasuwayomi
