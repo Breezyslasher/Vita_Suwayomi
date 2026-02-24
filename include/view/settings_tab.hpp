@@ -7,6 +7,7 @@
 
 #include <borealis.hpp>
 #include <functional>
+#include <memory>
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
@@ -14,6 +15,7 @@ namespace vitasuwayomi {
 class SettingsTab : public brls::Box {
 public:
     SettingsTab();
+    ~SettingsTab();
 
 private:
     void createAccountSection();
@@ -76,6 +78,9 @@ private:
 
     // Browse section
     brls::DetailCell* m_languageFilterCell = nullptr;
+
+    // Async lifetime guard
+    std::shared_ptr<bool> m_alive;
 };
 
 } // namespace vitasuwayomi

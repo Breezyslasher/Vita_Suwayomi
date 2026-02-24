@@ -10,6 +10,7 @@
 #include <string>
 #include <atomic>
 #include <chrono>
+#include <memory>
 
 namespace vitasuwayomi {
 
@@ -20,7 +21,7 @@ struct LocalChapterDownload;
 class DownloadsTab : public brls::Box {
 public:
     DownloadsTab();
-    ~DownloadsTab() override = default;
+    ~DownloadsTab() override;
 
     void willAppear(bool resetState) override;
     void willDisappear(bool resetState) override;
@@ -151,6 +152,9 @@ private:
     int m_focusedLocalIndex = -1;   // Index of focused item in local queue
     bool m_hadFocusOnServerQueue = false;
     bool m_hadFocusOnLocalQueue = false;
+
+    // Async lifetime guard
+    std::shared_ptr<bool> m_alive;
 };
 
 } // namespace vitasuwayomi

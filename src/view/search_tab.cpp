@@ -16,6 +16,8 @@
 namespace vitasuwayomi {
 
 SearchTab::SearchTab() {
+    m_alive = std::make_shared<bool>(true);
+
     this->setAxis(brls::Axis::COLUMN);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
@@ -304,6 +306,10 @@ SearchTab::SearchTab() {
     loadSources();
 }
 
+SearchTab::~SearchTab() {
+    if (m_alive) *m_alive = false;
+}
+
 void SearchTab::onFocusGained() {
     brls::Box::onFocusGained();
 
@@ -324,21 +330,25 @@ void SearchTab::loadSources() {
         return;
     }
 
-    asyncRun([this]() {
+    asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Source> sources;
 
         if (client.fetchSourceList(sources)) {
             brls::Logger::info("SearchTab: Got {} sources", sources.size());
 
-            brls::sync([this, sources]() {
+            brls::sync([this, sources, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 m_sources = sources;
                 showSources();
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch sources");
             Application::getInstance().setConnected(false);
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 m_resultsLabel->setText("App is offline - connect to a server to browse sources");
                 // Focus on history button so user can still navigate
                 brls::Application::giveFocus(m_historyBtn);
@@ -691,7 +701,7 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
     m_currentPage = 1;
     int gen = ++m_loadGeneration;
 
-    asyncRun([this, sourceId, gen]() {
+    asyncRun([this, sourceId, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -699,7 +709,9 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
         if (client.fetchPopularManga(sourceId, 1, manga, hasNextPage)) {
             brls::Logger::info("SearchTab: Got {} popular manga", manga.size());
 
-            brls::sync([this, manga, hasNextPage, gen]() {
+            brls::sync([this, manga, hasNextPage, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;  // Stale callback, user navigated away
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
@@ -716,7 +728,9 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch popular manga");
-            brls::sync([this, gen]() {
+            brls::sync([this, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Failed to load popular manga");
                 // Focus on Popular button so user can retry
@@ -732,7 +746,7 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
     m_currentPage = 1;
     int gen = ++m_loadGeneration;
 
-    asyncRun([this, sourceId, gen]() {
+    asyncRun([this, sourceId, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -740,7 +754,9 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
         if (client.fetchLatestManga(sourceId, 1, manga, hasNextPage)) {
             brls::Logger::info("SearchTab: Got {} latest manga", manga.size());
 
-            brls::sync([this, manga, hasNextPage, gen]() {
+            brls::sync([this, manga, hasNextPage, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
@@ -757,7 +773,9 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch latest manga");
-            brls::sync([this, gen]() {
+            brls::sync([this, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Failed to load latest manga");
                 // Focus on Latest button so user can retry
@@ -814,7 +832,7 @@ void SearchTab::performSearch(const std::string& query) {
     std::vector<Source> sourcesToSearch = m_filteredSources;
     int gen = ++m_loadGeneration;
 
-    asyncRun([this, query, sourcesToSearch, gen]() {
+    asyncRun([this, query, sourcesToSearch, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         // Map to group results by source
@@ -858,7 +876,9 @@ void SearchTab::performSearch(const std::string& query) {
             }
         }
 
-        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources, gen]() {
+        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources, gen, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             if (gen != m_loadGeneration) return;  // Stale callback, user navigated away
             m_mangaList = allResults;
             m_resultsBySource = resultsBySource;
@@ -897,7 +917,7 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
     m_currentPage = 1;
     int gen = ++m_loadGeneration;
 
-    asyncRun([this, sourceId, query, gen]() {
+    asyncRun([this, sourceId, query, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -905,7 +925,9 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
         if (client.searchManga(sourceId, query, 1, manga, hasNextPage)) {
             brls::Logger::info("SearchTab: Found {} results for '{}'", manga.size(), query);
 
-            brls::sync([this, manga, hasNextPage, gen]() {
+            brls::sync([this, manga, hasNextPage, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
@@ -925,7 +947,9 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
             });
         } else {
             brls::Logger::error("SearchTab: Failed to search manga");
-            brls::sync([this, gen]() {
+            brls::sync([this, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_resultsLabel->setText("Search failed");
                 // Focus on back button so user can go back
@@ -1080,7 +1104,7 @@ void SearchTab::loadNextPage() {
 
     int gen = m_loadGeneration;  // Don't increment - loadNextPage appends, not a new navigation
 
-    asyncRun([this, firstNewItemIndex, gen]() {
+    asyncRun([this, firstNewItemIndex, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
@@ -1095,7 +1119,9 @@ void SearchTab::loadNextPage() {
         }
 
         if (success) {
-            brls::sync([this, manga, hasNextPage, firstNewItemIndex, gen]() {
+            brls::sync([this, manga, hasNextPage, firstNewItemIndex, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 // Append to existing list
                 for (const auto& m : manga) {
@@ -1110,7 +1136,9 @@ void SearchTab::loadNextPage() {
                 m_isLoadingPage = false;
             });
         } else {
-            brls::sync([this, gen]() {
+            brls::sync([this, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_isLoadingPage = false;
             });

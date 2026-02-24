@@ -660,6 +660,8 @@ bool ExtensionsTab::isLanguageExpanded(const std::string& lang) const {
 }
 
 ExtensionsTab::ExtensionsTab() {
+    m_alive = std::make_shared<bool>(true);
+
     this->setAxis(brls::Axis::COLUMN);
     this->setPadding(20, 30, 20, 30);
 
@@ -832,6 +834,10 @@ ExtensionsTab::ExtensionsTab() {
     loadExtensionsFast();
 }
 
+ExtensionsTab::~ExtensionsTab() {
+    if (m_alive) *m_alive = false;
+}
+
 void ExtensionsTab::onFocusGained() {
     brls::Box::onFocusGained();
 
@@ -853,7 +859,7 @@ void ExtensionsTab::loadExtensionsFast() {
 
     showLoading("Loading extensions...");
 
-    brls::async([this]() {
+    brls::async([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         const AppSettings& settings = Application::getInstance().getSettings();
 
@@ -865,7 +871,11 @@ void ExtensionsTab::loadExtensionsFast() {
             bool success = client.fetchExtensionList(allExtensions);
             if (!success) {
                 Application::getInstance().setConnected(false);
-                brls::sync([this]() { showError("App is offline - connect to a server to manage extensions"); });
+                brls::sync([this, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    showError("App is offline - connect to a server to manage extensions");
+                });
                 return;
             }
             m_cachedExtensions = allExtensions;
@@ -927,7 +937,9 @@ void ExtensionsTab::loadExtensionsFast() {
         brls::Logger::debug("Fast mode: {} updates, {} installed, {} uninstalled",
             m_updates.size(), m_installed.size(), m_uninstalled.size());
 
-        brls::sync([this]() {
+        brls::sync([this, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             reloadRecycler();
         });
     });
@@ -1152,7 +1164,7 @@ void ExtensionsTab::installExtension(const Extension& ext) {
     brls::Logger::info("Installing extension: {}", ext.name);
     brls::Application::notify("Installing " + ext.name + "...");
 
-    brls::async([this, ext]() {
+    brls::async([this, ext, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         bool success = false;
@@ -1175,12 +1187,16 @@ void ExtensionsTab::installExtension(const Extension& ext) {
                 }
             }
 
-            brls::sync([this, ext]() {
+            brls::sync([this, ext, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify(ext.name + " installed");
                 refreshUIFromCache();
             });
         } else {
-            brls::sync([this, ext]() {
+            brls::sync([this, ext, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Failed to install " + ext.name);
             });
         }
@@ -1191,7 +1207,7 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
     brls::Logger::info("Updating extension: {}", ext.name);
     brls::Application::notify("Updating " + ext.name + "...");
 
-    brls::async([this, ext]() {
+    brls::async([this, ext, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         bool success = false;
@@ -1212,12 +1228,16 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
                 }
             }
 
-            brls::sync([this, ext]() {
+            brls::sync([this, ext, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify(ext.name + " updated");
                 refreshUIFromCache();
             });
         } else {
-            brls::sync([this, ext]() {
+            brls::sync([this, ext, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Failed to update " + ext.name);
             });
         }
@@ -1237,7 +1257,7 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
         brls::Logger::info("Uninstalling extension: {}", ext.name);
         brls::Application::notify("Uninstalling " + ext.name + "...");
 
-        brls::async([this, ext]() {
+        brls::async([this, ext, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
 
             bool success = false;
@@ -1259,12 +1279,16 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
                     }
                 }
 
-                brls::sync([this, ext]() {
+                brls::sync([this, ext, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
                     brls::Application::notify(ext.name + " uninstalled");
                     refreshUIFromCache();
                 });
             } else {
-                brls::sync([this, ext]() {
+                brls::sync([this, ext, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
                     brls::Application::notify("Failed to uninstall " + ext.name);
                 });
             }
@@ -1277,20 +1301,24 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
 void ExtensionsTab::showSourceSettings(const Extension& ext) {
     brls::Logger::info("Opening settings for extension: {}", ext.name);
 
-    brls::async([this, ext]() {
+    brls::async([this, ext, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         std::vector<Source> sources;
         bool success = client.fetchSourcesForExtension(ext.pkgName, sources);
 
         if (!success || sources.empty()) {
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("No configurable sources found");
             });
             return;
         }
 
-        brls::sync([this, sources, ext]() {
+        brls::sync([this, sources, ext, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             if (sources.size() == 1) {
                 showSourcePreferencesDialog(sources[0]);
             } else {
@@ -1339,27 +1367,33 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
 void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
     brls::Logger::info("Fetching preferences for source: {}", source.name);
 
-    brls::async([this, source]() {
+    brls::async([this, source, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         std::vector<SourcePreference> prefs;
         bool success = client.fetchSourcePreferences(source.id, prefs);
 
         if (!success) {
-            brls::sync([this]() {
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify("Failed to load source settings");
             });
             return;
         }
 
         if (prefs.empty()) {
-            brls::sync([this, source]() {
+            brls::sync([this, source, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 brls::Application::notify(source.name + " has no configurable settings");
             });
             return;
         }
 
-        brls::sync([this, source, prefs]() {
+        brls::sync([this, source, prefs, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
             auto* dialog = new brls::Dialog(source.name + " Settings");
             dialog->setCancelable(false);  // Prevent exit dialog from appearing
 
@@ -1480,11 +1514,13 @@ void ExtensionsTab::showAddRepoDialog() {
         brls::Application::notify("Adding extension repository...");
 
         // Add repository in background thread
-        std::thread([this, text]() {
+        std::thread([this, text, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             bool success = client.addExtensionRepo(text);
 
-            brls::sync([this, success, text]() {
+            brls::sync([this, success, text, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (success) {
                     brls::Application::notify("Repository added successfully!");
                     // Refresh extension list to load from new repository

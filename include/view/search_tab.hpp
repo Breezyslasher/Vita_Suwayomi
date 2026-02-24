@@ -23,6 +23,7 @@ enum class BrowseMode {
 class SearchTab : public brls::Box {
 public:
     SearchTab();
+    ~SearchTab();
 
     void onFocusGained() override;
 
@@ -96,6 +97,9 @@ private:
     // Data
     std::vector<Source> m_sources;
     std::vector<Manga> m_mangaList;
+
+    // Async lifetime guard
+    std::shared_ptr<bool> m_alive;
 };
 
 } // namespace vitasuwayomi

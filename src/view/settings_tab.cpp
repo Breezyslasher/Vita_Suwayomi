@@ -31,6 +31,8 @@
 namespace vitasuwayomi {
 
 SettingsTab::SettingsTab() {
+    m_alive = std::make_shared<bool>(true);
+
     this->setAxis(brls::Axis::COLUMN);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
@@ -59,6 +61,10 @@ SettingsTab::SettingsTab() {
 
     m_scrollView->setContentView(m_contentBox);
     this->addView(m_scrollView);
+}
+
+SettingsTab::~SettingsTab() {
+    if (m_alive) *m_alive = false;
 }
 
 void SettingsTab::createAccountSection() {
@@ -247,7 +253,7 @@ void SettingsTab::createTrackingSection() {
 
         brls::Application::notify("Loading trackers...");
 
-        asyncRun([this]() {
+        asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             std::vector<Tracker> trackers;
 
@@ -258,7 +264,9 @@ void SettingsTab::createTrackingSection() {
                 return;
             }
 
-            brls::sync([this, trackers]() {
+            brls::sync([this, trackers, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
                 if (trackers.empty()) {
                     brls::Application::notify("No trackers available on server");
                     return;

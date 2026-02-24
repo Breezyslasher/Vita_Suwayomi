@@ -10,6 +10,7 @@
 #include "app/suwayomi_client.hpp"
 #include <map>
 #include <functional>
+#include <memory>
 
 namespace vitasuwayomi {
 
@@ -110,6 +111,7 @@ private:
 class ExtensionsTab : public brls::Box {
 public:
     ExtensionsTab();
+    ~ExtensionsTab();
 
     void onFocusGained() override;
 
@@ -217,6 +219,9 @@ private:
 
     // Data source (owned by recycler, but we need to trigger rebuilds)
     ExtensionsDataSource* m_dataSource = nullptr;
+
+    // Async lifetime guard
+    std::shared_ptr<bool> m_alive;
 };
 
 } // namespace vitasuwayomi
