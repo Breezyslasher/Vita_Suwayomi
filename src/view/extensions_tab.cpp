@@ -859,13 +859,18 @@ void ExtensionsTab::loadExtensionsFast() {
 
     showLoading("Loading extensions...");
 
-    brls::async([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+    // Capture cache state by value for safe background thread access
+    bool cacheLoaded = m_cacheLoaded;
+    std::vector<Extension> cachedCopy = m_cachedExtensions;
+
+    brls::async([this, aliveWeak = std::weak_ptr<bool>(m_alive), cacheLoaded, cachedCopy]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         const AppSettings& settings = Application::getInstance().getSettings();
 
+        // Work entirely with local variables on the background thread
         std::vector<Extension> allExtensions;
-        if (m_cacheLoaded && !m_cachedExtensions.empty()) {
-            allExtensions = m_cachedExtensions;
+        if (cacheLoaded && !cachedCopy.empty()) {
+            allExtensions = cachedCopy;
             brls::Logger::debug("Using cached extensions ({} total)", allExtensions.size());
         } else {
             bool success = client.fetchExtensionList(allExtensions);
@@ -878,9 +883,7 @@ void ExtensionsTab::loadExtensionsFast() {
                 });
                 return;
             }
-            m_cachedExtensions = allExtensions;
-            m_cacheLoaded = true;
-            brls::Logger::debug("Fetched and cached {} extensions", allExtensions.size());
+            brls::Logger::debug("Fetched {} extensions", allExtensions.size());
         }
 
         std::set<std::string> filterLanguages = settings.enabledSourceLanguages;
@@ -888,16 +891,17 @@ void ExtensionsTab::loadExtensionsFast() {
             filterLanguages.insert("en");
         }
 
-        m_updates.clear();
-        m_installed.clear();
-        m_uninstalled.clear();
+        // Use local vectors, not member variables
+        std::vector<Extension> updates;
+        std::vector<Extension> installed;
+        std::vector<Extension> uninstalled;
 
         for (const auto& ext : allExtensions) {
             if (ext.installed) {
                 if (ext.hasUpdate) {
-                    m_updates.push_back(ext);
+                    updates.push_back(ext);
                 } else {
-                    m_installed.push_back(ext);
+                    installed.push_back(ext);
                 }
             } else {
                 bool languageMatch = false;
@@ -917,7 +921,7 @@ void ExtensionsTab::loadExtensionsFast() {
                     languageMatch = true;
                 }
                 if (languageMatch) {
-                    m_uninstalled.push_back(ext);
+                    uninstalled.push_back(ext);
                 }
             }
         }
@@ -926,20 +930,31 @@ void ExtensionsTab::loadExtensionsFast() {
         auto sortByName = [](const Extension& a, const Extension& b) {
             return a.name < b.name;
         };
-        std::sort(m_updates.begin(), m_updates.end(), sortByName);
-        std::sort(m_installed.begin(), m_installed.end(), sortByName);
-        std::sort(m_uninstalled.begin(), m_uninstalled.end(), sortByName);
+        std::sort(updates.begin(), updates.end(), sortByName);
+        std::sort(installed.begin(), installed.end(), sortByName);
+        std::sort(uninstalled.begin(), uninstalled.end(), sortByName);
 
         // Group uninstalled by language
-        m_cachedGrouped = groupExtensionsByLanguage(m_uninstalled);
-        m_cachedSortedLanguages = getSortedLanguageKeys(m_cachedGrouped);
+        auto grouped = groupExtensionsByLanguage(uninstalled);
+        auto sortedLangs = getSortedLanguageKeys(grouped);
 
         brls::Logger::debug("Fast mode: {} updates, {} installed, {} uninstalled",
-            m_updates.size(), m_installed.size(), m_uninstalled.size());
+            updates.size(), installed.size(), uninstalled.size());
 
-        brls::sync([this, aliveWeak]() {
+        // Transfer all results to member variables on UI thread only
+        brls::sync([this, aliveWeak, allExtensions = std::move(allExtensions),
+                    updates = std::move(updates), installed = std::move(installed),
+                    uninstalled = std::move(uninstalled), grouped = std::move(grouped),
+                    sortedLangs = std::move(sortedLangs), cacheLoaded]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
+            m_cachedExtensions = std::move(allExtensions);
+            m_cacheLoaded = true;
+            m_updates = std::move(updates);
+            m_installed = std::move(installed);
+            m_uninstalled = std::move(uninstalled);
+            m_cachedGrouped = std::move(grouped);
+            m_cachedSortedLanguages = std::move(sortedLangs);
             reloadRecycler();
         });
     });
@@ -1178,18 +1193,17 @@ void ExtensionsTab::installExtension(const Extension& ext) {
         }
 
         if (success) {
-            // Update cache
-            for (auto& cachedExt : m_cachedExtensions) {
-                if (cachedExt.pkgName == ext.pkgName) {
-                    cachedExt.installed = true;
-                    cachedExt.hasUpdate = false;
-                    break;
-                }
-            }
-
             brls::sync([this, ext, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
+                // Update cache on UI thread only
+                for (auto& cachedExt : m_cachedExtensions) {
+                    if (cachedExt.pkgName == ext.pkgName) {
+                        cachedExt.installed = true;
+                        cachedExt.hasUpdate = false;
+                        break;
+                    }
+                }
                 brls::Application::notify(ext.name + " installed");
                 refreshUIFromCache();
             });
@@ -1221,16 +1235,16 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
         }
 
         if (success) {
-            for (auto& cachedExt : m_cachedExtensions) {
-                if (cachedExt.pkgName == ext.pkgName) {
-                    cachedExt.hasUpdate = false;
-                    break;
-                }
-            }
-
             brls::sync([this, ext, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
+                // Update cache on UI thread only
+                for (auto& cachedExt : m_cachedExtensions) {
+                    if (cachedExt.pkgName == ext.pkgName) {
+                        cachedExt.hasUpdate = false;
+                        break;
+                    }
+                }
                 brls::Application::notify(ext.name + " updated");
                 refreshUIFromCache();
             });
@@ -1271,17 +1285,17 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
             }
 
             if (success) {
-                for (auto& cachedExt : m_cachedExtensions) {
-                    if (cachedExt.pkgName == ext.pkgName) {
-                        cachedExt.installed = false;
-                        cachedExt.hasUpdate = false;
-                        break;
-                    }
-                }
-
                 brls::sync([this, ext, aliveWeak]() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
+                    // Update cache on UI thread only
+                    for (auto& cachedExt : m_cachedExtensions) {
+                        if (cachedExt.pkgName == ext.pkgName) {
+                            cachedExt.installed = false;
+                            cachedExt.hasUpdate = false;
+                            break;
+                        }
+                    }
                     brls::Application::notify(ext.name + " uninstalled");
                     refreshUIFromCache();
                 });

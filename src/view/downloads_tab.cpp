@@ -122,12 +122,13 @@ DownloadsTab::DownloadsTab() {
     // Start/Stop button action - toggle downloader state for both server and local
     // brls::Button handles both touch and controller input via registerClickAction
     m_startStopBtn->registerClickAction([this](brls::View*) {
-        asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+        // Capture member value by value for safe background thread access
+        bool wasRunning = m_downloaderRunning;
+        asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive), wasRunning]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             DownloadsManager& mgr = DownloadsManager::getInstance();
             bool success = false;
-            bool wasRunning = m_downloaderRunning;
-            if (m_downloaderRunning) {
+            if (wasRunning) {
                 // Stop both server and local downloads
                 success = client.stopDownloads();
                 mgr.pauseDownloads();
@@ -960,22 +961,24 @@ void DownloadsTab::startAutoRefresh() {
     m_autoRefreshEnabled.store(true);
 
     // Start auto-refresh loop in background thread
-    asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-        while (m_autoRefreshEnabled.load()) {
-            // Adaptive interval - use longer interval for large queues to reduce UI thread pressure
-            int totalItems = static_cast<int>(m_lastServerQueue.size() + m_lastLocalQueue.size());
-            int refreshInterval = (totalItems > LARGE_QUEUE_THRESHOLD) ?
-                                  AUTO_REFRESH_INTERVAL_LARGE_MS : AUTO_REFRESH_INTERVAL_MS;
+    // Use shared_ptr to m_alive for loop termination (safe even after object destruction)
+    auto aliveShared = m_alive;
+    asyncRun([this, aliveShared]() {
+        while (true) {
+            // Check if object is still alive before accessing any members
+            if (!aliveShared || !*aliveShared) break;
+
+            // Use default interval - avoid accessing member vectors on background thread
+            int refreshInterval = AUTO_REFRESH_INTERVAL_MS;
 
             // Sleep for the interval
             std::this_thread::sleep_for(std::chrono::milliseconds(refreshInterval));
 
-            // Check if still enabled after sleep (use atomic load)
-            if (!m_autoRefreshEnabled.load()) {
-                break;
-            }
+            // Check again after sleep
+            if (!aliveShared || !*aliveShared) break;
 
             // Trigger refresh on main thread for both server and local queues
+            std::weak_ptr<bool> aliveWeak = aliveShared;
             brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
@@ -985,7 +988,6 @@ void DownloadsTab::startAutoRefresh() {
                 }
             });
         }
-        m_autoRefreshTimerActive.store(false);
     });
 }
 

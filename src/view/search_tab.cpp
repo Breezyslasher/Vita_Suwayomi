@@ -1104,18 +1104,25 @@ void SearchTab::loadNextPage() {
 
     int gen = m_loadGeneration;  // Don't increment - loadNextPage appends, not a new navigation
 
-    asyncRun([this, firstNewItemIndex, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+    // Capture member values by value for safe background thread access
+    auto browseMode = m_browseMode;
+    auto sourceId = m_currentSourceId;
+    auto page = m_currentPage;
+    auto query = m_searchQuery;
+
+    asyncRun([this, firstNewItemIndex, gen, aliveWeak = std::weak_ptr<bool>(m_alive),
+              browseMode, sourceId, page, query]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
 
         bool success = false;
-        if (m_browseMode == BrowseMode::POPULAR) {
-            success = client.fetchPopularManga(m_currentSourceId, m_currentPage, manga, hasNextPage);
-        } else if (m_browseMode == BrowseMode::LATEST) {
-            success = client.fetchLatestManga(m_currentSourceId, m_currentPage, manga, hasNextPage);
-        } else if (m_browseMode == BrowseMode::SEARCH_RESULTS && !m_searchQuery.empty()) {
-            success = client.searchManga(m_currentSourceId, m_searchQuery, m_currentPage, manga, hasNextPage);
+        if (browseMode == BrowseMode::POPULAR) {
+            success = client.fetchPopularManga(sourceId, page, manga, hasNextPage);
+        } else if (browseMode == BrowseMode::LATEST) {
+            success = client.fetchLatestManga(sourceId, page, manga, hasNextPage);
+        } else if (browseMode == BrowseMode::SEARCH_RESULTS && !query.empty()) {
+            success = client.searchManga(sourceId, query, page, manga, hasNextPage);
         }
 
         if (success) {

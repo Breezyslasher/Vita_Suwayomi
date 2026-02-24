@@ -197,21 +197,28 @@ void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
         m_contentGrid->setVisibility(brls::Visibility::GONE);
     }
 
-    brls::async([this, focusIndexAfterLoad, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+    // Capture member values by value for safe background thread access
+    auto browseMode = m_browseMode;
+    auto sourceId = m_source.id;
+    auto page = m_currentPage;
+    auto query = m_searchQuery;
+
+    brls::async([this, focusIndexAfterLoad, aliveWeak = std::weak_ptr<bool>(m_alive),
+                 browseMode, sourceId, page, query]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> newManga;
         bool hasNext = false;
         bool success = false;
 
-        switch (m_browseMode) {
+        switch (browseMode) {
             case BrowseMode::POPULAR:
-                success = client.fetchPopularManga(m_source.id, m_currentPage, newManga, hasNext);
+                success = client.fetchPopularManga(sourceId, page, newManga, hasNext);
                 break;
             case BrowseMode::LATEST:
-                success = client.fetchLatestManga(m_source.id, m_currentPage, newManga, hasNext);
+                success = client.fetchLatestManga(sourceId, page, newManga, hasNext);
                 break;
             case BrowseMode::SEARCH:
-                success = client.searchManga(m_source.id, m_searchQuery, m_currentPage, newManga, hasNext);
+                success = client.searchManga(sourceId, query, page, newManga, hasNext);
                 break;
         }
 
