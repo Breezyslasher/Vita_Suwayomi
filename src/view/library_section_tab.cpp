@@ -2186,9 +2186,13 @@ void LibrarySectionTab::markMangaRead(const std::vector<Manga>& mangaList) {
 
     asyncRun([this, asyncList, aliveWeak, categoryId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& dm = DownloadsManager::getInstance();
         int count = 0;
         for (const auto& manga : asyncList) {
-            if (client.markAllChaptersRead(manga.id)) count++;
+            if (client.markAllChaptersRead(manga.id)) {
+                dm.clearReadingProgress(manga.id);
+                count++;
+            }
         }
 
         brls::sync([this, count, aliveWeak, categoryId]() {
@@ -2210,9 +2214,13 @@ void LibrarySectionTab::markMangaUnread(const std::vector<Manga>& mangaList) {
 
     asyncRun([this, asyncList, aliveWeak, categoryId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
+        DownloadsManager& dm = DownloadsManager::getInstance();
         int count = 0;
         for (const auto& manga : asyncList) {
-            if (client.markAllChaptersUnread(manga.id)) count++;
+            if (client.markAllChaptersUnread(manga.id)) {
+                dm.clearReadingProgress(manga.id);
+                count++;
+            }
         }
 
         brls::sync([this, count, aliveWeak, categoryId]() {

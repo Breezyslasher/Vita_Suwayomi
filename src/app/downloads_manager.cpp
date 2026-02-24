@@ -704,6 +704,26 @@ void DownloadsManager::updateReadingProgress(int mangaId, int chapterIndex, int 
     }
 }
 
+void DownloadsManager::clearReadingProgress(int mangaId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    for (auto& manga : m_downloads) {
+        if (manga.mangaId == mangaId) {
+            manga.lastChapterRead = 0;
+            manga.lastPageRead = 0;
+            manga.lastReadTime = 0;
+
+            for (auto& chapter : manga.chapters) {
+                chapter.lastPageRead = 0;
+                chapter.lastReadTime = 0;
+            }
+
+            saveStateUnlocked();
+            break;
+        }
+    }
+}
+
 void DownloadsManager::syncProgressToServer() {
     // Sync local reading progress to Suwayomi server
     SuwayomiClient& client = SuwayomiClient::getInstance();

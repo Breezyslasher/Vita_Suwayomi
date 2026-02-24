@@ -149,6 +149,9 @@ public:
     // Update reading progress
     void updateReadingProgress(int mangaId, int chapterIndex, int lastPageRead);
 
+    // Clear all reading progress for a manga (used by mark as read/unread)
+    void clearReadingProgress(int mangaId);
+
     // Sync progress to/from server
     void syncProgressToServer();
     void syncProgressFromServer();
