@@ -2227,17 +2227,26 @@ void ReaderActivity::showPageError(const std::string& message) {
     m_retryButton->setHeight(44);
     m_retryButton->setCornerRadius(22);
     m_retryButton->setBackgroundColor(nvgRGBA(0, 150, 136, 255));
-    m_retryButton->registerClickAction([this](brls::View* view) {
+    std::weak_ptr<bool> retryAlive = m_alive;
+    m_retryButton->registerClickAction([this, retryAlive](brls::View* view) {
         if (!Application::getInstance().isConnected() && !m_loadedFromLocal) {
             brls::Application::notify("App is offline");
             return true;
         }
-        hidePageError();
-        if (m_pages.empty()) {
-            loadPages();
-        } else {
-            loadPage(m_currentPage);
-        }
+        // Defer to next frame so the click event finishes processing before
+        // the button is removed from the view hierarchy. Without this,
+        // hidePageError() destroys the button mid-callback, and borealis's
+        // hover/focus state machine accesses the freed view.
+        brls::sync([this, retryAlive]() {
+            auto alive = retryAlive.lock();
+            if (!alive || !*alive) return;
+            hidePageError();
+            if (m_pages.empty()) {
+                loadPages();
+            } else {
+                loadPage(m_currentPage);
+            }
+        });
         return true;
     });
     m_retryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_retryButton));
