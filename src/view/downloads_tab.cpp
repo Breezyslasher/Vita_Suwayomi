@@ -359,12 +359,26 @@ DownloadsTab::DownloadsTab() {
 void DownloadsTab::willAppear(bool resetState) {
     brls::Box::willAppear(resetState);
 
-    // Clear tracking vectors for fresh start
+    // Re-arm the alive flag so async callbacks work after tab revisit
+    // (willDisappear sets *m_alive = false to cancel pending callbacks)
+    m_alive = std::make_shared<bool>(true);
+
+    // Clear tracking vectors and stale UI children for fresh start
     m_currentFocusedIcon = nullptr;
     m_localRowElements.clear();
     m_serverRowElements.clear();
     m_lastLocalQueue.clear();
     m_lastServerQueue.clear();
+
+    // Remove stale row views from containers (tracking vectors were just cleared)
+    if (m_queueContainer) {
+        while (m_queueContainer->getChildren().size() > 0)
+            m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
+    }
+    if (m_localContainer) {
+        while (m_localContainer->getChildren().size() > 0)
+            m_localContainer->removeView(m_localContainer->getChildren()[0]);
+    }
 
     // Initialize last progress refresh time
     m_lastProgressRefresh = std::chrono::steady_clock::now();
@@ -423,17 +437,20 @@ DownloadsTab::~DownloadsTab() {
 void DownloadsTab::willDisappear(bool resetState) {
     brls::Box::willDisappear(resetState);
 
+    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
+    if (m_alive) *m_alive = false;
+
     // IMPORTANT: Stop auto-refresh FIRST to signal all callbacks to stop
     // This must happen before clearing callbacks to prevent race conditions
     stopAutoRefresh();
-
-    // Small delay to allow any pending brls::sync calls to complete
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     // Clear callbacks to avoid updates when tab is not visible
     DownloadsManager& mgr = DownloadsManager::getInstance();
     mgr.setProgressCallback(nullptr);
     mgr.setChapterCompletionCallback(nullptr);
+
+    // Cancel pending image loads to free up worker threads and network bandwidth
+    ImageLoader::cancelAll();
 
     // Clear tracking vectors to free memory
     m_localRowElements.clear();
@@ -994,8 +1011,10 @@ void DownloadsTab::startAutoRefresh() {
 void DownloadsTab::stopAutoRefresh() {
     // Set to false - timer will stop on next iteration
     m_autoRefreshEnabled.store(false);
+    // Reset timer active flag so startAutoRefresh() can launch a new thread on next willAppear
+    m_autoRefreshTimerActive.store(false);
     // Note: We don't wait for the thread to stop here to avoid blocking the UI
-    // The atomic checks in the callbacks will prevent any issues
+    // The old thread will exit on its next loop iteration when it sees *m_alive == false
 }
 
 

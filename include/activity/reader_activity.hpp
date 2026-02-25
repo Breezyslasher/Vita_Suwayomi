@@ -213,6 +213,14 @@ private:
     void completeSwipeAnimation(bool turnPage);
     void resetSwipeState();
 
+    // Smooth slide completion animation (runs after finger lifts)
+    bool m_completionAnimating = false;   // true while slide-to-finish is running
+    float m_completionOffset = 0.0f;      // current animated offset
+    float m_completionTarget = 0.0f;      // target offset (screen width or 0 for snap-back)
+    bool m_completionTurnPage = false;    // whether to finalize page turn at end
+    void animateSwipeCompletion();        // per-frame step, called via brls::sync
+    void finalizePageTurn();              // called when animation reaches target
+
     // NOBORU-style touch controls
     // Double-tap detection
     std::chrono::steady_clock::time_point m_lastTapTime;

@@ -67,6 +67,13 @@ SettingsTab::~SettingsTab() {
     if (m_alive) *m_alive = false;
 }
 
+void SettingsTab::willDisappear(bool resetState) {
+    brls::Box::willDisappear(resetState);
+
+    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
+    if (m_alive) *m_alive = false;
+}
+
 void SettingsTab::createAccountSection() {
     Application& app = Application::getInstance();
     AppSettings& settings = app.getSettings();

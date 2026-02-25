@@ -704,29 +704,66 @@ void DownloadsManager::updateReadingProgress(int mangaId, int chapterIndex, int 
     }
 }
 
-void DownloadsManager::syncProgressToServer() {
-    // Sync local reading progress to Suwayomi server
-    SuwayomiClient& client = SuwayomiClient::getInstance();
-
+void DownloadsManager::clearReadingProgress(int mangaId) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
+    for (auto& manga : m_downloads) {
+        if (manga.mangaId == mangaId) {
+            manga.lastChapterRead = 0;
+            manga.lastPageRead = 0;
+            manga.lastReadTime = 0;
+
+            for (auto& chapter : manga.chapters) {
+                chapter.lastPageRead = 0;
+                chapter.lastReadTime = 0;
+            }
+
+            saveStateUnlocked();
+            break;
+        }
+    }
+}
+
+void DownloadsManager::syncProgressToServer() {
+    // Sync local reading progress to Suwayomi server
+    // Copy data under lock, then release lock before making network calls
+    // to avoid blocking the main thread (getDownloads, etc.)
+    struct SyncItem {
+        int mangaId;
+        int chapterId;
+        int lastPageRead;
+        int pageCount;
+    };
+    std::vector<SyncItem> items;
+
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        for (const auto& manga : m_downloads) {
+            for (const auto& chapter : manga.chapters) {
+                if (chapter.lastPageRead > 0) {
+                    SyncItem item;
+                    item.mangaId = manga.mangaId;
+                    item.chapterId = chapter.chapterId > 0 ? chapter.chapterId : chapter.chapterIndex;
+                    item.lastPageRead = chapter.lastPageRead;
+                    item.pageCount = chapter.pageCount;
+                    items.push_back(item);
+                }
+            }
+        }
+    }
+
+    // Network calls outside the mutex
+    SuwayomiClient& client = SuwayomiClient::getInstance();
     int syncedCount = 0;
     int markedReadCount = 0;
 
-    for (const auto& manga : m_downloads) {
-        for (const auto& chapter : manga.chapters) {
-            if (chapter.lastPageRead > 0) {
-                // Use chapterId (not chapterIndex) for server API calls
-                int id = chapter.chapterId > 0 ? chapter.chapterId : chapter.chapterIndex;
-                if (client.updateChapterProgress(manga.mangaId, id, chapter.lastPageRead)) {
-                    syncedCount++;
-                }
-                // Mark as read on server if user reached the last page
-                if (chapter.pageCount > 0 && chapter.lastPageRead >= chapter.pageCount - 1) {
-                    if (client.markChapterRead(manga.mangaId, id)) {
-                        markedReadCount++;
-                    }
-                }
+    for (const auto& item : items) {
+        if (client.updateChapterProgress(item.mangaId, item.chapterId, item.lastPageRead)) {
+            syncedCount++;
+        }
+        if (item.pageCount > 0 && item.lastPageRead >= item.pageCount - 1) {
+            if (client.markChapterRead(item.mangaId, item.chapterId)) {
+                markedReadCount++;
             }
         }
     }
@@ -737,39 +774,80 @@ void DownloadsManager::syncProgressToServer() {
 
 void DownloadsManager::syncProgressFromServer() {
     // Bidirectional sync: compare local vs server, take the more advanced progress
+    // Step 1: Copy local state under lock
+    struct LocalChapterInfo {
+        int mangaId;
+        int chapterId;
+        int chapterIndex;
+        int lastPageRead;
+        int pageCount;
+    };
+    struct MangaFetchInfo {
+        int mangaId;
+        std::vector<LocalChapterInfo> chapters;
+    };
+    std::vector<MangaFetchInfo> mangaList;
+
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        for (const auto& manga : m_downloads) {
+            MangaFetchInfo info;
+            info.mangaId = manga.mangaId;
+            for (const auto& ch : manga.chapters) {
+                LocalChapterInfo lci;
+                lci.mangaId = manga.mangaId;
+                lci.chapterId = ch.chapterId;
+                lci.chapterIndex = ch.chapterIndex;
+                lci.lastPageRead = ch.lastPageRead;
+                lci.pageCount = ch.pageCount;
+                info.chapters.push_back(lci);
+            }
+            mangaList.push_back(std::move(info));
+        }
+    }
+
+    // Step 2: Fetch from server and compute updates (no mutex held)
     SuwayomiClient& client = SuwayomiClient::getInstance();
-
-    std::lock_guard<std::mutex> lock(m_mutex);
-
     int updatedLocal = 0;
     int updatedServer = 0;
 
-    for (auto& manga : m_downloads) {
+    struct LocalUpdate {
+        int mangaId;
+        int chapterId;
+        int chapterIndex;
+        int lastPageRead;
+        time_t lastReadTime;
+    };
+    std::vector<LocalUpdate> localUpdates;
+
+    for (auto& manga : mangaList) {
         std::vector<Chapter> serverChapters;
         if (!client.fetchChapters(manga.mangaId, serverChapters)) {
             continue;
         }
 
-        for (auto& localChapter : manga.chapters) {
-            for (const auto& serverChapter : serverChapters) {
-                if (serverChapter.id == localChapter.chapterId ||
-                    serverChapter.index == localChapter.chapterIndex) {
-                    // Compare progress — take the more advanced position
-                    if (serverChapter.lastPageRead > localChapter.lastPageRead) {
-                        // Server is ahead — update local
-                        localChapter.lastPageRead = serverChapter.lastPageRead;
-                        if (serverChapter.lastReadAt > 0) {
-                            localChapter.lastReadTime = static_cast<time_t>(serverChapter.lastReadAt / 1000);
-                        }
+        for (auto& localCh : manga.chapters) {
+            for (const auto& serverCh : serverChapters) {
+                if (serverCh.id == localCh.chapterId ||
+                    serverCh.index == localCh.chapterIndex) {
+                    if (serverCh.lastPageRead > localCh.lastPageRead) {
+                        // Server is ahead — queue local update
+                        LocalUpdate upd;
+                        upd.mangaId = localCh.mangaId;
+                        upd.chapterId = localCh.chapterId;
+                        upd.chapterIndex = localCh.chapterIndex;
+                        upd.lastPageRead = serverCh.lastPageRead;
+                        upd.lastReadTime = serverCh.lastReadAt > 0
+                            ? static_cast<time_t>(serverCh.lastReadAt / 1000) : 0;
+                        localUpdates.push_back(upd);
                         updatedLocal++;
-                    } else if (localChapter.lastPageRead > serverChapter.lastPageRead &&
-                               localChapter.lastPageRead > 0) {
+                    } else if (localCh.lastPageRead > serverCh.lastPageRead &&
+                               localCh.lastPageRead > 0) {
                         // Local is ahead — push to server
-                        int id = localChapter.chapterId > 0 ? localChapter.chapterId : localChapter.chapterIndex;
-                        client.updateChapterProgress(manga.mangaId, id, localChapter.lastPageRead);
-                        // Mark as read if at end
-                        if (localChapter.pageCount > 0 && localChapter.lastPageRead >= localChapter.pageCount - 1) {
-                            client.markChapterRead(manga.mangaId, id);
+                        int id = localCh.chapterId > 0 ? localCh.chapterId : localCh.chapterIndex;
+                        client.updateChapterProgress(localCh.mangaId, id, localCh.lastPageRead);
+                        if (localCh.pageCount > 0 && localCh.lastPageRead >= localCh.pageCount - 1) {
+                            client.markChapterRead(localCh.mangaId, id);
                         }
                         updatedServer++;
                     }
@@ -779,7 +857,25 @@ void DownloadsManager::syncProgressFromServer() {
         }
     }
 
-    saveStateUnlocked();
+    // Step 3: Apply local updates under lock
+    if (!localUpdates.empty()) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        for (const auto& upd : localUpdates) {
+            for (auto& manga : m_downloads) {
+                if (manga.mangaId != upd.mangaId) continue;
+                for (auto& ch : manga.chapters) {
+                    if (ch.chapterId == upd.chapterId || ch.chapterIndex == upd.chapterIndex) {
+                        ch.lastPageRead = upd.lastPageRead;
+                        if (upd.lastReadTime > 0) ch.lastReadTime = upd.lastReadTime;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        saveStateUnlocked();
+    }
+
     brls::Logger::info("DownloadsManager: Bidirectional sync - {} local updates, {} server updates",
                       updatedLocal, updatedServer);
 }
