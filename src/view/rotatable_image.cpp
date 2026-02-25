@@ -143,7 +143,44 @@ void RotatableImage::calculateImageBounds(float viewX, float viewY, float viewW,
 
 void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float height,
                           brls::Style style, brls::FrameContext* ctx) {
-    // First draw the background to fill margins
+    nvgSave(vg);
+
+    bool hasSlide = (m_slideX != 0.0f || m_slideY != 0.0f);
+
+    if (hasSlide) {
+        // Debug: log draw coords and slide offsets (throttled to avoid spam)
+        static int s_drawLogCounter = 0;
+        if ((s_drawLogCounter++ % 180) == 0) {  // ~every 3 seconds at 60fps
+            brls::Logger::info("DRAW slideX={:.0f} slideY={:.0f} x={:.0f} y={:.0f} "
+                "w={:.0f} h={:.0f} rot={:.0f} img={}x{}",
+                m_slideX, m_slideY, x, y, width, height,
+                m_rotationDegrees, m_imageWidth, m_imageHeight);
+        }
+
+        // During swipe: clip in the SWIPE direction only to prevent pages
+        // from overlapping each other. The cross-axis is left unclipped
+        // so wide/tall images (FIT_WIDTH, FIT_HEIGHT, rotated) aren't cut off.
+        //
+        // Use nvgScissor (not nvgIntersectScissor) because borealis sets a
+        // parent scissor at the view bounds. nvgIntersectScissor would intersect
+        // with that parent scissor, negating our cross-axis extension and
+        // cutting off images that extend beyond the view.
+        const float PAD = 4000.0f;
+        float clipX = x, clipY = y, clipW = width, clipH = height;
+        if (m_slideY != 0.0f && m_slideX == 0.0f) {
+            // Vertical swipe (90/270 rotation): keep Y tight, extend X
+            clipX -= PAD;
+            clipW += 2.0f * PAD;
+        } else {
+            // Horizontal swipe (0/180 rotation): keep X tight, extend Y
+            clipY -= PAD;
+            clipH += 2.0f * PAD;
+        }
+        nvgScissor(vg, clipX, clipY, clipW, clipH);
+        nvgTranslate(vg, m_slideX, m_slideY);
+    }
+
+    // Draw the background to fill margins
     nvgBeginPath(vg);
     nvgRect(vg, x, y, width, height);
     nvgFillColor(vg, m_bgColor);
@@ -151,18 +188,13 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
 
     // If no image, just show background
     if (m_nvgImage == 0 || m_imageWidth <= 0 || m_imageHeight <= 0) {
+        nvgRestore(vg);
         return;
     }
 
     // Calculate where the image should be drawn (accounts for rotation)
     float imgX, imgY, imgW, imgH;
     calculateImageBounds(x, y, width, height, imgX, imgY, imgW, imgH);
-
-    // Save state
-    nvgSave(vg);
-
-    // Use scissor to clip rendering to the view bounds (not calculated bounds when zoomed)
-    nvgScissor(vg, x, y, width, height);
 
     // Calculate center of the destination area
     float centerX = imgX + imgW / 2.0f;
@@ -222,7 +254,7 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
         nvgFill(vg);
     }
 
-    // Restore state (removes scissor and rotation)
+    // Restore state (removes scissor, slide offset, rotation transforms)
     nvgRestore(vg);
 }
 
@@ -273,6 +305,36 @@ void RotatableImage::resetZoom() {
     m_zoomLevel = 1.0f;
     m_zoomOffset = {0, 0};
     this->invalidate();
+}
+
+void RotatableImage::setSlideOffset(float x, float y) {
+    m_slideX = x;
+    m_slideY = y;
+}
+
+void RotatableImage::resetSlideOffset() {
+    m_slideX = 0.0f;
+    m_slideY = 0.0f;
+}
+
+void RotatableImage::takeImageFrom(RotatableImage* source) {
+    if (!source) return;
+
+    // Clear our current image
+    clearImage();
+
+    // Transfer the NVG image handle and dimensions
+    m_nvgImage = source->m_nvgImage;
+    m_imageWidth = source->m_imageWidth;
+    m_imageHeight = source->m_imageHeight;
+
+    // Clear the source without deleting the NVG image (we own it now)
+    source->m_nvgImage = 0;
+    source->m_imageWidth = 0;
+    source->m_imageHeight = 0;
+
+    this->invalidate();
+    source->invalidate();
 }
 
 brls::View* RotatableImage::create() {

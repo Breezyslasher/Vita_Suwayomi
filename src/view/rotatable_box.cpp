@@ -35,25 +35,55 @@ void RotatableBox::setRotation(float degrees) {
     this->invalidate();
 }
 
+void RotatableBox::setSlideOffset(float x, float y) {
+    m_slideX = x;
+    m_slideY = y;
+}
+
+void RotatableBox::resetSlideOffset() {
+    m_slideX = 0.0f;
+    m_slideY = 0.0f;
+}
+
 void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float height,
                          brls::Style style, brls::FrameContext* ctx) {
-    if (m_rotationDegrees == 0.0f) {
-        // No rotation - draw normally
-        Box::draw(vg, x, y, width, height, style, ctx);
-        return;
+    // Apply slide offset for swipe carousel if active
+    bool hasSlide = (m_slideX != 0.0f || m_slideY != 0.0f);
+    if (hasSlide) {
+        nvgSave(vg);
+        // Clip in swipe direction only — extend cross-axis so rotated content isn't cut.
+        // Use nvgScissor (not nvgIntersectScissor) to override the parent scissor
+        // that borealis sets at the view bounds, which would negate cross-axis extension.
+        const float PAD = 4000.0f;
+        float clipX = x, clipY = y, clipW = width, clipH = height;
+        if (m_slideY != 0.0f && m_slideX == 0.0f) {
+            clipX -= PAD; clipW += 2.0f * PAD;
+        } else {
+            clipY -= PAD; clipH += 2.0f * PAD;
+        }
+        nvgScissor(vg, clipX, clipY, clipW, clipH);
+        nvgTranslate(vg, m_slideX, m_slideY);
     }
 
-    float centerX = x + width / 2.0f;
-    float centerY = y + height / 2.0f;
+    if (m_rotationDegrees == 0.0f) {
+        Box::draw(vg, x, y, width, height, style, ctx);
+    } else {
+        nvgSave(vg);
 
-    nvgSave(vg);
-    nvgTranslate(vg, centerX, centerY);
-    nvgRotate(vg, m_rotationDegrees * NVG_PI / 180.0f);
-    nvgTranslate(vg, -centerX, -centerY);
+        float centerX = x + width / 2.0f;
+        float centerY = y + height / 2.0f;
+        nvgTranslate(vg, centerX, centerY);
+        nvgRotate(vg, m_rotationDegrees * NVG_PI / 180.0f);
+        nvgTranslate(vg, -centerX, -centerY);
 
-    Box::draw(vg, x, y, width, height, style, ctx);
+        Box::draw(vg, x, y, width, height, style, ctx);
 
-    nvgRestore(vg);
+        nvgRestore(vg);
+    }
+
+    if (hasSlide) {
+        nvgRestore(vg);
+    }
 }
 
 brls::View* RotatableBox::create() {
