@@ -50,11 +50,12 @@ void WebtoonScrollView::setupGestures() {
                 float rawDy = status.position.y - m_touchLast.y;
 
                 // Calculate scroll delta based on rotation
-                // scrollY: 0 = beginning (top/left), negative = scrolled towards end
-                // 0°: Normal vertical scrolling - swipe up (negative dy) to scroll down
-                // 90°: Horizontal scrolling - swipe left (negative dx) to scroll down (forward)
-                // 180°: Inverted vertical scrolling - swipe down (positive dy) to scroll down
-                // 270°: Horizontal scrolling - swipe right (positive dx) to scroll down (forward)
+                // scrollY: 0 = beginning, negative = scrolled towards end
+                // Content follows finger (natural scrolling) for all rotations.
+                // 0°: swipe up to scroll forward
+                // 90° (RTL layout): swipe up (user's +X) to scroll forward
+                // 180° (BTT layout): swipe up (user's +Y) to scroll forward
+                // 270° (LTR layout): swipe up (user's -X) to scroll forward
                 //
                 // Touch deltas are in physical screen coords (960x544) but scroll
                 // position is in view coords (~1280x726). Scale for 1:1 tracking.
@@ -66,13 +67,15 @@ void WebtoonScrollView::setupGestures() {
                 if (rotation == 0) {
                     scrollDelta = rawDy * scaleY;
                 } else if (rotation == 90) {
-                    // Swipe left (negative dx) should scroll forward (decrease scrollY)
-                    scrollDelta = rawDx * scaleX;
+                    // 90° CW: user holds device CCW, their "up" = +X on screen
+                    // RTL layout: -scrollY in formula, so negate dx for natural tracking
+                    scrollDelta = -rawDx * scaleX;
                 } else if (rotation == 180) {
                     scrollDelta = -rawDy * scaleY;
                 } else if (rotation == 270) {
-                    // Swipe right (positive dx) should scroll forward (decrease scrollY)
-                    scrollDelta = -rawDx * scaleX;
+                    // 270° CW: user holds device CW, their "up" = -X on screen
+                    // LTR layout: +scrollY in formula, so use dx directly for natural tracking
+                    scrollDelta = rawDx * scaleX;
                 }
 
                 // Update scroll position
