@@ -471,6 +471,26 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     brls::Logger::info("MangaDetailView: Creating for '{}' id={}", manga.title, manga.id);
     m_lastProgressRefresh = std::chrono::steady_clock::now();
 
+    // Register callback so when the reader closes, we immediately update the
+    // Continue Reading button without waiting for willAppear (which may not fire
+    // since this view is a Box inside an Activity, not an Activity itself).
+    int mangaId = m_manga.id;
+    Application::getInstance().setReaderResultCallback(
+        [this, mangaId, aliveWeak = std::weak_ptr<bool>(m_alive)](const Application::ReaderResult& result) {
+            if (result.mangaId != mangaId) return;
+            // Defer to next frame so the reader activity finishes popping first
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                applyReaderResult();
+                Application::getInstance().clearLastReaderResult();
+                updateChapterDownloadStates();
+                updateReadButtonText();
+                // Also refresh chapter list cells to show updated read state
+                populateChaptersList();
+            });
+        });
+
     // Try to load cached details if description is missing
     if (m_manga.description.empty()) {
         LibraryCache& cache = LibraryCache::getInstance();
@@ -3790,6 +3810,7 @@ MangaDetailView::~MangaDetailView() {
     DownloadsManager& dm = DownloadsManager::getInstance();
     dm.setProgressCallback(nullptr);
     dm.setChapterCompletionCallback(nullptr);
+    Application::getInstance().setReaderResultCallback(nullptr);
 
     // Note: m_chaptersDataSource is owned and deleted by m_chaptersRecycler
 }
