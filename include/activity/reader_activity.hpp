@@ -218,6 +218,8 @@ private:
     float m_completionOffset = 0.0f;      // current animated offset
     float m_completionTarget = 0.0f;      // target offset (screen width or 0 for snap-back)
     bool m_completionTurnPage = false;    // whether to finalize page turn at end
+    bool m_completionNavChapter = false;  // whether to navigate chapters after animation
+    bool m_completionNavNext = false;     // true = next chapter, false = previous
     void animateSwipeCompletion();        // per-frame step, called via brls::sync
     void finalizePageTurn();              // called when animation reaches target
 
