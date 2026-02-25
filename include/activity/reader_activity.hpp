@@ -273,6 +273,7 @@ private:
     bool isTransitionPage(int index) const;
     void insertTransitionPages();
     void renderTransitionPage(int index);
+    void setupWebtoonTransitionText();  // Set transition text on webtoon scroll view
     int m_realPageCount = 0;  // Actual page count excluding transition pages
 
     // Guard flag: prevents slider callback from firing during programmatic setProgress

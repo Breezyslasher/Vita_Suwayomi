@@ -1294,12 +1294,27 @@ void ReaderActivity::loadPages() {
                     toggleControls();
                 });
 
+                // Set up chapter navigation callback for transition pages
+                webtoonScroll->setChapterNavigateCallback([this, cbAlive](bool next) {
+                    auto a = cbAlive.lock();
+                    if (!a || !*a) return;
+                    if (next) {
+                        nextChapter();
+                    } else {
+                        previousChapter();
+                    }
+                });
+
                 // Load all pages into the scroll view
                 // Use actual view width (internal rendering coords, ~1280) rather than
                 // physical screen width (960) to avoid coordinate system mismatch.
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
                 webtoonScroll->setPages(m_pages, viewW);
+
+                // Set transition text for chapter separator pages
+                setupWebtoonTransitionText();
+
                 webtoonScroll->scrollToPage(m_currentPage);
             }
         } else {
@@ -1622,6 +1637,7 @@ void ReaderActivity::nextChapter() {
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
                 webtoonScroll->setPages(m_pages, viewW);
+                setupWebtoonTransitionText();
                 webtoonScroll->scrollToPage(m_currentPage);
             } else {
                 loadPage(m_currentPage);
@@ -1694,6 +1710,7 @@ void ReaderActivity::previousChapter() {
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
                 webtoonScroll->setPages(m_pages, viewW);
+                setupWebtoonTransitionText();
                 webtoonScroll->scrollToPage(m_currentPage);
             } else {
                 loadPage(m_currentPage);
@@ -2375,6 +2392,61 @@ void ReaderActivity::renderTransitionPage(int index) {
     brls::Application::giveFocus(transitionBox);
 }
 
+void ReaderActivity::setupWebtoonTransitionText() {
+    if (!webtoonScroll) return;
+
+    std::string currentChapterDisplay = m_chapterName.empty() ?
+        "Chapter " + getChapterDisplayNumber() : m_chapterName;
+
+    for (int i = 0; i < static_cast<int>(m_pages.size()); i++) {
+        if (!isTransitionPage(i)) continue;
+
+        const std::string& url = m_pages[i].imageUrl;
+        std::string line1, line2;
+
+        if (url == TRANSITION_NEXT) {
+            line1 = "End of: " + currentChapterDisplay;
+            if (m_chapterPosition >= 0 && m_chapterPosition < m_totalChapters - 1) {
+                const Chapter& nextCh = m_chapters[m_chapterPosition + 1];
+                std::string nextName = nextCh.name;
+                if (nextName.empty()) {
+                    float num = nextCh.chapterNumber;
+                    if (num == static_cast<int>(num))
+                        nextName = "Chapter " + std::to_string(static_cast<int>(num));
+                    else {
+                        char buf[32];
+                        snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                        nextName = buf;
+                    }
+                }
+                line2 = "Next: " + nextName;
+            }
+        } else if (url == TRANSITION_PREV) {
+            line1 = "Beginning of: " + currentChapterDisplay;
+            if (m_chapterPosition > 0) {
+                const Chapter& prevCh = m_chapters[m_chapterPosition - 1];
+                std::string prevName = prevCh.name;
+                if (prevName.empty()) {
+                    float num = prevCh.chapterNumber;
+                    if (num == static_cast<int>(num))
+                        prevName = "Chapter " + std::to_string(static_cast<int>(num));
+                    else {
+                        char buf[32];
+                        snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                        prevName = buf;
+                    }
+                }
+                line2 = "Previous: " + prevName;
+            }
+        } else if (url == TRANSITION_END) {
+            line1 = "End of: " + currentChapterDisplay;
+            line2 = "You've reached the end!";
+        }
+
+        webtoonScroll->setTransitionText(i, line1, line2);
+    }
+}
+
 // NOBORU-style swipe methods
 
 void ReaderActivity::updateSwipePreview(float offset) {
@@ -2992,11 +3064,23 @@ void ReaderActivity::updateReaderMode() {
                 toggleControls();
             });
 
+            // Set up chapter navigation callback for transition pages
+            webtoonScroll->setChapterNavigateCallback([this, cbAlive](bool next) {
+                auto a = cbAlive.lock();
+                if (!a || !*a) return;
+                if (next) {
+                    nextChapter();
+                } else {
+                    previousChapter();
+                }
+            });
+
             // Load pages into the scroll view
             if (!m_pages.empty()) {
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
                 webtoonScroll->setPages(m_pages, viewW);
+                setupWebtoonTransitionText();
                 webtoonScroll->scrollToPage(m_currentPage);
             }
         }
