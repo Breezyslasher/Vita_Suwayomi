@@ -511,7 +511,16 @@ void ReaderActivity::onContentAvailable() {
                     // Only track swipes in the primary direction
                     if (std::abs(rawDelta) > std::abs(crossDelta) && std::abs(rawDelta) > SWIPE_START_THRESHOLD) {
                         m_isSwipeAnimating = true;
-                        m_swipeOffset = rawDelta;  // Store raw for visual
+
+                        // Scale touch delta from physical screen coords to view coords
+                        // for 1:1 finger-to-page tracking. Touch is in physical pixels
+                        // (960x544) but NanoVG views use internal coords (~1280x726).
+                        float physScreen = useVerticalSwipe ? 544.0f : 960.0f;
+                        float viewSize = useVerticalSwipe ?
+                            (pageImage ? pageImage->getHeight() : physScreen) :
+                            (pageImage ? pageImage->getWidth() : physScreen);
+                        float scaledDelta = rawDelta * (viewSize / physScreen);
+                        m_swipeOffset = scaledDelta;
 
                         // Determine active swipe direction for page turn logic
                         bool swipingPositive = logicalDelta > 0;
@@ -533,7 +542,7 @@ void ReaderActivity::onContentAvailable() {
                         }
 
                         // Update visual positions - all 3 pages slide together
-                        updateSwipePreview(rawDelta);
+                        updateSwipePreview(scaledDelta);
                     }
                 } else if (status.state == brls::GestureState::END) {
                     // Don't turn the page if we were just pinch-zooming
@@ -711,7 +720,14 @@ void ReaderActivity::onContentAvailable() {
 
                     if (std::abs(rawDelta) > std::abs(crossDelta) && std::abs(rawDelta) > SWIPE_START_THRESHOLD) {
                         m_isSwipeAnimating = true;
-                        m_swipeOffset = rawDelta;
+
+                        // Scale touch delta from physical screen coords to view coords
+                        float physScreen = useVerticalSwipe ? 544.0f : 960.0f;
+                        float viewSize = useVerticalSwipe ?
+                            (pageImage ? pageImage->getHeight() : physScreen) :
+                            (pageImage ? pageImage->getWidth() : physScreen);
+                        float scaledDelta = rawDelta * (viewSize / physScreen);
+                        m_swipeOffset = scaledDelta;
 
                         bool swipingPositive = logicalDelta > 0;
                         bool wantNextPage = (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) ? swipingPositive : !swipingPositive;
@@ -766,7 +782,7 @@ void ReaderActivity::onContentAvailable() {
                             }
                         }
 
-                        updateSwipePreview(rawDelta);
+                        updateSwipePreview(scaledDelta);
                     }
                 } else if (status.state == brls::GestureState::END) {
                     if (m_pages.empty()) {
@@ -2424,12 +2440,18 @@ void ReaderActivity::updateSwipePreview(float offset) {
     // rendering on PS Vita's GXM backend. Each view's draw() method applies
     // the slide offset via nvgTranslate inside a scissor clip, so pages
     // slide off screen without overlapping.
-    const float SCREEN_WIDTH = 960.0f;
-    const float SCREEN_HEIGHT = 544.0f;
+    //
+    // Use actual view dimensions (internal rendering coords), NOT physical
+    // screen dimensions (960x544). The borealis framework renders at a higher
+    // internal resolution (~1280x726) that gets scaled to the physical display.
+    // Using physical screen dimensions causes pages to be spaced too close
+    // together, resulting in overlap during swipe transitions.
+    float viewWidth = pageImage ? pageImage->getWidth() : 960.0f;
+    float viewHeight = pageImage ? pageImage->getHeight() : 544.0f;
 
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
                              m_settings.rotation == ImageRotation::ROTATE_270);
-    float screenExtent = useVerticalSwipe ? SCREEN_HEIGHT : SCREEN_WIDTH;
+    float screenExtent = useVerticalSwipe ? viewHeight : viewWidth;
     offset = std::max(-screenExtent, std::min(screenExtent, offset));
 
     // Calculate positions for the 3-page strip
@@ -2664,9 +2686,12 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
         m_previewPageIndex, m_swipingToNext, m_currentPage);
 
     // Determine target offset for slide animation
+    // Use actual view dimensions, not physical screen dimensions
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
                              m_settings.rotation == ImageRotation::ROTATE_270);
-    float screenExtent = useVerticalSwipe ? 544.0f : 960.0f;
+    float viewWidth = pageImage ? pageImage->getWidth() : 960.0f;
+    float viewHeight = pageImage ? pageImage->getHeight() : 544.0f;
+    float screenExtent = useVerticalSwipe ? viewHeight : viewWidth;
 
     if (turnPage && m_swipeToChapter) {
         // Swiped on a transition page showing a chapter page preview —

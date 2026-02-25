@@ -51,7 +51,9 @@ void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float hei
     bool hasSlide = (m_slideX != 0.0f || m_slideY != 0.0f);
     if (hasSlide) {
         nvgSave(vg);
-        // Clip in swipe direction only — extend cross-axis so rotated content isn't cut
+        // Clip in swipe direction only — extend cross-axis so rotated content isn't cut.
+        // Use nvgScissor (not nvgIntersectScissor) to override the parent scissor
+        // that borealis sets at the view bounds, which would negate cross-axis extension.
         const float PAD = 4000.0f;
         float clipX = x, clipY = y, clipW = width, clipH = height;
         if (m_slideY != 0.0f && m_slideX == 0.0f) {
@@ -59,7 +61,7 @@ void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float hei
         } else {
             clipY -= PAD; clipH += 2.0f * PAD;
         }
-        nvgIntersectScissor(vg, clipX, clipY, clipW, clipH);
+        nvgScissor(vg, clipX, clipY, clipW, clipH);
         nvgTranslate(vg, m_slideX, m_slideY);
     }
 

@@ -160,6 +160,11 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
         // During swipe: clip in the SWIPE direction only to prevent pages
         // from overlapping each other. The cross-axis is left unclipped
         // so wide/tall images (FIT_WIDTH, FIT_HEIGHT, rotated) aren't cut off.
+        //
+        // Use nvgScissor (not nvgIntersectScissor) because borealis sets a
+        // parent scissor at the view bounds. nvgIntersectScissor would intersect
+        // with that parent scissor, negating our cross-axis extension and
+        // cutting off images that extend beyond the view.
         const float PAD = 4000.0f;
         float clipX = x, clipY = y, clipW = width, clipH = height;
         if (m_slideY != 0.0f && m_slideX == 0.0f) {
@@ -171,7 +176,7 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
             clipY -= PAD;
             clipH += 2.0f * PAD;
         }
-        nvgIntersectScissor(vg, clipX, clipY, clipW, clipH);
+        nvgScissor(vg, clipX, clipY, clipW, clipH);
         nvgTranslate(vg, m_slideX, m_slideY);
     }
 
