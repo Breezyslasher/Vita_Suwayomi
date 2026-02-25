@@ -101,7 +101,6 @@ private:
     // UI element tracking for incremental updates (avoid full rebuilds)
     struct LocalRowElements {
         brls::Box* row = nullptr;
-        brls::Box* contentBox = nullptr;  // Inner content layer (slides on swipe)
         brls::Label* progressLabel = nullptr;
         brls::Image* xButtonIcon = nullptr;
         int mangaId = 0;
@@ -111,7 +110,6 @@ private:
 
     struct ServerRowElements {
         brls::Box* row = nullptr;
-        brls::Box* contentBox = nullptr;  // Inner content layer (slides on swipe)
         brls::Label* progressLabel = nullptr;
         brls::Image* xButtonIcon = nullptr;
         int chapterId = 0;
@@ -129,16 +127,14 @@ private:
     brls::Box* createLocalRow(int mangaId, int chapterIndex, const std::string& mangaTitle,
                               const std::string& chapterName, float chapterNumber,
                               int downloadedPages, int pageCount, int state,
-                              brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon,
-                              brls::Box*& outContentBox);
+                              brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon);
 
     // Helper methods for incremental updates (server queue)
     brls::Box* createServerRow(int chapterId, int mangaId, const std::string& mangaTitle,
                                const std::string& chapterName, float chapterNumber,
                                int downloadedPages, int pageCount, int state,
                                int currentIndex, int queueSize,
-                               brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon,
-                               brls::Box*& outContentBox);
+                               brls::Label*& outProgressLabel, brls::Image*& outXButtonIcon);
     void addServerItem(int chapterId, int mangaId, const std::string& mangaTitle,
                        const std::string& chapterName, float chapterNumber,
                        int downloadedPages, int pageCount, int state,
