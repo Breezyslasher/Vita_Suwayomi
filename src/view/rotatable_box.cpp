@@ -47,6 +47,10 @@ void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float hei
     float centerY = y + height / 2.0f;
 
     nvgSave(vg);
+
+    // Clip to view bounds so rotated content doesn't overflow
+    nvgScissor(vg, x, y, width, height);
+
     nvgTranslate(vg, centerX, centerY);
     nvgRotate(vg, m_rotationDegrees * NVG_PI / 180.0f);
     nvgTranslate(vg, -centerX, -centerY);
