@@ -148,24 +148,7 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
     nvgSave(vg);
 
     if (hasSlide) {
-        // Build a clip rect that is tight in the swipe direction (prevents
-        // tiles from overlapping) but extended in the cross direction so that
-        // images which naturally extend beyond the view (FIT_WIDTH, wide
-        // images, rotated images) aren't cropped differently during a swipe.
-        float clipX = x, clipY = y, clipW = width, clipH = height;
-        const float PAD = 2000.0f;
-        if (m_slideOffsetY != 0.0f && m_slideOffsetX == 0.0f) {
-            // Vertical swipe (90°/270°): keep Y tight, extend X
-            clipX -= PAD;
-            clipW += 2.0f * PAD;
-        } else if (m_slideOffsetX != 0.0f && m_slideOffsetY == 0.0f) {
-            // Horizontal swipe (0°/180°): keep X tight, extend Y
-            clipY -= PAD;
-            clipH += 2.0f * PAD;
-        }
-        nvgScissor(vg, clipX, clipY, clipW, clipH);
         nvgTranslate(vg, m_slideOffsetX, m_slideOffsetY);
-        nvgIntersectScissor(vg, clipX, clipY, clipW, clipH);
     }
 
     // Draw the background to fill margins
