@@ -2413,9 +2413,8 @@ void ReaderActivity::renderTransitionPage(int index) {
 
 void ReaderActivity::updateSwipePreview(float offset) {
     // 3-page carousel: positive side + current + negative side
-    // All three views slide together as a strip using NanoVG slide offsets.
-    // "Positive side" = page revealed when swiping in the positive direction (right/down)
-    // "Negative side" = page revealed when swiping in the negative direction (left/up)
+    // Views are moved to their actual screen positions using setTranslationX/Y
+    // so they don't overlap. Each view draws at its own location.
     const float SCREEN_WIDTH = 960.0f;
     const float SCREEN_HEIGHT = 544.0f;
 
@@ -2424,7 +2423,14 @@ void ReaderActivity::updateSwipePreview(float offset) {
     float screenExtent = useVerticalSwipe ? SCREEN_HEIGHT : SCREEN_WIDTH;
     offset = std::max(-screenExtent, std::min(screenExtent, offset));
 
-    // Calculate slide offsets for the 3-page strip
+    // Helper: position a view at (tx, ty) using borealis translation
+    auto moveView = [&](brls::View* view, float tx, float ty) {
+        if (!view) return;
+        view->setTranslationX(tx);
+        view->setTranslationY(ty);
+    };
+
+    // Calculate positions for the 3-page strip
     auto makeSlide = [&](float val) -> std::pair<float,float> {
         return useVerticalSwipe ? std::make_pair(0.0f, val) : std::make_pair(val, 0.0f);
     };
@@ -2438,25 +2444,25 @@ void ReaderActivity::updateSwipePreview(float offset) {
                         transitionBox->getVisibility() == brls::Visibility::VISIBLE &&
                         isTransitionPage(m_currentPage);
     if (onTransition) {
-        transitionBox->setSlideOffset(curX, curY);
+        moveView(transitionBox, curX, curY);
     } else if (pageImage) {
-        pageImage->setSlideOffset(curX, curY);
+        moveView(pageImage, curX, curY);
     }
 
     // Positive side preview
     if (m_posIsTransition && transitionBox && !onTransition) {
-        transitionBox->setSlideOffset(posX, posY);
+        moveView(transitionBox, posX, posY);
     } else if (previewImage && m_posPreviewIdx >= 0) {
         previewImage->setVisibility(brls::Visibility::VISIBLE);
-        previewImage->setSlideOffset(posX, posY);
+        moveView(previewImage, posX, posY);
     }
 
     // Negative side preview
     if (m_negIsTransition && transitionBox && !onTransition && !m_posIsTransition) {
-        transitionBox->setSlideOffset(negX, negY);
+        moveView(transitionBox, negX, negY);
     } else if (previewImageB && m_negPreviewIdx >= 0) {
         previewImageB->setVisibility(brls::Visibility::VISIBLE);
-        previewImageB->setSlideOffset(negX, negY);
+        moveView(previewImageB, negX, negY);
     }
 }
 
@@ -2792,27 +2798,31 @@ void ReaderActivity::resetSwipeState() {
     m_swipeOffset = 0.0f;
     m_previewPageIndex = -1;
 
-    // Reset slide offsets on all views
+    // Reset translations on all views
     if (pageImage) {
-        pageImage->setSlideOffset(0.0f, 0.0f);
+        pageImage->setTranslationX(0.0f);
+        pageImage->setTranslationY(0.0f);
     }
 
     // Reset transition box
     if (transitionBox) {
-        transitionBox->setSlideOffset(0.0f, 0.0f);
+        transitionBox->setTranslationX(0.0f);
+        transitionBox->setTranslationY(0.0f);
         if (wasTransitionPreview && !isTransitionPage(m_currentPage)) {
             transitionBox->setVisibility(brls::Visibility::GONE);
         }
     }
 
-    // Hide both preview images and reset offsets
+    // Hide both preview images and reset translations
     if (previewImage) {
         previewImage->setVisibility(brls::Visibility::GONE);
-        previewImage->setSlideOffset(0.0f, 0.0f);
+        previewImage->setTranslationX(0.0f);
+        previewImage->setTranslationY(0.0f);
     }
     if (previewImageB) {
         previewImageB->setVisibility(brls::Visibility::GONE);
-        previewImageB->setSlideOffset(0.0f, 0.0f);
+        previewImageB->setTranslationX(0.0f);
+        previewImageB->setTranslationY(0.0f);
     }
 }
 

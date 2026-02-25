@@ -143,13 +143,7 @@ void RotatableImage::calculateImageBounds(float viewX, float viewY, float viewW,
 
 void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float height,
                           brls::Style style, brls::FrameContext* ctx) {
-    bool hasSlide = (m_slideOffsetX != 0.0f || m_slideOffsetY != 0.0f);
-
     nvgSave(vg);
-
-    if (hasSlide) {
-        nvgTranslate(vg, m_slideOffsetX, m_slideOffsetY);
-    }
 
     // Draw the background to fill margins
     nvgBeginPath(vg);

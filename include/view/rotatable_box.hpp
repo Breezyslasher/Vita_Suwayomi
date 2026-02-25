@@ -27,17 +27,10 @@ public:
      */
     float getRotation() const { return m_rotationDegrees; }
 
-    /**
-     * Set slide offset for swipe push effect (content slides within clipped view bounds)
-     */
-    void setSlideOffset(float x, float y) { m_slideOffsetX = x; m_slideOffsetY = y; }
-
     static brls::View* create();
 
 private:
     float m_rotationDegrees = 0.0f;
-    float m_slideOffsetX = 0.0f;
-    float m_slideOffsetY = 0.0f;
 };
 
 } // namespace vitasuwayomi

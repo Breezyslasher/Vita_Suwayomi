@@ -37,27 +37,18 @@ void RotatableBox::setRotation(float degrees) {
 
 void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float height,
                          brls::Style style, brls::FrameContext* ctx) {
-    bool hasSlide = (m_slideOffsetX != 0.0f || m_slideOffsetY != 0.0f);
-
-    if (m_rotationDegrees == 0.0f && !hasSlide) {
-        // No rotation, no slide - draw normally
+    if (m_rotationDegrees == 0.0f) {
         Box::draw(vg, x, y, width, height, style, ctx);
         return;
     }
 
     nvgSave(vg);
 
-    if (hasSlide) {
-        nvgTranslate(vg, m_slideOffsetX, m_slideOffsetY);
-    }
-
-    if (m_rotationDegrees != 0.0f) {
-        float centerX = x + width / 2.0f;
-        float centerY = y + height / 2.0f;
-        nvgTranslate(vg, centerX, centerY);
-        nvgRotate(vg, m_rotationDegrees * NVG_PI / 180.0f);
-        nvgTranslate(vg, -centerX, -centerY);
-    }
+    float centerX = x + width / 2.0f;
+    float centerY = y + height / 2.0f;
+    nvgTranslate(vg, centerX, centerY);
+    nvgRotate(vg, m_rotationDegrees * NVG_PI / 180.0f);
+    nvgTranslate(vg, -centerX, -centerY);
 
     Box::draw(vg, x, y, width, height, style, ctx);
 

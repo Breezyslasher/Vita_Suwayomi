@@ -113,11 +113,6 @@ public:
      */
     void resetZoom();
 
-    /**
-     * Set slide offset for swipe push effect (content slides within clipped view bounds)
-     */
-    void setSlideOffset(float x, float y) { m_slideOffsetX = x; m_slideOffsetY = y; }
-
     static brls::View* create();
 
 private:
@@ -132,10 +127,6 @@ private:
     // Zoom state
     float m_zoomLevel = 1.0f;      // Current zoom level (1.0 = normal)
     brls::Point m_zoomOffset = {0, 0};  // Pan offset when zoomed
-
-    // Slide offset for swipe push effect (pixels)
-    float m_slideOffsetX = 0.0f;
-    float m_slideOffsetY = 0.0f;
 
     // Calculate image bounds for current scaling type
     void calculateImageBounds(float viewX, float viewY, float viewW, float viewH,
