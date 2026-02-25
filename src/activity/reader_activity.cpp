@@ -2585,44 +2585,25 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
         turnPage, m_swipeToChapter, m_previewIsTransition,
         m_previewPageIndex, m_swipingToNext, m_currentPage);
 
-    if (turnPage && m_swipeToChapter) {
-        // Swiped on a transition page showing a chapter page preview —
-        // navigate to that chapter directly (instant, chapter reloads everything).
-        brls::Logger::info("COMPLETE: taking CHAPTER path, swipingToNext={}", m_swipingToNext);
-        m_swipeToChapter = false;
-        m_previewIsTransition = false;
-        m_isSwipeAnimating = false;
-        m_swipeOffset = 0.0f;
-        m_previewPageIndex = -1;
-
-        if (transitionBox) {
-            transitionBox->setTranslationX(0.0f);
-            transitionBox->setTranslationY(0.0f);
-            transitionBox->setVisibility(brls::Visibility::GONE);
-        }
-        if (previewImage) {
-            previewImage->setTranslationX(0.0f);
-            previewImage->setTranslationY(0.0f);
-            previewImage->setVisibility(brls::Visibility::GONE);
-        }
-        if (pageImage) {
-            pageImage->setTranslationX(0.0f);
-            pageImage->setTranslationY(0.0f);
-        }
-
-        if (m_swipingToNext) {
-            nextChapter();
-            return;
-        } else {
-            previousChapter();
-            return;
-        }
-    }
-
     // Determine target offset for slide animation
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
                              m_settings.rotation == ImageRotation::ROTATE_270);
     float screenExtent = useVerticalSwipe ? 544.0f : 960.0f;
+
+    if (turnPage && m_swipeToChapter) {
+        // Swiped on a transition page showing a chapter page preview —
+        // animate the slide, then navigate to the chapter after animation completes.
+        brls::Logger::info("COMPLETE: taking CHAPTER path, swipingToNext={}", m_swipingToNext);
+        float target = (m_swipeOffset > 0) ? screenExtent : -screenExtent;
+        m_completionOffset = m_swipeOffset;
+        m_completionTarget = target;
+        m_completionTurnPage = false;
+        m_completionNavChapter = true;
+        m_completionNavNext = m_swipingToNext;
+        m_completionAnimating = true;
+        animateSwipeCompletion();
+        return;
+    }
 
     if (turnPage && (m_previewIsTransition || (m_previewPageIndex >= 0 &&
         m_previewPageIndex < static_cast<int>(m_pages.size())))) {
@@ -2631,6 +2612,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
         m_completionOffset = m_swipeOffset;
         m_completionTarget = target;
         m_completionTurnPage = true;
+        m_completionNavChapter = false;
         m_completionAnimating = true;
         animateSwipeCompletion();
         return;
@@ -2638,46 +2620,31 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
 
     if (turnPage && isTransitionPage(m_currentPage)) {
         // Swiped past a transition page boundary with no preview page available.
-        // Trigger the same chapter navigation as nextPage()/previousPage().
+        // Animate the slide, then trigger chapter navigation after.
         const std::string& url = m_pages[m_currentPage].imageUrl;
         brls::Logger::info("COMPLETE: taking FALLBACK path, url={} swipingToNext={}", url, m_swipingToNext);
 
-        m_isSwipeAnimating = false;
-        m_swipeOffset = 0.0f;
-        m_previewPageIndex = -1;
-        m_previewIsTransition = false;
-        m_swipeToChapter = false;
-        if (transitionBox) {
-            transitionBox->setTranslationX(0.0f);
-            transitionBox->setTranslationY(0.0f);
-            transitionBox->setVisibility(brls::Visibility::GONE);
-        }
-        if (previewImage) {
-            previewImage->setTranslationX(0.0f);
-            previewImage->setTranslationY(0.0f);
-            previewImage->setVisibility(brls::Visibility::GONE);
-        }
-        if (pageImage) {
-            pageImage->setTranslationX(0.0f);
-            pageImage->setTranslationY(0.0f);
+        // Determine if this should actually navigate to a chapter
+        bool shouldNavChapter = false;
+        bool navNext = false;
+        if (m_swipingToNext) {
+            if (url == TRANSITION_NEXT) { shouldNavChapter = true; navNext = true; }
+            else if (url == TRANSITION_PREV) { shouldNavChapter = true; navNext = false; }
+        } else {
+            if (url == TRANSITION_PREV) { shouldNavChapter = true; navNext = false; }
+            else if (url == TRANSITION_NEXT) { shouldNavChapter = true; navNext = false; }
         }
 
-        if (m_swipingToNext) {
-            if (url == TRANSITION_NEXT) {
-                nextChapter();
-                return;
-            } else if (url == TRANSITION_PREV) {
-                previousChapter();
-                return;
-            }
-        } else {
-            if (url == TRANSITION_PREV) {
-                previousChapter();
-                return;
-            } else if (url == TRANSITION_NEXT) {
-                previousPage();
-                return;
-            }
+        if (shouldNavChapter) {
+            float target = (m_swipeOffset > 0) ? screenExtent : -screenExtent;
+            m_completionOffset = m_swipeOffset;
+            m_completionTarget = target;
+            m_completionTurnPage = false;
+            m_completionNavChapter = true;
+            m_completionNavNext = navNext;
+            m_completionAnimating = true;
+            animateSwipeCompletion();
+            return;
         }
     }
 
@@ -2685,6 +2652,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
     m_completionOffset = m_swipeOffset;
     m_completionTarget = 0.0f;
     m_completionTurnPage = false;
+    m_completionNavChapter = false;
     m_completionAnimating = true;
     animateSwipeCompletion();
 }
@@ -2697,7 +2665,17 @@ void ReaderActivity::animateSwipeCompletion() {
     if (std::abs(diff) < 3.0f) {
         // Close enough to target — finalize
         m_completionAnimating = false;
-        if (m_completionTurnPage) {
+        if (m_completionNavChapter) {
+            // Chapter navigation after slide animation
+            bool navNext = m_completionNavNext;
+            m_completionNavChapter = false;
+            resetSwipeState();
+            if (navNext) {
+                nextChapter();
+            } else {
+                previousChapter();
+            }
+        } else if (m_completionTurnPage) {
             finalizePageTurn();
         } else {
             resetSwipeState();
