@@ -2399,71 +2399,50 @@ void ReaderActivity::renderTransitionPage(int index) {
 
 void ReaderActivity::updateSwipePreview(float offset) {
     // Update visual positions during swipe - PUSH EFFECT
-    // Current page is pushed off screen, preview page follows behind pushing it
+    // Uses NanoVG slide offsets (rendered inside scissor) instead of borealis
+    // translations, which don't work reliably on PSV at 90/180 rotation.
     const float SCREEN_WIDTH = 960.0f;
     const float SCREEN_HEIGHT = 544.0f;
 
     if (!previewImage) return;
 
     // Determine which view is the "current page" being swiped away
-    // When m_previewIsTransition is set, transitionBox is the INCOMING view, not the current
     bool onTransition = !m_previewIsTransition && transitionBox &&
                         transitionBox->getVisibility() == brls::Visibility::VISIBLE;
 
     // Show the incoming view
     if (m_previewIsTransition) {
-        // transitionBox is the incoming preview — keep previewImage hidden
         previewImage->setVisibility(brls::Visibility::GONE);
     } else {
         previewImage->setVisibility(brls::Visibility::VISIBLE);
     }
 
-    // Determine if we should use vertical swipe based on rotation
+    // Determine swipe axis based on rotation
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
                              m_settings.rotation == ImageRotation::ROTATE_270);
 
-    if (useVerticalSwipe) {
-        offset = std::max(-SCREEN_HEIGHT, std::min(SCREEN_HEIGHT, offset));
+    float screenExtent = useVerticalSwipe ? SCREEN_HEIGHT : SCREEN_WIDTH;
+    offset = std::max(-screenExtent, std::min(screenExtent, offset));
 
-        // Move the active view (current page) with finger
-        if (onTransition) {
-            transitionBox->setTranslationY(offset);
-            transitionBox->setTranslationX(0.0f);
-        } else if (pageImage) {
-            pageImage->setTranslationY(offset);
-            pageImage->setTranslationX(0.0f);
-        }
+    // Calculate slide offsets
+    float slideX = useVerticalSwipe ? 0.0f : offset;
+    float slideY = useVerticalSwipe ? offset : 0.0f;
+    float incomingVal = offset > 0 ? offset - screenExtent : offset + screenExtent;
+    float inSlideX = useVerticalSwipe ? 0.0f : incomingVal;
+    float inSlideY = useVerticalSwipe ? incomingVal : 0.0f;
 
-        // Position the incoming view behind (off-screen initially)
-        float incomingY = offset > 0 ? offset - SCREEN_HEIGHT : offset + SCREEN_HEIGHT;
-        if (m_previewIsTransition && transitionBox) {
-            transitionBox->setTranslationY(incomingY);
-            transitionBox->setTranslationX(0.0f);
-        } else {
-            previewImage->setTranslationY(incomingY);
-            previewImage->setTranslationX(0.0f);
-        }
+    // Move the active view (current page) with finger
+    if (onTransition) {
+        transitionBox->setSlideOffset(slideX, slideY);
+    } else if (pageImage) {
+        pageImage->setSlideOffset(slideX, slideY);
+    }
+
+    // Position the incoming view behind (off-screen initially, slides in)
+    if (m_previewIsTransition && transitionBox) {
+        transitionBox->setSlideOffset(inSlideX, inSlideY);
     } else {
-        offset = std::max(-SCREEN_WIDTH, std::min(SCREEN_WIDTH, offset));
-
-        // Move the active view (current page) with finger
-        if (onTransition) {
-            transitionBox->setTranslationX(offset);
-            transitionBox->setTranslationY(0.0f);
-        } else if (pageImage) {
-            pageImage->setTranslationX(offset);
-            pageImage->setTranslationY(0.0f);
-        }
-
-        // Position the incoming view behind (off-screen initially)
-        float incomingX = offset > 0 ? offset - SCREEN_WIDTH : offset + SCREEN_WIDTH;
-        if (m_previewIsTransition && transitionBox) {
-            transitionBox->setTranslationX(incomingX);
-            transitionBox->setTranslationY(0.0f);
-        } else {
-            previewImage->setTranslationX(incomingX);
-            previewImage->setTranslationY(0.0f);
-        }
+        previewImage->setSlideOffset(inSlideX, inSlideY);
     }
 }
 
@@ -2735,16 +2714,14 @@ void ReaderActivity::resetSwipeState() {
     m_swipeOffset = 0.0f;
     m_previewPageIndex = -1;
 
-    // Reset page positions (both X and Y)
+    // Reset slide offsets
     if (pageImage) {
-        pageImage->setTranslationX(0.0f);
-        pageImage->setTranslationY(0.0f);
+        pageImage->setSlideOffset(0.0f, 0.0f);
     }
 
-    // Reset transition box position and hide if it was used as preview
+    // Reset transition box and hide if it was used as preview
     if (transitionBox) {
-        transitionBox->setTranslationX(0.0f);
-        transitionBox->setTranslationY(0.0f);
+        transitionBox->setSlideOffset(0.0f, 0.0f);
         if (wasTransitionPreview && !isTransitionPage(m_currentPage)) {
             transitionBox->setVisibility(brls::Visibility::GONE);
         }
@@ -2753,8 +2730,7 @@ void ReaderActivity::resetSwipeState() {
     // Hide preview image
     if (previewImage) {
         previewImage->setVisibility(brls::Visibility::GONE);
-        previewImage->setTranslationX(0.0f);
-        previewImage->setTranslationY(0.0f);
+        previewImage->setSlideOffset(0.0f, 0.0f);
     }
 }
 

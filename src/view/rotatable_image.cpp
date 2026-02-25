@@ -143,7 +143,18 @@ void RotatableImage::calculateImageBounds(float viewX, float viewY, float viewW,
 
 void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float height,
                           brls::Style style, brls::FrameContext* ctx) {
-    // First draw the background to fill margins
+    // Save state and clip to view bounds FIRST (before any slide offset)
+    // This ensures the push effect is properly clipped
+    nvgSave(vg);
+    nvgScissor(vg, x, y, width, height);
+
+    // Apply slide offset for swipe push effect
+    // Content slides within the clipped view bounds
+    if (m_slideOffsetX != 0.0f || m_slideOffsetY != 0.0f) {
+        nvgTranslate(vg, m_slideOffsetX, m_slideOffsetY);
+    }
+
+    // Draw the background to fill margins (inside scissor + slide)
     nvgBeginPath(vg);
     nvgRect(vg, x, y, width, height);
     nvgFillColor(vg, m_bgColor);
@@ -151,18 +162,13 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
 
     // If no image, just show background
     if (m_nvgImage == 0 || m_imageWidth <= 0 || m_imageHeight <= 0) {
+        nvgRestore(vg);
         return;
     }
 
     // Calculate where the image should be drawn (accounts for rotation)
     float imgX, imgY, imgW, imgH;
     calculateImageBounds(x, y, width, height, imgX, imgY, imgW, imgH);
-
-    // Save state
-    nvgSave(vg);
-
-    // Use scissor to clip rendering to the view bounds (not calculated bounds when zoomed)
-    nvgScissor(vg, x, y, width, height);
 
     // Calculate center of the destination area
     float centerX = imgX + imgW / 2.0f;
@@ -222,7 +228,7 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
         nvgFill(vg);
     }
 
-    // Restore state (removes scissor and rotation)
+    // Restore state (removes scissor, slide offset, and rotation)
     nvgRestore(vg);
 }
 
