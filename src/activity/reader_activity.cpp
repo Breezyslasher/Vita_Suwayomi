@@ -450,6 +450,11 @@ void ReaderActivity::onContentAvailable() {
                                         m_settings.rotation == ImageRotation::ROTATE_270);
 
                 if (status.state == brls::GestureState::START) {
+                    // Cancel any running slide-completion animation
+                    if (m_completionAnimating) {
+                        m_completionAnimating = false;
+                        resetSwipeState();
+                    }
                     m_isPanning = false;
                     m_isSwipeAnimating = false;
                     m_touchStart = status.position;
@@ -665,6 +670,10 @@ void ReaderActivity::onContentAvailable() {
                                         m_settings.rotation == ImageRotation::ROTATE_270);
 
                 if (status.state == brls::GestureState::START) {
+                    if (m_completionAnimating) {
+                        m_completionAnimating = false;
+                        resetSwipeState();
+                    }
                     m_isPanning = false;
                     m_isSwipeAnimating = false;
                     m_touchStart = status.position;
@@ -2578,8 +2587,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
 
     if (turnPage && m_swipeToChapter) {
         // Swiped on a transition page showing a chapter page preview —
-        // navigate to that chapter directly.
-        // Hide everything cleanly BEFORE navigating to avoid visual snap-back.
+        // navigate to that chapter directly (instant, chapter reloads everything).
         brls::Logger::info("COMPLETE: taking CHAPTER path, swipingToNext={}", m_swipingToNext);
         m_swipeToChapter = false;
         m_previewIsTransition = false;
@@ -2610,37 +2618,30 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
             return;
         }
     }
-    if (turnPage && m_previewIsTransition && m_previewPageIndex >= 0) {
-        // Swiped from a real page into a transition page — navigate there normally
-        brls::Logger::info("COMPLETE: taking TRANSITION_PREVIEW path, going to page {}", m_previewPageIndex);
-        m_previewIsTransition = false;
-        m_currentPage = m_previewPageIndex;
-        updatePageDisplay();
-        loadPage(m_currentPage);
-        resetSwipeState();
+
+    // Determine target offset for slide animation
+    bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
+                             m_settings.rotation == ImageRotation::ROTATE_270);
+    float screenExtent = useVerticalSwipe ? 544.0f : 960.0f;
+
+    if (turnPage && (m_previewIsTransition || (m_previewPageIndex >= 0 &&
+        m_previewPageIndex < static_cast<int>(m_pages.size())))) {
+        // Animate slide to full screen extent, then finalize page turn
+        float target = (m_swipeOffset > 0) ? screenExtent : -screenExtent;
+        m_completionOffset = m_swipeOffset;
+        m_completionTarget = target;
+        m_completionTurnPage = true;
+        m_completionAnimating = true;
+        animateSwipeCompletion();
         return;
     }
-    if (turnPage && m_previewPageIndex >= 0 &&
-        m_previewPageIndex < static_cast<int>(m_pages.size())) {
-        // Turn to the preview page (must be a valid in-bounds index)
-        brls::Logger::info("COMPLETE: taking NORMAL_PAGE path, going to page {}", m_previewPageIndex);
-        m_currentPage = m_previewPageIndex;
-        updatePageDisplay();
-        loadPage(m_currentPage);
-        updateProgress();
 
-        // Preload next chapter if near end
-        if (m_currentPage >= static_cast<int>(m_pages.size()) - 3) {
-            preloadNextChapter();
-        }
-    } else if (turnPage && isTransitionPage(m_currentPage)) {
+    if (turnPage && isTransitionPage(m_currentPage)) {
         // Swiped past a transition page boundary with no preview page available.
         // Trigger the same chapter navigation as nextPage()/previousPage().
-        // Hide everything cleanly to avoid visual snap-back.
         const std::string& url = m_pages[m_currentPage].imageUrl;
         brls::Logger::info("COMPLETE: taking FALLBACK path, url={} swipingToNext={}", url, m_swipingToNext);
 
-        // Clean hide before navigating (same as swipeToChapter path)
         m_isSwipeAnimating = false;
         m_swipeOffset = 0.0f;
         m_previewPageIndex = -1;
@@ -2663,29 +2664,81 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
 
         if (m_swipingToNext) {
             if (url == TRANSITION_NEXT) {
-                brls::Logger::info("COMPLETE: FALLBACK → nextChapter()");
                 nextChapter();
                 return;
             } else if (url == TRANSITION_PREV) {
-                brls::Logger::info("COMPLETE: FALLBACK → previousChapter() (from PREV, swipingToNext)");
                 previousChapter();
                 return;
             }
         } else {
             if (url == TRANSITION_PREV) {
-                brls::Logger::info("COMPLETE: FALLBACK → previousChapter() (from PREV, swiping back)");
                 previousChapter();
                 return;
             } else if (url == TRANSITION_NEXT) {
-                brls::Logger::info("COMPLETE: FALLBACK → back to real page (from NEXT, swiping back)");
-                // Swiping back from TRANSITION_NEXT → go to nearest real page
                 previousPage();
                 return;
             }
         }
     }
 
-    // Reset positions
+    // Snap back — animate smoothly to 0
+    m_completionOffset = m_swipeOffset;
+    m_completionTarget = 0.0f;
+    m_completionTurnPage = false;
+    m_completionAnimating = true;
+    animateSwipeCompletion();
+}
+
+void ReaderActivity::animateSwipeCompletion() {
+    if (!m_completionAnimating) return;
+    if (m_alive && !*m_alive) { m_completionAnimating = false; return; }
+
+    float diff = m_completionTarget - m_completionOffset;
+    if (std::abs(diff) < 3.0f) {
+        // Close enough to target — finalize
+        m_completionAnimating = false;
+        if (m_completionTurnPage) {
+            finalizePageTurn();
+        } else {
+            resetSwipeState();
+        }
+        return;
+    }
+
+    // Ease toward target (~30% of remaining distance per frame)
+    m_completionOffset += diff * 0.3f;
+    updateSwipePreview(m_completionOffset);
+
+    // Schedule next frame
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    brls::sync([this, aliveWeak]() {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive) return;
+        animateSwipeCompletion();
+    });
+}
+
+void ReaderActivity::finalizePageTurn() {
+    brls::Logger::info("FINALIZE: previewIdx={} previewIsTransition={}",
+        m_previewPageIndex, m_previewIsTransition);
+
+    if (m_previewIsTransition) {
+        m_previewIsTransition = false;
+        m_currentPage = m_previewPageIndex;
+        updatePageDisplay();
+        loadPage(m_currentPage);
+    } else if (m_previewPageIndex >= 0 &&
+               m_previewPageIndex < static_cast<int>(m_pages.size())) {
+        m_currentPage = m_previewPageIndex;
+        updatePageDisplay();
+        loadPage(m_currentPage);
+        updateProgress();
+
+        if (m_currentPage >= static_cast<int>(m_pages.size()) - 3) {
+            preloadNextChapter();
+        }
+    }
+
     resetSwipeState();
 }
 
