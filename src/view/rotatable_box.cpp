@@ -47,12 +47,12 @@ void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float hei
 
     nvgSave(vg);
 
-    // Clip to view bounds (prevents overflow from rotation AND slide)
-    nvgScissor(vg, x, y, width, height);
-
-    // Apply slide offset for swipe push effect
     if (hasSlide) {
+        // During swipe: clip to view bounds, translate, then intersect-clip
+        // to the tile boundary so rotated content doesn't bleed across tiles
+        nvgScissor(vg, x, y, width, height);
         nvgTranslate(vg, m_slideOffsetX, m_slideOffsetY);
+        nvgIntersectScissor(vg, x, y, width, height);
     }
 
     if (m_rotationDegrees != 0.0f) {

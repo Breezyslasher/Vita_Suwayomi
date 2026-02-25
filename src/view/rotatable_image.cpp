@@ -143,18 +143,20 @@ void RotatableImage::calculateImageBounds(float viewX, float viewY, float viewW,
 
 void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float height,
                           brls::Style style, brls::FrameContext* ctx) {
-    // Save state and clip to view bounds FIRST (before any slide offset)
-    // This ensures the push effect is properly clipped
-    nvgSave(vg);
-    nvgScissor(vg, x, y, width, height);
+    bool hasSlide = (m_slideOffsetX != 0.0f || m_slideOffsetY != 0.0f);
 
-    // Apply slide offset for swipe push effect
-    // Content slides within the clipped view bounds
-    if (m_slideOffsetX != 0.0f || m_slideOffsetY != 0.0f) {
+    nvgSave(vg);
+
+    if (hasSlide) {
+        // During swipe: clip to view bounds, translate, then intersect-clip to
+        // the translated view bounds (= tile boundary).  This prevents rotated
+        // image content from bleeding into adjacent carousel tiles at 90/270°.
+        nvgScissor(vg, x, y, width, height);
         nvgTranslate(vg, m_slideOffsetX, m_slideOffsetY);
+        nvgIntersectScissor(vg, x, y, width, height);
     }
 
-    // Draw the background to fill margins (inside scissor + slide)
+    // Draw the background to fill margins
     nvgBeginPath(vg);
     nvgRect(vg, x, y, width, height);
     nvgFillColor(vg, m_bgColor);
@@ -228,7 +230,7 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
         nvgFill(vg);
     }
 
-    // Restore state (removes scissor, slide offset, and rotation)
+    // Restore state (removes scissor, slide offset, rotation transforms)
     nvgRestore(vg);
 }
 
