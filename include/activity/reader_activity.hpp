@@ -109,7 +109,8 @@ private:
     // UI components - NOBORU style
     BRLS_BIND(brls::Box, container, "reader/container");
     BRLS_BIND(RotatableImage, pageImage, "reader/page_image");
-    BRLS_BIND(RotatableImage, previewImage, "reader/preview_image");  // Preview page for swipe
+    BRLS_BIND(RotatableImage, previewImage, "reader/preview_image");    // Positive-side preview
+    BRLS_BIND(RotatableImage, previewImageB, "reader/preview_image_b"); // Negative-side preview
     BRLS_BIND(brls::Box, topBar, "reader/top_bar");
     BRLS_BIND(brls::Box, bottomBar, "reader/bottom_bar");
     BRLS_BIND(RotatableLabel, pageCounter, "reader/page_counter");
@@ -203,13 +204,21 @@ private:
     brls::Point m_touchStart;
     brls::Point m_touchCurrent;
 
-    // NOBORU-style swipe animation (shows next/prev page sliding in)
+    // 3-page carousel swipe: positive side + current + negative side
+    // "Positive" = revealed when swiping positive (right/down on screen)
+    // "Negative" = revealed when swiping negative (left/up on screen)
     bool m_isSwipeAnimating = false;
     float m_swipeOffset = 0.0f;           // Current swipe offset in pixels
-    int m_previewPageIndex = -1;          // Index of page being previewed (-1 = none)
+    int m_previewPageIndex = -1;          // Active side's page index for page turn
     bool m_swipingToNext = true;          // true = swiping to next page, false = previous
+    int m_posPreviewIdx = -1;             // Page index loaded in positive-side preview
+    int m_negPreviewIdx = -1;             // Page index loaded in negative-side preview
+    bool m_posIsTransition = false;       // Positive side is a transition page (uses transitionBox)
+    bool m_negIsTransition = false;       // Negative side is a transition page
     void updateSwipePreview(float offset);
     void loadPreviewPage(int index);
+    void loadPreviewInto(RotatableImage* target, int index);
+    void preloadAdjacentPreviews();       // Pre-load both sides after page loads
     void completeSwipeAnimation(bool turnPage);
     void resetSwipeState();
 
