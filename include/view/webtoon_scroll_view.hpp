@@ -191,6 +191,10 @@ private:
     float m_scrollAtTouchStart = 0.0f;
     std::chrono::steady_clock::time_point m_lastTouchTime;
 
+    // Overscroll tracking for auto chapter navigation
+    float m_overscrollAmount = 0.0f;      // Accumulated overscroll past boundary
+    bool m_overscrollTriggered = false;    // Prevents repeated triggers
+
     // Page tracking
     int m_currentPage = 0;
     std::set<int> m_loadedPages;      // Pages that have been loaded
@@ -236,6 +240,9 @@ private:
 
     // Failed page height (shows error message + retry)
     static constexpr float FAILED_PAGE_HEIGHT = 150.0f;
+
+    // Overscroll threshold to trigger chapter navigation (in view coords)
+    static constexpr float OVERSCROLL_THRESHOLD = 80.0f;
 };
 
 } // namespace vitasuwayomi

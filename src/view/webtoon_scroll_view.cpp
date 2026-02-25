@@ -41,6 +41,8 @@ void WebtoonScrollView::setupGestures() {
                 m_touchLast = status.position;
                 m_scrollAtTouchStart = m_scrollY;
                 m_scrollVelocity = 0.0f;
+                m_overscrollAmount = 0.0f;
+                m_overscrollTriggered = false;
                 m_lastTouchTime = std::chrono::steady_clock::now();
             } else if (status.state == brls::GestureState::STAY) {
                 // Calculate raw deltas
@@ -74,6 +76,7 @@ void WebtoonScrollView::setupGestures() {
                 }
 
                 // Update scroll position
+                float prevScrollY = m_scrollY;
                 m_scrollY += scrollDelta;
 
                 // Clamp scroll position based on layout direction
@@ -85,6 +88,44 @@ void WebtoonScrollView::setupGestures() {
                 if (minScroll > maxScroll) minScroll = maxScroll;
 
                 m_scrollY = std::max(minScroll, std::min(maxScroll, m_scrollY));
+
+                // Track overscroll for chapter navigation
+                // If user is scrolling past the boundary, accumulate overscroll
+                float unclamped = prevScrollY + scrollDelta;
+                if (unclamped > maxScroll && scrollDelta > 0) {
+                    // Overscrolling at the beginning (scrolling up past start)
+                    m_overscrollAmount += scrollDelta;
+                    if (m_overscrollAmount > OVERSCROLL_THRESHOLD && !m_overscrollTriggered) {
+                        // Check if first page is a transition page
+                        if (!m_pages.empty() && isTransitionPage(0)) {
+                            m_overscrollTriggered = true;
+                            auto it = m_transitionInfo.find(0);
+                            bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : false;
+                            if (m_chapterNavigateCallback) {
+                                m_chapterNavigateCallback(isNext);
+                            }
+                        }
+                    }
+                } else if (unclamped < minScroll && scrollDelta < 0) {
+                    // Overscrolling at the end (scrolling down past end)
+                    m_overscrollAmount += -scrollDelta;
+                    int lastIdx = static_cast<int>(m_pages.size()) - 1;
+                    if (m_overscrollAmount > OVERSCROLL_THRESHOLD && !m_overscrollTriggered) {
+                        // Check if last page is a transition page
+                        if (lastIdx >= 0 && isTransitionPage(lastIdx)) {
+                            m_overscrollTriggered = true;
+                            auto it = m_transitionInfo.find(lastIdx);
+                            bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : true;
+                            if (m_chapterNavigateCallback) {
+                                m_chapterNavigateCallback(isNext);
+                            }
+                        }
+                    }
+                } else {
+                    // Not overscrolling - reset
+                    m_overscrollAmount = 0.0f;
+                    m_overscrollTriggered = false;
+                }
 
                 // Calculate velocity for momentum
                 auto now = std::chrono::steady_clock::now();
@@ -118,26 +159,23 @@ void WebtoonScrollView::setupGestures() {
 
                     int tappedPage = getPageAtPosition(tapX, tapY);
 
-                    if (tappedPage >= 0 && isTransitionPage(tappedPage)) {
-                        // Tapped on a transition page - navigate to chapter
-                        if (m_chapterNavigateCallback) {
-                            auto it = m_transitionInfo.find(tappedPage);
-                            bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : true;
-                            m_chapterNavigateCallback(isNext);
-                        }
-                    } else if (tappedPage >= 0 && isFailedPage(tappedPage)) {
+                    if (tappedPage >= 0 && isFailedPage(tappedPage)) {
                         // Tapped on a failed page - retry loading
                         m_failedPages.erase(tappedPage);
                         m_loadedPages.erase(tappedPage);
                         m_loadingPages.erase(tappedPage);
                         updateVisibleImages();
                     } else {
-                        // Regular tap - toggle controls
+                        // Regular tap (including on transition pages) - toggle controls
                         if (m_tapCallback) {
                             m_tapCallback();
                         }
                     }
                 }
+
+                // Reset overscroll state when finger lifts
+                m_overscrollAmount = 0.0f;
+                m_overscrollTriggered = false;
                 // Otherwise, momentum will be applied in onFrame()
             }
         }, brls::PanAxis::ANY));
@@ -224,11 +262,11 @@ void WebtoonScrollView::drawTransitionPage(NVGcontext* vg, int pageIndex,
             nvgText(vg, x + width * 0.5f, lineY + 12.0f, it->second.line2.c_str(), nullptr);
         }
 
-        // "Tap to continue" hint
+        // Scroll hint
         nvgFontSize(vg, 14.0f);
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
         nvgFillColor(vg, nvgRGBA(120, 120, 120, 200));
-        nvgText(vg, x + width * 0.5f, y + height - 12.0f, "Tap to continue", nullptr);
+        nvgText(vg, x + width * 0.5f, y + height - 12.0f, "Keep scrolling to continue", nullptr);
     } else {
         // Fallback text if no transition info set
         nvgFontSize(vg, 18.0f);
@@ -286,14 +324,6 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
     m_pageHeights.clear();
     m_pageHeights.reserve(pages.size());
 
-    // Calculate image rotation (swap 90/270 for webtoon mode)
-    float imageRotation = m_rotationDegrees;
-    if (m_rotationDegrees == 90.0f) {
-        imageRotation = 270.0f;
-    } else if (m_rotationDegrees == 270.0f) {
-        imageRotation = 90.0f;
-    }
-
     // Create image containers for each page
     for (size_t i = 0; i < pages.size(); i++) {
         float pageHeight;
@@ -310,7 +340,7 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
         pageImg->setHeight(pageHeight);
         pageImg->setScalingType(brls::ImageScalingType::FIT);
         pageImg->setBackgroundFillColor(m_bgColor);
-        pageImg->setRotation(imageRotation);
+        pageImg->setRotation(m_rotationDegrees);
 
         m_pageImages.push_back(pageImg);
         m_pageHeights.push_back(pageHeight);
@@ -325,6 +355,8 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
     // Reset scroll
     m_scrollY = 0.0f;
     m_scrollVelocity = 0.0f;
+    m_overscrollAmount = 0.0f;
+    m_overscrollTriggered = false;
     m_currentPage = 0;
     m_loadedPages.clear();
     m_loadingPages.clear();
@@ -353,6 +385,8 @@ void WebtoonScrollView::clearPages() {
     m_totalHeight = 0.0f;
     m_scrollY = 0.0f;
     m_scrollVelocity = 0.0f;
+    m_overscrollAmount = 0.0f;
+    m_overscrollTriggered = false;
     m_currentPage = 0;
 }
 
@@ -425,22 +459,15 @@ void WebtoonScrollView::setRotation(float degrees) {
         m_rotationDegrees = 0.0f;
     }
 
-    // For webtoon mode with horizontal layout (90°/270°), swap rotation
-    float imageRotation = m_rotationDegrees;
-    if (m_rotationDegrees == 90.0f) {
-        imageRotation = 270.0f;
-    } else if (m_rotationDegrees == 270.0f) {
-        imageRotation = 90.0f;
-    }
-
-    // Apply rotation to all existing page images
+    // Apply rotation directly to all existing page images
+    // RotatableImage handles rotation rendering correctly on its own
     for (auto& img : m_pageImages) {
         if (img) {
-            img->setRotation(imageRotation);
+            img->setRotation(m_rotationDegrees);
         }
     }
 
-    brls::Logger::debug("WebtoonScrollView: setRotation({}) -> {} degrees (image: {} degrees)", degrees, m_rotationDegrees, imageRotation);
+    brls::Logger::debug("WebtoonScrollView: setRotation({}) -> {} degrees", degrees, m_rotationDegrees);
 }
 
 bool WebtoonScrollView::isHorizontalLayout() const {
