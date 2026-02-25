@@ -113,6 +113,23 @@ public:
      */
     void resetZoom();
 
+    /**
+     * Take ownership of the NVG image from another RotatableImage.
+     * The source image is cleared after the transfer.
+     * This enables seamless page transitions without reloading.
+     */
+    void takeImageFrom(RotatableImage* source);
+
+    /**
+     * Set a slide offset for swipe carousel transitions.
+     * Uses NanoVG transforms directly (bypasses borealis setTranslationX
+     * which may not work reliably on all platforms).
+     * The content slides by (x, y) pixels while the scissor clips to the
+     * view's original bounds, creating a proper page-slide effect.
+     */
+    void setSlideOffset(float x, float y);
+    void resetSlideOffset();
+
     static brls::View* create();
 
 private:
@@ -127,6 +144,10 @@ private:
     // Zoom state
     float m_zoomLevel = 1.0f;      // Current zoom level (1.0 = normal)
     brls::Point m_zoomOffset = {0, 0};  // Pan offset when zoomed
+
+    // Slide offset for swipe carousel (NanoVG-based, not borealis translation)
+    float m_slideX = 0.0f;
+    float m_slideY = 0.0f;
 
     // Calculate image bounds for current scaling type
     void calculateImageBounds(float viewX, float viewY, float viewW, float viewH,

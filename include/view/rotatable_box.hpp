@@ -27,10 +27,18 @@ public:
      */
     float getRotation() const { return m_rotationDegrees; }
 
+    /**
+     * Set slide offset for swipe carousel (NanoVG-based positioning)
+     */
+    void setSlideOffset(float x, float y);
+    void resetSlideOffset();
+
     static brls::View* create();
 
 private:
     float m_rotationDegrees = 0.0f;
+    float m_slideX = 0.0f;
+    float m_slideY = 0.0f;
 };
 
 } // namespace vitasuwayomi

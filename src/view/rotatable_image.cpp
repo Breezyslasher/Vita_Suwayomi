@@ -145,6 +145,18 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
                           brls::Style style, brls::FrameContext* ctx) {
     nvgSave(vg);
 
+    // Clip to the view's original bounds BEFORE applying the slide offset.
+    // This ensures each page only renders in its designated screen area
+    // and pages can't overlap during swipe carousel transitions.
+    nvgIntersectScissor(vg, x, y, width, height);
+
+    // Apply slide offset via NanoVG translate for swipe carousel.
+    // This bypasses borealis setTranslationX/Y which doesn't reliably
+    // move NanoVG rendering on all platforms (e.g. PS Vita GXM backend).
+    if (m_slideX != 0.0f || m_slideY != 0.0f) {
+        nvgTranslate(vg, m_slideX, m_slideY);
+    }
+
     // Draw the background to fill margins
     nvgBeginPath(vg);
     nvgRect(vg, x, y, width, height);
@@ -270,6 +282,36 @@ void RotatableImage::resetZoom() {
     m_zoomLevel = 1.0f;
     m_zoomOffset = {0, 0};
     this->invalidate();
+}
+
+void RotatableImage::setSlideOffset(float x, float y) {
+    m_slideX = x;
+    m_slideY = y;
+}
+
+void RotatableImage::resetSlideOffset() {
+    m_slideX = 0.0f;
+    m_slideY = 0.0f;
+}
+
+void RotatableImage::takeImageFrom(RotatableImage* source) {
+    if (!source) return;
+
+    // Clear our current image
+    clearImage();
+
+    // Transfer the NVG image handle and dimensions
+    m_nvgImage = source->m_nvgImage;
+    m_imageWidth = source->m_imageWidth;
+    m_imageHeight = source->m_imageHeight;
+
+    // Clear the source without deleting the NVG image (we own it now)
+    source->m_nvgImage = 0;
+    source->m_imageWidth = 0;
+    source->m_imageHeight = 0;
+
+    this->invalidate();
+    source->invalidate();
 }
 
 brls::View* RotatableImage::create() {

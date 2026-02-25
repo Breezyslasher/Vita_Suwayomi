@@ -354,9 +354,18 @@ void ReaderActivity::onContentAvailable() {
     // Set background color based on dark/light mode (shows when page doesn't fill screen)
     updateMarginColors();
 
-    // Hide preview image initially
+    // Clip children to container bounds so swipe carousel pages
+    // don't render outside the screen area or overlap each other
+    if (container) {
+        container->setClipsToBounds(true);
+    }
+
+    // Hide preview images initially
     if (previewImage) {
         previewImage->setVisibility(brls::Visibility::GONE);
+    }
+    if (previewImageB) {
+        previewImageB->setVisibility(brls::Visibility::GONE);
     }
 
     // NOBORU-style touch handling with swipe controls
@@ -2413,8 +2422,11 @@ void ReaderActivity::renderTransitionPage(int index) {
 
 void ReaderActivity::updateSwipePreview(float offset) {
     // 3-page carousel: positive side + current + negative side
-    // Views are moved to their actual screen positions using setTranslationX/Y
-    // so they don't overlap. Each view draws at its own location.
+    // Uses NanoVG slide offsets (not borealis setTranslationX/Y) to position
+    // views, because borealis translations don't reliably move NanoVG
+    // rendering on PS Vita's GXM backend. Each view's draw() method applies
+    // the slide offset via nvgTranslate inside a scissor clip, so pages
+    // slide off screen without overlapping.
     const float SCREEN_WIDTH = 960.0f;
     const float SCREEN_HEIGHT = 544.0f;
 
@@ -2422,13 +2434,6 @@ void ReaderActivity::updateSwipePreview(float offset) {
                              m_settings.rotation == ImageRotation::ROTATE_270);
     float screenExtent = useVerticalSwipe ? SCREEN_HEIGHT : SCREEN_WIDTH;
     offset = std::max(-screenExtent, std::min(screenExtent, offset));
-
-    // Helper: position a view at (tx, ty) using borealis translation
-    auto moveView = [&](brls::View* view, float tx, float ty) {
-        if (!view) return;
-        view->setTranslationX(tx);
-        view->setTranslationY(ty);
-    };
 
     // Calculate positions for the 3-page strip
     auto makeSlide = [&](float val) -> std::pair<float,float> {
@@ -2444,25 +2449,25 @@ void ReaderActivity::updateSwipePreview(float offset) {
                         transitionBox->getVisibility() == brls::Visibility::VISIBLE &&
                         isTransitionPage(m_currentPage);
     if (onTransition) {
-        moveView(transitionBox, curX, curY);
+        transitionBox->setSlideOffset(curX, curY);
     } else if (pageImage) {
-        moveView(pageImage, curX, curY);
+        pageImage->setSlideOffset(curX, curY);
     }
 
     // Positive side preview
     if (m_posIsTransition && transitionBox && !onTransition) {
-        moveView(transitionBox, posX, posY);
+        transitionBox->setSlideOffset(posX, posY);
     } else if (previewImage && m_posPreviewIdx >= 0) {
         previewImage->setVisibility(brls::Visibility::VISIBLE);
-        moveView(previewImage, posX, posY);
+        previewImage->setSlideOffset(posX, posY);
     }
 
     // Negative side preview
     if (m_negIsTransition && transitionBox && !onTransition && !m_posIsTransition) {
-        moveView(transitionBox, negX, negY);
+        transitionBox->setSlideOffset(negX, negY);
     } else if (previewImageB && m_negPreviewIdx >= 0) {
         previewImageB->setVisibility(brls::Visibility::VISIBLE);
-        moveView(previewImageB, negX, negY);
+        previewImageB->setSlideOffset(negX, negY);
     }
 }
 
@@ -2770,6 +2775,16 @@ void ReaderActivity::finalizePageTurn() {
         loadPage(m_currentPage);
     } else if (m_previewPageIndex >= 0 &&
                m_previewPageIndex < static_cast<int>(m_pages.size())) {
+        // Transfer the already-loaded preview image to pageImage for a
+        // seamless transition. This avoids a brief flash of the old page
+        // that would occur if we hid the preview before the async load
+        // into pageImage completed.
+        bool swipedPositive = (m_swipeOffset > 0);
+        RotatableImage* sourcePreview = swipedPositive ? previewImage : previewImageB;
+        if (pageImage && sourcePreview && sourcePreview->hasImage()) {
+            pageImage->takeImageFrom(sourcePreview);
+        }
+
         m_currentPage = m_previewPageIndex;
         updatePageDisplay();
         loadPage(m_currentPage);
@@ -2798,31 +2813,27 @@ void ReaderActivity::resetSwipeState() {
     m_swipeOffset = 0.0f;
     m_previewPageIndex = -1;
 
-    // Reset translations on all views
+    // Reset slide offsets on all views (NanoVG-based positioning)
     if (pageImage) {
-        pageImage->setTranslationX(0.0f);
-        pageImage->setTranslationY(0.0f);
+        pageImage->resetSlideOffset();
     }
 
     // Reset transition box
     if (transitionBox) {
-        transitionBox->setTranslationX(0.0f);
-        transitionBox->setTranslationY(0.0f);
+        transitionBox->resetSlideOffset();
         if (wasTransitionPreview && !isTransitionPage(m_currentPage)) {
             transitionBox->setVisibility(brls::Visibility::GONE);
         }
     }
 
-    // Hide both preview images and reset translations
+    // Hide both preview images and reset slide offsets
     if (previewImage) {
         previewImage->setVisibility(brls::Visibility::GONE);
-        previewImage->setTranslationX(0.0f);
-        previewImage->setTranslationY(0.0f);
+        previewImage->resetSlideOffset();
     }
     if (previewImageB) {
         previewImageB->setVisibility(brls::Visibility::GONE);
-        previewImageB->setTranslationX(0.0f);
-        previewImageB->setTranslationY(0.0f);
+        previewImageB->resetSlideOffset();
     }
 }
 
