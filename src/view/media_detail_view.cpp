@@ -1022,23 +1022,8 @@ void MangaDetailView::willAppear(bool resetState) {
     if (!m_firstAppearance) {
         if (!m_chapters.empty()) {
             // Apply last reader result to update chapter state immediately
-            const auto& readerResult = Application::getInstance().getLastReaderResult();
-            if (readerResult.mangaId == m_manga.id && readerResult.timestamp > 0) {
-                for (auto& ch : m_chapters) {
-                    if (ch.id == readerResult.chapterId) {
-                        ch.lastPageRead = readerResult.lastPageRead;
-                        ch.lastReadAt = readerResult.timestamp;
-                        if (readerResult.markedRead) {
-                            ch.read = true;
-                        }
-                        brls::Logger::info("MangaDetailView: Applied reader result - ch={} page={} read={}",
-                                          ch.id, ch.lastPageRead, ch.read);
-                        break;
-                    }
-                }
-                Application::getInstance().clearLastReaderResult();
-            }
-
+            // (don't clear yet - loadChapters will re-apply after server data arrives)
+            applyReaderResult();
             updateChapterDownloadStates();
             updateReadButtonText();
         }
@@ -1449,8 +1434,14 @@ void MangaDetailView::loadChapters() {
                 }
 
                 m_chapters = chapters;
+
+                // Re-apply reader result over server data in case the server
+                // hasn't processed the progress update yet (race condition)
+                applyReaderResult();
+                Application::getInstance().clearLastReaderResult();
+
                 if (Application::getInstance().getSettings().cacheLibraryData) {
-                    LibraryCache::getInstance().saveChapters(m_manga.id, chapters);
+                    LibraryCache::getInstance().saveChapters(m_manga.id, m_chapters);
                 }
                 populateChaptersList();
 
@@ -3320,6 +3311,27 @@ void MangaDetailView::updateSortIcon() {
         : "app0:resources/icons/sort-1-9.png";
 
     m_sortIcon->setImageFromFile(iconPath);
+}
+
+void MangaDetailView::applyReaderResult() {
+    const auto& result = Application::getInstance().getLastReaderResult();
+    if (result.mangaId != m_manga.id || result.timestamp <= 0) return;
+
+    for (auto& ch : m_chapters) {
+        if (ch.id == result.chapterId) {
+            // Only apply if our reader result is more recent than what we have
+            if (result.timestamp >= ch.lastReadAt) {
+                ch.lastPageRead = result.lastPageRead;
+                ch.lastReadAt = result.timestamp;
+                if (result.markedRead) {
+                    ch.read = true;
+                }
+                brls::Logger::info("MangaDetailView: Applied reader result - ch={} page={} read={}",
+                                  ch.id, ch.lastPageRead, ch.read);
+            }
+            break;
+        }
+    }
 }
 
 void MangaDetailView::updateReadButtonText() {
