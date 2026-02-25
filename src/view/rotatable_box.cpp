@@ -48,11 +48,20 @@ void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float hei
     nvgSave(vg);
 
     if (hasSlide) {
-        // During swipe: clip to view bounds, translate, then intersect-clip
-        // to the tile boundary so rotated content doesn't bleed across tiles
-        nvgScissor(vg, x, y, width, height);
+        // Tight clip in the swipe direction (prevents tile overlap), extended
+        // in the cross direction so content isn't cropped during swipe.
+        float clipX = x, clipY = y, clipW = width, clipH = height;
+        const float PAD = 2000.0f;
+        if (m_slideOffsetY != 0.0f && m_slideOffsetX == 0.0f) {
+            clipX -= PAD;
+            clipW += 2.0f * PAD;
+        } else if (m_slideOffsetX != 0.0f && m_slideOffsetY == 0.0f) {
+            clipY -= PAD;
+            clipH += 2.0f * PAD;
+        }
+        nvgScissor(vg, clipX, clipY, clipW, clipH);
         nvgTranslate(vg, m_slideOffsetX, m_slideOffsetY);
-        nvgIntersectScissor(vg, x, y, width, height);
+        nvgIntersectScissor(vg, clipX, clipY, clipW, clipH);
     }
 
     if (m_rotationDegrees != 0.0f) {
