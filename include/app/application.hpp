@@ -99,7 +99,7 @@ struct MangaReaderSettings {
     int imageRotation = 0;  // 0, 90, 180, or 270 degrees
     bool cropBorders = false;
     int webtoonSidePadding = 0;
-    bool isWebtoonFormat = false;  // Treat as webtoon (vertical scroll, page splitting)
+    bool isWebtoonFormat = false;  // Treat as webtoon (vertical scroll)
 };
 
 // Application settings structure

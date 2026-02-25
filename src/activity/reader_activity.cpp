@@ -214,7 +214,7 @@ void ReaderActivity::onContentAvailable() {
                 readingMode = ReadingMode::WEBTOON;
                 pageScaleMode = PageScaleMode::FIT_WIDTH;
                 imageRotation = 0;  // No rotation for webtoons
-                m_settings.isWebtoonFormat = true;  // Set webtoon format flag for page splitting
+                m_settings.isWebtoonFormat = true;
                 autoDetectedWebtoon = true;
                 brls::Logger::info("ReaderActivity: auto-detected webtoon format for '{}', applying webtoon defaults", mangaInfo.title);
             }
@@ -1014,7 +1014,7 @@ void ReaderActivity::onContentAvailable() {
             // Immediately switch views between paged and webtoon mode
             updateReaderMode();
 
-            // Reload pages for page splitting and mode change
+            // Reload pages for mode change
             m_pages.clear();
             loadPages();
             return true;
@@ -1121,7 +1121,7 @@ void ReaderActivity::loadPages() {
     auto sharedTotalChapters = std::make_shared<int>(0);
     auto sharedLoadedFromLocal = std::make_shared<bool>(false);
 
-    vitasuwayomi::asyncTask<bool>([isWebtoonMode, mangaId, chapterIndex,
+    vitasuwayomi::asyncTask<bool>([mangaId, chapterIndex,
                                     sharedPages, sharedChapterName,
                                     sharedChapters, sharedTotalChapters,
                                     sharedLoadedFromLocal]() {
@@ -1167,48 +1167,8 @@ void ReaderActivity::loadPages() {
             }
         }
 
-        // For webtoon mode, check for tall images that need splitting
-        if (isWebtoonMode && !rawPages.empty()) {
-            brls::Logger::info("Webtoon mode: checking {} pages for tall images", rawPages.size());
-
-            for (size_t i = 0; i < rawPages.size(); i++) {
-                const Page& rawPage = rawPages[i];
-                int width, height, suggestedSegments;
-
-                // Get image dimensions to check if splitting is needed
-                if (ImageLoader::getImageDimensions(rawPage.imageUrl, width, height, suggestedSegments) &&
-                    suggestedSegments > 1) {
-                    // Split this page into multiple segments
-                    brls::Logger::info("Page {} ({}x{}) split into {} segments",
-                                       i, width, height, suggestedSegments);
-
-                    for (int seg = 0; seg < suggestedSegments; seg++) {
-                        Page segmentPage;
-                        segmentPage.index = static_cast<int>(sharedPages->size());
-                        segmentPage.url = rawPage.url;
-                        segmentPage.imageUrl = rawPage.imageUrl;
-                        segmentPage.segment = seg;
-                        segmentPage.totalSegments = suggestedSegments;
-                        segmentPage.originalIndex = static_cast<int>(i);
-                        sharedPages->push_back(segmentPage);
-                    }
-                } else {
-                    // Single page (no splitting needed)
-                    Page singlePage = rawPage;
-                    singlePage.index = static_cast<int>(sharedPages->size());
-                    singlePage.segment = 0;
-                    singlePage.totalSegments = 1;
-                    singlePage.originalIndex = static_cast<int>(i);
-                    sharedPages->push_back(singlePage);
-                }
-            }
-
-            brls::Logger::info("Webtoon mode: {} raw pages expanded to {} virtual pages",
-                               rawPages.size(), sharedPages->size());
-        } else {
-            // Normal mode - use pages as-is
-            *sharedPages = std::move(rawPages);
-        }
+        // Use pages as-is (no splitting)
+        *sharedPages = std::move(rawPages);
 
         // Fetch chapter details and navigation from server (skip when offline)
         if (Application::getInstance().isConnected()) {
@@ -1335,7 +1295,11 @@ void ReaderActivity::loadPages() {
                 });
 
                 // Load all pages into the scroll view
-                webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
+                // Use actual view width (internal rendering coords, ~1280) rather than
+                // physical screen width (960) to avoid coordinate system mismatch.
+                float viewW = webtoonScroll->getWidth();
+                if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
+                webtoonScroll->setPages(m_pages, viewW);
                 webtoonScroll->scrollToPage(m_currentPage);
             }
         } else {
@@ -1389,12 +1353,7 @@ void ReaderActivity::loadPage(int index) {
     const Page& page = m_pages[index];
     std::string imageUrl = page.imageUrl;
 
-    if (page.totalSegments > 1) {
-        brls::Logger::debug("Loading page {} segment {}/{} from: {}",
-                           index, page.segment + 1, page.totalSegments, imageUrl);
-    } else {
-        brls::Logger::debug("Loading page {} from: {}", index, imageUrl);
-    }
+    brls::Logger::debug("Loading page {} from: {}", index, imageUrl);
 
     // Show page counter when navigating
     showPageCounter();
@@ -1420,12 +1379,7 @@ void ReaderActivity::loadPage(int index) {
             }
         };
 
-        if (page.totalSegments > 1) {
-            ImageLoader::loadAsyncFullSizeSegment(
-                imageUrl, page.segment, page.totalSegments, onLoaded, pageImage, m_alive);
-        } else {
-            ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage, m_alive);
-        }
+        ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage, m_alive);
 
         // Set up a timeout: if page hasn't loaded after 15 seconds, show error
         // Only for server-streamed pages - local files load instantly from disk
@@ -1478,28 +1432,14 @@ void ReaderActivity::updatePageDisplay() {
 
     // Update page counter (top-right overlay with rotation support)
     if (pageCounter) {
-        const Page& page = m_pages[m_currentPage];
-        if (page.totalSegments > 1) {
-            pageCounter->setText(std::to_string(page.originalIndex + 1) + "-" +
-                              std::to_string(page.segment + 1) + "/" +
-                              std::to_string(m_realPageCount));
-        } else {
-            pageCounter->setText(std::to_string(displayPage + 1) + "/" +
-                              std::to_string(m_realPageCount));
-        }
+        pageCounter->setText(std::to_string(displayPage + 1) + "/" +
+                          std::to_string(m_realPageCount));
     }
 
     // Update slider page label (in bottom bar)
     if (sliderPageLabel) {
-        const Page& page = m_pages[m_currentPage];
-        if (page.totalSegments > 1) {
-            sliderPageLabel->setText("Page " + std::to_string(page.originalIndex + 1) + "-" +
-                                     std::to_string(page.segment + 1) +
-                                     " of " + std::to_string(m_realPageCount));
-        } else {
-            sliderPageLabel->setText("Page " + std::to_string(displayPage + 1) +
-                                     " of " + std::to_string(m_realPageCount));
-        }
+        sliderPageLabel->setText("Page " + std::to_string(displayPage + 1) +
+                                 " of " + std::to_string(m_realPageCount));
     }
 
     // Update slider position (based on real pages only)
@@ -1679,7 +1619,9 @@ void ReaderActivity::nextChapter() {
             // Handle webtoon mode vs single-page mode
             if (m_continuousScrollMode && webtoonScroll) {
                 // Update webtoon scroll view with new pages and scroll to beginning
-                webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
+                float viewW = webtoonScroll->getWidth();
+                if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
+                webtoonScroll->setPages(m_pages, viewW);
                 webtoonScroll->scrollToPage(m_currentPage);
             } else {
                 loadPage(m_currentPage);
@@ -1749,7 +1691,9 @@ void ReaderActivity::previousChapter() {
 
             // Handle webtoon mode vs single-page mode
             if (m_continuousScrollMode && webtoonScroll) {
-                webtoonScroll->setPages(m_pages, 960.0f);
+                float viewW = webtoonScroll->getWidth();
+                if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
+                webtoonScroll->setPages(m_pages, viewW);
                 webtoonScroll->scrollToPage(m_currentPage);
             } else {
                 loadPage(m_currentPage);
@@ -2587,22 +2531,6 @@ void ReaderActivity::loadPreviewPage(int index) {
     const Page& page = m_pages[index];
     std::string imageUrl = page.imageUrl;
 
-    if (page.totalSegments > 1) {
-        previewImage->setRotation(static_cast<float>(m_settings.rotation));
-
-        brls::Logger::debug("Loading preview page {} segment {}/{}",
-                           index, page.segment + 1, page.totalSegments);
-        std::weak_ptr<bool> aliveWeak = m_alive;
-        ImageLoader::loadAsyncFullSizeSegment(
-            imageUrl, page.segment, page.totalSegments,
-            [aliveWeak, index](RotatableImage* img) {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-                brls::Logger::debug("Preview page {} (segment) loaded", index);
-            }, previewImage, m_alive);
-        return;
-    }
-
     previewImage->setRotation(static_cast<float>(m_settings.rotation));
 
     brls::Logger::debug("Loading preview page {}", index);
@@ -2625,19 +2553,10 @@ void ReaderActivity::loadPreviewInto(RotatableImage* target, int index) {
     target->setRotation(static_cast<float>(m_settings.rotation));
 
     std::weak_ptr<bool> aliveWeak = m_alive;
-    if (page.totalSegments > 1) {
-        ImageLoader::loadAsyncFullSizeSegment(
-            imageUrl, page.segment, page.totalSegments,
-            [aliveWeak, index](RotatableImage* img) {
-                auto alive = aliveWeak.lock();
-                if (!alive || !*alive) return;
-            }, target, m_alive);
-    } else {
-        ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
-            auto alive = aliveWeak.lock();
-            if (!alive || !*alive) return;
-        }, target, m_alive);
-    }
+    ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
+        auto alive = aliveWeak.lock();
+        if (!alive || !*alive) return;
+    }, target, m_alive);
 }
 
 void ReaderActivity::preloadAdjacentPreviews() {
@@ -3075,7 +2994,9 @@ void ReaderActivity::updateReaderMode() {
 
             // Load pages into the scroll view
             if (!m_pages.empty()) {
-                webtoonScroll->setPages(m_pages, 960.0f);  // PS Vita screen width
+                float viewW = webtoonScroll->getWidth();
+                if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
+                webtoonScroll->setPages(m_pages, viewW);
                 webtoonScroll->scrollToPage(m_currentPage);
             }
         }

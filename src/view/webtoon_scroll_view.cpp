@@ -49,19 +49,24 @@ void WebtoonScrollView::setupGestures() {
                 // 90°: Horizontal scrolling - swipe left (negative dx) to scroll down (forward)
                 // 180°: Inverted vertical scrolling - swipe down (positive dy) to scroll down
                 // 270°: Horizontal scrolling - swipe right (positive dx) to scroll down (forward)
+                //
+                // Touch deltas are in physical screen coords (960x544) but scroll
+                // position is in view coords (~1280x726). Scale for 1:1 tracking.
                 float scrollDelta = 0.0f;
                 int rotation = static_cast<int>(m_rotationDegrees);
+                float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
 
                 if (rotation == 0) {
-                    scrollDelta = rawDy;
+                    scrollDelta = rawDy * scaleY;
                 } else if (rotation == 90) {
                     // Swipe left (negative dx) should scroll forward (decrease scrollY)
-                    scrollDelta = rawDx;
+                    scrollDelta = rawDx * scaleX;
                 } else if (rotation == 180) {
-                    scrollDelta = -rawDy;
+                    scrollDelta = -rawDy * scaleY;
                 } else if (rotation == 270) {
                     // Swipe right (positive dx) should scroll forward (decrease scrollY)
-                    scrollDelta = -rawDx;
+                    scrollDelta = -rawDx * scaleX;
                 }
 
                 // Update scroll position
@@ -115,7 +120,12 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
 
     m_pages = pages;
     m_viewWidth = screenWidth;
-    m_viewHeight = 544.0f;  // PS Vita screen height
+    // m_viewHeight will be updated from actual view dimensions in draw().
+    // Use a reasonable default until then; the draw() dimensions (~726 internal)
+    // differ from the physical screen (544) due to borealis DPI scaling.
+    if (m_viewHeight <= 0.0f) {
+        m_viewHeight = screenWidth * (544.0f / 960.0f);  // Maintain screen aspect ratio
+    }
 
     // Calculate available width after padding
     float availableWidth = screenWidth - (m_sidePadding * 2);
@@ -425,64 +435,32 @@ void WebtoonScrollView::updateVisibleImages() {
         int pageIndex = i;
 
         // Load the image
-        if (page.totalSegments > 1) {
-            // Segmented webtoon page
-            ImageLoader::loadAsyncFullSizeSegment(
-                page.imageUrl, page.segment, page.totalSegments,
-                [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) return;
+        ImageLoader::loadAsyncFullSize(page.imageUrl,
+            [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
 
-                    m_loadingPages.erase(pageIndex);
-                    m_loadedPages.insert(pageIndex);
+                m_loadingPages.erase(pageIndex);
+                m_loadedPages.insert(pageIndex);
 
-                    if (imgPtr->hasImage()) {
-                        float imageWidth = static_cast<float>(imgPtr->getImageWidth());
-                        float imageHeight = static_cast<float>(imgPtr->getImageHeight());
+                if (imgPtr->hasImage()) {
+                    float imageWidth = static_cast<float>(imgPtr->getImageWidth());
+                    float imageHeight = static_cast<float>(imgPtr->getImageHeight());
 
-                        if (imageWidth > 0 && imageHeight > 0) {
-                            float availableWidth = m_viewWidth - (m_sidePadding * 2);
-                            float aspectRatio = imageHeight / imageWidth;
-                            float newHeight = availableWidth * aspectRatio;
+                    if (imageWidth > 0 && imageHeight > 0) {
+                        float availableWidth = m_viewWidth - (m_sidePadding * 2);
+                        float aspectRatio = imageHeight / imageWidth;
+                        float newHeight = availableWidth * aspectRatio;
 
-                            float oldHeight = m_pageHeights[pageIndex];
-                            m_totalHeight += (newHeight - oldHeight);
-                            m_pageHeights[pageIndex] = newHeight;
-                            imgPtr->setHeight(newHeight);
-                        }
+                        float oldHeight = m_pageHeights[pageIndex];
+                        m_totalHeight += (newHeight - oldHeight);
+                        m_pageHeights[pageIndex] = newHeight;
+                        imgPtr->setHeight(newHeight);
                     }
+                }
 
-                    brls::Logger::debug("WebtoonScrollView: Loaded segment page {}", pageIndex);
-                }, img, m_alive);
-        } else {
-            // Regular page
-            ImageLoader::loadAsyncFullSize(page.imageUrl,
-                [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) return;
-
-                    m_loadingPages.erase(pageIndex);
-                    m_loadedPages.insert(pageIndex);
-
-                    if (imgPtr->hasImage()) {
-                        float imageWidth = static_cast<float>(imgPtr->getImageWidth());
-                        float imageHeight = static_cast<float>(imgPtr->getImageHeight());
-
-                        if (imageWidth > 0 && imageHeight > 0) {
-                            float availableWidth = m_viewWidth - (m_sidePadding * 2);
-                            float aspectRatio = imageHeight / imageWidth;
-                            float newHeight = availableWidth * aspectRatio;
-
-                            float oldHeight = m_pageHeights[pageIndex];
-                            m_totalHeight += (newHeight - oldHeight);
-                            m_pageHeights[pageIndex] = newHeight;
-                            imgPtr->setHeight(newHeight);
-                        }
-                    }
-
-                    brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
-                }, img, m_alive);
-        }
+                brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
+            }, img, m_alive);
     }
 }
 
