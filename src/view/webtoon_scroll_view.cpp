@@ -215,7 +215,12 @@ int WebtoonScrollView::getPageAtPosition(float tapX, float tapY) const {
             contentPos = tapX - m_scrollY;  // scrollY acts as scrollX
         }
     } else {
-        contentPos = tapY - m_scrollY;
+        if (rotation == 180) {
+            // Bottom-to-top layout: content start is at the bottom edge
+            contentPos = m_viewHeight - m_scrollY - tapY;
+        } else {
+            contentPos = tapY - m_scrollY;
+        }
     }
 
     // Subtract the view origin (since tap coords start from view origin)
@@ -983,28 +988,41 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         // Vertical layout (for 0/180 rotation)
         float availableWidth = width - (m_sidePadding * 2);
         float pageX = x + m_sidePadding;
-        float currentY = y + m_scrollY;
+        int rotation = static_cast<int>(m_rotationDegrees);
+
+        // 180°: original top maps to BOTTOM, so pages flow bottom-to-top
+        // 0°: normal top-to-bottom
+        bool bottomToTop = (rotation == 180);
 
         for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
             float pageHeight = m_pageHeights[i];
-            float pageBottom = currentY + pageHeight;
+
+            // Calculate screen Y position based on layout direction
+            float contentOffset = getPageOffset(i);
+            float pageY_screen;
+            if (bottomToTop) {
+                // BTT: content start at bottom edge, pages flow upward
+                pageY_screen = y + height - m_scrollY - contentOffset - pageHeight;
+            } else {
+                // TTB: content start at top edge, pages flow downward
+                pageY_screen = y + m_scrollY + contentOffset;
+            }
+            float pageBottom = pageY_screen + pageHeight;
 
             // Check if page is in visible area
-            if (pageBottom >= y - 100 && currentY <= y + height + 100) {
+            if (pageBottom >= y - 100 && pageY_screen <= y + height + 100) {
                 if (isTransitionPage(i)) {
-                    drawTransitionPage(vg, i, pageX, currentY, availableWidth, pageHeight);
+                    drawTransitionPage(vg, i, pageX, pageY_screen, availableWidth, pageHeight);
                 } else if (isFailedPage(i)) {
-                    drawFailedPage(vg, i, pageX, currentY, availableWidth, pageHeight);
+                    drawFailedPage(vg, i, pageX, pageY_screen, availableWidth, pageHeight);
                 } else {
                     RotatableImage* img = m_pageImages[i].get();
                     if (img) {
                         img->setWidth(availableWidth);
-                        img->draw(vg, pageX, currentY, availableWidth, pageHeight, style, ctx);
+                        img->draw(vg, pageX, pageY_screen, availableWidth, pageHeight, style, ctx);
                     }
                 }
             }
-
-            currentY = pageBottom + m_pageGap;
         }
     }
 
