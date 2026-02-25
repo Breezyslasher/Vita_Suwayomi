@@ -205,11 +205,22 @@ void WebtoonScrollView::setTransitionText(int pageIndex, const std::string& line
 int WebtoonScrollView::getPageAtPosition(float tapX, float tapY) const {
     // Convert tap position to content-space coordinate
     bool horizontal = isHorizontalLayout();
+    int rotation = static_cast<int>(m_rotationDegrees);
     float contentPos;
     if (horizontal) {
-        contentPos = tapX - m_scrollY;  // scrollY acts as scrollX
+        if (rotation == 90) {
+            // Right-to-left layout: content start is at the right edge
+            contentPos = m_viewWidth - m_scrollY - tapX;
+        } else {
+            contentPos = tapX - m_scrollY;  // scrollY acts as scrollX
+        }
     } else {
-        contentPos = tapY - m_scrollY;
+        if (rotation == 180) {
+            // Bottom-to-top layout: content start is at the bottom edge
+            contentPos = m_viewHeight - m_scrollY - tapY;
+        } else {
+            contentPos = tapY - m_scrollY;
+        }
     }
 
     // Subtract the view origin (since tap coords start from view origin)
@@ -921,14 +932,18 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         // Horizontal layout (for 90/270 rotation)
         float availableHeight = height - (m_sidePadding * 2);
         float pageY = y + m_sidePadding;
-        float currentX = x + m_scrollY;
+        int rotation = static_cast<int>(m_rotationDegrees);
+
+        // 90° CW: original top maps to RIGHT side, so pages flow right-to-left
+        // 270° CW: original top maps to LEFT side, so pages flow left-to-right
+        bool rightToLeft = (rotation == 90);
 
         for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
             RotatableImage* img = m_pageImages[i].get();
 
             float pageWidth;
             if (isTransitionPage(i)) {
-                pageWidth = TRANSITION_PAGE_HEIGHT;  // Fixed width for transitions in horizontal
+                pageWidth = TRANSITION_PAGE_HEIGHT;
             } else if (isFailedPage(i)) {
                 pageWidth = FAILED_PAGE_HEIGHT;
             } else if (img && img->hasImage() && img->getImageWidth() > 0 && img->getImageHeight() > 0) {
@@ -943,49 +958,71 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
                 }
             }
 
-            float pageRight = currentX + pageWidth;
+            // Calculate screen X position based on layout direction
+            float contentOffset = getPageOffset(i);
+            float pageX_screen;
+            if (rightToLeft) {
+                // RTL: content start at right edge, pages flow leftward
+                // screenX = x + width - scrollY - contentOffset - pageWidth
+                pageX_screen = x + width - m_scrollY - contentOffset - pageWidth;
+            } else {
+                // LTR: content start at left edge, pages flow rightward
+                pageX_screen = x + m_scrollY + contentOffset;
+            }
+            float pageRight = pageX_screen + pageWidth;
 
             // Check if page is in visible area
-            if (pageRight >= x - 100 && currentX <= x + width + 100) {
+            if (pageRight >= x - 100 && pageX_screen <= x + width + 100) {
                 if (isTransitionPage(i)) {
-                    drawTransitionPage(vg, i, currentX, pageY, pageWidth, availableHeight);
+                    drawTransitionPage(vg, i, pageX_screen, pageY, pageWidth, availableHeight);
                 } else if (isFailedPage(i)) {
-                    drawFailedPage(vg, i, currentX, pageY, pageWidth, availableHeight);
+                    drawFailedPage(vg, i, pageX_screen, pageY, pageWidth, availableHeight);
                 } else if (img) {
                     img->setWidth(pageWidth);
                     img->setHeight(availableHeight);
-                    img->draw(vg, currentX, pageY, pageWidth, availableHeight, style, ctx);
+                    img->draw(vg, pageX_screen, pageY, pageWidth, availableHeight, style, ctx);
                 }
             }
-
-            currentX = pageRight + m_pageGap;
         }
     } else {
         // Vertical layout (for 0/180 rotation)
         float availableWidth = width - (m_sidePadding * 2);
         float pageX = x + m_sidePadding;
-        float currentY = y + m_scrollY;
+        int rotation = static_cast<int>(m_rotationDegrees);
+
+        // 180°: original top maps to BOTTOM, so pages flow bottom-to-top
+        // 0°: normal top-to-bottom
+        bool bottomToTop = (rotation == 180);
 
         for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
             float pageHeight = m_pageHeights[i];
-            float pageBottom = currentY + pageHeight;
+
+            // Calculate screen Y position based on layout direction
+            float contentOffset = getPageOffset(i);
+            float pageY_screen;
+            if (bottomToTop) {
+                // BTT: content start at bottom edge, pages flow upward
+                pageY_screen = y + height - m_scrollY - contentOffset - pageHeight;
+            } else {
+                // TTB: content start at top edge, pages flow downward
+                pageY_screen = y + m_scrollY + contentOffset;
+            }
+            float pageBottom = pageY_screen + pageHeight;
 
             // Check if page is in visible area
-            if (pageBottom >= y - 100 && currentY <= y + height + 100) {
+            if (pageBottom >= y - 100 && pageY_screen <= y + height + 100) {
                 if (isTransitionPage(i)) {
-                    drawTransitionPage(vg, i, pageX, currentY, availableWidth, pageHeight);
+                    drawTransitionPage(vg, i, pageX, pageY_screen, availableWidth, pageHeight);
                 } else if (isFailedPage(i)) {
-                    drawFailedPage(vg, i, pageX, currentY, availableWidth, pageHeight);
+                    drawFailedPage(vg, i, pageX, pageY_screen, availableWidth, pageHeight);
                 } else {
                     RotatableImage* img = m_pageImages[i].get();
                     if (img) {
                         img->setWidth(availableWidth);
-                        img->draw(vg, pageX, currentY, availableWidth, pageHeight, style, ctx);
+                        img->draw(vg, pageX, pageY_screen, availableWidth, pageHeight, style, ctx);
                     }
                 }
             }
-
-            currentY = pageBottom + m_pageGap;
         }
     }
 
