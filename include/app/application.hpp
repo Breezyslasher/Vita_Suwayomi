@@ -267,9 +267,19 @@ public:
         bool markedRead = false;  // Whether chapter was marked as read
         int64_t timestamp = 0;   // When this was updated (milliseconds)
     };
-    void setLastReaderResult(const ReaderResult& result) { m_lastReaderResult = result; }
+    void setLastReaderResult(const ReaderResult& result) {
+        m_lastReaderResult = result;
+        // Notify registered listener (MangaDetailView) to update UI
+        if (m_readerResultCallback) {
+            m_readerResultCallback(result);
+        }
+    }
     const ReaderResult& getLastReaderResult() const { return m_lastReaderResult; }
     void clearLastReaderResult() { m_lastReaderResult = {}; }
+
+    // Callback for when reader result is set (detail view registers to update UI)
+    using ReaderResultCallback = std::function<void(const ReaderResult&)>;
+    void setReaderResultCallback(ReaderResultCallback cb) { m_readerResultCallback = std::move(cb); }
 
     // Get string for display
     static std::string getThemeString(AppTheme theme);
@@ -292,6 +302,7 @@ private:
     std::set<int> m_recentLibraryAdditions;  // Manga IDs added to library this session
     AppSettings m_settings;
     ReaderResult m_lastReaderResult;
+    ReaderResultCallback m_readerResultCallback;
 };
 
 } // namespace vitasuwayomi

@@ -204,6 +204,9 @@ private:
     // Update the read button text based on reading progress
     void updateReadButtonText();
 
+    // Apply pending reader result to m_chapters (progress from last reader session)
+    void applyReaderResult();
+
     // Cancel all downloading chapters (keep completed)
     void cancelAllDownloading();
 

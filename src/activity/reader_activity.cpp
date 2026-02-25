@@ -400,34 +400,26 @@ void ReaderActivity::onContentAvailable() {
                         m_lastTapPosition = status.position;
 
                         // Tap-to-navigate: left 1/3 = prev, right 1/3 = next, center = toggle
-                        // Respects reading direction (RTL: right=prev, left=next)
+                        // Respects reading direction and rotation
                         AppSettings& appSettings = Application::getInstance().getSettings();
                         if (appSettings.tapToNavigate && !m_isZoomed && !m_continuousScrollMode) {
-                            const float SCREEN_WIDTH = 960.0f;
-                            float tapX = status.position.x;
-                            float leftZone = SCREEN_WIDTH / 3.0f;
-                            float rightZone = SCREEN_WIDTH * 2.0f / 3.0f;
-
-                            if (tapX < leftZone) {
-                                // Left zone
-                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                            int zone = getTapZone(status.position);
+                            if (zone == -1) {
+                                // User's left zone
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
                                     nextPage();
-                                } else {
+                                else
                                     previousPage();
-                                }
-                            } else if (tapX > rightZone) {
-                                // Right zone
-                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                            } else if (zone == +1) {
+                                // User's right zone
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
                                     previousPage();
-                                } else {
+                                else
                                     nextPage();
-                                }
                             } else {
-                                // Center zone - toggle controls
                                 toggleControls();
                             }
                         } else {
-                            // Tap-to-navigate disabled - toggle controls
                             toggleControls();
                         }
                     }
@@ -653,17 +645,13 @@ void ReaderActivity::onContentAvailable() {
                 if (status.state == brls::GestureState::END) {
                     AppSettings& appSettings = Application::getInstance().getSettings();
                     if (appSettings.tapToNavigate) {
-                        const float SCREEN_WIDTH = 960.0f;
-                        float tapX = status.position.x;
-                        float leftZone = SCREEN_WIDTH / 3.0f;
-                        float rightZone = SCREEN_WIDTH * 2.0f / 3.0f;
-
-                        if (tapX < leftZone) {
+                        int zone = getTapZone(status.position);
+                        if (zone == -1) {
                             if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
                                 nextPage();
                             else
                                 previousPage();
-                        } else if (tapX > rightZone) {
+                        } else if (zone == +1) {
                             if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
                                 previousPage();
                             else
@@ -859,23 +847,17 @@ void ReaderActivity::onContentAvailable() {
                         // Same tap-to-navigate logic as pageImage
                         AppSettings& appSettings = Application::getInstance().getSettings();
                         if (appSettings.tapToNavigate && !m_isZoomed && !m_continuousScrollMode) {
-                            const float SCREEN_WIDTH = 960.0f;
-                            float tapX = status.position.x;
-                            float leftZone = SCREEN_WIDTH / 3.0f;
-                            float rightZone = SCREEN_WIDTH * 2.0f / 3.0f;
-
-                            if (tapX < leftZone) {
-                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                            int zone = getTapZone(status.position);
+                            if (zone == -1) {
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
                                     nextPage();
-                                } else {
+                                else
                                     previousPage();
-                                }
-                            } else if (tapX > rightZone) {
-                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT) {
+                            } else if (zone == +1) {
+                                if (m_settings.direction == ReaderDirection::RIGHT_TO_LEFT)
                                     previousPage();
-                                } else {
+                                else
                                     nextPage();
-                                }
                             } else {
                                 toggleControls();
                             }
@@ -898,15 +880,25 @@ void ReaderActivity::onContentAvailable() {
                     float dx = status.position.x - m_touchStart.x;
                     float dy = status.position.y - m_touchStart.y;
 
-                    // Only process swipes, not taps (handled by TapGestureRecognizer)
-                    if (std::abs(dx) > std::abs(dy) && std::abs(dx) >= PAGE_TURN_THRESHOLD) {
-                        if (dx > 0) {
+                    // Account for rotation when determining swipe direction
+                    bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
+                                             m_settings.rotation == ImageRotation::ROTATE_270);
+                    bool invertDirection = (m_settings.rotation == ImageRotation::ROTATE_180 ||
+                                            m_settings.rotation == ImageRotation::ROTATE_270);
+
+                    float primaryDelta = useVerticalSwipe ? dy : dx;
+                    float crossDelta = useVerticalSwipe ? dx : dy;
+                    float logicalPrimary = invertDirection ? -primaryDelta : primaryDelta;
+
+                    if (std::abs(primaryDelta) > std::abs(crossDelta) && std::abs(primaryDelta) >= PAGE_TURN_THRESHOLD) {
+                        if (logicalPrimary > 0) {
                             m_settings.direction == ReaderDirection::RIGHT_TO_LEFT ? nextPage() : previousPage();
                         } else {
                             m_settings.direction == ReaderDirection::RIGHT_TO_LEFT ? previousPage() : nextPage();
                         }
-                    } else if (std::abs(dy) >= PAGE_TURN_THRESHOLD) {
-                        dy > 0 ? previousPage() : nextPage();
+                    } else if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
+                        float logicalCross = invertDirection ? -crossDelta : crossDelta;
+                        logicalCross > 0 ? previousPage() : nextPage();
                     }
                 }
             }, brls::PanAxis::ANY));
@@ -2126,6 +2118,30 @@ void ReaderActivity::saveSettingsToApp() {
 }
 
 // Touch handling is now implemented inline in gesture recognizers (onContentAvailable)
+
+int ReaderActivity::getTapZone(brls::Point position) const {
+    // Map physical tap position to user's perceived left/center/right zone,
+    // accounting for how the device is held at each rotation.
+    //   0°:   user's left = low X,  right = high X  (screen width 960)
+    //   90°:  user's left = low Y,  right = high Y  (screen height 544)
+    //   180°: user's left = high X, right = low X   (screen width 960, inverted)
+    //   270°: user's left = high Y, right = low Y   (screen height 544, inverted)
+    float normalized;
+    int rotation = static_cast<int>(m_settings.rotation);
+    if (rotation == 90) {
+        normalized = position.y / 544.0f;
+    } else if (rotation == 270) {
+        normalized = 1.0f - (position.y / 544.0f);
+    } else if (rotation == 180) {
+        normalized = 1.0f - (position.x / 960.0f);
+    } else {
+        normalized = position.x / 960.0f;
+    }
+
+    if (normalized < 1.0f / 3.0f) return -1;  // left zone
+    if (normalized > 2.0f / 3.0f) return +1;   // right zone
+    return 0;                                    // center zone
+}
 
 void ReaderActivity::handleDoubleTap(brls::Point position) {
     if (m_isZoomed) {

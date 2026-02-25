@@ -253,6 +253,10 @@ private:
     void handleDoubleTap(brls::Point position);
     void handlePinchZoom(float scaleFactor);
     void resetZoom();
+
+    // Returns -1 for user's left zone, 0 for center, +1 for user's right zone
+    // accounting for rotation (user's left/right depends on how device is held)
+    int getTapZone(brls::Point position) const;
     void zoomTo(float level, brls::Point center);
 
     // Error overlay for failed page loads

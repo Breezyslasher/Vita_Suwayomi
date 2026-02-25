@@ -471,6 +471,26 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     brls::Logger::info("MangaDetailView: Creating for '{}' id={}", manga.title, manga.id);
     m_lastProgressRefresh = std::chrono::steady_clock::now();
 
+    // Register callback so when the reader closes, we immediately update the
+    // Continue Reading button without waiting for willAppear (which may not fire
+    // since this view is a Box inside an Activity, not an Activity itself).
+    int mangaId = m_manga.id;
+    Application::getInstance().setReaderResultCallback(
+        [this, mangaId, aliveWeak = std::weak_ptr<bool>(m_alive)](const Application::ReaderResult& result) {
+            if (result.mangaId != mangaId) return;
+            // Defer to next frame so the reader activity finishes popping first
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                applyReaderResult();
+                Application::getInstance().clearLastReaderResult();
+                updateChapterDownloadStates();
+                updateReadButtonText();
+                // Also refresh chapter list cells to show updated read state
+                populateChaptersList();
+            });
+        });
+
     // Try to load cached details if description is missing
     if (m_manga.description.empty()) {
         LibraryCache& cache = LibraryCache::getInstance();
@@ -1022,23 +1042,8 @@ void MangaDetailView::willAppear(bool resetState) {
     if (!m_firstAppearance) {
         if (!m_chapters.empty()) {
             // Apply last reader result to update chapter state immediately
-            const auto& readerResult = Application::getInstance().getLastReaderResult();
-            if (readerResult.mangaId == m_manga.id && readerResult.timestamp > 0) {
-                for (auto& ch : m_chapters) {
-                    if (ch.id == readerResult.chapterId) {
-                        ch.lastPageRead = readerResult.lastPageRead;
-                        ch.lastReadAt = readerResult.timestamp;
-                        if (readerResult.markedRead) {
-                            ch.read = true;
-                        }
-                        brls::Logger::info("MangaDetailView: Applied reader result - ch={} page={} read={}",
-                                          ch.id, ch.lastPageRead, ch.read);
-                        break;
-                    }
-                }
-                Application::getInstance().clearLastReaderResult();
-            }
-
+            // (don't clear yet - loadChapters will re-apply after server data arrives)
+            applyReaderResult();
             updateChapterDownloadStates();
             updateReadButtonText();
         }
@@ -1449,8 +1454,14 @@ void MangaDetailView::loadChapters() {
                 }
 
                 m_chapters = chapters;
+
+                // Re-apply reader result over server data in case the server
+                // hasn't processed the progress update yet (race condition)
+                applyReaderResult();
+                Application::getInstance().clearLastReaderResult();
+
                 if (Application::getInstance().getSettings().cacheLibraryData) {
-                    LibraryCache::getInstance().saveChapters(m_manga.id, chapters);
+                    LibraryCache::getInstance().saveChapters(m_manga.id, m_chapters);
                 }
                 populateChaptersList();
 
@@ -3322,6 +3333,27 @@ void MangaDetailView::updateSortIcon() {
     m_sortIcon->setImageFromFile(iconPath);
 }
 
+void MangaDetailView::applyReaderResult() {
+    const auto& result = Application::getInstance().getLastReaderResult();
+    if (result.mangaId != m_manga.id || result.timestamp <= 0) return;
+
+    for (auto& ch : m_chapters) {
+        if (ch.id == result.chapterId) {
+            // Only apply if our reader result is more recent than what we have
+            if (result.timestamp >= ch.lastReadAt) {
+                ch.lastPageRead = result.lastPageRead;
+                ch.lastReadAt = result.timestamp;
+                if (result.markedRead) {
+                    ch.read = true;
+                }
+                brls::Logger::info("MangaDetailView: Applied reader result - ch={} page={} read={}",
+                                  ch.id, ch.lastPageRead, ch.read);
+            }
+            break;
+        }
+    }
+}
+
 void MangaDetailView::updateReadButtonText() {
     if (!m_readButton || m_chapters.empty()) return;
 
@@ -3778,6 +3810,7 @@ MangaDetailView::~MangaDetailView() {
     DownloadsManager& dm = DownloadsManager::getInstance();
     dm.setProgressCallback(nullptr);
     dm.setChapterCompletionCallback(nullptr);
+    Application::getInstance().setReaderResultCallback(nullptr);
 
     // Note: m_chaptersDataSource is owned and deleted by m_chaptersRecycler
 }
