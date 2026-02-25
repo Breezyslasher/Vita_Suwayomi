@@ -8,8 +8,10 @@
 #include <borealis.hpp>
 #include <vector>
 #include <set>
+#include <map>
 #include <functional>
 #include <memory>
+#include <string>
 #include "view/rotatable_image.hpp"
 #include "app/suwayomi_client.hpp"
 
@@ -20,6 +22,13 @@ using ScrollProgressCallback = std::function<void(int currentPage, int totalPage
 
 // Callback when user taps (for toggling controls)
 using TapCallback = std::function<void()>;
+
+// Callback when user taps a transition page to navigate chapters
+// Parameter: true = next chapter, false = previous chapter
+using ChapterNavigateCallback = std::function<void(bool next)>;
+
+// Callback to retry loading a specific page
+using RetryPageCallback = std::function<void(int pageIndex)>;
 
 class WebtoonScrollView : public brls::Box {
 public:
@@ -37,6 +46,20 @@ public:
      * Clear all pages and reset scroll
      */
     void clearPages();
+
+    /**
+     * Append pages at the end (for seamless next chapter loading)
+     * Removes the trailing transition page, appends new pages.
+     * Scroll position stays the same so the user keeps scrolling naturally.
+     */
+    void appendPages(const std::vector<Page>& pages);
+
+    /**
+     * Prepend pages at the beginning (for seamless prev chapter loading)
+     * Removes the leading transition page, prepends new pages.
+     * Adjusts scroll position so the view doesn't jump.
+     */
+    void prependPages(const std::vector<Page>& pages);
 
     /**
      * Scroll to a specific page index
@@ -67,6 +90,24 @@ public:
      * Set callback for tap gesture (to toggle controls)
      */
     void setTapCallback(TapCallback callback) { m_tapCallback = callback; }
+
+    /**
+     * Set callback for chapter navigation (transition page tap)
+     */
+    void setChapterNavigateCallback(ChapterNavigateCallback callback) { m_chapterNavigateCallback = callback; }
+
+    /**
+     * Set callback for page retry
+     */
+    void setRetryPageCallback(RetryPageCallback callback) { m_retryPageCallback = callback; }
+
+    /**
+     * Set transition page text (called by reader activity when setting up pages)
+     * @param pageIndex Index of the transition page
+     * @param line1 First line of text (e.g. "End of: Chapter 5")
+     * @param line2 Second line of text (e.g. "Next: Chapter 6")
+     */
+    void setTransitionText(int pageIndex, const std::string& line1, const std::string& line2);
 
     /**
      * Set side padding percentage (0-20)
@@ -102,7 +143,7 @@ private:
     // Setup touch gestures for scrolling
     void setupGestures();
 
-    // Load images that are visible or near visible
+    // Load images that are visible or near visible, unload distant ones
     void updateVisibleImages();
 
     // Check if a page is in the visible range
@@ -125,6 +166,21 @@ private:
 
     // Apply momentum scrolling
     void applyMomentum();
+
+    // Check if a page is a transition page (chapter separator)
+    bool isTransitionPage(int pageIndex) const;
+
+    // Check if a page failed to load
+    bool isFailedPage(int pageIndex) const;
+
+    // Draw a transition page (chapter separator)
+    void drawTransitionPage(NVGcontext* vg, int pageIndex, float x, float y, float width, float height);
+
+    // Draw a failed page with retry prompt
+    void drawFailedPage(NVGcontext* vg, int pageIndex, float x, float y, float width, float height);
+
+    // Find which page a tap landed on (returns -1 if none)
+    int getPageAtPosition(float tapX, float tapY) const;
 
     // Pages data
     std::vector<Page> m_pages;
@@ -149,10 +205,23 @@ private:
     float m_scrollAtTouchStart = 0.0f;
     std::chrono::steady_clock::time_point m_lastTouchTime;
 
+    // Overscroll tracking for auto chapter navigation
+    float m_overscrollAmount = 0.0f;      // Accumulated overscroll past boundary
+    bool m_overscrollTriggered = false;    // Prevents repeated triggers
+
     // Page tracking
     int m_currentPage = 0;
     std::set<int> m_loadedPages;      // Pages that have been loaded
     std::set<int> m_loadingPages;     // Pages currently being loaded
+    std::set<int> m_failedPages;      // Pages that failed to load
+
+    // Transition page data
+    struct TransitionInfo {
+        std::string line1;
+        std::string line2;
+        bool isNext = true;  // true = next chapter, false = previous chapter
+    };
+    std::map<int, TransitionInfo> m_transitionInfo;
 
     // Layout
     NVGcolor m_bgColor = nvgRGBA(26, 26, 46, 255);  // Background color (default dark)
@@ -164,6 +233,8 @@ private:
     // Callbacks
     ScrollProgressCallback m_progressCallback;
     TapCallback m_tapCallback;
+    ChapterNavigateCallback m_chapterNavigateCallback;
+    RetryPageCallback m_retryPageCallback;
 
     // Alive flag for async callback safety (cleared in clearPages/destructor)
     std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
@@ -171,12 +242,24 @@ private:
     // Preload buffer - how many pages ahead/behind to load
     static constexpr int PRELOAD_PAGES = 3;
 
+    // Unload buffer - pages beyond this distance from visible area get their images freed
+    static constexpr int UNLOAD_PAGES = 8;
+
     // Momentum friction
     static constexpr float MOMENTUM_FRICTION = 0.95f;
     static constexpr float MOMENTUM_MIN_VELOCITY = 0.5f;
 
     // Touch thresholds
     static constexpr float TAP_THRESHOLD = 15.0f;
+
+    // Transition page height (fixed size for chapter separators)
+    static constexpr float TRANSITION_PAGE_HEIGHT = 200.0f;
+
+    // Failed page height (shows error message + retry)
+    static constexpr float FAILED_PAGE_HEIGHT = 150.0f;
+
+    // Overscroll threshold to trigger chapter navigation (in view coords)
+    static constexpr float OVERSCROLL_THRESHOLD = 80.0f;
 };
 
 } // namespace vitasuwayomi
