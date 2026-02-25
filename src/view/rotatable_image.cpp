@@ -145,15 +145,33 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
                           brls::Style style, brls::FrameContext* ctx) {
     nvgSave(vg);
 
-    // Clip to the view's original bounds BEFORE applying the slide offset.
-    // This ensures each page only renders in its designated screen area
-    // and pages can't overlap during swipe carousel transitions.
-    nvgIntersectScissor(vg, x, y, width, height);
+    bool hasSlide = (m_slideX != 0.0f || m_slideY != 0.0f);
 
-    // Apply slide offset via NanoVG translate for swipe carousel.
-    // This bypasses borealis setTranslationX/Y which doesn't reliably
-    // move NanoVG rendering on all platforms (e.g. PS Vita GXM backend).
-    if (m_slideX != 0.0f || m_slideY != 0.0f) {
+    if (hasSlide) {
+        // Debug: log draw coords and slide offsets (throttled to avoid spam)
+        static int s_drawLogCounter = 0;
+        if ((s_drawLogCounter++ % 180) == 0) {  // ~every 3 seconds at 60fps
+            brls::Logger::info("DRAW slideX={:.0f} slideY={:.0f} x={:.0f} y={:.0f} "
+                "w={:.0f} h={:.0f} rot={:.0f} img={}x{}",
+                m_slideX, m_slideY, x, y, width, height,
+                m_rotationDegrees, m_imageWidth, m_imageHeight);
+        }
+
+        // During swipe: clip in the SWIPE direction only to prevent pages
+        // from overlapping each other. The cross-axis is left unclipped
+        // so wide/tall images (FIT_WIDTH, FIT_HEIGHT, rotated) aren't cut off.
+        const float PAD = 4000.0f;
+        float clipX = x, clipY = y, clipW = width, clipH = height;
+        if (m_slideY != 0.0f && m_slideX == 0.0f) {
+            // Vertical swipe (90/270 rotation): keep Y tight, extend X
+            clipX -= PAD;
+            clipW += 2.0f * PAD;
+        } else {
+            // Horizontal swipe (0/180 rotation): keep X tight, extend Y
+            clipY -= PAD;
+            clipH += 2.0f * PAD;
+        }
+        nvgIntersectScissor(vg, clipX, clipY, clipW, clipH);
         nvgTranslate(vg, m_slideX, m_slideY);
     }
 

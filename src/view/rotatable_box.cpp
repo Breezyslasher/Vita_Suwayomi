@@ -51,7 +51,15 @@ void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float hei
     bool hasSlide = (m_slideX != 0.0f || m_slideY != 0.0f);
     if (hasSlide) {
         nvgSave(vg);
-        nvgIntersectScissor(vg, x, y, width, height);
+        // Clip in swipe direction only — extend cross-axis so rotated content isn't cut
+        const float PAD = 4000.0f;
+        float clipX = x, clipY = y, clipW = width, clipH = height;
+        if (m_slideY != 0.0f && m_slideX == 0.0f) {
+            clipX -= PAD; clipW += 2.0f * PAD;
+        } else {
+            clipY -= PAD; clipH += 2.0f * PAD;
+        }
+        nvgIntersectScissor(vg, clipX, clipY, clipW, clipH);
         nvgTranslate(vg, m_slideX, m_slideY);
     }
 

@@ -354,12 +354,6 @@ void ReaderActivity::onContentAvailable() {
     // Set background color based on dark/light mode (shows when page doesn't fill screen)
     updateMarginColors();
 
-    // Clip children to container bounds so swipe carousel pages
-    // don't render outside the screen area or overlap each other
-    if (container) {
-        container->setClipsToBounds(true);
-    }
-
     // Hide preview images initially
     if (previewImage) {
         previewImage->setVisibility(brls::Visibility::GONE);
@@ -473,6 +467,9 @@ void ReaderActivity::onContentAvailable() {
                     m_swipeToChapter = false;
                     m_previewIsTransition = false;
                     m_swipingToNext = true;
+                    brls::Logger::info("PAN START rot={} vert={} invert={} page={}/{}",
+                        static_cast<int>(m_settings.rotation), useVerticalSwipe,
+                        invertDirection, m_currentPage, static_cast<int>(m_pages.size()));
                 } else if (status.state == brls::GestureState::STAY) {
                     // Suppress page navigation while pinch-to-zoom is active
                     if (m_isPinching) return;
@@ -2443,6 +2440,19 @@ void ReaderActivity::updateSwipePreview(float offset) {
     auto [curX, curY] = makeSlide(offset);
     auto [posX, posY] = makeSlide(offset - screenExtent);  // positive side (left/above)
     auto [negX, negY] = makeSlide(offset + screenExtent);  // negative side (right/below)
+
+    // Debug: log slide positions once when swipe first starts or direction changes
+    static int s_lastLoggedOffset = -99999;
+    int roundedOffset = static_cast<int>(offset / 50) * 50;  // log every ~50px
+    if (roundedOffset != s_lastLoggedOffset) {
+        s_lastLoggedOffset = roundedOffset;
+        brls::Logger::info("SWIPE offset={:.0f} rot={} vert={} extent={:.0f} | "
+            "cur=({:.0f},{:.0f}) pos=({:.0f},{:.0f}) neg=({:.0f},{:.0f}) | "
+            "posIdx={} negIdx={} posIsTrans={} negIsTrans={}",
+            offset, static_cast<int>(m_settings.rotation), useVerticalSwipe, screenExtent,
+            curX, curY, posX, posY, negX, negY,
+            m_posPreviewIdx, m_negPreviewIdx, m_posIsTransition, m_negIsTransition);
+    }
 
     // Current page
     bool onTransition = transitionBox &&
