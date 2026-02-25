@@ -317,16 +317,62 @@ static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSi
 
 // Helper function to convert WebP to TGA format with downscaling
 static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t webpSize, int maxSize) {
-    std::vector<uint8_t> tgaData;
-
-    int width, height;
-    if (!WebPGetInfo(webpData, webpSize, &width, &height)) {
-        return tgaData;
+    // Use WebPGetFeatures for detailed error info instead of just WebPGetInfo
+    WebPBitstreamFeatures features;
+    VP8StatusCode status = WebPGetFeatures(webpData, webpSize, &features);
+    if (status != VP8_STATUS_OK) {
+        brls::Logger::error("ImageLoader: WebPGetFeatures failed (status={}, dataSize={})",
+                            static_cast<int>(status), webpSize);
+        return {};
     }
 
+    int width = features.width;
+    int height = features.height;
+    brls::Logger::debug("ImageLoader: WebP {}x{} hasAlpha={} format={}",
+                        width, height, features.has_alpha, features.format);
+
+    if (width <= 0 || height <= 0) {
+        brls::Logger::error("ImageLoader: WebP has invalid dimensions {}x{}", width, height);
+        return {};
+    }
+
+    // Try RGBA decode first
     uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &width, &height);
     if (!rgba) {
-        return tgaData;
+        // RGBA decode failed - try RGB (uses less memory) and add alpha manually
+        brls::Logger::warning("ImageLoader: WebPDecodeRGBA failed for {}x{}, trying RGB fallback", width, height);
+        uint8_t* rgb = WebPDecodeRGB(webpData, webpSize, &width, &height);
+        if (!rgb) {
+            brls::Logger::error("ImageLoader: WebP decode completely failed for {}x{} ({}KB data)",
+                                width, height, webpSize / 1024);
+            return {};
+        }
+
+        // Convert RGB to RGBA
+        size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
+        std::vector<uint8_t> rgbaVec(pixelCount * 4);
+        for (size_t i = 0; i < pixelCount; i++) {
+            rgbaVec[i * 4 + 0] = rgb[i * 3 + 0];
+            rgbaVec[i * 4 + 1] = rgb[i * 3 + 1];
+            rgbaVec[i * 4 + 2] = rgb[i * 3 + 2];
+            rgbaVec[i * 4 + 3] = 255;
+        }
+        WebPFree(rgb);
+
+        int targetW = width;
+        int targetH = height;
+        if (maxSize > 0 && (width > maxSize || height > maxSize)) {
+            float scale = (float)maxSize / std::max(width, height);
+            targetW = std::max(1, (int)(width * scale));
+            targetH = std::max(1, (int)(height * scale));
+        }
+
+        if (targetW != width || targetH != height) {
+            std::vector<uint8_t> scaledRgba(targetW * targetH * 4);
+            downscaleRGBA(rgbaVec.data(), width, height, scaledRgba.data(), targetW, targetH);
+            return createTGAFromRGBA(scaledRgba.data(), targetW, targetH);
+        }
+        return createTGAFromRGBA(rgbaVec.data(), targetW, targetH);
     }
 
     int targetW = width;
@@ -347,27 +393,7 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
         finalRgba = scaledRgba.data();
     }
 
-    size_t imageSize = targetW * targetH * 4;
-    tgaData.resize(18 + imageSize);
-
-    uint8_t* header = tgaData.data();
-    memset(header, 0, 18);
-    header[2] = 2;
-    header[12] = targetW & 0xFF;
-    header[13] = (targetW >> 8) & 0xFF;
-    header[14] = targetH & 0xFF;
-    header[15] = (targetH >> 8) & 0xFF;
-    header[16] = 32;
-    header[17] = 0x28;
-
-    uint8_t* pixels = tgaData.data() + 18;
-    for (int i = 0; i < targetW * targetH; i++) {
-        pixels[i * 4 + 0] = finalRgba[i * 4 + 2];  // B
-        pixels[i * 4 + 1] = finalRgba[i * 4 + 1];  // G
-        pixels[i * 4 + 2] = finalRgba[i * 4 + 0];  // R
-        pixels[i * 4 + 3] = finalRgba[i * 4 + 3];  // A
-    }
-
+    auto tgaData = createTGAFromRGBA(finalRgba, targetW, targetH);
     WebPFree(rgba);
     return tgaData;
 }
@@ -952,8 +978,19 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 );
             }
             if (imageData.empty()) {
-                brls::Logger::error("ImageLoader: WebP conversion failed for {}", url);
-                return;
+                // WebP decode failed - fall back to stb_image in case format was
+                // misidentified or stb can handle this particular encoding
+                brls::Logger::warning("ImageLoader: WebP conversion failed for {}, trying stb_image fallback", url);
+                imageData = convertImageToTGA(
+                    reinterpret_cast<const uint8_t*>(imageBody.data()),
+                    imageBody.size(),
+                    MAX_TEXTURE_SIZE
+                );
+                if (imageData.empty()) {
+                    brls::Logger::error("ImageLoader: All decode attempts failed for {}", url);
+                    return;
+                }
+                brls::Logger::info("ImageLoader: stb_image fallback succeeded for {}", url);
             }
         } else if (isJpegOrPng) {
             if (totalSegments > 1) {

@@ -274,6 +274,7 @@ private:
     void insertTransitionPages();
     void renderTransitionPage(int index);
     void setupWebtoonTransitionText();  // Set transition text on webtoon scroll view
+    void webtoonExtendChapter(bool next);  // Smoothly append/prepend chapter in webtoon mode
     int m_realPageCount = 0;  // Actual page count excluding transition pages
 
     // Guard flag: prevents slider callback from firing during programmatic setProgress

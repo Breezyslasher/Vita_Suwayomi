@@ -48,6 +48,20 @@ public:
     void clearPages();
 
     /**
+     * Append pages at the end (for seamless next chapter loading)
+     * Removes the trailing transition page, appends new pages.
+     * Scroll position stays the same so the user keeps scrolling naturally.
+     */
+    void appendPages(const std::vector<Page>& pages);
+
+    /**
+     * Prepend pages at the beginning (for seamless prev chapter loading)
+     * Removes the leading transition page, prepends new pages.
+     * Adjusts scroll position so the view doesn't jump.
+     */
+    void prependPages(const std::vector<Page>& pages);
+
+    /**
      * Scroll to a specific page index
      */
     void scrollToPage(int pageIndex);
@@ -129,7 +143,7 @@ private:
     // Setup touch gestures for scrolling
     void setupGestures();
 
-    // Load images that are visible or near visible
+    // Load images that are visible or near visible, unload distant ones
     void updateVisibleImages();
 
     // Check if a page is in the visible range
@@ -227,6 +241,9 @@ private:
 
     // Preload buffer - how many pages ahead/behind to load
     static constexpr int PRELOAD_PAGES = 3;
+
+    // Unload buffer - pages beyond this distance from visible area get their images freed
+    static constexpr int UNLOAD_PAGES = 8;
 
     // Momentum friction
     static constexpr float MOMENTUM_FRICTION = 0.95f;

@@ -1295,14 +1295,11 @@ void ReaderActivity::loadPages() {
                 });
 
                 // Set up chapter navigation callback for transition pages
+                // Use smooth extend (append/prepend) instead of full chapter replacement
                 webtoonScroll->setChapterNavigateCallback([this, cbAlive](bool next) {
                     auto a = cbAlive.lock();
                     if (!a || !*a) return;
-                    if (next) {
-                        nextChapter();
-                    } else {
-                        previousChapter();
-                    }
+                    webtoonExtendChapter(next);
                 });
 
                 // Load all pages into the scroll view
@@ -2447,6 +2444,205 @@ void ReaderActivity::setupWebtoonTransitionText() {
     }
 }
 
+void ReaderActivity::webtoonExtendChapter(bool next) {
+    if (!webtoonScroll) {
+        // Fallback if webtoon scroll not available
+        if (next) nextChapter(); else previousChapter();
+        return;
+    }
+
+    if (next) {
+        brls::Logger::info("WEBTOON_EXTEND: next chapter, chapterPos={}/{} preloaded={}",
+                           m_chapterPosition, m_totalChapters, m_nextChapterLoaded);
+
+        if (m_chapterPosition < 0 || m_chapterPosition >= m_totalChapters - 1 ||
+            m_chapterPosition + 1 >= static_cast<int>(m_chapters.size())) {
+            return;  // No next chapter
+        }
+
+        // Get next chapter pages (preloaded or fetch)
+        std::vector<Page> newPages;
+        if (m_nextChapterLoaded && !m_nextChapterPages.empty()) {
+            newPages = std::move(m_nextChapterPages);
+            m_nextChapterLoaded = false;
+            m_nextChapterPages.clear();
+        } else {
+            // Not preloaded - fall back to full chapter load
+            nextChapter();
+            return;
+        }
+
+        // Mark current chapter as read and advance
+        markChapterAsRead();
+        m_chapterPosition++;
+        m_chapterIndex = m_chapters[m_chapterPosition].id;
+        m_chapterName = m_chapters[m_chapterPosition].name;
+        m_prevChapterLoaded = false;
+        m_prevChapterPages.clear();
+
+        // Build the pages to append:
+        // - The new chapter's real pages
+        // - A transition page at the end (next or end)
+        std::vector<Page> appendList = std::move(newPages);
+
+        // Add end transition
+        Page endPage;
+        if (m_chapterPosition < m_totalChapters - 1) {
+            endPage.imageUrl = TRANSITION_NEXT;
+        } else {
+            endPage.imageUrl = TRANSITION_END;
+        }
+        endPage.index = -1;
+        appendList.push_back(endPage);
+
+        // Remember where new pages start in the webtoon view
+        int newStartIdx = webtoonScroll->getPageCount();
+        // The appendPages call will remove the old trailing transition,
+        // so the new pages start at (old count - 1)
+        newStartIdx = std::max(0, newStartIdx - 1);
+
+        // Append to webtoon scroll view (removes old trailing transition, adds new pages)
+        webtoonScroll->appendPages(appendList);
+
+        // Update m_pages to match webtoon view's state is not needed for webtoon mode
+        // (webtoon view manages its own page list), but update chapter metadata
+
+        // Set transition text for the newly appended pages
+        std::string currentChapterDisplay = m_chapterName.empty() ?
+            "Chapter " + getChapterDisplayNumber() : m_chapterName;
+
+        for (int i = newStartIdx; i < webtoonScroll->getPageCount(); i++) {
+            // Only set text for transition pages in the new section
+            // Check by attempting to set - the view will ignore non-transition pages
+            if (i == webtoonScroll->getPageCount() - 1) {
+                // Last page is the end/next transition
+                std::string line1 = "End of: " + currentChapterDisplay;
+                std::string line2;
+                if (m_chapterPosition < m_totalChapters - 1) {
+                    const Chapter& nextCh = m_chapters[m_chapterPosition + 1];
+                    std::string nextName = nextCh.name;
+                    if (nextName.empty()) {
+                        float num = nextCh.chapterNumber;
+                        if (num == static_cast<int>(num))
+                            nextName = "Chapter " + std::to_string(static_cast<int>(num));
+                        else {
+                            char buf[32];
+                            snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                            nextName = buf;
+                        }
+                    }
+                    line2 = "Next: " + nextName;
+                } else {
+                    line2 = "You've reached the end!";
+                }
+                webtoonScroll->setTransitionText(i, line1, line2);
+            }
+        }
+
+        // Update UI labels
+        if (chapterLabel) {
+            std::string label = m_chapterName.empty() ?
+                "Chapter " + getChapterDisplayNumber() : m_chapterName;
+            chapterLabel->setText(label);
+        }
+        if (chapterProgress) {
+            chapterProgress->setText("Ch. " + getChapterDisplayNumber() +
+                                     " of " + std::to_string(m_totalChapters));
+        }
+
+        // Start preloading next adjacent chapters
+        preloadNextChapter();
+        preloadPrevChapter();
+
+    } else {
+        brls::Logger::info("WEBTOON_EXTEND: prev chapter, chapterPos={}/{} preloaded={}",
+                           m_chapterPosition, m_totalChapters, m_prevChapterLoaded);
+
+        if (m_chapterPosition <= 0 ||
+            m_chapterPosition - 1 >= static_cast<int>(m_chapters.size())) {
+            return;  // No previous chapter
+        }
+
+        // Get prev chapter pages (preloaded or fetch)
+        std::vector<Page> newPages;
+        if (m_prevChapterLoaded && !m_prevChapterPages.empty()) {
+            newPages = std::move(m_prevChapterPages);
+            m_prevChapterLoaded = false;
+            m_prevChapterPages.clear();
+        } else {
+            // Not preloaded - fall back to full chapter load
+            previousChapter();
+            return;
+        }
+
+        // Go to previous chapter
+        m_chapterPosition--;
+        m_chapterIndex = m_chapters[m_chapterPosition].id;
+        m_chapterName = m_chapters[m_chapterPosition].name;
+        m_nextChapterLoaded = false;
+        m_nextChapterPages.clear();
+
+        // Build the pages to prepend:
+        // - A transition page at the start (prev) if there's a further previous chapter
+        // - The new chapter's real pages
+        std::vector<Page> prependList;
+
+        if (m_chapterPosition > 0) {
+            Page prevPage;
+            prevPage.imageUrl = TRANSITION_PREV;
+            prevPage.index = -1;
+            prependList.push_back(prevPage);
+        }
+
+        // Append the chapter's real pages
+        for (auto& p : newPages) {
+            prependList.push_back(p);
+        }
+
+        // Prepend to webtoon scroll view (removes old leading transition, adds new pages)
+        webtoonScroll->prependPages(prependList);
+
+        // Set transition text for the newly prepended pages
+        std::string currentChapterDisplay = m_chapterName.empty() ?
+            "Chapter " + getChapterDisplayNumber() : m_chapterName;
+
+        if (m_chapterPosition > 0) {
+            // First page is the prev transition
+            std::string line1 = "Beginning of: " + currentChapterDisplay;
+            std::string line2;
+            const Chapter& prevCh = m_chapters[m_chapterPosition - 1];
+            std::string prevName = prevCh.name;
+            if (prevName.empty()) {
+                float num = prevCh.chapterNumber;
+                if (num == static_cast<int>(num))
+                    prevName = "Chapter " + std::to_string(static_cast<int>(num));
+                else {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                    prevName = buf;
+                }
+            }
+            line2 = "Previous: " + prevName;
+            webtoonScroll->setTransitionText(0, line1, line2);
+        }
+
+        // Update UI labels
+        if (chapterLabel) {
+            std::string label = m_chapterName.empty() ?
+                "Chapter " + getChapterDisplayNumber() : m_chapterName;
+            chapterLabel->setText(label);
+        }
+        if (chapterProgress) {
+            chapterProgress->setText("Ch. " + getChapterDisplayNumber() +
+                                     " of " + std::to_string(m_totalChapters));
+        }
+
+        // Start preloading adjacent chapters
+        preloadNextChapter();
+        preloadPrevChapter();
+    }
+}
+
 // NOBORU-style swipe methods
 
 void ReaderActivity::updateSwipePreview(float offset) {
@@ -3065,14 +3261,11 @@ void ReaderActivity::updateReaderMode() {
             });
 
             // Set up chapter navigation callback for transition pages
+            // Use smooth extend (append/prepend) instead of full chapter replacement
             webtoonScroll->setChapterNavigateCallback([this, cbAlive](bool next) {
                 auto a = cbAlive.lock();
                 if (!a || !*a) return;
-                if (next) {
-                    nextChapter();
-                } else {
-                    previousChapter();
-                }
+                webtoonExtendChapter(next);
             });
 
             // Load pages into the scroll view

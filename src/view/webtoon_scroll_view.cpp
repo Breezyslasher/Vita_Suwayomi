@@ -390,6 +390,191 @@ void WebtoonScrollView::clearPages() {
     m_currentPage = 0;
 }
 
+void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
+    if (pages.empty()) return;
+
+    float availableWidth = m_viewWidth - (m_sidePadding * 2);
+    float defaultHeight = availableWidth * 1.5f;
+
+    // Remove trailing transition page if present
+    if (!m_pages.empty() && isTransitionPage(static_cast<int>(m_pages.size()) - 1)) {
+        int lastIdx = static_cast<int>(m_pages.size()) - 1;
+        float removedSize = getEffectivePageSize(lastIdx);
+        m_totalHeight -= removedSize;
+        if (lastIdx > 0) m_totalHeight -= m_pageGap;  // Remove gap before removed page
+
+        m_pages.pop_back();
+        m_pageImages.pop_back();
+        m_pageHeights.pop_back();
+        m_loadedPages.erase(lastIdx);
+        m_loadingPages.erase(lastIdx);
+        m_transitionInfo.erase(lastIdx);
+    }
+
+    int startIdx = static_cast<int>(m_pages.size());
+
+    // Append new pages
+    for (size_t i = 0; i < pages.size(); i++) {
+        float pageHeight;
+
+        m_pages.push_back(pages[i]);
+
+        // Check if new page is a transition page
+        const std::string& url = pages[i].imageUrl;
+        bool isTransition = url.compare(0, TRANSITION_PREFIX.size(), TRANSITION_PREFIX) == 0;
+
+        if (isTransition) {
+            pageHeight = TRANSITION_PAGE_HEIGHT;
+        } else {
+            pageHeight = defaultHeight;
+        }
+
+        auto pageImg = std::make_shared<RotatableImage>();
+        pageImg->setWidth(availableWidth);
+        pageImg->setHeight(pageHeight);
+        pageImg->setScalingType(brls::ImageScalingType::FIT);
+        pageImg->setBackgroundFillColor(m_bgColor);
+        pageImg->setRotation(m_rotationDegrees);
+
+        m_pageImages.push_back(pageImg);
+        m_pageHeights.push_back(pageHeight);
+
+        // Add gap + page height to total
+        if (startIdx + static_cast<int>(i) > 0) {
+            m_totalHeight += m_pageGap;
+        }
+        m_totalHeight += pageHeight;
+    }
+
+    // Reset overscroll since we just added content
+    m_overscrollAmount = 0.0f;
+    m_overscrollTriggered = false;
+
+    // Load newly visible images
+    updateVisibleImages();
+    updateCurrentPage();
+
+    brls::Logger::info("WebtoonScrollView: Appended {} pages (total now {})", pages.size(), m_pages.size());
+}
+
+void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
+    if (pages.empty()) return;
+
+    float availableWidth = m_viewWidth - (m_sidePadding * 2);
+    float defaultHeight = availableWidth * 1.5f;
+
+    // Calculate the size of the leading transition page we're about to remove
+    float removedSize = 0.0f;
+    bool hadLeadingTransition = false;
+    if (!m_pages.empty() && isTransitionPage(0)) {
+        removedSize = getEffectivePageSize(0);
+        if (m_pages.size() > 1) removedSize += m_pageGap;
+        hadLeadingTransition = true;
+    }
+
+    // Build new page data
+    std::vector<Page> newPages;
+    std::vector<std::shared_ptr<RotatableImage>> newImages;
+    std::vector<float> newHeights;
+    float addedHeight = 0.0f;
+
+    for (size_t i = 0; i < pages.size(); i++) {
+        const std::string& url = pages[i].imageUrl;
+        bool isTransition = url.compare(0, TRANSITION_PREFIX.size(), TRANSITION_PREFIX) == 0;
+
+        float pageHeight = isTransition ? TRANSITION_PAGE_HEIGHT : defaultHeight;
+
+        auto pageImg = std::make_shared<RotatableImage>();
+        pageImg->setWidth(availableWidth);
+        pageImg->setHeight(pageHeight);
+        pageImg->setScalingType(brls::ImageScalingType::FIT);
+        pageImg->setBackgroundFillColor(m_bgColor);
+        pageImg->setRotation(m_rotationDegrees);
+
+        newPages.push_back(pages[i]);
+        newImages.push_back(pageImg);
+        newHeights.push_back(pageHeight);
+        addedHeight += pageHeight;
+        if (i > 0) addedHeight += m_pageGap;
+    }
+
+    // Skip old leading transition page
+    int skipOld = hadLeadingTransition ? 1 : 0;
+
+    // Append existing pages (minus the removed transition) to new lists
+    for (size_t i = skipOld; i < m_pages.size(); i++) {
+        newPages.push_back(m_pages[i]);
+        newImages.push_back(m_pageImages[i]);
+        newHeights.push_back(m_pageHeights[i]);
+    }
+
+    // Rebuild tracking sets with shifted indices
+    int shift = static_cast<int>(pages.size()) - skipOld;
+    std::set<int> newLoaded, newLoading, newFailed;
+    for (int idx : m_loadedPages) {
+        int newIdx = idx + shift;
+        if (newIdx >= 0 && newIdx < static_cast<int>(newPages.size())) {
+            newLoaded.insert(newIdx);
+        }
+    }
+    for (int idx : m_loadingPages) {
+        int newIdx = idx + shift;
+        if (newIdx >= 0 && newIdx < static_cast<int>(newPages.size())) {
+            newLoading.insert(newIdx);
+        }
+    }
+    for (int idx : m_failedPages) {
+        int newIdx = idx + shift;
+        if (newIdx >= 0 && newIdx < static_cast<int>(newPages.size())) {
+            newFailed.insert(newIdx);
+        }
+    }
+
+    // Shift transition info
+    std::map<int, TransitionInfo> newTransitionInfo;
+    for (auto& pair : m_transitionInfo) {
+        int newIdx = pair.first + shift;
+        if (newIdx >= 0 && newIdx < static_cast<int>(newPages.size())) {
+            newTransitionInfo[newIdx] = pair.second;
+        }
+    }
+
+    // Replace all data
+    m_pages = std::move(newPages);
+    m_pageImages = std::move(newImages);
+    m_pageHeights = std::move(newHeights);
+    m_loadedPages = std::move(newLoaded);
+    m_loadingPages = std::move(newLoading);
+    m_failedPages = std::move(newFailed);
+    m_transitionInfo = std::move(newTransitionInfo);
+
+    // Recalculate total height
+    m_totalHeight = 0.0f;
+    for (size_t i = 0; i < m_pageHeights.size(); i++) {
+        m_totalHeight += m_pageHeights[i];
+        if (i > 0) m_totalHeight += m_pageGap;
+    }
+
+    // Adjust scroll position: user's view stays in the same visual spot
+    // We added content before the current view and possibly removed a transition page
+    float scrollAdjust = addedHeight + (pages.empty() ? 0 : m_pageGap) - removedSize;
+    m_scrollY -= scrollAdjust;
+
+    // Adjust current page index
+    m_currentPage += shift;
+
+    // Reset overscroll
+    m_overscrollAmount = 0.0f;
+    m_overscrollTriggered = false;
+
+    // Load newly visible images
+    updateVisibleImages();
+    updateCurrentPage();
+
+    brls::Logger::info("WebtoonScrollView: Prepended {} pages (total now {}, scrollAdjust={:.0f})",
+                        pages.size(), m_pages.size(), scrollAdjust);
+}
+
 void WebtoonScrollView::scrollToPage(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= static_cast<int>(m_pages.size())) {
         return;
@@ -660,6 +845,23 @@ void WebtoonScrollView::updateVisibleImages() {
 
                 brls::Logger::debug("WebtoonScrollView: Loaded page {}", pageIndex);
             }, img, m_alive);
+    }
+
+    // Unload images that are far from the visible area to free GPU memory
+    // This is important when multiple chapters accumulate via append/prepend
+    int unloadStart = std::max(0, firstVisible - UNLOAD_PAGES);
+    int unloadEnd = std::min(static_cast<int>(m_pages.size()) - 1, lastVisible + UNLOAD_PAGES);
+
+    for (int i = 0; i < static_cast<int>(m_pages.size()); i++) {
+        if (i >= unloadStart && i <= unloadEnd) continue;  // Within keep range
+        if (isTransitionPage(i)) continue;  // Transition pages have no images
+
+        if (m_loadedPages.count(i) > 0 && m_pageImages[i] && m_pageImages[i]->hasImage()) {
+            m_pageImages[i]->clearImage();
+            m_loadedPages.erase(i);
+            // Don't erase from m_loadingPages or add to m_failedPages -
+            // the page will be re-loaded when it comes back into range
+        }
     }
 }
 
