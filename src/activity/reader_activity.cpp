@@ -616,7 +616,9 @@ void ReaderActivity::onContentAvailable() {
 
                     if (std::abs(newZoom - m_zoomLevel) > 0.01f) {
                         m_zoomLevel = newZoom;
-                        m_isZoomed = (newZoom > 1.05f);
+                        // Mark as zoomed whenever zoom differs from 1.0
+                        // (only double-tap should clear this flag via resetZoom)
+                        m_isZoomed = true;
 
                         if (pageImage) {
                             pageImage->setZoomLevel(newZoom);

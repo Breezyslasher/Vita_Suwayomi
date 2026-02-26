@@ -229,7 +229,9 @@ void WebtoonScrollView::setupGestures() {
                     m_zoomOffset.y = (currentCenter.y - cy) / newZoom - (m_initialPinchCenter.y - cy) / m_initialZoomLevel + m_initialZoomOffset.y;
 
                     m_zoomLevel = newZoom;
-                    m_isZoomed = (newZoom > 1.05f);
+                    // Mark as zoomed whenever actively pinching
+                    // (only double-tap should clear this via resetZoom)
+                    m_isZoomed = true;
                 }
             } else if (status.state == brls::GestureState::END) {
                 m_isPinching = false;
