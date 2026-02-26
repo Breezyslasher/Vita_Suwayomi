@@ -57,11 +57,13 @@ void WebtoonScrollView::setupGestures() {
                 float rawDy = status.position.y - m_touchLast.y;
 
                 // If zoomed, pan the zoomed view instead of normal scrolling
+                // Divide by zoom level since offset is in pre-scale space;
+                // without this, panning moves too fast at higher zoom levels.
                 if (m_isZoomed) {
                     float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
                     float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
-                    m_zoomOffset.x += rawDx * scaleX;
-                    m_zoomOffset.y += rawDy * scaleY;
+                    m_zoomOffset.x += rawDx * scaleX / m_zoomLevel;
+                    m_zoomOffset.y += rawDy * scaleY / m_zoomLevel;
                     m_touchLast = status.position;
                     m_lastTouchTime = std::chrono::steady_clock::now();
                     return;

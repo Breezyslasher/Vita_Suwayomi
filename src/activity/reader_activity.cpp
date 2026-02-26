@@ -476,10 +476,14 @@ void ReaderActivity::onContentAvailable() {
 
                     // If zoomed, use pan to scroll the zoomed image instead of page navigation
                     if (m_isZoomed) {
-                        // Update zoom offset based on pan delta
+                        // Convert physical touch delta to view coords, then divide by zoom
+                        // since the offset is in pre-scale space (applied before nvgScale).
+                        // Without /zoom, panning feels too fast at higher zoom levels.
+                        float scaleX = (pageImage ? pageImage->getWidth() : 960.0f) / 960.0f;
+                        float scaleY = (pageImage ? pageImage->getHeight() : 544.0f) / 544.0f;
                         brls::Point newOffset = {
-                            m_zoomOffset.x + dx,
-                            m_zoomOffset.y + dy
+                            m_zoomOffset.x + dx * scaleX / m_zoomLevel,
+                            m_zoomOffset.y + dy * scaleY / m_zoomLevel
                         };
 
                         // Apply offset to image
