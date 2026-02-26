@@ -1341,12 +1341,10 @@ void ReaderActivity::loadPages() {
                 // physical screen width (960) to avoid coordinate system mismatch.
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
-                webtoonScroll->setPages(m_pages, viewW);
+                webtoonScroll->setPages(m_pages, viewW, m_currentPage);
 
                 // Set transition text for chapter separator pages
                 setupWebtoonTransitionText();
-
-                webtoonScroll->scrollToPage(m_currentPage);
             }
         } else {
             m_continuousScrollMode = false;

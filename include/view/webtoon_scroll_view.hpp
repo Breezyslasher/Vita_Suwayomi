@@ -41,7 +41,7 @@ public:
      * @param pages Vector of page data with image URLs
      * @param screenWidth Width available for pages
      */
-    void setPages(const std::vector<Page>& pages, float screenWidth);
+    void setPages(const std::vector<Page>& pages, float screenWidth, int startPage = 0);
 
     /**
      * Clear all pages and reset scroll
@@ -277,6 +277,7 @@ private:
     float m_initialZoomLevel = 1.0f;
     brls::Point m_initialZoomOffset = {0, 0};
     brls::Point m_initialPinchCenter = {0, 0};  // In view coords
+    std::chrono::steady_clock::time_point m_pinchEndTime;  // Cooldown guard
 
     // Zoom methods
     void resetZoom();

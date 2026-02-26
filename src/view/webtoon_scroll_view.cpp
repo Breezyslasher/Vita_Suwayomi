@@ -20,8 +20,9 @@ WebtoonScrollView::WebtoonScrollView() {
     this->setAlignItems(brls::AlignItems::CENTER);
     this->setGrow(1.0f);
 
-    // Initialize double-tap tracking
+    // Initialize double-tap and pinch cooldown tracking
     m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+    m_pinchEndTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
 
     // Setup touch gestures
     setupGestures();
@@ -40,6 +41,61 @@ void WebtoonScrollView::resetZoom() {
 
 void WebtoonScrollView::setupGestures() {
     this->setFocusable(true);
+
+    // Tap gesture for double-tap zoom reset and controls toggle
+    this->addGestureRecognizer(new brls::TapGestureRecognizer(
+        [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+            if (m_isPinching) return;
+
+            // Ignore taps shortly after a pinch ends (finger-lift artifacts)
+            auto timeSincePinch = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - m_pinchEndTime).count();
+            if (timeSincePinch < 300) return;
+
+            if (status.state == brls::GestureState::END) {
+                auto now = std::chrono::steady_clock::now();
+                auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now - m_lastTapTime).count();
+                float tapDistance = std::sqrt(
+                    std::pow(status.position.x - m_lastTapPosition.x, 2) +
+                    std::pow(status.position.y - m_lastTapPosition.y, 2));
+
+                if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
+                    tapDistance < DOUBLE_TAP_DISTANCE) {
+                    // Double-tap detected - reset zoom if zoomed
+                    if (m_isZoomed) {
+                        resetZoom();
+                    }
+                    // Prevent triple-tap
+                    m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+                } else {
+                    // Single tap
+                    m_lastTapTime = now;
+                    m_lastTapPosition = status.position;
+
+                    // Scale tap position from physical to view coords
+                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                    float tapX = status.position.x * scaleX;
+                    float tapY = status.position.y * scaleY;
+
+                    int tappedPage = getPageAtPosition(tapX, tapY);
+
+                    if (tappedPage >= 0 && isFailedPage(tappedPage)) {
+                        // Tapped on a failed page - retry loading
+                        m_failedPages.erase(tappedPage);
+                        m_loadedPages.erase(tappedPage);
+                        m_loadingPages.erase(tappedPage);
+                        updateVisibleImages();
+                    } else {
+                        // Regular tap - toggle controls
+                        if (m_tapCallback) {
+                            m_tapCallback();
+                        }
+                    }
+                }
+            }
+        }));
 
     // Pan gesture for scrolling (ANY axis to support rotated views)
     this->addGestureRecognizer(new brls::PanGestureRecognizer(
@@ -140,56 +196,13 @@ void WebtoonScrollView::setupGestures() {
                     return;
                 }
 
-                // Check if it was a tap (minimal movement)
+                // If it was a tap (minimal movement), kill momentum
+                // (tap handling is done by the TapGestureRecognizer above)
                 float dx = status.position.x - m_touchStart.x;
                 float dy = status.position.y - m_touchStart.y;
                 float distance = std::sqrt(dx * dx + dy * dy);
-
                 if (distance < TAP_THRESHOLD) {
                     m_scrollVelocity = 0.0f;
-
-                    // Check for double-tap
-                    auto now = std::chrono::steady_clock::now();
-                    auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        now - m_lastTapTime).count();
-                    float tapDistance = std::sqrt(
-                        std::pow(status.position.x - m_lastTapPosition.x, 2) +
-                        std::pow(status.position.y - m_lastTapPosition.y, 2));
-
-                    if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
-                        tapDistance < DOUBLE_TAP_DISTANCE) {
-                        // Double-tap detected - reset zoom if zoomed
-                        if (m_isZoomed) {
-                            resetZoom();
-                        }
-                        // Prevent triple-tap from triggering another double-tap
-                        m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
-                    } else {
-                        // Single tap
-                        m_lastTapTime = now;
-                        m_lastTapPosition = status.position;
-
-                        // Scale tap position from physical to view coords
-                        float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
-                        float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
-                        float tapX = status.position.x * scaleX;
-                        float tapY = status.position.y * scaleY;
-
-                        int tappedPage = getPageAtPosition(tapX, tapY);
-
-                        if (tappedPage >= 0 && isFailedPage(tappedPage)) {
-                            // Tapped on a failed page - retry loading
-                            m_failedPages.erase(tappedPage);
-                            m_loadedPages.erase(tappedPage);
-                            m_loadingPages.erase(tappedPage);
-                            updateVisibleImages();
-                        } else {
-                            // Regular tap - toggle controls
-                            if (m_tapCallback) {
-                                m_tapCallback();
-                            }
-                        }
-                    }
                 }
 
                 // Otherwise, momentum will be applied in onFrame()
@@ -203,6 +216,9 @@ void WebtoonScrollView::setupGestures() {
                 m_isPinching = true;
                 m_initialZoomLevel = m_zoomLevel;
                 m_initialZoomOffset = m_zoomOffset;
+                // Invalidate pending double-tap so lifting fingers after
+                // pinch can't accidentally trigger resetZoom
+                m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
                 // Convert physical pinch center to view coords
                 float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
                 float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
@@ -229,13 +245,16 @@ void WebtoonScrollView::setupGestures() {
                     m_zoomOffset.y = (currentCenter.y - cy) / newZoom - (m_initialPinchCenter.y - cy) / m_initialZoomLevel + m_initialZoomOffset.y;
 
                     m_zoomLevel = newZoom;
-                    // Mark as zoomed whenever actively pinching
-                    // (only double-tap should clear this via resetZoom)
-                    m_isZoomed = true;
+                    m_isZoomed = (newZoom > 1.01f);
                 }
             } else if (status.state == brls::GestureState::END) {
                 m_isPinching = false;
-                // Don't snap back - only double-tap resets zoom
+                m_pinchEndTime = std::chrono::steady_clock::now();
+
+                // If user pinched back to 1.0x, clear zoomed state so scrolling works
+                if (m_zoomLevel <= 1.0f) {
+                    resetZoom();
+                }
             }
         }));
 }
@@ -426,7 +445,7 @@ void WebtoonScrollView::drawFailedPage(NVGcontext* vg, int pageIndex,
     nvgRestore(vg);
 }
 
-void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWidth) {
+void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWidth, int startPage) {
     clearPages();
 
     m_pages = pages;
@@ -478,7 +497,7 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
         m_totalHeight -= m_pageGap;
     }
 
-    // Reset scroll
+    // Reset state
     m_scrollY = 0.0f;
     m_scrollVelocity = 0.0f;
     m_overscrollAmount = 0.0f;
@@ -495,10 +514,23 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
     m_userHasScrolled = false;
     m_extendingChapter = false;
 
-    // Load initial visible images
+    // Scroll to start page BEFORE loading images so we load from the
+    // resume position, not from page 0
+    if (startPage > 0 && startPage < static_cast<int>(m_pages.size())) {
+        float targetScroll = -getPageOffset(startPage);
+        float maxScroll = 0.0f;
+        float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+        float totalContentSize = getTotalContentSize();
+        float minScroll = -(totalContentSize - viewSize);
+        if (minScroll > maxScroll) minScroll = maxScroll;
+        m_scrollY = std::max(minScroll, std::min(maxScroll, targetScroll));
+        m_currentPage = startPage;
+    }
+
+    // Load visible images starting from current scroll position
     updateVisibleImages();
 
-    brls::Logger::info("WebtoonScrollView: Set {} pages, totalHeight={}", pages.size(), m_totalHeight);
+    brls::Logger::info("WebtoonScrollView: Set {} pages, startPage={}, totalHeight={}", pages.size(), startPage, m_totalHeight);
 }
 
 void WebtoonScrollView::clearPages() {
