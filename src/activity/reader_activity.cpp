@@ -802,11 +802,12 @@ void ReaderActivity::onContentAvailable() {
                                     else m_negPreviewIdx = activeIdx;
                                     target->setRotation(static_cast<float>(m_settings.rotation));
                                     std::weak_ptr<bool> aliveWeak = m_alive;
+                                    auto previewAlive = m_previewLoadAlive ? m_previewLoadAlive : m_alive;
                                     ImageLoader::loadAsyncFullSize(chapterPageUrl,
                                         [aliveWeak](RotatableImage* img) {
                                             auto alive = aliveWeak.lock();
                                             if (!alive || !*alive) return;
-                                        }, target, m_alive);
+                                        }, target, previewAlive);
                                 } else {
                                     m_previewPageIndex = activeIdx;
                                 }
@@ -2924,11 +2925,12 @@ void ReaderActivity::loadPreviewPage(int index) {
     brls::Logger::debug("Loading preview page {}", index);
 
     std::weak_ptr<bool> aliveWeak = m_alive;
+    auto previewAlive = m_previewLoadAlive ? m_previewLoadAlive : m_alive;
     ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
         brls::Logger::debug("Preview page {} loaded", index);
-    }, previewImage, m_alive);
+    }, previewImage, previewAlive);
 }
 
 void ReaderActivity::loadPreviewInto(RotatableImage* target, int index) {
@@ -2941,10 +2943,13 @@ void ReaderActivity::loadPreviewInto(RotatableImage* target, int index) {
     target->setRotation(static_cast<float>(m_settings.rotation));
 
     std::weak_ptr<bool> aliveWeak = m_alive;
+    // Use m_previewLoadAlive so stale preview loads are cancelled when
+    // the user moves to a new page and preloadAdjacentPreviews runs again.
+    auto previewAlive = m_previewLoadAlive ? m_previewLoadAlive : m_alive;
     ImageLoader::loadAsyncFullSize(imageUrl, [aliveWeak, index](RotatableImage* img) {
         auto alive = aliveWeak.lock();
         if (!alive || !*alive) return;
-    }, target, m_alive);
+    }, target, previewAlive);
 }
 
 std::pair<float, float> ReaderActivity::getSwipeViewSize() {
@@ -2967,6 +2972,12 @@ std::pair<float, float> ReaderActivity::getSwipeViewSize() {
 }
 
 void ReaderActivity::preloadAdjacentPreviews() {
+    // Invalidate any in-flight preview loads from a previous page so stale
+    // downloads (e.g. stuck behind a 401 token refresh) don't create GPU
+    // textures for pages the user has already swiped past.
+    if (m_previewLoadAlive) *m_previewLoadAlive = false;
+    m_previewLoadAlive = std::make_shared<bool>(true);
+
     // Determine which page goes on the positive side (swiping right/down reveals it)
     // and which goes on the negative side (swiping left/up reveals it).
     bool invertDirection = (m_settings.rotation == ImageRotation::ROTATE_180 ||
@@ -3469,6 +3480,7 @@ void ReaderActivity::willDisappear(bool resetState) {
     // flag as false and skip accessing any of our member state.
     *m_alive = false;
     if (m_pageLoadAlive) *m_pageLoadAlive = false;
+    if (m_previewLoadAlive) *m_previewLoadAlive = false;
 
     // Cancel all pending image loader operations to avoid their brls::sync
     // callbacks calling target->setImageFromMem() on our destroyed views.
