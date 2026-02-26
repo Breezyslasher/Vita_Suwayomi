@@ -41,8 +41,6 @@ void WebtoonScrollView::setupGestures() {
                 m_touchLast = status.position;
                 m_scrollAtTouchStart = m_scrollY;
                 m_scrollVelocity = 0.0f;
-                m_overscrollAmount = 0.0f;
-                m_overscrollTriggered = false;
                 m_lastTouchTime = std::chrono::steady_clock::now();
             } else if (status.state == brls::GestureState::STAY) {
                 // Calculate raw deltas
@@ -92,43 +90,8 @@ void WebtoonScrollView::setupGestures() {
 
                 m_scrollY = std::max(minScroll, std::min(maxScroll, m_scrollY));
 
-                // Track overscroll for chapter navigation
-                // If user is scrolling past the boundary, accumulate overscroll
-                float unclamped = prevScrollY + scrollDelta;
-                if (unclamped > maxScroll && scrollDelta > 0) {
-                    // Overscrolling at the beginning (scrolling up past start)
-                    m_overscrollAmount += scrollDelta;
-                    if (m_overscrollAmount > OVERSCROLL_THRESHOLD && !m_overscrollTriggered) {
-                        // Check if first page is a transition page
-                        if (!m_pages.empty() && isTransitionPage(0)) {
-                            m_overscrollTriggered = true;
-                            auto it = m_transitionInfo.find(0);
-                            bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : false;
-                            if (m_chapterNavigateCallback) {
-                                m_chapterNavigateCallback(isNext);
-                            }
-                        }
-                    }
-                } else if (unclamped < minScroll && scrollDelta < 0) {
-                    // Overscrolling at the end (scrolling down past end)
-                    m_overscrollAmount += -scrollDelta;
-                    int lastIdx = static_cast<int>(m_pages.size()) - 1;
-                    if (m_overscrollAmount > OVERSCROLL_THRESHOLD && !m_overscrollTriggered) {
-                        // Check if last page is a transition page
-                        if (lastIdx >= 0 && isTransitionPage(lastIdx)) {
-                            m_overscrollTriggered = true;
-                            auto it = m_transitionInfo.find(lastIdx);
-                            bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : true;
-                            if (m_chapterNavigateCallback) {
-                                m_chapterNavigateCallback(isNext);
-                            }
-                        }
-                    }
-                } else {
-                    // Not overscrolling - reset
-                    m_overscrollAmount = 0.0f;
-                    m_overscrollTriggered = false;
-                }
+                // Mark that the user has started scrolling (enables auto-extend)
+                if (!m_userHasScrolled) m_userHasScrolled = true;
 
                 // Calculate velocity for momentum
                 auto now = std::chrono::steady_clock::now();
@@ -176,9 +139,6 @@ void WebtoonScrollView::setupGestures() {
                     }
                 }
 
-                // Reset overscroll state when finger lifts
-                m_overscrollAmount = 0.0f;
-                m_overscrollTriggered = false;
                 // Otherwise, momentum will be applied in onFrame()
             }
         }, brls::PanAxis::ANY));
@@ -377,6 +337,12 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
     m_failedPages.clear();
     m_transitionInfo.clear();
 
+    // Reset auto-extend flags (user must scroll before auto-extend activates)
+    m_trailingExtendTriggered = false;
+    m_leadingExtendTriggered = false;
+    m_userHasScrolled = false;
+    m_extendingChapter = false;
+
     // Load initial visible images
     updateVisibleImages();
 
@@ -402,6 +368,10 @@ void WebtoonScrollView::clearPages() {
     m_overscrollAmount = 0.0f;
     m_overscrollTriggered = false;
     m_currentPage = 0;
+    m_trailingExtendTriggered = false;
+    m_leadingExtendTriggered = false;
+    m_userHasScrolled = false;
+    m_extendingChapter = false;
 }
 
 void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
@@ -463,6 +433,9 @@ void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
     // Reset overscroll since we just added content
     m_overscrollAmount = 0.0f;
     m_overscrollTriggered = false;
+
+    // Allow next trailing auto-extend (new transition page at end)
+    m_trailingExtendTriggered = false;
 
     // Load newly visible images
     updateVisibleImages();
@@ -580,6 +553,9 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     // Reset overscroll
     m_overscrollAmount = 0.0f;
     m_overscrollTriggered = false;
+
+    // Allow next leading auto-extend (new transition page at start)
+    m_leadingExtendTriggered = false;
 
     // Load newly visible images
     updateVisibleImages();
@@ -875,6 +851,35 @@ void WebtoonScrollView::updateVisibleImages() {
             m_loadedPages.erase(i);
             // Don't erase from m_loadingPages or add to m_failedPages -
             // the page will be re-loaded when it comes back into range
+        }
+    }
+
+    // Auto-extend: seamlessly load next/prev chapter when approaching transition pages
+    // This replaces the old overscroll-based chapter navigation for a smooth scrolling experience
+    if (!m_extendingChapter && m_userHasScrolled && m_chapterNavigateCallback && firstVisible >= 0) {
+        // Check trailing transition page (next chapter)
+        int lastIdx = static_cast<int>(m_pages.size()) - 1;
+        if (lastIdx >= 0 && isTransitionPage(lastIdx) && !m_trailingExtendTriggered && lastVisible >= 0) {
+            if (lastIdx <= lastVisible + PRELOAD_PAGES + 2) {
+                m_extendingChapter = true;
+                m_trailingExtendTriggered = true;
+                auto it = m_transitionInfo.find(lastIdx);
+                bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : true;
+                m_chapterNavigateCallback(isNext);
+                m_extendingChapter = false;
+            }
+        }
+
+        // Check leading transition page (previous chapter)
+        if (!m_pages.empty() && isTransitionPage(0) && !m_leadingExtendTriggered) {
+            if (firstVisible <= PRELOAD_PAGES + 2) {
+                m_extendingChapter = true;
+                m_leadingExtendTriggered = true;
+                auto it = m_transitionInfo.find(0);
+                bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : false;
+                m_chapterNavigateCallback(isNext);
+                m_extendingChapter = false;
+            }
         }
     }
 }

@@ -205,9 +205,15 @@ private:
     float m_scrollAtTouchStart = 0.0f;
     std::chrono::steady_clock::time_point m_lastTouchTime;
 
-    // Overscroll tracking for auto chapter navigation
+    // Overscroll tracking (legacy, kept for potential bounce animation)
     float m_overscrollAmount = 0.0f;      // Accumulated overscroll past boundary
     bool m_overscrollTriggered = false;    // Prevents repeated triggers
+
+    // Auto-extend: seamlessly load next/prev chapter when approaching transition pages
+    bool m_extendingChapter = false;           // Re-entrancy guard
+    bool m_trailingExtendTriggered = false;    // Prevents repeated trailing triggers
+    bool m_leadingExtendTriggered = false;     // Prevents repeated leading triggers
+    bool m_userHasScrolled = false;            // Prevents auto-extend during initial setup
 
     // Page tracking
     int m_currentPage = 0;
