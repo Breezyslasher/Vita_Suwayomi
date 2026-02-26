@@ -635,9 +635,7 @@ void ReaderActivity::onContentAvailable() {
 
                     if (std::abs(newZoom - m_zoomLevel) > 0.01f) {
                         m_zoomLevel = newZoom;
-                        // Mark as zoomed whenever zoom differs from 1.0
-                        // (only double-tap should clear this flag via resetZoom)
-                        m_isZoomed = true;
+                        m_isZoomed = (newZoom > 1.01f);
 
                         if (pageImage) {
                             pageImage->setZoomLevel(newZoom);
@@ -662,7 +660,12 @@ void ReaderActivity::onContentAvailable() {
                 } else if (status.state == brls::GestureState::END) {
                     m_isPinching = false;
                     m_pinchEndTime = std::chrono::steady_clock::now();
-                    // Don't snap back - only double-tap resets zoom
+
+                    // If user pinched back down to 1.0x, clear zoomed state
+                    // so swipe page navigation works again without needing double-tap
+                    if (m_zoomLevel <= 1.0f) {
+                        resetZoom();
+                    }
                 }
             }));
     }
