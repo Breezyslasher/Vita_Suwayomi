@@ -453,10 +453,21 @@ void ReaderActivity::onContentAvailable() {
                                         m_settings.rotation == ImageRotation::ROTATE_270);
 
                 if (status.state == brls::GestureState::START) {
-                    // Cancel any running slide-completion animation
+                    // If a page-turn animation is in progress, finalize it
+                    // immediately so fast swiping doesn't lose page turns
                     if (m_completionAnimating) {
                         m_completionAnimating = false;
-                        resetSwipeState();
+                        if (m_completionTurnPage) {
+                            finalizePageTurn();
+                        } else if (m_completionNavChapter) {
+                            bool navNext = m_completionNavNext;
+                            m_completionNavChapter = false;
+                            resetSwipeState();
+                            if (navNext) nextChapter();
+                            else previousChapter();
+                        } else {
+                            resetSwipeState();
+                        }
                     }
                     m_isPanning = false;
                     m_isSwipeAnimating = false;
