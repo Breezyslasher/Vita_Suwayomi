@@ -219,6 +219,7 @@ private:
     void loadPreviewPage(int index);
     void loadPreviewInto(RotatableImage* target, int index);
     void preloadAdjacentPreviews();       // Pre-load both sides after page loads
+    std::pair<float, float> getSwipeViewSize(); // View dims for swipe math
     void completeSwipeAnimation(bool turnPage);
     void resetSwipeState();
 
@@ -268,6 +269,7 @@ private:
     brls::Button* m_retryButton = nullptr;
     int m_pageLoadGeneration = 0;   // Track current load to detect stale timeouts
     bool m_pageLoadSucceeded = false; // Set true when current page loads successfully
+    std::shared_ptr<bool> m_pageLoadAlive; // Per-load alive flag to cancel stale async loads
     bool m_loadedFromLocal = false;  // True when current chapter was loaded from local downloads
     void showPageError(const std::string& message);
     void hidePageError();

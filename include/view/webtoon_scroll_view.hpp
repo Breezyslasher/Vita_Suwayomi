@@ -41,7 +41,7 @@ public:
      * @param pages Vector of page data with image URLs
      * @param screenWidth Width available for pages
      */
-    void setPages(const std::vector<Page>& pages, float screenWidth);
+    void setPages(const std::vector<Page>& pages, float screenWidth, int startPage = 0);
 
     /**
      * Clear all pages and reset scroll
@@ -76,6 +76,23 @@ public:
      * Get total page count
      */
     int getPageCount() const { return static_cast<int>(m_pages.size()); }
+
+    /**
+     * Get the number of real (non-transition) pages
+     */
+    int getRealPageCount() const;
+
+    /**
+     * Convert an internal page index to a 0-based display page number
+     * (counts only real pages before and including the given index)
+     */
+    int displayPageFromIndex(int pageIndex) const;
+
+    /**
+     * Convert a 0-based display page number to an internal page index
+     * (finds the Nth real page, skipping transition pages)
+     */
+    int pageIndexFromDisplayPage(int displayPage) const;
 
     /**
      * Get current scroll position (0.0 to 1.0)
@@ -277,6 +294,7 @@ private:
     float m_initialZoomLevel = 1.0f;
     brls::Point m_initialZoomOffset = {0, 0};
     brls::Point m_initialPinchCenter = {0, 0};  // In view coords
+    std::chrono::steady_clock::time_point m_pinchEndTime;  // Cooldown guard
 
     // Zoom methods
     void resetZoom();

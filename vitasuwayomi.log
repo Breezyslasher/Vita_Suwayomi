@@ -1,0 +1,714 @@
+17:50:02.833 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+17:50:03.401 [INFO] DownloadsManager: Initializing...
+17:50:03.406 [DEBUG] DownloadsManager: No saved state found
+17:50:03.407 [INFO] DownloadsManager: Initialized with 0 downloads
+17:50:03.407 [INFO] VitaSuwayomi 1.0.0 initializing...
+17:50:03.409 [DEBUG] sceIoMkdir result: -0x7ffeffef
+17:50:03.409 [INFO] Loading saved settings...
+17:50:03.409 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+17:50:03.411 [DEBUG] loadSettings: File size = 3626
+17:50:03.427 [DEBUG] loadSettings: Read 3626 bytes
+17:50:03.432 [INFO] loadSettings: serverUrl=http://192.168.1.28:4568
+17:50:03.438 [DEBUG] Loaded 4 hidden categories
+17:50:03.444 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+17:50:03.452 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+17:50:03.461 [INFO] loadSettings: enabledSourceLanguages count = 2
+17:50:03.471 [INFO] loadSettings: localUrl=http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+17:50:03.485 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=3, defaultSort=0, groupMode=0
+17:50:03.496 [DEBUG] Loaded 2 per-category sort modes
+17:50:03.502 [DEBUG] Loaded 2 search history entries
+17:50:03.508 [DEBUG] Loaded 11 per-manga reader settings
+17:50:03.514 [INFO] Restored auth credentials for user: Breezyslasher
+17:50:03.523 [INFO] Restored auth tokens
+17:50:03.532 [INFO] Settings loaded successfully
+17:50:03.543 [INFO] Settings load result: success
+17:50:03.554 [INFO] Applied theme: Dark
+17:50:03.566 [INFO] Debug logging disabled
+17:50:03.574 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+17:50:03.580 [INFO] Application::run - isConnected=false, serverUrl=http://192.168.1.28:4568
+17:50:03.586 [INFO] Restoring saved connection...
+17:50:03.595 [INFO] Attempting to refresh JWT tokens...
+17:50:03.626 [INFO] Token refreshed successfully
+17:50:03.637 [INFO] Token refresh successful
+17:50:03.648 [INFO] Fetching server info via GraphQL...
+17:50:03.682 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2085
+17:50:03.687 [INFO] Connection restored successfully
+17:50:03.795 [INFO] MainActivity: Tabs created, isOnline=false
+17:50:03.962 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
+17:50:03.979 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+17:50:04.140 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+17:50:04.153 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+17:50:04.214 [INFO] ImageLoader: Starting 3 worker threads
+17:50:04.846 [INFO] GraphQL: Fetching manga for category 1 with filter
+17:50:04.846 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+17:50:04.989 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+17:50:05.029 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+17:50:05.041 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+17:50:05.366 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+17:50:05.543 [INFO] GraphQL: Fetching manga for category 1 with filter
+17:50:05.659 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+17:50:05.670 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+17:50:19.195 [INFO] LibrarySectionTab: Loaded 4 manga from cache for category 2
+17:50:19.210 [INFO] RecyclingGrid: Building 1 rows for 4 items (first 1 immediate)
+17:50:19.435 [INFO] GraphQL: Fetching manga for category 2 with filter
+17:50:19.548 [INFO] GraphQL: Fetched 4 manga for category 2 (filter method)
+17:50:19.554 [INFO] LibrarySectionTab: Got 4 manga for category 2 from server
+17:50:21.366 [INFO] MangaDetailView: Creating for 'A Rare Marriage: How To Grill Our Love' id=405
+17:50:21.909 [INFO] MangaDetailView: Loaded 138 chapters from cache for manga 405
+17:50:21.924 [INFO] GraphQL: Fetched 1 track records for manga 405
+17:50:22.377 [INFO] MangaDetailView: Got 138 chapters
+17:50:26.127 [INFO] MangaDetailView: Continuing from chapter id=45874, page=7
+17:50:26.138 [INFO] MangaDetailView: Reading chapter id=45874, startPage=7
+17:50:26.149 [INFO] ReaderActivity: manga=405, chapter=45874, startPage=7
+17:50:26.451 [INFO] ReaderActivity: content available for manga 405
+17:50:26.458 [INFO] ReaderActivity: global defaults - readingMode=1, pageScaleMode=0, rotation=90
+17:50:26.464 [INFO] ReaderActivity: local cache has 11 per-manga settings
+17:50:26.473 [INFO] ReaderActivity: fetching server meta for manga 405...
+17:50:26.502 [INFO] ReaderActivity: server returned 0 meta entries
+17:50:26.512 [INFO] ReaderActivity: no server settings, checking local cache for manga 405
+17:50:26.524 [INFO] ReaderActivity: NO local settings found, using global defaults
+17:50:26.559 [INFO] ReaderActivity: keepScreenOn enabled, disabled screen dimming
+17:50:26.571 [INFO] ReaderActivity: Fetching chapter 45874 from server
+17:50:26.578 [INFO] GraphQL: Fetching pages for chapter id=45874
+17:50:28.028 [INFO] GraphQL: Fetched 21 pages for chapter 45874
+17:50:28.138 [INFO] Loaded 21 pages
+17:50:28.149 [INFO] loadPages: startPage=8 → page 8/23 url=http://192.168.1.28:4568/api/v1/manga/405/chapter/61/page/7
+17:50:28.165 [INFO] Preloading next chapter id=45873
+17:50:28.171 [INFO] GraphQL: Fetching pages for chapter id=45873
+17:50:28.171 [INFO] Preloading prev chapter id=45875
+17:50:28.187 [INFO] GraphQL: Fetching pages for chapter id=45875
+17:50:30.815 [INFO] GraphQL: Fetched 22 pages for chapter 45873
+17:50:30.817 [INFO] GraphQL: Fetched 19 pages for chapter 45875
+17:50:30.840 [INFO] Next chapter preloaded: 22 pages
+17:50:30.845 [INFO] Prev chapter preloaded: 19 pages
+17:50:32.392 [INFO] PAN START rot=90 vert=true invert=false page=8/23
+17:50:32.441 [INFO] SWIPE offset=35 rot=90 vert=true extent=726 | cur=(0,35) pos=(0,-691) neg=(0,761) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.455 [INFO] DRAW slideX=0 slideY=35 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:50:32.467 [INFO] SWIPE offset=62 rot=90 vert=true extent=726 | cur=(0,62) pos=(0,-664) neg=(0,788) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.525 [INFO] SWIPE offset=103 rot=90 vert=true extent=726 | cur=(0,103) pos=(0,-623) neg=(0,829) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.625 [INFO] SWIPE offset=153 rot=90 vert=true extent=726 | cur=(0,153) pos=(0,-573) neg=(0,879) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.758 [INFO] SWIPE offset=216 rot=90 vert=true extent=726 | cur=(0,216) pos=(0,-510) neg=(0,942) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.792 [INFO] SWIPE offset=279 rot=90 vert=true extent=726 | cur=(0,279) pos=(0,-447) neg=(0,1005) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.808 [INFO] SWIPE offset=311 rot=90 vert=true extent=726 | cur=(0,311) pos=(0,-415) neg=(0,1037) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.842 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=9 swipingToNext=true currentPage=8
+17:50:32.852 [INFO] SWIPE offset=449 rot=90 vert=true extent=726 | cur=(0,449) pos=(0,-277) neg=(0,1175) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.858 [INFO] SWIPE offset=532 rot=90 vert=true extent=726 | cur=(0,532) pos=(0,-194) neg=(0,1258) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.875 [INFO] SWIPE offset=590 rot=90 vert=true extent=726 | cur=(0,590) pos=(0,-136) neg=(0,1316) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.892 [INFO] SWIPE offset=631 rot=90 vert=true extent=726 | cur=(0,631) pos=(0,-95) neg=(0,1357) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.908 [INFO] SWIPE offset=659 rot=90 vert=true extent=726 | cur=(0,659) pos=(0,-67) neg=(0,1385) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:32.958 [INFO] SWIPE offset=703 rot=90 vert=true extent=726 | cur=(0,703) pos=(0,-23) neg=(0,1429) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:50:33.075 [INFO] FINALIZE: previewIdx=9 previewIsTransition=false
+17:50:35.378 [INFO] PAN START rot=90 vert=true invert=false page=9/23
+17:50:35.411 [INFO] SWIPE offset=31 rot=90 vert=true extent=726 | cur=(0,31) pos=(0,-695) neg=(0,757) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.445 [INFO] SWIPE offset=62 rot=90 vert=true extent=726 | cur=(0,62) pos=(0,-664) neg=(0,788) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.494 [INFO] SWIPE offset=110 rot=90 vert=true extent=726 | cur=(0,110) pos=(0,-616) neg=(0,836) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.544 [INFO] SWIPE offset=165 rot=90 vert=true extent=726 | cur=(0,165) pos=(0,-561) neg=(0,891) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.578 [INFO] SWIPE offset=201 rot=90 vert=true extent=726 | cur=(0,201) pos=(0,-525) neg=(0,927) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.628 [INFO] SWIPE offset=260 rot=90 vert=true extent=726 | cur=(0,260) pos=(0,-466) neg=(0,986) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.678 [INFO] SWIPE offset=302 rot=90 vert=true extent=726 | cur=(0,302) pos=(0,-424) neg=(0,1028) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.745 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=10 swipingToNext=true currentPage=9
+17:50:35.757 [INFO] SWIPE offset=460 rot=90 vert=true extent=726 | cur=(0,460) pos=(0,-266) neg=(0,1186) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.767 [INFO] SWIPE offset=540 rot=90 vert=true extent=726 | cur=(0,540) pos=(0,-186) neg=(0,1266) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.778 [INFO] SWIPE offset=596 rot=90 vert=true extent=726 | cur=(0,596) pos=(0,-130) neg=(0,1322) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:35.790 [INFO] DRAW slideX=0 slideY=596 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:50:35.864 [INFO] SWIPE offset=635 rot=90 vert=true extent=726 | cur=(0,635) pos=(0,-91) neg=(0,1361) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:36.195 [INFO] SWIPE offset=662 rot=90 vert=true extent=726 | cur=(0,662) pos=(0,-64) neg=(0,1388) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:36.228 [INFO] SWIPE offset=704 rot=90 vert=true extent=726 | cur=(0,704) pos=(0,-22) neg=(0,1430) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:36.345 [INFO] FINALIZE: previewIdx=10 previewIsTransition=false
+17:50:41.150 [INFO] PAN START rot=90 vert=true invert=false page=10/23
+17:50:41.250 [INFO] SWIPE offset=-28 rot=90 vert=true extent=726 | cur=(0,-28) pos=(0,-754) neg=(0,698) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.367 [INFO] SWIPE offset=-53 rot=90 vert=true extent=726 | cur=(0,-53) pos=(0,-779) neg=(0,673) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.584 [INFO] SWIPE offset=-109 rot=90 vert=true extent=726 | cur=(0,-109) pos=(0,-835) neg=(0,617) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.617 [INFO] SWIPE offset=-189 rot=90 vert=true extent=726 | cur=(0,-189) pos=(0,-915) neg=(0,537) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.634 [INFO] SWIPE offset=-230 rot=90 vert=true extent=726 | cur=(0,-230) pos=(0,-956) neg=(0,496) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.651 [INFO] SWIPE offset=-261 rot=90 vert=true extent=726 | cur=(0,-261) pos=(0,-987) neg=(0,465) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.667 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=9 swipingToNext=false currentPage=10
+17:50:41.673 [INFO] SWIPE offset=-401 rot=90 vert=true extent=726 | cur=(0,-401) pos=(0,-1127) neg=(0,325) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.684 [INFO] SWIPE offset=-498 rot=90 vert=true extent=726 | cur=(0,-498) pos=(0,-1224) neg=(0,228) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.700 [INFO] SWIPE offset=-567 rot=90 vert=true extent=726 | cur=(0,-567) pos=(0,-1293) neg=(0,159) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.717 [INFO] SWIPE offset=-614 rot=90 vert=true extent=726 | cur=(0,-614) pos=(0,-1340) neg=(0,112) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.751 [INFO] SWIPE offset=-671 rot=90 vert=true extent=726 | cur=(0,-671) pos=(0,-1397) neg=(0,55) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.801 [INFO] SWIPE offset=-707 rot=90 vert=true extent=726 | cur=(0,-707) pos=(0,-1433) neg=(0,19) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:50:41.917 [INFO] FINALIZE: previewIdx=9 previewIsTransition=false
+17:50:43.586 [INFO] PAN START rot=90 vert=true invert=false page=9/23
+17:50:43.636 [INFO] SWIPE offset=37 rot=90 vert=true extent=726 | cur=(0,37) pos=(0,-689) neg=(0,763) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:43.652 [INFO] SWIPE offset=51 rot=90 vert=true extent=726 | cur=(0,51) pos=(0,-675) neg=(0,777) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:43.719 [INFO] SWIPE offset=102 rot=90 vert=true extent=726 | cur=(0,102) pos=(0,-624) neg=(0,828) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:43.770 [INFO] DRAW slideX=0 slideY=130 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:50:43.803 [INFO] SWIPE offset=156 rot=90 vert=true extent=726 | cur=(0,156) pos=(0,-570) neg=(0,882) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:43.886 [INFO] SWIPE offset=211 rot=90 vert=true extent=726 | cur=(0,211) pos=(0,-515) neg=(0,937) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:43.919 [INFO] SWIPE offset=252 rot=90 vert=true extent=726 | cur=(0,252) pos=(0,-474) neg=(0,978) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:43.969 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=10 swipingToNext=true currentPage=9
+17:50:43.981 [INFO] SWIPE offset=424 rot=90 vert=true extent=726 | cur=(0,424) pos=(0,-302) neg=(0,1150) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:43.992 [INFO] SWIPE offset=514 rot=90 vert=true extent=726 | cur=(0,514) pos=(0,-212) neg=(0,1240) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:44.003 [INFO] SWIPE offset=578 rot=90 vert=true extent=726 | cur=(0,578) pos=(0,-148) neg=(0,1304) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:44.019 [INFO] SWIPE offset=622 rot=90 vert=true extent=726 | cur=(0,622) pos=(0,-104) neg=(0,1348) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:44.036 [INFO] SWIPE offset=653 rot=90 vert=true extent=726 | cur=(0,653) pos=(0,-73) neg=(0,1379) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:44.086 [INFO] SWIPE offset=701 rot=90 vert=true extent=726 | cur=(0,701) pos=(0,-25) neg=(0,1427) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:50:44.203 [INFO] FINALIZE: previewIdx=10 previewIsTransition=false
+17:51:18.154 [INFO] PAN START rot=90 vert=true invert=false page=10/23
+17:51:18.187 [INFO] SWIPE offset=39 rot=90 vert=true extent=726 | cur=(0,39) pos=(0,-687) neg=(0,765) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.204 [INFO] SWIPE offset=62 rot=90 vert=true extent=726 | cur=(0,62) pos=(0,-664) neg=(0,788) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.237 [INFO] SWIPE offset=106 rot=90 vert=true extent=726 | cur=(0,106) pos=(0,-620) neg=(0,832) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.270 [INFO] SWIPE offset=179 rot=90 vert=true extent=726 | cur=(0,179) pos=(0,-547) neg=(0,905) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.287 [INFO] SWIPE offset=213 rot=90 vert=true extent=726 | cur=(0,213) pos=(0,-513) neg=(0,939) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.320 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=11 swipingToNext=true currentPage=10
+17:51:18.328 [INFO] SWIPE offset=391 rot=90 vert=true extent=726 | cur=(0,391) pos=(0,-335) neg=(0,1117) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.338 [INFO] SWIPE offset=492 rot=90 vert=true extent=726 | cur=(0,492) pos=(0,-234) neg=(0,1218) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.354 [INFO] SWIPE offset=562 rot=90 vert=true extent=726 | cur=(0,562) pos=(0,-164) neg=(0,1288) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.370 [INFO] SWIPE offset=611 rot=90 vert=true extent=726 | cur=(0,611) pos=(0,-115) neg=(0,1337) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.404 [INFO] SWIPE offset=670 rot=90 vert=true extent=726 | cur=(0,670) pos=(0,-56) neg=(0,1396) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.454 [INFO] SWIPE offset=707 rot=90 vert=true extent=726 | cur=(0,707) pos=(0,-19) neg=(0,1433) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:51:18.571 [INFO] FINALIZE: previewIdx=11 previewIsTransition=false
+17:51:21.724 [INFO] PAN START rot=90 vert=true invert=false page=11/23
+17:51:21.791 [INFO] SWIPE offset=34 rot=90 vert=true extent=726 | cur=(0,34) pos=(0,-692) neg=(0,760) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:21.824 [INFO] SWIPE offset=64 rot=90 vert=true extent=726 | cur=(0,64) pos=(0,-662) neg=(0,790) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:21.891 [INFO] COMPLETE: turnPage=false swipeToChapter=false previewIsTransition=false previewIdx=12 swipingToNext=true currentPage=11
+17:51:21.907 [INFO] SWIPE offset=46 rot=90 vert=true extent=726 | cur=(0,46) pos=(0,-680) neg=(0,772) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:21.974 [INFO] DRAW slideX=0 slideY=11 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:51:37.673 [INFO] PAN START rot=90 vert=true invert=false page=11/23
+17:51:37.706 [INFO] SWIPE offset=56 rot=90 vert=true extent=726 | cur=(0,56) pos=(0,-670) neg=(0,782) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:37.740 [INFO] SWIPE offset=111 rot=90 vert=true extent=726 | cur=(0,111) pos=(0,-615) neg=(0,837) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:37.756 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=12 swipingToNext=true currentPage=11
+17:51:37.762 [INFO] SWIPE offset=295 rot=90 vert=true extent=726 | cur=(0,295) pos=(0,-431) neg=(0,1021) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:37.773 [INFO] SWIPE offset=424 rot=90 vert=true extent=726 | cur=(0,424) pos=(0,-302) neg=(0,1150) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:37.790 [INFO] SWIPE offset=515 rot=90 vert=true extent=726 | cur=(0,515) pos=(0,-211) neg=(0,1241) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:37.806 [INFO] SWIPE offset=578 rot=90 vert=true extent=726 | cur=(0,578) pos=(0,-148) neg=(0,1304) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:37.823 [INFO] SWIPE offset=623 rot=90 vert=true extent=726 | cur=(0,623) pos=(0,-103) neg=(0,1349) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:37.840 [INFO] SWIPE offset=654 rot=90 vert=true extent=726 | cur=(0,654) pos=(0,-72) neg=(0,1380) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:37.890 [INFO] SWIPE offset=701 rot=90 vert=true extent=726 | cur=(0,701) pos=(0,-25) neg=(0,1427) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:51:38.007 [INFO] FINALIZE: previewIdx=12 previewIsTransition=false
+17:51:46.982 [INFO] PAN START rot=90 vert=true invert=false page=12/23
+17:51:47.049 [INFO] SWIPE offset=35 rot=90 vert=true extent=726 | cur=(0,35) pos=(0,-691) neg=(0,761) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.066 [INFO] SWIPE offset=52 rot=90 vert=true extent=726 | cur=(0,52) pos=(0,-674) neg=(0,778) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.132 [INFO] SWIPE offset=112 rot=90 vert=true extent=726 | cur=(0,112) pos=(0,-614) neg=(0,838) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.183 [INFO] SWIPE offset=155 rot=90 vert=true extent=726 | cur=(0,155) pos=(0,-571) neg=(0,881) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.349 [INFO] SWIPE offset=201 rot=90 vert=true extent=726 | cur=(0,201) pos=(0,-525) neg=(0,927) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.516 [INFO] SWIPE offset=263 rot=90 vert=true extent=726 | cur=(0,263) pos=(0,-463) neg=(0,989) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.550 [INFO] SWIPE offset=354 rot=90 vert=true extent=726 | cur=(0,354) pos=(0,-372) neg=(0,1080) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.566 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=13 swipingToNext=true currentPage=12
+17:51:47.577 [INFO] SWIPE offset=466 rot=90 vert=true extent=726 | cur=(0,466) pos=(0,-260) neg=(0,1192) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.584 [INFO] SWIPE offset=544 rot=90 vert=true extent=726 | cur=(0,544) pos=(0,-182) neg=(0,1270) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.600 [INFO] SWIPE offset=598 rot=90 vert=true extent=726 | cur=(0,598) pos=(0,-128) neg=(0,1324) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.616 [INFO] SWIPE offset=637 rot=90 vert=true extent=726 | cur=(0,637) pos=(0,-89) neg=(0,1363) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.633 [INFO] SWIPE offset=663 rot=90 vert=true extent=726 | cur=(0,663) pos=(0,-63) neg=(0,1389) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.666 [INFO] DRAW slideX=0 slideY=695 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:51:47.683 [INFO] SWIPE offset=705 rot=90 vert=true extent=726 | cur=(0,705) pos=(0,-21) neg=(0,1431) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:51:47.800 [INFO] FINALIZE: previewIdx=13 previewIsTransition=false
+17:51:51.432 [INFO] PAN START rot=90 vert=true invert=false page=13/23
+17:51:51.820 [INFO] SWIPE offset=27 rot=90 vert=true extent=726 | cur=(0,27) pos=(0,-699) neg=(0,753) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:51.954 [INFO] COMPLETE: turnPage=false swipeToChapter=false previewIsTransition=false previewIdx=14 swipingToNext=true currentPage=13
+17:51:55.207 [INFO] PAN START rot=90 vert=true invert=false page=13/23
+17:51:55.274 [INFO] SWIPE offset=58 rot=90 vert=true extent=726 | cur=(0,58) pos=(0,-668) neg=(0,784) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.324 [INFO] SWIPE offset=114 rot=90 vert=true extent=726 | cur=(0,114) pos=(0,-612) neg=(0,840) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.357 [INFO] SWIPE offset=165 rot=90 vert=true extent=726 | cur=(0,165) pos=(0,-561) neg=(0,891) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.391 [INFO] SWIPE offset=203 rot=90 vert=true extent=726 | cur=(0,203) pos=(0,-523) neg=(0,929) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.424 [INFO] SWIPE offset=257 rot=90 vert=true extent=726 | cur=(0,257) pos=(0,-469) neg=(0,983) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.457 [INFO] SWIPE offset=316 rot=90 vert=true extent=726 | cur=(0,316) pos=(0,-410) neg=(0,1042) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.474 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=14 swipingToNext=true currentPage=13
+17:51:55.481 [INFO] SWIPE offset=439 rot=90 vert=true extent=726 | cur=(0,439) pos=(0,-287) neg=(0,1165) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.492 [INFO] SWIPE offset=525 rot=90 vert=true extent=726 | cur=(0,525) pos=(0,-201) neg=(0,1251) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.507 [INFO] SWIPE offset=585 rot=90 vert=true extent=726 | cur=(0,585) pos=(0,-141) neg=(0,1311) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.524 [INFO] SWIPE offset=627 rot=90 vert=true extent=726 | cur=(0,627) pos=(0,-99) neg=(0,1353) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.541 [INFO] SWIPE offset=657 rot=90 vert=true extent=726 | cur=(0,657) pos=(0,-69) neg=(0,1383) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.591 [INFO] SWIPE offset=702 rot=90 vert=true extent=726 | cur=(0,702) pos=(0,-24) neg=(0,1428) | posIdx=14 negIdx=12 posIsTrans=false negIsTrans=false
+17:51:55.708 [INFO] FINALIZE: previewIdx=14 previewIsTransition=false
+17:51:58.778 [INFO] PAN START rot=90 vert=true invert=false page=14/23
+17:51:58.811 [INFO] SWIPE offset=40 rot=90 vert=true extent=726 | cur=(0,40) pos=(0,-686) neg=(0,766) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:58.828 [INFO] SWIPE offset=67 rot=90 vert=true extent=726 | cur=(0,67) pos=(0,-659) neg=(0,793) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:58.861 [INFO] SWIPE offset=112 rot=90 vert=true extent=726 | cur=(0,112) pos=(0,-614) neg=(0,838) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:58.895 [INFO] SWIPE offset=158 rot=90 vert=true extent=726 | cur=(0,158) pos=(0,-568) neg=(0,884) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:58.928 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=15 swipingToNext=true currentPage=14
+17:51:58.940 [INFO] SWIPE offset=342 rot=90 vert=true extent=726 | cur=(0,342) pos=(0,-384) neg=(0,1068) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:58.951 [INFO] SWIPE offset=457 rot=90 vert=true extent=726 | cur=(0,457) pos=(0,-269) neg=(0,1183) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:58.961 [INFO] SWIPE offset=538 rot=90 vert=true extent=726 | cur=(0,538) pos=(0,-188) neg=(0,1264) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:58.978 [INFO] SWIPE offset=594 rot=90 vert=true extent=726 | cur=(0,594) pos=(0,-132) neg=(0,1320) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:58.985 [INFO] DRAW slideX=0 slideY=594 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:51:58.996 [INFO] SWIPE offset=634 rot=90 vert=true extent=726 | cur=(0,634) pos=(0,-92) neg=(0,1360) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:59.011 [INFO] SWIPE offset=661 rot=90 vert=true extent=726 | cur=(0,661) pos=(0,-65) neg=(0,1387) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:59.061 [INFO] SWIPE offset=704 rot=90 vert=true extent=726 | cur=(0,704) pos=(0,-22) neg=(0,1430) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:51:59.178 [INFO] FINALIZE: previewIdx=15 previewIsTransition=false
+17:52:04.584 [INFO] PAN START rot=90 vert=true invert=false page=15/23
+17:52:04.634 [INFO] SWIPE offset=27 rot=90 vert=true extent=726 | cur=(0,27) pos=(0,-699) neg=(0,753) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:04.684 [INFO] SWIPE offset=61 rot=90 vert=true extent=726 | cur=(0,61) pos=(0,-665) neg=(0,787) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:04.767 [INFO] SWIPE offset=105 rot=90 vert=true extent=726 | cur=(0,105) pos=(0,-621) neg=(0,831) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:04.950 [INFO] SWIPE offset=154 rot=90 vert=true extent=726 | cur=(0,154) pos=(0,-572) neg=(0,880) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:05.408 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=16 swipingToNext=true currentPage=15
+17:52:05.416 [INFO] SWIPE offset=333 rot=90 vert=true extent=726 | cur=(0,333) pos=(0,-393) neg=(0,1059) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:05.429 [INFO] SWIPE offset=451 rot=90 vert=true extent=726 | cur=(0,451) pos=(0,-275) neg=(0,1177) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:05.439 [INFO] SWIPE offset=534 rot=90 vert=true extent=726 | cur=(0,534) pos=(0,-192) neg=(0,1260) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:05.451 [INFO] SWIPE offset=591 rot=90 vert=true extent=726 | cur=(0,591) pos=(0,-135) neg=(0,1317) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:05.467 [INFO] SWIPE offset=632 rot=90 vert=true extent=726 | cur=(0,632) pos=(0,-94) neg=(0,1358) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:05.484 [INFO] SWIPE offset=660 rot=90 vert=true extent=726 | cur=(0,660) pos=(0,-66) neg=(0,1386) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:05.534 [INFO] SWIPE offset=703 rot=90 vert=true extent=726 | cur=(0,703) pos=(0,-23) neg=(0,1429) | posIdx=16 negIdx=14 posIsTrans=false negIsTrans=false
+17:52:05.651 [INFO] FINALIZE: previewIdx=16 previewIsTransition=false
+17:52:09.372 [INFO] PAN START rot=90 vert=true invert=false page=16/23
+17:52:09.438 [INFO] SWIPE offset=30 rot=90 vert=true extent=726 | cur=(0,30) pos=(0,-696) neg=(0,756) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:09.505 [INFO] SWIPE offset=53 rot=90 vert=true extent=726 | cur=(0,53) pos=(0,-673) neg=(0,779) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:09.605 [INFO] DRAW slideX=0 slideY=76 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:52:10.022 [INFO] SWIPE offset=101 rot=90 vert=true extent=726 | cur=(0,101) pos=(0,-625) neg=(0,827) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:10.172 [INFO] SWIPE offset=165 rot=90 vert=true extent=726 | cur=(0,165) pos=(0,-561) neg=(0,891) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:10.206 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=17 swipingToNext=true currentPage=16
+17:52:10.212 [INFO] SWIPE offset=349 rot=90 vert=true extent=726 | cur=(0,349) pos=(0,-377) neg=(0,1075) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:10.223 [INFO] SWIPE offset=462 rot=90 vert=true extent=726 | cur=(0,462) pos=(0,-264) neg=(0,1188) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:10.239 [INFO] SWIPE offset=541 rot=90 vert=true extent=726 | cur=(0,541) pos=(0,-185) neg=(0,1267) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:10.256 [INFO] SWIPE offset=597 rot=90 vert=true extent=726 | cur=(0,597) pos=(0,-129) neg=(0,1323) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:10.272 [INFO] SWIPE offset=636 rot=90 vert=true extent=726 | cur=(0,636) pos=(0,-90) neg=(0,1362) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:10.289 [INFO] SWIPE offset=663 rot=90 vert=true extent=726 | cur=(0,663) pos=(0,-63) neg=(0,1389) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:10.339 [INFO] SWIPE offset=704 rot=90 vert=true extent=726 | cur=(0,704) pos=(0,-22) neg=(0,1430) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:52:10.456 [INFO] FINALIZE: previewIdx=17 previewIsTransition=false
+17:52:12.541 [INFO] PAN START rot=90 vert=true invert=false page=17/23
+17:52:12.575 [INFO] SWIPE offset=57 rot=90 vert=true extent=726 | cur=(0,57) pos=(0,-669) neg=(0,783) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:52:12.608 [INFO] SWIPE offset=123 rot=90 vert=true extent=726 | cur=(0,123) pos=(0,-603) neg=(0,849) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:52:12.641 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=18 swipingToNext=true currentPage=17
+17:52:12.648 [INFO] SWIPE offset=316 rot=90 vert=true extent=726 | cur=(0,316) pos=(0,-410) neg=(0,1042) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:52:12.660 [INFO] SWIPE offset=439 rot=90 vert=true extent=726 | cur=(0,439) pos=(0,-287) neg=(0,1165) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:52:12.675 [INFO] SWIPE offset=525 rot=90 vert=true extent=726 | cur=(0,525) pos=(0,-201) neg=(0,1251) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:52:12.691 [INFO] SWIPE offset=585 rot=90 vert=true extent=726 | cur=(0,585) pos=(0,-141) neg=(0,1311) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:52:12.708 [INFO] SWIPE offset=628 rot=90 vert=true extent=726 | cur=(0,628) pos=(0,-98) neg=(0,1354) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:52:12.725 [INFO] SWIPE offset=657 rot=90 vert=true extent=726 | cur=(0,657) pos=(0,-69) neg=(0,1383) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:52:12.735 [INFO] DRAW slideX=0 slideY=657 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:52:12.775 [INFO] SWIPE offset=702 rot=90 vert=true extent=726 | cur=(0,702) pos=(0,-24) neg=(0,1428) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:52:12.891 [INFO] FINALIZE: previewIdx=18 previewIsTransition=false
+17:52:36.632 [INFO] PAN START rot=90 vert=true invert=false page=18/23
+17:52:36.715 [INFO] SWIPE offset=29 rot=90 vert=true extent=726 | cur=(0,29) pos=(0,-697) neg=(0,755) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:36.782 [INFO] SWIPE offset=62 rot=90 vert=true extent=726 | cur=(0,62) pos=(0,-664) neg=(0,788) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:36.866 [INFO] SWIPE offset=102 rot=90 vert=true extent=726 | cur=(0,102) pos=(0,-624) neg=(0,828) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:36.982 [INFO] SWIPE offset=158 rot=90 vert=true extent=726 | cur=(0,158) pos=(0,-568) neg=(0,884) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:37.032 [INFO] SWIPE offset=223 rot=90 vert=true extent=726 | cur=(0,223) pos=(0,-503) neg=(0,949) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:37.066 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=19 swipingToNext=true currentPage=18
+17:52:37.074 [INFO] SWIPE offset=392 rot=90 vert=true extent=726 | cur=(0,392) pos=(0,-334) neg=(0,1118) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:37.087 [INFO] SWIPE offset=492 rot=90 vert=true extent=726 | cur=(0,492) pos=(0,-234) neg=(0,1218) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:37.099 [INFO] SWIPE offset=562 rot=90 vert=true extent=726 | cur=(0,562) pos=(0,-164) neg=(0,1288) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:37.116 [INFO] SWIPE offset=611 rot=90 vert=true extent=726 | cur=(0,611) pos=(0,-115) neg=(0,1337) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:37.149 [INFO] SWIPE offset=670 rot=90 vert=true extent=726 | cur=(0,670) pos=(0,-56) neg=(0,1396) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:37.199 [INFO] SWIPE offset=707 rot=90 vert=true extent=726 | cur=(0,707) pos=(0,-19) neg=(0,1433) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:37.316 [INFO] FINALIZE: previewIdx=19 previewIsTransition=false
+17:52:41.320 [INFO] PAN START rot=90 vert=true invert=false page=19/23
+17:52:41.437 [INFO] SWIPE offset=-29 rot=90 vert=true extent=726 | cur=(0,-29) pos=(0,-755) neg=(0,697) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:41.604 [INFO] SWIPE offset=-51 rot=90 vert=true extent=726 | cur=(0,-51) pos=(0,-777) neg=(0,675) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:41.670 [INFO] DRAW slideX=0 slideY=-54 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:52:41.887 [INFO] COMPLETE: turnPage=false swipeToChapter=false previewIsTransition=false previewIdx=18 swipingToNext=false currentPage=19
+17:52:41.895 [INFO] SWIPE offset=-42 rot=90 vert=true extent=726 | cur=(0,-42) pos=(0,-768) neg=(0,684) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:42.421 [INFO] PAN START rot=90 vert=true invert=false page=19/23
+17:52:42.521 [INFO] SWIPE offset=-58 rot=90 vert=true extent=726 | cur=(0,-58) pos=(0,-784) neg=(0,668) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:42.588 [INFO] SWIPE offset=-115 rot=90 vert=true extent=726 | cur=(0,-115) pos=(0,-841) neg=(0,611) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:42.671 [INFO] SWIPE offset=-152 rot=90 vert=true extent=726 | cur=(0,-152) pos=(0,-878) neg=(0,574) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:42.872 [INFO] SWIPE offset=-210 rot=90 vert=true extent=726 | cur=(0,-210) pos=(0,-936) neg=(0,516) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:42.905 [INFO] SWIPE offset=-255 rot=90 vert=true extent=726 | cur=(0,-255) pos=(0,-981) neg=(0,471) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:42.922 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=18 swipingToNext=false currentPage=19
+17:52:42.929 [INFO] SWIPE offset=-396 rot=90 vert=true extent=726 | cur=(0,-396) pos=(0,-1122) neg=(0,330) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:42.939 [INFO] SWIPE offset=-495 rot=90 vert=true extent=726 | cur=(0,-495) pos=(0,-1221) neg=(0,231) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:42.955 [INFO] SWIPE offset=-564 rot=90 vert=true extent=726 | cur=(0,-564) pos=(0,-1290) neg=(0,162) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:42.971 [INFO] SWIPE offset=-613 rot=90 vert=true extent=726 | cur=(0,-613) pos=(0,-1339) neg=(0,113) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:43.005 [INFO] SWIPE offset=-671 rot=90 vert=true extent=726 | cur=(0,-671) pos=(0,-1397) neg=(0,55) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:43.055 [INFO] SWIPE offset=-707 rot=90 vert=true extent=726 | cur=(0,-707) pos=(0,-1433) neg=(0,19) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:43.122 [INFO] DRAW slideX=0 slideY=-721 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:52:43.172 [INFO] FINALIZE: previewIdx=18 previewIsTransition=false
+17:52:43.956 [INFO] PAN START rot=90 vert=true invert=false page=18/23
+17:52:44.073 [INFO] SWIPE offset=29 rot=90 vert=true extent=726 | cur=(0,29) pos=(0,-697) neg=(0,755) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:44.273 [INFO] COMPLETE: turnPage=false swipeToChapter=false previewIsTransition=false previewIdx=19 swipingToNext=true currentPage=18
+17:52:44.840 [INFO] PAN START rot=90 vert=true invert=false page=18/23
+17:52:44.874 [INFO] SWIPE offset=70 rot=90 vert=true extent=726 | cur=(0,70) pos=(0,-656) neg=(0,796) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:44.890 [INFO] SWIPE offset=108 rot=90 vert=true extent=726 | cur=(0,108) pos=(0,-618) neg=(0,834) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:44.924 [INFO] SWIPE offset=170 rot=90 vert=true extent=726 | cur=(0,170) pos=(0,-556) neg=(0,896) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:44.957 [INFO] SWIPE offset=233 rot=90 vert=true extent=726 | cur=(0,233) pos=(0,-493) neg=(0,959) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:44.974 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=19 swipingToNext=true currentPage=18
+17:52:44.986 [INFO] SWIPE offset=381 rot=90 vert=true extent=726 | cur=(0,381) pos=(0,-345) neg=(0,1107) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:44.992 [INFO] SWIPE offset=484 rot=90 vert=true extent=726 | cur=(0,484) pos=(0,-242) neg=(0,1210) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:45.007 [INFO] SWIPE offset=557 rot=90 vert=true extent=726 | cur=(0,557) pos=(0,-169) neg=(0,1283) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:45.024 [INFO] SWIPE offset=608 rot=90 vert=true extent=726 | cur=(0,608) pos=(0,-118) neg=(0,1334) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:45.057 [INFO] SWIPE offset=668 rot=90 vert=true extent=726 | cur=(0,668) pos=(0,-58) neg=(0,1394) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:45.107 [INFO] SWIPE offset=706 rot=90 vert=true extent=726 | cur=(0,706) pos=(0,-20) neg=(0,1432) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:52:45.224 [INFO] FINALIZE: previewIdx=19 previewIsTransition=false
+17:52:46.208 [INFO] PAN START rot=90 vert=true invert=false page=19/23
+17:52:46.292 [INFO] SWIPE offset=27 rot=90 vert=true extent=726 | cur=(0,27) pos=(0,-699) neg=(0,753) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:46.744 [INFO] COMPLETE: turnPage=false swipeToChapter=false previewIsTransition=false previewIdx=20 swipingToNext=true currentPage=19
+17:52:47.593 [INFO] PAN START rot=90 vert=true invert=false page=19/23
+17:52:47.676 [INFO] SWIPE offset=57 rot=90 vert=true extent=726 | cur=(0,57) pos=(0,-669) neg=(0,783) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:47.726 [INFO] SWIPE offset=112 rot=90 vert=true extent=726 | cur=(0,112) pos=(0,-614) neg=(0,838) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:47.732 [INFO] DRAW slideX=0 slideY=112 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:52:47.776 [INFO] SWIPE offset=159 rot=90 vert=true extent=726 | cur=(0,159) pos=(0,-567) neg=(0,885) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:47.826 [INFO] SWIPE offset=205 rot=90 vert=true extent=726 | cur=(0,205) pos=(0,-521) neg=(0,931) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:47.893 [INFO] SWIPE offset=259 rot=90 vert=true extent=726 | cur=(0,259) pos=(0,-467) neg=(0,985) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:47.943 [INFO] SWIPE offset=308 rot=90 vert=true extent=726 | cur=(0,308) pos=(0,-418) neg=(0,1034) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:47.977 [INFO] SWIPE offset=354 rot=90 vert=true extent=726 | cur=(0,354) pos=(0,-372) neg=(0,1080) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:48.010 [INFO] SWIPE offset=408 rot=90 vert=true extent=726 | cur=(0,408) pos=(0,-318) neg=(0,1134) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:48.027 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=20 swipingToNext=true currentPage=19
+17:52:48.035 [INFO] SWIPE offset=504 rot=90 vert=true extent=726 | cur=(0,504) pos=(0,-222) neg=(0,1230) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:48.048 [INFO] SWIPE offset=570 rot=90 vert=true extent=726 | cur=(0,570) pos=(0,-156) neg=(0,1296) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:48.061 [INFO] SWIPE offset=617 rot=90 vert=true extent=726 | cur=(0,617) pos=(0,-109) neg=(0,1343) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:48.093 [INFO] SWIPE offset=673 rot=90 vert=true extent=726 | cur=(0,673) pos=(0,-53) neg=(0,1399) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:48.143 [INFO] SWIPE offset=708 rot=90 vert=true extent=726 | cur=(0,708) pos=(0,-18) neg=(0,1434) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:52:48.260 [INFO] FINALIZE: previewIdx=20 previewIsTransition=false
+17:52:54.883 [INFO] PAN START rot=90 vert=true invert=false page=20/23
+17:52:54.934 [INFO] SWIPE offset=28 rot=90 vert=true extent=726 | cur=(0,28) pos=(0,-698) neg=(0,754) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:54.984 [INFO] SWIPE offset=54 rot=90 vert=true extent=726 | cur=(0,54) pos=(0,-672) neg=(0,780) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.084 [INFO] SWIPE offset=104 rot=90 vert=true extent=726 | cur=(0,104) pos=(0,-622) neg=(0,830) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.167 [INFO] SWIPE offset=160 rot=90 vert=true extent=726 | cur=(0,160) pos=(0,-566) neg=(0,886) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.251 [INFO] SWIPE offset=201 rot=90 vert=true extent=726 | cur=(0,201) pos=(0,-525) neg=(0,927) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.384 [INFO] SWIPE offset=253 rot=90 vert=true extent=726 | cur=(0,253) pos=(0,-473) neg=(0,979) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.401 [INFO] DRAW slideX=0 slideY=262 x=0 y=0 w=1280 h=726 rot=90 img=883x913
+17:52:55.451 [INFO] SWIPE offset=301 rot=90 vert=true extent=726 | cur=(0,301) pos=(0,-425) neg=(0,1027) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.501 [INFO] SWIPE offset=385 rot=90 vert=true extent=726 | cur=(0,385) pos=(0,-341) neg=(0,1111) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.517 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=21 swipingToNext=true currentPage=20
+17:52:55.523 [INFO] SWIPE offset=487 rot=90 vert=true extent=726 | cur=(0,487) pos=(0,-239) neg=(0,1213) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.534 [INFO] SWIPE offset=559 rot=90 vert=true extent=726 | cur=(0,559) pos=(0,-167) neg=(0,1285) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.551 [INFO] SWIPE offset=609 rot=90 vert=true extent=726 | cur=(0,609) pos=(0,-117) neg=(0,1335) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.584 [INFO] SWIPE offset=669 rot=90 vert=true extent=726 | cur=(0,669) pos=(0,-57) neg=(0,1395) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.634 [INFO] SWIPE offset=706 rot=90 vert=true extent=726 | cur=(0,706) pos=(0,-20) neg=(0,1432) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:52:55.751 [INFO] FINALIZE: previewIdx=21 previewIsTransition=false
+17:53:12.902 [INFO] PAN START rot=90 vert=true invert=false page=21/23
+17:53:12.990 [INFO] SWIPE offset=29 rot=90 vert=true extent=726 | cur=(0,29) pos=(0,-697) neg=(0,755) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:13.068 [INFO] SWIPE offset=54 rot=90 vert=true extent=726 | cur=(0,54) pos=(0,-672) neg=(0,780) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:13.619 [INFO] SWIPE offset=101 rot=90 vert=true extent=726 | cur=(0,101) pos=(0,-625) neg=(0,827) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:13.953 [INFO] DRAW slideX=0 slideY=832 x=0 y=0 w=1280 h=726 rot=90 img=883x913
+17:53:14.253 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=true previewIdx=22 swipingToNext=true currentPage=21
+17:53:14.264 [INFO] SWIPE offset=293 rot=90 vert=true extent=726 | cur=(0,293) pos=(0,-433) neg=(0,1019) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:14.278 [INFO] SWIPE offset=423 rot=90 vert=true extent=726 | cur=(0,423) pos=(0,-303) neg=(0,1149) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:14.286 [INFO] SWIPE offset=514 rot=90 vert=true extent=726 | cur=(0,514) pos=(0,-212) neg=(0,1240) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:14.303 [INFO] SWIPE offset=577 rot=90 vert=true extent=726 | cur=(0,577) pos=(0,-149) neg=(0,1303) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:14.319 [INFO] SWIPE offset=622 rot=90 vert=true extent=726 | cur=(0,622) pos=(0,-104) neg=(0,1348) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:14.336 [INFO] SWIPE offset=653 rot=90 vert=true extent=726 | cur=(0,653) pos=(0,-73) neg=(0,1379) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:14.386 [INFO] SWIPE offset=701 rot=90 vert=true extent=726 | cur=(0,701) pos=(0,-25) neg=(0,1427) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:14.503 [INFO] FINALIZE: previewIdx=22 previewIsTransition=true
+17:53:15.905 [INFO] TSWIPE START: page=22/23 url=__transition:next
+17:53:16.038 [INFO] SWIPE offset=30 rot=90 vert=true extent=726 | cur=(0,30) pos=(0,-696) neg=(0,756) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.105 [INFO] SWIPE offset=52 rot=90 vert=true extent=726 | cur=(0,52) pos=(0,-674) neg=(0,778) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.288 [INFO] SWIPE offset=103 rot=90 vert=true extent=726 | cur=(0,103) pos=(0,-623) neg=(0,829) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.422 [INFO] SWIPE offset=152 rot=90 vert=true extent=726 | cur=(0,152) pos=(0,-574) neg=(0,878) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.472 [INFO] SWIPE offset=218 rot=90 vert=true extent=726 | cur=(0,218) pos=(0,-508) neg=(0,944) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.505 [INFO] SWIPE offset=258 rot=90 vert=true extent=726 | cur=(0,258) pos=(0,-468) neg=(0,984) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.555 [INFO] SWIPE offset=308 rot=90 vert=true extent=726 | cur=(0,308) pos=(0,-418) neg=(0,1034) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.605 [INFO] SWIPE offset=361 rot=90 vert=true extent=726 | cur=(0,361) pos=(0,-365) neg=(0,1087) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.639 [INFO] TSWIPE END: rawDelta=280.5 distance=280.9 isSwipeAnim=true previewIdx=-1 swipeToChapter=true swipingToNext=true previewIsTransition=false
+17:53:16.645 [INFO] COMPLETE: turnPage=true swipeToChapter=true previewIsTransition=false previewIdx=-1 swipingToNext=true currentPage=22
+17:53:16.654 [INFO] COMPLETE: taking CHAPTER path, swipingToNext=true
+17:53:16.665 [INFO] SWIPE offset=480 rot=90 vert=true extent=726 | cur=(0,480) pos=(0,-246) neg=(0,1206) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.679 [INFO] SWIPE offset=554 rot=90 vert=true extent=726 | cur=(0,554) pos=(0,-172) neg=(0,1280) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.687 [INFO] SWIPE offset=605 rot=90 vert=true extent=726 | cur=(0,605) pos=(0,-121) neg=(0,1331) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.705 [INFO] SWIPE offset=667 rot=90 vert=true extent=726 | cur=(0,667) pos=(0,-59) neg=(0,1393) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.755 [INFO] SWIPE offset=706 rot=90 vert=true extent=726 | cur=(0,706) pos=(0,-20) neg=(0,1432) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:16.883 [INFO] NEXTCHAPTER: chapterPos=60/138 nextPreloaded=true
+17:53:17.013 [INFO] Preloading next chapter id=45872
+17:53:17.023 [INFO] Preloading prev chapter id=45874
+17:53:17.023 [INFO] GraphQL: Fetching pages for chapter id=45872
+17:53:17.036 [INFO] GraphQL: Fetching pages for chapter id=45874
+17:53:17.153 [INFO] Statistics: chapters read = 108
+17:53:17.164 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+17:53:17.193 [INFO] Settings saved successfully (3626 bytes)
+17:53:19.403 [INFO] GraphQL: Fetched 22 pages for chapter 45872
+17:53:19.406 [INFO] GraphQL: Fetched 21 pages for chapter 45874
+17:53:19.425 [INFO] Next chapter preloaded: 22 pages
+17:53:19.463 [INFO] Prev chapter preloaded: 21 pages
+17:53:28.817 [INFO] PREVCHAPTER: chapterPos=61/138 prevPreloaded=true
+17:53:28.832 [INFO] Preloading next chapter id=45873
+17:53:28.839 [INFO] GraphQL: Fetching pages for chapter id=45873
+17:53:28.839 [INFO] Preloading prev chapter id=45875
+17:53:28.862 [INFO] GraphQL: Fetching pages for chapter id=45875
+17:53:29.952 [INFO] PAN START rot=90 vert=true invert=false page=21/23
+17:53:29.991 [INFO] SWIPE offset=44 rot=90 vert=true extent=726 | cur=(0,44) pos=(0,-682) neg=(0,770) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:30.009 [INFO] SWIPE offset=87 rot=90 vert=true extent=726 | cur=(0,87) pos=(0,-639) neg=(0,813) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:30.057 [INFO] GraphQL: Fetched 22 pages for chapter 45873
+17:53:30.060 [INFO] GraphQL: Fetched 19 pages for chapter 45875
+17:53:30.238 [INFO] SWIPE offset=255 rot=90 vert=true extent=726 | cur=(0,255) pos=(0,-471) neg=(0,981) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:30.267 [INFO] Next chapter preloaded: 22 pages
+17:53:30.274 [INFO] Prev chapter preloaded: 19 pages
+17:53:30.870 [INFO] DRAW slideX=0 slideY=1007 x=0 y=0 w=1280 h=726 rot=90 img=883x913
+17:53:30.936 [INFO] SWIPE offset=249 rot=90 vert=true extent=726 | cur=(0,249) pos=(0,-477) neg=(0,975) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:31.053 [INFO] SWIPE offset=196 rot=90 vert=true extent=726 | cur=(0,196) pos=(0,-530) neg=(0,922) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:31.320 [INFO] SWIPE offset=150 rot=90 vert=true extent=726 | cur=(0,150) pos=(0,-576) neg=(0,876) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:31.537 [INFO] SWIPE offset=151 rot=90 vert=true extent=726 | cur=(0,151) pos=(0,-575) neg=(0,877) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:31.604 [INFO] SWIPE offset=217 rot=90 vert=true extent=726 | cur=(0,217) pos=(0,-509) neg=(0,943) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:31.654 [INFO] SWIPE offset=259 rot=90 vert=true extent=726 | cur=(0,259) pos=(0,-467) neg=(0,985) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:31.704 [INFO] SWIPE offset=303 rot=90 vert=true extent=726 | cur=(0,303) pos=(0,-423) neg=(0,1029) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:31.754 [INFO] SWIPE offset=350 rot=90 vert=true extent=726 | cur=(0,350) pos=(0,-376) neg=(0,1076) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:31.821 [INFO] SWIPE offset=401 rot=90 vert=true extent=726 | cur=(0,401) pos=(0,-325) neg=(0,1127) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:31.954 [INFO] SWIPE offset=457 rot=90 vert=true extent=726 | cur=(0,457) pos=(0,-269) neg=(0,1183) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:32.321 [INFO] SWIPE offset=500 rot=90 vert=true extent=726 | cur=(0,500) pos=(0,-226) neg=(0,1226) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:32.371 [INFO] DRAW slideX=0 slideY=1227 x=0 y=0 w=1280 h=726 rot=90 img=883x913
+17:53:32.471 [INFO] SWIPE offset=499 rot=90 vert=true extent=726 | cur=(0,499) pos=(0,-227) neg=(0,1225) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:32.822 [INFO] SWIPE offset=449 rot=90 vert=true extent=726 | cur=(0,449) pos=(0,-277) neg=(0,1175) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:33.322 [INFO] SWIPE offset=453 rot=90 vert=true extent=726 | cur=(0,453) pos=(0,-273) neg=(0,1179) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:33.739 [INFO] SWIPE offset=441 rot=90 vert=true extent=726 | cur=(0,441) pos=(0,-285) neg=(0,1167) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:33.789 [INFO] SWIPE offset=395 rot=90 vert=true extent=726 | cur=(0,395) pos=(0,-331) neg=(0,1121) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:33.839 [INFO] SWIPE offset=349 rot=90 vert=true extent=726 | cur=(0,349) pos=(0,-377) neg=(0,1075) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:33.873 [INFO] DRAW slideX=0 slideY=1037 x=0 y=0 w=1280 h=726 rot=90 img=883x913
+17:53:33.889 [INFO] SWIPE offset=297 rot=90 vert=true extent=726 | cur=(0,297) pos=(0,-429) neg=(0,1023) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:33.973 [INFO] SWIPE offset=249 rot=90 vert=true extent=726 | cur=(0,249) pos=(0,-477) neg=(0,975) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:34.090 [INFO] SWIPE offset=197 rot=90 vert=true extent=726 | cur=(0,197) pos=(0,-529) neg=(0,923) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:34.390 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=true previewIdx=22 swipingToNext=true currentPage=21
+17:53:34.402 [INFO] SWIPE offset=337 rot=90 vert=true extent=726 | cur=(0,337) pos=(0,-389) neg=(0,1063) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:34.413 [INFO] SWIPE offset=454 rot=90 vert=true extent=726 | cur=(0,454) pos=(0,-272) neg=(0,1180) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:34.424 [INFO] SWIPE offset=535 rot=90 vert=true extent=726 | cur=(0,535) pos=(0,-191) neg=(0,1261) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:34.440 [INFO] SWIPE offset=593 rot=90 vert=true extent=726 | cur=(0,593) pos=(0,-133) neg=(0,1319) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:34.456 [INFO] SWIPE offset=633 rot=90 vert=true extent=726 | cur=(0,633) pos=(0,-93) neg=(0,1359) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:34.473 [INFO] SWIPE offset=661 rot=90 vert=true extent=726 | cur=(0,661) pos=(0,-65) neg=(0,1387) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:34.523 [INFO] SWIPE offset=704 rot=90 vert=true extent=726 | cur=(0,704) pos=(0,-22) neg=(0,1430) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:53:34.640 [INFO] FINALIZE: previewIdx=22 previewIsTransition=true
+17:53:35.174 [INFO] TSWIPE START: page=22/23 url=__transition:next
+17:53:35.257 [INFO] SWIPE offset=32 rot=90 vert=true extent=726 | cur=(0,32) pos=(0,-694) neg=(0,758) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:35.307 [INFO] SWIPE offset=53 rot=90 vert=true extent=726 | cur=(0,53) pos=(0,-673) neg=(0,779) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:35.441 [INFO] SWIPE offset=103 rot=90 vert=true extent=726 | cur=(0,103) pos=(0,-623) neg=(0,829) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:35.574 [INFO] SWIPE offset=154 rot=90 vert=true extent=726 | cur=(0,154) pos=(0,-572) neg=(0,880) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:35.691 [INFO] SWIPE offset=211 rot=90 vert=true extent=726 | cur=(0,211) pos=(0,-515) neg=(0,937) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:36.013 [INFO] SWIPE offset=318 rot=90 vert=true extent=726 | cur=(0,318) pos=(0,-408) neg=(0,1044) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:36.058 [INFO] TSWIPE END: rawDelta=261.1 distance=261.8 isSwipeAnim=true previewIdx=-1 swipeToChapter=true swipingToNext=true previewIsTransition=false
+17:53:36.065 [INFO] COMPLETE: turnPage=true swipeToChapter=true previewIsTransition=false previewIdx=-1 swipingToNext=true currentPage=22
+17:53:36.075 [INFO] COMPLETE: taking CHAPTER path, swipingToNext=true
+17:53:36.088 [INFO] SWIPE offset=462 rot=90 vert=true extent=726 | cur=(0,462) pos=(0,-264) neg=(0,1188) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:36.216 [INFO] SWIPE offset=541 rot=90 vert=true extent=726 | cur=(0,541) pos=(0,-185) neg=(0,1267) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:36.229 [INFO] SWIPE offset=597 rot=90 vert=true extent=726 | cur=(0,597) pos=(0,-129) neg=(0,1323) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:36.243 [INFO] SWIPE offset=635 rot=90 vert=true extent=726 | cur=(0,635) pos=(0,-91) neg=(0,1361) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:36.252 [INFO] SWIPE offset=663 rot=90 vert=true extent=726 | cur=(0,663) pos=(0,-63) neg=(0,1389) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:36.291 [INFO] SWIPE offset=704 rot=90 vert=true extent=726 | cur=(0,704) pos=(0,-22) neg=(0,1430) | posIdx=-1 negIdx=21 posIsTrans=false negIsTrans=false
+17:53:36.409 [INFO] NEXTCHAPTER: chapterPos=60/138 nextPreloaded=true
+17:53:36.543 [INFO] Preloading next chapter id=45872
+17:53:36.556 [INFO] GraphQL: Fetching pages for chapter id=45872
+17:53:36.556 [INFO] Preloading prev chapter id=45874
+17:53:36.576 [INFO] GraphQL: Fetching pages for chapter id=45874
+17:53:36.577 [INFO] Statistics: chapters read = 109
+17:53:36.598 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+17:53:36.626 [INFO] Settings saved successfully (3626 bytes)
+17:53:38.244 [INFO] PAN START rot=90 vert=true invert=false page=1/24
+17:53:38.277 [INFO] SWIPE offset=38 rot=90 vert=true extent=726 | cur=(0,38) pos=(0,-688) neg=(0,764) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.294 [INFO] SWIPE offset=76 rot=90 vert=true extent=726 | cur=(0,76) pos=(0,-650) neg=(0,802) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.310 [INFO] SWIPE offset=118 rot=90 vert=true extent=726 | cur=(0,118) pos=(0,-608) neg=(0,844) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.327 [INFO] SWIPE offset=154 rot=90 vert=true extent=726 | cur=(0,154) pos=(0,-572) neg=(0,880) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.360 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=2 swipingToNext=true currentPage=1
+17:53:38.370 [INFO] SWIPE offset=340 rot=90 vert=true extent=726 | cur=(0,340) pos=(0,-386) neg=(0,1066) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.385 [INFO] SWIPE offset=456 rot=90 vert=true extent=726 | cur=(0,456) pos=(0,-270) neg=(0,1182) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.394 [INFO] SWIPE offset=537 rot=90 vert=true extent=726 | cur=(0,537) pos=(0,-189) neg=(0,1263) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.410 [INFO] SWIPE offset=594 rot=90 vert=true extent=726 | cur=(0,594) pos=(0,-132) neg=(0,1320) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.427 [INFO] SWIPE offset=633 rot=90 vert=true extent=726 | cur=(0,633) pos=(0,-93) neg=(0,1359) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.444 [INFO] SWIPE offset=661 rot=90 vert=true extent=726 | cur=(0,661) pos=(0,-65) neg=(0,1387) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.494 [INFO] SWIPE offset=704 rot=90 vert=true extent=726 | cur=(0,704) pos=(0,-22) neg=(0,1430) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:38.578 [INFO] DRAW slideX=0 slideY=-4 x=0 y=0 w=1280 h=726 rot=90 img=628x918
+17:53:38.610 [INFO] FINALIZE: previewIdx=2 previewIsTransition=false
+17:53:39.056 [INFO] GraphQL: Fetched 22 pages for chapter 45872
+17:53:39.058 [INFO] GraphQL: Fetched 21 pages for chapter 45874
+17:53:39.078 [INFO] Next chapter preloaded: 22 pages
+17:53:39.094 [INFO] Prev chapter preloaded: 21 pages
+17:53:39.461 [INFO] PAN START rot=90 vert=true invert=false page=2/24
+17:53:39.478 [INFO] SWIPE offset=-33 rot=90 vert=true extent=726 | cur=(0,-33) pos=(0,-759) neg=(0,693) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.495 [INFO] SWIPE offset=-61 rot=90 vert=true extent=726 | cur=(0,-61) pos=(0,-787) neg=(0,665) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.528 [INFO] SWIPE offset=-118 rot=90 vert=true extent=726 | cur=(0,-118) pos=(0,-844) neg=(0,608) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.561 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=1 swipingToNext=false currentPage=2
+17:53:39.568 [INFO] SWIPE offset=-313 rot=90 vert=true extent=726 | cur=(0,-313) pos=(0,-1039) neg=(0,413) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.581 [INFO] SWIPE offset=-437 rot=90 vert=true extent=726 | cur=(0,-437) pos=(0,-1163) neg=(0,289) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.595 [INFO] SWIPE offset=-524 rot=90 vert=true extent=726 | cur=(0,-524) pos=(0,-1250) neg=(0,202) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.611 [INFO] SWIPE offset=-584 rot=90 vert=true extent=726 | cur=(0,-584) pos=(0,-1310) neg=(0,142) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.628 [INFO] SWIPE offset=-627 rot=90 vert=true extent=726 | cur=(0,-627) pos=(0,-1353) neg=(0,99) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.645 [INFO] SWIPE offset=-657 rot=90 vert=true extent=726 | cur=(0,-657) pos=(0,-1383) neg=(0,69) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.695 [INFO] SWIPE offset=-702 rot=90 vert=true extent=726 | cur=(0,-702) pos=(0,-1428) neg=(0,24) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+17:53:39.812 [INFO] FINALIZE: previewIdx=1 previewIsTransition=false
+17:53:43.849 [INFO] PAN START rot=90 vert=true invert=false page=1/24
+17:53:43.899 [INFO] SWIPE offset=42 rot=90 vert=true extent=726 | cur=(0,42) pos=(0,-684) neg=(0,768) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:43.916 [INFO] SWIPE offset=57 rot=90 vert=true extent=726 | cur=(0,57) pos=(0,-669) neg=(0,783) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:43.983 [INFO] SWIPE offset=105 rot=90 vert=true extent=726 | cur=(0,105) pos=(0,-621) neg=(0,831) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.116 [INFO] SWIPE offset=151 rot=90 vert=true extent=726 | cur=(0,151) pos=(0,-575) neg=(0,877) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.250 [INFO] SWIPE offset=208 rot=90 vert=true extent=726 | cur=(0,208) pos=(0,-518) neg=(0,934) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.283 [INFO] SWIPE offset=257 rot=90 vert=true extent=726 | cur=(0,257) pos=(0,-469) neg=(0,983) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.316 [INFO] SWIPE offset=309 rot=90 vert=true extent=726 | cur=(0,309) pos=(0,-417) neg=(0,1035) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.333 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=2 swipingToNext=true currentPage=1
+17:53:44.342 [INFO] SWIPE offset=434 rot=90 vert=true extent=726 | cur=(0,434) pos=(0,-292) neg=(0,1160) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.356 [INFO] SWIPE offset=522 rot=90 vert=true extent=726 | cur=(0,522) pos=(0,-204) neg=(0,1248) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.366 [INFO] SWIPE offset=583 rot=90 vert=true extent=726 | cur=(0,583) pos=(0,-143) neg=(0,1309) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.383 [INFO] SWIPE offset=626 rot=90 vert=true extent=726 | cur=(0,626) pos=(0,-100) neg=(0,1352) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.400 [INFO] SWIPE offset=656 rot=90 vert=true extent=726 | cur=(0,656) pos=(0,-70) neg=(0,1382) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.450 [INFO] SWIPE offset=702 rot=90 vert=true extent=726 | cur=(0,702) pos=(0,-24) neg=(0,1428) | posIdx=2 negIdx=0 posIsTrans=false negIsTrans=true
+17:53:44.566 [INFO] FINALIZE: previewIdx=2 previewIsTransition=false
+17:53:47.720 [INFO] ReaderActivity: willDisappear, restored screen dimming
+17:53:47.739 [INFO] MangaDetailView: Applied reader result - ch=45873 page=1 read=false
+17:54:00.148 [INFO] ReaderActivity: manga=405, chapter=45874, startPage=7
+17:54:00.396 [INFO] ReaderActivity: content available for manga 405
+17:54:00.397 [INFO] ReaderActivity: global defaults - readingMode=1, pageScaleMode=0, rotation=90
+17:54:00.398 [INFO] ReaderActivity: local cache has 11 per-manga settings
+17:54:00.401 [INFO] ReaderActivity: fetching server meta for manga 405...
+17:54:00.431 [INFO] ReaderActivity: server returned 0 meta entries
+17:54:00.438 [INFO] ReaderActivity: no server settings, checking local cache for manga 405
+17:54:00.447 [INFO] ReaderActivity: NO local settings found, using global defaults
+17:54:00.476 [INFO] ReaderActivity: keepScreenOn enabled, disabled screen dimming
+17:54:00.491 [INFO] ReaderActivity: Fetching chapter 45874 from server
+17:54:00.501 [INFO] GraphQL: Fetching pages for chapter id=45874
+17:54:01.638 [INFO] GraphQL: Fetched 21 pages for chapter 45874
+17:54:01.801 [INFO] Loaded 21 pages
+17:54:01.809 [INFO] loadPages: startPage=8 → page 8/23 url=http://192.168.1.28:4568/api/v1/manga/405/chapter/61/page/7
+17:54:01.824 [INFO] Preloading next chapter id=45873
+17:54:01.834 [INFO] GraphQL: Fetching pages for chapter id=45873
+17:54:01.834 [INFO] Preloading prev chapter id=45875
+17:54:01.857 [INFO] GraphQL: Fetching pages for chapter id=45875
+17:54:04.426 [INFO] GraphQL: Fetched 22 pages for chapter 45873
+17:54:04.428 [INFO] GraphQL: Fetched 19 pages for chapter 45875
+17:54:04.436 [INFO] Next chapter preloaded: 22 pages
+17:54:04.453 [INFO] Prev chapter preloaded: 19 pages
+17:54:06.355 [INFO] PAN START rot=90 vert=true invert=false page=8/23
+17:54:06.405 [INFO] SWIPE offset=33 rot=90 vert=true extent=726 | cur=(0,33) pos=(0,-693) neg=(0,759) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.422 [INFO] SWIPE offset=53 rot=90 vert=true extent=726 | cur=(0,53) pos=(0,-673) neg=(0,779) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.472 [INFO] SWIPE offset=111 rot=90 vert=true extent=726 | cur=(0,111) pos=(0,-615) neg=(0,837) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.505 [INFO] SWIPE offset=170 rot=90 vert=true extent=726 | cur=(0,170) pos=(0,-556) neg=(0,896) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.522 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=9 swipingToNext=true currentPage=8
+17:54:06.528 [INFO] SWIPE offset=337 rot=90 vert=true extent=726 | cur=(0,337) pos=(0,-389) neg=(0,1063) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.538 [INFO] SWIPE offset=454 rot=90 vert=true extent=726 | cur=(0,454) pos=(0,-272) neg=(0,1180) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.555 [INFO] SWIPE offset=535 rot=90 vert=true extent=726 | cur=(0,535) pos=(0,-191) neg=(0,1261) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.572 [INFO] SWIPE offset=593 rot=90 vert=true extent=726 | cur=(0,593) pos=(0,-133) neg=(0,1319) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.588 [INFO] SWIPE offset=633 rot=90 vert=true extent=726 | cur=(0,633) pos=(0,-93) neg=(0,1359) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.605 [INFO] SWIPE offset=661 rot=90 vert=true extent=726 | cur=(0,661) pos=(0,-65) neg=(0,1387) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.615 [INFO] DRAW slideX=0 slideY=-65 x=0 y=0 w=1280 h=726 rot=90 img=0x0
+17:54:06.655 [INFO] SWIPE offset=704 rot=90 vert=true extent=726 | cur=(0,704) pos=(0,-22) neg=(0,1430) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+17:54:06.772 [INFO] FINALIZE: previewIdx=9 previewIsTransition=false
+17:54:08.924 [INFO] PAN START rot=90 vert=true invert=false page=9/23
+17:54:08.958 [INFO] SWIPE offset=29 rot=90 vert=true extent=726 | cur=(0,29) pos=(0,-697) neg=(0,755) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:08.976 [INFO] SWIPE offset=51 rot=90 vert=true extent=726 | cur=(0,51) pos=(0,-675) neg=(0,777) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:08.993 [INFO] SWIPE offset=101 rot=90 vert=true extent=726 | cur=(0,101) pos=(0,-625) neg=(0,827) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:09.058 [INFO] SWIPE offset=158 rot=90 vert=true extent=726 | cur=(0,158) pos=(0,-568) neg=(0,884) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:09.108 [INFO] SWIPE offset=222 rot=90 vert=true extent=726 | cur=(0,222) pos=(0,-504) neg=(0,948) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:09.141 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=10 swipingToNext=true currentPage=9
+17:54:09.147 [INFO] SWIPE offset=387 rot=90 vert=true extent=726 | cur=(0,387) pos=(0,-339) neg=(0,1113) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:09.160 [INFO] SWIPE offset=489 rot=90 vert=true extent=726 | cur=(0,489) pos=(0,-237) neg=(0,1215) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:09.174 [INFO] SWIPE offset=560 rot=90 vert=true extent=726 | cur=(0,560) pos=(0,-166) neg=(0,1286) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:09.191 [INFO] SWIPE offset=610 rot=90 vert=true extent=726 | cur=(0,610) pos=(0,-116) neg=(0,1336) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:09.224 [INFO] SWIPE offset=669 rot=90 vert=true extent=726 | cur=(0,669) pos=(0,-57) neg=(0,1395) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:09.275 [INFO] SWIPE offset=706 rot=90 vert=true extent=726 | cur=(0,706) pos=(0,-20) neg=(0,1432) | posIdx=10 negIdx=8 posIsTrans=false negIsTrans=false
+17:54:09.758 [INFO] FINALIZE: previewIdx=10 previewIsTransition=false
+17:54:10.695 [INFO] PAN START rot=90 vert=true invert=false page=10/23
+17:54:10.712 [INFO] SWIPE offset=28 rot=90 vert=true extent=726 | cur=(0,28) pos=(0,-698) neg=(0,754) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:10.759 [INFO] COMPLETE: turnPage=false swipeToChapter=false previewIsTransition=false previewIdx=11 swipingToNext=true currentPage=10
+17:54:11.227 [INFO] PAN START rot=90 vert=true invert=false page=10/23
+17:54:11.260 [INFO] SWIPE offset=55 rot=90 vert=true extent=726 | cur=(0,55) pos=(0,-671) neg=(0,781) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.277 [INFO] SWIPE offset=103 rot=90 vert=true extent=726 | cur=(0,103) pos=(0,-623) neg=(0,829) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.310 [INFO] SWIPE offset=191 rot=90 vert=true extent=726 | cur=(0,191) pos=(0,-535) neg=(0,917) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.327 [INFO] SWIPE offset=222 rot=90 vert=true extent=726 | cur=(0,222) pos=(0,-504) neg=(0,948) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.344 [INFO] SWIPE offset=254 rot=90 vert=true extent=726 | cur=(0,254) pos=(0,-472) neg=(0,980) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.362 [INFO] SWIPE offset=334 rot=90 vert=true extent=726 | cur=(0,334) pos=(0,-392) neg=(0,1060) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.393 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=11 swipingToNext=true currentPage=10
+17:54:11.400 [INFO] SWIPE offset=452 rot=90 vert=true extent=726 | cur=(0,452) pos=(0,-274) neg=(0,1178) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.412 [INFO] SWIPE offset=534 rot=90 vert=true extent=726 | cur=(0,534) pos=(0,-192) neg=(0,1260) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.427 [INFO] SWIPE offset=592 rot=90 vert=true extent=726 | cur=(0,592) pos=(0,-134) neg=(0,1318) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.443 [INFO] SWIPE offset=632 rot=90 vert=true extent=726 | cur=(0,632) pos=(0,-94) neg=(0,1358) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.460 [INFO] SWIPE offset=660 rot=90 vert=true extent=726 | cur=(0,660) pos=(0,-66) neg=(0,1386) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.477 [INFO] DRAW slideX=0 slideY=-46 x=0 y=0 w=1280 h=726 rot=90 img=0x0
+17:54:11.510 [INFO] SWIPE offset=703 rot=90 vert=true extent=726 | cur=(0,703) pos=(0,-23) neg=(0,1429) | posIdx=11 negIdx=9 posIsTrans=false negIsTrans=false
+17:54:11.627 [INFO] FINALIZE: previewIdx=11 previewIsTransition=false
+17:54:13.345 [INFO] PAN START rot=90 vert=true invert=false page=11/23
+17:54:13.362 [INFO] SWIPE offset=59 rot=90 vert=true extent=726 | cur=(0,59) pos=(0,-667) neg=(0,785) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.379 [INFO] SWIPE offset=133 rot=90 vert=true extent=726 | cur=(0,133) pos=(0,-593) neg=(0,859) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.395 [INFO] SWIPE offset=193 rot=90 vert=true extent=726 | cur=(0,193) pos=(0,-533) neg=(0,919) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.412 [INFO] SWIPE offset=248 rot=90 vert=true extent=726 | cur=(0,248) pos=(0,-478) neg=(0,974) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.429 [INFO] SWIPE offset=267 rot=90 vert=true extent=726 | cur=(0,267) pos=(0,-459) neg=(0,993) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.445 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=12 swipingToNext=true currentPage=11
+17:54:13.455 [INFO] SWIPE offset=404 rot=90 vert=true extent=726 | cur=(0,404) pos=(0,-322) neg=(0,1130) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.462 [INFO] SWIPE offset=501 rot=90 vert=true extent=726 | cur=(0,501) pos=(0,-225) neg=(0,1227) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.479 [INFO] SWIPE offset=568 rot=90 vert=true extent=726 | cur=(0,568) pos=(0,-158) neg=(0,1294) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.495 [INFO] SWIPE offset=616 rot=90 vert=true extent=726 | cur=(0,616) pos=(0,-110) neg=(0,1342) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.529 [INFO] SWIPE offset=672 rot=90 vert=true extent=726 | cur=(0,672) pos=(0,-54) neg=(0,1398) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.579 [INFO] SWIPE offset=707 rot=90 vert=true extent=726 | cur=(0,707) pos=(0,-19) neg=(0,1433) | posIdx=12 negIdx=10 posIsTrans=false negIsTrans=false
+17:54:13.696 [INFO] FINALIZE: previewIdx=12 previewIsTransition=false
+17:54:14.013 [INFO] PAN START rot=90 vert=true invert=false page=12/23
+17:54:14.046 [INFO] SWIPE offset=64 rot=90 vert=true extent=726 | cur=(0,64) pos=(0,-662) neg=(0,790) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:54:14.063 [INFO] SWIPE offset=110 rot=90 vert=true extent=726 | cur=(0,110) pos=(0,-616) neg=(0,836) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:54:14.096 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=13 swipingToNext=true currentPage=12
+17:54:14.102 [INFO] SWIPE offset=321 rot=90 vert=true extent=726 | cur=(0,321) pos=(0,-405) neg=(0,1047) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:54:14.113 [INFO] SWIPE offset=443 rot=90 vert=true extent=726 | cur=(0,443) pos=(0,-283) neg=(0,1169) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:54:14.129 [INFO] SWIPE offset=528 rot=90 vert=true extent=726 | cur=(0,528) pos=(0,-198) neg=(0,1254) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:54:14.146 [INFO] SWIPE offset=587 rot=90 vert=true extent=726 | cur=(0,587) pos=(0,-139) neg=(0,1313) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:54:14.163 [INFO] SWIPE offset=629 rot=90 vert=true extent=726 | cur=(0,629) pos=(0,-97) neg=(0,1355) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:54:14.179 [INFO] SWIPE offset=658 rot=90 vert=true extent=726 | cur=(0,658) pos=(0,-68) neg=(0,1384) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:54:14.229 [INFO] SWIPE offset=703 rot=90 vert=true extent=726 | cur=(0,703) pos=(0,-23) neg=(0,1429) | posIdx=13 negIdx=11 posIsTrans=false negIsTrans=false
+17:54:14.346 [INFO] FINALIZE: previewIdx=13 previewIsTransition=false
+17:54:14.430 [INFO] NEXTPAGE: currentPage=13/23 url=http://192.168.1.28:4568/api/v1/manga/405/chapter/61/page/12
+17:54:14.436 [INFO] NEXTPAGE: advancing to page 14
+17:54:14.680 [INFO] PAN START rot=90 vert=true invert=false page=14/23
+17:54:14.697 [INFO] SWIPE offset=36 rot=90 vert=true extent=726 | cur=(0,36) pos=(0,-690) neg=(0,762) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.713 [INFO] SWIPE offset=87 rot=90 vert=true extent=726 | cur=(0,87) pos=(0,-639) neg=(0,813) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.730 [INFO] SWIPE offset=128 rot=90 vert=true extent=726 | cur=(0,128) pos=(0,-598) neg=(0,854) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.747 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=15 swipingToNext=true currentPage=14
+17:54:14.756 [INFO] SWIPE offset=308 rot=90 vert=true extent=726 | cur=(0,308) pos=(0,-418) neg=(0,1034) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.769 [INFO] SWIPE offset=433 rot=90 vert=true extent=726 | cur=(0,433) pos=(0,-293) neg=(0,1159) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.780 [INFO] SWIPE offset=521 rot=90 vert=true extent=726 | cur=(0,521) pos=(0,-205) neg=(0,1247) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.797 [INFO] SWIPE offset=583 rot=90 vert=true extent=726 | cur=(0,583) pos=(0,-143) neg=(0,1309) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.813 [INFO] SWIPE offset=626 rot=90 vert=true extent=726 | cur=(0,626) pos=(0,-100) neg=(0,1352) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.830 [INFO] SWIPE offset=656 rot=90 vert=true extent=726 | cur=(0,656) pos=(0,-70) neg=(0,1382) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.880 [INFO] SWIPE offset=702 rot=90 vert=true extent=726 | cur=(0,702) pos=(0,-24) neg=(0,1428) | posIdx=15 negIdx=13 posIsTrans=false negIsTrans=false
+17:54:14.914 [INFO] DRAW slideX=0 slideY=-12 x=0 y=0 w=1280 h=726 rot=90 img=0x0
+17:54:14.997 [INFO] FINALIZE: previewIdx=15 previewIsTransition=false
+17:54:15.031 [INFO] NEXTPAGE: currentPage=15/23 url=http://192.168.1.28:4568/api/v1/manga/405/chapter/61/page/14
+17:54:15.042 [INFO] NEXTPAGE: advancing to page 16
+17:54:15.414 [INFO] PAN START rot=90 vert=true invert=false page=16/23
+17:54:15.431 [INFO] SWIPE offset=76 rot=90 vert=true extent=726 | cur=(0,76) pos=(0,-650) neg=(0,802) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:54:15.448 [INFO] SWIPE offset=160 rot=90 vert=true extent=726 | cur=(0,160) pos=(0,-566) neg=(0,886) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:54:15.481 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=17 swipingToNext=true currentPage=16
+17:54:15.487 [INFO] SWIPE offset=356 rot=90 vert=true extent=726 | cur=(0,356) pos=(0,-370) neg=(0,1082) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:54:15.498 [INFO] SWIPE offset=467 rot=90 vert=true extent=726 | cur=(0,467) pos=(0,-259) neg=(0,1193) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:54:15.514 [INFO] SWIPE offset=545 rot=90 vert=true extent=726 | cur=(0,545) pos=(0,-181) neg=(0,1271) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:54:15.531 [INFO] SWIPE offset=599 rot=90 vert=true extent=726 | cur=(0,599) pos=(0,-127) neg=(0,1325) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:54:15.547 [INFO] SWIPE offset=637 rot=90 vert=true extent=726 | cur=(0,637) pos=(0,-89) neg=(0,1363) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:54:15.564 [INFO] SWIPE offset=664 rot=90 vert=true extent=726 | cur=(0,664) pos=(0,-62) neg=(0,1390) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:54:15.614 [INFO] SWIPE offset=705 rot=90 vert=true extent=726 | cur=(0,705) pos=(0,-21) neg=(0,1431) | posIdx=17 negIdx=15 posIsTrans=false negIsTrans=false
+17:54:15.731 [INFO] FINALIZE: previewIdx=17 previewIsTransition=false
+17:54:49.848 [INFO] PAN START rot=90 vert=true invert=false page=17/23
+17:54:49.882 [INFO] SWIPE offset=53 rot=90 vert=true extent=726 | cur=(0,53) pos=(0,-673) neg=(0,779) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:49.900 [INFO] SWIPE offset=131 rot=90 vert=true extent=726 | cur=(0,131) pos=(0,-595) neg=(0,857) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:49.932 [INFO] SWIPE offset=175 rot=90 vert=true extent=726 | cur=(0,175) pos=(0,-551) neg=(0,901) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:49.949 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=18 swipingToNext=true currentPage=17
+17:54:49.958 [INFO] SWIPE offset=340 rot=90 vert=true extent=726 | cur=(0,340) pos=(0,-386) neg=(0,1066) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:49.974 [INFO] SWIPE offset=456 rot=90 vert=true extent=726 | cur=(0,456) pos=(0,-270) neg=(0,1182) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:49.983 [INFO] SWIPE offset=537 rot=90 vert=true extent=726 | cur=(0,537) pos=(0,-189) neg=(0,1263) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:49.998 [INFO] SWIPE offset=594 rot=90 vert=true extent=726 | cur=(0,594) pos=(0,-132) neg=(0,1320) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:50.015 [INFO] SWIPE offset=633 rot=90 vert=true extent=726 | cur=(0,633) pos=(0,-93) neg=(0,1359) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:50.032 [INFO] SWIPE offset=661 rot=90 vert=true extent=726 | cur=(0,661) pos=(0,-65) neg=(0,1387) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:50.082 [INFO] SWIPE offset=704 rot=90 vert=true extent=726 | cur=(0,704) pos=(0,-22) neg=(0,1430) | posIdx=18 negIdx=16 posIsTrans=false negIsTrans=false
+17:54:50.199 [INFO] FINALIZE: previewIdx=18 previewIsTransition=false
+17:54:51.650 [INFO] PAN START rot=90 vert=true invert=false page=18/23
+17:54:51.684 [INFO] SWIPE offset=44 rot=90 vert=true extent=726 | cur=(0,44) pos=(0,-682) neg=(0,770) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.700 [INFO] SWIPE offset=77 rot=90 vert=true extent=726 | cur=(0,77) pos=(0,-649) neg=(0,803) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.717 [INFO] SWIPE offset=119 rot=90 vert=true extent=726 | cur=(0,119) pos=(0,-607) neg=(0,845) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.734 [INFO] SWIPE offset=169 rot=90 vert=true extent=726 | cur=(0,169) pos=(0,-557) neg=(0,895) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.750 [INFO] SWIPE offset=216 rot=90 vert=true extent=726 | cur=(0,216) pos=(0,-510) neg=(0,942) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.767 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=19 swipingToNext=true currentPage=18
+17:54:51.779 [INFO] SWIPE offset=369 rot=90 vert=true extent=726 | cur=(0,369) pos=(0,-357) neg=(0,1095) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.789 [INFO] SWIPE offset=476 rot=90 vert=true extent=726 | cur=(0,476) pos=(0,-250) neg=(0,1202) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.800 [INFO] SWIPE offset=551 rot=90 vert=true extent=726 | cur=(0,551) pos=(0,-175) neg=(0,1277) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.817 [INFO] SWIPE offset=603 rot=90 vert=true extent=726 | cur=(0,603) pos=(0,-123) neg=(0,1329) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.850 [INFO] SWIPE offset=666 rot=90 vert=true extent=726 | cur=(0,666) pos=(0,-60) neg=(0,1392) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.900 [INFO] SWIPE offset=705 rot=90 vert=true extent=726 | cur=(0,705) pos=(0,-21) neg=(0,1431) | posIdx=19 negIdx=17 posIsTrans=false negIsTrans=false
+17:54:51.984 [INFO] DRAW slideX=0 slideY=-3 x=0 y=0 w=1280 h=726 rot=90 img=0x0
+17:54:52.017 [INFO] FINALIZE: previewIdx=19 previewIsTransition=false
+17:54:53.136 [INFO] PAN START rot=90 vert=true invert=false page=19/23
+17:54:53.169 [INFO] SWIPE offset=43 rot=90 vert=true extent=726 | cur=(0,43) pos=(0,-683) neg=(0,769) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.185 [INFO] SWIPE offset=77 rot=90 vert=true extent=726 | cur=(0,77) pos=(0,-649) neg=(0,803) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.202 [INFO] SWIPE offset=123 rot=90 vert=true extent=726 | cur=(0,123) pos=(0,-603) neg=(0,849) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.219 [INFO] SWIPE offset=170 rot=90 vert=true extent=726 | cur=(0,170) pos=(0,-556) neg=(0,896) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.235 [INFO] SWIPE offset=201 rot=90 vert=true extent=726 | cur=(0,201) pos=(0,-525) neg=(0,927) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.252 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=20 swipingToNext=true currentPage=19
+17:54:53.260 [INFO] SWIPE offset=358 rot=90 vert=true extent=726 | cur=(0,358) pos=(0,-368) neg=(0,1084) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.272 [INFO] SWIPE offset=469 rot=90 vert=true extent=726 | cur=(0,469) pos=(0,-257) neg=(0,1195) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.285 [INFO] SWIPE offset=546 rot=90 vert=true extent=726 | cur=(0,546) pos=(0,-180) neg=(0,1272) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.302 [INFO] SWIPE offset=600 rot=90 vert=true extent=726 | cur=(0,600) pos=(0,-126) neg=(0,1326) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.318 [INFO] SWIPE offset=638 rot=90 vert=true extent=726 | cur=(0,638) pos=(0,-88) neg=(0,1364) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.335 [INFO] SWIPE offset=664 rot=90 vert=true extent=726 | cur=(0,664) pos=(0,-62) neg=(0,1390) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.385 [INFO] SWIPE offset=705 rot=90 vert=true extent=726 | cur=(0,705) pos=(0,-21) neg=(0,1431) | posIdx=20 negIdx=18 posIsTrans=false negIsTrans=false
+17:54:53.502 [INFO] FINALIZE: previewIdx=20 previewIsTransition=false
+17:54:59.375 [INFO] PAN START rot=90 vert=true invert=false page=20/23
+17:54:59.441 [INFO] SWIPE offset=30 rot=90 vert=true extent=726 | cur=(0,30) pos=(0,-696) neg=(0,756) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.475 [INFO] SWIPE offset=56 rot=90 vert=true extent=726 | cur=(0,56) pos=(0,-670) neg=(0,782) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.525 [INFO] SWIPE offset=113 rot=90 vert=true extent=726 | cur=(0,113) pos=(0,-613) neg=(0,839) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.575 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=21 swipingToNext=true currentPage=20
+17:54:59.587 [INFO] SWIPE offset=320 rot=90 vert=true extent=726 | cur=(0,320) pos=(0,-406) neg=(0,1046) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.599 [INFO] SWIPE offset=441 rot=90 vert=true extent=726 | cur=(0,441) pos=(0,-285) neg=(0,1167) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.610 [INFO] SWIPE offset=527 rot=90 vert=true extent=726 | cur=(0,527) pos=(0,-199) neg=(0,1253) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.625 [INFO] SWIPE offset=587 rot=90 vert=true extent=726 | cur=(0,587) pos=(0,-139) neg=(0,1313) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.641 [INFO] SWIPE offset=628 rot=90 vert=true extent=726 | cur=(0,628) pos=(0,-98) neg=(0,1354) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.658 [INFO] SWIPE offset=658 rot=90 vert=true extent=726 | cur=(0,658) pos=(0,-68) neg=(0,1384) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.708 [INFO] SWIPE offset=703 rot=90 vert=true extent=726 | cur=(0,703) pos=(0,-23) neg=(0,1429) | posIdx=21 negIdx=19 posIsTrans=false negIsTrans=false
+17:54:59.825 [INFO] FINALIZE: previewIdx=21 previewIsTransition=false
+17:55:00.409 [INFO] PAN START rot=90 vert=true invert=false page=21/23
+17:55:00.497 [INFO] SWIPE offset=29 rot=90 vert=true extent=726 | cur=(0,29) pos=(0,-697) neg=(0,755) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:55:00.559 [INFO] SWIPE offset=52 rot=90 vert=true extent=726 | cur=(0,52) pos=(0,-674) neg=(0,778) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:55:00.876 [INFO] DRAW slideX=0 slideY=92 x=0 y=0 w=1280 h=726 rot=90 img=1125x1600
+17:55:01.093 [INFO] COMPLETE: turnPage=false swipeToChapter=false previewIsTransition=true previewIdx=22 swipingToNext=true currentPage=21
+17:55:01.110 [INFO] SWIPE offset=48 rot=90 vert=true extent=726 | cur=(0,48) pos=(0,-678) neg=(0,774) | posIdx=22 negIdx=20 posIsTrans=true negIsTrans=false
+17:55:01.260 [INFO] RESET: wasTransitionPreview=true currentPage=21 isTransition=false
+17:55:04.143 [INFO] ImageLoader: Got 401 for http://192.168.1.28:4568/api/v1/manga/405/chapter/61/page/18, attempting token refresh...
+17:55:04.170 [INFO] Token refreshed successfully
+17:55:04.184 [INFO] ImageLoader: Token refreshed, retrying download

@@ -453,10 +453,29 @@ void ReaderActivity::onContentAvailable() {
                                         m_settings.rotation == ImageRotation::ROTATE_270);
 
                 if (status.state == brls::GestureState::START) {
-                    // Cancel any running slide-completion animation
+                    // If a page-turn animation is in progress, finalize it
+                    // immediately so fast swiping doesn't lose page turns
                     if (m_completionAnimating) {
                         m_completionAnimating = false;
-                        resetSwipeState();
+                        if (m_completionTurnPage) {
+                            finalizePageTurn();
+                        } else if (m_completionNavChapter) {
+                            // Defer chapter navigation to next frame — it's a
+                            // heavy operation that replaces all pages and should
+                            // not run inside the gesture handler's stack.
+                            bool navNext = m_completionNavNext;
+                            m_completionNavChapter = false;
+                            resetSwipeState();
+                            std::weak_ptr<bool> wa = m_alive;
+                            brls::sync([this, wa, navNext]() {
+                                auto a = wa.lock();
+                                if (!a || !*a) return;
+                                if (navNext) nextChapter();
+                                else previousChapter();
+                            });
+                        } else {
+                            resetSwipeState();
+                        }
                     }
                     m_isPanning = false;
                     m_isSwipeAnimating = false;
@@ -520,9 +539,8 @@ void ReaderActivity::onContentAvailable() {
                         // for 1:1 finger-to-page tracking. Touch is in physical pixels
                         // (960x544) but NanoVG views use internal coords (~1280x726).
                         float physScreen = useVerticalSwipe ? 544.0f : 960.0f;
-                        float viewSize = useVerticalSwipe ?
-                            (pageImage ? pageImage->getHeight() : physScreen) :
-                            (pageImage ? pageImage->getWidth() : physScreen);
+                        auto [svW, svH] = getSwipeViewSize();
+                        float viewSize = useVerticalSwipe ? svH : svW;
                         float scaledDelta = rawDelta * (viewSize / physScreen);
                         m_swipeOffset = scaledDelta;
 
@@ -746,9 +764,8 @@ void ReaderActivity::onContentAvailable() {
 
                         // Scale touch delta from physical screen coords to view coords
                         float physScreen = useVerticalSwipe ? 544.0f : 960.0f;
-                        float viewSize = useVerticalSwipe ?
-                            (pageImage ? pageImage->getHeight() : physScreen) :
-                            (pageImage ? pageImage->getWidth() : physScreen);
+                        auto [svW, svH] = getSwipeViewSize();
+                        float viewSize = useVerticalSwipe ? svH : svW;
                         float scaledDelta = rawDelta * (viewSize / physScreen);
                         m_swipeOffset = scaledDelta;
 
@@ -959,6 +976,20 @@ void ReaderActivity::onContentAvailable() {
     if (pageSlider) {
         pageSlider->getProgressEvent()->subscribe([this](float progress) {
             if (m_updatingSlider) return;  // Ignore programmatic setProgress
+
+            if (m_continuousScrollMode && webtoonScroll) {
+                // Webtoon mode: map slider progress to a webtoon view page index
+                int realCount = webtoonScroll->getRealPageCount();
+                if (realCount <= 0) return;
+                int displayPage = static_cast<int>(progress * std::max(1, realCount - 1) + 0.5f);
+                int targetPage = webtoonScroll->pageIndexFromDisplayPage(displayPage);
+                if (targetPage != m_currentPage) {
+                    goToPage(targetPage);
+                }
+                return;
+            }
+
+            // Manga mode
             if (m_pages.empty() || m_realPageCount <= 0) return;
             // Convert slider progress back to internal page index.
             // Progress was calculated as displayPage / (m_realPageCount - 1),
@@ -1341,12 +1372,10 @@ void ReaderActivity::loadPages() {
                 // physical screen width (960) to avoid coordinate system mismatch.
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
-                webtoonScroll->setPages(m_pages, viewW);
+                webtoonScroll->setPages(m_pages, viewW, m_currentPage);
 
                 // Set transition text for chapter separator pages
                 setupWebtoonTransitionText();
-
-                webtoonScroll->scrollToPage(m_currentPage);
             }
         } else {
             m_continuousScrollMode = false;
@@ -1380,6 +1409,11 @@ void ReaderActivity::loadPage(int index) {
     // Handle fake transition pages
     if (isTransitionPage(index)) {
         renderTransitionPage(index);
+        // Still need to update adjacent preview indices so swiping from the
+        // transition page knows where to go (next/prev chapter vs real page).
+        // Without this, m_posPreviewIdx/m_negPreviewIdx are stale from the
+        // previous real page and swipe goes in circles.
+        preloadAdjacentPreviews();
         return;
     }
 
@@ -1409,6 +1443,13 @@ void ReaderActivity::loadPage(int index) {
     int loadGen = ++m_pageLoadGeneration;
     m_pageLoadSucceeded = false;
 
+    // Invalidate any previous async load for pageImage so stale loads
+    // (from a page we already swiped past) don't overwrite the new page.
+    // Each load gets its own alive flag; setting the old one to false
+    // makes executeRotatableLoad skip setImageFromMem for the old page.
+    if (m_pageLoadAlive) *m_pageLoadAlive = false;
+    m_pageLoadAlive = std::make_shared<bool>(true);
+
     // Load image using RotatableImage
     if (pageImage) {
         int currentPageAtLoad = m_currentPage;
@@ -1425,7 +1466,7 @@ void ReaderActivity::loadPage(int index) {
             }
         };
 
-        ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage, m_alive);
+        ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage, m_pageLoadAlive);
 
         // Set up a timeout: if page hasn't loaded after 15 seconds, show error
         // Only for server-streamed pages - local files load instantly from disk
@@ -1465,33 +1506,44 @@ void ReaderActivity::preloadAdjacentPages() {
 }
 
 void ReaderActivity::updatePageDisplay() {
-    // Don't update counters for transition pages
-    if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
-    if (isTransitionPage(m_currentPage)) return;
+    int displayPage = 0;
+    int realPageCount = 0;
 
-    // Calculate display page number (exclude transition pages from count)
-    int displayPage = m_currentPage;
-    // If a prev transition page was inserted at index 0, adjust
-    if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
-        displayPage = m_currentPage - 1;
+    if (m_continuousScrollMode && webtoonScroll) {
+        // Webtoon mode: get page info from the webtoon view which manages
+        // its own page list (may have grown via chapter extension)
+        realPageCount = webtoonScroll->getRealPageCount();
+        if (realPageCount <= 0) return;
+        displayPage = webtoonScroll->displayPageFromIndex(m_currentPage);
+    } else {
+        // Manga mode: use ReaderActivity's m_pages and m_realPageCount
+        if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
+        if (isTransitionPage(m_currentPage)) return;
+
+        realPageCount = m_realPageCount;
+        displayPage = m_currentPage;
+        // If a prev transition page was inserted at index 0, adjust
+        if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
+            displayPage = m_currentPage - 1;
+        }
     }
 
     // Update page counter (top-right overlay with rotation support)
     if (pageCounter) {
         pageCounter->setText(std::to_string(displayPage + 1) + "/" +
-                          std::to_string(m_realPageCount));
+                          std::to_string(realPageCount));
     }
 
     // Update slider page label (in bottom bar)
     if (sliderPageLabel) {
         sliderPageLabel->setText("Page " + std::to_string(displayPage + 1) +
-                                 " of " + std::to_string(m_realPageCount));
+                                 " of " + std::to_string(realPageCount));
     }
 
     // Update slider position (based on real pages only)
-    if (pageSlider && m_realPageCount > 0) {
+    if (pageSlider && realPageCount > 0) {
         float progress = static_cast<float>(displayPage) /
-                        static_cast<float>(std::max(1, m_realPageCount - 1));
+                        static_cast<float>(std::max(1, realPageCount - 1));
         m_updatingSlider = true;
         pageSlider->setProgress(progress);
         m_updatingSlider = false;
@@ -1616,6 +1668,13 @@ void ReaderActivity::previousPage() {
 }
 
 void ReaderActivity::goToPage(int pageIndex) {
+    if (m_continuousScrollMode && webtoonScroll) {
+        // Webtoon mode: scroll the webtoon view instead of loading a single page
+        webtoonScroll->scrollToPage(pageIndex);
+        // scrollToPage triggers updateCurrentPage which fires the progress callback,
+        // updating m_currentPage/display/progress automatically
+        return;
+    }
     if (pageIndex >= 0 && pageIndex < static_cast<int>(m_pages.size())) {
         m_currentPage = pageIndex;
         updatePageDisplay();
@@ -2720,8 +2779,7 @@ void ReaderActivity::updateSwipePreview(float offset) {
     // internal resolution (~1280x726) that gets scaled to the physical display.
     // Using physical screen dimensions causes pages to be spaced too close
     // together, resulting in overlap during swipe transitions.
-    float viewWidth = pageImage ? pageImage->getWidth() : 960.0f;
-    float viewHeight = pageImage ? pageImage->getHeight() : 544.0f;
+    auto [viewWidth, viewHeight] = getSwipeViewSize();
 
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
                              m_settings.rotation == ImageRotation::ROTATE_270);
@@ -2889,6 +2947,25 @@ void ReaderActivity::loadPreviewInto(RotatableImage* target, int index) {
     }, target, m_alive);
 }
 
+std::pair<float, float> ReaderActivity::getSwipeViewSize() {
+    // Use whichever view is currently visible for accurate dimensions.
+    // When on a transition page, pageImage is GONE (dims == 0), so
+    // we fall back to transitionBox, then to the physical screen size.
+    float w = 0, h = 0;
+    if (pageImage && pageImage->getVisibility() == brls::Visibility::VISIBLE) {
+        w = pageImage->getWidth();
+        h = pageImage->getHeight();
+    }
+    if ((w <= 0 || h <= 0) && transitionBox &&
+        transitionBox->getVisibility() == brls::Visibility::VISIBLE) {
+        w = transitionBox->getWidth();
+        h = transitionBox->getHeight();
+    }
+    if (w <= 0) w = 960.0f;
+    if (h <= 0) h = 544.0f;
+    return {w, h};
+}
+
 void ReaderActivity::preloadAdjacentPreviews() {
     // Determine which page goes on the positive side (swiping right/down reveals it)
     // and which goes on the negative side (swiping left/up reveals it).
@@ -2938,8 +3015,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
     // Use actual view dimensions, not physical screen dimensions
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
                              m_settings.rotation == ImageRotation::ROTATE_270);
-    float viewWidth = pageImage ? pageImage->getWidth() : 960.0f;
-    float viewHeight = pageImage ? pageImage->getHeight() : 544.0f;
+    auto [viewWidth, viewHeight] = getSwipeViewSize();
     float screenExtent = useVerticalSwipe ? viewHeight : viewWidth;
 
     if (turnPage && m_swipeToChapter) {
@@ -3067,6 +3143,10 @@ void ReaderActivity::finalizePageTurn() {
         RotatableImage* sourcePreview = swipedPositive ? previewImage : previewImageB;
         if (pageImage && sourcePreview && sourcePreview->hasImage()) {
             pageImage->takeImageFrom(sourcePreview);
+        } else if (pageImage) {
+            // Preview hasn't loaded yet — clear the old page so it doesn't
+            // briefly flash the previous page while the new one loads
+            pageImage->clearImage();
         }
 
         m_currentPage = m_previewPageIndex;
@@ -3388,6 +3468,7 @@ void ReaderActivity::willDisappear(bool resetState) {
     // (image loader brls::sync, asyncTask completions, etc.) see the
     // flag as false and skip accessing any of our member state.
     *m_alive = false;
+    if (m_pageLoadAlive) *m_pageLoadAlive = false;
 
     // Cancel all pending image loader operations to avoid their brls::sync
     // callbacks calling target->setImageFromMem() on our destroyed views.
