@@ -194,10 +194,15 @@ void WebtoonScrollView::setupGestures() {
                     float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
                     brls::Point currentCenter = {status.center.x * scaleX, status.center.y * scaleY};
 
-                    // Focal point zoom: keep the initial pinch point stable
-                    // offset_new = currentCenter/newZoom - initialCenter/initialZoom + initialOffset
-                    m_zoomOffset.x = currentCenter.x / newZoom - m_initialPinchCenter.x / m_initialZoomLevel + m_initialZoomOffset.x;
-                    m_zoomOffset.y = currentCenter.y / newZoom - m_initialPinchCenter.y / m_initialZoomLevel + m_initialZoomOffset.y;
+                    // Focal-point zoom formula:
+                    // NVG transform: P' = C + z*(P - C + off), C = view center
+                    // To keep image point P at screen pos S:
+                    //   off = (S-C)/z - (S0-C)/z0 + off0
+                    float cx = m_viewWidth / 2.0f;
+                    float cy = m_viewHeight / 2.0f;
+
+                    m_zoomOffset.x = (currentCenter.x - cx) / newZoom - (m_initialPinchCenter.x - cx) / m_initialZoomLevel + m_initialZoomOffset.x;
+                    m_zoomOffset.y = (currentCenter.y - cy) / newZoom - (m_initialPinchCenter.y - cy) / m_initialZoomLevel + m_initialZoomOffset.y;
 
                     m_zoomLevel = newZoom;
                     m_isZoomed = (newZoom > 1.05f);

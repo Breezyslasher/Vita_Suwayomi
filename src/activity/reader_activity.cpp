@@ -604,8 +604,6 @@ void ReaderActivity::onContentAvailable() {
                     m_initialZoomLevel = m_zoomLevel;
 
                     // Record initial pinch center and current zoom offset for focal-point tracking
-                    // PinchGestureRecognizer provides center in physical screen coords (0-959, 0-543)
-                    // which matches getFrame() coordinates on Vita (960x544 window)
                     m_pinchStartCenter = status.center;
                     m_pinchStartOffset = m_zoomOffset;
                 } else if (status.state == brls::GestureState::STAY) {
@@ -619,12 +617,18 @@ void ReaderActivity::onContentAvailable() {
                         if (pageImage) {
                             pageImage->setZoomLevel(newZoom);
 
-                            // Focal-point zoom: keep the image point that was under the initial
-                            // pinch center stable, adjusting for both zoom change and finger movement
-                            // Formula: offset = currentCenter/newZoom - startCenter/startZoom + startOffset
+                            // Focal-point zoom formula:
+                            // The NVG transform is: P' = C + z*(P - C + off)
+                            // where C = image center in view coords.
+                            // To keep image point P at screen pos S:
+                            //   off = (S-C)/z - (S0-C)/z0 + off0
+                            brls::Rect frame = pageImage->getFrame();
+                            float cx = frame.getMinX() + frame.getWidth() / 2.0f;
+                            float cy = frame.getMinY() + frame.getHeight() / 2.0f;
+
                             brls::Point offset = {
-                                status.center.x / newZoom - m_pinchStartCenter.x / m_initialZoomLevel + m_pinchStartOffset.x,
-                                status.center.y / newZoom - m_pinchStartCenter.y / m_initialZoomLevel + m_pinchStartOffset.y
+                                (status.center.x - cx) / newZoom - (m_pinchStartCenter.x - cx) / m_initialZoomLevel + m_pinchStartOffset.x,
+                                (status.center.y - cy) / newZoom - (m_pinchStartCenter.y - cy) / m_initialZoomLevel + m_pinchStartOffset.y
                             };
                             m_zoomOffset = offset;
                             pageImage->setZoomOffset(offset);
