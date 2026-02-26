@@ -3076,6 +3076,10 @@ void ReaderActivity::finalizePageTurn() {
         RotatableImage* sourcePreview = swipedPositive ? previewImage : previewImageB;
         if (pageImage && sourcePreview && sourcePreview->hasImage()) {
             pageImage->takeImageFrom(sourcePreview);
+        } else if (pageImage) {
+            // Preview hasn't loaded yet — clear the old page so it doesn't
+            // briefly flash the previous page while the new one loads
+            pageImage->clearImage();
         }
 
         m_currentPage = m_previewPageIndex;
