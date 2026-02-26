@@ -375,11 +375,19 @@ void ReaderActivity::onContentAvailable() {
         // Initialize double-tap tracking
         m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
         m_lastTapPosition = {0, 0};
+        m_pinchEndTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
 
         // Tap gesture for controls toggle and optional tap-to-navigate zones
         pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (m_errorOverlay) return;  // Don't handle taps while error overlay is shown
+                if (m_isPinching) return;    // Ignore taps during active pinch
+
+                // Ignore taps that fire shortly after a pinch ends (finger-lift artifacts)
+                auto timeSincePinch = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - m_pinchEndTime).count();
+                if (timeSincePinch < 300) return;
+
                 if (status.state == brls::GestureState::END) {
                     // Check for double-tap
                     auto now = std::chrono::steady_clock::now();
@@ -542,7 +550,14 @@ void ReaderActivity::onContentAvailable() {
                     }
                 } else if (status.state == brls::GestureState::END) {
                     // Don't turn the page if we were just pinch-zooming
+                    // (also check cooldown — pinch END may fire before pan END)
                     if (m_isPinching) {
+                        resetSwipeState();
+                        return;
+                    }
+                    auto msSincePinch = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - m_pinchEndTime).count();
+                    if (msSincePinch < 300) {
                         resetSwipeState();
                         return;
                     }
@@ -607,6 +622,10 @@ void ReaderActivity::onContentAvailable() {
                     m_initialPinchDistance = 0;
                     m_initialZoomLevel = m_zoomLevel;
 
+                    // Invalidate any pending double-tap so lifting fingers after
+                    // pinch can't accidentally trigger handleDoubleTap/resetZoom.
+                    m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+
                     // Record initial pinch center and current zoom offset for focal-point tracking
                     m_pinchStartCenter = status.center;
                     m_pinchStartOffset = m_zoomOffset;
@@ -642,6 +661,7 @@ void ReaderActivity::onContentAvailable() {
                     }
                 } else if (status.state == brls::GestureState::END) {
                     m_isPinching = false;
+                    m_pinchEndTime = std::chrono::steady_clock::now();
                     // Don't snap back - only double-tap resets zoom
                 }
             }));
@@ -838,6 +858,13 @@ void ReaderActivity::onContentAvailable() {
         container->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (m_errorOverlay) return;  // Don't handle taps while error overlay is shown
+                if (m_isPinching) return;    // Ignore taps during active pinch
+
+                // Ignore taps that fire shortly after a pinch ends (finger-lift artifacts)
+                auto timeSincePinch = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - m_pinchEndTime).count();
+                if (timeSincePinch < 300) return;
+
                 if (status.state == brls::GestureState::END) {
                     // Check for double-tap
                     auto now = std::chrono::steady_clock::now();
