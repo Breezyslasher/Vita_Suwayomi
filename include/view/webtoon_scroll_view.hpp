@@ -78,6 +78,23 @@ public:
     int getPageCount() const { return static_cast<int>(m_pages.size()); }
 
     /**
+     * Get the number of real (non-transition) pages
+     */
+    int getRealPageCount() const;
+
+    /**
+     * Convert an internal page index to a 0-based display page number
+     * (counts only real pages before and including the given index)
+     */
+    int displayPageFromIndex(int pageIndex) const;
+
+    /**
+     * Convert a 0-based display page number to an internal page index
+     * (finds the Nth real page, skipping transition pages)
+     */
+    int pageIndexFromDisplayPage(int displayPage) const;
+
+    /**
      * Get current scroll position (0.0 to 1.0)
      */
     float getScrollProgress() const;

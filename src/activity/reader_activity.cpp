@@ -970,6 +970,20 @@ void ReaderActivity::onContentAvailable() {
     if (pageSlider) {
         pageSlider->getProgressEvent()->subscribe([this](float progress) {
             if (m_updatingSlider) return;  // Ignore programmatic setProgress
+
+            if (m_continuousScrollMode && webtoonScroll) {
+                // Webtoon mode: map slider progress to a webtoon view page index
+                int realCount = webtoonScroll->getRealPageCount();
+                if (realCount <= 0) return;
+                int displayPage = static_cast<int>(progress * std::max(1, realCount - 1) + 0.5f);
+                int targetPage = webtoonScroll->pageIndexFromDisplayPage(displayPage);
+                if (targetPage != m_currentPage) {
+                    goToPage(targetPage);
+                }
+                return;
+            }
+
+            // Manga mode
             if (m_pages.empty() || m_realPageCount <= 0) return;
             // Convert slider progress back to internal page index.
             // Progress was calculated as displayPage / (m_realPageCount - 1),
@@ -1474,33 +1488,44 @@ void ReaderActivity::preloadAdjacentPages() {
 }
 
 void ReaderActivity::updatePageDisplay() {
-    // Don't update counters for transition pages
-    if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
-    if (isTransitionPage(m_currentPage)) return;
+    int displayPage = 0;
+    int realPageCount = 0;
 
-    // Calculate display page number (exclude transition pages from count)
-    int displayPage = m_currentPage;
-    // If a prev transition page was inserted at index 0, adjust
-    if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
-        displayPage = m_currentPage - 1;
+    if (m_continuousScrollMode && webtoonScroll) {
+        // Webtoon mode: get page info from the webtoon view which manages
+        // its own page list (may have grown via chapter extension)
+        realPageCount = webtoonScroll->getRealPageCount();
+        if (realPageCount <= 0) return;
+        displayPage = webtoonScroll->displayPageFromIndex(m_currentPage);
+    } else {
+        // Manga mode: use ReaderActivity's m_pages and m_realPageCount
+        if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
+        if (isTransitionPage(m_currentPage)) return;
+
+        realPageCount = m_realPageCount;
+        displayPage = m_currentPage;
+        // If a prev transition page was inserted at index 0, adjust
+        if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
+            displayPage = m_currentPage - 1;
+        }
     }
 
     // Update page counter (top-right overlay with rotation support)
     if (pageCounter) {
         pageCounter->setText(std::to_string(displayPage + 1) + "/" +
-                          std::to_string(m_realPageCount));
+                          std::to_string(realPageCount));
     }
 
     // Update slider page label (in bottom bar)
     if (sliderPageLabel) {
         sliderPageLabel->setText("Page " + std::to_string(displayPage + 1) +
-                                 " of " + std::to_string(m_realPageCount));
+                                 " of " + std::to_string(realPageCount));
     }
 
     // Update slider position (based on real pages only)
-    if (pageSlider && m_realPageCount > 0) {
+    if (pageSlider && realPageCount > 0) {
         float progress = static_cast<float>(displayPage) /
-                        static_cast<float>(std::max(1, m_realPageCount - 1));
+                        static_cast<float>(std::max(1, realPageCount - 1));
         m_updatingSlider = true;
         pageSlider->setProgress(progress);
         m_updatingSlider = false;
@@ -1625,6 +1650,13 @@ void ReaderActivity::previousPage() {
 }
 
 void ReaderActivity::goToPage(int pageIndex) {
+    if (m_continuousScrollMode && webtoonScroll) {
+        // Webtoon mode: scroll the webtoon view instead of loading a single page
+        webtoonScroll->scrollToPage(pageIndex);
+        // scrollToPage triggers updateCurrentPage which fires the progress callback,
+        // updating m_currentPage/display/progress automatically
+        return;
+    }
     if (pageIndex >= 0 && pageIndex < static_cast<int>(m_pages.size())) {
         m_currentPage = pageIndex;
         updatePageDisplay();

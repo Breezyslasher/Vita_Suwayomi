@@ -752,6 +752,37 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
                         pages.size(), m_pages.size(), scrollAdjust);
 }
 
+int WebtoonScrollView::getRealPageCount() const {
+    int count = 0;
+    for (int i = 0; i < static_cast<int>(m_pages.size()); i++) {
+        if (!isTransitionPage(i)) count++;
+    }
+    return count;
+}
+
+int WebtoonScrollView::displayPageFromIndex(int pageIndex) const {
+    int display = 0;
+    for (int i = 0; i < pageIndex && i < static_cast<int>(m_pages.size()); i++) {
+        if (!isTransitionPage(i)) display++;
+    }
+    return display;
+}
+
+int WebtoonScrollView::pageIndexFromDisplayPage(int displayPage) const {
+    int realCount = 0;
+    for (int i = 0; i < static_cast<int>(m_pages.size()); i++) {
+        if (!isTransitionPage(i)) {
+            if (realCount == displayPage) return i;
+            realCount++;
+        }
+    }
+    // Fallback: return last real page
+    for (int i = static_cast<int>(m_pages.size()) - 1; i >= 0; i--) {
+        if (!isTransitionPage(i)) return i;
+    }
+    return 0;
+}
+
 void WebtoonScrollView::scrollToPage(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= static_cast<int>(m_pages.size())) {
         return;
