@@ -1727,16 +1727,21 @@ void ReaderActivity::previousChapter() {
 }
 
 void ReaderActivity::markChapterAsRead() {
-    // Skip server call when offline
-    if (!Application::getInstance().isConnected()) {
-        brls::Logger::info("ReaderActivity: offline, skipping mark as read");
-        return;
-    }
-
     int mangaId = m_mangaId;
     int chapterId = m_chapterIndex;  // This is the chapter ID
     int chapterPos = m_chapterPosition;
     int totalChapters = m_totalChapters;
+
+    // Always mark locally in downloads manager (works offline)
+    DownloadsManager::getInstance().markChapterReadLocally(mangaId, chapterId);
+
+    if (!Application::getInstance().isConnected()) {
+        brls::Logger::info("ReaderActivity: offline, marked chapter read locally (will sync later)");
+        // Still update reading statistics locally
+        bool mangaCompleted = (chapterPos >= 0 && chapterPos == totalChapters - 1);
+        Application::getInstance().updateReadingStatistics(true, mangaCompleted);
+        return;
+    }
 
     vitasuwayomi::asyncRun([mangaId, chapterId, chapterPos, totalChapters]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -3325,6 +3330,17 @@ void ReaderActivity::willDisappear(bool resetState) {
     result.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     Application::getInstance().setLastReaderResult(result);
+
+    // If user finished the chapter (on last page), mark it as read
+    if (result.markedRead) {
+        markChapterAsRead();
+    }
+
+    // Save final reading progress (both online and offline)
+    if (!m_pages.empty() && !isTransitionPage(m_currentPage)) {
+        DownloadsManager::getInstance().updateReadingProgress(
+            m_mangaId, m_chapterIndex, result.lastPageRead);
+    }
 
     // Invalidate alive flag so pending async callbacks bail out safely.
     // This must happen BEFORE any cleanup so that in-flight callbacks

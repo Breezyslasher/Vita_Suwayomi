@@ -704,6 +704,32 @@ void DownloadsManager::updateReadingProgress(int mangaId, int chapterIndex, int 
     }
 }
 
+void DownloadsManager::markChapterReadLocally(int mangaId, int chapterIndex) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    for (auto& manga : m_downloads) {
+        if (manga.mangaId == mangaId) {
+            for (auto& chapter : manga.chapters) {
+                if (chapter.chapterIndex == chapterIndex || chapter.chapterId == chapterIndex) {
+                    if (!chapter.read) {
+                        chapter.read = true;
+                        // Set progress to last page
+                        if (chapter.pageCount > 0) {
+                            chapter.lastPageRead = chapter.pageCount - 1;
+                        }
+                        chapter.lastReadTime = std::time(nullptr);
+                        brls::Logger::info("DownloadsManager: Marked chapter {} as read locally (manga={})",
+                                          chapterIndex, mangaId);
+                        saveStateUnlocked();
+                    }
+                    break;
+                }
+            }
+            break;
+        }
+    }
+}
+
 void DownloadsManager::clearReadingProgress(int mangaId) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -733,6 +759,7 @@ void DownloadsManager::syncProgressToServer() {
         int chapterId;
         int lastPageRead;
         int pageCount;
+        bool read;
     };
     std::vector<SyncItem> items;
 
@@ -740,12 +767,13 @@ void DownloadsManager::syncProgressToServer() {
         std::lock_guard<std::mutex> lock(m_mutex);
         for (const auto& manga : m_downloads) {
             for (const auto& chapter : manga.chapters) {
-                if (chapter.lastPageRead > 0) {
+                if (chapter.lastPageRead > 0 || chapter.read) {
                     SyncItem item;
                     item.mangaId = manga.mangaId;
                     item.chapterId = chapter.chapterId > 0 ? chapter.chapterId : chapter.chapterIndex;
                     item.lastPageRead = chapter.lastPageRead;
                     item.pageCount = chapter.pageCount;
+                    item.read = chapter.read;
                     items.push_back(item);
                 }
             }
@@ -758,10 +786,13 @@ void DownloadsManager::syncProgressToServer() {
     int markedReadCount = 0;
 
     for (const auto& item : items) {
-        if (client.updateChapterProgress(item.mangaId, item.chapterId, item.lastPageRead)) {
-            syncedCount++;
+        if (item.lastPageRead > 0) {
+            if (client.updateChapterProgress(item.mangaId, item.chapterId, item.lastPageRead)) {
+                syncedCount++;
+            }
         }
-        if (item.pageCount > 0 && item.lastPageRead >= item.pageCount - 1) {
+        // Mark as read if locally flagged or if on/past last page
+        if (item.read || (item.pageCount > 0 && item.lastPageRead >= item.pageCount - 1)) {
             if (client.markChapterRead(item.mangaId, item.chapterId)) {
                 markedReadCount++;
             }
@@ -1071,6 +1102,7 @@ void DownloadsManager::saveStateUnlocked() {
                << "\"downloadedPages\":" << ch.downloadedPages << ",\n"
                << "\"state\":" << static_cast<int>(ch.state) << ",\n"
                << "\"lastPageRead\":" << ch.lastPageRead << ",\n"
+               << "\"read\":" << (ch.read ? "true" : "false") << ",\n"
                << "\"pages\":[\n";
 
             for (size_t k = 0; k < ch.pages.size(); ++k) {
@@ -1275,6 +1307,7 @@ void DownloadsManager::loadState() {
                         chapter.downloadedPages = extractJsonInt(chJson, "downloadedPages");
                         chapter.state = static_cast<LocalDownloadState>(extractJsonInt(chJson, "state"));
                         chapter.lastPageRead = extractJsonInt(chJson, "lastPageRead");
+                        chapter.read = extractJsonBool(chJson, "read");
 
                         // Parse pages array
                         size_t pagesPos = chJson.find("\"pages\":");

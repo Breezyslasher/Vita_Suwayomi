@@ -45,6 +45,7 @@ struct DownloadedChapter {
     LocalDownloadState state = LocalDownloadState::QUEUED;
     int lastPageRead = 0;       // Reading progress
     time_t lastReadTime = 0;    // Last read timestamp
+    bool read = false;          // Chapter has been fully read
 };
 
 // Download item information (manga)
@@ -148,6 +149,9 @@ public:
 
     // Update reading progress
     void updateReadingProgress(int mangaId, int chapterIndex, int lastPageRead);
+
+    // Mark a chapter as fully read in the local cache
+    void markChapterReadLocally(int mangaId, int chapterIndex);
 
     // Clear all reading progress for a manga (used by mark as read/unread)
     void clearReadingProgress(int mangaId);
