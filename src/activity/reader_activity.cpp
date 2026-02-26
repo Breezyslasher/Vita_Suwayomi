@@ -539,9 +539,8 @@ void ReaderActivity::onContentAvailable() {
                         // for 1:1 finger-to-page tracking. Touch is in physical pixels
                         // (960x544) but NanoVG views use internal coords (~1280x726).
                         float physScreen = useVerticalSwipe ? 544.0f : 960.0f;
-                        float viewSize = useVerticalSwipe ?
-                            (pageImage ? pageImage->getHeight() : physScreen) :
-                            (pageImage ? pageImage->getWidth() : physScreen);
+                        auto [svW, svH] = getSwipeViewSize();
+                        float viewSize = useVerticalSwipe ? svH : svW;
                         float scaledDelta = rawDelta * (viewSize / physScreen);
                         m_swipeOffset = scaledDelta;
 
@@ -765,9 +764,8 @@ void ReaderActivity::onContentAvailable() {
 
                         // Scale touch delta from physical screen coords to view coords
                         float physScreen = useVerticalSwipe ? 544.0f : 960.0f;
-                        float viewSize = useVerticalSwipe ?
-                            (pageImage ? pageImage->getHeight() : physScreen) :
-                            (pageImage ? pageImage->getWidth() : physScreen);
+                        auto [svW, svH] = getSwipeViewSize();
+                        float viewSize = useVerticalSwipe ? svH : svW;
                         float scaledDelta = rawDelta * (viewSize / physScreen);
                         m_swipeOffset = scaledDelta;
 
@@ -1411,6 +1409,11 @@ void ReaderActivity::loadPage(int index) {
     // Handle fake transition pages
     if (isTransitionPage(index)) {
         renderTransitionPage(index);
+        // Still need to update adjacent preview indices so swiping from the
+        // transition page knows where to go (next/prev chapter vs real page).
+        // Without this, m_posPreviewIdx/m_negPreviewIdx are stale from the
+        // previous real page and swipe goes in circles.
+        preloadAdjacentPreviews();
         return;
     }
 
@@ -2776,8 +2779,7 @@ void ReaderActivity::updateSwipePreview(float offset) {
     // internal resolution (~1280x726) that gets scaled to the physical display.
     // Using physical screen dimensions causes pages to be spaced too close
     // together, resulting in overlap during swipe transitions.
-    float viewWidth = pageImage ? pageImage->getWidth() : 960.0f;
-    float viewHeight = pageImage ? pageImage->getHeight() : 544.0f;
+    auto [viewWidth, viewHeight] = getSwipeViewSize();
 
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
                              m_settings.rotation == ImageRotation::ROTATE_270);
@@ -2945,6 +2947,25 @@ void ReaderActivity::loadPreviewInto(RotatableImage* target, int index) {
     }, target, m_alive);
 }
 
+std::pair<float, float> ReaderActivity::getSwipeViewSize() const {
+    // Use whichever view is currently visible for accurate dimensions.
+    // When on a transition page, pageImage is GONE (dims == 0), so
+    // we fall back to transitionBox, then to the physical screen size.
+    float w = 0, h = 0;
+    if (pageImage && pageImage->getVisibility() == brls::Visibility::VISIBLE) {
+        w = pageImage->getWidth();
+        h = pageImage->getHeight();
+    }
+    if ((w <= 0 || h <= 0) && transitionBox &&
+        transitionBox->getVisibility() == brls::Visibility::VISIBLE) {
+        w = transitionBox->getWidth();
+        h = transitionBox->getHeight();
+    }
+    if (w <= 0) w = 960.0f;
+    if (h <= 0) h = 544.0f;
+    return {w, h};
+}
+
 void ReaderActivity::preloadAdjacentPreviews() {
     // Determine which page goes on the positive side (swiping right/down reveals it)
     // and which goes on the negative side (swiping left/up reveals it).
@@ -2994,8 +3015,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
     // Use actual view dimensions, not physical screen dimensions
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
                              m_settings.rotation == ImageRotation::ROTATE_270);
-    float viewWidth = pageImage ? pageImage->getWidth() : 960.0f;
-    float viewHeight = pageImage ? pageImage->getHeight() : 544.0f;
+    auto [viewWidth, viewHeight] = getSwipeViewSize();
     float screenExtent = useVerticalSwipe ? viewHeight : viewWidth;
 
     if (turnPage && m_swipeToChapter) {
