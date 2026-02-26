@@ -260,11 +260,17 @@ private:
 
     // Touch thresholds
     static constexpr float TAP_THRESHOLD = 15.0f;
+    static constexpr int DOUBLE_TAP_THRESHOLD_MS = 300;
+    static constexpr float DOUBLE_TAP_DISTANCE = 50.0f;
 
     // Zoom state
     bool m_isZoomed = false;
     float m_zoomLevel = 1.0f;
     brls::Point m_zoomOffset = {0, 0};
+
+    // Double-tap tracking
+    std::chrono::steady_clock::time_point m_lastTapTime;
+    brls::Point m_lastTapPosition = {0, 0};
 
     // Pinch-to-zoom tracking
     bool m_isPinching = false;

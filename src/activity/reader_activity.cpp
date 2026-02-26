@@ -375,11 +375,19 @@ void ReaderActivity::onContentAvailable() {
         // Initialize double-tap tracking
         m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
         m_lastTapPosition = {0, 0};
+        m_pinchEndTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
 
         // Tap gesture for controls toggle and optional tap-to-navigate zones
         pageImage->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (m_errorOverlay) return;  // Don't handle taps while error overlay is shown
+                if (m_isPinching) return;    // Ignore taps during active pinch
+
+                // Ignore taps that fire shortly after a pinch ends (finger-lift artifacts)
+                auto timeSincePinch = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - m_pinchEndTime).count();
+                if (timeSincePinch < 300) return;
+
                 if (status.state == brls::GestureState::END) {
                     // Check for double-tap
                     auto now = std::chrono::steady_clock::now();
@@ -476,10 +484,14 @@ void ReaderActivity::onContentAvailable() {
 
                     // If zoomed, use pan to scroll the zoomed image instead of page navigation
                     if (m_isZoomed) {
-                        // Update zoom offset based on pan delta
+                        // Convert physical touch delta to view coords, then divide by zoom
+                        // since the offset is in pre-scale space (applied before nvgScale).
+                        // Without /zoom, panning feels too fast at higher zoom levels.
+                        float scaleX = (pageImage ? pageImage->getWidth() : 960.0f) / 960.0f;
+                        float scaleY = (pageImage ? pageImage->getHeight() : 544.0f) / 544.0f;
                         brls::Point newOffset = {
-                            m_zoomOffset.x + dx,
-                            m_zoomOffset.y + dy
+                            m_zoomOffset.x + dx * scaleX / m_zoomLevel,
+                            m_zoomOffset.y + dy * scaleY / m_zoomLevel
                         };
 
                         // Apply offset to image
@@ -538,7 +550,14 @@ void ReaderActivity::onContentAvailable() {
                     }
                 } else if (status.state == brls::GestureState::END) {
                     // Don't turn the page if we were just pinch-zooming
+                    // (also check cooldown — pinch END may fire before pan END)
                     if (m_isPinching) {
+                        resetSwipeState();
+                        return;
+                    }
+                    auto msSincePinch = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - m_pinchEndTime).count();
+                    if (msSincePinch < 300) {
                         resetSwipeState();
                         return;
                     }
@@ -603,16 +622,20 @@ void ReaderActivity::onContentAvailable() {
                     m_initialPinchDistance = 0;
                     m_initialZoomLevel = m_zoomLevel;
 
+                    // Invalidate any pending double-tap so lifting fingers after
+                    // pinch can't accidentally trigger handleDoubleTap/resetZoom.
+                    m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+
                     // Record initial pinch center and current zoom offset for focal-point tracking
                     m_pinchStartCenter = status.center;
                     m_pinchStartOffset = m_zoomOffset;
                 } else if (status.state == brls::GestureState::STAY) {
                     float newZoom = m_initialZoomLevel * status.scaleFactor;
-                    newZoom = std::max(0.5f, std::min(4.0f, newZoom));
+                    newZoom = std::max(1.0f, std::min(4.0f, newZoom));
 
                     if (std::abs(newZoom - m_zoomLevel) > 0.01f) {
                         m_zoomLevel = newZoom;
-                        m_isZoomed = (newZoom > 1.05f);
+                        m_isZoomed = (newZoom > 1.01f);
 
                         if (pageImage) {
                             pageImage->setZoomLevel(newZoom);
@@ -636,8 +659,11 @@ void ReaderActivity::onContentAvailable() {
                     }
                 } else if (status.state == brls::GestureState::END) {
                     m_isPinching = false;
-                    // Snap to 1x if near normal
-                    if (m_zoomLevel <= 1.05f && m_zoomLevel >= 0.95f) {
+                    m_pinchEndTime = std::chrono::steady_clock::now();
+
+                    // If user pinched back down to 1.0x, clear zoomed state
+                    // so swipe page navigation works again without needing double-tap
+                    if (m_zoomLevel <= 1.0f) {
                         resetZoom();
                     }
                 }
@@ -835,6 +861,13 @@ void ReaderActivity::onContentAvailable() {
         container->addGestureRecognizer(new brls::TapGestureRecognizer(
             [this](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
                 if (m_errorOverlay) return;  // Don't handle taps while error overlay is shown
+                if (m_isPinching) return;    // Ignore taps during active pinch
+
+                // Ignore taps that fire shortly after a pinch ends (finger-lift artifacts)
+                auto timeSincePinch = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - m_pinchEndTime).count();
+                if (timeSincePinch < 300) return;
+
                 if (status.state == brls::GestureState::END) {
                     // Check for double-tap
                     auto now = std::chrono::steady_clock::now();
@@ -2209,8 +2242,8 @@ void ReaderActivity::handlePinchZoom(float scaleFactor) {
     // Pinch-to-zoom - scale by the pinch factor
     float newZoom = m_zoomLevel * scaleFactor;
 
-    // Clamp zoom between 0.5x and 4x
-    newZoom = std::max(0.5f, std::min(4.0f, newZoom));
+    // Clamp zoom between 1.0x and 4.0x (no zoom-out past fit)
+    newZoom = std::max(1.0f, std::min(4.0f, newZoom));
 
     if (newZoom != m_zoomLevel) {
         if (newZoom <= 1.05f && newZoom >= 0.95f) {

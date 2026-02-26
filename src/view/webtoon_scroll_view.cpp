@@ -20,6 +20,9 @@ WebtoonScrollView::WebtoonScrollView() {
     this->setAlignItems(brls::AlignItems::CENTER);
     this->setGrow(1.0f);
 
+    // Initialize double-tap tracking
+    m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+
     // Setup touch gestures
     setupGestures();
 }
@@ -57,11 +60,13 @@ void WebtoonScrollView::setupGestures() {
                 float rawDy = status.position.y - m_touchLast.y;
 
                 // If zoomed, pan the zoomed view instead of normal scrolling
+                // Divide by zoom level since offset is in pre-scale space;
+                // without this, panning moves too fast at higher zoom levels.
                 if (m_isZoomed) {
                     float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
                     float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
-                    m_zoomOffset.x += rawDx * scaleX;
-                    m_zoomOffset.y += rawDy * scaleY;
+                    m_zoomOffset.x += rawDx * scaleX / m_zoomLevel;
+                    m_zoomOffset.y += rawDy * scaleY / m_zoomLevel;
                     m_touchLast = status.position;
                     m_lastTouchTime = std::chrono::steady_clock::now();
                     return;
@@ -143,27 +148,46 @@ void WebtoonScrollView::setupGestures() {
                 if (distance < TAP_THRESHOLD) {
                     m_scrollVelocity = 0.0f;
 
-                    // If zoomed, double-tap resets zoom
-                    // (single tap while zoomed just toggles controls)
+                    // Check for double-tap
+                    auto now = std::chrono::steady_clock::now();
+                    auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now - m_lastTapTime).count();
+                    float tapDistance = std::sqrt(
+                        std::pow(status.position.x - m_lastTapPosition.x, 2) +
+                        std::pow(status.position.y - m_lastTapPosition.y, 2));
 
-                    // Scale tap position from physical to view coords
-                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
-                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
-                    float tapX = status.position.x * scaleX;
-                    float tapY = status.position.y * scaleY;
-
-                    int tappedPage = getPageAtPosition(tapX, tapY);
-
-                    if (tappedPage >= 0 && isFailedPage(tappedPage)) {
-                        // Tapped on a failed page - retry loading
-                        m_failedPages.erase(tappedPage);
-                        m_loadedPages.erase(tappedPage);
-                        m_loadingPages.erase(tappedPage);
-                        updateVisibleImages();
+                    if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
+                        tapDistance < DOUBLE_TAP_DISTANCE) {
+                        // Double-tap detected - reset zoom if zoomed
+                        if (m_isZoomed) {
+                            resetZoom();
+                        }
+                        // Prevent triple-tap from triggering another double-tap
+                        m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
                     } else {
-                        // Regular tap (including on transition pages) - toggle controls
-                        if (m_tapCallback) {
-                            m_tapCallback();
+                        // Single tap
+                        m_lastTapTime = now;
+                        m_lastTapPosition = status.position;
+
+                        // Scale tap position from physical to view coords
+                        float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                        float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                        float tapX = status.position.x * scaleX;
+                        float tapY = status.position.y * scaleY;
+
+                        int tappedPage = getPageAtPosition(tapX, tapY);
+
+                        if (tappedPage >= 0 && isFailedPage(tappedPage)) {
+                            // Tapped on a failed page - retry loading
+                            m_failedPages.erase(tappedPage);
+                            m_loadedPages.erase(tappedPage);
+                            m_loadingPages.erase(tappedPage);
+                            updateVisibleImages();
+                        } else {
+                            // Regular tap - toggle controls
+                            if (m_tapCallback) {
+                                m_tapCallback();
+                            }
                         }
                     }
                 }
@@ -205,14 +229,13 @@ void WebtoonScrollView::setupGestures() {
                     m_zoomOffset.y = (currentCenter.y - cy) / newZoom - (m_initialPinchCenter.y - cy) / m_initialZoomLevel + m_initialZoomOffset.y;
 
                     m_zoomLevel = newZoom;
-                    m_isZoomed = (newZoom > 1.05f);
+                    // Mark as zoomed whenever actively pinching
+                    // (only double-tap should clear this via resetZoom)
+                    m_isZoomed = true;
                 }
             } else if (status.state == brls::GestureState::END) {
                 m_isPinching = false;
-                // Snap to 1x if near normal
-                if (m_zoomLevel <= 1.05f) {
-                    resetZoom();
-                }
+                // Don't snap back - only double-tap resets zoom
             }
         }));
 }
@@ -275,16 +298,43 @@ int WebtoonScrollView::getPageAtPosition(float tapX, float tapY) const {
 
 void WebtoonScrollView::drawTransitionPage(NVGcontext* vg, int pageIndex,
                                              float x, float y, float width, float height) {
-    // Dark background for transition
+    // Dark background for transition (drawn in screen space)
     nvgBeginPath(vg);
     nvgRect(vg, x, y, width, height);
     nvgFillColor(vg, nvgRGBA(20, 20, 30, 255));
     nvgFill(vg);
 
+    // Apply rotation so text matches page content orientation
+    int rotation = static_cast<int>(m_rotationDegrees);
+    float drawX = x, drawY = y, drawW = width, drawH = height;
+
+    nvgSave(vg);
+
+    if (rotation != 0) {
+        float cx = x + width * 0.5f;
+        float cy = y + height * 0.5f;
+        nvgTranslate(vg, cx, cy);
+        nvgRotate(vg, nvgDegToRad(static_cast<float>(rotation)));
+
+        if (rotation == 90 || rotation == 270) {
+            // In the rotated coordinate space, width and height are swapped
+            drawX = -height * 0.5f;
+            drawY = -width * 0.5f;
+            drawW = height;
+            drawH = width;
+        } else {
+            // 180°
+            drawX = -width * 0.5f;
+            drawY = -height * 0.5f;
+            drawW = width;
+            drawH = height;
+        }
+    }
+
     // Horizontal divider line
-    float lineY = y + height * 0.35f;
+    float lineY = drawY + drawH * 0.35f;
     nvgBeginPath(vg);
-    nvgRect(vg, x + width * 0.2f, lineY, width * 0.6f, 1.0f);
+    nvgRect(vg, drawX + drawW * 0.2f, lineY, drawW * 0.6f, 1.0f);
     nvgFillColor(vg, nvgRGBA(150, 150, 150, 100));
     nvgFill(vg);
 
@@ -298,7 +348,7 @@ void WebtoonScrollView::drawTransitionPage(NVGcontext* vg, int pageIndex,
             nvgFontSize(vg, fontSize1);
             nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
             nvgFillColor(vg, nvgRGBA(220, 220, 220, 255));
-            nvgText(vg, x + width * 0.5f, lineY - 8.0f, it->second.line1.c_str(), nullptr);
+            nvgText(vg, drawX + drawW * 0.5f, lineY - 8.0f, it->second.line1.c_str(), nullptr);
         }
 
         // Line 2 (below divider)
@@ -306,33 +356,60 @@ void WebtoonScrollView::drawTransitionPage(NVGcontext* vg, int pageIndex,
             nvgFontSize(vg, fontSize2);
             nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
             nvgFillColor(vg, nvgRGBA(180, 180, 180, 255));
-            nvgText(vg, x + width * 0.5f, lineY + 12.0f, it->second.line2.c_str(), nullptr);
+            nvgText(vg, drawX + drawW * 0.5f, lineY + 12.0f, it->second.line2.c_str(), nullptr);
         }
 
         // Scroll hint
         nvgFontSize(vg, 14.0f);
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
         nvgFillColor(vg, nvgRGBA(120, 120, 120, 200));
-        nvgText(vg, x + width * 0.5f, y + height - 12.0f, "Keep scrolling to continue", nullptr);
+        nvgText(vg, drawX + drawW * 0.5f, drawY + drawH - 12.0f, "Keep scrolling to continue", nullptr);
     } else {
         // Fallback text if no transition info set
         nvgFontSize(vg, 18.0f);
         nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         nvgFillColor(vg, nvgRGBA(180, 180, 180, 255));
-        nvgText(vg, x + width * 0.5f, y + height * 0.5f, "Chapter transition", nullptr);
+        nvgText(vg, drawX + drawW * 0.5f, drawY + drawH * 0.5f, "Chapter transition", nullptr);
     }
+
+    nvgRestore(vg);
 }
 
 void WebtoonScrollView::drawFailedPage(NVGcontext* vg, int pageIndex,
                                         float x, float y, float width, float height) {
-    // Dark red-tinted background
+    // Dark red-tinted background (drawn in screen space)
     nvgBeginPath(vg);
     nvgRect(vg, x, y, width, height);
     nvgFillColor(vg, nvgRGBA(40, 20, 20, 255));
     nvgFill(vg);
 
-    float centerX = x + width * 0.5f;
-    float centerY = y + height * 0.5f;
+    // Apply rotation so text matches page content orientation
+    int rotation = static_cast<int>(m_rotationDegrees);
+    float drawX = x, drawY = y, drawW = width, drawH = height;
+
+    nvgSave(vg);
+
+    if (rotation != 0) {
+        float cx = x + width * 0.5f;
+        float cy = y + height * 0.5f;
+        nvgTranslate(vg, cx, cy);
+        nvgRotate(vg, nvgDegToRad(static_cast<float>(rotation)));
+
+        if (rotation == 90 || rotation == 270) {
+            drawX = -height * 0.5f;
+            drawY = -width * 0.5f;
+            drawW = height;
+            drawH = width;
+        } else {
+            drawX = -width * 0.5f;
+            drawY = -height * 0.5f;
+            drawW = width;
+            drawH = height;
+        }
+    }
+
+    float centerX = drawX + drawW * 0.5f;
+    float centerY = drawY + drawH * 0.5f;
 
     // Error message
     nvgFontSize(vg, 16.0f);
@@ -345,6 +422,8 @@ void WebtoonScrollView::drawFailedPage(NVGcontext* vg, int pageIndex,
     nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
     nvgFillColor(vg, nvgRGBA(100, 200, 180, 255));
     nvgText(vg, centerX, centerY + 4.0f, "Tap to retry", nullptr);
+
+    nvgRestore(vg);
 }
 
 void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWidth) {

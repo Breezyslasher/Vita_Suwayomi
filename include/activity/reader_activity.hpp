@@ -250,6 +250,7 @@ private:
     float m_initialZoomLevel = 1.0f;
     brls::Point m_pinchStartCenter = {0, 0};   // Pinch center at gesture start
     brls::Point m_pinchStartOffset = {0, 0};   // Zoom offset at gesture start
+    std::chrono::steady_clock::time_point m_pinchEndTime;  // When pinch ended (cooldown guard)
 
     // Touch control methods
     void handleDoubleTap(brls::Point position);
