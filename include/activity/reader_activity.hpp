@@ -219,7 +219,7 @@ private:
     void loadPreviewPage(int index);
     void loadPreviewInto(RotatableImage* target, int index);
     void preloadAdjacentPreviews();       // Pre-load both sides after page loads
-    std::pair<float, float> getSwipeViewSize() const; // View dims for swipe math
+    std::pair<float, float> getSwipeViewSize(); // View dims for swipe math
     void completeSwipeAnimation(bool turnPage);
     void resetSwipeState();
 

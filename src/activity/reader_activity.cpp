@@ -2947,7 +2947,7 @@ void ReaderActivity::loadPreviewInto(RotatableImage* target, int index) {
     }, target, m_alive);
 }
 
-std::pair<float, float> ReaderActivity::getSwipeViewSize() const {
+std::pair<float, float> ReaderActivity::getSwipeViewSize() {
     // Use whichever view is currently visible for accurate dimensions.
     // When on a transition page, pageImage is GONE (dims == 0), so
     // we fall back to transitionBox, then to the physical screen size.
