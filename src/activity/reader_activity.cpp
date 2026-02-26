@@ -640,10 +640,7 @@ void ReaderActivity::onContentAvailable() {
                     }
                 } else if (status.state == brls::GestureState::END) {
                     m_isPinching = false;
-                    // Snap to 1x if near normal
-                    if (m_zoomLevel <= 1.05f && m_zoomLevel >= 0.95f) {
-                        resetZoom();
-                    }
+                    // Don't snap back - only double-tap resets zoom
                 }
             }));
     }

@@ -20,6 +20,9 @@ WebtoonScrollView::WebtoonScrollView() {
     this->setAlignItems(brls::AlignItems::CENTER);
     this->setGrow(1.0f);
 
+    // Initialize double-tap tracking
+    m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+
     // Setup touch gestures
     setupGestures();
 }
@@ -145,27 +148,46 @@ void WebtoonScrollView::setupGestures() {
                 if (distance < TAP_THRESHOLD) {
                     m_scrollVelocity = 0.0f;
 
-                    // If zoomed, double-tap resets zoom
-                    // (single tap while zoomed just toggles controls)
+                    // Check for double-tap
+                    auto now = std::chrono::steady_clock::now();
+                    auto timeSinceLastTap = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now - m_lastTapTime).count();
+                    float tapDistance = std::sqrt(
+                        std::pow(status.position.x - m_lastTapPosition.x, 2) +
+                        std::pow(status.position.y - m_lastTapPosition.y, 2));
 
-                    // Scale tap position from physical to view coords
-                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
-                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
-                    float tapX = status.position.x * scaleX;
-                    float tapY = status.position.y * scaleY;
-
-                    int tappedPage = getPageAtPosition(tapX, tapY);
-
-                    if (tappedPage >= 0 && isFailedPage(tappedPage)) {
-                        // Tapped on a failed page - retry loading
-                        m_failedPages.erase(tappedPage);
-                        m_loadedPages.erase(tappedPage);
-                        m_loadingPages.erase(tappedPage);
-                        updateVisibleImages();
+                    if (timeSinceLastTap < DOUBLE_TAP_THRESHOLD_MS &&
+                        tapDistance < DOUBLE_TAP_DISTANCE) {
+                        // Double-tap detected - reset zoom if zoomed
+                        if (m_isZoomed) {
+                            resetZoom();
+                        }
+                        // Prevent triple-tap from triggering another double-tap
+                        m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
                     } else {
-                        // Regular tap (including on transition pages) - toggle controls
-                        if (m_tapCallback) {
-                            m_tapCallback();
+                        // Single tap
+                        m_lastTapTime = now;
+                        m_lastTapPosition = status.position;
+
+                        // Scale tap position from physical to view coords
+                        float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                        float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                        float tapX = status.position.x * scaleX;
+                        float tapY = status.position.y * scaleY;
+
+                        int tappedPage = getPageAtPosition(tapX, tapY);
+
+                        if (tappedPage >= 0 && isFailedPage(tappedPage)) {
+                            // Tapped on a failed page - retry loading
+                            m_failedPages.erase(tappedPage);
+                            m_loadedPages.erase(tappedPage);
+                            m_loadingPages.erase(tappedPage);
+                            updateVisibleImages();
+                        } else {
+                            // Regular tap - toggle controls
+                            if (m_tapCallback) {
+                                m_tapCallback();
+                            }
                         }
                     }
                 }
@@ -211,10 +233,7 @@ void WebtoonScrollView::setupGestures() {
                 }
             } else if (status.state == brls::GestureState::END) {
                 m_isPinching = false;
-                // Snap to 1x if near normal
-                if (m_zoomLevel <= 1.05f) {
-                    resetZoom();
-                }
+                // Don't snap back - only double-tap resets zoom
             }
         }));
 }
