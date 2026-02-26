@@ -270,6 +270,7 @@ private:
     int m_pageLoadGeneration = 0;   // Track current load to detect stale timeouts
     bool m_pageLoadSucceeded = false; // Set true when current page loads successfully
     std::shared_ptr<bool> m_pageLoadAlive; // Per-load alive flag to cancel stale async loads
+    std::shared_ptr<bool> m_previewLoadAlive; // Per-preview-cycle alive flag to cancel stale preview loads
     bool m_loadedFromLocal = false;  // True when current chapter was loaded from local downloads
     void showPageError(const std::string& message);
     void hidePageError();
