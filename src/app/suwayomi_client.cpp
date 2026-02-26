@@ -2297,7 +2297,22 @@ bool SuwayomiClient::refreshToken() {
         return false;
     }
 
-    return refreshTokenGraphQL();
+    // Dedup: if token was refreshed within the last 5 seconds by another thread,
+    // skip the refresh and return success so the caller retries with the new token.
+    // This prevents the thundering herd when multiple worker threads all hit 401
+    // simultaneously and each tries to refresh independently.
+    time_t now = time(nullptr);
+    if (m_lastTokenRefreshTime > 0 && (now - m_lastTokenRefreshTime) < 5) {
+        brls::Logger::info("Token was recently refreshed ({}s ago), skipping duplicate refresh",
+                          now - m_lastTokenRefreshTime);
+        return true;
+    }
+
+    if (refreshTokenGraphQL()) {
+        m_lastTokenRefreshTime = now;
+        return true;
+    }
+    return false;
 }
 
 bool SuwayomiClient::refreshTokenGraphQL() {
