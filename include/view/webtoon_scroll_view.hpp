@@ -240,10 +240,12 @@ private:
     std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 
     // Preload buffer - how many pages ahead/behind to load
-    static constexpr int PRELOAD_PAGES = 3;
+    // Kept moderate to balance responsiveness vs VRAM (tall images use multiple GPU textures)
+    static constexpr int PRELOAD_PAGES = 2;
 
     // Unload buffer - pages beyond this distance from visible area get their images freed
-    static constexpr int UNLOAD_PAGES = 8;
+    // Reduced from 8 to limit VRAM usage when tall images have multiple segment textures
+    static constexpr int UNLOAD_PAGES = 5;
 
     // Momentum friction
     static constexpr float MOMENTUM_FRICTION = 0.95f;

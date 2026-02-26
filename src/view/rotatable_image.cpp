@@ -22,15 +22,27 @@ RotatableImage::~RotatableImage() {
 }
 
 void RotatableImage::clearImage() {
-    if (m_nvgImage != 0) {
-        NVGcontext* vg = brls::Application::getNVGContext();
-        if (vg) {
-            nvgDeleteImage(vg, m_nvgImage);
-        }
-        m_nvgImage = 0;
-        m_imageWidth = 0;
-        m_imageHeight = 0;
+    NVGcontext* vg = brls::Application::getNVGContext();
+
+    // Clear single image
+    if (m_nvgImage != 0 && vg) {
+        nvgDeleteImage(vg, m_nvgImage);
     }
+    m_nvgImage = 0;
+
+    // Clear segments
+    if (vg) {
+        for (int handle : m_segmentNvgImages) {
+            if (handle != 0) nvgDeleteImage(vg, handle);
+        }
+    }
+    m_segmentNvgImages.clear();
+    m_segmentSrcHeights.clear();
+    m_origWidth = 0;
+    m_origHeight = 0;
+
+    m_imageWidth = 0;
+    m_imageHeight = 0;
 }
 
 void RotatableImage::setImageFromMem(const unsigned char* data, size_t size) {
@@ -75,6 +87,42 @@ void RotatableImage::setImageFromFile(const std::string& path) {
         brls::Logger::error("RotatableImage: Failed to load image from {}", path);
     }
 
+    this->invalidate();
+}
+
+void RotatableImage::setImageSegments(const std::vector<std::vector<uint8_t>>& segments,
+                                       int origWidth, int origHeight,
+                                       const std::vector<int>& segmentSrcHeights) {
+    NVGcontext* vg = brls::Application::getNVGContext();
+    if (!vg || segments.empty() || origWidth <= 0 || origHeight <= 0) return;
+
+    // Clear any existing image/segments
+    clearImage();
+
+    for (const auto& segData : segments) {
+        int nvgImg = nvgCreateImageMem(vg, 0, const_cast<unsigned char*>(segData.data()), segData.size());
+        if (nvgImg == 0) {
+            brls::Logger::error("RotatableImage: Failed to create segment NVG image");
+            // Clean up on failure
+            for (int handle : m_segmentNvgImages) {
+                nvgDeleteImage(vg, handle);
+            }
+            m_segmentNvgImages.clear();
+            m_segmentSrcHeights.clear();
+            return;
+        }
+        m_segmentNvgImages.push_back(nvgImg);
+    }
+
+    m_segmentSrcHeights = segmentSrcHeights;
+    m_origWidth = origWidth;
+    m_origHeight = origHeight;
+    // Set m_imageWidth/Height to original dims for calculateImageBounds compatibility
+    m_imageWidth = origWidth;
+    m_imageHeight = origHeight;
+
+    brls::Logger::info("RotatableImage: Loaded {} segments for {}x{} image",
+                       m_segmentNvgImages.size(), origWidth, origHeight);
     this->invalidate();
 }
 
@@ -186,13 +234,72 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
     nvgFillColor(vg, m_bgColor);
     nvgFill(vg);
 
-    // If no image, just show background
-    if (m_nvgImage == 0 || m_imageWidth <= 0 || m_imageHeight <= 0) {
+    // If no image at all, just show background
+    if (m_nvgImage == 0 && m_segmentNvgImages.empty()) {
+        nvgRestore(vg);
+        return;
+    }
+    if (m_imageWidth <= 0 || m_imageHeight <= 0) {
         nvgRestore(vg);
         return;
     }
 
-    // Calculate where the image should be drawn (accounts for rotation)
+    // Segmented image drawing (tall images auto-split for GPU texture limit)
+    if (!m_segmentNvgImages.empty() && m_origHeight > 0) {
+        float imgX, imgY, imgW, imgH;
+        calculateImageBounds(x, y, width, height, imgX, imgY, imgW, imgH);
+
+        bool isRotated90or270 = (m_rotationDegrees == 90.0f || m_rotationDegrees == 270.0f);
+        bool hasRotation = (m_rotationDegrees != 0.0f);
+
+        // Determine drawing space: for rotated images, apply rotation transform
+        // and draw segments in pre-rotation coordinates
+        float drawX, drawY, drawW, drawH;
+        if (hasRotation) {
+            float centerX = imgX + imgW / 2.0f;
+            float centerY = imgY + imgH / 2.0f;
+            nvgTranslate(vg, centerX, centerY);
+            nvgRotate(vg, m_rotationRadians);
+            nvgTranslate(vg, -centerX, -centerY);
+
+            if (isRotated90or270) {
+                // Swap back to pre-rotation dimensions
+                drawW = imgH;
+                drawH = imgW;
+            } else {
+                // 180° - same dimensions
+                drawW = imgW;
+                drawH = imgH;
+            }
+            drawX = (imgX + imgW / 2.0f) - drawW / 2.0f;
+            drawY = (imgY + imgH / 2.0f) - drawH / 2.0f;
+        } else {
+            drawX = imgX;
+            drawY = imgY;
+            drawW = imgW;
+            drawH = imgH;
+        }
+
+        // Draw segments stacked vertically in (possibly pre-rotation) space
+        float yPos = drawY;
+        for (size_t i = 0; i < m_segmentNvgImages.size(); i++) {
+            float segFraction = (float)m_segmentSrcHeights[i] / (float)m_origHeight;
+            float segDisplayH = drawH * segFraction;
+
+            NVGpaint paint = nvgImagePattern(vg, drawX, yPos, drawW, segDisplayH,
+                                              0, m_segmentNvgImages[i], 1.0f);
+            nvgBeginPath(vg);
+            nvgRect(vg, drawX, yPos, drawW, segDisplayH);
+            nvgFillPaint(vg, paint);
+            nvgFill(vg);
+
+            yPos += segDisplayH;
+        }
+        nvgRestore(vg);
+        return;
+    }
+
+    // Single-texture image drawing (normal path)
     float imgX, imgY, imgW, imgH;
     calculateImageBounds(x, y, width, height, imgX, imgY, imgW, imgH);
 
@@ -323,15 +430,23 @@ void RotatableImage::takeImageFrom(RotatableImage* source) {
     // Clear our current image
     clearImage();
 
-    // Transfer the NVG image handle and dimensions
+    // Transfer single NVG image handle and dimensions
     m_nvgImage = source->m_nvgImage;
     m_imageWidth = source->m_imageWidth;
     m_imageHeight = source->m_imageHeight;
 
-    // Clear the source without deleting the NVG image (we own it now)
+    // Transfer segments
+    m_segmentNvgImages = std::move(source->m_segmentNvgImages);
+    m_segmentSrcHeights = std::move(source->m_segmentSrcHeights);
+    m_origWidth = source->m_origWidth;
+    m_origHeight = source->m_origHeight;
+
+    // Clear the source without deleting handles (we own them now)
     source->m_nvgImage = 0;
     source->m_imageWidth = 0;
     source->m_imageHeight = 0;
+    source->m_origWidth = 0;
+    source->m_origHeight = 0;
 
     this->invalidate();
     source->invalidate();

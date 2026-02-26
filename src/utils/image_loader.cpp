@@ -13,6 +13,7 @@
 // WebP decoding support
 #include <webp/decode.h>
 #include <cstring>
+#include <cmath>
 #include <thread>
 #include <chrono>
 #include <fstream>
@@ -990,8 +991,99 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
 
         // Convert images to TGA with size limit for Vita GPU (max texture 2048x2048)
-        // Webtoon images are often very tall and need to be split into segments
         const int MAX_TEXTURE_SIZE = 2048;
+
+        // Auto-split tall images to preserve width quality.
+        // Without splitting, an 800x15000 image gets scaled to 109x2048 (proportional),
+        // which looks extremely blurry when displayed at screen width.
+        // By splitting into vertical segments, each segment keeps full image width.
+        if (totalSegments == 1 && (isWebP || isJpegOrPng)) {
+            int origW = 0, origH = 0;
+
+            if (isWebP) {
+                WebPBitstreamFeatures feat;
+                if (WebPGetFeatures(reinterpret_cast<const uint8_t*>(imageBody.data()),
+                                    imageBody.size(), &feat) == VP8_STATUS_OK) {
+                    origW = feat.width;
+                    origH = feat.height;
+                }
+            } else {
+                int c;
+                stbi_info_from_memory(reinterpret_cast<const unsigned char*>(imageBody.data()),
+                                      static_cast<int>(imageBody.size()), &origW, &origH, &c);
+            }
+
+            if (origW > 0 && origH > MAX_TEXTURE_SIZE) {
+                int autoSegments = (origH + MAX_TEXTURE_SIZE - 1) / MAX_TEXTURE_SIZE;
+
+                // VRAM budget: cap total texture memory per image to prevent GPU exhaustion.
+                // The segment function scales both dims proportionally when width > maxSize,
+                // so total VRAM = maxSize² * origH / origW * 4.
+                // Solve for maxSize: maxSize = sqrt(budget * origW / (origH * 4))
+                const int MAX_VRAM_PER_IMAGE = 16 * 1024 * 1024;  // 16MB
+                int segMaxSize = MAX_TEXTURE_SIZE;
+                long long totalUnscaledBytes = (long long)origW * origH * 4;
+                if (totalUnscaledBytes > MAX_VRAM_PER_IMAGE) {
+                    float maxSizeF = std::sqrt((float)MAX_VRAM_PER_IMAGE * origW / ((float)origH * 4.0f));
+                    segMaxSize = std::max(256, std::min((int)maxSizeF, MAX_TEXTURE_SIZE));
+                    brls::Logger::info("ImageLoader: VRAM budget {}x{} -> maxWidth={}", origW, origH, segMaxSize);
+                }
+
+                brls::Logger::info("ImageLoader: Auto-splitting {}x{} into {} segments (maxSize={})",
+                                   origW, origH, autoSegments, segMaxSize);
+
+                std::vector<std::vector<uint8_t>> segmentDatas;
+                std::vector<int> segSrcHeights;
+                bool allOK = true;
+
+                for (int seg = 0; seg < autoSegments && allOK; seg++) {
+                    if (alive && !*alive) return;  // Owner destroyed during processing
+
+                    std::vector<uint8_t> segData;
+                    if (isWebP) {
+                        segData = convertWebPtoTGASegment(
+                            reinterpret_cast<const uint8_t*>(imageBody.data()),
+                            imageBody.size(), seg, autoSegments, segMaxSize);
+                    } else {
+                        segData = convertImageToTGASegment(
+                            reinterpret_cast<const uint8_t*>(imageBody.data()),
+                            imageBody.size(), seg, autoSegments, segMaxSize);
+                    }
+                    if (segData.empty()) {
+                        allOK = false;
+                        break;
+                    }
+
+                    // Cache each segment
+                    std::string segCK = url + "_full_autoseg" + std::to_string(seg);
+                    cachePut(segCK, segData);
+                    segmentDatas.push_back(std::move(segData));
+
+                    // Track source height for proportional display
+                    int segH = (origH + autoSegments - 1) / autoSegments;
+                    int startY = seg * segH;
+                    int endY = std::min(startY + segH, origH);
+                    segSrcHeights.push_back(endY - startY);
+                }
+
+                if (allOK && !segmentDatas.empty() && (target || callback)) {
+                    brls::sync([segDatas = std::move(segmentDatas), origW, origH,
+                                segHeights = std::move(segSrcHeights), callback, target, alive]() {
+                        if (alive && !*alive) return;
+                        if (target) {
+                            target->setImageSegments(segDatas, origW, origH, segHeights);
+                            if (callback) callback(target);
+                        }
+                    });
+                    return;  // Done - skip normal single-texture path
+                }
+
+                // Auto-split failed, fall through to normal proportional scaling
+                brls::Logger::warning("ImageLoader: Auto-split failed for {}x{}, using proportional scaling", origW, origH);
+            }
+        }
+
+        // Normal single-texture path (images that fit in one texture, or auto-split fallback)
         std::vector<uint8_t> imageData;
 
         if (isWebP) {

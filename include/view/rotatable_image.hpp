@@ -7,6 +7,7 @@
 
 #include <borealis.hpp>
 #include <string>
+#include <vector>
 
 namespace vitasuwayomi {
 
@@ -78,15 +79,24 @@ public:
     void setBackgroundFillColor(NVGcolor color) { m_bgColor = color; }
 
     /**
-     * Get image dimensions
+     * Set image from multiple segments (for tall images auto-split to fit GPU texture limit).
+     * Each segment is a TGA representing a horizontal slice of the original image.
+     * The RotatableImage draws them stacked vertically, transparent to the caller.
      */
-    int getImageWidth() const { return m_imageWidth; }
-    int getImageHeight() const { return m_imageHeight; }
+    void setImageSegments(const std::vector<std::vector<uint8_t>>& segments,
+                          int origWidth, int origHeight,
+                          const std::vector<int>& segmentSrcHeights);
 
     /**
-     * Check if image is loaded
+     * Get image dimensions (returns original dimensions for segmented images)
      */
-    bool hasImage() const { return m_nvgImage != 0; }
+    int getImageWidth() const { return (m_origWidth > 0) ? m_origWidth : m_imageWidth; }
+    int getImageHeight() const { return (m_origHeight > 0) ? m_origHeight : m_imageHeight; }
+
+    /**
+     * Check if image is loaded (single or segmented)
+     */
+    bool hasImage() const { return m_nvgImage != 0 || !m_segmentNvgImages.empty(); }
 
     /**
      * Set zoom level (1.0 = normal, >1.0 = zoomed in)
@@ -133,9 +143,17 @@ public:
     static brls::View* create();
 
 private:
-    int m_nvgImage = 0;           // NanoVG image handle
+    int m_nvgImage = 0;           // NanoVG image handle (single texture)
     int m_imageWidth = 0;
     int m_imageHeight = 0;
+
+    // Multi-segment support: tall images are auto-split into multiple GPU textures
+    // to preserve width quality within the 2048x2048 texture size limit.
+    std::vector<int> m_segmentNvgImages;      // NVG handles for each segment
+    std::vector<int> m_segmentSrcHeights;     // Source pixel height of each segment
+    int m_origWidth = 0;                       // Original full image width
+    int m_origHeight = 0;                      // Original full image height
+
     float m_rotationDegrees = 0.0f;
     float m_rotationRadians = 0.0f;
     ImageScaleMode m_scaleMode = ImageScaleMode::FIT_SCREEN;
