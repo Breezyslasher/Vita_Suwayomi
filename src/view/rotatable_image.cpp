@@ -249,15 +249,47 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
         float imgX, imgY, imgW, imgH;
         calculateImageBounds(x, y, width, height, imgX, imgY, imgW, imgH);
 
-        float yPos = imgY;
+        bool isRotated90or270 = (m_rotationDegrees == 90.0f || m_rotationDegrees == 270.0f);
+        bool hasRotation = (m_rotationDegrees != 0.0f);
+
+        // Determine drawing space: for rotated images, apply rotation transform
+        // and draw segments in pre-rotation coordinates
+        float drawX, drawY, drawW, drawH;
+        if (hasRotation) {
+            float centerX = imgX + imgW / 2.0f;
+            float centerY = imgY + imgH / 2.0f;
+            nvgTranslate(vg, centerX, centerY);
+            nvgRotate(vg, m_rotationRadians);
+            nvgTranslate(vg, -centerX, -centerY);
+
+            if (isRotated90or270) {
+                // Swap back to pre-rotation dimensions
+                drawW = imgH;
+                drawH = imgW;
+            } else {
+                // 180° - same dimensions
+                drawW = imgW;
+                drawH = imgH;
+            }
+            drawX = (imgX + imgW / 2.0f) - drawW / 2.0f;
+            drawY = (imgY + imgH / 2.0f) - drawH / 2.0f;
+        } else {
+            drawX = imgX;
+            drawY = imgY;
+            drawW = imgW;
+            drawH = imgH;
+        }
+
+        // Draw segments stacked vertically in (possibly pre-rotation) space
+        float yPos = drawY;
         for (size_t i = 0; i < m_segmentNvgImages.size(); i++) {
             float segFraction = (float)m_segmentSrcHeights[i] / (float)m_origHeight;
-            float segDisplayH = imgH * segFraction;
+            float segDisplayH = drawH * segFraction;
 
-            NVGpaint paint = nvgImagePattern(vg, imgX, yPos, imgW, segDisplayH,
+            NVGpaint paint = nvgImagePattern(vg, drawX, yPos, drawW, segDisplayH,
                                               0, m_segmentNvgImages[i], 1.0f);
             nvgBeginPath(vg);
-            nvgRect(vg, imgX, yPos, imgW, segDisplayH);
+            nvgRect(vg, drawX, yPos, drawW, segDisplayH);
             nvgFillPaint(vg, paint);
             nvgFill(vg);
 
