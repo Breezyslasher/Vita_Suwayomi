@@ -20,6 +20,7 @@ public:
     void willDisappear(bool resetState) override;
 
 private:
+    void addSectionSeparator();
     void createAccountSection();
     void createTrackingSection();
     void createUISection();

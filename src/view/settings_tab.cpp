@@ -47,16 +47,25 @@ SettingsTab::SettingsTab() {
     m_contentBox->setPadding(20);
     m_contentBox->setGrow(1.0f);
 
-    // Create all sections
+    // Create all sections with visual separators
     createAccountSection();
+    addSectionSeparator();
     createTrackingSection();
+    addSectionSeparator();
     createUISection();
+    addSectionSeparator();
     createLibrarySection();
+    addSectionSeparator();
     createReaderSection();
+    addSectionSeparator();
     createDownloadsSection();
+    addSectionSeparator();
     createBrowseSection();
+    addSectionSeparator();
     createStatisticsSection();
+    addSectionSeparator();
     createBackupSection();
+    addSectionSeparator();
     createAboutSection();
 
     m_scrollView->setContentView(m_contentBox);
@@ -72,6 +81,17 @@ void SettingsTab::willDisappear(bool resetState) {
 
     // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
     if (m_alive) *m_alive = false;
+}
+
+void SettingsTab::addSectionSeparator() {
+    auto* separator = new brls::Box();
+    separator->setHeight(1);
+    separator->setMarginTop(12);
+    separator->setMarginBottom(4);
+    separator->setMarginLeft(8);
+    separator->setMarginRight(8);
+    separator->setBackgroundColor(nvgRGBA(80, 80, 80, 100));
+    m_contentBox->addView(separator);
 }
 
 void SettingsTab::createAccountSection() {
@@ -151,14 +171,6 @@ void SettingsTab::createAccountSection() {
             brls::Application::notify(value ? "Auto-switch enabled" : "Auto-switch disabled");
         });
     m_contentBox->addView(autoSwitchToggle);
-
-    // Info label for auto-switch
-    auto* autoSwitchInfoLabel = new brls::Label();
-    autoSwitchInfoLabel->setText("Try alternate URL if connection fails");
-    autoSwitchInfoLabel->setFontSize(14);
-    autoSwitchInfoLabel->setMarginLeft(16);
-    autoSwitchInfoLabel->setMarginTop(4);
-    m_contentBox->addView(autoSwitchInfoLabel);
 
     // Connection timeout selector
     auto* timeoutSelector = new brls::SelectorCell();
@@ -423,15 +435,6 @@ void SettingsTab::createLibrarySection() {
     });
     m_contentBox->addView(m_hideCategoriesCell);
 
-    // Info label
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Select which categories to show in library");
-    infoLabel->setFontSize(14);
-    infoLabel->setMarginLeft(16);
-    infoLabel->setMarginTop(4);
-    infoLabel->setMarginBottom(8);
-    m_contentBox->addView(infoLabel);
-
     // Grid display mode selector
     auto* displayModeSelector = new brls::SelectorCell();
     displayModeSelector->init("Display Mode",
@@ -465,15 +468,6 @@ void SettingsTab::createLibrarySection() {
         });
     m_contentBox->addView(listRowSizeSelector);
 
-    // Info label for list row size
-    auto* listRowInfoLabel = new brls::Label();
-    listRowInfoLabel->setText("Auto mode adjusts row height to fit the full title");
-    listRowInfoLabel->setFontSize(14);
-    listRowInfoLabel->setMarginLeft(16);
-    listRowInfoLabel->setMarginTop(4);
-    listRowInfoLabel->setMarginBottom(8);
-    m_contentBox->addView(listRowInfoLabel);
-
     // Library grouping mode selector
     auto* groupModeSelector = new brls::SelectorCell();
     groupModeSelector->init("Library Grouping",
@@ -485,15 +479,6 @@ void SettingsTab::createLibrarySection() {
             brls::Application::notify("Library grouping updated");
         });
     m_contentBox->addView(groupModeSelector);
-
-    // Info label for grouping mode
-    auto* groupModeInfoLabel = new brls::Label();
-    groupModeInfoLabel->setText("How manga is organized in the library");
-    groupModeInfoLabel->setFontSize(14);
-    groupModeInfoLabel->setMarginLeft(16);
-    groupModeInfoLabel->setMarginTop(4);
-    groupModeInfoLabel->setMarginBottom(8);
-    m_contentBox->addView(groupModeInfoLabel);
 
     // Default library sort mode selector
     auto* defaultSortSelector = new brls::SelectorCell();
@@ -507,15 +492,6 @@ void SettingsTab::createLibrarySection() {
             Application::getInstance().saveSettings();
         });
     m_contentBox->addView(defaultSortSelector);
-
-    // Info label for default sort mode
-    auto* defaultSortInfoLabel = new brls::Label();
-    defaultSortInfoLabel->setText("Used when category sort is set to 'Default'");
-    defaultSortInfoLabel->setFontSize(14);
-    defaultSortInfoLabel->setMarginLeft(16);
-    defaultSortInfoLabel->setMarginTop(4);
-    defaultSortInfoLabel->setMarginBottom(8);
-    m_contentBox->addView(defaultSortInfoLabel);
 
     // Cache Library Data toggle
     auto* cacheDataToggle = new brls::BooleanCell();
@@ -533,14 +509,6 @@ void SettingsTab::createLibrarySection() {
     });
     m_contentBox->addView(cacheCoverToggle);
 
-    // Cache info label
-    auto* cacheInfoLabel = new brls::Label();
-    cacheInfoLabel->setText("Caching speeds up library loading");
-    cacheInfoLabel->setFontSize(14);
-    cacheInfoLabel->setMarginLeft(16);
-    cacheInfoLabel->setMarginTop(4);
-    m_contentBox->addView(cacheInfoLabel);
-
     // Downloads Only Mode toggle
     auto* downloadsOnlyToggle = new brls::BooleanCell();
     downloadsOnlyToggle->init("Downloads Only Mode", settings.downloadsOnlyMode, [](bool value) {
@@ -549,15 +517,6 @@ void SettingsTab::createLibrarySection() {
         brls::Application::notify(value ? "Showing downloaded only" : "Showing all manga");
     });
     m_contentBox->addView(downloadsOnlyToggle);
-
-    // Downloads Only info label
-    auto* downloadsOnlyInfoLabel = new brls::Label();
-    downloadsOnlyInfoLabel->setText("When offline, only show locally downloaded manga and chapters");
-    downloadsOnlyInfoLabel->setFontSize(14);
-    downloadsOnlyInfoLabel->setMarginLeft(16);
-    downloadsOnlyInfoLabel->setMarginTop(4);
-    downloadsOnlyInfoLabel->setMarginBottom(8);
-    m_contentBox->addView(downloadsOnlyInfoLabel);
 
     // Library Updates header
     auto* updatesHeader = new brls::Header();
@@ -571,14 +530,6 @@ void SettingsTab::createLibrarySection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(updateOnStartToggle);
-
-    // Info label for update on start
-    auto* updateOnStartInfoLabel = new brls::Label();
-    updateOnStartInfoLabel->setText("Automatically check for new chapters on app startup");
-    updateOnStartInfoLabel->setFontSize(14);
-    updateOnStartInfoLabel->setMarginLeft(16);
-    updateOnStartInfoLabel->setMarginTop(4);
-    m_contentBox->addView(updateOnStartInfoLabel);
 
     // Default category selector
     m_defaultCategorySelector = new brls::SelectorCell();
@@ -648,6 +599,22 @@ void SettingsTab::showCategoryVisibilityDialog() {
         });
 
     auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
+
+    // Clean up stale hidden IDs (categories that no longer exist on server)
+    std::set<int> validIds;
+    for (const auto& cat : categories) validIds.insert(cat.id);
+    bool cleaned = false;
+    for (auto it = hiddenIds.begin(); it != hiddenIds.end(); ) {
+        if (validIds.find(*it) == validIds.end()) {
+            it = hiddenIds.erase(it);
+            cleaned = true;
+        } else {
+            ++it;
+        }
+    }
+    if (cleaned) {
+        Application::getInstance().saveSettings();
+    }
 
     // Create dialog box (matching Manage Categories design)
     auto* dialogBox = new brls::Box();
@@ -847,14 +814,6 @@ void SettingsTab::createReaderSection() {
     header->setTitle("Reader (Defaults)");
     m_contentBox->addView(header);
 
-    // Info label explaining these are defaults
-    auto* readerInfoLabel = new brls::Label();
-    readerInfoLabel->setText("These settings are used for new manga. Per-manga settings can be changed in the reader and are synced to the server.");
-    readerInfoLabel->setFontSize(14);
-    readerInfoLabel->setMarginLeft(16);
-    readerInfoLabel->setMarginBottom(12);
-    m_contentBox->addView(readerInfoLabel);
-
     // Reading mode selector
     m_readingModeSelector = new brls::SelectorCell();
     m_readingModeSelector->init("Reading Mode",
@@ -956,14 +915,6 @@ void SettingsTab::createReaderSection() {
     });
     m_contentBox->addView(cropBordersToggle);
 
-    // Info label for crop borders
-    auto* cropInfoLabel = new brls::Label();
-    cropInfoLabel->setText("Automatically removes white/black borders from pages");
-    cropInfoLabel->setFontSize(14);
-    cropInfoLabel->setMarginLeft(16);
-    cropInfoLabel->setMarginTop(4);
-    m_contentBox->addView(cropInfoLabel);
-
     // Auto-detect webtoon toggle
     auto* webtoonDetectToggle = new brls::BooleanCell();
     webtoonDetectToggle->init("Auto-Detect Webtoon", settings.webtoonDetection, [&settings](bool value) {
@@ -971,14 +922,6 @@ void SettingsTab::createReaderSection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(webtoonDetectToggle);
-
-    // Info label for webtoon detection
-    auto* detectInfoLabel = new brls::Label();
-    detectInfoLabel->setText("Automatically switch to vertical mode for long strip images");
-    detectInfoLabel->setFontSize(14);
-    detectInfoLabel->setMarginLeft(16);
-    detectInfoLabel->setMarginTop(4);
-    m_contentBox->addView(detectInfoLabel);
 
     // Side padding selector
     auto* paddingSelector = new brls::SelectorCell();
@@ -1013,14 +956,6 @@ void SettingsTab::createDownloadsSection() {
         });
     m_contentBox->addView(downloadModeSelector);
 
-    // Info label for download mode
-    auto* downloadModeInfoLabel = new brls::Label();
-    downloadModeInfoLabel->setText("Server: stored on Suwayomi server | Local: stored on Vita | Both: synced to both");
-    downloadModeInfoLabel->setFontSize(14);
-    downloadModeInfoLabel->setMarginLeft(16);
-    downloadModeInfoLabel->setMarginTop(4);
-    m_contentBox->addView(downloadModeInfoLabel);
-
     // Download quality selector
     auto* qualitySelector = new brls::SelectorCell();
     qualitySelector->init("Download Quality",
@@ -1032,14 +967,6 @@ void SettingsTab::createDownloadsSection() {
             Application::getInstance().saveSettings();
         });
     m_contentBox->addView(qualitySelector);
-
-    // Info label for download quality
-    auto* qualityInfoLabel = new brls::Label();
-    qualityInfoLabel->setText("Controls image quality for local downloads. Lower quality saves storage space.");
-    qualityInfoLabel->setFontSize(14);
-    qualityInfoLabel->setMarginLeft(16);
-    qualityInfoLabel->setMarginTop(4);
-    m_contentBox->addView(qualityInfoLabel);
 
     // Auto download new chapters toggle
     auto* autoDownloadToggle = new brls::BooleanCell();
@@ -1064,14 +991,6 @@ void SettingsTab::createDownloadsSection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(autoResumeToggle);
-
-    // Info label for auto-resume
-    auto* autoResumeInfoLabel = new brls::Label();
-    autoResumeInfoLabel->setText("Automatically resume queued downloads when app restarts");
-    autoResumeInfoLabel->setFontSize(14);
-    autoResumeInfoLabel->setMarginLeft(16);
-    autoResumeInfoLabel->setMarginTop(4);
-    m_contentBox->addView(autoResumeInfoLabel);
 
     // Sync progress now button
     auto* syncNowCell = new brls::DetailCell();
@@ -1150,14 +1069,6 @@ void SettingsTab::createBrowseSection() {
         return true;
     });
     m_contentBox->addView(m_languageFilterCell);
-
-    // Info label
-    auto* langInfoLabel = new brls::Label();
-    langInfoLabel->setText("Filter which source languages appear in Browse and Search");
-    langInfoLabel->setFontSize(14);
-    langInfoLabel->setMarginLeft(16);
-    langInfoLabel->setMarginTop(4);
-    m_contentBox->addView(langInfoLabel);
 
     // Show NSFW sources toggle
     auto* nsfwToggle = new brls::BooleanCell();
@@ -2133,8 +2044,24 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
     dialog->addButton("Delete", [this, catId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         if (client.deleteCategory(catId)) {
+            // Clean up hidden category reference
+            auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
+            hidden.erase(catId);
+
+            // Reset default category if it was the deleted one
+            if (Application::getInstance().getSettings().defaultCategoryId == catId) {
+                Application::getInstance().getSettings().defaultCategoryId = 0;
+            }
+
+            Application::getInstance().saveSettings();
+
+            // Update UI cells
+            if (m_hideCategoriesCell) {
+                m_hideCategoriesCell->setDetailText(std::to_string(hidden.size()) + " hidden");
+            }
+            refreshDefaultCategorySelector();
+
             brls::Application::notify("Category deleted");
-            // Re-open category management dialog to show updated list
             showCategoryManagementDialog();
         } else {
             brls::Application::notify("Failed to delete category");
