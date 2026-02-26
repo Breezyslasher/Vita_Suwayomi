@@ -460,11 +460,19 @@ void ReaderActivity::onContentAvailable() {
                         if (m_completionTurnPage) {
                             finalizePageTurn();
                         } else if (m_completionNavChapter) {
+                            // Defer chapter navigation to next frame — it's a
+                            // heavy operation that replaces all pages and should
+                            // not run inside the gesture handler's stack.
                             bool navNext = m_completionNavNext;
                             m_completionNavChapter = false;
                             resetSwipeState();
-                            if (navNext) nextChapter();
-                            else previousChapter();
+                            std::weak_ptr<bool> wa = m_alive;
+                            brls::sync([this, wa, navNext]() {
+                                auto a = wa.lock();
+                                if (!a || !*a) return;
+                                if (navNext) nextChapter();
+                                else previousChapter();
+                            });
                         } else {
                             resetSwipeState();
                         }
@@ -1432,6 +1440,13 @@ void ReaderActivity::loadPage(int index) {
     int loadGen = ++m_pageLoadGeneration;
     m_pageLoadSucceeded = false;
 
+    // Invalidate any previous async load for pageImage so stale loads
+    // (from a page we already swiped past) don't overwrite the new page.
+    // Each load gets its own alive flag; setting the old one to false
+    // makes executeRotatableLoad skip setImageFromMem for the old page.
+    if (m_pageLoadAlive) *m_pageLoadAlive = false;
+    m_pageLoadAlive = std::make_shared<bool>(true);
+
     // Load image using RotatableImage
     if (pageImage) {
         int currentPageAtLoad = m_currentPage;
@@ -1448,7 +1463,7 @@ void ReaderActivity::loadPage(int index) {
             }
         };
 
-        ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage, m_alive);
+        ImageLoader::loadAsyncFullSize(imageUrl, onLoaded, pageImage, m_pageLoadAlive);
 
         // Set up a timeout: if page hasn't loaded after 15 seconds, show error
         // Only for server-streamed pages - local files load instantly from disk
@@ -3433,6 +3448,7 @@ void ReaderActivity::willDisappear(bool resetState) {
     // (image loader brls::sync, asyncTask completions, etc.) see the
     // flag as false and skip accessing any of our member state.
     *m_alive = false;
+    if (m_pageLoadAlive) *m_pageLoadAlive = false;
 
     // Cancel all pending image loader operations to avoid their brls::sync
     // callbacks calling target->setImageFromMem() on our destroyed views.
