@@ -399,7 +399,7 @@ void RotatableImage::cycleRotation() {
 }
 
 void RotatableImage::setZoomLevel(float level) {
-    m_zoomLevel = std::max(0.5f, std::min(1.0f, level));  // Clamp between 0.5x and 1.0x
+    m_zoomLevel = std::max(1.0f, std::min(4.0f, level));  // Clamp between 1.0x and 4.0x
     this->invalidate();
 }
 

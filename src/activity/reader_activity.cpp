@@ -612,7 +612,7 @@ void ReaderActivity::onContentAvailable() {
                     m_pinchStartOffset = m_zoomOffset;
                 } else if (status.state == brls::GestureState::STAY) {
                     float newZoom = m_initialZoomLevel * status.scaleFactor;
-                    newZoom = std::max(0.5f, std::min(1.0f, newZoom));
+                    newZoom = std::max(1.0f, std::min(4.0f, newZoom));
 
                     if (std::abs(newZoom - m_zoomLevel) > 0.01f) {
                         m_zoomLevel = newZoom;
@@ -2212,8 +2212,8 @@ void ReaderActivity::handlePinchZoom(float scaleFactor) {
     // Pinch-to-zoom - scale by the pinch factor
     float newZoom = m_zoomLevel * scaleFactor;
 
-    // Clamp zoom between 0.5x and 1.0x (no zoom-in past fit)
-    newZoom = std::max(0.5f, std::min(1.0f, newZoom));
+    // Clamp zoom between 1.0x and 4.0x (no zoom-out past fit)
+    newZoom = std::max(1.0f, std::min(4.0f, newZoom));
 
     if (newZoom != m_zoomLevel) {
         if (newZoom <= 1.05f && newZoom >= 0.95f) {
