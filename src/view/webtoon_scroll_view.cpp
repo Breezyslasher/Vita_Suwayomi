@@ -29,25 +29,43 @@ WebtoonScrollView::~WebtoonScrollView() {
     clearPages();
 }
 
+void WebtoonScrollView::resetZoom() {
+    m_isZoomed = false;
+    m_zoomLevel = 1.0f;
+    m_zoomOffset = {0, 0};
+}
+
 void WebtoonScrollView::setupGestures() {
     this->setFocusable(true);
 
     // Pan gesture for scrolling (ANY axis to support rotated views)
     this->addGestureRecognizer(new brls::PanGestureRecognizer(
         [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            // Suppress scrolling while pinch-to-zoom is active
+            if (m_isPinching) return;
+
             if (status.state == brls::GestureState::START) {
                 m_isTouching = true;
                 m_touchStart = status.position;
                 m_touchLast = status.position;
                 m_scrollAtTouchStart = m_scrollY;
                 m_scrollVelocity = 0.0f;
-                m_overscrollAmount = 0.0f;
-                m_overscrollTriggered = false;
                 m_lastTouchTime = std::chrono::steady_clock::now();
             } else if (status.state == brls::GestureState::STAY) {
                 // Calculate raw deltas
                 float rawDx = status.position.x - m_touchLast.x;
                 float rawDy = status.position.y - m_touchLast.y;
+
+                // If zoomed, pan the zoomed view instead of normal scrolling
+                if (m_isZoomed) {
+                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                    m_zoomOffset.x += rawDx * scaleX;
+                    m_zoomOffset.y += rawDy * scaleY;
+                    m_touchLast = status.position;
+                    m_lastTouchTime = std::chrono::steady_clock::now();
+                    return;
+                }
 
                 // Calculate scroll delta based on rotation
                 // scrollY: 0 = beginning, negative = scrolled towards end
@@ -92,43 +110,8 @@ void WebtoonScrollView::setupGestures() {
 
                 m_scrollY = std::max(minScroll, std::min(maxScroll, m_scrollY));
 
-                // Track overscroll for chapter navigation
-                // If user is scrolling past the boundary, accumulate overscroll
-                float unclamped = prevScrollY + scrollDelta;
-                if (unclamped > maxScroll && scrollDelta > 0) {
-                    // Overscrolling at the beginning (scrolling up past start)
-                    m_overscrollAmount += scrollDelta;
-                    if (m_overscrollAmount > OVERSCROLL_THRESHOLD && !m_overscrollTriggered) {
-                        // Check if first page is a transition page
-                        if (!m_pages.empty() && isTransitionPage(0)) {
-                            m_overscrollTriggered = true;
-                            auto it = m_transitionInfo.find(0);
-                            bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : false;
-                            if (m_chapterNavigateCallback) {
-                                m_chapterNavigateCallback(isNext);
-                            }
-                        }
-                    }
-                } else if (unclamped < minScroll && scrollDelta < 0) {
-                    // Overscrolling at the end (scrolling down past end)
-                    m_overscrollAmount += -scrollDelta;
-                    int lastIdx = static_cast<int>(m_pages.size()) - 1;
-                    if (m_overscrollAmount > OVERSCROLL_THRESHOLD && !m_overscrollTriggered) {
-                        // Check if last page is a transition page
-                        if (lastIdx >= 0 && isTransitionPage(lastIdx)) {
-                            m_overscrollTriggered = true;
-                            auto it = m_transitionInfo.find(lastIdx);
-                            bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : true;
-                            if (m_chapterNavigateCallback) {
-                                m_chapterNavigateCallback(isNext);
-                            }
-                        }
-                    }
-                } else {
-                    // Not overscrolling - reset
-                    m_overscrollAmount = 0.0f;
-                    m_overscrollTriggered = false;
-                }
+                // Mark that the user has started scrolling (enables auto-extend)
+                if (!m_userHasScrolled) m_userHasScrolled = true;
 
                 // Calculate velocity for momentum
                 auto now = std::chrono::steady_clock::now();
@@ -146,6 +129,12 @@ void WebtoonScrollView::setupGestures() {
             } else if (status.state == brls::GestureState::END) {
                 m_isTouching = false;
 
+                // If zoomed, just stop panning (no momentum when zoomed)
+                if (m_isZoomed) {
+                    m_scrollVelocity = 0.0f;
+                    return;
+                }
+
                 // Check if it was a tap (minimal movement)
                 float dx = status.position.x - m_touchStart.x;
                 float dy = status.position.y - m_touchStart.y;
@@ -153,6 +142,9 @@ void WebtoonScrollView::setupGestures() {
 
                 if (distance < TAP_THRESHOLD) {
                     m_scrollVelocity = 0.0f;
+
+                    // If zoomed, double-tap resets zoom
+                    // (single tap while zoomed just toggles controls)
 
                     // Scale tap position from physical to view coords
                     float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
@@ -176,12 +168,48 @@ void WebtoonScrollView::setupGestures() {
                     }
                 }
 
-                // Reset overscroll state when finger lifts
-                m_overscrollAmount = 0.0f;
-                m_overscrollTriggered = false;
                 // Otherwise, momentum will be applied in onFrame()
             }
         }, brls::PanAxis::ANY));
+
+    // Pinch-to-zoom gesture (Vita two-finger touch)
+    this->addGestureRecognizer(new vitasuwayomi::PinchGestureRecognizer(
+        [this](vitasuwayomi::PinchGestureStatus status, brls::Sound* soundToPlay) {
+            if (status.state == brls::GestureState::START) {
+                m_isPinching = true;
+                m_initialZoomLevel = m_zoomLevel;
+                m_initialZoomOffset = m_zoomOffset;
+                // Convert physical pinch center to view coords
+                float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                m_initialPinchCenter = {status.center.x * scaleX, status.center.y * scaleY};
+                m_scrollVelocity = 0.0f;
+            } else if (status.state == brls::GestureState::STAY) {
+                float newZoom = m_initialZoomLevel * status.scaleFactor;
+                newZoom = std::max(1.0f, std::min(4.0f, newZoom));
+
+                if (std::abs(newZoom - m_zoomLevel) > 0.01f) {
+                    // Convert current pinch center to view coords
+                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                    brls::Point currentCenter = {status.center.x * scaleX, status.center.y * scaleY};
+
+                    // Focal point zoom: keep the initial pinch point stable
+                    // offset_new = currentCenter/newZoom - initialCenter/initialZoom + initialOffset
+                    m_zoomOffset.x = currentCenter.x / newZoom - m_initialPinchCenter.x / m_initialZoomLevel + m_initialZoomOffset.x;
+                    m_zoomOffset.y = currentCenter.y / newZoom - m_initialPinchCenter.y / m_initialZoomLevel + m_initialZoomOffset.y;
+
+                    m_zoomLevel = newZoom;
+                    m_isZoomed = (newZoom > 1.05f);
+                }
+            } else if (status.state == brls::GestureState::END) {
+                m_isPinching = false;
+                // Snap to 1x if near normal
+                if (m_zoomLevel <= 1.05f) {
+                    resetZoom();
+                }
+            }
+        }));
 }
 
 bool WebtoonScrollView::isTransitionPage(int pageIndex) const {
@@ -377,6 +405,12 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
     m_failedPages.clear();
     m_transitionInfo.clear();
 
+    // Reset auto-extend flags (user must scroll before auto-extend activates)
+    m_trailingExtendTriggered = false;
+    m_leadingExtendTriggered = false;
+    m_userHasScrolled = false;
+    m_extendingChapter = false;
+
     // Load initial visible images
     updateVisibleImages();
 
@@ -402,6 +436,13 @@ void WebtoonScrollView::clearPages() {
     m_overscrollAmount = 0.0f;
     m_overscrollTriggered = false;
     m_currentPage = 0;
+    m_trailingExtendTriggered = false;
+    m_leadingExtendTriggered = false;
+    m_userHasScrolled = false;
+    m_extendingChapter = false;
+
+    // Reset zoom state
+    resetZoom();
 }
 
 void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
@@ -463,6 +504,9 @@ void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
     // Reset overscroll since we just added content
     m_overscrollAmount = 0.0f;
     m_overscrollTriggered = false;
+
+    // Allow next trailing auto-extend (new transition page at end)
+    m_trailingExtendTriggered = false;
 
     // Load newly visible images
     updateVisibleImages();
@@ -580,6 +624,9 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     // Reset overscroll
     m_overscrollAmount = 0.0f;
     m_overscrollTriggered = false;
+
+    // Allow next leading auto-extend (new transition page at start)
+    m_leadingExtendTriggered = false;
 
     // Load newly visible images
     updateVisibleImages();
@@ -877,6 +924,35 @@ void WebtoonScrollView::updateVisibleImages() {
             // the page will be re-loaded when it comes back into range
         }
     }
+
+    // Auto-extend: seamlessly load next/prev chapter when approaching transition pages
+    // This replaces the old overscroll-based chapter navigation for a smooth scrolling experience
+    if (!m_extendingChapter && m_userHasScrolled && m_chapterNavigateCallback && firstVisible >= 0) {
+        // Check trailing transition page (next chapter)
+        int lastIdx = static_cast<int>(m_pages.size()) - 1;
+        if (lastIdx >= 0 && isTransitionPage(lastIdx) && !m_trailingExtendTriggered && lastVisible >= 0) {
+            if (lastIdx <= lastVisible + PRELOAD_PAGES + 2) {
+                m_extendingChapter = true;
+                m_trailingExtendTriggered = true;
+                auto it = m_transitionInfo.find(lastIdx);
+                bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : true;
+                m_chapterNavigateCallback(isNext);
+                m_extendingChapter = false;
+            }
+        }
+
+        // Check leading transition page (previous chapter)
+        if (!m_pages.empty() && isTransitionPage(0) && !m_leadingExtendTriggered) {
+            if (firstVisible <= PRELOAD_PAGES + 2) {
+                m_extendingChapter = true;
+                m_leadingExtendTriggered = true;
+                auto it = m_transitionInfo.find(0);
+                bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : false;
+                m_chapterNavigateCallback(isNext);
+                m_extendingChapter = false;
+            }
+        }
+    }
 }
 
 void WebtoonScrollView::updateCurrentPage() {
@@ -928,6 +1004,16 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
     // Save state and set scissor for clipping
     nvgSave(vg);
     nvgScissor(vg, x, y, width, height);
+
+    // Apply zoom transform if zoomed
+    if (m_zoomLevel != 1.0f) {
+        float centerX = x + width / 2.0f;
+        float centerY = y + height / 2.0f;
+        nvgTranslate(vg, centerX, centerY);
+        nvgScale(vg, m_zoomLevel, m_zoomLevel);
+        nvgTranslate(vg, m_zoomOffset.x, m_zoomOffset.y);
+        nvgTranslate(vg, -centerX, -centerY);
+    }
 
     bool horizontal = isHorizontalLayout();
 

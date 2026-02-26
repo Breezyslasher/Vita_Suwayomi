@@ -92,6 +92,14 @@ enum class DownloadMode {
     BOTH = 2            // Download to both server and local
 };
 
+// Download quality options (controls local download image quality)
+enum class DownloadQuality {
+    ORIGINAL = 0,       // Keep original quality from server
+    HIGH = 1,           // Resize to max 1280px width, JPEG quality 90
+    MEDIUM = 2,         // Resize to max 960px width, JPEG quality 80
+    LOW = 3             // Resize to max 720px width, JPEG quality 70
+};
+
 // Per-manga reader settings (overrides defaults when set)
 struct MangaReaderSettings {
     ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;
@@ -159,6 +167,7 @@ struct AppSettings {
 
     // Download Settings
     DownloadMode downloadMode = DownloadMode::SERVER_ONLY;  // Where to download chapters
+    DownloadQuality downloadQuality = DownloadQuality::ORIGINAL;  // Image quality for local downloads
     bool autoDownloadChapters = false;
     bool deleteAfterRead = false;
     bool autoResumeDownloads = true;  // Auto-resume queued downloads on app restart
@@ -286,6 +295,7 @@ public:
     static std::string getReadingModeString(ReadingMode mode);
     static std::string getPageScaleModeString(PageScaleMode mode);
     static std::string getDownloadModeString(DownloadMode mode);
+    static std::string getDownloadQualityString(DownloadQuality quality);
 
 private:
     Application() = default;

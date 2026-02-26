@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include "view/rotatable_image.hpp"
+#include "view/pinch_gesture.hpp"
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
@@ -205,9 +206,15 @@ private:
     float m_scrollAtTouchStart = 0.0f;
     std::chrono::steady_clock::time_point m_lastTouchTime;
 
-    // Overscroll tracking for auto chapter navigation
+    // Overscroll tracking (legacy, kept for potential bounce animation)
     float m_overscrollAmount = 0.0f;      // Accumulated overscroll past boundary
     bool m_overscrollTriggered = false;    // Prevents repeated triggers
+
+    // Auto-extend: seamlessly load next/prev chapter when approaching transition pages
+    bool m_extendingChapter = false;           // Re-entrancy guard
+    bool m_trailingExtendTriggered = false;    // Prevents repeated trailing triggers
+    bool m_leadingExtendTriggered = false;     // Prevents repeated leading triggers
+    bool m_userHasScrolled = false;            // Prevents auto-extend during initial setup
 
     // Page tracking
     int m_currentPage = 0;
@@ -253,6 +260,20 @@ private:
 
     // Touch thresholds
     static constexpr float TAP_THRESHOLD = 15.0f;
+
+    // Zoom state
+    bool m_isZoomed = false;
+    float m_zoomLevel = 1.0f;
+    brls::Point m_zoomOffset = {0, 0};
+
+    // Pinch-to-zoom tracking
+    bool m_isPinching = false;
+    float m_initialZoomLevel = 1.0f;
+    brls::Point m_initialZoomOffset = {0, 0};
+    brls::Point m_initialPinchCenter = {0, 0};  // In view coords
+
+    // Zoom methods
+    void resetZoom();
 
     // Transition page height (fixed size for chapter separators)
     static constexpr float TRANSITION_PAGE_HEIGHT = 200.0f;

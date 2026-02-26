@@ -1021,6 +1021,26 @@ void SettingsTab::createDownloadsSection() {
     downloadModeInfoLabel->setMarginTop(4);
     m_contentBox->addView(downloadModeInfoLabel);
 
+    // Download quality selector
+    auto* qualitySelector = new brls::SelectorCell();
+    qualitySelector->init("Download Quality",
+        {"Original", "High (1280px)", "Medium (960px)", "Low (720px)"},
+        static_cast<int>(settings.downloadQuality),
+        [](int index) {
+            brls::Logger::info("SettingsTab: Download quality changed to {}", index);
+            Application::getInstance().getSettings().downloadQuality = static_cast<DownloadQuality>(index);
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(qualitySelector);
+
+    // Info label for download quality
+    auto* qualityInfoLabel = new brls::Label();
+    qualityInfoLabel->setText("Controls image quality for local downloads. Lower quality saves storage space.");
+    qualityInfoLabel->setFontSize(14);
+    qualityInfoLabel->setMarginLeft(16);
+    qualityInfoLabel->setMarginTop(4);
+    m_contentBox->addView(qualityInfoLabel);
+
     // Auto download new chapters toggle
     auto* autoDownloadToggle = new brls::BooleanCell();
     autoDownloadToggle->init("Auto-Download New Chapters", settings.autoDownloadChapters, [&settings](bool value) {

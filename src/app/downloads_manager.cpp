@@ -15,6 +15,14 @@
 #include <algorithm>
 #include <thread>
 
+// stb_image for decoding downloaded images (quality processing)
+#include "stb_image.h"
+
+// stb_image_write for re-encoding at lower quality
+#define STB_IMAGE_WRITE_STATIC
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
@@ -1779,12 +1787,109 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
 
     // Stream directly to file - no memory buffering (like NOBORU does)
     if (http.downloadToFile(imageUrl, localPath)) {
+        // Process image quality if needed (resize/recompress)
+        processImageQuality(localPath);
         brls::Logger::debug("DownloadsManager: Page {} downloaded successfully", pageIndex);
         return true;
     }
 
     brls::Logger::error("DownloadsManager: Failed to download page {} from {}", pageIndex, imageUrl);
     return false;
+}
+
+bool DownloadsManager::processImageQuality(const std::string& filePath) {
+    DownloadQuality quality = Application::getInstance().getSettings().downloadQuality;
+    if (quality == DownloadQuality::ORIGINAL) {
+        return true;  // Nothing to do
+    }
+
+    // Determine max width and JPEG quality based on setting
+    int maxWidth;
+    int jpegQuality;
+    switch (quality) {
+        case DownloadQuality::HIGH:
+            maxWidth = 1280;
+            jpegQuality = 90;
+            break;
+        case DownloadQuality::MEDIUM:
+            maxWidth = 960;
+            jpegQuality = 80;
+            break;
+        case DownloadQuality::LOW:
+            maxWidth = 720;
+            jpegQuality = 70;
+            break;
+        default:
+            return true;
+    }
+
+    // Load the image
+    int w, h, channels;
+    unsigned char* data = stbi_load(filePath.c_str(), &w, &h, &channels, 3);
+    if (!data) {
+        brls::Logger::warning("DownloadsManager: Could not load image for quality processing: {}", filePath);
+        return true;  // Keep original if we can't process it
+    }
+
+    // Check if resizing is needed
+    if (w <= maxWidth) {
+        // Image is already small enough, just re-encode at target quality
+        int result = stbi_write_jpg(filePath.c_str(), w, h, 3, data, jpegQuality);
+        stbi_image_free(data);
+        return result != 0;
+    }
+
+    // Calculate new dimensions maintaining aspect ratio
+    int newW = maxWidth;
+    int newH = static_cast<int>(static_cast<float>(h) * newW / w);
+
+    // Simple bilinear resize
+    unsigned char* resized = static_cast<unsigned char*>(malloc(newW * newH * 3));
+    if (!resized) {
+        stbi_image_free(data);
+        return true;  // Keep original on allocation failure
+    }
+
+    float xRatio = static_cast<float>(w) / newW;
+    float yRatio = static_cast<float>(h) / newH;
+
+    for (int y = 0; y < newH; y++) {
+        float srcY = y * yRatio;
+        int sy0 = static_cast<int>(srcY);
+        int sy1 = std::min(sy0 + 1, h - 1);
+        float fy = srcY - sy0;
+
+        for (int x = 0; x < newW; x++) {
+            float srcX = x * xRatio;
+            int sx0 = static_cast<int>(srcX);
+            int sx1 = std::min(sx0 + 1, w - 1);
+            float fx = srcX - sx0;
+
+            for (int c = 0; c < 3; c++) {
+                float v00 = data[(sy0 * w + sx0) * 3 + c];
+                float v10 = data[(sy0 * w + sx1) * 3 + c];
+                float v01 = data[(sy1 * w + sx0) * 3 + c];
+                float v11 = data[(sy1 * w + sx1) * 3 + c];
+
+                float v = v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) +
+                          v01 * (1 - fx) * fy + v11 * fx * fy;
+                resized[(y * newW + x) * 3 + c] = static_cast<unsigned char>(v + 0.5f);
+            }
+        }
+    }
+
+    // Write resized image as JPEG
+    int result = stbi_write_jpg(filePath.c_str(), newW, newH, 3, resized, jpegQuality);
+
+    free(resized);
+    stbi_image_free(data);
+
+    if (result) {
+        brls::Logger::debug("DownloadsManager: Resized image {}x{} -> {}x{} (quality {})",
+                           w, h, newW, newH, jpegQuality);
+    }
+
+    return result != 0;
 }
 
 std::string DownloadsManager::createMangaDir(int mangaId, const std::string& title) {
