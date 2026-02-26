@@ -211,6 +211,9 @@ private:
     bool downloadPage(int mangaId, int chapterIndex, int pageIndex,
                       const std::string& imageUrl, std::string& localPath);
 
+    // Process downloaded image quality (resize/recompress based on quality setting)
+    bool processImageQuality(const std::string& filePath);
+
     // Internal save without locking (caller must hold m_mutex)
     void saveStateUnlocked();
 

@@ -594,16 +594,21 @@ void ReaderActivity::onContentAvailable() {
             }, brls::PanAxis::ANY));
 
         // Pinch-to-zoom gesture (Vita two-finger touch)
-        // Updates zoom level live on every frame while pinching
+        // Uses focal-point zoom: the image point under the initial pinch center
+        // stays visually fixed as you pinch in/out and move fingers.
         pageImage->addGestureRecognizer(new vitasuwayomi::PinchGestureRecognizer(
             [this](vitasuwayomi::PinchGestureStatus status, brls::Sound* soundToPlay) {
                 if (status.state == brls::GestureState::START) {
-                    // Record zoom level at pinch start
                     m_isPinching = true;
-                    m_initialPinchDistance = 0;  // not used, PinchGestureRecognizer tracks internally
+                    m_initialPinchDistance = 0;
                     m_initialZoomLevel = m_zoomLevel;
+
+                    // Record initial pinch center and current zoom offset for focal-point tracking
+                    // PinchGestureRecognizer provides center in physical screen coords (0-959, 0-543)
+                    // which matches getFrame() coordinates on Vita (960x544 window)
+                    m_pinchStartCenter = status.center;
+                    m_pinchStartOffset = m_zoomOffset;
                 } else if (status.state == brls::GestureState::STAY) {
-                    // Live zoom update every frame
                     float newZoom = m_initialZoomLevel * status.scaleFactor;
                     newZoom = std::max(0.5f, std::min(4.0f, newZoom));
 
@@ -613,13 +618,13 @@ void ReaderActivity::onContentAvailable() {
 
                         if (pageImage) {
                             pageImage->setZoomLevel(newZoom);
-                            // Zoom towards the pinch center
-                            brls::Rect frame = pageImage->getFrame();
-                            float relX = (status.center.x - frame.getMinX()) / frame.getWidth();
-                            float relY = (status.center.y - frame.getMinY()) / frame.getHeight();
+
+                            // Focal-point zoom: keep the image point that was under the initial
+                            // pinch center stable, adjusting for both zoom change and finger movement
+                            // Formula: offset = currentCenter/newZoom - startCenter/startZoom + startOffset
                             brls::Point offset = {
-                                -(relX - 0.5f) * frame.getWidth() * (newZoom - 1.0f),
-                                -(relY - 0.5f) * frame.getHeight() * (newZoom - 1.0f)
+                                status.center.x / newZoom - m_pinchStartCenter.x / m_initialZoomLevel + m_pinchStartOffset.x,
+                                status.center.y / newZoom - m_pinchStartCenter.y / m_initialZoomLevel + m_pinchStartOffset.y
                             };
                             m_zoomOffset = offset;
                             pageImage->setZoomOffset(offset);
@@ -2152,10 +2157,8 @@ void ReaderActivity::handleDoubleTap(brls::Point position) {
     if (m_isZoomed) {
         // Zoomed in - reset to normal view
         resetZoom();
-    } else {
-        // Not zoomed - zoom in to 2x centered on tap position
-        zoomTo(2.0f, position);
     }
+    // Double-tap only resets zoom; pinch-to-zoom is the only way to zoom in
 }
 
 void ReaderActivity::resetZoom() {
@@ -2178,15 +2181,16 @@ void ReaderActivity::zoomTo(float level, brls::Point center) {
         pageImage->setZoomLevel(level);
 
         // Calculate zoom offset to center on the tap position
-        // Transform center point to image space and zoom around it
+        // The NVG transform is: P' = imgCenter + z*(P - imgCenter + offset)
+        // For the tapped point to stay fixed: offset = (1-z)/z * (tap - imgCenter)
         brls::Rect frame = pageImage->getFrame();
         float relX = (center.x - frame.getMinX()) / frame.getWidth();
         float relY = (center.y - frame.getMinY()) / frame.getHeight();
 
-        // Offset to keep the tapped point in place
+        // Focal point zoom offset (divide by level for correct transform math)
         brls::Point offset = {
-            -(relX - 0.5f) * frame.getWidth() * (level - 1.0f),
-            -(relY - 0.5f) * frame.getHeight() * (level - 1.0f)
+            -(relX - 0.5f) * frame.getWidth() * (level - 1.0f) / level,
+            -(relY - 0.5f) * frame.getHeight() * (level - 1.0f) / level
         };
 
         m_zoomOffset = offset;

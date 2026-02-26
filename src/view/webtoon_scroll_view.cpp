@@ -29,12 +29,21 @@ WebtoonScrollView::~WebtoonScrollView() {
     clearPages();
 }
 
+void WebtoonScrollView::resetZoom() {
+    m_isZoomed = false;
+    m_zoomLevel = 1.0f;
+    m_zoomOffset = {0, 0};
+}
+
 void WebtoonScrollView::setupGestures() {
     this->setFocusable(true);
 
     // Pan gesture for scrolling (ANY axis to support rotated views)
     this->addGestureRecognizer(new brls::PanGestureRecognizer(
         [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            // Suppress scrolling while pinch-to-zoom is active
+            if (m_isPinching) return;
+
             if (status.state == brls::GestureState::START) {
                 m_isTouching = true;
                 m_touchStart = status.position;
@@ -46,6 +55,17 @@ void WebtoonScrollView::setupGestures() {
                 // Calculate raw deltas
                 float rawDx = status.position.x - m_touchLast.x;
                 float rawDy = status.position.y - m_touchLast.y;
+
+                // If zoomed, pan the zoomed view instead of normal scrolling
+                if (m_isZoomed) {
+                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                    m_zoomOffset.x += rawDx * scaleX;
+                    m_zoomOffset.y += rawDy * scaleY;
+                    m_touchLast = status.position;
+                    m_lastTouchTime = std::chrono::steady_clock::now();
+                    return;
+                }
 
                 // Calculate scroll delta based on rotation
                 // scrollY: 0 = beginning, negative = scrolled towards end
@@ -109,6 +129,12 @@ void WebtoonScrollView::setupGestures() {
             } else if (status.state == brls::GestureState::END) {
                 m_isTouching = false;
 
+                // If zoomed, just stop panning (no momentum when zoomed)
+                if (m_isZoomed) {
+                    m_scrollVelocity = 0.0f;
+                    return;
+                }
+
                 // Check if it was a tap (minimal movement)
                 float dx = status.position.x - m_touchStart.x;
                 float dy = status.position.y - m_touchStart.y;
@@ -116,6 +142,9 @@ void WebtoonScrollView::setupGestures() {
 
                 if (distance < TAP_THRESHOLD) {
                     m_scrollVelocity = 0.0f;
+
+                    // If zoomed, double-tap resets zoom
+                    // (single tap while zoomed just toggles controls)
 
                     // Scale tap position from physical to view coords
                     float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
@@ -142,6 +171,45 @@ void WebtoonScrollView::setupGestures() {
                 // Otherwise, momentum will be applied in onFrame()
             }
         }, brls::PanAxis::ANY));
+
+    // Pinch-to-zoom gesture (Vita two-finger touch)
+    this->addGestureRecognizer(new vitasuwayomi::PinchGestureRecognizer(
+        [this](vitasuwayomi::PinchGestureStatus status, brls::Sound* soundToPlay) {
+            if (status.state == brls::GestureState::START) {
+                m_isPinching = true;
+                m_initialZoomLevel = m_zoomLevel;
+                m_initialZoomOffset = m_zoomOffset;
+                // Convert physical pinch center to view coords
+                float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                m_initialPinchCenter = {status.center.x * scaleX, status.center.y * scaleY};
+                m_scrollVelocity = 0.0f;
+            } else if (status.state == brls::GestureState::STAY) {
+                float newZoom = m_initialZoomLevel * status.scaleFactor;
+                newZoom = std::max(1.0f, std::min(4.0f, newZoom));
+
+                if (std::abs(newZoom - m_zoomLevel) > 0.01f) {
+                    // Convert current pinch center to view coords
+                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                    brls::Point currentCenter = {status.center.x * scaleX, status.center.y * scaleY};
+
+                    // Focal point zoom: keep the initial pinch point stable
+                    // offset_new = currentCenter/newZoom - initialCenter/initialZoom + initialOffset
+                    m_zoomOffset.x = currentCenter.x / newZoom - m_initialPinchCenter.x / m_initialZoomLevel + m_initialZoomOffset.x;
+                    m_zoomOffset.y = currentCenter.y / newZoom - m_initialPinchCenter.y / m_initialZoomLevel + m_initialZoomOffset.y;
+
+                    m_zoomLevel = newZoom;
+                    m_isZoomed = (newZoom > 1.05f);
+                }
+            } else if (status.state == brls::GestureState::END) {
+                m_isPinching = false;
+                // Snap to 1x if near normal
+                if (m_zoomLevel <= 1.05f) {
+                    resetZoom();
+                }
+            }
+        }));
 }
 
 bool WebtoonScrollView::isTransitionPage(int pageIndex) const {
@@ -372,6 +440,9 @@ void WebtoonScrollView::clearPages() {
     m_leadingExtendTriggered = false;
     m_userHasScrolled = false;
     m_extendingChapter = false;
+
+    // Reset zoom state
+    resetZoom();
 }
 
 void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
@@ -933,6 +1004,16 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
     // Save state and set scissor for clipping
     nvgSave(vg);
     nvgScissor(vg, x, y, width, height);
+
+    // Apply zoom transform if zoomed
+    if (m_zoomLevel != 1.0f) {
+        float centerX = x + width / 2.0f;
+        float centerY = y + height / 2.0f;
+        nvgTranslate(vg, centerX, centerY);
+        nvgScale(vg, m_zoomLevel, m_zoomLevel);
+        nvgTranslate(vg, m_zoomOffset.x, m_zoomOffset.y);
+        nvgTranslate(vg, -centerX, -centerY);
+    }
 
     bool horizontal = isHorizontalLayout();
 

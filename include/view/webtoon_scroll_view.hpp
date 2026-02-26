@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include "view/rotatable_image.hpp"
+#include "view/pinch_gesture.hpp"
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
@@ -259,6 +260,20 @@ private:
 
     // Touch thresholds
     static constexpr float TAP_THRESHOLD = 15.0f;
+
+    // Zoom state
+    bool m_isZoomed = false;
+    float m_zoomLevel = 1.0f;
+    brls::Point m_zoomOffset = {0, 0};
+
+    // Pinch-to-zoom tracking
+    bool m_isPinching = false;
+    float m_initialZoomLevel = 1.0f;
+    brls::Point m_initialZoomOffset = {0, 0};
+    brls::Point m_initialPinchCenter = {0, 0};  // In view coords
+
+    // Zoom methods
+    void resetZoom();
 
     // Transition page height (fixed size for chapter separators)
     static constexpr float TRANSITION_PAGE_HEIGHT = 200.0f;

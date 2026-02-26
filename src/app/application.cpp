@@ -239,6 +239,16 @@ std::string Application::getDownloadModeString(DownloadMode mode) {
     }
 }
 
+std::string Application::getDownloadQualityString(DownloadQuality quality) {
+    switch (quality) {
+        case DownloadQuality::ORIGINAL: return "Original";
+        case DownloadQuality::HIGH: return "High (1280px)";
+        case DownloadQuality::MEDIUM: return "Medium (960px)";
+        case DownloadQuality::LOW: return "Low (720px)";
+        default: return "Unknown";
+    }
+}
+
 bool Application::loadSettings() {
     brls::Logger::debug("loadSettings: Opening {}", SETTINGS_PATH);
 
@@ -384,6 +394,10 @@ bool Application::loadSettings() {
     int downloadModeInt = extractInt("downloadMode");
     m_settings.downloadMode = static_cast<DownloadMode>(downloadModeInt);
     brls::Logger::info("loadSettings: downloadMode = {} (0=Server, 1=Local, 2=Both)", downloadModeInt);
+    int downloadQualityInt = extractInt("downloadQuality");
+    if (downloadQualityInt < 0 || downloadQualityInt > 3) downloadQualityInt = 0;
+    m_settings.downloadQuality = static_cast<DownloadQuality>(downloadQualityInt);
+    brls::Logger::info("loadSettings: downloadQuality = {} (0=Original, 1=High, 2=Medium, 3=Low)", downloadQualityInt);
     m_settings.autoDownloadChapters = extractBool("autoDownloadChapters", false);
     m_settings.deleteAfterRead = extractBool("deleteAfterRead", false);
     m_settings.autoResumeDownloads = extractBool("autoResumeDownloads", true);
@@ -765,6 +779,7 @@ bool Application::saveSettings() {
 
     // Download settings
     json += "  \"downloadMode\": " + std::to_string(static_cast<int>(m_settings.downloadMode)) + ",\n";
+    json += "  \"downloadQuality\": " + std::to_string(static_cast<int>(m_settings.downloadQuality)) + ",\n";
     json += "  \"autoDownloadChapters\": " + std::string(m_settings.autoDownloadChapters ? "true" : "false") + ",\n";
     json += "  \"deleteAfterRead\": " + std::string(m_settings.deleteAfterRead ? "true" : "false") + ",\n";
     json += "  \"autoResumeDownloads\": " + std::string(m_settings.autoResumeDownloads ? "true" : "false") + ",\n";

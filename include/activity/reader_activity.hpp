@@ -248,6 +248,8 @@ private:
     bool m_isPinching = false;
     float m_initialPinchDistance = 0.0f;
     float m_initialZoomLevel = 1.0f;
+    brls::Point m_pinchStartCenter = {0, 0};   // Pinch center at gesture start
+    brls::Point m_pinchStartOffset = {0, 0};   // Zoom offset at gesture start
 
     // Touch control methods
     void handleDoubleTap(brls::Point position);
