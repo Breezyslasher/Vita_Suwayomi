@@ -986,7 +986,7 @@ void ReaderActivity::onContentAvailable() {
             if (m_updatingSlider) return;  // Ignore programmatic setProgress
 
             if (m_continuousScrollMode && webtoonScroll) {
-                // Webtoon mode: use current chapter segment to map slider to page
+                // Webtoon mode: slider maps to current chapter's page range
                 int rawPage = webtoonScroll->getCurrentPage();
                 int chapterId, chapterPos, pageInChapter, segPageCount;
                 getWebtoonProgress(rawPage, chapterId, chapterPos, pageInChapter, segPageCount);
@@ -2789,13 +2789,12 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
         endPage.index = -1;
         appendList.push_back(endPage);
 
-        // Remember where new pages start in the webtoon view
+        // Remember where new pages start in the webtoon view.
+        // The old trailing transition page is kept as a chapter separator,
+        // so new real pages start right after it.
         int newStartIdx = webtoonScroll->getPageCount();
-        // The appendPages call will remove the old trailing transition,
-        // so the new pages start at (old count - 1)
-        newStartIdx = std::max(0, newStartIdx - 1);
 
-        // Append to webtoon scroll view (removes old trailing transition, adds new pages)
+        // Append to webtoon scroll view (transition page kept as separator)
         webtoonScroll->appendPages(appendList);
 
         // Track the new chapter segment (real pages start at newStartIdx)
@@ -2856,6 +2855,36 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
                                      " of " + std::to_string(m_totalChapters));
         }
 
+        // Trim distant chapters to limit memory usage (keep max 3 segments)
+        if (m_webtoonSegments.size() > 3 && webtoonScroll) {
+            // Remove the oldest (first) segment from the start
+            const auto& oldSeg = m_webtoonSegments.front();
+            // Pages to remove: everything from start up to (but not including) the second segment's first page
+            // The second segment's firstPage includes any transition page before it
+            int trimCount = 0;
+            if (m_webtoonSegments.size() >= 2) {
+                // Find where the second segment starts (minus its transition separator)
+                trimCount = m_webtoonSegments[1].firstPage;
+                // Include the transition page before the second segment if it exists
+                // Actually, trimCount = secondSeg.firstPage already includes everything before it
+            } else {
+                trimCount = oldSeg.firstPage + oldSeg.pageCount;
+            }
+
+            if (trimCount > 0) {
+                brls::Logger::info("WEBTOON_TRIM: removing first segment ({} pages, chapterPos={}), trimCount={}",
+                                    oldSeg.pageCount, oldSeg.chapterPos, trimCount);
+                webtoonScroll->trimPagesFromStart(trimCount);
+
+                // Shift all remaining segments
+                for (auto& seg : m_webtoonSegments) {
+                    seg.firstPage -= trimCount;
+                }
+                // Remove the trimmed segment
+                m_webtoonSegments.erase(m_webtoonSegments.begin());
+            }
+        }
+
         // Start preloading next adjacent chapters
         preloadNextChapter();
         preloadPrevChapter();
@@ -2913,9 +2942,8 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
         }
 
         // Calculate how many pages will be added.
-        // prependPages removes the old leading transition (1 page) and adds prependList.
-        int oldLeadingTransition = 1;  // The existing leading TRANSITION_PREV gets removed
-        int netAdded = static_cast<int>(prependList.size()) - oldLeadingTransition;
+        // prependPages keeps the old leading transition as a chapter separator.
+        int netAdded = static_cast<int>(prependList.size());
 
         // Shift all existing segment firstPage indices by the net-added count
         for (auto& seg : m_webtoonSegments) {
@@ -2932,7 +2960,7 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
             m_webtoonSegments.insert(m_webtoonSegments.begin(), seg);
         }
 
-        // Prepend to webtoon scroll view (removes old leading transition, adds new pages)
+        // Prepend to webtoon scroll view (old leading transition kept as separator)
         webtoonScroll->prependPages(prependList);
 
         // Now advance position/metadata for UI labels
@@ -2945,7 +2973,7 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
             "Chapter " + getChapterDisplayNumber() : m_chapterName;
 
         if (hasPrevTransition) {
-            // First page is the prev transition
+            // First page (index 0) is the new leading transition
             std::string line1 = "Beginning of: " + currentChapterDisplay;
             std::string line2;
             const Chapter& prevCh = m_chapters[m_chapterPosition - 1];
@@ -2964,6 +2992,31 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
             webtoonScroll->setTransitionText(0, line1, line2);
         }
 
+        // Update the old transition page (now a separator between prev and current chapter).
+        // It was at index 0 before prepend, now shifted by netAdded.
+        {
+            int sepIdx = netAdded;  // Where the old leading transition now sits
+            // Find the current chapter name (the one after this separator)
+            int origChapterPos = prevPos + 1;  // The chapter that was originally being read
+            if (origChapterPos < static_cast<int>(m_chapters.size())) {
+                const Chapter& origCh = m_chapters[origChapterPos];
+                std::string origName = origCh.name;
+                if (origName.empty()) {
+                    float num = origCh.chapterNumber;
+                    if (num == static_cast<int>(num))
+                        origName = "Chapter " + std::to_string(static_cast<int>(num));
+                    else {
+                        char buf[32];
+                        snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                        origName = buf;
+                    }
+                }
+                std::string sepLine1 = "End of: " + currentChapterDisplay;
+                std::string sepLine2 = "Next: " + origName;
+                webtoonScroll->setTransitionText(sepIdx, sepLine1, sepLine2);
+            }
+        }
+
         // Update UI labels
         if (chapterLabel) {
             std::string label = m_chapterName.empty() ?
@@ -2973,6 +3026,28 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
         if (chapterProgress) {
             chapterProgress->setText("Ch. " + getChapterDisplayNumber() +
                                      " of " + std::to_string(m_totalChapters));
+        }
+
+        // Trim distant chapters to limit memory usage (keep max 3 segments)
+        if (m_webtoonSegments.size() > 3 && webtoonScroll) {
+            // Remove the last (newest-at-the-end) segment from the end
+            const auto& lastSeg = m_webtoonSegments.back();
+            // Pages to remove: from lastSeg.firstPage to the end (including trailing transition)
+            int totalPages = webtoonScroll->getPageCount();
+            // Find where to start trimming: include the transition page before this segment
+            int trimStart = lastSeg.firstPage;
+            // Check if there's a transition page right before this segment
+            if (trimStart > 0 && webtoonScroll->isTransitionPage(trimStart - 1)) {
+                trimStart--;
+            }
+            int trimCount = totalPages - trimStart;
+
+            if (trimCount > 0) {
+                brls::Logger::info("WEBTOON_TRIM: removing last segment ({} pages, chapterPos={}), trimCount={}",
+                                    lastSeg.pageCount, lastSeg.chapterPos, trimCount);
+                webtoonScroll->trimPagesFromEnd(trimCount);
+                m_webtoonSegments.pop_back();
+            }
         }
 
         // Start preloading adjacent chapters

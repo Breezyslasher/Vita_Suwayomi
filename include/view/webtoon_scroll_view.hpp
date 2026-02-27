@@ -49,18 +49,34 @@ public:
     void clearPages();
 
     /**
-     * Append pages at the end (for seamless next chapter loading)
-     * Removes the trailing transition page, appends new pages.
-     * Scroll position stays the same so the user keeps scrolling naturally.
+     * Append pages at the end (for seamless next chapter loading).
+     * Keeps the old trailing transition page as a chapter separator,
+     * then appends the new pages after it.
+     * Scroll position stays the same since content is added below the viewport.
      */
     void appendPages(const std::vector<Page>& pages);
 
     /**
-     * Prepend pages at the beginning (for seamless prev chapter loading)
-     * Removes the leading transition page, prepends new pages.
-     * Adjusts scroll position so the view doesn't jump.
+     * Prepend pages at the beginning (for seamless prev chapter loading).
+     * Keeps the old leading transition page as a chapter separator,
+     * then prepends the new pages before it.
+     * Adjusts scroll position so existing content stays at the same screen position.
      */
     void prependPages(const std::vector<Page>& pages);
+
+    /**
+     * Remove pages from the start of the page list (for trimming distant chapters).
+     * Adjusts scroll position so visible content doesn't move.
+     * @param count Number of pages to remove from the start
+     */
+    void trimPagesFromStart(int count);
+
+    /**
+     * Remove pages from the end of the page list (for trimming distant chapters).
+     * No scroll adjustment needed since content is removed from below the viewport.
+     * @param count Number of pages to remove from the end
+     */
+    void trimPagesFromEnd(int count);
 
     /**
      * Scroll to a specific page index
