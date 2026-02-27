@@ -573,26 +573,19 @@ void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
     float availableWidth = m_viewWidth - (m_sidePadding * 2);
     float defaultHeight = availableWidth * 1.5f;
 
+    brls::Logger::info("WEBTOON_APPEND: start, adding {} pages, current total={}, scrollY={:.1f}, totalH={:.0f}",
+                        pages.size(), m_pages.size(), m_scrollY, m_totalHeight);
+
     // Keep the existing trailing transition page as a chapter separator.
-    // It stays visible so the user always sees the boundary between chapters.
+    // New pages are appended after it. No scroll adjustment needed since
+    // all new content is below the current viewport.
 
     int startIdx = static_cast<int>(m_pages.size());
 
-    // Append new pages
     for (size_t i = 0; i < pages.size(); i++) {
-        float pageHeight;
-
-        m_pages.push_back(pages[i]);
-
-        // Check if new page is a transition page
         const std::string& url = pages[i].imageUrl;
         bool isTransition = url.compare(0, TRANSITION_PREFIX.size(), TRANSITION_PREFIX) == 0;
-
-        if (isTransition) {
-            pageHeight = TRANSITION_PAGE_HEIGHT;
-        } else {
-            pageHeight = defaultHeight;
-        }
+        float pageHeight = isTransition ? TRANSITION_PAGE_HEIGHT : defaultHeight;
 
         auto pageImg = std::make_shared<RotatableImage>();
         pageImg->setWidth(availableWidth);
@@ -601,10 +594,10 @@ void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
         pageImg->setBackgroundFillColor(m_bgColor);
         pageImg->setRotation(m_rotationDegrees);
 
+        m_pages.push_back(pages[i]);
         m_pageImages.push_back(pageImg);
         m_pageHeights.push_back(pageHeight);
 
-        // Add gap + page height to total
         if (startIdx + static_cast<int>(i) > 0) {
             m_totalHeight += m_pageGap;
         }
@@ -622,7 +615,8 @@ void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
     updateVisibleImages();
     updateCurrentPage();
 
-    brls::Logger::info("WebtoonScrollView: Appended {} pages (total now {})", pages.size(), m_pages.size());
+    brls::Logger::info("WEBTOON_APPEND: done, total={}, scrollY={:.1f}, totalH={:.0f}",
+                        m_pages.size(), m_scrollY, m_totalHeight);
 }
 
 void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
@@ -631,8 +625,11 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     float availableWidth = m_viewWidth - (m_sidePadding * 2);
     float defaultHeight = availableWidth * 1.5f;
 
+    brls::Logger::info("WEBTOON_PREPEND: start, adding {} pages, current total={}, scrollY={:.1f}, totalH={:.0f}",
+                        pages.size(), m_pages.size(), m_scrollY, m_totalHeight);
+
     // Keep the existing leading transition page as a chapter separator.
-    // New pages are inserted before it so the user always sees the boundary.
+    // New pages are inserted before it so the user sees the boundary.
 
     // Build new page data
     std::vector<Page> newPages;
@@ -643,7 +640,6 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     for (size_t i = 0; i < pages.size(); i++) {
         const std::string& url = pages[i].imageUrl;
         bool isTransition = url.compare(0, TRANSITION_PREFIX.size(), TRANSITION_PREFIX) == 0;
-
         float pageHeight = isTransition ? TRANSITION_PAGE_HEIGHT : defaultHeight;
 
         auto pageImg = std::make_shared<RotatableImage>();
@@ -707,20 +703,28 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     m_failedPages = std::move(newFailed);
     m_transitionInfo = std::move(newTransitionInfo);
 
-    // Recalculate total height
+    // Recalculate total height from scratch for accuracy
     m_totalHeight = 0.0f;
     for (size_t i = 0; i < m_pageHeights.size(); i++) {
         m_totalHeight += m_pageHeights[i];
         if (i > 0) m_totalHeight += m_pageGap;
     }
 
-    // Adjust scroll position: user's view stays in the same visual spot
-    // We added content before the current view (nothing removed)
-    float scrollAdjust = addedHeight + (pages.empty() ? 0 : m_pageGap);
+    // Adjust scroll position so existing content stays at the exact same screen position.
+    // We added 'addedHeight' of content before the existing pages plus one gap
+    // between the last new page and the first old page.
+    float scrollAdjust = addedHeight + (pages.empty() ? 0.0f : m_pageGap);
+    float prevScrollY = m_scrollY;
     m_scrollY -= scrollAdjust;
+
+    // Kill any momentum - prevents the velocity from causing drift after the adjustment
+    m_scrollVelocity = 0.0f;
 
     // Adjust current page index
     m_currentPage += shift;
+
+    brls::Logger::info("WEBTOON_PREPEND: scrollAdjust={:.1f}, scrollY {:.1f} -> {:.1f}, shift={}",
+                        scrollAdjust, prevScrollY, m_scrollY, shift);
 
     // Reset overscroll
     m_overscrollAmount = 0.0f;
@@ -733,8 +737,117 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     updateVisibleImages();
     updateCurrentPage();
 
-    brls::Logger::info("WebtoonScrollView: Prepended {} pages (total now {}, scrollAdjust={:.0f})",
-                        pages.size(), m_pages.size(), scrollAdjust);
+    brls::Logger::info("WEBTOON_PREPEND: done, total={}, scrollY={:.1f}, totalH={:.0f}",
+                        m_pages.size(), m_scrollY, m_totalHeight);
+}
+
+void WebtoonScrollView::trimPagesFromStart(int count) {
+    if (count <= 0 || count >= static_cast<int>(m_pages.size())) return;
+
+    brls::Logger::info("WEBTOON_TRIM_START: removing {} pages from start, total={}, scrollY={:.1f}",
+                        count, m_pages.size(), m_scrollY);
+
+    // Calculate height of pages being removed
+    float removedHeight = 0.0f;
+    for (int i = 0; i < count; i++) {
+        removedHeight += m_pageHeights[i];
+        if (i > 0) removedHeight += m_pageGap;
+    }
+    // Add the gap between removed section and remaining section
+    if (count < static_cast<int>(m_pages.size())) {
+        removedHeight += m_pageGap;
+    }
+
+    // Remove from vectors
+    m_pages.erase(m_pages.begin(), m_pages.begin() + count);
+    m_pageImages.erase(m_pageImages.begin(), m_pageImages.begin() + count);
+    m_pageHeights.erase(m_pageHeights.begin(), m_pageHeights.begin() + count);
+
+    // Shift tracking sets down by count
+    std::set<int> newLoaded, newLoading, newFailed;
+    for (int idx : m_loadedPages) {
+        int newIdx = idx - count;
+        if (newIdx >= 0 && newIdx < static_cast<int>(m_pages.size())) {
+            newLoaded.insert(newIdx);
+        }
+    }
+    for (int idx : m_loadingPages) {
+        int newIdx = idx - count;
+        if (newIdx >= 0 && newIdx < static_cast<int>(m_pages.size())) {
+            newLoading.insert(newIdx);
+        }
+    }
+    for (int idx : m_failedPages) {
+        int newIdx = idx - count;
+        if (newIdx >= 0 && newIdx < static_cast<int>(m_pages.size())) {
+            newFailed.insert(newIdx);
+        }
+    }
+    m_loadedPages = std::move(newLoaded);
+    m_loadingPages = std::move(newLoading);
+    m_failedPages = std::move(newFailed);
+
+    // Shift transition info
+    std::map<int, TransitionInfo> newTransitionInfo;
+    for (auto& pair : m_transitionInfo) {
+        int newIdx = pair.first - count;
+        if (newIdx >= 0 && newIdx < static_cast<int>(m_pages.size())) {
+            newTransitionInfo[newIdx] = pair.second;
+        }
+    }
+    m_transitionInfo = std::move(newTransitionInfo);
+
+    // Recalculate total height
+    m_totalHeight = 0.0f;
+    for (size_t i = 0; i < m_pageHeights.size(); i++) {
+        m_totalHeight += m_pageHeights[i];
+        if (i > 0) m_totalHeight += m_pageGap;
+    }
+
+    // Adjust scroll: content above was removed, so shift scroll up
+    m_scrollY += removedHeight;
+
+    // Adjust current page
+    m_currentPage = std::max(0, m_currentPage - count);
+
+    brls::Logger::info("WEBTOON_TRIM_START: done, total={}, scrollY={:.1f}, removedHeight={:.0f}",
+                        m_pages.size(), m_scrollY, removedHeight);
+}
+
+void WebtoonScrollView::trimPagesFromEnd(int count) {
+    if (count <= 0 || count >= static_cast<int>(m_pages.size())) return;
+
+    brls::Logger::info("WEBTOON_TRIM_END: removing {} pages from end, total={}", count, m_pages.size());
+
+    int newSize = static_cast<int>(m_pages.size()) - count;
+
+    // Remove from tracking sets
+    for (int i = newSize; i < static_cast<int>(m_pages.size()); i++) {
+        m_loadedPages.erase(i);
+        m_loadingPages.erase(i);
+        m_failedPages.erase(i);
+        m_transitionInfo.erase(i);
+    }
+
+    // Remove from vectors
+    m_pages.resize(newSize);
+    m_pageImages.resize(newSize);
+    m_pageHeights.resize(newSize);
+
+    // Recalculate total height
+    m_totalHeight = 0.0f;
+    for (size_t i = 0; i < m_pageHeights.size(); i++) {
+        m_totalHeight += m_pageHeights[i];
+        if (i > 0) m_totalHeight += m_pageGap;
+    }
+
+    // No scroll adjustment needed - content removed from below viewport
+    // But clamp current page if needed
+    if (m_currentPage >= newSize) {
+        m_currentPage = std::max(0, newSize - 1);
+    }
+
+    brls::Logger::info("WEBTOON_TRIM_END: done, total={}, totalHeight={:.0f}", m_pages.size(), m_totalHeight);
 }
 
 int WebtoonScrollView::getRealPageCount() const {
@@ -1022,8 +1135,6 @@ void WebtoonScrollView::updateVisibleImages() {
 
                         if (std::abs(heightDelta) > 0.5f) {
                             // Compute the page's start BEFORE updating the height.
-                            // getPageOffset(i) sums sizes of pages 0..i-1, which are
-                            // unchanged, so calling it after updating page i is fine.
                             float pageStart = getPageOffset(pageIndex);
                             float visibleTop = -m_scrollY;
 
@@ -1038,6 +1149,11 @@ void WebtoonScrollView::updateVisibleImages() {
                             float pageEnd = pageStart + oldHeight;
                             if (pageEnd <= visibleTop) {
                                 m_scrollY -= heightDelta;
+                                brls::Logger::info("WEBTOON_HEIGHT: page {} above viewport, scroll adjusted by {:.1f} (scrollY={:.1f})",
+                                                    pageIndex, -heightDelta, m_scrollY);
+                            } else {
+                                brls::Logger::info("WEBTOON_HEIGHT: page {} visible/below (start={:.0f} end={:.0f} visTop={:.0f}), NO scroll adjust, delta={:.1f}",
+                                                    pageIndex, pageStart, pageEnd, visibleTop, heightDelta);
                             }
                         }
                     }
@@ -1103,12 +1219,17 @@ void WebtoonScrollView::updateVisibleImages() {
             float pageEnd = pageStart + pageSize;
             // Extend once the entire transition page is on screen
             if (pageEnd <= visibleEnd) {
+                brls::Logger::info("WEBTOON_EXTEND: TRAILING trigger! scrollY={:.1f}, visEnd={:.1f}, pageEnd={:.1f}, pages={}, vel={:.1f}",
+                                    m_scrollY, visibleEnd, pageEnd, m_pages.size(), m_scrollVelocity);
                 m_extendingChapter = true;
                 m_trailingExtendTriggered = true;
+                float preScrollY = m_scrollY;
                 auto it = m_transitionInfo.find(lastIdx);
                 bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : true;
                 m_chapterNavigateCallback(isNext);
                 m_extendingChapter = false;
+                brls::Logger::info("WEBTOON_EXTEND: TRAILING done, scrollY {:.1f} -> {:.1f}, pages {}",
+                                    preScrollY, m_scrollY, m_pages.size());
             }
         }
 
@@ -1117,12 +1238,17 @@ void WebtoonScrollView::updateVisibleImages() {
             // Page 0 starts at offset 0; extend once its top edge is visible
             // (i.e. the user has scrolled up enough to see the full page)
             if (visibleStart <= 0.0f) {
+                brls::Logger::info("WEBTOON_EXTEND: LEADING trigger! scrollY={:.1f}, visStart={:.1f}, pages={}, vel={:.1f}",
+                                    m_scrollY, visibleStart, m_pages.size(), m_scrollVelocity);
                 m_extendingChapter = true;
                 m_leadingExtendTriggered = true;
+                float preScrollY = m_scrollY;
                 auto it = m_transitionInfo.find(0);
                 bool isNext = (it != m_transitionInfo.end()) ? it->second.isNext : false;
                 m_chapterNavigateCallback(isNext);
                 m_extendingChapter = false;
+                brls::Logger::info("WEBTOON_EXTEND: LEADING done, scrollY {:.1f} -> {:.1f}, pages {}",
+                                    preScrollY, m_scrollY, m_pages.size());
             }
         }
     }
