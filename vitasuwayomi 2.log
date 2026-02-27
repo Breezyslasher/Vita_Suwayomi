@@ -1,0 +1,172 @@
+22:28:27.888 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+22:28:28.454 [INFO] DownloadsManager: Initializing...
+22:28:28.470 [DEBUG] DownloadsManager: Loading state (163171 bytes)
+22:28:28.629 [DEBUG] DownloadsManager: Loaded manga 405 with 67 chapters
+22:28:28.630 [INFO] DownloadsManager: State loaded with 1 downloads
+22:28:28.631 [INFO] DownloadsManager: Validating downloaded files...
+22:28:30.991 [INFO] DownloadsManager: Validation complete - 1172 pages valid, 0 pages missing
+22:28:30.992 [INFO] DownloadsManager: Initialized with 1 downloads
+22:28:30.997 [INFO] VitaSuwayomi 1.0.0 initializing...
+22:28:31.003 [DEBUG] sceIoMkdir result: -0x7ffeffef
+22:28:31.008 [INFO] Loading saved settings...
+22:28:31.017 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+22:28:31.030 [DEBUG] loadSettings: File size = 3625
+22:28:31.047 [DEBUG] loadSettings: Read 3625 bytes
+22:28:31.058 [INFO] loadSettings: serverUrl=http://192.168.1.28:4568
+22:28:31.069 [DEBUG] Loaded 4 hidden categories
+22:28:31.079 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+22:28:31.085 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+22:28:31.090 [INFO] loadSettings: enabledSourceLanguages count = 2
+22:28:31.099 [INFO] loadSettings: localUrl=http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+22:28:31.109 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=3, defaultSort=0, groupMode=0
+22:28:31.119 [DEBUG] Loaded 2 per-category sort modes
+22:28:31.130 [DEBUG] Loaded 2 search history entries
+22:28:31.142 [DEBUG] Loaded 11 per-manga reader settings
+22:28:31.149 [INFO] Restored auth credentials for user: Breezyslasher
+22:28:31.155 [INFO] Restored auth tokens
+22:28:31.160 [INFO] Settings loaded successfully
+22:28:31.169 [INFO] Settings load result: success
+22:28:31.179 [INFO] Applied theme: Dark
+22:28:31.189 [INFO] Debug logging disabled
+22:28:31.207 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+22:28:31.219 [INFO] Application::run - isConnected=false, serverUrl=http://192.168.1.28:4568
+22:28:31.226 [INFO] Restoring saved connection...
+22:28:31.232 [INFO] Attempting to refresh JWT tokens...
+22:28:31.262 [INFO] Token refreshed successfully
+22:28:31.271 [INFO] Token refresh successful
+22:28:31.280 [INFO] Fetching server info via GraphQL...
+22:28:31.305 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2085
+22:28:31.316 [INFO] Connection restored successfully
+22:28:31.332 [INFO] Syncing offline reading progress to server...
+22:28:31.345 [INFO] DownloadsManager: Synced 1 chapter progress, marked 0 as read
+22:28:31.446 [INFO] MainActivity: Tabs created, isOnline=false
+22:28:31.614 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
+22:28:31.633 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+22:28:31.796 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+22:28:31.809 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+22:28:31.869 [INFO] ImageLoader: Starting 3 worker threads
+22:28:32.501 [INFO] GraphQL: Fetching manga for category 1 with filter
+22:28:32.501 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+22:28:32.529 [INFO] Offline reading progress synced to server
+22:28:32.652 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+22:28:32.653 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+22:28:32.660 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+22:28:33.056 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+22:28:33.235 [INFO] GraphQL: Fetching manga for category 1 with filter
+22:28:33.343 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+22:28:33.353 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+22:28:45.626 [INFO] MangaDetailView: Creating for 'A Bride’s Story' id=269
+22:28:46.230 [INFO] GraphQL: Fetched 0 track records for manga 269
+22:28:46.278 [INFO] MangaDetailView: Got 107 chapters
+22:28:49.873 [INFO] MangaDetailView: Continuing from chapter id=31409, page=7
+22:28:49.885 [INFO] MangaDetailView: Reading chapter id=31409, startPage=7
+22:28:49.893 [INFO] ReaderActivity: manga=269, chapter=31409, startPage=7
+22:28:50.196 [INFO] ReaderActivity: content available for manga 269
+22:28:50.204 [INFO] ReaderActivity: global defaults - readingMode=1, pageScaleMode=0, rotation=90
+22:28:50.212 [INFO] ReaderActivity: local cache has 11 per-manga settings
+22:28:50.221 [INFO] ReaderActivity: fetching server meta for manga 269...
+22:28:50.297 [INFO] ReaderActivity: server returned 6 meta entries
+22:28:50.308 [INFO] ReaderActivity: server meta [cropBorders] = false
+22:28:50.371 [INFO] ReaderActivity: server meta [isWebtoonFormat] = false
+22:28:50.377 [INFO] ReaderActivity: server meta [readerMode] = 1
+22:28:50.384 [INFO] ReaderActivity: server meta [rotation] = 90
+22:28:50.393 [INFO] ReaderActivity: server meta [scaleType] = 0
+22:28:50.404 [INFO] ReaderActivity: server meta [webtoonSidePadding] = 0
+22:28:50.415 [INFO] ReaderActivity: loaded settings from server for manga 269
+22:28:50.425 [INFO] ReaderActivity: using server settings (skipping local cache)
+22:28:50.430 [INFO] ReaderActivity: keepScreenOn enabled, disabled screen dimming
+22:28:50.444 [INFO] ReaderActivity: Fetching chapter 31409 from server
+22:28:50.453 [INFO] GraphQL: Fetching pages for chapter id=31409
+22:28:50.599 [INFO] GraphQL: Fetched 33 pages for chapter 31409
+22:28:50.947 [INFO] Loaded 33 pages
+22:28:50.957 [INFO] loadPages: startPage=8 → page 8/35 url=http://192.168.1.28:4568/api/v1/manga/269/chapter/104/page/7
+22:28:50.968 [INFO] Preloading next chapter id=31408
+22:28:50.976 [INFO] GraphQL: Fetching pages for chapter id=31408
+22:28:50.976 [INFO] Preloading prev chapter id=31410
+22:28:50.995 [INFO] GraphQL: Fetching pages for chapter id=31410
+22:28:51.074 [INFO] GraphQL: Fetched 17 pages for chapter 31408
+22:28:51.097 [INFO] Next chapter preloaded: 17 pages
+22:28:51.177 [INFO] GraphQL: Fetched 24 pages for chapter 31410
+22:28:51.197 [INFO] Prev chapter preloaded: 24 pages
+22:28:52.481 [INFO] PAN START rot=90 vert=true invert=false page=8/35
+22:28:52.498 [INFO] SWIPE offset=-34 rot=90 vert=true extent=726 | cur=(0,-34) pos=(0,-760) neg=(0,692) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.513 [INFO] DRAW slideX=0 slideY=-34 x=0 y=0 w=1280 h=726 rot=90 img=0x0
+22:28:52.523 [INFO] SWIPE offset=-160 rot=90 vert=true extent=726 | cur=(0,-160) pos=(0,-886) neg=(0,566) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.548 [INFO] SWIPE offset=-211 rot=90 vert=true extent=726 | cur=(0,-211) pos=(0,-937) neg=(0,515) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.565 [INFO] SWIPE offset=-254 rot=90 vert=true extent=726 | cur=(0,-254) pos=(0,-980) neg=(0,472) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.598 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=7 swipingToNext=false currentPage=8
+22:28:52.609 [INFO] SWIPE offset=-422 rot=90 vert=true extent=726 | cur=(0,-422) pos=(0,-1148) neg=(0,304) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.621 [INFO] SWIPE offset=-514 rot=90 vert=true extent=726 | cur=(0,-514) pos=(0,-1240) neg=(0,212) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.632 [INFO] SWIPE offset=-577 rot=90 vert=true extent=726 | cur=(0,-577) pos=(0,-1303) neg=(0,149) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.648 [INFO] SWIPE offset=-622 rot=90 vert=true extent=726 | cur=(0,-622) pos=(0,-1348) neg=(0,104) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.665 [INFO] SWIPE offset=-653 rot=90 vert=true extent=726 | cur=(0,-653) pos=(0,-1379) neg=(0,73) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.715 [INFO] SWIPE offset=-701 rot=90 vert=true extent=726 | cur=(0,-701) pos=(0,-1427) neg=(0,25) | posIdx=9 negIdx=7 posIsTrans=false negIsTrans=false
+22:28:52.832 [INFO] FINALIZE: previewIdx=7 previewIsTransition=false
+22:28:52.999 [INFO] PAN START rot=90 vert=true invert=false page=7/35
+22:28:53.015 [INFO] SWIPE offset=-32 rot=90 vert=true extent=726 | cur=(0,-32) pos=(0,-758) neg=(0,694) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.032 [INFO] SWIPE offset=-96 rot=90 vert=true extent=726 | cur=(0,-96) pos=(0,-822) neg=(0,630) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.049 [INFO] SWIPE offset=-175 rot=90 vert=true extent=726 | cur=(0,-175) pos=(0,-901) neg=(0,551) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.065 [INFO] SWIPE offset=-224 rot=90 vert=true extent=726 | cur=(0,-224) pos=(0,-950) neg=(0,502) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.082 [INFO] SWIPE offset=-251 rot=90 vert=true extent=726 | cur=(0,-251) pos=(0,-977) neg=(0,475) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.099 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=6 swipingToNext=false currentPage=7
+22:28:53.104 [INFO] SWIPE offset=-394 rot=90 vert=true extent=726 | cur=(0,-394) pos=(0,-1120) neg=(0,332) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.115 [INFO] SWIPE offset=-493 rot=90 vert=true extent=726 | cur=(0,-493) pos=(0,-1219) neg=(0,233) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.132 [INFO] SWIPE offset=-563 rot=90 vert=true extent=726 | cur=(0,-563) pos=(0,-1289) neg=(0,163) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.149 [INFO] SWIPE offset=-612 rot=90 vert=true extent=726 | cur=(0,-612) pos=(0,-1338) neg=(0,114) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.182 [INFO] SWIPE offset=-670 rot=90 vert=true extent=726 | cur=(0,-670) pos=(0,-1396) neg=(0,56) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.232 [INFO] SWIPE offset=-707 rot=90 vert=true extent=726 | cur=(0,-707) pos=(0,-1433) neg=(0,19) | posIdx=8 negIdx=6 posIsTrans=false negIsTrans=false
+22:28:53.349 [INFO] FINALIZE: previewIdx=6 previewIsTransition=false
+22:28:53.399 [INFO] PAN START rot=90 vert=true invert=false page=6/35
+22:28:53.416 [INFO] SWIPE offset=-82 rot=90 vert=true extent=726 | cur=(0,-82) pos=(0,-808) neg=(0,644) | posIdx=7 negIdx=5 posIsTrans=false negIsTrans=false
+22:28:53.432 [INFO] SWIPE offset=-166 rot=90 vert=true extent=726 | cur=(0,-166) pos=(0,-892) neg=(0,560) | posIdx=7 negIdx=5 posIsTrans=false negIsTrans=false
+22:28:53.466 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=5 swipingToNext=false currentPage=6
+22:28:53.474 [INFO] SWIPE offset=-357 rot=90 vert=true extent=726 | cur=(0,-357) pos=(0,-1083) neg=(0,369) | posIdx=7 negIdx=5 posIsTrans=false negIsTrans=false
+22:28:53.485 [INFO] SWIPE offset=-468 rot=90 vert=true extent=726 | cur=(0,-468) pos=(0,-1194) neg=(0,258) | posIdx=7 negIdx=5 posIsTrans=false negIsTrans=false
+22:28:53.499 [INFO] SWIPE offset=-545 rot=90 vert=true extent=726 | cur=(0,-545) pos=(0,-1271) neg=(0,181) | posIdx=7 negIdx=5 posIsTrans=false negIsTrans=false
+22:28:53.516 [INFO] SWIPE offset=-599 rot=90 vert=true extent=726 | cur=(0,-599) pos=(0,-1325) neg=(0,127) | posIdx=7 negIdx=5 posIsTrans=false negIsTrans=false
+22:28:53.532 [INFO] SWIPE offset=-637 rot=90 vert=true extent=726 | cur=(0,-637) pos=(0,-1363) neg=(0,89) | posIdx=7 negIdx=5 posIsTrans=false negIsTrans=false
+22:28:53.549 [INFO] SWIPE offset=-664 rot=90 vert=true extent=726 | cur=(0,-664) pos=(0,-1390) neg=(0,62) | posIdx=7 negIdx=5 posIsTrans=false negIsTrans=false
+22:28:53.599 [INFO] SWIPE offset=-705 rot=90 vert=true extent=726 | cur=(0,-705) pos=(0,-1431) neg=(0,21) | posIdx=7 negIdx=5 posIsTrans=false negIsTrans=false
+22:28:53.716 [INFO] FINALIZE: previewIdx=5 previewIsTransition=false
+22:28:53.749 [INFO] PAN START rot=90 vert=true invert=false page=5/35
+22:28:53.766 [INFO] SWIPE offset=-50 rot=90 vert=true extent=726 | cur=(0,-50) pos=(0,-776) neg=(0,676) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:53.783 [INFO] SWIPE offset=-132 rot=90 vert=true extent=726 | cur=(0,-132) pos=(0,-858) neg=(0,594) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:53.799 [INFO] SWIPE offset=-201 rot=90 vert=true extent=726 | cur=(0,-201) pos=(0,-927) neg=(0,525) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:53.811 [INFO] DRAW slideX=0 slideY=-201 x=0 y=0 w=1280 h=726 rot=90 img=0x0
+22:28:53.821 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=4 swipingToNext=false currentPage=5
+22:28:53.827 [INFO] SWIPE offset=-358 rot=90 vert=true extent=726 | cur=(0,-358) pos=(0,-1084) neg=(0,368) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:53.837 [INFO] SWIPE offset=-469 rot=90 vert=true extent=726 | cur=(0,-469) pos=(0,-1195) neg=(0,257) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:53.849 [INFO] SWIPE offset=-546 rot=90 vert=true extent=726 | cur=(0,-546) pos=(0,-1272) neg=(0,180) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:53.866 [INFO] SWIPE offset=-600 rot=90 vert=true extent=726 | cur=(0,-600) pos=(0,-1326) neg=(0,126) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:53.883 [INFO] SWIPE offset=-638 rot=90 vert=true extent=726 | cur=(0,-638) pos=(0,-1364) neg=(0,88) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:53.899 [INFO] SWIPE offset=-664 rot=90 vert=true extent=726 | cur=(0,-664) pos=(0,-1390) neg=(0,62) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:53.949 [INFO] SWIPE offset=-705 rot=90 vert=true extent=726 | cur=(0,-705) pos=(0,-1431) neg=(0,21) | posIdx=6 negIdx=4 posIsTrans=false negIsTrans=false
+22:28:54.066 [INFO] FINALIZE: previewIdx=4 previewIsTransition=false
+22:28:54.100 [INFO] PAN START rot=90 vert=true invert=false page=4/35
+22:28:54.116 [INFO] SWIPE offset=-96 rot=90 vert=true extent=726 | cur=(0,-96) pos=(0,-822) neg=(0,630) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.133 [INFO] SWIPE offset=-186 rot=90 vert=true extent=726 | cur=(0,-186) pos=(0,-912) neg=(0,540) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.150 [INFO] SWIPE offset=-241 rot=90 vert=true extent=726 | cur=(0,-241) pos=(0,-967) neg=(0,485) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.166 [INFO] SWIPE offset=-275 rot=90 vert=true extent=726 | cur=(0,-275) pos=(0,-1001) neg=(0,451) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.183 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=3 swipingToNext=false currentPage=4
+22:28:54.195 [INFO] SWIPE offset=-411 rot=90 vert=true extent=726 | cur=(0,-411) pos=(0,-1137) neg=(0,315) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.259 [INFO] SWIPE offset=-505 rot=90 vert=true extent=726 | cur=(0,-505) pos=(0,-1231) neg=(0,221) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.263 [INFO] SWIPE offset=-571 rot=90 vert=true extent=726 | cur=(0,-571) pos=(0,-1297) neg=(0,155) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.272 [INFO] SWIPE offset=-618 rot=90 vert=true extent=726 | cur=(0,-618) pos=(0,-1344) neg=(0,108) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.284 [INFO] SWIPE offset=-650 rot=90 vert=true extent=726 | cur=(0,-650) pos=(0,-1376) neg=(0,76) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.333 [INFO] SWIPE offset=-700 rot=90 vert=true extent=726 | cur=(0,-700) pos=(0,-1426) neg=(0,26) | posIdx=5 negIdx=3 posIsTrans=false negIsTrans=false
+22:28:54.467 [INFO] FINALIZE: previewIdx=3 previewIsTransition=false
+22:28:54.550 [INFO] PREVPAGE: currentPage=3/35 url=http://192.168.1.28:4568/api/v1/manga/269/chapter/104/page/2
+22:28:54.884 [INFO] PAN START rot=90 vert=true invert=false page=2/35
+22:28:54.901 [INFO] SWIPE offset=-32 rot=90 vert=true extent=726 | cur=(0,-32) pos=(0,-758) neg=(0,694) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+22:28:54.917 [INFO] SWIPE offset=-128 rot=90 vert=true extent=726 | cur=(0,-128) pos=(0,-854) neg=(0,598) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+22:28:54.934 [INFO] SWIPE offset=-206 rot=90 vert=true extent=726 | cur=(0,-206) pos=(0,-932) neg=(0,520) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+22:28:54.951 [INFO] COMPLETE: turnPage=true swipeToChapter=false previewIsTransition=false previewIdx=1 swipingToNext=false currentPage=2
+22:28:54.964 [INFO] SWIPE offset=-362 rot=90 vert=true extent=726 | cur=(0,-362) pos=(0,-1088) neg=(0,364) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+22:28:54.974 [INFO] SWIPE offset=-471 rot=90 vert=true extent=726 | cur=(0,-471) pos=(0,-1197) neg=(0,255) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+22:28:54.984 [INFO] SWIPE offset=-548 rot=90 vert=true extent=726 | cur=(0,-548) pos=(0,-1274) neg=(0,178) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+22:28:55.001 [INFO] SWIPE offset=-601 rot=90 vert=true extent=726 | cur=(0,-601) pos=(0,-1327) neg=(0,125) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+22:28:55.034 [INFO] SWIPE offset=-665 rot=90 vert=true extent=726 | cur=(0,-665) pos=(0,-1391) neg=(0,61) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+22:28:55.084 [INFO] SWIPE offset=-705 rot=90 vert=true extent=726 | cur=(0,-705) pos=(0,-1431) neg=(0,21) | posIdx=3 negIdx=1 posIsTrans=false negIsTrans=false
+22:28:55.201 [INFO] FINALIZE: previewIdx=1 previewIsTransition=false
+22:29:06.839 [INFO] ImageLoader: VRAM budget 2047x2338 -> maxWidth=1916
+22:29:06.845 [INFO] ImageLoader: Auto-splitting 2047x2338 into 2 segments (maxSize=1916)
