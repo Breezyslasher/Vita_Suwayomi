@@ -13,6 +13,7 @@
 #include <map>
 #include <set>
 #include <mutex>
+#include <ctime>
 #include "utils/http_client.hpp"
 
 namespace vitasuwayomi {
@@ -718,6 +719,10 @@ private:
     // Thread safety: protects all member variables accessed from multiple threads
     // (createHttpClient, refreshToken, buildGraphQLUrl can all run concurrently)
     mutable std::recursive_mutex m_mutex;
+
+    // Token refresh deduplication: avoid thundering herd when multiple threads
+    // hit 401 simultaneously and all try to refresh the token
+    time_t m_lastTokenRefreshTime = 0;
 
     // Login GraphQL methods
     bool loginGraphQL(const std::string& username, const std::string& password);

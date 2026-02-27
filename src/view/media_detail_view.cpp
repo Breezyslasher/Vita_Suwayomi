@@ -1010,7 +1010,10 @@ void MangaDetailView::willAppear(bool resetState) {
     DownloadsManager& dm = DownloadsManager::getInstance();
 
     // Throttled progress callback - update download icons in-place (no focus loss)
-    dm.setProgressCallback([this](int downloadedPages, int totalPages) {
+    // FIX: Capture weak_ptr by value instead of raw 'this' to prevent use-after-free
+    // when the view is destroyed before the brls::sync callback fires
+    std::weak_ptr<bool> aliveWeakForProgress = m_alive;
+    dm.setProgressCallback([this, aliveWeakForProgress](int downloadedPages, int totalPages) {
         if (!m_progressCallbackActive.load()) return;
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1018,20 +1021,23 @@ void MangaDetailView::willAppear(bool resetState) {
         // Throttle to every 2 seconds to keep it lightweight on Vita
         if (elapsed >= 2000 || downloadedPages == totalPages) {
             m_lastProgressRefresh = now;
-            brls::sync([this]() {
+            brls::sync([this, aliveWeakForProgress]() {
+                auto alive = aliveWeakForProgress.lock();
+                if (!alive || !*alive) return;
                 if (!m_progressCallbackActive.load()) return;
-                if (!m_alive || !*m_alive) return;
                 refreshVisibleDownloadIcons();
             });
         }
     });
 
     // Chapter completion callback - immediate icon refresh when a chapter finishes
-    dm.setChapterCompletionCallback([this](int mangaId, int chapterIndex, bool success) {
+    std::weak_ptr<bool> aliveWeakForCompletion = m_alive;
+    dm.setChapterCompletionCallback([this, aliveWeakForCompletion](int mangaId, int chapterIndex, bool success) {
         if (!m_progressCallbackActive.load()) return;
-        brls::sync([this]() {
+        brls::sync([this, aliveWeakForCompletion]() {
+            auto alive = aliveWeakForCompletion.lock();
+            if (!alive || !*alive) return;
             if (!m_progressCallbackActive.load()) return;
-            if (!m_alive || !*m_alive) return;
             refreshVisibleDownloadIcons();
         });
     });

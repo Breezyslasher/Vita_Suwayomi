@@ -1,0 +1,2038 @@
+18:48:33.249 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+18:48:33.812 [INFO] DownloadsManager: Initializing...
+18:48:33.846 [DEBUG] DownloadsManager: Loading state (54250 bytes)
+18:48:33.899 [INFO] DownloadsManager: Chapter 82 was interrupted, marking as QUEUED for resume
+18:48:33.900 [DEBUG] DownloadsManager: Loaded manga 405 with 75 chapters
+18:48:33.901 [INFO] DownloadsManager: State loaded with 1 downloads
+18:48:33.901 [INFO] DownloadsManager: Validating downloaded files...
+18:48:34.178 [INFO] DownloadsManager: Validation complete - 318 pages valid, 0 pages missing
+18:48:34.220 [DEBUG] DownloadsManager: State saved (54250 bytes)
+18:48:34.234 [INFO] DownloadsManager: Initialized with 1 downloads
+18:48:34.239 [INFO] VitaSuwayomi 1.0.0 initializing...
+18:48:34.245 [DEBUG] sceIoMkdir result: -0x7ffeffef
+18:48:34.250 [INFO] Loading saved settings...
+18:48:34.259 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+18:48:34.273 [DEBUG] loadSettings: File size = 3626
+18:48:34.290 [DEBUG] loadSettings: Read 3626 bytes
+18:48:34.303 [INFO] loadSettings: serverUrl=http://192.168.1.28:4568
+18:48:34.315 [DEBUG] Loaded 4 hidden categories
+18:48:34.321 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+18:48:34.326 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+18:48:34.333 [INFO] loadSettings: enabledSourceLanguages count = 2
+18:48:34.342 [INFO] loadSettings: localUrl=http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+18:48:34.351 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=3, defaultSort=0, groupMode=0
+18:48:34.362 [DEBUG] Loaded 2 per-category sort modes
+18:48:34.373 [DEBUG] Loaded 2 search history entries
+18:48:34.386 [DEBUG] Loaded 11 per-manga reader settings
+18:48:34.391 [INFO] Restored auth credentials for user: Breezyslasher
+18:48:34.396 [INFO] Restored auth tokens
+18:48:34.403 [INFO] Settings loaded successfully
+18:48:34.412 [INFO] Settings load result: success
+18:48:34.421 [INFO] Applied theme: Dark
+18:48:34.432 [INFO] Debug logging disabled
+18:48:34.448 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+18:48:34.460 [INFO] Application::run - isConnected=false, serverUrl=http://192.168.1.28:4568
+18:48:34.466 [INFO] Restoring saved connection...
+18:48:34.471 [INFO] Attempting to refresh JWT tokens...
+18:48:34.629 [INFO] Token refreshed successfully
+18:48:34.637 [INFO] Token refresh successful
+18:48:34.646 [INFO] Fetching server info via GraphQL...
+18:48:34.685 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2085
+18:48:34.696 [INFO] Connection restored successfully
+18:48:34.709 [INFO] Syncing offline reading progress to server...
+18:48:34.715 [INFO] DownloadsManager: Synced 0 chapter progress, marked 0 as read
+18:48:34.715 [INFO] DownloadsManager: Auto-resuming 57 incomplete downloads
+18:48:34.735 [INFO] DownloadsManager: Starting downloads
+18:48:34.743 [INFO] DownloadsManager: Downloading chapter 82 (id=45853) for manga 405
+18:48:34.757 [INFO] DownloadsManager: Fetching pages for chapter id=45853
+18:48:34.768 [INFO] GraphQL: Fetching pages for chapter id=45853
+18:48:34.811 [INFO] GraphQL: Fetched 21 pages for chapter 45853
+18:48:34.823 [INFO] DownloadsManager: Got 21 pages for chapter 45853
+18:48:34.846 [INFO] DownloadsManager: Resuming chapter 82 - 20/21 pages already downloaded
+18:48:34.851 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:48:34.859 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_82
+18:48:34.879 [INFO] MainActivity: Tabs created, isOnline=false
+18:48:34.893 [INFO] DownloadsManager: Downloading page 21 of 21 (95%)
+18:48:34.917 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/82/page/20
+18:48:35.096 [INFO] HttpClient: Download completed successfully
+18:48:35.113 [INFO] DownloadsManager: Page 20 downloaded successfully
+18:48:35.207 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
+18:48:35.227 [INFO] DownloadsManager: Chapter 82 download completed
+18:48:35.233 [INFO] DownloadsManager: Downloading chapter 83 (id=45852) for manga 405
+18:48:35.247 [INFO] DownloadsManager: Fetching pages for chapter id=45852
+18:48:35.258 [INFO] GraphQL: Fetching pages for chapter id=45852
+18:48:35.268 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+18:48:35.285 [INFO] GraphQL: Fetched 18 pages for chapter 45852
+18:48:35.291 [INFO] DownloadsManager: Got 18 pages for chapter 45852
+18:48:35.300 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:48:36.131 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_83
+18:48:36.149 [INFO] DownloadsManager: Downloading page 1 of 18 (0%)
+18:48:36.165 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/0
+18:48:36.204 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+18:48:36.219 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+18:48:36.294 [INFO] ImageLoader: Starting 3 worker threads
+18:48:36.552 [INFO] HttpClient: Download completed successfully
+18:48:36.591 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:48:36.654 [INFO] DownloadsManager: Downloading page 2 of 18 (5%)
+18:48:36.711 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/1
+18:48:36.926 [INFO] GraphQL: Fetching manga for category 1 with filter
+18:48:36.927 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+18:48:36.952 [INFO] Offline reading progress synced to server
+18:48:37.000 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+18:48:37.008 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+18:48:37.048 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+18:48:37.058 [INFO] HttpClient: Download completed successfully
+18:48:37.144 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:48:37.205 [INFO] DownloadsManager: Downloading page 3 of 18 (11%)
+18:48:37.249 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/2
+18:48:37.569 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+18:48:37.577 [INFO] HttpClient: Download completed successfully
+18:48:37.611 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:48:37.666 [INFO] DownloadsManager: Downloading page 4 of 18 (16%)
+18:48:37.678 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/3
+18:48:37.759 [INFO] GraphQL: Fetching manga for category 1 with filter
+18:48:37.831 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+18:48:37.843 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+18:48:38.072 [INFO] HttpClient: Download completed successfully
+18:48:38.113 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:48:38.173 [INFO] DownloadsManager: Downloading page 5 of 18 (22%)
+18:48:38.187 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/4
+18:48:38.456 [INFO] HttpClient: Download completed successfully
+18:48:38.473 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:48:38.575 [INFO] DownloadsManager: Downloading page 6 of 18 (27%)
+18:48:38.595 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/5
+18:48:38.981 [INFO] HttpClient: Download completed successfully
+18:48:39.000 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:48:39.061 [INFO] DownloadsManager: Downloading page 7 of 18 (33%)
+18:48:39.076 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/6
+18:48:39.405 [INFO] HttpClient: Download completed successfully
+18:48:39.416 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:48:39.475 [INFO] DownloadsManager: Downloading page 8 of 18 (38%)
+18:48:39.489 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/7
+18:48:39.747 [INFO] HttpClient: Download completed successfully
+18:48:39.759 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:48:39.818 [INFO] DownloadsManager: Downloading page 9 of 18 (44%)
+18:48:39.834 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/8
+18:48:40.186 [INFO] HttpClient: Download completed successfully
+18:48:40.198 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:48:40.257 [INFO] DownloadsManager: Downloading page 10 of 18 (50%)
+18:48:40.273 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/9
+18:48:40.627 [INFO] HttpClient: Download completed successfully
+18:48:40.644 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:48:40.751 [INFO] DownloadsManager: Downloading page 11 of 18 (55%)
+18:48:40.771 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/10
+18:48:41.112 [INFO] HttpClient: Download completed successfully
+18:48:41.127 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:48:41.190 [INFO] DownloadsManager: Downloading page 12 of 18 (61%)
+18:48:41.206 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/11
+18:48:42.882 [ERROR] Cannot set texture: 0
+18:48:43.268 [INFO] HttpClient: Download completed successfully
+18:48:43.285 [INFO] SuwayomiClient: Fetched 44 items in download queue
+18:48:43.295 [INFO] SearchTab: Got 83 sources
+18:48:43.303 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:48:43.362 [INFO] DownloadsManager: Downloading page 13 of 18 (66%)
+18:48:43.379 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/12
+18:48:43.894 [INFO] HttpClient: Download completed successfully
+18:48:43.916 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:48:43.972 [INFO] DownloadsManager: Downloading page 14 of 18 (72%)
+18:48:43.986 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/13
+18:48:44.220 [INFO] HttpClient: Download completed successfully
+18:48:44.233 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:48:44.293 [INFO] DownloadsManager: Downloading page 15 of 18 (77%)
+18:48:44.309 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/14
+18:48:44.572 [INFO] HttpClient: Download completed successfully
+18:48:44.589 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:48:44.692 [INFO] DownloadsManager: Downloading page 16 of 18 (83%)
+18:48:44.712 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/15
+18:48:45.061 [INFO] HttpClient: Download completed successfully
+18:48:45.079 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:48:45.135 [INFO] DownloadsManager: Downloading page 17 of 18 (88%)
+18:48:45.151 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/16
+18:48:45.235 [INFO] HttpClient: Download completed successfully
+18:48:45.249 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:48:45.309 [INFO] DownloadsManager: Downloading page 18 of 18 (94%)
+18:48:45.325 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/83/page/17
+18:48:45.487 [INFO] HttpClient: Download completed successfully
+18:48:45.502 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:48:45.600 [INFO] DownloadsManager: Chapter 83 download completed
+18:48:45.607 [INFO] DownloadsManager: Downloading chapter 84 (id=45851) for manga 405
+18:48:45.616 [INFO] DownloadsManager: Fetching pages for chapter id=45851
+18:48:45.627 [INFO] GraphQL: Fetching pages for chapter id=45851
+18:48:45.674 [INFO] GraphQL: Fetched 20 pages for chapter 45851
+18:48:45.680 [INFO] DownloadsManager: Got 20 pages for chapter 45851
+18:48:45.687 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:48:46.523 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_84
+18:48:46.535 [INFO] DownloadsManager: Downloading page 1 of 20 (0%)
+18:48:46.552 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/0
+18:48:46.802 [INFO] HttpClient: Download completed successfully
+18:48:46.818 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:48:46.879 [INFO] DownloadsManager: Downloading page 2 of 20 (5%)
+18:48:46.896 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/1
+18:48:47.127 [INFO] HttpClient: Download completed successfully
+18:48:47.139 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:48:47.198 [INFO] DownloadsManager: Downloading page 3 of 20 (10%)
+18:48:47.212 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/2
+18:48:47.402 [INFO] HttpClient: Download completed successfully
+18:48:47.419 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:48:47.475 [INFO] DownloadsManager: Downloading page 4 of 20 (15%)
+18:48:47.489 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/3
+18:48:47.714 [INFO] HttpClient: Download completed successfully
+18:48:47.728 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:48:47.787 [INFO] DownloadsManager: Downloading page 5 of 20 (20%)
+18:48:47.802 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/4
+18:48:48.002 [INFO] HttpClient: Download completed successfully
+18:48:48.015 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:48:48.120 [INFO] DownloadsManager: Downloading page 6 of 20 (25%)
+18:48:48.144 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/5
+18:48:48.406 [INFO] SuwayomiClient: Fetched 44 items in download queue
+18:48:48.448 [INFO] HttpClient: Download completed successfully
+18:48:48.466 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:48:48.524 [INFO] DownloadsManager: Downloading page 7 of 20 (30%)
+18:48:48.538 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/6
+18:48:48.775 [INFO] HttpClient: Download completed successfully
+18:48:48.797 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:48:48.853 [INFO] DownloadsManager: Downloading page 8 of 20 (35%)
+18:48:48.865 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/7
+18:48:49.101 [INFO] HttpClient: Download completed successfully
+18:48:49.118 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:48:49.178 [INFO] DownloadsManager: Downloading page 9 of 20 (40%)
+18:48:49.189 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/8
+18:48:49.371 [INFO] HttpClient: Download completed successfully
+18:48:49.388 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:48:49.451 [INFO] DownloadsManager: Downloading page 10 of 20 (45%)
+18:48:49.461 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/9
+18:48:49.682 [INFO] HttpClient: Download completed successfully
+18:48:49.696 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:48:49.804 [INFO] DownloadsManager: Downloading page 11 of 20 (50%)
+18:48:49.829 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/10
+18:48:50.107 [INFO] HttpClient: Download completed successfully
+18:48:50.119 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:48:50.179 [INFO] DownloadsManager: Downloading page 12 of 20 (55%)
+18:48:50.195 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/11
+18:48:50.416 [INFO] HttpClient: Download completed successfully
+18:48:50.435 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:48:50.492 [INFO] DownloadsManager: Downloading page 13 of 20 (60%)
+18:48:50.506 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/12
+18:48:50.696 [INFO] HttpClient: Download completed successfully
+18:48:50.710 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:48:50.769 [INFO] DownloadsManager: Downloading page 14 of 20 (65%)
+18:48:50.784 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/13
+18:48:51.005 [INFO] HttpClient: Download completed successfully
+18:48:51.018 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:48:51.077 [INFO] DownloadsManager: Downloading page 15 of 20 (70%)
+18:48:51.092 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/14
+18:48:51.306 [INFO] HttpClient: Download completed successfully
+18:48:51.326 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:48:51.424 [INFO] DownloadsManager: Downloading page 16 of 20 (75%)
+18:48:51.440 [INFO] SuwayomiClient: Fetched 43 items in download queue
+18:48:51.443 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/15
+18:48:51.713 [INFO] HttpClient: Download completed successfully
+18:48:51.730 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:48:51.791 [INFO] DownloadsManager: Downloading page 17 of 20 (80%)
+18:48:51.812 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/16
+18:48:52.108 [INFO] HttpClient: Download completed successfully
+18:48:52.128 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:48:52.185 [INFO] DownloadsManager: Downloading page 18 of 20 (85%)
+18:48:52.199 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/17
+18:48:52.413 [INFO] HttpClient: Download completed successfully
+18:48:52.428 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:48:52.490 [INFO] DownloadsManager: Downloading page 19 of 20 (90%)
+18:48:52.506 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/18
+18:48:52.834 [INFO] HttpClient: Download completed successfully
+18:48:52.851 [INFO] DownloadsManager: Page 18 downloaded successfully
+18:48:52.914 [INFO] DownloadsManager: Downloading page 20 of 20 (95%)
+18:48:52.925 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/84/page/19
+18:48:53.048 [INFO] HttpClient: Download completed successfully
+18:48:53.061 [INFO] DownloadsManager: Page 19 downloaded successfully
+18:48:53.166 [INFO] DownloadsManager: Chapter 84 download completed
+18:48:53.178 [INFO] DownloadsManager: Downloading chapter 85 (id=45850) for manga 405
+18:48:53.188 [INFO] DownloadsManager: Fetching pages for chapter id=45850
+18:48:53.195 [INFO] GraphQL: Fetching pages for chapter id=45850
+18:48:53.230 [INFO] GraphQL: Fetched 17 pages for chapter 45850
+18:48:53.243 [INFO] DownloadsManager: Got 17 pages for chapter 45850
+18:48:53.252 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:48:54.093 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_85
+18:48:54.106 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:48:54.127 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/0
+18:48:54.436 [INFO] HttpClient: Download completed successfully
+18:48:54.438 [INFO] SuwayomiClient: Fetched 43 items in download queue
+18:48:54.470 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:48:54.529 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:48:54.543 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/1
+18:48:54.828 [INFO] HttpClient: Download completed successfully
+18:48:54.843 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:48:54.907 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:48:54.918 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/2
+18:48:55.388 [INFO] HttpClient: Download completed successfully
+18:48:55.404 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:48:55.464 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:48:55.482 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/3
+18:48:55.756 [INFO] HttpClient: Download completed successfully
+18:48:55.774 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:48:55.837 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:48:55.848 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/4
+18:48:56.136 [INFO] HttpClient: Download completed successfully
+18:48:56.152 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:48:56.257 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:48:56.281 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/5
+18:48:56.658 [INFO] HttpClient: Download completed successfully
+18:48:56.680 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:48:56.742 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:48:56.761 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/6
+18:48:56.991 [INFO] HttpClient: Download completed successfully
+18:48:57.014 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:48:57.071 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:48:57.086 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/7
+18:48:57.394 [INFO] HttpClient: Download completed successfully
+18:48:57.399 [INFO] SuwayomiClient: Fetched 43 items in download queue
+18:48:57.420 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:48:57.483 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:48:57.495 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/8
+18:48:57.759 [INFO] HttpClient: Download completed successfully
+18:48:57.779 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:48:57.837 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:48:57.852 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/9
+18:48:58.159 [INFO] HttpClient: Download completed successfully
+18:48:58.179 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:48:58.278 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:48:58.298 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/10
+18:48:58.663 [INFO] HttpClient: Download completed successfully
+18:48:58.682 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:48:58.746 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:48:58.758 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/11
+18:48:59.029 [INFO] HttpClient: Download completed successfully
+18:48:59.041 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:48:59.103 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:48:59.119 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/12
+18:48:59.373 [INFO] HttpClient: Download completed successfully
+18:48:59.388 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:48:59.448 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:48:59.465 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/13
+18:48:59.832 [INFO] HttpClient: Download completed successfully
+18:48:59.849 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:48:59.909 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:48:59.924 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/14
+18:49:00.154 [INFO] HttpClient: Download completed successfully
+18:49:00.170 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:49:00.274 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:49:00.289 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/15
+18:49:00.443 [INFO] SuwayomiClient: Fetched 42 items in download queue
+18:49:00.643 [INFO] HttpClient: Download completed successfully
+18:49:00.657 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:49:00.713 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:49:00.729 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/85/page/16
+18:49:00.843 [INFO] HttpClient: Download completed successfully
+18:49:00.856 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:49:00.951 [INFO] DownloadsManager: Chapter 85 download completed
+18:49:00.962 [INFO] DownloadsManager: Downloading chapter 86 (id=45849) for manga 405
+18:49:00.971 [INFO] DownloadsManager: Fetching pages for chapter id=45849
+18:49:00.979 [INFO] GraphQL: Fetching pages for chapter id=45849
+18:49:01.058 [INFO] GraphQL: Fetched 17 pages for chapter 45849
+18:49:01.065 [INFO] DownloadsManager: Got 17 pages for chapter 45849
+18:49:01.075 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:49:01.651 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_86
+18:49:01.663 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:49:01.677 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/0
+18:49:01.893 [INFO] HttpClient: Download completed successfully
+18:49:01.907 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:49:01.967 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:49:01.978 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/1
+18:49:02.311 [INFO] HttpClient: Download completed successfully
+18:49:02.385 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:49:02.442 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:49:02.456 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/2
+18:49:02.776 [INFO] HttpClient: Download completed successfully
+18:49:02.793 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:49:02.857 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:49:02.870 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/3
+18:49:03.270 [INFO] HttpClient: Download completed successfully
+18:49:03.285 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:49:03.347 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:49:03.358 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/4
+18:49:03.448 [INFO] SuwayomiClient: Fetched 42 items in download queue
+18:49:03.658 [INFO] HttpClient: Download completed successfully
+18:49:03.672 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:49:03.775 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:49:03.796 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/5
+18:49:04.306 [INFO] HttpClient: Download completed successfully
+18:49:04.327 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:49:04.389 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:49:04.401 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/6
+18:49:04.635 [INFO] HttpClient: Download completed successfully
+18:49:04.649 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:49:04.714 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:49:04.778 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/7
+18:49:05.029 [INFO] HttpClient: Download completed successfully
+18:49:05.049 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:49:05.106 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:49:05.123 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/8
+18:49:05.424 [INFO] HttpClient: Download completed successfully
+18:49:05.440 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:49:05.501 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:49:05.519 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/9
+18:49:05.740 [INFO] HttpClient: Download completed successfully
+18:49:05.756 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:49:05.864 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:49:05.881 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/10
+18:49:06.252 [INFO] HttpClient: Download completed successfully
+18:49:06.268 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:49:06.334 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:49:06.348 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/11
+18:49:06.447 [INFO] SuwayomiClient: Fetched 41 items in download queue
+18:49:06.705 [INFO] HttpClient: Download completed successfully
+18:49:06.725 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:49:06.785 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:49:06.804 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/12
+18:49:07.094 [INFO] HttpClient: Download completed successfully
+18:49:07.114 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:49:07.171 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:49:07.187 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/13
+18:49:07.425 [INFO] HttpClient: Download completed successfully
+18:49:07.445 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:49:07.502 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:49:07.517 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/14
+18:49:07.795 [INFO] HttpClient: Download completed successfully
+18:49:07.812 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:49:07.914 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:49:07.935 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/15
+18:49:08.246 [INFO] HttpClient: Download completed successfully
+18:49:08.262 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:49:08.325 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:49:08.339 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/86/page/16
+18:49:08.557 [INFO] HttpClient: Download completed successfully
+18:49:08.570 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:49:08.678 [INFO] DownloadsManager: Chapter 86 download completed
+18:49:08.685 [INFO] DownloadsManager: Downloading chapter 87 (id=45848) for manga 405
+18:49:08.695 [INFO] DownloadsManager: Fetching pages for chapter id=45848
+18:49:08.709 [INFO] GraphQL: Fetching pages for chapter id=45848
+18:49:08.758 [INFO] GraphQL: Fetched 17 pages for chapter 45848
+18:49:08.770 [INFO] DownloadsManager: Got 17 pages for chapter 45848
+18:49:08.780 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:49:09.392 [INFO] SuwayomiClient: Fetched 41 items in download queue
+18:49:09.669 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_87
+18:49:09.695 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:49:09.711 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/0
+18:49:09.965 [INFO] HttpClient: Download completed successfully
+18:49:09.981 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:49:10.042 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:49:10.058 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/1
+18:49:10.513 [INFO] HttpClient: Download completed successfully
+18:49:10.530 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:49:10.591 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:49:10.609 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/2
+18:49:10.922 [INFO] HttpClient: Download completed successfully
+18:49:10.935 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:49:10.986 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:49:10.991 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/3
+18:49:11.261 [INFO] HttpClient: Download completed successfully
+18:49:11.269 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:49:11.328 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:49:11.337 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/4
+18:49:11.604 [INFO] HttpClient: Download completed successfully
+18:49:11.619 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:49:11.727 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:49:11.745 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/5
+18:49:12.206 [INFO] HttpClient: Download completed successfully
+18:49:12.231 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:49:12.293 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:49:12.303 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/6
+18:49:12.408 [INFO] SuwayomiClient: Fetched 40 items in download queue
+18:49:12.887 [INFO] HttpClient: Download completed successfully
+18:49:12.899 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:49:12.958 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:49:12.972 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/7
+18:49:13.318 [INFO] HttpClient: Download completed successfully
+18:49:13.333 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:49:13.395 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:49:13.411 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/8
+18:49:13.734 [INFO] HttpClient: Download completed successfully
+18:49:13.748 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:49:13.809 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:49:13.822 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/9
+18:49:14.071 [INFO] HttpClient: Download completed successfully
+18:49:14.090 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:49:14.188 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:49:14.202 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/10
+18:49:14.551 [INFO] HttpClient: Download completed successfully
+18:49:14.567 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:49:14.622 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:49:14.635 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/11
+18:49:14.900 [INFO] HttpClient: Download completed successfully
+18:49:14.914 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:49:14.970 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:49:14.982 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/12
+18:49:15.339 [INFO] HttpClient: Download completed successfully
+18:49:15.351 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:49:15.411 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:49:15.422 [INFO] SuwayomiClient: Fetched 40 items in download queue
+18:49:15.426 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/13
+18:49:15.766 [INFO] HttpClient: Download completed successfully
+18:49:15.787 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:49:15.843 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:49:15.853 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/14
+18:49:16.194 [INFO] HttpClient: Download completed successfully
+18:49:16.209 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:49:16.319 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:49:16.340 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/15
+18:49:16.771 [INFO] HttpClient: Download completed successfully
+18:49:16.790 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:49:16.853 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:49:16.865 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/87/page/16
+18:49:17.075 [INFO] HttpClient: Download completed successfully
+18:49:17.085 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:49:17.244 [INFO] DownloadsManager: Chapter 87 download completed
+18:49:17.254 [INFO] DownloadsManager: Downloading chapter 88 (id=45847) for manga 405
+18:49:17.264 [INFO] DownloadsManager: Fetching pages for chapter id=45847
+18:49:17.276 [INFO] GraphQL: Fetching pages for chapter id=45847
+18:49:17.318 [INFO] GraphQL: Fetched 19 pages for chapter 45847
+18:49:17.319 [INFO] DownloadsManager: Got 19 pages for chapter 45847
+18:49:17.325 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:49:18.168 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_88
+18:49:18.176 [INFO] DownloadsManager: Downloading page 1 of 19 (0%)
+18:49:18.191 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/0
+18:49:18.508 [INFO] SuwayomiClient: Fetched 40 items in download queue
+18:49:18.545 [INFO] HttpClient: Download completed successfully
+18:49:18.562 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:49:18.625 [INFO] DownloadsManager: Downloading page 2 of 19 (5%)
+18:49:18.640 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/1
+18:49:18.876 [INFO] HttpClient: Download completed successfully
+18:49:18.893 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:49:18.956 [INFO] DownloadsManager: Downloading page 3 of 19 (10%)
+18:49:18.966 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/2
+18:49:19.238 [INFO] HttpClient: Download completed successfully
+18:49:19.252 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:49:19.309 [INFO] DownloadsManager: Downloading page 4 of 19 (15%)
+18:49:19.322 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/3
+18:49:19.522 [INFO] HttpClient: Download completed successfully
+18:49:19.539 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:49:19.602 [INFO] DownloadsManager: Downloading page 5 of 19 (21%)
+18:49:19.612 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/4
+18:49:19.948 [INFO] HttpClient: Download completed successfully
+18:49:19.964 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:49:20.073 [INFO] DownloadsManager: Downloading page 6 of 19 (26%)
+18:49:20.093 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/5
+18:49:20.441 [INFO] HttpClient: Download completed successfully
+18:49:20.462 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:49:20.525 [INFO] DownloadsManager: Downloading page 7 of 19 (31%)
+18:49:20.540 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/6
+18:49:20.890 [INFO] HttpClient: Download completed successfully
+18:49:20.904 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:49:20.962 [INFO] DownloadsManager: Downloading page 8 of 19 (36%)
+18:49:20.976 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/7
+18:49:21.240 [INFO] HttpClient: Download completed successfully
+18:49:21.259 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:49:21.315 [INFO] DownloadsManager: Downloading page 9 of 19 (42%)
+18:49:21.326 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/8
+18:49:21.516 [INFO] SuwayomiClient: Fetched 40 items in download queue
+18:49:21.665 [INFO] HttpClient: Download completed successfully
+18:49:21.677 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:49:21.739 [INFO] DownloadsManager: Downloading page 10 of 19 (47%)
+18:49:21.754 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/9
+18:49:21.978 [INFO] HttpClient: Download completed successfully
+18:49:21.996 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:49:22.097 [INFO] DownloadsManager: Downloading page 11 of 19 (52%)
+18:49:22.114 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/10
+18:49:22.759 [INFO] HttpClient: Download completed successfully
+18:49:22.775 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:49:22.836 [INFO] DownloadsManager: Downloading page 12 of 19 (57%)
+18:49:22.852 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/11
+18:49:23.193 [INFO] HttpClient: Download completed successfully
+18:49:23.206 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:49:23.266 [INFO] DownloadsManager: Downloading page 13 of 19 (63%)
+18:49:23.328 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/12
+18:49:23.668 [INFO] HttpClient: Download completed successfully
+18:49:23.684 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:49:23.740 [INFO] DownloadsManager: Downloading page 14 of 19 (68%)
+18:49:23.754 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/13
+18:49:24.033 [INFO] HttpClient: Download completed successfully
+18:49:24.048 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:49:24.111 [INFO] DownloadsManager: Downloading page 15 of 19 (73%)
+18:49:24.127 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/14
+18:49:24.390 [INFO] HttpClient: Download completed successfully
+18:49:24.405 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:49:24.440 [INFO] SuwayomiClient: Fetched 39 items in download queue
+18:49:24.526 [INFO] DownloadsManager: Downloading page 16 of 19 (78%)
+18:49:24.541 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/15
+18:49:24.843 [INFO] HttpClient: Download completed successfully
+18:49:24.862 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:49:24.924 [INFO] DownloadsManager: Downloading page 17 of 19 (84%)
+18:49:24.937 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/16
+18:49:25.040 [INFO] HttpClient: Download completed successfully
+18:49:25.053 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:49:25.114 [INFO] DownloadsManager: Downloading page 18 of 19 (89%)
+18:49:25.132 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/17
+18:49:25.237 [INFO] HttpClient: Download completed successfully
+18:49:25.253 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:49:25.316 [INFO] DownloadsManager: Downloading page 19 of 19 (94%)
+18:49:25.328 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/88/page/18
+18:49:25.510 [INFO] HttpClient: Download completed successfully
+18:49:25.530 [INFO] DownloadsManager: Page 18 downloaded successfully
+18:49:25.634 [INFO] DownloadsManager: Chapter 88 download completed
+18:49:25.641 [INFO] DownloadsManager: Downloading chapter 89 (id=45846) for manga 405
+18:49:25.649 [INFO] DownloadsManager: Fetching pages for chapter id=45846
+18:49:25.660 [INFO] GraphQL: Fetching pages for chapter id=45846
+18:49:25.693 [INFO] GraphQL: Fetched 17 pages for chapter 45846
+18:49:25.699 [INFO] DownloadsManager: Got 17 pages for chapter 45846
+18:49:25.706 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:49:26.539 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_89
+18:49:26.552 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:49:26.569 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/0
+18:49:26.805 [INFO] HttpClient: Download completed successfully
+18:49:26.822 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:49:26.885 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:49:26.896 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/1
+18:49:27.150 [INFO] HttpClient: Download completed successfully
+18:49:27.163 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:49:27.227 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:49:27.244 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/2
+18:49:27.411 [INFO] SuwayomiClient: Fetched 39 items in download queue
+18:49:27.540 [INFO] HttpClient: Download completed successfully
+18:49:27.557 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:49:27.620 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:49:27.631 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/3
+18:49:28.016 [INFO] HttpClient: Download completed successfully
+18:49:28.030 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:49:28.089 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:49:28.104 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/4
+18:49:28.360 [INFO] HttpClient: Download completed successfully
+18:49:28.372 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:49:28.484 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:49:28.504 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/5
+18:49:28.871 [INFO] HttpClient: Download completed successfully
+18:49:28.894 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:49:28.957 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:49:28.968 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/6
+18:49:29.195 [INFO] HttpClient: Download completed successfully
+18:49:29.212 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:49:29.268 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:49:29.282 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/7
+18:49:29.566 [INFO] HttpClient: Download completed successfully
+18:49:29.583 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:49:29.646 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:49:29.657 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/8
+18:49:29.895 [INFO] HttpClient: Download completed successfully
+18:49:29.910 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:49:29.973 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:49:29.988 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/9
+18:49:30.292 [INFO] HttpClient: Download completed successfully
+18:49:30.310 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:49:30.418 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:49:30.422 [INFO] SuwayomiClient: Fetched 39 items in download queue
+18:49:30.448 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/10
+18:49:30.758 [INFO] HttpClient: Download completed successfully
+18:49:30.771 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:49:30.832 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:49:30.851 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/11
+18:49:31.108 [INFO] HttpClient: Download completed successfully
+18:49:31.125 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:49:31.189 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:49:31.200 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/12
+18:49:31.473 [INFO] HttpClient: Download completed successfully
+18:49:31.489 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:49:31.548 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:49:31.564 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/13
+18:49:31.828 [INFO] HttpClient: Download completed successfully
+18:49:31.846 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:49:31.906 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:49:31.926 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/14
+18:49:32.187 [INFO] HttpClient: Download completed successfully
+18:49:32.207 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:49:32.311 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:49:32.332 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/15
+18:49:32.730 [INFO] HttpClient: Download completed successfully
+18:49:32.748 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:49:32.810 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:49:32.824 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/89/page/16
+18:49:33.058 [INFO] HttpClient: Download completed successfully
+18:49:33.072 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:49:33.186 [INFO] DownloadsManager: Chapter 89 download completed
+18:49:33.201 [INFO] DownloadsManager: Downloading chapter 90 (id=45845) for manga 405
+18:49:33.208 [INFO] DownloadsManager: Fetching pages for chapter id=45845
+18:49:33.217 [INFO] GraphQL: Fetching pages for chapter id=45845
+18:49:33.265 [INFO] GraphQL: Fetched 17 pages for chapter 45845
+18:49:33.272 [INFO] DownloadsManager: Got 17 pages for chapter 45845
+18:49:33.281 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:49:33.396 [INFO] SuwayomiClient: Fetched 38 items in download queue
+18:49:34.122 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_90
+18:49:34.147 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:49:34.162 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/0
+18:49:34.511 [INFO] HttpClient: Download completed successfully
+18:49:34.527 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:49:34.587 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:49:34.604 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/1
+18:49:34.848 [INFO] HttpClient: Download completed successfully
+18:49:34.864 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:49:34.924 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:49:34.941 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/2
+18:49:35.135 [INFO] HttpClient: Download completed successfully
+18:49:35.151 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:49:35.211 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:49:35.228 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/3
+18:49:35.491 [INFO] HttpClient: Download completed successfully
+18:49:35.508 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:49:35.570 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:49:35.581 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/4
+18:49:35.827 [INFO] HttpClient: Download completed successfully
+18:49:35.844 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:49:35.957 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:49:35.972 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/5
+18:49:36.309 [INFO] HttpClient: Download completed successfully
+18:49:36.332 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:49:36.389 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:49:36.404 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/6
+18:49:36.409 [INFO] SuwayomiClient: Fetched 38 items in download queue
+18:49:36.689 [INFO] HttpClient: Download completed successfully
+18:49:36.704 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:49:36.765 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:49:36.782 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/7
+18:49:37.189 [INFO] HttpClient: Download completed successfully
+18:49:37.208 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:49:37.274 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:49:37.286 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/8
+18:49:37.496 [INFO] HttpClient: Download completed successfully
+18:49:37.515 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:49:37.576 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:49:37.593 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/9
+18:49:37.842 [INFO] HttpClient: Download completed successfully
+18:49:37.862 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:49:37.970 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:49:37.990 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/10
+18:49:38.229 [INFO] HttpClient: Download completed successfully
+18:49:38.248 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:49:38.307 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:49:38.326 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/11
+18:49:38.528 [INFO] HttpClient: Download completed successfully
+18:49:38.545 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:49:38.605 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:49:38.624 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/12
+18:49:38.884 [INFO] HttpClient: Download completed successfully
+18:49:38.908 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:49:38.965 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:49:38.980 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/13
+18:49:39.395 [INFO] SuwayomiClient: Fetched 37 items in download queue
+18:49:39.476 [INFO] HttpClient: Download completed successfully
+18:49:39.496 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:49:39.553 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:49:39.567 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/14
+18:49:39.863 [INFO] HttpClient: Download completed successfully
+18:49:39.884 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:49:39.991 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:49:40.012 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/15
+18:49:40.329 [INFO] HttpClient: Download completed successfully
+18:49:40.343 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:49:40.404 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:49:40.425 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/90/page/16
+18:49:40.602 [INFO] HttpClient: Download completed successfully
+18:49:40.623 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:49:40.730 [INFO] DownloadsManager: Chapter 90 download completed
+18:49:40.741 [INFO] DownloadsManager: Downloading chapter 91 (id=45844) for manga 405
+18:49:40.754 [INFO] DownloadsManager: Fetching pages for chapter id=45844
+18:49:40.764 [INFO] GraphQL: Fetching pages for chapter id=45844
+18:49:40.805 [INFO] GraphQL: Fetched 3 pages for chapter 45844
+18:49:40.818 [INFO] DownloadsManager: Got 3 pages for chapter 45844
+18:49:40.827 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:49:41.664 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_91
+18:49:41.676 [INFO] DownloadsManager: Downloading page 1 of 3 (0%)
+18:49:41.696 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/91/page/0
+18:49:43.251 [INFO] SuwayomiClient: Fetched 37 items in download queue
+18:49:43.409 [INFO] HttpClient: Download completed successfully
+18:49:43.429 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:49:43.486 [INFO] DownloadsManager: Downloading page 2 of 3 (33%)
+18:49:43.502 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/91/page/1
+18:49:43.731 [INFO] HttpClient: Download completed successfully
+18:49:43.749 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:49:43.811 [INFO] DownloadsManager: Downloading page 3 of 3 (66%)
+18:49:43.826 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/91/page/2
+18:49:43.943 [INFO] HttpClient: Download completed successfully
+18:49:43.958 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:49:44.074 [INFO] DownloadsManager: Chapter 91 download completed
+18:49:44.089 [INFO] DownloadsManager: Downloading chapter 92 (id=45843) for manga 405
+18:49:44.098 [INFO] DownloadsManager: Fetching pages for chapter id=45843
+18:49:44.109 [INFO] GraphQL: Fetching pages for chapter id=45843
+18:49:44.172 [INFO] GraphQL: Fetched 23 pages for chapter 45843
+18:49:44.182 [INFO] DownloadsManager: Got 23 pages for chapter 45843
+18:49:44.195 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:49:45.037 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_92
+18:49:45.046 [INFO] DownloadsManager: Downloading page 1 of 23 (0%)
+18:49:45.062 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/0
+18:49:45.235 [INFO] HttpClient: Download completed successfully
+18:49:45.252 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:49:45.312 [INFO] DownloadsManager: Downloading page 2 of 23 (4%)
+18:49:45.329 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/1
+18:49:45.439 [INFO] SuwayomiClient: Fetched 36 items in download queue
+18:49:45.615 [INFO] HttpClient: Download completed successfully
+18:49:45.635 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:49:45.692 [INFO] DownloadsManager: Downloading page 3 of 23 (8%)
+18:49:45.709 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/2
+18:49:45.909 [INFO] HttpClient: Download completed successfully
+18:49:45.929 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:49:45.986 [INFO] DownloadsManager: Downloading page 4 of 23 (13%)
+18:49:46.002 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/3
+18:49:46.212 [INFO] HttpClient: Download completed successfully
+18:49:46.229 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:49:46.293 [INFO] DownloadsManager: Downloading page 5 of 23 (17%)
+18:49:46.307 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/4
+18:49:46.452 [INFO] HttpClient: Download completed successfully
+18:49:46.475 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:49:46.585 [INFO] DownloadsManager: Downloading page 6 of 23 (21%)
+18:49:46.605 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/5
+18:49:47.012 [INFO] HttpClient: Download completed successfully
+18:49:47.035 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:49:47.099 [INFO] DownloadsManager: Downloading page 7 of 23 (26%)
+18:49:47.112 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/6
+18:49:47.303 [INFO] HttpClient: Download completed successfully
+18:49:47.314 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:49:47.376 [INFO] DownloadsManager: Downloading page 8 of 23 (30%)
+18:49:47.387 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/7
+18:49:47.626 [INFO] HttpClient: Download completed successfully
+18:49:47.642 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:49:47.703 [INFO] DownloadsManager: Downloading page 9 of 23 (34%)
+18:49:47.722 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/8
+18:49:47.950 [INFO] HttpClient: Download completed successfully
+18:49:47.970 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:49:48.036 [INFO] DownloadsManager: Downloading page 10 of 23 (39%)
+18:49:48.052 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/9
+18:49:48.296 [INFO] HttpClient: Download completed successfully
+18:49:48.315 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:49:48.430 [INFO] DownloadsManager: Downloading page 11 of 23 (43%)
+18:49:48.448 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/10
+18:49:48.511 [INFO] SuwayomiClient: Fetched 36 items in download queue
+18:49:48.754 [INFO] HttpClient: Download completed successfully
+18:49:48.773 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:49:48.833 [INFO] DownloadsManager: Downloading page 12 of 23 (47%)
+18:49:48.853 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/11
+18:49:49.092 [INFO] HttpClient: Download completed successfully
+18:49:49.114 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:49:49.171 [INFO] DownloadsManager: Downloading page 13 of 23 (52%)
+18:49:49.188 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/12
+18:49:49.383 [INFO] HttpClient: Download completed successfully
+18:49:49.399 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:49:49.460 [INFO] DownloadsManager: Downloading page 14 of 23 (56%)
+18:49:49.476 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/13
+18:49:49.638 [INFO] HttpClient: Download completed successfully
+18:49:49.651 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:49:49.714 [INFO] DownloadsManager: Downloading page 15 of 23 (60%)
+18:49:49.725 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/14
+18:49:49.929 [INFO] HttpClient: Download completed successfully
+18:49:49.948 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:49:50.062 [INFO] DownloadsManager: Downloading page 16 of 23 (65%)
+18:49:50.083 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/15
+18:49:50.376 [INFO] HttpClient: Download completed successfully
+18:49:50.391 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:49:50.454 [INFO] DownloadsManager: Downloading page 17 of 23 (69%)
+18:49:50.469 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/16
+18:49:50.747 [INFO] HttpClient: Download completed successfully
+18:49:50.767 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:49:50.824 [INFO] DownloadsManager: Downloading page 18 of 23 (73%)
+18:49:50.854 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/17
+18:49:51.087 [INFO] HttpClient: Download completed successfully
+18:49:51.100 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:49:51.162 [INFO] DownloadsManager: Downloading page 19 of 23 (78%)
+18:49:51.174 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/18
+18:49:51.414 [INFO] SuwayomiClient: Fetched 36 items in download queue
+18:49:51.532 [INFO] HttpClient: Download completed successfully
+18:49:51.544 [INFO] DownloadsManager: Page 18 downloaded successfully
+18:49:51.608 [INFO] DownloadsManager: Downloading page 20 of 23 (82%)
+18:49:51.614 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/19
+18:49:51.820 [INFO] HttpClient: Download completed successfully
+18:49:51.826 [INFO] DownloadsManager: Page 19 downloaded successfully
+18:49:51.932 [INFO] DownloadsManager: Downloading page 21 of 23 (86%)
+18:49:51.939 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/20
+18:49:52.209 [INFO] HttpClient: Download completed successfully
+18:49:52.224 [INFO] DownloadsManager: Page 20 downloaded successfully
+18:49:52.280 [INFO] DownloadsManager: Downloading page 22 of 23 (91%)
+18:49:52.299 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/21
+18:49:52.606 [INFO] HttpClient: Download completed successfully
+18:49:52.626 [INFO] DownloadsManager: Page 21 downloaded successfully
+18:49:52.681 [INFO] DownloadsManager: Downloading page 23 of 23 (95%)
+18:49:52.695 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/92/page/22
+18:49:52.887 [INFO] HttpClient: Download completed successfully
+18:49:52.905 [INFO] DownloadsManager: Page 22 downloaded successfully
+18:49:53.013 [INFO] DownloadsManager: Chapter 92 download completed
+18:49:53.020 [INFO] DownloadsManager: Downloading chapter 93 (id=45842) for manga 405
+18:49:53.025 [INFO] DownloadsManager: Fetching pages for chapter id=45842
+18:49:53.034 [INFO] GraphQL: Fetching pages for chapter id=45842
+18:49:53.069 [INFO] GraphQL: Fetched 17 pages for chapter 45842
+18:49:53.080 [INFO] DownloadsManager: Got 17 pages for chapter 45842
+18:49:53.091 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:49:53.922 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_93
+18:49:53.937 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:49:53.956 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/0
+18:49:54.286 [INFO] HttpClient: Download completed successfully
+18:49:54.301 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:49:54.360 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:49:54.375 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/1
+18:49:54.426 [INFO] SuwayomiClient: Fetched 35 items in download queue
+18:49:54.869 [INFO] HttpClient: Download completed successfully
+18:49:54.884 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:49:54.944 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:49:54.960 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/2
+18:49:55.207 [INFO] HttpClient: Download completed successfully
+18:49:55.222 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:49:55.284 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:49:55.301 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/3
+18:49:55.611 [INFO] HttpClient: Download completed successfully
+18:49:55.631 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:49:55.687 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:49:55.697 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/4
+18:49:55.941 [INFO] HttpClient: Download completed successfully
+18:49:55.957 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:49:56.072 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:49:56.093 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/5
+18:49:56.419 [INFO] HttpClient: Download completed successfully
+18:49:56.441 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:49:56.504 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:49:56.514 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/6
+18:49:56.747 [INFO] HttpClient: Download completed successfully
+18:49:56.762 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:49:56.823 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:49:56.839 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/7
+18:49:57.246 [INFO] HttpClient: Download completed successfully
+18:49:57.268 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:49:57.323 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:49:57.334 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/8
+18:49:57.400 [INFO] SuwayomiClient: Fetched 35 items in download queue
+18:49:57.621 [INFO] HttpClient: Download completed successfully
+18:49:57.639 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:49:57.703 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:49:57.722 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/9
+18:49:57.941 [INFO] HttpClient: Download completed successfully
+18:49:57.958 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:49:58.074 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:49:58.096 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/10
+18:49:58.414 [INFO] HttpClient: Download completed successfully
+18:49:58.434 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:49:58.497 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:49:58.509 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/11
+18:49:58.760 [INFO] HttpClient: Download completed successfully
+18:49:58.773 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:49:58.831 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:49:58.845 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/12
+18:49:59.069 [INFO] HttpClient: Download completed successfully
+18:49:59.088 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:49:59.147 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:49:59.158 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/13
+18:49:59.440 [INFO] HttpClient: Download completed successfully
+18:49:59.460 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:49:59.516 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:49:59.528 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/14
+18:49:59.793 [INFO] HttpClient: Download completed successfully
+18:49:59.806 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:49:59.919 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:49:59.938 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/15
+18:50:00.256 [INFO] HttpClient: Download completed successfully
+18:50:00.271 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:50:00.331 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:50:00.350 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/93/page/16
+18:50:00.390 [INFO] SuwayomiClient: Fetched 35 items in download queue
+18:50:00.664 [INFO] HttpClient: Download completed successfully
+18:50:00.681 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:50:00.798 [INFO] DownloadsManager: Chapter 93 download completed
+18:50:00.811 [INFO] DownloadsManager: Downloading chapter 94 (id=45841) for manga 405
+18:50:00.816 [INFO] DownloadsManager: Fetching pages for chapter id=45841
+18:50:00.823 [INFO] GraphQL: Fetching pages for chapter id=45841
+18:50:00.873 [INFO] GraphQL: Fetched 19 pages for chapter 45841
+18:50:00.884 [INFO] DownloadsManager: Got 19 pages for chapter 45841
+18:50:00.895 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:50:01.731 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_94
+18:50:01.746 [INFO] DownloadsManager: Downloading page 1 of 19 (0%)
+18:50:01.761 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/0
+18:50:02.112 [INFO] HttpClient: Download completed successfully
+18:50:02.122 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:50:02.179 [INFO] DownloadsManager: Downloading page 2 of 19 (5%)
+18:50:02.193 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/1
+18:50:02.483 [INFO] HttpClient: Download completed successfully
+18:50:02.498 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:50:02.554 [INFO] DownloadsManager: Downloading page 3 of 19 (10%)
+18:50:02.567 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/2
+18:50:02.754 [INFO] HttpClient: Download completed successfully
+18:50:02.773 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:50:02.832 [INFO] DownloadsManager: Downloading page 4 of 19 (15%)
+18:50:02.843 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/3
+18:50:03.081 [INFO] HttpClient: Download completed successfully
+18:50:03.096 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:50:03.158 [INFO] DownloadsManager: Downloading page 5 of 19 (21%)
+18:50:03.175 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/4
+18:50:03.405 [INFO] HttpClient: Download completed successfully
+18:50:03.420 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:50:03.432 [INFO] SuwayomiClient: Fetched 34 items in download queue
+18:50:03.526 [INFO] DownloadsManager: Downloading page 6 of 19 (26%)
+18:50:03.548 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/5
+18:50:03.913 [INFO] HttpClient: Download completed successfully
+18:50:03.930 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:50:03.990 [INFO] DownloadsManager: Downloading page 7 of 19 (31%)
+18:50:04.007 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/6
+18:50:04.335 [INFO] HttpClient: Download completed successfully
+18:50:04.352 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:50:04.415 [INFO] DownloadsManager: Downloading page 8 of 19 (36%)
+18:50:04.426 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/7
+18:50:04.601 [INFO] HttpClient: Download completed successfully
+18:50:04.614 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:50:04.673 [INFO] DownloadsManager: Downloading page 9 of 19 (42%)
+18:50:04.689 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/8
+18:50:05.057 [INFO] HttpClient: Download completed successfully
+18:50:05.075 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:50:05.136 [INFO] DownloadsManager: Downloading page 10 of 19 (47%)
+18:50:05.147 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/9
+18:50:05.407 [INFO] HttpClient: Download completed successfully
+18:50:05.422 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:50:05.535 [INFO] DownloadsManager: Downloading page 11 of 19 (52%)
+18:50:05.555 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/10
+18:50:05.832 [INFO] HttpClient: Download completed successfully
+18:50:05.847 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:50:05.904 [INFO] DownloadsManager: Downloading page 12 of 19 (57%)
+18:50:05.920 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/11
+18:50:06.243 [INFO] HttpClient: Download completed successfully
+18:50:06.255 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:50:06.315 [INFO] DownloadsManager: Downloading page 13 of 19 (63%)
+18:50:06.332 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/12
+18:50:06.522 [INFO] SuwayomiClient: Fetched 34 items in download queue
+18:50:06.791 [INFO] HttpClient: Download completed successfully
+18:50:06.806 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:50:06.866 [INFO] DownloadsManager: Downloading page 14 of 19 (68%)
+18:50:06.883 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/13
+18:50:07.112 [INFO] HttpClient: Download completed successfully
+18:50:07.124 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:50:07.183 [INFO] DownloadsManager: Downloading page 15 of 19 (73%)
+18:50:07.194 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/14
+18:50:07.448 [INFO] HttpClient: Download completed successfully
+18:50:07.462 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:50:07.572 [INFO] DownloadsManager: Downloading page 16 of 19 (78%)
+18:50:07.596 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/15
+18:50:07.888 [INFO] HttpClient: Download completed successfully
+18:50:07.906 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:50:07.969 [INFO] DownloadsManager: Downloading page 17 of 19 (84%)
+18:50:07.982 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/16
+18:50:08.116 [INFO] HttpClient: Download completed successfully
+18:50:08.136 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:50:08.192 [INFO] DownloadsManager: Downloading page 18 of 19 (89%)
+18:50:08.208 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/17
+18:50:08.355 [INFO] HttpClient: Download completed successfully
+18:50:08.371 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:50:08.431 [INFO] DownloadsManager: Downloading page 19 of 19 (94%)
+18:50:08.447 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/94/page/18
+18:50:08.627 [INFO] HttpClient: Download completed successfully
+18:50:08.641 [INFO] DownloadsManager: Page 18 downloaded successfully
+18:50:08.749 [INFO] DownloadsManager: Chapter 94 download completed
+18:50:08.764 [INFO] DownloadsManager: Downloading chapter 95 (id=45840) for manga 405
+18:50:08.774 [INFO] DownloadsManager: Fetching pages for chapter id=45840
+18:50:08.780 [INFO] GraphQL: Fetching pages for chapter id=45840
+18:50:08.820 [INFO] GraphQL: Fetched 18 pages for chapter 45840
+18:50:08.831 [INFO] DownloadsManager: Got 18 pages for chapter 45840
+18:50:08.842 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:50:09.399 [INFO] SuwayomiClient: Fetched 34 items in download queue
+18:50:09.687 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_95
+18:50:09.705 [INFO] DownloadsManager: Downloading page 1 of 18 (0%)
+18:50:09.725 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/0
+18:50:10.003 [INFO] HttpClient: Download completed successfully
+18:50:10.020 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:50:10.083 [INFO] DownloadsManager: Downloading page 2 of 18 (5%)
+18:50:10.094 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/1
+18:50:10.342 [INFO] HttpClient: Download completed successfully
+18:50:10.354 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:50:10.414 [INFO] DownloadsManager: Downloading page 3 of 18 (11%)
+18:50:10.431 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/2
+18:50:10.643 [INFO] HttpClient: Download completed successfully
+18:50:10.657 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:50:10.715 [INFO] DownloadsManager: Downloading page 4 of 18 (16%)
+18:50:10.729 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/3
+18:50:10.982 [INFO] HttpClient: Download completed successfully
+18:50:10.994 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:50:11.055 [INFO] DownloadsManager: Downloading page 5 of 18 (22%)
+18:50:11.072 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/4
+18:50:11.297 [INFO] HttpClient: Download completed successfully
+18:50:11.318 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:50:11.419 [INFO] DownloadsManager: Downloading page 6 of 18 (27%)
+18:50:11.438 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/5
+18:50:11.743 [INFO] HttpClient: Download completed successfully
+18:50:11.763 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:50:11.825 [INFO] DownloadsManager: Downloading page 7 of 18 (33%)
+18:50:11.838 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/6
+18:50:12.246 [INFO] HttpClient: Download completed successfully
+18:50:12.264 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:50:12.325 [INFO] DownloadsManager: Downloading page 8 of 18 (38%)
+18:50:12.342 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/7
+18:50:12.427 [INFO] SuwayomiClient: Fetched 33 items in download queue
+18:50:12.784 [INFO] HttpClient: Download completed successfully
+18:50:12.797 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:50:12.860 [INFO] DownloadsManager: Downloading page 9 of 18 (44%)
+18:50:12.876 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/8
+18:50:13.096 [INFO] HttpClient: Download completed successfully
+18:50:13.112 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:50:13.174 [INFO] DownloadsManager: Downloading page 10 of 18 (50%)
+18:50:13.191 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/9
+18:50:13.437 [INFO] HttpClient: Download completed successfully
+18:50:13.450 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:50:13.561 [INFO] DownloadsManager: Downloading page 11 of 18 (55%)
+18:50:13.581 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/10
+18:50:13.886 [INFO] HttpClient: Download completed successfully
+18:50:13.911 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:50:13.974 [INFO] DownloadsManager: Downloading page 12 of 18 (61%)
+18:50:13.988 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/11
+18:50:14.281 [INFO] HttpClient: Download completed successfully
+18:50:14.296 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:50:14.357 [INFO] DownloadsManager: Downloading page 13 of 18 (66%)
+18:50:14.374 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/12
+18:50:14.675 [INFO] HttpClient: Download completed successfully
+18:50:14.689 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:50:14.752 [INFO] DownloadsManager: Downloading page 14 of 18 (72%)
+18:50:14.763 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/13
+18:50:15.008 [INFO] HttpClient: Download completed successfully
+18:50:15.021 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:50:15.081 [INFO] DownloadsManager: Downloading page 15 of 18 (77%)
+18:50:15.093 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/14
+18:50:15.300 [INFO] HttpClient: Download completed successfully
+18:50:15.311 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:50:15.410 [INFO] DownloadsManager: Downloading page 16 of 18 (83%)
+18:50:15.427 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/15
+18:50:15.527 [INFO] SuwayomiClient: Fetched 33 items in download queue
+18:50:16.022 [INFO] HttpClient: Download completed successfully
+18:50:16.069 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:50:16.125 [INFO] DownloadsManager: Downloading page 17 of 18 (88%)
+18:50:16.142 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/16
+18:50:16.232 [INFO] HttpClient: Download completed successfully
+18:50:16.247 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:50:16.304 [INFO] DownloadsManager: Downloading page 18 of 18 (94%)
+18:50:16.319 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/95/page/17
+18:50:16.511 [INFO] HttpClient: Download completed successfully
+18:50:16.523 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:50:16.636 [INFO] DownloadsManager: Chapter 95 download completed
+18:50:16.651 [INFO] DownloadsManager: Downloading chapter 96 (id=45839) for manga 405
+18:50:16.660 [INFO] DownloadsManager: Fetching pages for chapter id=45839
+18:50:16.670 [INFO] GraphQL: Fetching pages for chapter id=45839
+18:50:16.718 [INFO] GraphQL: Fetched 20 pages for chapter 45839
+18:50:16.725 [INFO] DownloadsManager: Got 20 pages for chapter 45839
+18:50:16.735 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:50:17.641 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_96
+18:50:17.656 [INFO] DownloadsManager: Downloading page 1 of 20 (0%)
+18:50:17.670 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/0
+18:50:17.980 [INFO] HttpClient: Download completed successfully
+18:50:17.999 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:50:18.056 [INFO] DownloadsManager: Downloading page 2 of 20 (5%)
+18:50:18.071 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/1
+18:50:18.410 [INFO] SuwayomiClient: Fetched 33 items in download queue
+18:50:18.416 [INFO] HttpClient: Download completed successfully
+18:50:18.442 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:50:18.502 [INFO] DownloadsManager: Downloading page 3 of 20 (10%)
+18:50:18.519 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/2
+18:50:18.766 [INFO] HttpClient: Download completed successfully
+18:50:18.787 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:50:18.844 [INFO] DownloadsManager: Downloading page 4 of 20 (15%)
+18:50:18.859 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/3
+18:50:19.083 [INFO] HttpClient: Download completed successfully
+18:50:19.099 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:50:19.158 [INFO] DownloadsManager: Downloading page 5 of 20 (20%)
+18:50:19.176 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/4
+18:50:19.565 [INFO] HttpClient: Download completed successfully
+18:50:19.582 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:50:19.690 [INFO] DownloadsManager: Downloading page 6 of 20 (25%)
+18:50:19.707 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/5
+18:50:20.007 [INFO] HttpClient: Download completed successfully
+18:50:20.024 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:50:20.084 [INFO] DownloadsManager: Downloading page 7 of 20 (30%)
+18:50:20.101 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/6
+18:50:20.409 [INFO] HttpClient: Download completed successfully
+18:50:20.424 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:50:20.485 [INFO] DownloadsManager: Downloading page 8 of 20 (35%)
+18:50:20.503 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/7
+18:50:20.906 [INFO] HttpClient: Download completed successfully
+18:50:20.921 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:50:20.981 [INFO] DownloadsManager: Downloading page 9 of 20 (40%)
+18:50:20.999 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/8
+18:50:21.336 [INFO] HttpClient: Download completed successfully
+18:50:21.351 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:50:21.377 [INFO] SuwayomiClient: Fetched 32 items in download queue
+18:50:21.413 [INFO] DownloadsManager: Downloading page 10 of 20 (45%)
+18:50:21.428 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/9
+18:50:21.753 [INFO] HttpClient: Download completed successfully
+18:50:21.770 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:50:21.936 [INFO] DownloadsManager: Downloading page 11 of 20 (50%)
+18:50:21.956 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/10
+18:50:22.264 [INFO] HttpClient: Download completed successfully
+18:50:22.284 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:50:22.350 [INFO] DownloadsManager: Downloading page 12 of 20 (55%)
+18:50:22.364 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/11
+18:50:22.825 [INFO] HttpClient: Download completed successfully
+18:50:22.842 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:50:22.903 [INFO] DownloadsManager: Downloading page 13 of 20 (60%)
+18:50:22.919 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/12
+18:50:23.139 [INFO] HttpClient: Download completed successfully
+18:50:23.157 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:50:23.219 [INFO] DownloadsManager: Downloading page 14 of 20 (65%)
+18:50:23.235 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/13
+18:50:23.535 [INFO] HttpClient: Download completed successfully
+18:50:23.552 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:50:23.616 [INFO] DownloadsManager: Downloading page 15 of 20 (70%)
+18:50:23.628 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/14
+18:50:23.832 [INFO] HttpClient: Download completed successfully
+18:50:23.848 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:50:23.964 [INFO] DownloadsManager: Downloading page 16 of 20 (75%)
+18:50:23.982 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/15
+18:50:24.405 [INFO] SuwayomiClient: Fetched 32 items in download queue
+18:50:24.439 [INFO] HttpClient: Download completed successfully
+18:50:24.459 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:50:24.516 [INFO] DownloadsManager: Downloading page 17 of 20 (80%)
+18:50:24.534 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/16
+18:50:24.702 [INFO] HttpClient: Download completed successfully
+18:50:24.724 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:50:24.781 [INFO] DownloadsManager: Downloading page 18 of 20 (85%)
+18:50:24.797 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/17
+18:50:24.927 [INFO] HttpClient: Download completed successfully
+18:50:24.998 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:50:25.055 [INFO] DownloadsManager: Downloading page 19 of 20 (90%)
+18:50:25.070 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/18
+18:50:25.286 [INFO] HttpClient: Download completed successfully
+18:50:25.303 [INFO] DownloadsManager: Page 18 downloaded successfully
+18:50:25.363 [INFO] DownloadsManager: Downloading page 20 of 20 (95%)
+18:50:25.384 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/96/page/19
+18:50:25.577 [INFO] HttpClient: Download completed successfully
+18:50:25.595 [INFO] DownloadsManager: Page 19 downloaded successfully
+18:50:25.719 [INFO] DownloadsManager: Chapter 96 download completed
+18:50:25.726 [INFO] DownloadsManager: Downloading chapter 97 (id=45838) for manga 405
+18:50:25.736 [INFO] DownloadsManager: Fetching pages for chapter id=45838
+18:50:25.750 [INFO] GraphQL: Fetching pages for chapter id=45838
+18:50:25.790 [INFO] GraphQL: Fetched 17 pages for chapter 45838
+18:50:25.803 [INFO] DownloadsManager: Got 17 pages for chapter 45838
+18:50:25.812 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:50:26.653 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_97
+18:50:26.666 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:50:26.686 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/0
+18:50:26.989 [INFO] HttpClient: Download completed successfully
+18:50:27.009 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:50:27.069 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:50:27.079 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/1
+18:50:27.279 [INFO] HttpClient: Download completed successfully
+18:50:27.296 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:50:27.360 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:50:27.373 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/2
+18:50:27.416 [INFO] SuwayomiClient: Fetched 32 items in download queue
+18:50:27.681 [INFO] HttpClient: Download completed successfully
+18:50:27.702 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:50:27.760 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:50:27.778 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/3
+18:50:27.970 [INFO] HttpClient: Download completed successfully
+18:50:27.983 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:50:28.047 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:50:28.059 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/4
+18:50:28.420 [INFO] HttpClient: Download completed successfully
+18:50:28.440 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:50:28.549 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:50:28.570 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/5
+18:50:28.861 [INFO] HttpClient: Download completed successfully
+18:50:28.885 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:50:28.943 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:50:28.961 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/6
+18:50:29.227 [INFO] HttpClient: Download completed successfully
+18:50:29.245 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:50:29.310 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:50:29.324 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/7
+18:50:29.539 [INFO] HttpClient: Download completed successfully
+18:50:29.555 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:50:29.616 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:50:29.634 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/8
+18:50:29.918 [INFO] HttpClient: Download completed successfully
+18:50:29.935 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:50:29.996 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:50:30.011 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/9
+18:50:30.235 [INFO] HttpClient: Download completed successfully
+18:50:30.252 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:50:30.421 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:50:30.446 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/10
+18:50:30.491 [INFO] SuwayomiClient: Fetched 31 items in download queue
+18:50:30.739 [INFO] HttpClient: Download completed successfully
+18:50:30.754 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:50:30.817 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:50:30.831 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/11
+18:50:31.037 [INFO] HttpClient: Download completed successfully
+18:50:31.050 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:50:31.171 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:50:31.177 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/12
+18:50:31.511 [INFO] HttpClient: Download completed successfully
+18:50:31.517 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:50:31.568 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:50:31.574 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/13
+18:50:31.793 [INFO] HttpClient: Download completed successfully
+18:50:31.809 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:50:31.869 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:50:31.888 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/14
+18:50:32.225 [INFO] HttpClient: Download completed successfully
+18:50:32.242 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:50:32.348 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:50:32.365 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/15
+18:50:32.648 [INFO] HttpClient: Download completed successfully
+18:50:32.668 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:50:32.731 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:50:32.744 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/97/page/16
+18:50:33.038 [INFO] HttpClient: Download completed successfully
+18:50:33.051 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:50:33.160 [INFO] DownloadsManager: Chapter 97 download completed
+18:50:33.172 [INFO] DownloadsManager: Downloading chapter 98 (id=45837) for manga 405
+18:50:33.183 [INFO] DownloadsManager: Fetching pages for chapter id=45837
+18:50:33.194 [INFO] GraphQL: Fetching pages for chapter id=45837
+18:50:33.222 [INFO] GraphQL: Fetched 17 pages for chapter 45837
+18:50:33.228 [INFO] DownloadsManager: Got 17 pages for chapter 45837
+18:50:33.233 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:50:33.378 [INFO] SuwayomiClient: Fetched 31 items in download queue
+18:50:34.133 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_98
+18:50:34.150 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:50:34.166 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/0
+18:50:34.411 [INFO] HttpClient: Download completed successfully
+18:50:34.429 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:50:34.488 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:50:34.499 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/1
+18:50:34.711 [INFO] HttpClient: Download completed successfully
+18:50:34.724 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:50:34.781 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:50:34.795 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/2
+18:50:35.102 [INFO] HttpClient: Download completed successfully
+18:50:35.119 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:50:35.179 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:50:35.189 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/3
+18:50:35.431 [INFO] HttpClient: Download completed successfully
+18:50:35.450 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:50:35.513 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:50:35.523 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/4
+18:50:35.820 [INFO] HttpClient: Download completed successfully
+18:50:35.836 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:50:35.954 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:50:35.967 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/5
+18:50:36.281 [INFO] HttpClient: Download completed successfully
+18:50:36.302 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:50:36.362 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:50:36.379 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/6
+18:50:36.424 [INFO] SuwayomiClient: Fetched 31 items in download queue
+18:50:36.689 [INFO] HttpClient: Download completed successfully
+18:50:36.699 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:50:36.758 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:50:36.773 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/7
+18:50:37.036 [INFO] HttpClient: Download completed successfully
+18:50:37.052 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:50:37.113 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:50:37.131 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/8
+18:50:37.470 [INFO] HttpClient: Download completed successfully
+18:50:37.487 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:50:37.549 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:50:37.565 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/9
+18:50:37.840 [INFO] HttpClient: Download completed successfully
+18:50:37.861 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:50:37.969 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:50:37.986 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/10
+18:50:38.337 [INFO] HttpClient: Download completed successfully
+18:50:38.352 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:50:38.412 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:50:38.430 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/11
+18:50:38.647 [INFO] HttpClient: Download completed successfully
+18:50:38.658 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:50:38.714 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:50:38.729 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/12
+18:50:38.968 [INFO] HttpClient: Download completed successfully
+18:50:38.985 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:50:39.048 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:50:39.059 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/13
+18:50:39.371 [INFO] SuwayomiClient: Fetched 30 items in download queue
+18:50:39.399 [INFO] HttpClient: Download completed successfully
+18:50:39.417 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:50:39.477 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:50:39.490 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/14
+18:50:39.839 [INFO] HttpClient: Download completed successfully
+18:50:39.851 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:50:39.964 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:50:39.989 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/15
+18:50:40.259 [INFO] HttpClient: Download completed successfully
+18:50:40.274 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:50:40.332 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:50:40.349 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/98/page/16
+18:50:40.668 [INFO] HttpClient: Download completed successfully
+18:50:40.687 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:50:40.795 [INFO] DownloadsManager: Chapter 98 download completed
+18:50:40.802 [INFO] DownloadsManager: Downloading chapter 99 (id=45836) for manga 405
+18:50:40.811 [INFO] DownloadsManager: Fetching pages for chapter id=45836
+18:50:40.821 [INFO] GraphQL: Fetching pages for chapter id=45836
+18:50:40.864 [INFO] GraphQL: Fetched 19 pages for chapter 45836
+18:50:40.876 [INFO] DownloadsManager: Got 19 pages for chapter 45836
+18:50:40.882 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:50:41.770 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_99
+18:50:41.778 [INFO] DownloadsManager: Downloading page 1 of 19 (0%)
+18:50:41.835 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/0
+18:50:42.780 [INFO] SuwayomiClient: Fetched 30 items in download queue
+18:50:43.673 [INFO] HttpClient: Download completed successfully
+18:50:43.694 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:50:43.749 [INFO] DownloadsManager: Downloading page 2 of 19 (5%)
+18:50:43.761 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/1
+18:50:44.037 [INFO] HttpClient: Download completed successfully
+18:50:44.054 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:50:44.117 [INFO] DownloadsManager: Downloading page 3 of 19 (10%)
+18:50:44.129 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/2
+18:50:44.425 [INFO] HttpClient: Download completed successfully
+18:50:44.440 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:50:44.502 [INFO] DownloadsManager: Downloading page 4 of 19 (15%)
+18:50:44.518 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/3
+18:50:44.764 [INFO] HttpClient: Download completed successfully
+18:50:44.788 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:50:44.844 [INFO] DownloadsManager: Downloading page 5 of 19 (21%)
+18:50:44.858 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/4
+18:50:45.167 [INFO] HttpClient: Download completed successfully
+18:50:45.183 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:50:45.295 [INFO] DownloadsManager: Downloading page 6 of 19 (26%)
+18:50:45.311 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/5
+18:50:45.415 [INFO] SuwayomiClient: Fetched 30 items in download queue
+18:50:45.655 [INFO] HttpClient: Download completed successfully
+18:50:45.678 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:50:45.734 [INFO] DownloadsManager: Downloading page 7 of 19 (31%)
+18:50:45.747 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/6
+18:50:45.957 [INFO] HttpClient: Download completed successfully
+18:50:45.971 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:50:46.030 [INFO] DownloadsManager: Downloading page 8 of 19 (36%)
+18:50:46.045 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/7
+18:50:46.255 [INFO] HttpClient: Download completed successfully
+18:50:46.268 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:50:46.330 [INFO] DownloadsManager: Downloading page 9 of 19 (42%)
+18:50:46.345 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/8
+18:50:46.547 [INFO] HttpClient: Download completed successfully
+18:50:46.563 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:50:46.620 [INFO] DownloadsManager: Downloading page 10 of 19 (47%)
+18:50:46.634 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/9
+18:50:46.853 [INFO] HttpClient: Download completed successfully
+18:50:46.870 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:50:46.981 [INFO] DownloadsManager: Downloading page 11 of 19 (52%)
+18:50:46.998 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/10
+18:50:47.267 [INFO] HttpClient: Download completed successfully
+18:50:47.288 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:50:47.347 [INFO] DownloadsManager: Downloading page 12 of 19 (57%)
+18:50:47.360 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/11
+18:50:47.703 [INFO] HttpClient: Download completed successfully
+18:50:47.722 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:50:47.778 [INFO] DownloadsManager: Downloading page 13 of 19 (63%)
+18:50:47.794 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/12
+18:50:48.163 [INFO] HttpClient: Download completed successfully
+18:50:48.177 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:50:48.237 [INFO] DownloadsManager: Downloading page 14 of 19 (68%)
+18:50:48.256 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/13
+18:50:48.406 [INFO] SuwayomiClient: Fetched 30 items in download queue
+18:50:48.482 [INFO] HttpClient: Download completed successfully
+18:50:48.494 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:50:48.555 [INFO] DownloadsManager: Downloading page 15 of 19 (73%)
+18:50:48.575 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/14
+18:50:49.019 [INFO] HttpClient: Download completed successfully
+18:50:49.033 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:50:49.152 [INFO] DownloadsManager: Downloading page 16 of 19 (78%)
+18:50:49.171 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/15
+18:50:49.452 [INFO] HttpClient: Download completed successfully
+18:50:49.471 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:50:49.534 [INFO] DownloadsManager: Downloading page 17 of 19 (84%)
+18:50:49.549 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/16
+18:50:49.735 [INFO] HttpClient: Download completed successfully
+18:50:49.748 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:50:49.808 [INFO] DownloadsManager: Downloading page 18 of 19 (89%)
+18:50:49.825 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/17
+18:50:49.943 [INFO] HttpClient: Download completed successfully
+18:50:49.954 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:50:50.015 [INFO] DownloadsManager: Downloading page 19 of 19 (94%)
+18:50:50.033 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/99/page/18
+18:50:50.222 [INFO] HttpClient: Download completed successfully
+18:50:50.237 [INFO] DownloadsManager: Page 18 downloaded successfully
+18:50:50.353 [INFO] DownloadsManager: Chapter 99 download completed
+18:50:50.366 [INFO] DownloadsManager: Downloading chapter 100 (id=45835) for manga 405
+18:50:50.372 [INFO] DownloadsManager: Fetching pages for chapter id=45835
+18:50:50.382 [INFO] GraphQL: Fetching pages for chapter id=45835
+18:50:50.453 [INFO] GraphQL: Fetched 17 pages for chapter 45835
+18:50:50.464 [INFO] DownloadsManager: Got 17 pages for chapter 45835
+18:50:50.470 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:50:51.309 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_100
+18:50:51.321 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:50:51.340 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/0
+18:50:51.457 [INFO] SuwayomiClient: Fetched 29 items in download queue
+18:50:51.673 [INFO] HttpClient: Download completed successfully
+18:50:51.693 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:50:51.749 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:50:51.764 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/1
+18:50:51.967 [INFO] HttpClient: Download completed successfully
+18:50:51.986 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:50:52.042 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:50:52.056 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/2
+18:50:52.249 [INFO] HttpClient: Download completed successfully
+18:50:52.263 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:50:52.324 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:50:52.341 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/3
+18:50:52.472 [INFO] HttpClient: Download completed successfully
+18:50:52.491 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:50:52.548 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:50:52.562 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/4
+18:50:52.819 [INFO] HttpClient: Download completed successfully
+18:50:52.832 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:50:52.960 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:50:52.976 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/5
+18:50:53.313 [INFO] HttpClient: Download completed successfully
+18:50:53.338 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:50:53.398 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:50:53.415 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/6
+18:50:53.709 [INFO] HttpClient: Download completed successfully
+18:50:53.729 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:50:53.785 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:50:53.801 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/7
+18:50:54.029 [INFO] HttpClient: Download completed successfully
+18:50:54.045 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:50:54.108 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:50:54.120 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/8
+18:50:54.417 [INFO] SuwayomiClient: Fetched 29 items in download queue
+18:50:54.472 [INFO] HttpClient: Download completed successfully
+18:50:54.486 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:50:54.547 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:50:54.565 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/9
+18:50:54.797 [INFO] HttpClient: Download completed successfully
+18:50:54.817 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:50:54.933 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:50:54.955 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/10
+18:50:55.296 [INFO] HttpClient: Download completed successfully
+18:50:55.315 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:50:55.378 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:50:55.391 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/11
+18:50:55.748 [INFO] HttpClient: Download completed successfully
+18:50:55.763 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:50:55.825 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:50:55.843 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/12
+18:50:56.115 [INFO] HttpClient: Download completed successfully
+18:50:56.131 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:50:56.206 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:50:56.219 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/13
+18:50:56.523 [INFO] HttpClient: Download completed successfully
+18:50:56.537 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:50:56.599 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:50:56.617 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/14
+18:50:56.961 [INFO] HttpClient: Download completed successfully
+18:50:56.973 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:50:57.095 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:50:57.111 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/15
+18:50:57.404 [INFO] SuwayomiClient: Fetched 29 items in download queue
+18:50:57.569 [INFO] HttpClient: Download completed successfully
+18:50:57.584 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:50:57.647 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:50:57.661 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/100/page/16
+18:50:57.864 [INFO] HttpClient: Download completed successfully
+18:50:57.882 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:50:58.000 [INFO] DownloadsManager: Chapter 100 download completed
+18:50:58.009 [INFO] DownloadsManager: Downloading chapter 101 (id=45834) for manga 405
+18:50:58.020 [INFO] DownloadsManager: Fetching pages for chapter id=45834
+18:50:58.031 [INFO] GraphQL: Fetching pages for chapter id=45834
+18:50:58.480 [INFO] GraphQL: Fetched 17 pages for chapter 45834
+18:50:58.491 [INFO] DownloadsManager: Got 17 pages for chapter 45834
+18:50:58.502 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:50:59.346 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_101
+18:50:59.359 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:50:59.380 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/0
+18:50:59.576 [INFO] HttpClient: Download completed successfully
+18:50:59.589 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:50:59.651 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:50:59.667 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/1
+18:50:59.839 [INFO] HttpClient: Download completed successfully
+18:50:59.856 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:50:59.916 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:50:59.934 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/2
+18:51:00.101 [INFO] HttpClient: Download completed successfully
+18:51:00.118 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:51:00.182 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:51:00.194 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/3
+18:51:00.314 [INFO] HttpClient: Download completed successfully
+18:51:00.326 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:51:00.388 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:51:00.405 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/4
+18:51:00.407 [INFO] SuwayomiClient: Fetched 28 items in download queue
+18:51:00.566 [INFO] HttpClient: Download completed successfully
+18:51:00.581 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:51:00.702 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:51:00.724 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/5
+18:51:00.949 [INFO] HttpClient: Download completed successfully
+18:51:00.969 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:51:01.029 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:51:01.047 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/6
+18:51:01.182 [INFO] HttpClient: Download completed successfully
+18:51:01.199 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:51:01.259 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:51:01.276 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/7
+18:51:01.463 [INFO] HttpClient: Download completed successfully
+18:51:01.478 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:51:01.540 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:51:01.557 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/8
+18:51:01.685 [INFO] HttpClient: Download completed successfully
+18:51:01.700 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:51:01.763 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:51:01.775 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/9
+18:51:01.953 [INFO] HttpClient: Download completed successfully
+18:51:01.973 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:51:02.091 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:51:02.117 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/10
+18:51:02.348 [INFO] HttpClient: Download completed successfully
+18:51:02.366 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:51:02.431 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:51:02.445 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/11
+18:51:02.631 [INFO] HttpClient: Download completed successfully
+18:51:02.647 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:51:02.711 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:51:02.725 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/12
+18:51:02.901 [INFO] HttpClient: Download completed successfully
+18:51:02.917 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:51:02.978 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:51:02.998 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/13
+18:51:03.135 [INFO] HttpClient: Download completed successfully
+18:51:03.150 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:51:03.211 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:51:03.272 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/14
+18:51:03.421 [INFO] SuwayomiClient: Fetched 28 items in download queue
+18:51:03.479 [INFO] HttpClient: Download completed successfully
+18:51:03.503 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:51:03.621 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:51:03.644 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/15
+18:51:03.818 [INFO] HttpClient: Download completed successfully
+18:51:03.840 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:51:03.897 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:51:03.916 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/101/page/16
+18:51:04.081 [INFO] HttpClient: Download completed successfully
+18:51:04.094 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:51:04.213 [INFO] DownloadsManager: Chapter 101 download completed
+18:51:04.222 [INFO] DownloadsManager: Downloading chapter 102 (id=45833) for manga 405
+18:51:04.234 [INFO] DownloadsManager: Fetching pages for chapter id=45833
+18:51:04.244 [INFO] GraphQL: Fetching pages for chapter id=45833
+18:51:04.355 [INFO] GraphQL: Fetched 19 pages for chapter 45833
+18:51:04.368 [INFO] DownloadsManager: Got 19 pages for chapter 45833
+18:51:04.377 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:51:05.218 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_102
+18:51:05.233 [INFO] DownloadsManager: Downloading page 1 of 19 (0%)
+18:51:05.250 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/0
+18:51:05.421 [INFO] HttpClient: Download completed successfully
+18:51:05.438 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:51:05.502 [INFO] DownloadsManager: Downloading page 2 of 19 (5%)
+18:51:05.516 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/1
+18:51:05.665 [INFO] HttpClient: Download completed successfully
+18:51:05.685 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:51:05.743 [INFO] DownloadsManager: Downloading page 3 of 19 (10%)
+18:51:05.761 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/2
+18:51:05.997 [INFO] HttpClient: Download completed successfully
+18:51:06.015 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:51:06.072 [INFO] DownloadsManager: Downloading page 4 of 19 (15%)
+18:51:06.088 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/3
+18:51:06.232 [INFO] HttpClient: Download completed successfully
+18:51:06.247 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:51:06.310 [INFO] DownloadsManager: Downloading page 5 of 19 (21%)
+18:51:06.322 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/4
+18:51:06.392 [INFO] SuwayomiClient: Fetched 27 items in download queue
+18:51:06.546 [INFO] HttpClient: Download completed successfully
+18:51:06.564 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:51:06.691 [INFO] DownloadsManager: Downloading page 6 of 19 (26%)
+18:51:06.715 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/5
+18:51:06.925 [INFO] HttpClient: Download completed successfully
+18:51:06.950 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:51:07.007 [INFO] DownloadsManager: Downloading page 7 of 19 (31%)
+18:51:07.025 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/6
+18:51:07.206 [INFO] HttpClient: Download completed successfully
+18:51:07.223 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:51:07.280 [INFO] DownloadsManager: Downloading page 8 of 19 (36%)
+18:51:07.296 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/7
+18:51:07.427 [INFO] HttpClient: Download completed successfully
+18:51:07.444 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:51:07.509 [INFO] DownloadsManager: Downloading page 9 of 19 (42%)
+18:51:07.524 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/8
+18:51:07.668 [INFO] HttpClient: Download completed successfully
+18:51:07.683 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:51:07.744 [INFO] DownloadsManager: Downloading page 10 of 19 (47%)
+18:51:07.763 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/9
+18:51:07.917 [INFO] HttpClient: Download completed successfully
+18:51:07.935 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:51:08.054 [INFO] DownloadsManager: Downloading page 11 of 19 (52%)
+18:51:08.071 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/10
+18:51:08.331 [INFO] HttpClient: Download completed successfully
+18:51:08.346 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:51:08.409 [INFO] DownloadsManager: Downloading page 12 of 19 (57%)
+18:51:08.423 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/11
+18:51:08.554 [INFO] HttpClient: Download completed successfully
+18:51:08.570 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:51:08.631 [INFO] DownloadsManager: Downloading page 13 of 19 (63%)
+18:51:08.648 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/12
+18:51:09.059 [INFO] HttpClient: Download completed successfully
+18:51:09.078 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:51:09.135 [INFO] DownloadsManager: Downloading page 14 of 19 (68%)
+18:51:09.152 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/13
+18:51:09.304 [INFO] HttpClient: Download completed successfully
+18:51:09.320 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:51:09.381 [INFO] DownloadsManager: Downloading page 15 of 19 (73%)
+18:51:09.393 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/14
+18:51:09.446 [INFO] SuwayomiClient: Fetched 27 items in download queue
+18:51:09.696 [INFO] HttpClient: Download completed successfully
+18:51:09.706 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:51:09.821 [INFO] DownloadsManager: Downloading page 16 of 19 (78%)
+18:51:09.833 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/15
+18:51:10.062 [INFO] HttpClient: Download completed successfully
+18:51:10.067 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:51:10.118 [INFO] DownloadsManager: Downloading page 17 of 19 (84%)
+18:51:10.132 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/16
+18:51:10.263 [INFO] HttpClient: Download completed successfully
+18:51:10.278 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:51:10.337 [INFO] DownloadsManager: Downloading page 18 of 19 (89%)
+18:51:10.353 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/17
+18:51:10.579 [INFO] HttpClient: Download completed successfully
+18:51:10.597 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:51:10.660 [INFO] DownloadsManager: Downloading page 19 of 19 (94%)
+18:51:10.673 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/102/page/18
+18:51:10.777 [INFO] HttpClient: Download completed successfully
+18:51:10.794 [INFO] DownloadsManager: Page 18 downloaded successfully
+18:51:10.914 [INFO] DownloadsManager: Chapter 102 download completed
+18:51:10.920 [INFO] DownloadsManager: Downloading chapter 103 (id=45832) for manga 405
+18:51:10.928 [INFO] DownloadsManager: Fetching pages for chapter id=45832
+18:51:10.937 [INFO] GraphQL: Fetching pages for chapter id=45832
+18:51:10.989 [INFO] GraphQL: Fetched 17 pages for chapter 45832
+18:51:11.000 [INFO] DownloadsManager: Got 17 pages for chapter 45832
+18:51:11.012 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:51:11.851 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_103
+18:51:11.866 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:51:11.882 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/0
+18:51:12.401 [INFO] HttpClient: Download completed successfully
+18:51:12.414 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:51:12.470 [INFO] SuwayomiClient: Fetched 27 items in download queue
+18:51:12.471 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:51:12.494 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/1
+18:51:13.034 [INFO] HttpClient: Download completed successfully
+18:51:13.048 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:51:13.103 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:51:13.117 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/2
+18:51:13.394 [INFO] HttpClient: Download completed successfully
+18:51:13.409 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:51:13.469 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:51:13.486 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/3
+18:51:13.754 [INFO] HttpClient: Download completed successfully
+18:51:13.768 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:51:13.828 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:51:13.844 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/4
+18:51:14.151 [INFO] HttpClient: Download completed successfully
+18:51:14.165 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:51:14.285 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:51:14.305 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/5
+18:51:14.713 [INFO] HttpClient: Download completed successfully
+18:51:14.738 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:51:14.793 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:51:14.805 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/6
+18:51:15.144 [INFO] HttpClient: Download completed successfully
+18:51:15.160 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:51:15.222 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:51:15.241 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/7
+18:51:15.649 [INFO] SuwayomiClient: Fetched 26 items in download queue
+18:51:15.782 [INFO] HttpClient: Download completed successfully
+18:51:15.802 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:51:15.860 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:51:15.873 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/8
+18:51:16.112 [INFO] HttpClient: Download completed successfully
+18:51:16.128 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:51:16.186 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:51:16.202 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/9
+18:51:16.484 [INFO] HttpClient: Download completed successfully
+18:51:16.497 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:51:16.627 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:51:16.645 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/10
+18:51:16.932 [INFO] HttpClient: Download completed successfully
+18:51:16.952 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:51:17.018 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:51:17.030 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/11
+18:51:17.296 [INFO] HttpClient: Download completed successfully
+18:51:17.310 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:51:17.369 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:51:17.384 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/12
+18:51:17.683 [INFO] HttpClient: Download completed successfully
+18:51:17.698 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:51:17.758 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:51:17.775 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/13
+18:51:18.047 [INFO] HttpClient: Download completed successfully
+18:51:18.061 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:51:18.117 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:51:18.131 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/14
+18:51:18.390 [INFO] HttpClient: Download completed successfully
+18:51:18.405 [INFO] SuwayomiClient: Fetched 26 items in download queue
+18:51:18.420 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:51:18.540 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:51:18.559 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/15
+18:51:18.848 [INFO] HttpClient: Download completed successfully
+18:51:18.865 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:51:18.926 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:51:18.947 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/103/page/16
+18:51:19.051 [INFO] HttpClient: Download completed successfully
+18:51:19.067 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:51:19.189 [INFO] DownloadsManager: Chapter 103 download completed
+18:51:19.196 [INFO] DownloadsManager: Downloading chapter 104 (id=45831) for manga 405
+18:51:19.205 [INFO] DownloadsManager: Fetching pages for chapter id=45831
+18:51:19.214 [INFO] GraphQL: Fetching pages for chapter id=45831
+18:51:19.268 [INFO] GraphQL: Fetched 17 pages for chapter 45831
+18:51:19.279 [INFO] DownloadsManager: Got 17 pages for chapter 45831
+18:51:19.285 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:51:20.128 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_104
+18:51:20.136 [INFO] DownloadsManager: Downloading page 1 of 17 (0%)
+18:51:20.150 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/0
+18:51:20.457 [INFO] HttpClient: Download completed successfully
+18:51:20.469 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:51:20.525 [INFO] DownloadsManager: Downloading page 2 of 17 (5%)
+18:51:20.539 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/1
+18:51:20.815 [INFO] HttpClient: Download completed successfully
+18:51:20.828 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:51:20.889 [INFO] DownloadsManager: Downloading page 3 of 17 (11%)
+18:51:20.906 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/2
+18:51:21.137 [INFO] HttpClient: Download completed successfully
+18:51:21.157 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:51:21.213 [INFO] DownloadsManager: Downloading page 4 of 17 (17%)
+18:51:21.228 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/3
+18:51:21.402 [INFO] SuwayomiClient: Fetched 26 items in download queue
+18:51:21.412 [INFO] HttpClient: Download completed successfully
+18:51:21.435 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:51:21.496 [INFO] DownloadsManager: Downloading page 5 of 17 (23%)
+18:51:21.513 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/4
+18:51:21.774 [INFO] HttpClient: Download completed successfully
+18:51:21.794 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:51:21.916 [INFO] DownloadsManager: Downloading page 6 of 17 (29%)
+18:51:21.937 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/5
+18:51:22.244 [INFO] HttpClient: Download completed successfully
+18:51:22.262 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:51:22.320 [INFO] DownloadsManager: Downloading page 7 of 17 (35%)
+18:51:22.334 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/6
+18:51:22.574 [INFO] HttpClient: Download completed successfully
+18:51:22.587 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:51:22.647 [INFO] DownloadsManager: Downloading page 8 of 17 (41%)
+18:51:22.663 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/7
+18:51:22.877 [INFO] HttpClient: Download completed successfully
+18:51:22.890 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:51:22.951 [INFO] DownloadsManager: Downloading page 9 of 17 (47%)
+18:51:22.968 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/8
+18:51:23.088 [INFO] HttpClient: Download completed successfully
+18:51:23.103 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:51:23.159 [INFO] DownloadsManager: Downloading page 10 of 17 (52%)
+18:51:23.173 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/9
+18:51:23.499 [INFO] HttpClient: Download completed successfully
+18:51:23.513 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:51:23.642 [INFO] DownloadsManager: Downloading page 11 of 17 (58%)
+18:51:23.663 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/10
+18:51:23.885 [INFO] HttpClient: Download completed successfully
+18:51:23.909 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:51:23.964 [INFO] DownloadsManager: Downloading page 12 of 17 (64%)
+18:51:23.977 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/11
+18:51:24.162 [INFO] HttpClient: Download completed successfully
+18:51:24.176 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:51:24.232 [INFO] DownloadsManager: Downloading page 13 of 17 (70%)
+18:51:24.248 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/12
+18:51:24.414 [INFO] SuwayomiClient: Fetched 25 items in download queue
+18:51:24.482 [INFO] HttpClient: Download completed successfully
+18:51:24.495 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:51:24.555 [INFO] DownloadsManager: Downloading page 14 of 17 (76%)
+18:51:24.573 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/13
+18:51:24.736 [INFO] HttpClient: Download completed successfully
+18:51:24.750 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:51:24.809 [INFO] DownloadsManager: Downloading page 15 of 17 (82%)
+18:51:24.827 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/14
+18:51:25.001 [INFO] HttpClient: Download completed successfully
+18:51:25.018 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:51:25.142 [INFO] DownloadsManager: Downloading page 16 of 17 (88%)
+18:51:25.162 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/15
+18:51:25.440 [INFO] HttpClient: Download completed successfully
+18:51:25.462 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:51:25.518 [INFO] DownloadsManager: Downloading page 17 of 17 (94%)
+18:51:25.535 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/104/page/16
+18:51:25.648 [INFO] HttpClient: Download completed successfully
+18:51:25.664 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:51:25.788 [INFO] DownloadsManager: Chapter 104 download completed
+18:51:25.799 [INFO] DownloadsManager: Downloading chapter 105 (id=45830) for manga 405
+18:51:25.810 [INFO] DownloadsManager: Fetching pages for chapter id=45830
+18:51:25.823 [INFO] GraphQL: Fetching pages for chapter id=45830
+18:51:25.858 [INFO] GraphQL: Fetched 19 pages for chapter 45830
+18:51:25.867 [INFO] DownloadsManager: Got 19 pages for chapter 45830
+18:51:25.878 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:51:26.724 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_105
+18:51:26.741 [INFO] DownloadsManager: Downloading page 1 of 19 (0%)
+18:51:26.753 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/0
+18:51:26.969 [INFO] HttpClient: Download completed successfully
+18:51:26.984 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:51:27.047 [INFO] DownloadsManager: Downloading page 2 of 19 (5%)
+18:51:27.063 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/1
+18:51:27.278 [INFO] HttpClient: Download completed successfully
+18:51:27.294 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:51:27.354 [INFO] DownloadsManager: Downloading page 3 of 19 (10%)
+18:51:27.371 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/2
+18:51:27.404 [INFO] SuwayomiClient: Fetched 25 items in download queue
+18:51:27.626 [INFO] HttpClient: Download completed successfully
+18:51:27.646 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:51:27.702 [INFO] DownloadsManager: Downloading page 4 of 19 (15%)
+18:51:27.717 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/3
+18:51:28.026 [INFO] HttpClient: Download completed successfully
+18:51:28.042 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:51:28.106 [INFO] DownloadsManager: Downloading page 5 of 19 (21%)
+18:51:28.118 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/4
+18:51:28.414 [INFO] HttpClient: Download completed successfully
+18:51:28.432 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:51:28.556 [INFO] DownloadsManager: Downloading page 6 of 19 (26%)
+18:51:28.577 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/5
+18:51:28.941 [INFO] HttpClient: Download completed successfully
+18:51:28.965 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:51:29.030 [INFO] DownloadsManager: Downloading page 7 of 19 (31%)
+18:51:29.042 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/6
+18:51:29.275 [INFO] HttpClient: Download completed successfully
+18:51:29.287 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:51:29.348 [INFO] DownloadsManager: Downloading page 8 of 19 (36%)
+18:51:29.366 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/7
+18:51:29.616 [INFO] HttpClient: Download completed successfully
+18:51:29.636 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:51:29.699 [INFO] DownloadsManager: Downloading page 9 of 19 (42%)
+18:51:29.713 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/8
+18:51:29.961 [INFO] HttpClient: Download completed successfully
+18:51:29.981 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:51:30.045 [INFO] DownloadsManager: Downloading page 10 of 19 (47%)
+18:51:30.057 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/9
+18:51:30.287 [INFO] HttpClient: Download completed successfully
+18:51:30.299 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:51:30.430 [INFO] DownloadsManager: Downloading page 11 of 19 (52%)
+18:51:30.447 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/10
+18:51:30.498 [INFO] SuwayomiClient: Fetched 24 items in download queue
+18:51:30.800 [INFO] HttpClient: Download completed successfully
+18:51:30.820 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:51:30.877 [INFO] DownloadsManager: Downloading page 12 of 19 (57%)
+18:51:30.893 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/11
+18:51:31.180 [INFO] HttpClient: Download completed successfully
+18:51:31.197 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:51:31.260 [INFO] DownloadsManager: Downloading page 13 of 19 (63%)
+18:51:31.274 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/12
+18:51:31.563 [INFO] HttpClient: Download completed successfully
+18:51:31.575 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:51:31.636 [INFO] DownloadsManager: Downloading page 14 of 19 (68%)
+18:51:31.654 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/13
+18:51:31.882 [INFO] HttpClient: Download completed successfully
+18:51:31.897 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:51:31.958 [INFO] DownloadsManager: Downloading page 15 of 19 (73%)
+18:51:31.975 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/14
+18:51:32.296 [INFO] HttpClient: Download completed successfully
+18:51:32.313 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:51:32.431 [INFO] DownloadsManager: Downloading page 16 of 19 (78%)
+18:51:32.450 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/15
+18:51:32.708 [INFO] HttpClient: Download completed successfully
+18:51:32.725 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:51:32.781 [INFO] DownloadsManager: Downloading page 17 of 19 (84%)
+18:51:32.799 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/16
+18:51:32.894 [INFO] HttpClient: Download completed successfully
+18:51:32.906 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:51:32.962 [INFO] DownloadsManager: Downloading page 18 of 19 (89%)
+18:51:32.975 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/17
+18:51:33.126 [INFO] HttpClient: Download completed successfully
+18:51:33.136 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:51:33.193 [INFO] DownloadsManager: Downloading page 19 of 19 (94%)
+18:51:33.207 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/105/page/18
+18:51:33.317 [INFO] HttpClient: Download completed successfully
+18:51:33.332 [INFO] DownloadsManager: Page 18 downloaded successfully
+18:51:33.408 [INFO] SuwayomiClient: Fetched 24 items in download queue
+18:51:33.448 [INFO] DownloadsManager: Chapter 105 download completed
+18:51:33.455 [INFO] DownloadsManager: Downloading chapter 106 (id=45829) for manga 405
+18:51:33.465 [INFO] DownloadsManager: Fetching pages for chapter id=45829
+18:51:33.473 [INFO] GraphQL: Fetching pages for chapter id=45829
+18:51:33.541 [INFO] GraphQL: Fetched 19 pages for chapter 45829
+18:51:33.547 [INFO] DownloadsManager: Got 19 pages for chapter 45829
+18:51:33.558 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:51:34.346 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_106
+18:51:34.419 [INFO] DownloadsManager: Downloading page 1 of 19 (0%)
+18:51:34.432 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/0
+18:51:34.621 [INFO] HttpClient: Download completed successfully
+18:51:34.638 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:51:34.698 [INFO] DownloadsManager: Downloading page 2 of 19 (5%)
+18:51:34.713 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/1
+18:51:34.967 [INFO] HttpClient: Download completed successfully
+18:51:34.982 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:51:35.102 [INFO] DownloadsManager: Downloading page 3 of 19 (10%)
+18:51:35.114 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/2
+18:51:35.384 [INFO] HttpClient: Download completed successfully
+18:51:35.398 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:51:35.461 [INFO] DownloadsManager: Downloading page 4 of 19 (15%)
+18:51:35.473 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/3
+18:51:35.669 [INFO] HttpClient: Download completed successfully
+18:51:35.740 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:51:35.799 [INFO] DownloadsManager: Downloading page 5 of 19 (21%)
+18:51:35.816 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/4
+18:51:36.152 [INFO] HttpClient: Download completed successfully
+18:51:36.169 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:51:36.299 [INFO] DownloadsManager: Downloading page 6 of 19 (26%)
+18:51:36.321 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/5
+18:51:36.392 [INFO] SuwayomiClient: Fetched 24 items in download queue
+18:51:36.722 [INFO] HttpClient: Download completed successfully
+18:51:36.741 [INFO] DownloadsManager: Page 5 downloaded successfully
+18:51:36.802 [INFO] DownloadsManager: Downloading page 7 of 19 (31%)
+18:51:36.820 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/6
+18:51:37.065 [INFO] HttpClient: Download completed successfully
+18:51:37.084 [INFO] DownloadsManager: Page 6 downloaded successfully
+18:51:37.140 [INFO] DownloadsManager: Downloading page 8 of 19 (36%)
+18:51:37.155 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/7
+18:51:37.453 [INFO] HttpClient: Download completed successfully
+18:51:37.474 [INFO] DownloadsManager: Page 7 downloaded successfully
+18:51:37.530 [INFO] DownloadsManager: Downloading page 9 of 19 (42%)
+18:51:37.546 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/8
+18:51:37.775 [INFO] HttpClient: Download completed successfully
+18:51:37.791 [INFO] DownloadsManager: Page 8 downloaded successfully
+18:51:37.851 [INFO] DownloadsManager: Downloading page 10 of 19 (47%)
+18:51:37.869 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/9
+18:51:38.163 [INFO] HttpClient: Download completed successfully
+18:51:38.178 [INFO] DownloadsManager: Page 9 downloaded successfully
+18:51:38.309 [INFO] DownloadsManager: Downloading page 11 of 19 (52%)
+18:51:38.327 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/10
+18:51:38.605 [INFO] HttpClient: Download completed successfully
+18:51:38.623 [INFO] DownloadsManager: Page 10 downloaded successfully
+18:51:38.683 [INFO] DownloadsManager: Downloading page 12 of 19 (57%)
+18:51:38.704 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/11
+18:51:39.007 [INFO] HttpClient: Download completed successfully
+18:51:39.024 [INFO] DownloadsManager: Page 11 downloaded successfully
+18:51:39.088 [INFO] DownloadsManager: Downloading page 13 of 19 (63%)
+18:51:39.102 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/12
+18:51:39.382 [INFO] SuwayomiClient: Fetched 23 items in download queue
+18:51:39.427 [INFO] HttpClient: Download completed successfully
+18:51:39.447 [INFO] DownloadsManager: Page 12 downloaded successfully
+18:51:39.506 [INFO] DownloadsManager: Downloading page 14 of 19 (68%)
+18:51:39.526 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/13
+18:51:39.880 [INFO] HttpClient: Download completed successfully
+18:51:39.895 [INFO] DownloadsManager: Page 13 downloaded successfully
+18:51:39.957 [INFO] DownloadsManager: Downloading page 15 of 19 (73%)
+18:51:39.970 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/14
+18:51:40.276 [INFO] HttpClient: Download completed successfully
+18:51:40.292 [INFO] DownloadsManager: Page 14 downloaded successfully
+18:51:40.423 [INFO] DownloadsManager: Downloading page 16 of 19 (78%)
+18:51:40.446 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/15
+18:51:40.860 [INFO] HttpClient: Download completed successfully
+18:51:40.876 [INFO] DownloadsManager: Page 15 downloaded successfully
+18:51:40.939 [INFO] DownloadsManager: Downloading page 17 of 19 (84%)
+18:51:40.955 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/16
+18:51:41.088 [INFO] HttpClient: Download completed successfully
+18:51:41.106 [INFO] DownloadsManager: Page 16 downloaded successfully
+18:51:41.168 [INFO] DownloadsManager: Downloading page 18 of 19 (89%)
+18:51:41.185 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/17
+18:51:41.418 [INFO] HttpClient: Download completed successfully
+18:51:41.436 [INFO] DownloadsManager: Page 17 downloaded successfully
+18:51:41.496 [INFO] DownloadsManager: Downloading page 19 of 19 (94%)
+18:51:41.512 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/106/page/18
+18:51:43.962 [INFO] SuwayomiClient: Fetched 23 items in download queue
+18:51:44.003 [INFO] HttpClient: Download completed successfully
+18:51:44.018 [INFO] DownloadsManager: Page 18 downloaded successfully
+18:51:44.147 [INFO] DownloadsManager: Chapter 106 download completed
+18:51:44.156 [INFO] DownloadsManager: Downloading chapter 107 (id=45828) for manga 405
+18:51:44.168 [INFO] DownloadsManager: Fetching pages for chapter id=45828
+18:51:44.178 [INFO] GraphQL: Fetching pages for chapter id=45828
+18:51:44.236 [INFO] GraphQL: Fetched 18 pages for chapter 45828
+18:51:44.248 [INFO] DownloadsManager: Got 18 pages for chapter 45828
+18:51:44.258 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_405
+18:51:45.156 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_405/chapter_107
+18:51:45.172 [INFO] DownloadsManager: Downloading page 1 of 18 (0%)
+18:51:45.189 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/107/page/0
+18:51:45.402 [INFO] SuwayomiClient: Fetched 22 items in download queue
+18:51:45.452 [INFO] HttpClient: Download completed successfully
+18:51:45.465 [INFO] DownloadsManager: Page 0 downloaded successfully
+18:51:45.529 [INFO] DownloadsManager: Downloading page 2 of 18 (5%)
+18:51:45.542 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/107/page/1
+18:51:45.742 [INFO] HttpClient: Download completed successfully
+18:51:45.762 [INFO] DownloadsManager: Page 1 downloaded successfully
+18:51:45.819 [INFO] DownloadsManager: Downloading page 3 of 18 (11%)
+18:51:45.836 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/107/page/2
+18:51:46.252 [INFO] HttpClient: Download completed successfully
+18:51:46.265 [INFO] DownloadsManager: Page 2 downloaded successfully
+18:51:46.328 [INFO] DownloadsManager: Downloading page 4 of 18 (16%)
+18:51:46.341 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/107/page/3
+18:51:46.652 [INFO] HttpClient: Download completed successfully
+18:51:46.670 [INFO] DownloadsManager: Page 3 downloaded successfully
+18:51:46.783 [INFO] DownloadsManager: Downloading page 5 of 18 (22%)
+18:51:46.799 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/107/page/4
+18:51:47.026 [INFO] HttpClient: Download completed successfully
+18:51:47.041 [INFO] DownloadsManager: Page 4 downloaded successfully
+18:51:47.164 [INFO] DownloadsManager: Downloading page 6 of 18 (27%)
+18:51:47.182 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/405/chapter/107/page/5

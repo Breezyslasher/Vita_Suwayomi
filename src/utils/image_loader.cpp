@@ -515,18 +515,20 @@ static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2)
             brls::Logger::info("ImageLoader: Got {} for {}, attempting token refresh...",
                               resp.statusCode, url);
             auto& suwayomiClient = SuwayomiClient::getInstance();
-            if (suwayomiClient.refreshToken()) {
+            bool refreshed = suwayomiClient.refreshToken();
+            // Always re-apply auth headers: even if OUR refresh failed,
+            // another thread may have already refreshed the token successfully.
+            tokenRefreshed = true;
+            client = HttpClient();
+            applyAuthHeaders(client);
+            if (refreshed) {
                 brls::Logger::info("ImageLoader: Token refreshed, retrying download");
-                tokenRefreshed = true;
-                // Re-create client with new token
-                client = HttpClient();
-                applyAuthHeaders(client);
-                // Don't count this as a retry attempt
-                attempt--;
-                continue;
             } else {
-                brls::Logger::warning("ImageLoader: Token refresh failed for {}", url);
+                brls::Logger::warning("ImageLoader: Token refresh failed for {}, retrying with current token", url);
             }
+            // Don't count this as a retry attempt
+            attempt--;
+            continue;
         }
 
         if (resp.success && !resp.body.empty()) {

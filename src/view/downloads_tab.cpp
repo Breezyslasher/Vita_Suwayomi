@@ -479,6 +479,15 @@ void DownloadsTab::refreshQueue() {
                     if (elem.row == currentFocus) { focusInServerQueue = true; break; }
                 }
 
+                // FIX: Transfer focus BEFORE destroying views to prevent use-after-free
+                if (focusInServerQueue) {
+                    if (!m_localRowElements.empty() && m_localRowElements[0].row) {
+                        brls::Application::giveFocus(m_localRowElements[0].row);
+                    } else if (m_startStopBtn) {
+                        brls::Application::giveFocus(m_startStopBtn);
+                    }
+                }
+
                 // Hide entire section on fetch failure or empty
                 m_queueSection->setVisibility(brls::Visibility::GONE);
                 m_currentFocusedIcon = nullptr;
@@ -495,15 +504,6 @@ void DownloadsTab::refreshQueue() {
                 // Show empty state if local queue is also empty
                 if (m_lastLocalQueue.empty() && m_emptyStateBox) {
                     m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
-                }
-
-                // Transfer focus if it was inside the destroyed server queue
-                if (focusInServerQueue) {
-                    if (!m_localRowElements.empty() && m_localRowElements[0].row) {
-                        brls::Application::giveFocus(m_localRowElements[0].row);
-                    } else if (m_startStopBtn) {
-                        brls::Application::giveFocus(m_startStopBtn);
-                    }
                 }
             });
             return;
@@ -573,6 +573,16 @@ void DownloadsTab::refreshQueue() {
                     if (elem.row == currentFocus) { focusInServerQueue = true; break; }
                 }
 
+                // FIX: Transfer focus BEFORE destroying views to prevent use-after-free
+                // (borealis sends focus-lost events to the old focus target)
+                if (focusInServerQueue) {
+                    if (!m_localRowElements.empty() && m_localRowElements[0].row) {
+                        brls::Application::giveFocus(m_localRowElements[0].row);
+                    } else if (m_startStopBtn) {
+                        brls::Application::giveFocus(m_startStopBtn);
+                    }
+                }
+
                 m_queueSection->setVisibility(brls::Visibility::GONE);
                 m_currentFocusedIcon = nullptr;
                 m_lastServerQueue.clear();
@@ -586,14 +596,6 @@ void DownloadsTab::refreshQueue() {
                 }
                 // Update navigation routes (may now point to local queue)
                 updateNavigationRoutes();
-                // Transfer focus if it was inside the destroyed server queue
-                if (focusInServerQueue) {
-                    if (!m_localRowElements.empty() && m_localRowElements[0].row) {
-                        brls::Application::giveFocus(m_localRowElements[0].row);
-                    } else if (m_startStopBtn) {
-                        brls::Application::giveFocus(m_startStopBtn);
-                    }
-                }
                 return;
             }
 
@@ -730,6 +732,12 @@ void DownloadsTab::refreshQueue() {
                     }
                 }
 
+                // FIX: Transfer focus to a safe target BEFORE destroying views
+                // to prevent use-after-free on borealis focus-lost events
+                if (focusedIdx >= 0 && m_startStopBtn) {
+                    brls::Application::giveFocus(m_startStopBtn);
+                }
+
                 m_serverRowElements.clear();
                 while (m_queueContainer->getChildren().size() > 0) {
                     m_queueContainer->removeView(m_queueContainer->getChildren()[0]);
@@ -809,7 +817,16 @@ void DownloadsTab::refreshLocalDownloads() {
             if (elem.row == currentFocus) { focusInLocalQueue = true; break; }
         }
 
-        // Clear all items
+        // FIX: Transfer focus BEFORE destroying views to prevent use-after-free
+        if (focusInLocalQueue) {
+            if (!m_serverRowElements.empty() && m_serverRowElements.back().row) {
+                brls::Application::giveFocus(m_serverRowElements.back().row);
+            } else if (m_startStopBtn) {
+                brls::Application::giveFocus(m_startStopBtn);
+            }
+        }
+
+        // Clear all items (now safe - focus already transferred)
         m_currentFocusedIcon = nullptr;
         m_localRowElements.clear();
         m_lastLocalQueue.clear();
@@ -829,15 +846,6 @@ void DownloadsTab::refreshLocalDownloads() {
         // Update status if no server downloads either
         if (m_lastServerQueue.empty() && m_downloadStatusLabel) {
             m_downloadStatusLabel->setText("");
-        }
-
-        // Transfer focus if it was inside the destroyed local queue
-        if (focusInLocalQueue) {
-            if (!m_serverRowElements.empty() && m_serverRowElements.back().row) {
-                brls::Application::giveFocus(m_serverRowElements.back().row);
-            } else if (m_startStopBtn) {
-                brls::Application::giveFocus(m_startStopBtn);
-            }
         }
         return;
     }
@@ -1281,7 +1289,25 @@ void DownloadsTab::removeLocalItem(int mangaId, int chapterIndex) {
     brls::View* currentFocus = brls::Application::getCurrentFocus();
     bool hadFocus = (elem.row == currentFocus);
 
-    // Remove from container
+    // FIX: Transfer focus BEFORE destroying the view to prevent use-after-free
+    // (borealis sends focus-lost events to the old focus target during giveFocus)
+    if (hadFocus) {
+        int remainingCount = static_cast<int>(m_localRowElements.size()) - 1;
+        if (remainingCount > 0) {
+            int newIdx = std::min(removeIdx, remainingCount - 1);
+            // Adjust index to skip the element being removed
+            if (newIdx >= removeIdx) newIdx++;
+            if (newIdx < static_cast<int>(m_localRowElements.size()) && m_localRowElements[newIdx].row) {
+                brls::Application::giveFocus(m_localRowElements[newIdx].row);
+            }
+        } else if (!m_serverRowElements.empty() && m_serverRowElements.back().row) {
+            brls::Application::giveFocus(m_serverRowElements.back().row);
+        } else if (m_startStopBtn) {
+            brls::Application::giveFocus(m_startStopBtn);
+        }
+    }
+
+    // Remove from container (now safe - focus already transferred)
     if (m_localContainer && elem.row) {
         m_localContainer->removeView(elem.row);
     }
@@ -1297,7 +1323,7 @@ void DownloadsTab::removeLocalItem(int mangaId, int chapterIndex) {
     // Remove from tracking
     m_localRowElements.erase(m_localRowElements.begin() + removeIdx);
 
-    // Handle empty state and focus
+    // Handle empty state
     if (m_localRowElements.empty()) {
         m_localSection->setVisibility(brls::Visibility::GONE);
         if (m_lastServerQueue.empty() && m_downloadStatusLabel) {
@@ -1309,15 +1335,7 @@ void DownloadsTab::removeLocalItem(int mangaId, int chapterIndex) {
         }
         // Update navigation routes since local queue is now empty
         updateNavigationRoutes();
-        if (m_startStopBtn) {
-            brls::Application::giveFocus(m_startStopBtn);
-        }
     } else if (hadFocus) {
-        // Move focus to next item
-        int newIdx = std::min(removeIdx, static_cast<int>(m_localRowElements.size()) - 1);
-        if (newIdx >= 0 && m_localRowElements[newIdx].row) {
-            brls::Application::giveFocus(m_localRowElements[newIdx].row);
-        }
         // Update navigation routes since first item may have changed
         if (removeIdx == 0) {
             updateNavigationRoutes();
@@ -1681,19 +1699,16 @@ void DownloadsTab::removeServerItem(int chapterId) {
     brls::View* currentFocus = brls::Application::getCurrentFocus();
     bool hadFocus = (elem.row == currentFocus);
 
-    // Remove from container
-    if (m_queueContainer && elem.row) {
-        m_queueContainer->removeView(elem.row);
-    }
-
-    // Remove from tracking
-    m_serverRowElements.erase(m_serverRowElements.begin() + removeIdx);
-
-    // Transfer focus if this row had it
+    // FIX: Transfer focus BEFORE destroying the view to prevent use-after-free
+    // (borealis sends focus-lost events to the old focus target during giveFocus)
     if (hadFocus) {
-        if (!m_serverRowElements.empty()) {
-            int newIdx = std::min(removeIdx, static_cast<int>(m_serverRowElements.size()) - 1);
-            if (newIdx >= 0 && m_serverRowElements[newIdx].row) {
+        // Determine focus target based on remaining items (excluding the one being removed)
+        int remainingCount = static_cast<int>(m_serverRowElements.size()) - 1;
+        if (remainingCount > 0) {
+            int newIdx = std::min(removeIdx, remainingCount - 1);
+            // Adjust index to skip the element being removed
+            if (newIdx >= removeIdx) newIdx++;
+            if (newIdx < static_cast<int>(m_serverRowElements.size()) && m_serverRowElements[newIdx].row) {
                 brls::Application::giveFocus(m_serverRowElements[newIdx].row);
             }
         } else if (!m_localRowElements.empty() && m_localRowElements[0].row) {
@@ -1702,6 +1717,14 @@ void DownloadsTab::removeServerItem(int chapterId) {
             brls::Application::giveFocus(m_startStopBtn);
         }
     }
+
+    // Remove from container (now safe - focus already transferred)
+    if (m_queueContainer && elem.row) {
+        m_queueContainer->removeView(elem.row);
+    }
+
+    // Remove from tracking
+    m_serverRowElements.erase(m_serverRowElements.begin() + removeIdx);
 }
 
 } // namespace vitasuwayomi
