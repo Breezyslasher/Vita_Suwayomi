@@ -155,6 +155,9 @@ public:
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override;
 
+    // Check if a page is a transition page (chapter separator)
+    bool isTransitionPage(int pageIndex) const;
+
     static brls::View* create();
 
 private:
@@ -184,9 +187,6 @@ private:
 
     // Apply momentum scrolling
     void applyMomentum();
-
-    // Check if a page is a transition page (chapter separator)
-    bool isTransitionPage(int pageIndex) const;
 
     // Check if a page failed to load
     bool isFailedPage(int pageIndex) const;
