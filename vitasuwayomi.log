@@ -1,0 +1,139 @@
+01:28:00.364 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+01:28:00.933 [INFO] DownloadsManager: Initializing...
+01:28:00.948 [DEBUG] DownloadsManager: Loading state (153910 bytes)
+01:28:01.099 [DEBUG] DownloadsManager: Loaded manga 405 with 63 chapters
+01:28:01.101 [DEBUG] DownloadsManager: Loaded manga 269 with 1 chapters
+01:28:01.101 [INFO] DownloadsManager: State loaded with 2 downloads
+01:28:01.102 [INFO] DownloadsManager: Validating downloaded files...
+01:28:03.375 [INFO] DownloadsManager: Validation complete - 1102 pages valid, 0 pages missing
+01:28:03.476 [DEBUG] DownloadsManager: State saved (153910 bytes)
+01:28:03.484 [INFO] DownloadsManager: Initialized with 2 downloads
+01:28:03.494 [INFO] VitaSuwayomi 1.0.0 initializing...
+01:28:03.505 [DEBUG] sceIoMkdir result: -0x7ffeffef
+01:28:03.515 [INFO] Loading saved settings...
+01:28:03.525 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+01:28:03.533 [DEBUG] loadSettings: File size = 3626
+01:28:03.546 [DEBUG] loadSettings: Read 3626 bytes
+01:28:03.556 [INFO] loadSettings: serverUrl=http://192.168.1.28:4568
+01:28:03.566 [DEBUG] Loaded 4 hidden categories
+01:28:03.576 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+01:28:03.587 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+01:28:03.598 [INFO] loadSettings: enabledSourceLanguages count = 2
+01:28:03.606 [INFO] loadSettings: localUrl=http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+01:28:03.612 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=3, defaultSort=0, groupMode=0
+01:28:03.617 [DEBUG] Loaded 2 per-category sort modes
+01:28:03.626 [DEBUG] Loaded 2 search history entries
+01:28:03.636 [DEBUG] Loaded 11 per-manga reader settings
+01:28:03.646 [INFO] Restored auth credentials for user: Breezyslasher
+01:28:03.657 [INFO] Restored auth tokens
+01:28:03.668 [INFO] Settings loaded successfully
+01:28:03.676 [INFO] Settings load result: success
+01:28:03.681 [INFO] Applied theme: Dark
+01:28:03.687 [INFO] Debug logging disabled
+01:28:03.703 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+01:28:03.712 [INFO] Application::run - isConnected=false, serverUrl=http://192.168.1.28:4568
+01:28:03.722 [INFO] Restoring saved connection...
+01:28:03.733 [INFO] Attempting to refresh JWT tokens...
+01:28:03.759 [INFO] Token refreshed successfully
+01:28:03.766 [INFO] Token refresh successful
+01:28:03.771 [INFO] Fetching server info via GraphQL...
+01:28:03.791 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2085
+01:28:03.799 [INFO] Connection restored successfully
+01:28:03.812 [INFO] Syncing offline reading progress to server...
+01:28:03.823 [INFO] DownloadsManager: Auto-resuming 1 incomplete downloads
+01:28:03.841 [INFO] DownloadsManager: Starting downloads
+01:28:03.852 [INFO] DownloadsManager: Downloading chapter 101 (id=31412) for manga 269
+01:28:03.857 [INFO] DownloadsManager: Synced 1 chapter progress, marked 1 as read
+01:28:03.865 [INFO] DownloadsManager: Fetching pages for chapter id=31412
+01:28:03.878 [INFO] GraphQL: Fetching pages for chapter id=31412
+01:28:03.907 [INFO] GraphQL: Fetched 28 pages for chapter 31412
+01:28:03.916 [INFO] DownloadsManager: Got 28 pages for chapter 31412
+01:28:03.926 [INFO] DownloadsManager: Creating chapter dir in ux0:data/VitaSuwayomi/downloads/manga_269
+01:28:03.938 [INFO] DownloadsManager: Starting page downloads to ux0:data/VitaSuwayomi/downloads/manga_269/chapter_101
+01:28:03.949 [INFO] DownloadsManager: Downloading page 1 of 28 (0%)
+01:28:03.965 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/0
+01:28:03.984 [INFO] MainActivity: Tabs created, isOnline=false
+01:28:04.615 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
+01:28:04.643 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+01:28:04.810 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+01:28:04.824 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+01:28:04.885 [INFO] ImageLoader: Starting 3 worker threads
+01:28:05.131 [INFO] HttpClient: Download completed successfully
+01:28:05.190 [INFO] DownloadsManager: Page 0 downloaded successfully
+01:28:05.248 [INFO] DownloadsManager: Downloading page 2 of 28 (3%)
+01:28:05.270 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/1
+01:28:05.510 [INFO] GraphQL: Fetching manga for category 1 with filter
+01:28:05.510 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+01:28:05.537 [INFO] Offline reading progress synced to server
+01:28:05.766 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+01:28:05.783 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+01:28:05.814 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+01:28:06.248 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+01:28:06.424 [INFO] GraphQL: Fetching manga for category 1 with filter
+01:28:06.903 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+01:28:06.910 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+01:28:07.555 [INFO] HttpClient: Download completed successfully
+01:28:07.578 [INFO] DownloadsManager: Page 1 downloaded successfully
+01:28:07.637 [INFO] DownloadsManager: Downloading page 3 of 28 (7%)
+01:28:07.653 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/2
+01:28:08.312 [INFO] HttpClient: Download completed successfully
+01:28:08.333 [INFO] DownloadsManager: Page 2 downloaded successfully
+01:28:08.389 [INFO] DownloadsManager: Downloading page 4 of 28 (10%)
+01:28:08.400 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/3
+01:28:08.820 [INFO] MangaDetailView: Creating for 'A Bride’s Story' id=269
+01:28:09.354 [INFO] HttpClient: Download completed successfully
+01:28:09.374 [INFO] DownloadsManager: Page 3 downloaded successfully
+01:28:09.428 [INFO] MangaDetailView: Loaded 107 chapters from cache for manga 269
+01:28:09.431 [INFO] DownloadsManager: Downloading page 5 of 28 (14%)
+01:28:09.454 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/4
+01:28:09.558 [INFO] GraphQL: Fetched 0 track records for manga 269
+01:28:09.874 [INFO] MangaDetailView: Got 107 chapters
+01:28:10.179 [INFO] HttpClient: Download completed successfully
+01:28:10.193 [INFO] DownloadsManager: Page 4 downloaded successfully
+01:28:10.353 [INFO] DownloadsManager: Downloading page 6 of 28 (17%)
+01:28:10.374 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/5
+01:28:11.837 [INFO] HttpClient: Download completed successfully
+01:28:11.892 [INFO] DownloadsManager: Page 5 downloaded successfully
+01:28:11.960 [INFO] DownloadsManager: Downloading page 7 of 28 (21%)
+01:28:12.003 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/6
+01:28:12.620 [INFO] HttpClient: Download completed successfully
+01:28:12.633 [INFO] DownloadsManager: Page 6 downloaded successfully
+01:28:12.692 [INFO] DownloadsManager: Downloading page 8 of 28 (25%)
+01:28:12.710 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/7
+01:28:13.775 [INFO] HttpClient: Download completed successfully
+01:28:13.797 [INFO] DownloadsManager: Page 7 downloaded successfully
+01:28:13.853 [INFO] DownloadsManager: Downloading page 9 of 28 (28%)
+01:28:13.864 [INFO] HttpClient: Starting download from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/8
+01:28:13.980 [INFO] SuwayomiClient: Queueing 1 chapters for download via GraphQL
+01:28:14.201 [INFO] DownloadsManager: Queueing chapter 102 (id=31411) for manga 269 (A Bride’s Story)
+01:28:14.565 [INFO] HttpClient: Download completed successfully
+01:28:14.583 [INFO] DownloadsManager: Page 8 downloaded successfully
+01:28:14.646 [INFO] DownloadsManager: Downloading page 10 of 28 (0%)
+01:28:14.656 [ERROR] HttpClient: Failed to open file for writing: ux0:data/VitaSuwayomi/downloads/manga_269/chapter_-2111005868/page_9.jpg
+01:28:14.662 [ERROR] DownloadsManager: Failed to download page 9 from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/9
+01:28:14.670 [INFO] DownloadsManager: Retrying page 9 (attempt 2/3)
+01:28:15.181 [ERROR] HttpClient: Failed to open file for writing: ux0:data/VitaSuwayomi/downloads/manga_269/chapter_-2111005868/page_9.jpg
+01:28:15.192 [ERROR] DownloadsManager: Failed to download page 9 from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/9
+01:28:15.203 [INFO] DownloadsManager: Retrying page 9 (attempt 3/3)
+01:28:16.214 [ERROR] HttpClient: Failed to open file for writing: ux0:data/VitaSuwayomi/downloads/manga_269/chapter_-2111005868/page_9.jpg
+01:28:16.220 [ERROR] DownloadsManager: Failed to download page 9 from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/9
+01:28:16.229 [ERROR] DownloadsManager: Page 9 download failed after 3 attempts
+01:28:16.352 [INFO] SuwayomiClient: Queueing 1 chapters for download via GraphQL
+01:28:16.381 [INFO] DownloadsManager: Downloading page 11 of 28 (0%)
+01:28:16.394 [ERROR] HttpClient: Failed to open file for writing: ux0:data/VitaSuwayomi/downloads/manga_269/chapter_-2111005868/page_10.jpg
+01:28:16.400 [ERROR] DownloadsManager: Failed to download page 10 from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/10
+01:28:16.408 [INFO] DownloadsManager: Retrying page 10 (attempt 2/3)
+01:28:16.491 [INFO] DownloadsManager: Queueing chapter 104 (id=31409) for manga 269 (A Bride’s Story)
+01:28:16.919 [ERROR] HttpClient: Failed to open file for writing: ux0:data/VitaSuwayomi/downloads/manga_269/chapter_-2111005868/page_10.jpg
+01:28:16.930 [ERROR] DownloadsManager: Failed to download page 10 from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/10
+01:28:16.936 [INFO] DownloadsManager: Retrying page 10 (attempt 3/3)
+01:28:17.947 [ERROR] HttpClient: Failed to open file for writing: ux0:data/VitaSuwayomi/downloads/manga_269/chapter_-2111005868/page_10.jpg
+01:28:17.957 [ERROR] DownloadsManager: Failed to download page 10 from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/10
+01:28:17.969 [ERROR] DownloadsManager: Page 10 download failed after 3 attempts
+01:28:18.027 [INFO] DownloadsManager: Downloading page 12 of 28 (0%)
+01:28:18.034 [ERROR] HttpClient: Failed to open file for writing: ux0:data/VitaSuwayomi/downloads/manga_269/chapter_-2111005868/page_11.jpg
+01:28:18.043 [ERROR] DownloadsManager: Failed to download page 11 from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/11
+01:28:18.053 [INFO] DownloadsManager: Retrying page 11 (attempt 2/3)
+01:28:18.566 [ERROR] HttpClient: Failed to open file for writing: ux0:data/VitaSuwayomi/downloads/manga_269/chapter_-2111005868/page_11.jpg
+01:28:18.572 [ERROR] DownloadsManager: Failed to download page 11 from http://192.168.1.28:4568/api/v1/manga/269/chapter/101/page/11
+01:28:18.578 [INFO] DownloadsManager: Retrying page 11 (attempt 3/3)
