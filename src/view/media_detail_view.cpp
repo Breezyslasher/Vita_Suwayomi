@@ -241,13 +241,6 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         return true;
     });
 
-    // Select button to continue reading (same as Continue Reading button)
-    cell->registerAction("Read", brls::ControllerButton::BUTTON_BACK,
-        [view](brls::View*) {
-        view->onRead();
-        return true;
-    });
-
     // Download button click
     cell->dlBtn->registerClickAction([view, capturedChapter, isLocallyDownloaded, isLocallyQueued,
                                        isLocallyDownloading, mangaId, chapterIdx, dlState](brls::View*) {
@@ -520,6 +513,12 @@ MangaDetailView::MangaDetailView(const Manga& manga)
         return true;
     }, false, false, brls::Sound::SOUND_BACK);
 
+    // Select button always triggers continue reading, no matter what is focused
+    this->registerAction("Read", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
+        onRead();
+        return true;
+    });
+
     // Load saved chapter sort order
     m_sortDescending = Application::getInstance().getSettings().chapterSortDescending;
 
@@ -623,10 +622,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     }
     m_readButton->setText(readText);
     m_readButton->registerClickAction([this](brls::View* view) {
-        onRead();
-        return true;
-    });
-    m_readButton->registerAction("Read", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
         onRead();
         return true;
     });
