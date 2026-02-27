@@ -619,10 +619,14 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     std::string readText = "Start Reading";
     if (m_manga.lastChapterRead > 0) {
-        readText = "Continue Ch. " + std::to_string(m_manga.lastChapterRead);
+        readText = "Continue Reading";
     }
     m_readButton->setText(readText);
     m_readButton->registerClickAction([this](brls::View* view) {
+        onRead();
+        return true;
+    });
+    m_readButton->registerAction("Read", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
         onRead();
         return true;
     });
