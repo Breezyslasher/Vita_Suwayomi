@@ -691,6 +691,13 @@ void ReaderActivity::onContentAvailable() {
     // Transition page gestures - tap and swipe like a regular page
     if (transitionBox) {
         transitionBox->setFocusable(true);
+        // Draw background via NanoVG inside draw() so it follows the slide offset.
+        // The XML backgroundColor attribute is drawn by borealis BEFORE draw() is
+        // called, at the layout position, covering views below in z-order during swipes.
+        transitionBox->setCustomBackground(nvgRGBA(20, 20, 30, 255));
+        // Also clear borealis-level background to fully transparent so the
+        // framework doesn't draw anything at the layout position before draw().
+        transitionBox->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
 
         // Tap gesture on transition page - toggle controls or tap-to-navigate
         transitionBox->addGestureRecognizer(new brls::TapGestureRecognizer(

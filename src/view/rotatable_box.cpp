@@ -45,6 +45,11 @@ void RotatableBox::resetSlideOffset() {
     m_slideY = 0.0f;
 }
 
+void RotatableBox::setCustomBackground(NVGcolor color) {
+    m_hasCustomBg = true;
+    m_customBgColor = color;
+}
+
 void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float height,
                          brls::Style style, brls::FrameContext* ctx) {
     // Apply slide offset for swipe carousel if active
@@ -63,6 +68,17 @@ void RotatableBox::draw(NVGcontext* vg, float x, float y, float width, float hei
         }
         nvgScissor(vg, clipX, clipY, clipW, clipH);
         nvgTranslate(vg, m_slideX, m_slideY);
+    }
+
+    // Draw custom background via NanoVG AFTER the slide offset is applied.
+    // This replaces the borealis backgroundColor XML attribute, which is drawn
+    // at the view's layout position BEFORE draw() is called and therefore
+    // covers views below in z-order regardless of slide offset.
+    if (m_hasCustomBg) {
+        nvgBeginPath(vg);
+        nvgRect(vg, x, y, width, height);
+        nvgFillColor(vg, m_customBgColor);
+        nvgFill(vg);
     }
 
     if (m_rotationDegrees == 0.0f) {
