@@ -280,8 +280,9 @@ private:
     std::shared_ptr<bool> m_alive = std::make_shared<bool>(true);
 
     // Preload buffer - how many pages ahead/behind to load
-    // Kept moderate to balance responsiveness vs VRAM (tall images use multiple GPU textures)
-    static constexpr int PRELOAD_PAGES = 2;
+    // Higher values mean smoother scrolling but more VRAM usage.
+    // 4 pages gives ~2 screens of lookahead at typical webtoon image heights.
+    static constexpr int PRELOAD_PAGES = 4;
 
     // Unload buffer - pages beyond this distance from visible area get their images freed
     // Reduced from 8 to limit VRAM usage when tall images have multiple segment textures
