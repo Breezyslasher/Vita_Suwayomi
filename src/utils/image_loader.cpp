@@ -64,10 +64,15 @@ std::vector<std::thread> ImageLoader::s_workers;
 std::atomic<bool> ImageLoader::s_workersStarted{false};
 std::atomic<bool> ImageLoader::s_shutdownWorkers{false};
 
-// Batched texture upload queue
+// Batched texture upload queue (thumbnails / brls::Image)
 std::queue<ImageLoader::PendingTextureUpdate> ImageLoader::s_pendingTextures;
 std::mutex ImageLoader::s_pendingMutex;
 std::atomic<bool> ImageLoader::s_pendingScheduled{false};
+
+// Batched texture upload queue (reader pages / RotatableImage)
+std::queue<ImageLoader::PendingRotatableTextureUpdate> ImageLoader::s_pendingRotatableTextures;
+std::mutex ImageLoader::s_pendingRotatableMutex;
+std::atomic<bool> ImageLoader::s_pendingRotatableScheduled{false};
 
 // Helper to extract manga ID from thumbnail URL
 // URLs look like: http://server/api/v1/manga/123/thumbnail or /api/v1/manga/123/thumbnail
@@ -646,6 +651,111 @@ void ImageLoader::processPendingTextures() {
     }
 }
 
+void ImageLoader::queueRotatableTextureUpdate(const std::vector<uint8_t>& data, RotatableImage* target,
+                                               RotatableLoadCallback callback, std::shared_ptr<bool> alive) {
+    {
+        std::lock_guard<std::mutex> lock(s_pendingRotatableMutex);
+        PendingRotatableTextureUpdate update;
+        update.data = data;
+        update.target = target;
+        update.callback = callback;
+        update.alive = alive;
+        update.isSegmented = false;
+        s_pendingRotatableTextures.push(std::move(update));
+    }
+
+    // Schedule processing if not already scheduled
+    bool expected = false;
+    if (s_pendingRotatableScheduled.compare_exchange_strong(expected, true)) {
+        brls::sync([]() {
+            processPendingRotatableTextures();
+        });
+    }
+}
+
+void ImageLoader::queueRotatableSegmentUpdate(std::vector<std::vector<uint8_t>> segDatas, int origW, int origH,
+                                               std::vector<int> segHeights, RotatableImage* target,
+                                               RotatableLoadCallback callback, std::shared_ptr<bool> alive) {
+    {
+        std::lock_guard<std::mutex> lock(s_pendingRotatableMutex);
+        PendingRotatableTextureUpdate update;
+        update.segmentDatas = std::move(segDatas);
+        update.origW = origW;
+        update.origH = origH;
+        update.segHeights = std::move(segHeights);
+        update.target = target;
+        update.callback = callback;
+        update.alive = alive;
+        update.isSegmented = true;
+        s_pendingRotatableTextures.push(std::move(update));
+    }
+
+    bool expected = false;
+    if (s_pendingRotatableScheduled.compare_exchange_strong(expected, true)) {
+        brls::sync([]() {
+            processPendingRotatableTextures();
+        });
+    }
+}
+
+void ImageLoader::processPendingRotatableTextures() {
+    s_pendingRotatableScheduled = false;
+
+    int processed = 0;
+    int queueSize = 0;
+    {
+        std::lock_guard<std::mutex> lock(s_pendingRotatableMutex);
+        queueSize = static_cast<int>(s_pendingRotatableTextures.size());
+    }
+    if (queueSize > 0) {
+        brls::Logger::debug("ImageLoader: [TIMING] Processing rotatable textures ({} queued, max {} per frame)",
+                           queueSize, MAX_ROTATABLE_TEXTURES_PER_FRAME);
+    }
+
+    while (processed < MAX_ROTATABLE_TEXTURES_PER_FRAME) {
+        PendingRotatableTextureUpdate update;
+        {
+            std::lock_guard<std::mutex> lock(s_pendingRotatableMutex);
+            if (s_pendingRotatableTextures.empty()) return;
+            update = std::move(s_pendingRotatableTextures.front());
+            s_pendingRotatableTextures.pop();
+        }
+
+        if (update.target) {
+            if (update.alive && !*update.alive) {
+                continue;  // Owner destroyed, skip
+            }
+            auto uploadStart = std::chrono::steady_clock::now();
+            if (update.isSegmented) {
+                update.target->setImageSegments(update.segmentDatas, update.origW, update.origH, update.segHeights);
+            } else {
+                update.target->setImageFromMem(update.data.data(), update.data.size());
+            }
+            auto uploadEnd = std::chrono::steady_clock::now();
+            auto uploadMs = std::chrono::duration_cast<std::chrono::milliseconds>(uploadEnd - uploadStart).count();
+            brls::Logger::debug("ImageLoader: [TIMING] GPU upload took {}ms ({})",
+                               uploadMs, update.isSegmented ? "segmented" : "single");
+            if (update.callback) update.callback(update.target);
+        }
+        processed++;
+    }
+
+    // If more pending, schedule another batch for the next frame
+    bool morePending = false;
+    {
+        std::lock_guard<std::mutex> lock(s_pendingRotatableMutex);
+        morePending = !s_pendingRotatableTextures.empty();
+    }
+    if (morePending) {
+        bool expected = false;
+        if (s_pendingRotatableScheduled.compare_exchange_strong(expected, true)) {
+            brls::sync([]() {
+                processPendingRotatableTextures();
+            });
+        }
+    }
+}
+
 void ImageLoader::executeLoad(const LoadRequest& request) {
     const std::string& url = request.url;
     brls::Image* target = request.target;
@@ -888,6 +998,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     // Early out if owner was destroyed before we started
     if (alive && !*alive) return;
 
+    auto loadStartTime = std::chrono::steady_clock::now();
+
     std::string imageBody;
     bool loadSuccess = false;
 
@@ -939,6 +1051,11 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     }
 
     if (loadSuccess && !imageBody.empty()) {
+        auto ioEndTime = std::chrono::steady_clock::now();
+        auto ioMs = std::chrono::duration_cast<std::chrono::milliseconds>(ioEndTime - loadStartTime).count();
+        brls::Logger::info("ImageLoader: [TIMING] I/O took {}ms for {} ({} bytes, {})",
+                          ioMs, url, imageBody.size(), isLocalFile ? "local" : "network");
+
         // Check alive flag again after download - if the reader was closed while
         // we were downloading, skip the expensive decode/conversion to save memory
         if (alive && !*alive) {
@@ -946,7 +1063,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             return;
         }
 
-        brls::Logger::debug("ImageLoader: Loaded {} bytes from {} for RotatableImage", imageBody.size(), url);
+        auto decodeStartTime = std::chrono::steady_clock::now();
 
         // Check image format
         bool isWebP = false;
@@ -1097,15 +1214,17 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                     }
                     cachePut(url + "_full", meta);
 
+                    {
+                        auto decodeEndTime = std::chrono::steady_clock::now();
+                        auto decodeMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeEndTime - decodeStartTime).count();
+                        auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeEndTime - loadStartTime).count();
+                        brls::Logger::info("ImageLoader: [TIMING] Decode took {}ms (auto-split {}x{} -> {} segs), total {}ms for {}",
+                                          decodeMs, origW, origH, autoSegments, totalMs, url);
+                    }
+
                     if (target || callback) {
-                        brls::sync([segDatas = std::move(segmentDatas), origW, origH,
-                                    segHeights = std::move(segSrcHeights), callback, target, alive]() {
-                            if (alive && !*alive) return;
-                            if (target) {
-                                target->setImageSegments(segDatas, origW, origH, segHeights);
-                                if (callback) callback(target);
-                            }
-                        });
+                        queueRotatableSegmentUpdate(std::move(segmentDatas), origW, origH,
+                                                    std::move(segSrcHeights), target, callback, alive);
                     }
                     return;  // Done - skip normal single-texture path
                 }
@@ -1189,21 +1308,23 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
         cachePut(cacheKey, imageData);
 
-        // Update UI on main thread (check alive flag to prevent use-after-free)
-        // Skip sync callback entirely for preload-only requests (no target/callback)
-        // to avoid copying large image data into the sync queue unnecessarily
+        {
+            auto decodeEndTime = std::chrono::steady_clock::now();
+            auto decodeMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeEndTime - decodeStartTime).count();
+            auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeEndTime - loadStartTime).count();
+            brls::Logger::info("ImageLoader: [TIMING] Decode took {}ms, total {}ms for {}", decodeMs, totalMs, url);
+        }
+
+        // Queue for batched texture upload on the main thread.
+        // Skip entirely for preload-only requests (no target/callback)
+        // to avoid copying large image data into the queue unnecessarily.
         if (target || callback) {
-            // Move imageData into the lambda to avoid expensive copy (C++14 init-capture)
-            brls::sync([imageData = std::move(imageData), callback, target, alive]() {
-                if (alive && !*alive) return;  // Owner destroyed, skip
-                if (target) {
-                    target->setImageFromMem(imageData.data(), imageData.size());
-                    if (callback) callback(target);
-                }
-            });
+            queueRotatableTextureUpdate(imageData, target, callback, alive);
         }
     } else {
-        brls::Logger::error("ImageLoader: Failed to load {}", url);
+        auto failTime = std::chrono::steady_clock::now();
+        auto failMs = std::chrono::duration_cast<std::chrono::milliseconds>(failTime - loadStartTime).count();
+        brls::Logger::error("ImageLoader: Failed to load {} (after {}ms)", url, failMs);
     }
 }
 
@@ -1249,24 +1370,31 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
                 }
 
                 if (allFound && !segDatas.empty()) {
-                    target->setImageSegments(segDatas, origW, origH, segHeights);
-                    if (callback) callback(target);
+                    // Route through batched queue to avoid GPU stalls when multiple
+                    // cache hits happen in the same frame (e.g. scrolling back)
+                    queueRotatableSegmentUpdate(std::move(segDatas), origW, origH,
+                                                std::move(segHeights), target, callback);
                     return;
                 }
                 // Segments evicted from cache, fall through to full reload
                 brls::Logger::debug("ImageLoader: Auto-seg cache partial miss for {}, reloading", url);
             } else {
-                // Normal single-texture cache hit
-                target->setImageFromMem(cachedData.data(), cachedData.size());
-                if (callback) callback(target);
+                // Normal single-texture cache hit - route through batched queue
+                queueRotatableTextureUpdate(cachedData, target, callback);
                 return;
             }
         }
     }
 
-    // Add to rotatable queue (also track in pending set for dedup)
+    // Add to rotatable queue with dedup — if the URL is already queued or being
+    // processed by a worker, skip to avoid wasting a worker thread on duplicate work.
+    // The first load will cache the result; subsequent requests will hit the cache.
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
+        if (s_pendingFullSizeUrls.count(url) > 0) {
+            brls::Logger::debug("ImageLoader: Skipping duplicate loadAsyncFullSize for {}", url);
+            return;  // Already queued or being processed
+        }
         s_pendingFullSizeUrls.insert(url);
         s_rotatableLoadQueue.push({url, callback, target, 0, 1, alive});
     }
@@ -1293,8 +1421,7 @@ void ImageLoader::loadAsyncFullSizeSegment(const std::string& url, int segment, 
     {
         std::vector<uint8_t> cachedData;
         if (cacheGet(cacheKey, cachedData)) {
-            target->setImageFromMem(cachedData.data(), cachedData.size());
-            if (callback) callback(target);
+            queueRotatableTextureUpdate(cachedData, target, callback, alive);
             return;
         }
     }
@@ -1490,11 +1617,17 @@ void ImageLoader::cancelAll() {
         }
         s_pendingFullSizeUrls.clear();
     }
-    // Also clear pending texture uploads
+    // Also clear pending texture uploads (both thumbnail and reader page queues)
     {
         std::lock_guard<std::mutex> lock2(s_pendingMutex);
         while (!s_pendingTextures.empty()) {
             s_pendingTextures.pop();
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock3(s_pendingRotatableMutex);
+        while (!s_pendingRotatableTextures.empty()) {
+            s_pendingRotatableTextures.pop();
         }
     }
 }

@@ -160,6 +160,38 @@ private:
                                    std::shared_ptr<bool> alive = nullptr);
     // Process a batch of pending texture uploads (called on main thread)
     static void processPendingTextures();
+
+    // Batched texture upload queue for RotatableImage (webtoon/manga reader pages).
+    // Same concept as PendingTextureUpdate but for full-size reader images.
+    // Limits GPU uploads to MAX_ROTATABLE_TEXTURES_PER_FRAME per frame to prevent
+    // the "group loading" appearance where multiple images pop in simultaneously.
+    struct PendingRotatableTextureUpdate {
+        // Single-texture path
+        std::vector<uint8_t> data;
+        // Multi-segment path (auto-split tall images)
+        std::vector<std::vector<uint8_t>> segmentDatas;
+        int origW = 0;
+        int origH = 0;
+        std::vector<int> segHeights;
+        bool isSegmented = false;  // true = use segmentDatas, false = use data
+        RotatableImage* target = nullptr;
+        RotatableLoadCallback callback;
+        std::shared_ptr<bool> alive;
+    };
+    static std::queue<PendingRotatableTextureUpdate> s_pendingRotatableTextures;
+    static std::mutex s_pendingRotatableMutex;
+    static std::atomic<bool> s_pendingRotatableScheduled;
+    static constexpr int MAX_ROTATABLE_TEXTURES_PER_FRAME = 2;  // Fewer than thumbnails - these are large
+
+    // Queue a RotatableImage texture for batched upload (single-texture path)
+    static void queueRotatableTextureUpdate(const std::vector<uint8_t>& data, RotatableImage* target,
+                                            RotatableLoadCallback callback, std::shared_ptr<bool> alive = nullptr);
+    // Queue a RotatableImage texture for batched upload (multi-segment path)
+    static void queueRotatableSegmentUpdate(std::vector<std::vector<uint8_t>> segDatas, int origW, int origH,
+                                            std::vector<int> segHeights, RotatableImage* target,
+                                            RotatableLoadCallback callback, std::shared_ptr<bool> alive = nullptr);
+    // Process a batch of pending RotatableImage texture uploads (called on main thread)
+    static void processPendingRotatableTextures();
 };
 
 } // namespace vitasuwayomi
