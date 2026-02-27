@@ -1036,16 +1036,22 @@ void WebtoonScrollView::updateVisibleImages() {
                         float heightDelta = newHeight - oldHeight;
 
                         if (std::abs(heightDelta) > 0.5f) {
+                            // Compute the page's start BEFORE updating the height.
+                            // getPageOffset(i) sums sizes of pages 0..i-1, which are
+                            // unchanged, so calling it after updating page i is fine.
+                            float pageStart = getPageOffset(pageIndex);
+                            float visibleTop = -m_scrollY;
+
                             m_totalHeight += heightDelta;
                             m_pageHeights[pageIndex] = newHeight;
                             imgPtr->setHeight(newHeight);
 
-                            // Compensate scroll position so the viewport doesn't
-                            // jump when a page above the view changes height.
-                            // visibleTop = -m_scrollY in content coordinates.
-                            float pageStart = getPageOffset(pageIndex);
-                            float visibleTop = -m_scrollY;
-                            if (pageStart < visibleTop) {
+                            // Compensate scroll only if the page ENDS above the
+                            // viewport top — i.e. it's fully above what the user
+                            // sees.  For the partially-visible current page we must
+                            // NOT adjust, otherwise the view snaps forward.
+                            float pageEnd = pageStart + oldHeight;
+                            if (pageEnd <= visibleTop) {
                                 m_scrollY -= heightDelta;
                             }
                         }
@@ -1057,14 +1063,16 @@ void WebtoonScrollView::updateVisibleImages() {
                     // Set a reasonable height for the failed page placeholder
                     float oldHeight = m_pageHeights[pageIndex];
                     if (oldHeight > FAILED_PAGE_HEIGHT * 2) {
+                        float pageStart = getPageOffset(pageIndex);
+                        float visibleTop = -m_scrollY;
+
                         float heightDelta = FAILED_PAGE_HEIGHT - oldHeight;
                         m_totalHeight += heightDelta;
                         m_pageHeights[pageIndex] = FAILED_PAGE_HEIGHT;
 
-                        // Compensate scroll for pages above viewport
-                        float pageStart = getPageOffset(pageIndex);
-                        float visibleTop = -m_scrollY;
-                        if (pageStart < visibleTop) {
+                        // Compensate scroll only for pages fully above viewport
+                        float pageEnd = pageStart + oldHeight;
+                        if (pageEnd <= visibleTop) {
                             m_scrollY -= heightDelta;
                         }
                     }
