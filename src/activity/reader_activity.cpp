@@ -2789,13 +2789,12 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
         endPage.index = -1;
         appendList.push_back(endPage);
 
-        // Remember where new pages start in the webtoon view
+        // Remember where new pages start in the webtoon view.
+        // The old trailing transition page is kept as a chapter separator,
+        // so new real pages start right after it.
         int newStartIdx = webtoonScroll->getPageCount();
-        // The appendPages call will remove the old trailing transition,
-        // so the new pages start at (old count - 1)
-        newStartIdx = std::max(0, newStartIdx - 1);
 
-        // Append to webtoon scroll view (removes old trailing transition, adds new pages)
+        // Append to webtoon scroll view (transition page kept as separator)
         webtoonScroll->appendPages(appendList);
 
         // Track the new chapter segment (real pages start at newStartIdx)
@@ -2913,9 +2912,8 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
         }
 
         // Calculate how many pages will be added.
-        // prependPages removes the old leading transition (1 page) and adds prependList.
-        int oldLeadingTransition = 1;  // The existing leading TRANSITION_PREV gets removed
-        int netAdded = static_cast<int>(prependList.size()) - oldLeadingTransition;
+        // prependPages keeps the old leading transition as a chapter separator.
+        int netAdded = static_cast<int>(prependList.size());
 
         // Shift all existing segment firstPage indices by the net-added count
         for (auto& seg : m_webtoonSegments) {
@@ -2932,7 +2930,7 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
             m_webtoonSegments.insert(m_webtoonSegments.begin(), seg);
         }
 
-        // Prepend to webtoon scroll view (removes old leading transition, adds new pages)
+        // Prepend to webtoon scroll view (old leading transition kept as separator)
         webtoonScroll->prependPages(prependList);
 
         // Now advance position/metadata for UI labels
@@ -2945,7 +2943,7 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
             "Chapter " + getChapterDisplayNumber() : m_chapterName;
 
         if (hasPrevTransition) {
-            // First page is the prev transition
+            // First page (index 0) is the new leading transition
             std::string line1 = "Beginning of: " + currentChapterDisplay;
             std::string line2;
             const Chapter& prevCh = m_chapters[m_chapterPosition - 1];
@@ -2962,6 +2960,31 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
             }
             line2 = "Previous: " + prevName;
             webtoonScroll->setTransitionText(0, line1, line2);
+        }
+
+        // Update the old transition page (now a separator between prev and current chapter).
+        // It was at index 0 before prepend, now shifted by netAdded.
+        {
+            int sepIdx = netAdded;  // Where the old leading transition now sits
+            // Find the current chapter name (the one after this separator)
+            int origChapterPos = prevPos + 1;  // The chapter that was originally being read
+            if (origChapterPos < static_cast<int>(m_chapters.size())) {
+                const Chapter& origCh = m_chapters[origChapterPos];
+                std::string origName = origCh.name;
+                if (origName.empty()) {
+                    float num = origCh.chapterNumber;
+                    if (num == static_cast<int>(num))
+                        origName = "Chapter " + std::to_string(static_cast<int>(num));
+                    else {
+                        char buf[32];
+                        snprintf(buf, sizeof(buf), "Chapter %.1f", num);
+                        origName = buf;
+                    }
+                }
+                std::string sepLine1 = "End of: " + currentChapterDisplay;
+                std::string sepLine2 = "Next: " + origName;
+                webtoonScroll->setTransitionText(sepIdx, sepLine1, sepLine2);
+            }
         }
 
         // Update UI labels

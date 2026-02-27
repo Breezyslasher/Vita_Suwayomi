@@ -573,20 +573,8 @@ void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
     float availableWidth = m_viewWidth - (m_sidePadding * 2);
     float defaultHeight = availableWidth * 1.5f;
 
-    // Remove trailing transition page if present
-    if (!m_pages.empty() && isTransitionPage(static_cast<int>(m_pages.size()) - 1)) {
-        int lastIdx = static_cast<int>(m_pages.size()) - 1;
-        float removedSize = getEffectivePageSize(lastIdx);
-        m_totalHeight -= removedSize;
-        if (lastIdx > 0) m_totalHeight -= m_pageGap;  // Remove gap before removed page
-
-        m_pages.pop_back();
-        m_pageImages.pop_back();
-        m_pageHeights.pop_back();
-        m_loadedPages.erase(lastIdx);
-        m_loadingPages.erase(lastIdx);
-        m_transitionInfo.erase(lastIdx);
-    }
+    // Keep the existing trailing transition page as a chapter separator.
+    // It stays visible so the user always sees the boundary between chapters.
 
     int startIdx = static_cast<int>(m_pages.size());
 
@@ -643,14 +631,8 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     float availableWidth = m_viewWidth - (m_sidePadding * 2);
     float defaultHeight = availableWidth * 1.5f;
 
-    // Calculate the size of the leading transition page we're about to remove
-    float removedSize = 0.0f;
-    bool hadLeadingTransition = false;
-    if (!m_pages.empty() && isTransitionPage(0)) {
-        removedSize = getEffectivePageSize(0);
-        if (m_pages.size() > 1) removedSize += m_pageGap;
-        hadLeadingTransition = true;
-    }
+    // Keep the existing leading transition page as a chapter separator.
+    // New pages are inserted before it so the user always sees the boundary.
 
     // Build new page data
     std::vector<Page> newPages;
@@ -678,18 +660,15 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
         if (i > 0) addedHeight += m_pageGap;
     }
 
-    // Skip old leading transition page
-    int skipOld = hadLeadingTransition ? 1 : 0;
-
-    // Append existing pages (minus the removed transition) to new lists
-    for (size_t i = skipOld; i < m_pages.size(); i++) {
+    // Append ALL existing pages (keeping the leading transition as chapter separator)
+    for (size_t i = 0; i < m_pages.size(); i++) {
         newPages.push_back(m_pages[i]);
         newImages.push_back(m_pageImages[i]);
         newHeights.push_back(m_pageHeights[i]);
     }
 
     // Rebuild tracking sets with shifted indices
-    int shift = static_cast<int>(pages.size()) - skipOld;
+    int shift = static_cast<int>(pages.size());
     std::set<int> newLoaded, newLoading, newFailed;
     for (int idx : m_loadedPages) {
         int newIdx = idx + shift;
@@ -736,8 +715,8 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     }
 
     // Adjust scroll position: user's view stays in the same visual spot
-    // We added content before the current view and possibly removed a transition page
-    float scrollAdjust = addedHeight + (pages.empty() ? 0 : m_pageGap) - removedSize;
+    // We added content before the current view (nothing removed)
+    float scrollAdjust = addedHeight + (pages.empty() ? 0 : m_pageGap);
     m_scrollY -= scrollAdjust;
 
     // Adjust current page index
@@ -1108,14 +1087,12 @@ void WebtoonScrollView::updateVisibleImages() {
     }
 
     // Auto-extend: seamlessly load next/prev chapter when approaching transition pages.
-    // Only trigger when the transition page is significantly visible (at least half shown),
-    // so the user can read the chapter separator before the next chapter loads in.
-    // With m_pageGap=0, even a 1px scroll would make the adjacent transition "visible",
-    // so we check scroll position directly instead of relying on isPageVisible().
+    // Only trigger when the entire transition page is visible on screen so the user
+    // can read the chapter separator text. The next/prev chapter loads behind the
+    // transition page and only appears when the user keeps scrolling past it.
     if (!m_extendingChapter && m_userHasScrolled && m_chapterNavigateCallback && firstVisible >= 0) {
-        bool horizontal = isHorizontalLayout();
-        float viewSize = horizontal ? m_viewWidth : m_viewHeight;
         float visibleStart = -m_scrollY;
+        float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
         float visibleEnd = visibleStart + viewSize;
 
         // Check trailing transition page (next chapter)
@@ -1123,9 +1100,9 @@ void WebtoonScrollView::updateVisibleImages() {
         if (lastIdx >= 0 && isTransitionPage(lastIdx) && !m_trailingExtendTriggered && lastVisible >= 0) {
             float pageStart = getPageOffset(lastIdx);
             float pageSize = getEffectivePageSize(lastIdx);
-            float pageMidpoint = pageStart + pageSize * 0.5f;
-            // Extend only when the user has scrolled past the midpoint of the transition page
-            if (pageMidpoint < visibleEnd) {
+            float pageEnd = pageStart + pageSize;
+            // Extend once the entire transition page is on screen
+            if (pageEnd <= visibleEnd) {
                 m_extendingChapter = true;
                 m_trailingExtendTriggered = true;
                 auto it = m_transitionInfo.find(lastIdx);
@@ -1137,10 +1114,9 @@ void WebtoonScrollView::updateVisibleImages() {
 
         // Check leading transition page (previous chapter)
         if (!m_pages.empty() && isTransitionPage(0) && !m_leadingExtendTriggered) {
-            float pageSize = getEffectivePageSize(0);
-            float pageMidpoint = pageSize * 0.5f;  // page 0 starts at offset 0
-            // Extend only when the user has scrolled past the midpoint of the transition page
-            if (pageMidpoint > visibleStart) {
+            // Page 0 starts at offset 0; extend once its top edge is visible
+            // (i.e. the user has scrolled up enough to see the full page)
+            if (visibleStart <= 0.0f) {
                 m_extendingChapter = true;
                 m_leadingExtendTriggered = true;
                 auto it = m_transitionInfo.find(0);
