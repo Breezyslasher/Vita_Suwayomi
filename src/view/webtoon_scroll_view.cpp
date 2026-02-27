@@ -604,6 +604,10 @@ void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
         m_totalHeight += pageHeight;
     }
 
+    // Kill momentum — prevent the user from flying through placeholder pages
+    // at high speed, which causes jarring jumps when images load with different heights.
+    m_scrollVelocity = 0.0f;
+
     // Reset overscroll since we just added content
     m_overscrollAmount = 0.0f;
     m_overscrollTriggered = false;
@@ -841,13 +845,22 @@ void WebtoonScrollView::trimPagesFromEnd(int count) {
         if (i > 0) m_totalHeight += m_pageGap;
     }
 
-    // No scroll adjustment needed - content removed from below viewport
-    // But clamp current page if needed
+    // Clamp scroll position in case the user was scrolled near the end
+    float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+    float minScroll = -(m_totalHeight - viewSize);
+    if (minScroll > 0.0f) minScroll = 0.0f;
+    if (m_scrollY < minScroll) {
+        m_scrollY = minScroll;
+        m_scrollVelocity = 0.0f;
+    }
+
+    // Clamp current page if needed
     if (m_currentPage >= newSize) {
         m_currentPage = std::max(0, newSize - 1);
     }
 
-    brls::Logger::info("WEBTOON_TRIM_END: done, total={}, totalHeight={:.0f}", m_pages.size(), m_totalHeight);
+    brls::Logger::info("WEBTOON_TRIM_END: done, total={}, totalHeight={:.0f}, scrollY={:.1f}",
+                        m_pages.size(), m_totalHeight, m_scrollY);
 }
 
 int WebtoonScrollView::getRealPageCount() const {
@@ -1109,13 +1122,28 @@ void WebtoonScrollView::updateVisibleImages() {
         const Page& page = m_pages[i];
         std::shared_ptr<RotatableImage> imgPtr = m_pageImages[i];
         RotatableImage* img = imgPtr.get();
-        int pageIndex = i;
 
         // Load the image
+        // IMPORTANT: Do NOT capture pageIndex by value — after prepend/append,
+        // indices shift and the captured value becomes stale. Instead, look up
+        // the current index of imgPtr in the callback by scanning m_pageImages.
         ImageLoader::loadAsyncFullSize(page.imageUrl,
-            [this, aliveWeak, pageIndex, imgPtr](RotatableImage* loadedImg) {
+            [this, aliveWeak, imgPtr](RotatableImage* loadedImg) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
+
+                // Find the CURRENT index of this image (may have shifted due to prepend/append)
+                int pageIndex = -1;
+                for (int idx = 0; idx < static_cast<int>(m_pageImages.size()); idx++) {
+                    if (m_pageImages[idx] == imgPtr) {
+                        pageIndex = idx;
+                        break;
+                    }
+                }
+                if (pageIndex < 0) {
+                    // Image was removed (trimmed) while loading — discard silently
+                    return;
+                }
 
                 m_loadingPages.erase(pageIndex);
 
@@ -1134,26 +1162,28 @@ void WebtoonScrollView::updateVisibleImages() {
                         float heightDelta = newHeight - oldHeight;
 
                         if (std::abs(heightDelta) > 0.5f) {
-                            // Compute the page's start BEFORE updating the height.
                             float pageStart = getPageOffset(pageIndex);
                             float visibleTop = -m_scrollY;
+                            float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+                            float visibleBottom = visibleTop + viewSize;
 
                             m_totalHeight += heightDelta;
                             m_pageHeights[pageIndex] = newHeight;
                             imgPtr->setHeight(newHeight);
 
-                            // Compensate scroll only if the page ENDS above the
-                            // viewport top — i.e. it's fully above what the user
-                            // sees.  For the partially-visible current page we must
-                            // NOT adjust, otherwise the view snaps forward.
-                            float pageEnd = pageStart + oldHeight;
-                            if (pageEnd <= visibleTop) {
+                            // Compensate scroll for any page whose top is above the
+                            // viewport top. This keeps the content the user is looking
+                            // at pinned in place:
+                            // - Pages fully above viewport: adjust (they shift everything down)
+                            // - The page straddling the top edge: adjust (its top is pinned)
+                            // - Pages fully below viewport: no adjust needed
+                            if (pageStart < visibleTop) {
                                 m_scrollY -= heightDelta;
-                                brls::Logger::info("WEBTOON_HEIGHT: page {} above viewport, scroll adjusted by {:.1f} (scrollY={:.1f})",
-                                                    pageIndex, -heightDelta, m_scrollY);
+                                brls::Logger::info("WEBTOON_HEIGHT: page {} (start={:.0f} < visTop={:.0f}), scroll adjusted by {:.1f}",
+                                                    pageIndex, pageStart, visibleTop, -heightDelta);
                             } else {
-                                brls::Logger::info("WEBTOON_HEIGHT: page {} visible/below (start={:.0f} end={:.0f} visTop={:.0f}), NO scroll adjust, delta={:.1f}",
-                                                    pageIndex, pageStart, pageEnd, visibleTop, heightDelta);
+                                brls::Logger::info("WEBTOON_HEIGHT: page {} below viewport top (start={:.0f} visTop={:.0f}), delta={:.1f}, no adjust",
+                                                    pageIndex, pageStart, visibleTop, heightDelta);
                             }
                         }
                     }
@@ -1161,7 +1191,6 @@ void WebtoonScrollView::updateVisibleImages() {
                     // Image load failed - mark as failed for retry
                     m_failedPages.insert(pageIndex);
 
-                    // Set a reasonable height for the failed page placeholder
                     float oldHeight = m_pageHeights[pageIndex];
                     if (oldHeight > FAILED_PAGE_HEIGHT * 2) {
                         float pageStart = getPageOffset(pageIndex);
@@ -1171,9 +1200,7 @@ void WebtoonScrollView::updateVisibleImages() {
                         m_totalHeight += heightDelta;
                         m_pageHeights[pageIndex] = FAILED_PAGE_HEIGHT;
 
-                        // Compensate scroll only for pages fully above viewport
-                        float pageEnd = pageStart + oldHeight;
-                        if (pageEnd <= visibleTop) {
+                        if (pageStart < visibleTop) {
                             m_scrollY -= heightDelta;
                         }
                     }

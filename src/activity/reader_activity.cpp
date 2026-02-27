@@ -986,27 +986,25 @@ void ReaderActivity::onContentAvailable() {
             if (m_updatingSlider) return;  // Ignore programmatic setProgress
 
             if (m_continuousScrollMode && webtoonScroll) {
-                // Webtoon mode: slider maps to combined page total across all segments
-                int combinedTotal = 0;
-                for (const auto& seg : m_webtoonSegments) {
-                    combinedTotal += seg.pageCount;
-                }
-                if (combinedTotal <= 0) return;
+                // Webtoon mode: slider maps to current chapter's page range
+                int rawPage = webtoonScroll->getCurrentPage();
+                int chapterId, chapterPos, pageInChapter, segPageCount;
+                getWebtoonProgress(rawPage, chapterId, chapterPos, pageInChapter, segPageCount);
+                if (segPageCount <= 0) return;
 
-                int targetCombinedPage = static_cast<int>(progress * std::max(1, combinedTotal - 1) + 0.5f);
-
-                // Map combined page index to actual webtoon page index
-                int cumulative = 0;
+                // Find the segment for this chapter to get firstPage
+                int segFirst = 0;
                 for (const auto& seg : m_webtoonSegments) {
-                    if (targetCombinedPage < cumulative + seg.pageCount) {
-                        int pageInSeg = targetCombinedPage - cumulative;
-                        int targetPage = seg.firstPage + pageInSeg;
-                        if (targetPage != m_currentPage) {
-                            goToPage(targetPage);
-                        }
+                    if (seg.chapterId == chapterId) {
+                        segFirst = seg.firstPage;
                         break;
                     }
-                    cumulative += seg.pageCount;
+                }
+
+                int targetDisplayPage = static_cast<int>(progress * std::max(1, segPageCount - 1) + 0.5f);
+                int targetPage = segFirst + targetDisplayPage;
+                if (targetPage != m_currentPage) {
+                    goToPage(targetPage);
                 }
                 return;
             }
@@ -1565,33 +1563,14 @@ void ReaderActivity::updatePageDisplay() {
     int realPageCount = 0;
 
     if (m_continuousScrollMode && webtoonScroll) {
-        // Webtoon mode: use segment tracking for combined page numbers across all loaded chapters
+        // Webtoon mode: use segment tracking for chapter-relative page numbers
         int rawPage = webtoonScroll->getCurrentPage();
         if (webtoonScroll->isTransitionPage(rawPage)) return;
 
         int chapterId, chapterPos, pageInChapter, segPageCount;
         getWebtoonProgress(rawPage, chapterId, chapterPos, pageInChapter, segPageCount);
-
-        // Calculate combined display page and total across all loaded segments
-        // This makes all loaded chapters appear as one continuous strip
-        int combinedPage = 0;
-        int combinedTotal = 0;
-        bool foundCurrentSeg = false;
-        for (const auto& seg : m_webtoonSegments) {
-            if (seg.chapterId == chapterId && seg.chapterPos == chapterPos) {
-                combinedPage = combinedTotal + pageInChapter;
-                foundCurrentSeg = true;
-            }
-            combinedTotal += seg.pageCount;
-        }
-        if (!foundCurrentSeg) {
-            // Fallback to per-segment display
-            combinedPage = pageInChapter;
-            combinedTotal = segPageCount;
-        }
-
-        displayPage = combinedPage;
-        realPageCount = combinedTotal;
+        displayPage = pageInChapter;
+        realPageCount = segPageCount;
         if (realPageCount <= 0) return;
 
         // Update chapter label if user has scrolled into a different chapter
