@@ -1811,13 +1811,12 @@ void ReaderActivity::nextChapter() {
 
             // Handle webtoon mode vs single-page mode
             if (m_continuousScrollMode && webtoonScroll) {
-                // Update webtoon scroll view with new pages and scroll to beginning
+                // Update webtoon scroll view with new pages and scroll to start
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
-                webtoonScroll->setPages(m_pages, viewW);
+                webtoonScroll->setPages(m_pages, viewW, m_currentPage);
                 initWebtoonSegments();
                 setupWebtoonTransitionText();
-                webtoonScroll->scrollToPage(m_currentPage);
             } else {
                 loadPage(m_currentPage);
             }
@@ -1888,10 +1887,12 @@ void ReaderActivity::previousChapter() {
             if (m_continuousScrollMode && webtoonScroll) {
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
-                webtoonScroll->setPages(m_pages, viewW);
+                // Pass m_currentPage as startPage so the scroll position and
+                // image loading begin at the target page, avoiding a visible
+                // snap from position 0 to the end of the chapter.
+                webtoonScroll->setPages(m_pages, viewW, m_currentPage);
                 initWebtoonSegments();
                 setupWebtoonTransitionText();
-                webtoonScroll->scrollToPage(m_currentPage);
             } else {
                 loadPage(m_currentPage);
             }
@@ -1907,10 +1908,9 @@ void ReaderActivity::previousChapter() {
             m_startPage = 0;
             m_pages.clear();
 
-            // Clear webtoon scroll view to reset scroll position for new chapter
-            if (m_continuousScrollMode && webtoonScroll) {
-                webtoonScroll->clearPages();
-            }
+            // Don't call clearPages() here — let loadPages()'s callback handle
+            // it via setPages() so the old content stays visible during the
+            // async fetch, avoiding a blank-screen flash / snap.
 
             loadPages();
         }
