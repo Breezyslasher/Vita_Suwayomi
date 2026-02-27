@@ -3042,6 +3042,9 @@ void ReaderActivity::preloadAdjacentPreviews() {
         if (!target || !isTransitionPage(m_currentPage) || m_continuousScrollMode) return false;
         if (idx >= 0 && idx < static_cast<int>(m_pages.size())) return false; // in-bounds, not needed
 
+        // Skip if the target already has an image (e.g. from early cross-chapter preload)
+        if (target->hasImage()) return true;
+
         const std::string& tUrl = m_pages[m_currentPage].imageUrl;
         std::string crossUrl;
         if (isNext && tUrl == TRANSITION_NEXT && m_nextChapterLoaded && !m_nextChapterPages.empty()) {
@@ -3090,6 +3093,55 @@ void ReaderActivity::preloadAdjacentPreviews() {
         m_negPreviewIdx = negIdx;
     } else {
         m_negPreviewIdx = -1;
+    }
+
+    // Early cross-chapter preload: when adjacent to a transition page, start
+    // loading the cross-chapter image one page ahead so it's ready when the
+    // user reaches the transition page. Uses a separate alive guard so the
+    // load survives the next preloadAdjacentPreviews() call.
+    if (!m_continuousScrollMode && (m_posIsTransition || m_negIsTransition)) {
+        if (!m_crossChapterPreloadAlive)
+            m_crossChapterPreloadAlive = std::make_shared<bool>(true);
+
+        auto earlyCrossPreload = [&](int transIdx, RotatableImage* target, bool isNext) {
+            if (!target || transIdx < 0 || transIdx >= static_cast<int>(m_pages.size())) return;
+            if (target->hasImage()) return; // already loaded
+
+            const std::string& tUrl = m_pages[transIdx].imageUrl;
+            std::string crossUrl;
+            if (isNext && tUrl == TRANSITION_NEXT && m_nextChapterLoaded && !m_nextChapterPages.empty()) {
+                crossUrl = m_nextChapterPages[0].imageUrl;
+            } else if (!isNext && tUrl == TRANSITION_PREV && m_prevChapterLoaded && !m_prevChapterPages.empty()) {
+                crossUrl = m_prevChapterPages.back().imageUrl;
+            }
+            if (crossUrl.empty()) return;
+
+            target->setRotation(static_cast<float>(m_settings.rotation));
+            std::weak_ptr<bool> aliveWeak = m_alive;
+            ImageLoader::loadAsyncFullSize(crossUrl, [aliveWeak](RotatableImage*) {
+                auto a = aliveWeak.lock();
+                if (!a || !*a) return;
+            }, target, m_crossChapterPreloadAlive);
+
+            brls::Logger::info("Early cross-chapter preload started for {} chapter",
+                               isNext ? "next" : "prev");
+        };
+
+        // When positive side is a transition, previewImage is free (transition
+        // uses transitionBox). Preload the cross-chapter image into previewImage.
+        if (m_posIsTransition && previewImage) {
+            earlyCrossPreload(posIdx, previewImage, positiveIsNext);
+        }
+        // When negative side is a transition, previewImageB is free.
+        if (m_negIsTransition && previewImageB) {
+            earlyCrossPreload(negIdx, previewImageB, !positiveIsNext);
+        }
+    } else {
+        // Not near a transition — cancel any early cross-chapter preloads
+        if (m_crossChapterPreloadAlive) {
+            *m_crossChapterPreloadAlive = false;
+            m_crossChapterPreloadAlive.reset();
+        }
     }
 }
 
@@ -3559,6 +3611,7 @@ void ReaderActivity::willDisappear(bool resetState) {
     *m_alive = false;
     if (m_pageLoadAlive) *m_pageLoadAlive = false;
     if (m_previewLoadAlive) *m_previewLoadAlive = false;
+    if (m_crossChapterPreloadAlive) *m_crossChapterPreloadAlive = false;
 
     // Cancel all pending image loader operations to avoid their brls::sync
     // callbacks calling target->setImageFromMem() on our destroyed views.
