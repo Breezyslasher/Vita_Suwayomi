@@ -1033,9 +1033,22 @@ void WebtoonScrollView::updateVisibleImages() {
                         float newHeight = availableWidth * aspectRatio;
 
                         float oldHeight = m_pageHeights[pageIndex];
-                        m_totalHeight += (newHeight - oldHeight);
-                        m_pageHeights[pageIndex] = newHeight;
-                        imgPtr->setHeight(newHeight);
+                        float heightDelta = newHeight - oldHeight;
+
+                        if (std::abs(heightDelta) > 0.5f) {
+                            m_totalHeight += heightDelta;
+                            m_pageHeights[pageIndex] = newHeight;
+                            imgPtr->setHeight(newHeight);
+
+                            // Compensate scroll position so the viewport doesn't
+                            // jump when a page above the view changes height.
+                            // visibleTop = -m_scrollY in content coordinates.
+                            float pageStart = getPageOffset(pageIndex);
+                            float visibleTop = -m_scrollY;
+                            if (pageStart < visibleTop) {
+                                m_scrollY -= heightDelta;
+                            }
+                        }
                     }
                 } else {
                     // Image load failed - mark as failed for retry
@@ -1044,8 +1057,16 @@ void WebtoonScrollView::updateVisibleImages() {
                     // Set a reasonable height for the failed page placeholder
                     float oldHeight = m_pageHeights[pageIndex];
                     if (oldHeight > FAILED_PAGE_HEIGHT * 2) {
-                        m_totalHeight += (FAILED_PAGE_HEIGHT - oldHeight);
+                        float heightDelta = FAILED_PAGE_HEIGHT - oldHeight;
+                        m_totalHeight += heightDelta;
                         m_pageHeights[pageIndex] = FAILED_PAGE_HEIGHT;
+
+                        // Compensate scroll for pages above viewport
+                        float pageStart = getPageOffset(pageIndex);
+                        float visibleTop = -m_scrollY;
+                        if (pageStart < visibleTop) {
+                            m_scrollY -= heightDelta;
+                        }
                     }
 
                     brls::Logger::warning("WebtoonScrollView: Failed to load page {}", pageIndex);
