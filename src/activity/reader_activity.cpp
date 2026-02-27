@@ -356,10 +356,10 @@ void ReaderActivity::onContentAvailable() {
 
     // Hide preview images initially
     if (previewImage) {
-        previewImage->setVisibility(brls::Visibility::INVISIBLE);
+        previewImage->setVisibility(brls::Visibility::GONE);
     }
     if (previewImageB) {
-        previewImageB->setVisibility(brls::Visibility::INVISIBLE);
+        previewImageB->setVisibility(brls::Visibility::GONE);
     }
 
     // NOBORU-style touch handling with swipe controls
@@ -1363,7 +1363,7 @@ void ReaderActivity::loadPages() {
                 pageImage->setVisibility(brls::Visibility::GONE);
             }
             if (previewImage) {
-                previewImage->setVisibility(brls::Visibility::INVISIBLE);
+                previewImage->setVisibility(brls::Visibility::GONE);
             }
             if (webtoonScroll) {
                 webtoonScroll->setVisibility(brls::Visibility::VISIBLE);
@@ -1449,6 +1449,9 @@ void ReaderActivity::loadPage(int index) {
     bool wasOnTransition = transitionBox && transitionBox->getVisibility() != brls::Visibility::GONE;
     if (wasOnTransition) {
         transitionBox->setVisibility(brls::Visibility::GONE);
+        // Clear stale image from the previous chapter so the old page
+        // doesn't flash briefly while the new page loads asynchronously.
+        if (pageImage) pageImage->clearImage();
     }
     if (pageImage && pageImage->getVisibility() != brls::Visibility::VISIBLE) {
         pageImage->setVisibility(brls::Visibility::VISIBLE);
@@ -2942,12 +2945,12 @@ void ReaderActivity::loadPreviewPage(int index) {
             transitionPreview->setVisibility(brls::Visibility::GONE);
         }
 
-        // Make transitionBox visible but it will be positioned off-screen by updateSwipePreview
+        // Pre-position transitionBox far off-screen BEFORE making it visible,
+        // so its opaque background never covers pageImage even for a single frame.
+        // updateSwipePreview() will set the correct slide offset right after.
+        transitionBox->setSlideOffset(10000.0f, 0.0f);
         transitionBox->setVisibility(brls::Visibility::VISIBLE);
         m_previewIsTransition = true;
-
-        // Hide previewImage since we're using transitionBox as the incoming view
-        previewImage->setVisibility(brls::Visibility::INVISIBLE);
 
         brls::Logger::debug("Loading transition preview for page {}", index);
         return;
@@ -3270,11 +3273,11 @@ void ReaderActivity::resetSwipeState() {
 
     // Hide both preview images and reset slide offsets
     if (previewImage) {
-        previewImage->setVisibility(brls::Visibility::INVISIBLE);
+        previewImage->setVisibility(brls::Visibility::GONE);
         previewImage->resetSlideOffset();
     }
     if (previewImageB) {
-        previewImageB->setVisibility(brls::Visibility::INVISIBLE);
+        previewImageB->setVisibility(brls::Visibility::GONE);
         previewImageB->resetSlideOffset();
     }
 }
@@ -3456,7 +3459,7 @@ void ReaderActivity::updateReaderMode() {
             pageImage->setVisibility(brls::Visibility::GONE);
         }
         if (previewImage) {
-            previewImage->setVisibility(brls::Visibility::INVISIBLE);
+            previewImage->setVisibility(brls::Visibility::GONE);
         }
         if (webtoonScroll) {
             webtoonScroll->setVisibility(brls::Visibility::VISIBLE);
