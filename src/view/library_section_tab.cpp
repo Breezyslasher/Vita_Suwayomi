@@ -2091,7 +2091,7 @@ void LibrarySectionTab::downloadChapters(const std::vector<Manga>& mangaList, co
             std::reverse(chapters.begin(), chapters.end());
 
             std::vector<int> serverChapterIds;
-            std::vector<std::pair<int, int>> localChapterPairs;
+            std::vector<DownloadsManager::ChapterQueueInfo> localChapterPairs;
 
             auto collectChapter = [&](const Chapter& ch) {
                 if ((downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) && !ch.downloaded) {
@@ -2099,7 +2099,7 @@ void LibrarySectionTab::downloadChapters(const std::vector<Manga>& mangaList, co
                 }
                 if ((downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) &&
                     !localMgr.isChapterDownloaded(manga.id, ch.index)) {
-                    localChapterPairs.push_back({ch.id, ch.index});
+                    localChapterPairs.push_back({ch.id, ch.index, ch.chapterNumber, ch.name});
                 }
             };
 

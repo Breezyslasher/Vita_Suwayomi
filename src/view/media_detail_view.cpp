@@ -268,6 +268,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     // Swipe gesture support (Komikku-style)
     int chapterId = capturedChapter.id;
     int chapterIndex = capturedChapter.index;
+    float chapterNum = capturedChapter.chapterNumber;
     std::string mangaTitle = m_view->m_manga.title;
     std::string chapterName = capturedChapter.name;
     bool serverDownloaded = capturedChapter.downloaded;
@@ -371,7 +372,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                                 });
                             });
                         } else {
-                            asyncRun([view, mangaId, chapterId, chapterIndex, mangaTitle,
+                            asyncRun([view, mangaId, chapterId, chapterIndex, chapterNum, mangaTitle,
                                       chapterName, downloadMode]() {
                                 SuwayomiClient& client = SuwayomiClient::getInstance();
                                 DownloadsManager& dm = DownloadsManager::getInstance();
@@ -384,7 +385,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                                 if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
                                     dm.init();
                                     localQueued = dm.queueChapterDownload(mangaId, chapterId, chapterIndex,
-                                                                          mangaTitle, chapterName);
+                                                                          mangaTitle, chapterName, chapterNum);
                                     if (localQueued) { dm.startDownloads(); }
                                 }
                                 brls::sync([view, serverQueued, localQueued]() {
@@ -1180,16 +1181,16 @@ void MangaDetailView::loadDetails() {
                             client.startDownloads();
                         }
                         if (autoDownloadMode == DownloadMode::LOCAL_ONLY || autoDownloadMode == DownloadMode::BOTH) {
-                            std::vector<std::pair<int, int>> localPairs;
+                            std::vector<DownloadsManager::ChapterQueueInfo> localChapters;
                             for (const auto& ch : chapters) {
                                 if (!ch.read && !ch.downloaded &&
                                     !localMgr.isChapterDownloaded(combinedMangaId, ch.index)) {
-                                    localPairs.emplace_back(ch.id, ch.index);
+                                    localChapters.push_back({ch.id, ch.index, ch.chapterNumber, ch.name});
                                 }
                             }
-                            if (!localPairs.empty()) {
+                            if (!localChapters.empty()) {
                                 std::string mangaTitle = updatedManga.title.empty() ? "" : updatedManga.title;
-                                localMgr.queueChaptersDownload(combinedMangaId, localPairs, mangaTitle);
+                                localMgr.queueChaptersDownload(combinedMangaId, localChapters, mangaTitle);
                                 localMgr.startDownloads();
                             }
                         }
@@ -1438,15 +1439,15 @@ void MangaDetailView::loadChapters() {
                         client.startDownloads();
                     }
                     if (autoDownloadMode == DownloadMode::LOCAL_ONLY || autoDownloadMode == DownloadMode::BOTH) {
-                        std::vector<std::pair<int, int>> localPairs;
+                        std::vector<DownloadsManager::ChapterQueueInfo> localChapters;
                         for (const auto& ch : chapters) {
                             if (!ch.read && !ch.downloaded &&
                                 !localMgr.isChapterDownloaded(mangaId, ch.index)) {
-                                localPairs.emplace_back(ch.id, ch.index);
+                                localChapters.push_back({ch.id, ch.index, ch.chapterNumber, ch.name});
                             }
                         }
-                        if (!localPairs.empty()) {
-                            localMgr.queueChaptersDownload(mangaId, localPairs, m_manga.title);
+                        if (!localChapters.empty()) {
+                            localMgr.queueChaptersDownload(mangaId, localChapters, m_manga.title);
                             localMgr.startDownloads();
                         }
                     }
@@ -2171,7 +2172,7 @@ void MangaDetailView::downloadAllChapters() {
     localMgr.init();
 
     std::vector<int> serverChapterIds;
-    std::vector<std::pair<int, int>> localChapterPairs;  // (chapterId, chapterIndex)
+    std::vector<DownloadsManager::ChapterQueueInfo> localChapterPairs;
 
     for (const auto& ch : m_chapters) {
         bool needsServerDownload = !ch.downloaded;
@@ -2182,7 +2183,7 @@ void MangaDetailView::downloadAllChapters() {
         }
 
         if ((downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) && needsLocalDownload) {
-            localChapterPairs.push_back({ch.id, ch.index});
+            localChapterPairs.push_back({ch.id, ch.index, ch.chapterNumber, ch.name});
         }
     }
 
@@ -2346,7 +2347,7 @@ void MangaDetailView::downloadUnreadChapters() {
     localMgr.init();
 
     std::vector<int> serverChapterIds;
-    std::vector<std::pair<int, int>> localChapterPairs;
+    std::vector<DownloadsManager::ChapterQueueInfo> localChapterPairs;
 
     for (const auto& ch : m_chapters) {
         if (ch.read) continue;  // Skip read chapters
@@ -2359,7 +2360,7 @@ void MangaDetailView::downloadUnreadChapters() {
         }
 
         if ((downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) && needsLocalDownload) {
-            localChapterPairs.push_back({ch.id, ch.index});
+            localChapterPairs.push_back({ch.id, ch.index, ch.chapterNumber, ch.name});
         }
     }
 
@@ -2629,13 +2630,14 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
     int mangaId = m_manga.id;
     int chapterId = chapter.id;
     int chapterIndex = chapter.index;
+    float chapterNum = chapter.chapterNumber;
     std::string mangaTitle = m_manga.title;
     std::string chapterName = chapter.name;
 
     // Get download mode setting
     DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
 
-    asyncRun([this, mangaId, chapterId, chapterIndex, mangaTitle, chapterName, downloadMode,
+    asyncRun([this, mangaId, chapterId, chapterIndex, chapterNum, mangaTitle, chapterName, downloadMode,
               aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         bool serverQueued = false;
         bool localQueued = false;
@@ -2651,7 +2653,7 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
         if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
             DownloadsManager& dm = DownloadsManager::getInstance();
             dm.init();
-            localQueued = dm.queueChapterDownload(mangaId, chapterId, chapterIndex, mangaTitle, chapterName);
+            localQueued = dm.queueChapterDownload(mangaId, chapterId, chapterIndex, mangaTitle, chapterName, chapterNum);
             if (localQueued) {
                 dm.startDownloads();
             }
@@ -3654,14 +3656,14 @@ void MangaDetailView::downloadSelected() {
     int mangaId = m_manga.id;
     std::string mangaTitle = m_manga.title;
     std::vector<int> chapterIds;
-    std::vector<std::pair<int, int>> localChapterPairs;
+    std::vector<DownloadsManager::ChapterQueueInfo> localChapterPairs;
 
     for (int idx : m_selectedChapters) {
         if (idx >= 0 && idx < static_cast<int>(m_chapters.size())) {
             const auto& ch = m_chapters[idx];
             if (!ch.downloaded) {
                 chapterIds.push_back(ch.id);
-                localChapterPairs.push_back({ch.id, ch.index});
+                localChapterPairs.push_back({ch.id, ch.index, ch.chapterNumber, ch.name});
             }
         }
     }

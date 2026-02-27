@@ -142,7 +142,8 @@ bool DownloadsManager::init() {
 
 bool DownloadsManager::queueChapterDownload(int mangaId, int chapterId, int chapterIndex,
                                              const std::string& mangaTitle,
-                                             const std::string& chapterName) {
+                                             const std::string& chapterName,
+                                             float chapterNumber) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     brls::Logger::info("DownloadsManager: Queueing chapter {} (id={}) for manga {} ({})",
@@ -181,6 +182,7 @@ bool DownloadsManager::queueChapterDownload(int mangaId, int chapterId, int chap
     chapter.chapterId = chapterId;
     chapter.chapterIndex = chapterIndex;
     chapter.name = chapterName;
+    chapter.chapterNumber = chapterNumber;
     chapter.state = LocalDownloadState::QUEUED;
     manga->chapters.push_back(chapter);
     manga->totalChapters = static_cast<int>(manga->chapters.size());
@@ -250,6 +252,67 @@ bool DownloadsManager::queueChaptersDownload(int mangaId,
     if (addedCount > 0) {
         saveStateUnlocked();
         brls::Logger::info("DownloadsManager: Batch queued {} chapters successfully", addedCount);
+    }
+
+    return true;
+}
+
+bool DownloadsManager::queueChaptersDownload(int mangaId,
+                                              const std::vector<ChapterQueueInfo>& chapters,
+                                              const std::string& mangaTitle) {
+    if (chapters.empty()) return true;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    brls::Logger::info("DownloadsManager: Batch queueing {} chapters (with metadata) for manga {} ({})",
+                       chapters.size(), mangaId, mangaTitle);
+
+    // Find or create manga download item
+    DownloadItem* manga = nullptr;
+    for (auto& item : m_downloads) {
+        if (item.mangaId == mangaId) {
+            manga = &item;
+            break;
+        }
+    }
+
+    if (!manga) {
+        DownloadItem newItem;
+        newItem.mangaId = mangaId;
+        newItem.title = mangaTitle;
+        newItem.state = LocalDownloadState::QUEUED;
+        newItem.localPath = createMangaDir(mangaId, mangaTitle);
+        m_downloads.push_back(newItem);
+        manga = &m_downloads.back();
+    }
+
+    int addedCount = 0;
+    for (const auto& ch : chapters) {
+        bool exists = false;
+        for (const auto& existingCh : manga->chapters) {
+            if (existingCh.chapterIndex == ch.chapterIndex || existingCh.chapterId == ch.chapterId) {
+                exists = true;
+                break;
+            }
+        }
+
+        if (!exists) {
+            DownloadedChapter chapter;
+            chapter.chapterId = ch.chapterId;
+            chapter.chapterIndex = ch.chapterIndex;
+            chapter.name = ch.chapterName;
+            chapter.chapterNumber = ch.chapterNumber;
+            chapter.state = LocalDownloadState::QUEUED;
+            manga->chapters.push_back(chapter);
+            addedCount++;
+        }
+    }
+
+    manga->totalChapters = static_cast<int>(manga->chapters.size());
+
+    if (addedCount > 0) {
+        saveStateUnlocked();
+        brls::Logger::info("DownloadsManager: Batch queued {} chapters (with metadata) successfully", addedCount);
     }
 
     return true;
