@@ -1102,12 +1102,15 @@ void WebtoonScrollView::updateVisibleImages() {
     }
 
     // Auto-extend: seamlessly load next/prev chapter when approaching transition pages
-    // This replaces the old overscroll-based chapter navigation for a smooth scrolling experience
+    // This replaces the old overscroll-based chapter navigation for a smooth scrolling experience.
+    // Only trigger when the transition page is actually visible (on-screen), not merely
+    // within the preload window, to avoid loading adjacent chapters prematurely.
     if (!m_extendingChapter && m_userHasScrolled && m_chapterNavigateCallback && firstVisible >= 0) {
         // Check trailing transition page (next chapter)
         int lastIdx = static_cast<int>(m_pages.size()) - 1;
         if (lastIdx >= 0 && isTransitionPage(lastIdx) && !m_trailingExtendTriggered && lastVisible >= 0) {
-            if (lastIdx <= lastVisible + PRELOAD_PAGES + 2) {
+            // Only extend when the transition page is actually visible on screen
+            if (lastVisible >= lastIdx) {
                 m_extendingChapter = true;
                 m_trailingExtendTriggered = true;
                 auto it = m_transitionInfo.find(lastIdx);
@@ -1119,7 +1122,8 @@ void WebtoonScrollView::updateVisibleImages() {
 
         // Check leading transition page (previous chapter)
         if (!m_pages.empty() && isTransitionPage(0) && !m_leadingExtendTriggered) {
-            if (firstVisible <= PRELOAD_PAGES + 2) {
+            // Only extend when the leading transition page is actually visible on screen
+            if (firstVisible == 0) {
                 m_extendingChapter = true;
                 m_leadingExtendTriggered = true;
                 auto it = m_transitionInfo.find(0);
