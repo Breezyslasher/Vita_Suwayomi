@@ -576,56 +576,103 @@ bool DownloadsManager::deleteMangaDownload(int mangaId) {
 }
 
 bool DownloadsManager::deleteChapterDownload(int mangaId, int chapterIndex) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    // If the download thread is active, stop it first and wait for it to
+    // finish before we touch the vector.  The download thread holds a raw
+    // reference into manga.chapters — erasing while it runs is a
+    // use-after-free crash.
+    bool needRestart = false;
+    if (m_downloadThreadActive.load()) {
+        brls::Logger::info("DownloadsManager: Stopping download thread before deleting chapter");
+        m_downloading.store(false);
 
-    for (auto& manga : m_downloads) {
-        if (manga.mangaId == mangaId) {
-            for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
-                if (it->chapterIndex == chapterIndex || it->chapterId == chapterIndex) {
-                    // Store paths before erasing
-                    std::string chapterDir = it->localPath;
-                    std::string mangaDir = manga.localPath;
+        // Wait WITHOUT the mutex so the download thread can release its locks
+        // (waitForDownloadThread does not acquire m_mutex)
+        waitForDownloadThread(5000);
 
-                    // Delete page files
-                    for (auto& page : it->pages) {
-                        if (!page.localPath.empty()) {
-                            deleteFile(page.localPath);
-                        }
+        // Re-queue any chapters that were interrupted (DOWNLOADING/PAUSED)
+        // so the restart picks them up — but NOT the one we are about to delete.
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            for (auto& manga : m_downloads) {
+                for (auto& ch : manga.chapters) {
+                    if (ch.chapterId == chapterIndex || ch.chapterIndex == chapterIndex) {
+                        // This is the chapter we are deleting — mark FAILED
+                        if (ch.state == LocalDownloadState::DOWNLOADING)
+                            ch.state = LocalDownloadState::FAILED;
+                        continue;
                     }
-
-                    // Remove chapter directory
-                    if (!chapterDir.empty()) {
-                        removeDirectory(chapterDir);
-                        brls::Logger::debug("DownloadsManager: Removed chapter directory: {}", chapterDir);
+                    if (ch.state == LocalDownloadState::DOWNLOADING ||
+                        ch.state == LocalDownloadState::PAUSED) {
+                        ch.state = LocalDownloadState::QUEUED;
+                        needRestart = true;
+                    } else if (ch.state == LocalDownloadState::QUEUED) {
+                        needRestart = true;
                     }
-
-                    manga.chapters.erase(it);
-                    manga.totalChapters = static_cast<int>(manga.chapters.size());
-
-                    // If no chapters left, remove manga entry and directory
-                    if (manga.chapters.empty()) {
-                        // Remove manga directory
-                        if (!mangaDir.empty()) {
-                            removeDirectory(mangaDir);
-                            brls::Logger::debug("DownloadsManager: Removed manga directory: {}", mangaDir);
-                        }
-
-                        for (auto mit = m_downloads.begin(); mit != m_downloads.end(); ++mit) {
-                            if (mit->mangaId == mangaId) {
-                                m_downloads.erase(mit);
-                                break;
-                            }
-                        }
-                    }
-
-                    saveStateUnlocked();
-                    return true;
                 }
             }
         }
     }
 
-    return false;
+    // Now the download thread is stopped — safe to erase from the vector
+    bool found = false;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        for (auto& manga : m_downloads) {
+            if (manga.mangaId == mangaId) {
+                for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
+                    if (it->chapterIndex == chapterIndex || it->chapterId == chapterIndex) {
+                        // Store paths before erasing
+                        std::string chapterDir = it->localPath;
+                        std::string mangaDir = manga.localPath;
+
+                        // Delete page files
+                        for (auto& page : it->pages) {
+                            if (!page.localPath.empty()) {
+                                deleteFile(page.localPath);
+                            }
+                        }
+
+                        // Remove chapter directory
+                        if (!chapterDir.empty()) {
+                            removeDirectory(chapterDir);
+                            brls::Logger::debug("DownloadsManager: Removed chapter directory: {}", chapterDir);
+                        }
+
+                        manga.chapters.erase(it);
+                        manga.totalChapters = static_cast<int>(manga.chapters.size());
+
+                        // If no chapters left, remove manga entry and directory
+                        if (manga.chapters.empty()) {
+                            // Remove manga directory
+                            if (!mangaDir.empty()) {
+                                removeDirectory(mangaDir);
+                                brls::Logger::debug("DownloadsManager: Removed manga directory: {}", mangaDir);
+                            }
+
+                            for (auto mit = m_downloads.begin(); mit != m_downloads.end(); ++mit) {
+                                if (mit->mangaId == mangaId) {
+                                    m_downloads.erase(mit);
+                                    break;
+                                }
+                            }
+                        }
+
+                        saveStateUnlocked();
+                        found = true;
+                        break;
+                    }
+                }
+                break;  // mangaId matched, no need to keep searching
+            }
+        }
+    }
+    // mutex released — safe to restart downloads
+    if (needRestart) {
+        brls::Logger::info("DownloadsManager: Restarting downloads after chapter deletion");
+        startDownloads();
+    }
+    return found;
 }
 
 std::vector<DownloadItem> DownloadsManager::getDownloads() const {
