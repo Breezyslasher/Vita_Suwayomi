@@ -1861,6 +1861,11 @@ void ReaderActivity::markChapterAsRead() {
     int chapterPos = m_chapterPosition;
     int totalChapters = m_totalChapters;
 
+    // Track every chapter marked read so the detail view can update all of them
+    if (std::find(m_readChapterIds.begin(), m_readChapterIds.end(), chapterId) == m_readChapterIds.end()) {
+        m_readChapterIds.push_back(chapterId);
+    }
+
     // Always mark locally in downloads manager (works offline)
     DownloadsManager::getInstance().markChapterReadLocally(mangaId, chapterId);
 
@@ -3488,6 +3493,7 @@ void ReaderActivity::willDisappear(bool resetState) {
     result.markedRead = (!m_pages.empty() && adjustedPage >= m_realPageCount - 1);
     result.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
+    result.chaptersRead = m_readChapterIds;
     Application::getInstance().setLastReaderResult(result);
 
     // If user finished the chapter (on last page), mark it as read

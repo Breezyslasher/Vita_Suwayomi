@@ -275,6 +275,7 @@ public:
         int lastPageRead = 0;    // Last page position
         bool markedRead = false;  // Whether chapter was marked as read
         int64_t timestamp = 0;   // When this was updated (milliseconds)
+        std::vector<int> chaptersRead;  // All chapter IDs marked read during session
     };
     void setLastReaderResult(const ReaderResult& result) {
         m_lastReaderResult = result;
