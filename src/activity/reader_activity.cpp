@@ -11,7 +11,6 @@
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/image_loader.hpp"
-#include "utils/library_cache.hpp"
 #include "utils/async.hpp"
 #include "view/webtoon_scroll_view.hpp"
 
@@ -3608,42 +3607,6 @@ void ReaderActivity::willDisappear(bool resetState) {
     if (!m_pages.empty() && !isTransitionPage(m_currentPage)) {
         DownloadsManager::getInstance().updateReadingProgress(
             m_mangaId, m_chapterIndex, result.lastPageRead);
-    }
-
-    // Persist progress to LibraryCache so offline mode has up-to-date data.
-    // DownloadsManager only tracks downloaded chapters; this covers streamed ones too.
-    if (Application::getInstance().getSettings().cacheLibraryData) {
-        LibraryCache& cache = LibraryCache::getInstance();
-        if (cache.hasChaptersCache(m_mangaId)) {
-            std::vector<Chapter> cachedChapters;
-            if (cache.loadChapters(m_mangaId, cachedChapters)) {
-                bool changed = false;
-                for (auto& ch : cachedChapters) {
-                    // Update current chapter's progress
-                    if (ch.id == m_chapterIndex) {
-                        if (result.lastPageRead > ch.lastPageRead || result.markedRead) {
-                            ch.lastPageRead = result.lastPageRead;
-                            ch.lastReadAt = result.timestamp;
-                            if (result.markedRead) ch.read = true;
-                            changed = true;
-                        }
-                    }
-                    // Mark chapters read during cross-chapter navigation
-                    for (int readId : m_readChapterIds) {
-                        if (ch.id == readId && !ch.read) {
-                            ch.read = true;
-                            ch.lastReadAt = result.timestamp;
-                            changed = true;
-                            break;
-                        }
-                    }
-                }
-                if (changed) {
-                    cache.saveChapters(m_mangaId, cachedChapters);
-                    brls::Logger::info("ReaderActivity: Updated chapter cache for manga {}", m_mangaId);
-                }
-            }
-        }
     }
 
     // Invalidate alive flag so pending async callbacks bail out safely.
