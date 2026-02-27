@@ -556,10 +556,17 @@ void ReaderActivity::onContentAvailable() {
                             m_swipingToNext = wantNextPage;
 
                             // Check if active side is a transition page for chapter navigation
-                            bool activeIsTransition = rawDelta > 0 ? m_posIsTransition : m_negIsTransition;
-                            m_previewIsTransition = activeIsTransition;
-                            if (activeIsTransition && transitionBox) {
-                                loadPreviewPage(activeIdx);  // Populate transitionBox text
+                            bool activeSkipTrans = rawDelta > 0 ? m_posSkipTransition : m_negSkipTransition;
+                            if (activeSkipTrans) {
+                                // Cross-chapter image loaded in preview — skip text card
+                                m_previewIsTransition = false;
+                                m_swipeToChapter = true;
+                            } else {
+                                bool activeIsTransition = rawDelta > 0 ? m_posIsTransition : m_negIsTransition;
+                                m_previewIsTransition = activeIsTransition;
+                                if (activeIsTransition && transitionBox) {
+                                    loadPreviewPage(activeIdx);  // Populate transitionBox text
+                                }
                             }
                         }
 
@@ -3021,12 +3028,47 @@ void ReaderActivity::preloadAdjacentPreviews() {
     int posIdx = positiveIsNext ? m_currentPage + 1 : m_currentPage - 1;
     int negIdx = positiveIsNext ? m_currentPage - 1 : m_currentPage + 1;
 
+    // Helper: try to load a cross-chapter page into a preview image.
+    // Returns true if a real page image was loaded (skip the text transition).
+    auto tryLoadCrossChapter = [&](int idx, RotatableImage* target) -> bool {
+        if (!target || idx < 0 || idx >= static_cast<int>(m_pages.size())) return false;
+        if (!isTransitionPage(idx)) return false;
+        // Skip webtoon/continuous mode — transition text is fine there
+        if (m_continuousScrollMode) return false;
+
+        const std::string& url = m_pages[idx].imageUrl;
+        std::string crossUrl;
+
+        if (url == TRANSITION_NEXT && m_nextChapterLoaded && !m_nextChapterPages.empty()) {
+            crossUrl = m_nextChapterPages[0].imageUrl;
+        } else if (url == TRANSITION_PREV && m_prevChapterLoaded && !m_prevChapterPages.empty()) {
+            crossUrl = m_prevChapterPages.back().imageUrl;
+        }
+
+        if (crossUrl.empty()) return false;
+
+        target->setRotation(static_cast<float>(m_settings.rotation));
+        auto previewAlive = m_previewLoadAlive ? m_previewLoadAlive : m_alive;
+        std::weak_ptr<bool> aliveWeak = m_alive;
+        ImageLoader::loadAsyncFullSize(crossUrl, [aliveWeak](RotatableImage*) {
+            auto a = aliveWeak.lock();
+            if (!a || !*a) return;
+        }, target, previewAlive);
+        return true;
+    };
+
     // Load positive side
     m_posIsTransition = false;
+    m_posSkipTransition = false;
     if (posIdx >= 0 && posIdx < static_cast<int>(m_pages.size())) {
         m_posPreviewIdx = posIdx;
         if (isTransitionPage(posIdx)) {
-            m_posIsTransition = true;
+            if (tryLoadCrossChapter(posIdx, previewImage)) {
+                // Real page loaded — swipe shows the image, not the text card
+                m_posSkipTransition = true;
+            } else {
+                m_posIsTransition = true;
+            }
         } else if (previewImage) {
             loadPreviewInto(previewImage, posIdx);
         }
@@ -3036,10 +3078,15 @@ void ReaderActivity::preloadAdjacentPreviews() {
 
     // Load negative side
     m_negIsTransition = false;
+    m_negSkipTransition = false;
     if (negIdx >= 0 && negIdx < static_cast<int>(m_pages.size())) {
         m_negPreviewIdx = negIdx;
         if (isTransitionPage(negIdx)) {
-            m_negIsTransition = true;
+            if (tryLoadCrossChapter(negIdx, previewImageB)) {
+                m_negSkipTransition = true;
+            } else {
+                m_negIsTransition = true;
+            }
         } else if (previewImageB) {
             loadPreviewInto(previewImageB, negIdx);
         }
