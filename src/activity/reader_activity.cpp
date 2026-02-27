@@ -3070,6 +3070,9 @@ void ReaderActivity::preloadAdjacentPreviews() {
         m_posPreviewIdx = posIdx;
         if (isTransitionPage(posIdx)) {
             m_posIsTransition = true;
+            // Transition uses transitionBox, not previewImage. Clear any stale
+            // image so it doesn't get mistaken for a valid cross-chapter preview.
+            if (previewImage) previewImage->clearImage();
         } else if (previewImage) {
             loadPreviewInto(previewImage, posIdx);
         }
@@ -3086,6 +3089,8 @@ void ReaderActivity::preloadAdjacentPreviews() {
         m_negPreviewIdx = negIdx;
         if (isTransitionPage(negIdx)) {
             m_negIsTransition = true;
+            // Clear stale image (same reason as positive side above).
+            if (previewImageB) previewImageB->clearImage();
         } else if (previewImageB) {
             loadPreviewInto(previewImageB, negIdx);
         }
