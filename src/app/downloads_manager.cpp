@@ -444,44 +444,45 @@ bool DownloadsManager::cancelChapterDownload(int mangaId, int chapterIndex) {
         if (manga.mangaId == mangaId) {
             for (auto it = manga.chapters.begin(); it != manga.chapters.end(); ++it) {
                 if (it->chapterIndex == chapterIndex || it->chapterId == chapterIndex) {
-                    if (it->state != LocalDownloadState::COMPLETED) {
-                        // If the download thread is still active, we cannot
-                        // safely erase ANY chapter from the vector — the thread
-                        // holds a raw pointer/reference into the vector and
-                        // erasing invalidates it (use-after-free crash).
-                        // Instead, signal the thread to stop and mark as FAILED.
-                        if (m_downloadThreadActive.load()) {
-                            m_downloading.store(false);
-                            it->state = LocalDownloadState::FAILED;
-                            saveStateUnlocked();
-                            return true;
-                        }
+                    if (it->state == LocalDownloadState::COMPLETED) {
+                        break;  // Don't cancel completed downloads via this method
+                    }
 
-                        // Thread is not active — safe to erase
-                        // Delete any partial download files
-                        for (auto& page : it->pages) {
-                            if (!page.localPath.empty()) {
-                                deleteFile(page.localPath);
-                            }
-                        }
-
-                        // Remove the chapter entry
-                        manga.chapters.erase(it);
-                        manga.totalChapters = static_cast<int>(manga.chapters.size());
-
-                        // If no chapters left, remove manga entry
-                        if (manga.chapters.empty()) {
-                            for (auto mangaIt = m_downloads.begin(); mangaIt != m_downloads.end(); ++mangaIt) {
-                                if (mangaIt->mangaId == mangaId) {
-                                    m_downloads.erase(mangaIt);
-                                    break;
-                                }
-                            }
-                        }
-
+                    // If this chapter is actively downloading, signal the thread
+                    // to stop — we cannot erase it because the download thread
+                    // holds a live reference to it.
+                    if (it->state == LocalDownloadState::DOWNLOADING && m_downloadThreadActive.load()) {
+                        m_downloading.store(false);
+                        it->state = LocalDownloadState::FAILED;
                         saveStateUnlocked();
                         return true;
                     }
+
+                    // QUEUED / PAUSED / FAILED chapters are not held by the
+                    // download thread, so we can safely erase them.
+                    // Delete any partial download files
+                    for (auto& page : it->pages) {
+                        if (!page.localPath.empty()) {
+                            deleteFile(page.localPath);
+                        }
+                    }
+
+                    // Remove the chapter entry
+                    manga.chapters.erase(it);
+                    manga.totalChapters = static_cast<int>(manga.chapters.size());
+
+                    // If no chapters left, remove manga entry
+                    if (manga.chapters.empty()) {
+                        for (auto mangaIt = m_downloads.begin(); mangaIt != m_downloads.end(); ++mangaIt) {
+                            if (mangaIt->mangaId == mangaId) {
+                                m_downloads.erase(mangaIt);
+                                break;
+                            }
+                        }
+                    }
+
+                    saveStateUnlocked();
+                    return true;
                 }
             }
         }
