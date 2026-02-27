@@ -278,7 +278,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     bool localDownloading = isLocallyDownloading;
 
     cell->addGestureRecognizer(new brls::PanGestureRecognizer(
-        [view, cell, mangaId, chapterIndex, chapterId, chapterRead,
+        [view, cell, mangaId, chapterIndex, chapterId, chapterNum, chapterRead,
          localDownloaded, localQueued, localDownloading, serverDownloaded,
          mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
             static brls::Point touchStart;
