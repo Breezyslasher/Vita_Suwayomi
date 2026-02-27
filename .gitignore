@@ -21,9 +21,7 @@ cmake-build-*/
 *.vpk
 
 # Log files and crash dumps
-*.log
-*.psp2dmp.tmp
-psp2core-*
+
 
 # OS files
 .DS_Store
