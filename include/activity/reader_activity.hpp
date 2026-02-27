@@ -152,6 +152,7 @@ private:
     int m_chapterPosition = -1;  // Position of current chapter in m_chapters list
     std::string m_mangaTitle;
     std::string m_chapterName;
+    std::vector<int> m_readChapterIds;  // Chapter IDs marked read during this session
 
     // Find position of current chapter in m_chapters by matching chapter ID
     void findChapterPosition();
