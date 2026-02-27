@@ -23,7 +23,7 @@
 namespace vitasuwayomi {
 
 // Find a chapter in a download list by index or id (linear scan, typically <50 elements)
-static DownloadedChapter* findChapterDl(std::vector<DownloadedChapter>* chapters, int key) {
+static DownloadedChapter* findChapterDl(std::deque<DownloadedChapter>* chapters, int key) {
     if (!chapters) return nullptr;
     for (auto& ch : *chapters) {
         if (ch.chapterIndex == key || ch.chapterId == key) return &ch;
@@ -220,20 +220,23 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     });
 
     // X button action: download/delete/cancel
+    // Query live state at action time via view->getDownloadStateForRow() so the
+    // callback always reflects the current download status, not stale bind-time values.
     int mangaId = m_view->m_manga.id;
     int chapterIdx = chapter.index;
-    bool isLocallyDownloaded = dlState == static_cast<int>(LocalDownloadState::COMPLETED);
-    bool isLocallyDownloading = dlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
-    bool isLocallyQueued = dlState == static_cast<int>(LocalDownloadState::QUEUED);
     cell->registerAction("Download", brls::ControllerButton::BUTTON_X,
-        [view, capturedChapter, isLocallyDownloaded, isLocallyQueued, isLocallyDownloading, mangaId, chapterIdx](brls::View*) {
-        if (isLocallyQueued || isLocallyDownloading) {
+        [view, capturedChapter, cell, mangaId, chapterIdx](brls::View*) {
+        int curState = view->getDownloadStateForRow(cell->rowIndex);
+        bool queued = curState == static_cast<int>(LocalDownloadState::QUEUED);
+        bool downloading = curState == static_cast<int>(LocalDownloadState::DOWNLOADING);
+        bool downloaded = curState == static_cast<int>(LocalDownloadState::COMPLETED);
+        if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
             if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
                 brls::Application::notify("Removed from queue");
-                view->updateChapterDownloadStates();
+                view->refreshVisibleDownloadIcons();
             }
-        } else if (isLocallyDownloaded) {
+        } else if (downloaded) {
             view->deleteChapterDownload(capturedChapter);
         } else {
             view->downloadChapter(capturedChapter);
@@ -242,15 +245,18 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     });
 
     // Download button click
-    cell->dlBtn->registerClickAction([view, capturedChapter, isLocallyDownloaded, isLocallyQueued,
-                                       isLocallyDownloading, mangaId, chapterIdx, dlState](brls::View*) {
-        if (isLocallyQueued || isLocallyDownloading) {
+    cell->dlBtn->registerClickAction([view, capturedChapter, cell, mangaId, chapterIdx](brls::View*) {
+        int curState = view->getDownloadStateForRow(cell->rowIndex);
+        bool queued = curState == static_cast<int>(LocalDownloadState::QUEUED);
+        bool downloading = curState == static_cast<int>(LocalDownloadState::DOWNLOADING);
+        bool downloaded = curState == static_cast<int>(LocalDownloadState::COMPLETED);
+        if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
             if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
                 brls::Application::notify("Removed from queue");
-                view->updateChapterDownloadStates();
+                view->refreshVisibleDownloadIcons();
             }
-        } else if (isLocallyDownloaded) {
+        } else if (downloaded) {
             view->deleteChapterDownload(capturedChapter);
         } else {
             view->downloadChapter(capturedChapter);
@@ -259,6 +265,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     });
 
     // Swipe gesture support (Komikku-style)
+    // Capture only immutable chapter metadata; download state is queried live.
     int chapterId = capturedChapter.id;
     int chapterIndex = capturedChapter.index;
     float chapterNum = capturedChapter.chapterNumber;
@@ -266,19 +273,22 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     std::string chapterName = capturedChapter.name;
     bool serverDownloaded = capturedChapter.downloaded;
     bool chapterRead = chapter.read;
-    bool localDownloaded = isLocallyDownloaded;
-    bool localQueued = isLocallyQueued;
-    bool localDownloading = isLocallyDownloading;
 
     cell->addGestureRecognizer(new brls::PanGestureRecognizer(
         [view, cell, mangaId, chapterIndex, chapterId, chapterNum, chapterRead,
-         localDownloaded, localQueued, localDownloading, serverDownloaded,
+         serverDownloaded,
          mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
             static brls::Point touchStart;
             static bool isValidSwipe = false;
             const NVGcolor originalBgColor = nvgRGBA(40, 40, 40, 255);
             const float SWIPE_THRESHOLD = 60.0f;
             const float TAP_THRESHOLD = 15.0f;
+
+            // Query live download state for swipe color hints
+            int liveDlState = view->getDownloadStateForRow(cell->rowIndex);
+            bool isLiveDownloaded = liveDlState == static_cast<int>(LocalDownloadState::COMPLETED);
+            bool isLiveQueued = liveDlState == static_cast<int>(LocalDownloadState::QUEUED);
+            bool isLiveDownloading = liveDlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
 
             if (status.state == brls::GestureState::START) {
                 touchStart = status.position;
@@ -293,7 +303,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                     if (dx < -SWIPE_THRESHOLD * 0.5f) {
                         cell->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
                     } else if (dx > SWIPE_THRESHOLD * 0.5f) {
-                        if (localDownloaded || serverDownloaded || localQueued || localDownloading) {
+                        if (isLiveDownloaded || serverDownloaded || isLiveQueued || isLiveDownloading) {
                             cell->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
                         } else {
                             cell->setBackgroundColor(nvgRGBA(46, 204, 113, 100));
@@ -323,22 +333,22 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                             });
                         }
                     } else {
-                        // Swipe right: download/delete
+                        // Swipe right: download/delete — use live state
                         DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
 
-                        if (localQueued || localDownloading) {
+                        if (isLiveQueued || isLiveDownloading) {
                             asyncRun([view, mangaId, chapterIndex]() {
                                 DownloadsManager& dm = DownloadsManager::getInstance();
                                 if (dm.cancelChapterDownload(mangaId, chapterIndex)) {
                                     brls::sync([view]() {
                                         brls::Application::notify("Removed from queue");
-                                        view->updateChapterDownloadStates();
+                                        view->refreshVisibleDownloadIcons();
                                     });
                                 }
                             });
-                        } else if (localDownloaded || serverDownloaded) {
+                        } else if (isLiveDownloaded || serverDownloaded) {
                             asyncRun([view, mangaId, chapterId, chapterIndex, downloadMode,
-                                      serverDownloaded, localDownloaded]() {
+                                      serverDownloaded, isLiveDownloaded]() {
                                 int serverDeleted = 0;
                                 int localDeleted = 0;
                                 if (serverDownloaded &&
@@ -350,7 +360,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                                         serverDeleted = 1;
                                     }
                                 }
-                                if (localDownloaded &&
+                                if (isLiveDownloaded &&
                                     (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
                                     DownloadsManager& dm = DownloadsManager::getInstance();
                                     if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
@@ -361,7 +371,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                                     if (serverDeleted > 0 || localDeleted > 0) {
                                         brls::Application::notify("Download deleted");
                                     }
-                                    view->updateChapterDownloadStates();
+                                    view->refreshVisibleDownloadIcons();
                                 });
                             });
                         } else {
@@ -387,7 +397,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                                     } else {
                                         brls::Application::notify("Failed to queue");
                                     }
-                                    view->updateChapterDownloadStates();
+                                    view->refreshVisibleDownloadIcons();
                                 });
                             });
                         }
@@ -2697,7 +2707,7 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
             } else {
                 brls::Application::notify("Failed to queue download");
             }
-            updateChapterDownloadStates();
+            refreshVisibleDownloadIcons();
         });
     });
 }
@@ -2754,7 +2764,7 @@ void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
             } else {
                 brls::Application::notify("Failed to delete download");
             }
-            updateChapterDownloadStates();
+            refreshVisibleDownloadIcons();
         });
     });
 }
