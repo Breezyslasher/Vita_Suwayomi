@@ -216,8 +216,6 @@ private:
     int m_negPreviewIdx = -1;             // Page index loaded in negative-side preview
     bool m_posIsTransition = false;       // Positive side is a transition page (uses transitionBox)
     bool m_negIsTransition = false;       // Negative side is a transition page
-    bool m_posSkipTransition = false;     // Positive side: cross-chapter image loaded, skip transition
-    bool m_negSkipTransition = false;     // Negative side: cross-chapter image loaded, skip transition
     void updateSwipePreview(float offset);
     void loadPreviewPage(int index);
     void loadPreviewInto(RotatableImage* target, int index);
