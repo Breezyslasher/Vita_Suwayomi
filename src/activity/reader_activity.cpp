@@ -986,11 +986,23 @@ void ReaderActivity::onContentAvailable() {
             if (m_updatingSlider) return;  // Ignore programmatic setProgress
 
             if (m_continuousScrollMode && webtoonScroll) {
-                // Webtoon mode: map slider progress to a webtoon view page index
-                int realCount = webtoonScroll->getRealPageCount();
-                if (realCount <= 0) return;
-                int displayPage = static_cast<int>(progress * std::max(1, realCount - 1) + 0.5f);
-                int targetPage = webtoonScroll->pageIndexFromDisplayPage(displayPage);
+                // Webtoon mode: use current chapter segment to map slider to page
+                int rawPage = webtoonScroll->getCurrentPage();
+                int chapterId, chapterPos, pageInChapter, segPageCount;
+                getWebtoonProgress(rawPage, chapterId, chapterPos, pageInChapter, segPageCount);
+                if (segPageCount <= 0) return;
+
+                // Find the segment for this chapter to get firstPage
+                int segFirst = 0;
+                for (const auto& seg : m_webtoonSegments) {
+                    if (seg.chapterId == chapterId) {
+                        segFirst = seg.firstPage;
+                        break;
+                    }
+                }
+
+                int targetDisplayPage = static_cast<int>(progress * std::max(1, segPageCount - 1) + 0.5f);
+                int targetPage = segFirst + targetDisplayPage;
                 if (targetPage != m_currentPage) {
                     goToPage(targetPage);
                 }
@@ -1409,6 +1421,9 @@ void ReaderActivity::loadPages() {
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
                 webtoonScroll->setPages(m_pages, viewW, m_currentPage);
 
+                // Build chapter-boundary map so progress saves to the right chapter
+                initWebtoonSegments();
+
                 // Set transition text for chapter separator pages
                 setupWebtoonTransitionText();
             }
@@ -1548,11 +1563,33 @@ void ReaderActivity::updatePageDisplay() {
     int realPageCount = 0;
 
     if (m_continuousScrollMode && webtoonScroll) {
-        // Webtoon mode: get page info from the webtoon view which manages
-        // its own page list (may have grown via chapter extension)
-        realPageCount = webtoonScroll->getRealPageCount();
+        // Webtoon mode: use segment tracking for chapter-relative page numbers
+        int rawPage = webtoonScroll->getCurrentPage();
+        if (webtoonScroll->isTransitionPage(rawPage)) return;
+
+        int chapterId, chapterPos, pageInChapter, segPageCount;
+        getWebtoonProgress(rawPage, chapterId, chapterPos, pageInChapter, segPageCount);
+        displayPage = pageInChapter;
+        realPageCount = segPageCount;
         if (realPageCount <= 0) return;
-        displayPage = webtoonScroll->displayPageFromIndex(m_currentPage);
+
+        // Update chapter label if user has scrolled into a different chapter
+        if (chapterId != m_chapterIndex) {
+            m_chapterIndex = chapterId;
+            m_chapterPosition = chapterPos;
+            if (chapterPos >= 0 && chapterPos < static_cast<int>(m_chapters.size())) {
+                m_chapterName = m_chapters[chapterPos].name;
+            }
+            if (chapterLabel) {
+                std::string label = m_chapterName.empty() ?
+                    "Chapter " + getChapterDisplayNumber() : m_chapterName;
+                chapterLabel->setText(label);
+            }
+            if (chapterProgress) {
+                chapterProgress->setText("Ch. " + getChapterDisplayNumber() +
+                                         " of " + std::to_string(m_totalChapters));
+            }
+        }
     } else {
         // Manga mode: use ReaderActivity's m_pages and m_realPageCount
         if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
@@ -1605,16 +1642,29 @@ void ReaderActivity::updateDirectionLabel() {
 }
 
 void ReaderActivity::updateProgress() {
-    // Don't save progress for transition pages
-    if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
-    if (isTransitionPage(m_currentPage)) return;
-
     int mangaId = m_mangaId;
     int chapterIndex = m_chapterIndex;
-    // Adjust page index to exclude the prepended transition page
-    int currentPage = m_currentPage;
-    if (m_pages[0].imageUrl == TRANSITION_PREV) {
-        currentPage = m_currentPage - 1;
+    int currentPage = 0;
+
+    if (m_continuousScrollMode && webtoonScroll) {
+        // Webtoon mode: use segment tracking for correct chapter/page
+        int rawPage = webtoonScroll->getCurrentPage();
+        if (webtoonScroll->isTransitionPage(rawPage)) return;
+
+        int chapterId, chapterPos, pageInChapter, chapterPageCount;
+        getWebtoonProgress(rawPage, chapterId, chapterPos, pageInChapter, chapterPageCount);
+        chapterIndex = chapterId;
+        currentPage = pageInChapter;
+    } else {
+        // Manga mode: use m_pages and m_currentPage
+        if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
+        if (isTransitionPage(m_currentPage)) return;
+
+        currentPage = m_currentPage;
+        // Adjust page index to exclude the prepended transition page
+        if (m_pages[0].imageUrl == TRANSITION_PREV) {
+            currentPage = m_currentPage - 1;
+        }
     }
 
     if (Application::getInstance().isConnected()) {
@@ -1765,6 +1815,7 @@ void ReaderActivity::nextChapter() {
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
                 webtoonScroll->setPages(m_pages, viewW);
+                initWebtoonSegments();
                 setupWebtoonTransitionText();
                 webtoonScroll->scrollToPage(m_currentPage);
             } else {
@@ -1838,6 +1889,7 @@ void ReaderActivity::previousChapter() {
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
                 webtoonScroll->setPages(m_pages, viewW);
+                initWebtoonSegments();
                 setupWebtoonTransitionText();
                 webtoonScroll->scrollToPage(m_currentPage);
             } else {
@@ -2608,6 +2660,77 @@ void ReaderActivity::setupWebtoonTransitionText() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Webtoon chapter-boundary tracking
+// ---------------------------------------------------------------------------
+
+void ReaderActivity::initWebtoonSegments() {
+    m_webtoonSegments.clear();
+    if (!webtoonScroll) return;
+
+    // Count real (non-transition) pages and find the first one
+    int firstReal = -1;
+    int realCount = 0;
+    for (int i = 0; i < webtoonScroll->getPageCount(); i++) {
+        if (!webtoonScroll->isTransitionPage(i)) {
+            if (firstReal < 0) firstReal = i;
+            realCount++;
+        }
+    }
+
+    if (firstReal >= 0 && realCount > 0) {
+        WebtoonChapterSegment seg;
+        seg.firstPage = firstReal;
+        seg.pageCount = realCount;
+        seg.chapterId = m_chapterIndex;
+        seg.chapterPos = m_chapterPosition;
+        m_webtoonSegments.push_back(seg);
+    }
+}
+
+void ReaderActivity::getWebtoonProgress(int rawPageIndex, int& outChapterId,
+                                         int& outChapterPos, int& outPageInChapter,
+                                         int& outChapterPageCount) const {
+    // Default to current chapter info
+    outChapterId = m_chapterIndex;
+    outChapterPos = m_chapterPosition;
+    outPageInChapter = 0;
+    outChapterPageCount = m_realPageCount;
+
+    if (m_webtoonSegments.empty()) return;
+
+    // Find which segment this page belongs to
+    for (const auto& seg : m_webtoonSegments) {
+        int lastPage = seg.firstPage + seg.pageCount - 1;
+        if (rawPageIndex >= seg.firstPage && rawPageIndex <= lastPage) {
+            outChapterId = seg.chapterId;
+            outChapterPos = seg.chapterPos;
+            outPageInChapter = rawPageIndex - seg.firstPage;
+            outChapterPageCount = seg.pageCount;
+            return;
+        }
+    }
+
+    // If between segments (on a transition page), find the nearest segment
+    // Prefer the segment that starts after this index (user is scrolling toward it)
+    for (const auto& seg : m_webtoonSegments) {
+        if (rawPageIndex < seg.firstPage) {
+            outChapterId = seg.chapterId;
+            outChapterPos = seg.chapterPos;
+            outPageInChapter = 0;
+            outChapterPageCount = seg.pageCount;
+            return;
+        }
+    }
+
+    // Past all segments — use the last one
+    const auto& last = m_webtoonSegments.back();
+    outChapterId = last.chapterId;
+    outChapterPos = last.chapterPos;
+    outPageInChapter = last.pageCount - 1;
+    outChapterPageCount = last.pageCount;
+}
+
 void ReaderActivity::webtoonExtendChapter(bool next) {
     if (!webtoonScroll) {
         // Fallback if webtoon scroll not available
@@ -2636,13 +2759,20 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
             return;
         }
 
-        // Mark current chapter as read and advance
+        // Mark current chapter as read and advance position
         markChapterAsRead();
-        m_chapterPosition++;
-        m_chapterIndex = m_chapters[m_chapterPosition].id;
-        m_chapterName = m_chapters[m_chapterPosition].name;
+        int nextPos = m_chapterPosition + 1;
+        int nextChapterId = m_chapters[nextPos].id;
+        std::string nextChapterName = m_chapters[nextPos].name;
+
         m_prevChapterLoaded = false;
         m_prevChapterPages.clear();
+
+        // Count real pages in newPages (exclude transitions)
+        int realNewPages = 0;
+        for (const auto& p : newPages) {
+            if (p.imageUrl.compare(0, 14, "__transition:") != 0) realNewPages++;
+        }
 
         // Build the pages to append:
         // - The new chapter's real pages
@@ -2651,7 +2781,7 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
 
         // Add end transition
         Page endPage;
-        if (m_chapterPosition < m_totalChapters - 1) {
+        if (nextPos < m_totalChapters - 1) {
             endPage.imageUrl = TRANSITION_NEXT;
         } else {
             endPage.imageUrl = TRANSITION_END;
@@ -2668,8 +2798,20 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
         // Append to webtoon scroll view (removes old trailing transition, adds new pages)
         webtoonScroll->appendPages(appendList);
 
-        // Update m_pages to match webtoon view's state is not needed for webtoon mode
-        // (webtoon view manages its own page list), but update chapter metadata
+        // Track the new chapter segment (real pages start at newStartIdx)
+        {
+            WebtoonChapterSegment seg;
+            seg.firstPage = newStartIdx;
+            seg.pageCount = realNewPages;
+            seg.chapterId = nextChapterId;
+            seg.chapterPos = nextPos;
+            m_webtoonSegments.push_back(seg);
+        }
+
+        // Now advance position/metadata for UI labels
+        m_chapterPosition = nextPos;
+        m_chapterIndex = nextChapterId;
+        m_chapterName = nextChapterName;
 
         // Set transition text for the newly appended pages
         std::string currentChapterDisplay = m_chapterName.empty() ?
@@ -2739,19 +2881,26 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
             return;
         }
 
-        // Go to previous chapter
-        m_chapterPosition--;
-        m_chapterIndex = m_chapters[m_chapterPosition].id;
-        m_chapterName = m_chapters[m_chapterPosition].name;
+        int prevPos = m_chapterPosition - 1;
+        int prevChapterId = m_chapters[prevPos].id;
+        std::string prevChapterName = m_chapters[prevPos].name;
+
         m_nextChapterLoaded = false;
         m_nextChapterPages.clear();
+
+        // Count real pages in newPages (exclude transitions)
+        int realNewPages = 0;
+        for (const auto& p : newPages) {
+            if (p.imageUrl.compare(0, 14, "__transition:") != 0) realNewPages++;
+        }
 
         // Build the pages to prepend:
         // - A transition page at the start (prev) if there's a further previous chapter
         // - The new chapter's real pages
         std::vector<Page> prependList;
 
-        if (m_chapterPosition > 0) {
+        bool hasPrevTransition = (prevPos > 0);
+        if (hasPrevTransition) {
             Page prevPage;
             prevPage.imageUrl = TRANSITION_PREV;
             prevPage.index = -1;
@@ -2763,14 +2912,39 @@ void ReaderActivity::webtoonExtendChapter(bool next) {
             prependList.push_back(p);
         }
 
+        // Calculate how many pages will be added.
+        // prependPages removes the old leading transition (1 page) and adds prependList.
+        int oldLeadingTransition = 1;  // The existing leading TRANSITION_PREV gets removed
+        int netAdded = static_cast<int>(prependList.size()) - oldLeadingTransition;
+
+        // Shift all existing segment firstPage indices by the net-added count
+        for (auto& seg : m_webtoonSegments) {
+            seg.firstPage += netAdded;
+        }
+
+        // Insert new segment at the beginning
+        {
+            WebtoonChapterSegment seg;
+            seg.firstPage = hasPrevTransition ? 1 : 0;  // After optional leading transition
+            seg.pageCount = realNewPages;
+            seg.chapterId = prevChapterId;
+            seg.chapterPos = prevPos;
+            m_webtoonSegments.insert(m_webtoonSegments.begin(), seg);
+        }
+
         // Prepend to webtoon scroll view (removes old leading transition, adds new pages)
         webtoonScroll->prependPages(prependList);
+
+        // Now advance position/metadata for UI labels
+        m_chapterPosition = prevPos;
+        m_chapterIndex = prevChapterId;
+        m_chapterName = prevChapterName;
 
         // Set transition text for the newly prepended pages
         std::string currentChapterDisplay = m_chapterName.empty() ?
             "Chapter " + getChapterDisplayNumber() : m_chapterName;
 
-        if (m_chapterPosition > 0) {
+        if (hasPrevTransition) {
             // First page is the prev transition
             std::string line1 = "Beginning of: " + currentChapterDisplay;
             std::string line2;
@@ -3560,6 +3734,7 @@ void ReaderActivity::updateReaderMode() {
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
                 webtoonScroll->setPages(m_pages, viewW);
+                initWebtoonSegments();
                 setupWebtoonTransitionText();
                 webtoonScroll->scrollToPage(m_currentPage);
             }
@@ -3584,15 +3759,32 @@ void ReaderActivity::willDisappear(bool resetState) {
     // without waiting for async server refresh
     Application::ReaderResult result;
     result.mangaId = m_mangaId;
-    result.chapterId = m_chapterIndex;  // This is actually the chapter ID passed to reader
 
-    // Adjust page index to exclude the prepended transition page
-    int adjustedPage = m_currentPage;
-    if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
-        adjustedPage = m_currentPage - 1;
+    int adjustedPage = 0;
+    int chapterPageCount = m_realPageCount;
+
+    if (m_continuousScrollMode && webtoonScroll) {
+        // Webtoon mode: use segment tracking for correct chapter/page
+        int rawPage = webtoonScroll->getCurrentPage();
+        int chapterId, chapterPos, pageInChapter, segPageCount;
+        getWebtoonProgress(rawPage, chapterId, chapterPos, pageInChapter, segPageCount);
+        result.chapterId = chapterId;
+        adjustedPage = pageInChapter;
+        chapterPageCount = segPageCount;
+        // Ensure m_chapterIndex/m_chapterPosition match for markChapterAsRead()
+        m_chapterIndex = chapterId;
+        m_chapterPosition = chapterPos;
+    } else {
+        // Manga mode
+        result.chapterId = m_chapterIndex;
+        adjustedPage = m_currentPage;
+        if (!m_pages.empty() && m_pages[0].imageUrl == TRANSITION_PREV) {
+            adjustedPage = m_currentPage - 1;
+        }
     }
+
     result.lastPageRead = std::max(0, adjustedPage);
-    result.markedRead = (!m_pages.empty() && adjustedPage >= m_realPageCount - 1);
+    result.markedRead = (chapterPageCount > 0 && adjustedPage >= chapterPageCount - 1);
     result.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     result.chaptersRead = m_readChapterIds;
@@ -3604,9 +3796,12 @@ void ReaderActivity::willDisappear(bool resetState) {
     }
 
     // Save final reading progress (both online and offline)
-    if (!m_pages.empty() && !isTransitionPage(m_currentPage)) {
+    bool onTransition = m_continuousScrollMode && webtoonScroll
+        ? webtoonScroll->isTransitionPage(webtoonScroll->getCurrentPage())
+        : (!m_pages.empty() && isTransitionPage(m_currentPage));
+    if (!onTransition) {
         DownloadsManager::getInstance().updateReadingProgress(
-            m_mangaId, m_chapterIndex, result.lastPageRead);
+            m_mangaId, result.chapterId, result.lastPageRead);
     }
 
     // Invalidate alive flag so pending async callbacks bail out safely.

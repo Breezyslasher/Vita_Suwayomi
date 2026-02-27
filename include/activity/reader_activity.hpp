@@ -289,6 +289,19 @@ private:
     void webtoonExtendChapter(bool next);  // Smoothly append/prepend chapter in webtoon mode
     int m_realPageCount = 0;  // Actual page count excluding transition pages
 
+    // Webtoon chapter-boundary tracking: maps ranges of webtoon page indices
+    // to the chapter they belong to, so progress is saved for the correct chapter.
+    struct WebtoonChapterSegment {
+        int firstPage;     // First real (non-transition) page index in webtoon view
+        int pageCount;     // Number of real pages in this segment
+        int chapterId;     // Server chapter ID
+        int chapterPos;    // Index into m_chapters
+    };
+    std::vector<WebtoonChapterSegment> m_webtoonSegments;
+    void initWebtoonSegments();   // Build initial segment from setPages
+    void getWebtoonProgress(int rawPageIndex, int& outChapterId, int& outChapterPos,
+                            int& outPageInChapter, int& outChapterPageCount) const;
+
     // Guard flag: prevents slider callback from firing during programmatic setProgress
     bool m_updatingSlider = false;
 };
