@@ -241,10 +241,10 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         return true;
     });
 
-    // Select button to start reading
+    // Select button to continue reading (same as Continue Reading button)
     cell->registerAction("Read", brls::ControllerButton::BUTTON_BACK,
-        [view, capturedChapter](brls::View*) {
-        view->onRead(capturedChapter.id);
+        [view](brls::View*) {
+        view->onRead();
         return true;
     });
 
