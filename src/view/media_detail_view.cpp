@@ -484,6 +484,10 @@ MangaDetailView::MangaDetailView(const Manga& manga)
                 if (r.timestamp <= 0) return;  // Already consumed by willAppear
                 applyReaderResult();
                 Application::getInstance().clearLastReaderResult();
+                // Persist updated read/progress state to cache so offline mode sees it
+                if (Application::getInstance().getSettings().cacheLibraryData && !m_chapters.empty()) {
+                    LibraryCache::getInstance().saveChapters(m_manga.id, m_chapters);
+                }
                 updateChapterDownloadStates();
                 updateReadButtonText();
                 populateChaptersList();
@@ -1057,6 +1061,10 @@ void MangaDetailView::willAppear(bool resetState) {
             // Returning from reader for this manga — apply reads locally
             applyReaderResult();
             Application::getInstance().clearLastReaderResult();
+            // Persist updated read/progress state to cache so offline mode sees it
+            if (Application::getInstance().getSettings().cacheLibraryData) {
+                LibraryCache::getInstance().saveChapters(m_manga.id, m_chapters);
+            }
             updateChapterDownloadStates();
             updateReadButtonText();
             populateChaptersList();
@@ -1112,11 +1120,19 @@ void MangaDetailView::loadDetails() {
                 auto* dlChapters = dm.getChapterDownloads(m_manga.id, dlLock);
                 for (auto& ch : m_chapters) {
                     DownloadedChapter* dlCh = findChapterDl(dlChapters, ch.id);
-                    if (dlCh && dlCh->lastPageRead > ch.lastPageRead) {
-                        ch.lastPageRead = dlCh->lastPageRead;
-                        ch.lastReadAt = static_cast<int64_t>(dlCh->lastReadTime);
-                        brls::Logger::debug("MangaDetailView: Merged local progress for chapter {} page {}",
-                                           ch.id, ch.lastPageRead);
+                    if (dlCh) {
+                        // Merge read flag from local downloads
+                        if (dlCh->read && !ch.read) {
+                            ch.read = true;
+                        }
+                        if (dlCh->lastPageRead > ch.lastPageRead) {
+                            ch.lastPageRead = dlCh->lastPageRead;
+                        }
+                        if (dlCh->lastReadTime > 0) {
+                            ch.lastReadAt = std::max(ch.lastReadAt, static_cast<int64_t>(dlCh->lastReadTime));
+                        }
+                        brls::Logger::debug("MangaDetailView: Merged local progress for chapter {} page {} read={}",
+                                           ch.id, ch.lastPageRead, ch.read);
                     }
                 }
             }
