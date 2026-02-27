@@ -2852,17 +2852,22 @@ void ReaderActivity::updateSwipePreview(float offset) {
     }
 
     // Positive side preview
+    // Show preview if it has a valid in-bounds index OR a cross-chapter image was preloaded
+    bool posInBounds = m_posPreviewIdx >= 0 && m_posPreviewIdx < static_cast<int>(m_pages.size());
+    bool posCrossLoaded = !posInBounds && onTransition && previewImage && previewImage->hasImage();
     if (m_posIsTransition && transitionBox && !onTransition) {
         transitionBox->setSlideOffset(posX, posY);
-    } else if (previewImage && m_posPreviewIdx >= 0) {
+    } else if (previewImage && (posInBounds || posCrossLoaded)) {
         previewImage->setVisibility(brls::Visibility::VISIBLE);
         previewImage->setSlideOffset(posX, posY);
     }
 
     // Negative side preview
+    bool negInBounds = m_negPreviewIdx >= 0 && m_negPreviewIdx < static_cast<int>(m_pages.size());
+    bool negCrossLoaded = !negInBounds && onTransition && previewImageB && previewImageB->hasImage();
     if (m_negIsTransition && transitionBox && !onTransition && !m_posIsTransition) {
         transitionBox->setSlideOffset(negX, negY);
-    } else if (previewImageB && m_negPreviewIdx >= 0) {
+    } else if (previewImageB && (negInBounds || negCrossLoaded)) {
         previewImageB->setVisibility(brls::Visibility::VISIBLE);
         previewImageB->setSlideOffset(negX, negY);
     }
@@ -3021,6 +3026,31 @@ void ReaderActivity::preloadAdjacentPreviews() {
     int posIdx = positiveIsNext ? m_currentPage + 1 : m_currentPage - 1;
     int negIdx = positiveIsNext ? m_currentPage - 1 : m_currentPage + 1;
 
+    // Helper: when on a transition page and the adjacent slot is out of bounds,
+    // preload the cross-chapter page so the preview is ready before the user swipes.
+    auto preloadCrossChapter = [&](int idx, RotatableImage* target, bool isNext) -> bool {
+        if (!target || !isTransitionPage(m_currentPage) || m_continuousScrollMode) return false;
+        if (idx >= 0 && idx < static_cast<int>(m_pages.size())) return false; // in-bounds, not needed
+
+        const std::string& tUrl = m_pages[m_currentPage].imageUrl;
+        std::string crossUrl;
+        if (isNext && tUrl == TRANSITION_NEXT && m_nextChapterLoaded && !m_nextChapterPages.empty()) {
+            crossUrl = m_nextChapterPages[0].imageUrl;
+        } else if (!isNext && tUrl == TRANSITION_PREV && m_prevChapterLoaded && !m_prevChapterPages.empty()) {
+            crossUrl = m_prevChapterPages.back().imageUrl;
+        }
+        if (crossUrl.empty()) return false;
+
+        target->setRotation(static_cast<float>(m_settings.rotation));
+        auto previewAlive = m_previewLoadAlive ? m_previewLoadAlive : m_alive;
+        std::weak_ptr<bool> aliveWeak = m_alive;
+        ImageLoader::loadAsyncFullSize(crossUrl, [aliveWeak](RotatableImage*) {
+            auto a = aliveWeak.lock();
+            if (!a || !*a) return;
+        }, target, previewAlive);
+        return true;
+    };
+
     // Load positive side
     m_posIsTransition = false;
     if (posIdx >= 0 && posIdx < static_cast<int>(m_pages.size())) {
@@ -3030,6 +3060,9 @@ void ReaderActivity::preloadAdjacentPreviews() {
         } else if (previewImage) {
             loadPreviewInto(previewImage, posIdx);
         }
+    } else if (preloadCrossChapter(posIdx, previewImage, positiveIsNext)) {
+        // Cross-chapter page preloaded — use a sentinel so updateSwipePreview shows it
+        m_posPreviewIdx = posIdx;
     } else {
         m_posPreviewIdx = -1;
     }
@@ -3043,6 +3076,8 @@ void ReaderActivity::preloadAdjacentPreviews() {
         } else if (previewImageB) {
             loadPreviewInto(previewImageB, negIdx);
         }
+    } else if (preloadCrossChapter(negIdx, previewImageB, !positiveIsNext)) {
+        m_negPreviewIdx = negIdx;
     } else {
         m_negPreviewIdx = -1;
     }
