@@ -536,6 +536,11 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
         if (minScroll > maxScroll) minScroll = maxScroll;
         m_scrollY = std::max(minScroll, std::min(maxScroll, targetScroll));
         m_currentPage = startPage;
+
+        // Set anchor so only pages before startPage get scroll compensation
+        // when images load with different-than-estimated heights. Without this,
+        // the cascading drift pushes visibleTop past the start page.
+        m_anchorPage = startPage;
     }
 
     // Load visible images starting from current scroll position
