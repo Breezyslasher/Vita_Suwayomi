@@ -1107,16 +1107,25 @@ void WebtoonScrollView::updateVisibleImages() {
         }
     }
 
-    // Auto-extend: seamlessly load next/prev chapter when approaching transition pages
-    // This replaces the old overscroll-based chapter navigation for a smooth scrolling experience.
-    // Only trigger when the transition page is actually visible (on-screen), not merely
-    // within the preload window, to avoid loading adjacent chapters prematurely.
+    // Auto-extend: seamlessly load next/prev chapter when approaching transition pages.
+    // Only trigger when the transition page is significantly visible (at least half shown),
+    // so the user can read the chapter separator before the next chapter loads in.
+    // With m_pageGap=0, even a 1px scroll would make the adjacent transition "visible",
+    // so we check scroll position directly instead of relying on isPageVisible().
     if (!m_extendingChapter && m_userHasScrolled && m_chapterNavigateCallback && firstVisible >= 0) {
+        bool horizontal = isHorizontalLayout();
+        float viewSize = horizontal ? m_viewWidth : m_viewHeight;
+        float visibleStart = -m_scrollY;
+        float visibleEnd = visibleStart + viewSize;
+
         // Check trailing transition page (next chapter)
         int lastIdx = static_cast<int>(m_pages.size()) - 1;
         if (lastIdx >= 0 && isTransitionPage(lastIdx) && !m_trailingExtendTriggered && lastVisible >= 0) {
-            // Only extend when the transition page is actually visible on screen
-            if (lastVisible >= lastIdx) {
+            float pageStart = getPageOffset(lastIdx);
+            float pageSize = getEffectivePageSize(lastIdx);
+            float pageMidpoint = pageStart + pageSize * 0.5f;
+            // Extend only when the user has scrolled past the midpoint of the transition page
+            if (pageMidpoint < visibleEnd) {
                 m_extendingChapter = true;
                 m_trailingExtendTriggered = true;
                 auto it = m_transitionInfo.find(lastIdx);
@@ -1128,8 +1137,10 @@ void WebtoonScrollView::updateVisibleImages() {
 
         // Check leading transition page (previous chapter)
         if (!m_pages.empty() && isTransitionPage(0) && !m_leadingExtendTriggered) {
-            // Only extend when the leading transition page is actually visible on screen
-            if (firstVisible == 0) {
+            float pageSize = getEffectivePageSize(0);
+            float pageMidpoint = pageSize * 0.5f;  // page 0 starts at offset 0
+            // Extend only when the user has scrolled past the midpoint of the transition page
+            if (pageMidpoint > visibleStart) {
                 m_extendingChapter = true;
                 m_leadingExtendTriggered = true;
                 auto it = m_transitionInfo.find(0);
