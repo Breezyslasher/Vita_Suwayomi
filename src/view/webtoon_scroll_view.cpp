@@ -1033,9 +1033,28 @@ void WebtoonScrollView::updateVisibleImages() {
                         float newHeight = availableWidth * aspectRatio;
 
                         float oldHeight = m_pageHeights[pageIndex];
-                        m_totalHeight += (newHeight - oldHeight);
-                        m_pageHeights[pageIndex] = newHeight;
-                        imgPtr->setHeight(newHeight);
+                        float heightDelta = newHeight - oldHeight;
+
+                        if (std::abs(heightDelta) > 0.5f) {
+                            // Compute the page's start BEFORE updating the height.
+                            // getPageOffset(i) sums sizes of pages 0..i-1, which are
+                            // unchanged, so calling it after updating page i is fine.
+                            float pageStart = getPageOffset(pageIndex);
+                            float visibleTop = -m_scrollY;
+
+                            m_totalHeight += heightDelta;
+                            m_pageHeights[pageIndex] = newHeight;
+                            imgPtr->setHeight(newHeight);
+
+                            // Compensate scroll only if the page ENDS above the
+                            // viewport top — i.e. it's fully above what the user
+                            // sees.  For the partially-visible current page we must
+                            // NOT adjust, otherwise the view snaps forward.
+                            float pageEnd = pageStart + oldHeight;
+                            if (pageEnd <= visibleTop) {
+                                m_scrollY -= heightDelta;
+                            }
+                        }
                     }
                 } else {
                     // Image load failed - mark as failed for retry
@@ -1044,8 +1063,18 @@ void WebtoonScrollView::updateVisibleImages() {
                     // Set a reasonable height for the failed page placeholder
                     float oldHeight = m_pageHeights[pageIndex];
                     if (oldHeight > FAILED_PAGE_HEIGHT * 2) {
-                        m_totalHeight += (FAILED_PAGE_HEIGHT - oldHeight);
+                        float pageStart = getPageOffset(pageIndex);
+                        float visibleTop = -m_scrollY;
+
+                        float heightDelta = FAILED_PAGE_HEIGHT - oldHeight;
+                        m_totalHeight += heightDelta;
                         m_pageHeights[pageIndex] = FAILED_PAGE_HEIGHT;
+
+                        // Compensate scroll only for pages fully above viewport
+                        float pageEnd = pageStart + oldHeight;
+                        if (pageEnd <= visibleTop) {
+                            m_scrollY -= heightDelta;
+                        }
                     }
 
                     brls::Logger::warning("WebtoonScrollView: Failed to load page {}", pageIndex);
@@ -1073,12 +1102,15 @@ void WebtoonScrollView::updateVisibleImages() {
     }
 
     // Auto-extend: seamlessly load next/prev chapter when approaching transition pages
-    // This replaces the old overscroll-based chapter navigation for a smooth scrolling experience
+    // This replaces the old overscroll-based chapter navigation for a smooth scrolling experience.
+    // Only trigger when the transition page is actually visible (on-screen), not merely
+    // within the preload window, to avoid loading adjacent chapters prematurely.
     if (!m_extendingChapter && m_userHasScrolled && m_chapterNavigateCallback && firstVisible >= 0) {
         // Check trailing transition page (next chapter)
         int lastIdx = static_cast<int>(m_pages.size()) - 1;
         if (lastIdx >= 0 && isTransitionPage(lastIdx) && !m_trailingExtendTriggered && lastVisible >= 0) {
-            if (lastIdx <= lastVisible + PRELOAD_PAGES + 2) {
+            // Only extend when the transition page is actually visible on screen
+            if (lastVisible >= lastIdx) {
                 m_extendingChapter = true;
                 m_trailingExtendTriggered = true;
                 auto it = m_transitionInfo.find(lastIdx);
@@ -1090,7 +1122,8 @@ void WebtoonScrollView::updateVisibleImages() {
 
         // Check leading transition page (previous chapter)
         if (!m_pages.empty() && isTransitionPage(0) && !m_leadingExtendTriggered) {
-            if (firstVisible <= PRELOAD_PAGES + 2) {
+            // Only extend when the leading transition page is actually visible on screen
+            if (firstVisible == 0) {
                 m_extendingChapter = true;
                 m_leadingExtendTriggered = true;
                 auto it = m_transitionInfo.find(0);
