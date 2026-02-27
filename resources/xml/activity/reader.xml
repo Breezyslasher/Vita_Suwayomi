@@ -16,26 +16,6 @@
         height="100%"
         grow="1"/>
 
-    <!-- Preview page (positive swipe direction) - hidden by default -->
-    <RotatableImage
-        id="reader/preview_image"
-        width="100%"
-        height="100%"
-        positionType="absolute"
-        positionTop="0"
-        positionLeft="0"
-        visibility="gone"/>
-
-    <!-- Preview page (negative swipe direction) - hidden by default -->
-    <RotatableImage
-        id="reader/preview_image_b"
-        width="100%"
-        height="100%"
-        positionType="absolute"
-        positionTop="0"
-        positionLeft="0"
-        visibility="gone"/>
-
     <!-- Webtoon continuous scroll view - hidden by default, shown in webtoon mode -->
     <WebtoonScrollView
         id="reader/webtoon_scroll"
@@ -92,6 +72,28 @@
             scalingType="fit"
             visibility="gone"/>
     </RotatableBox>
+
+    <!-- Preview pages: placed AFTER transition_box so they draw on top during swipes.
+         Use "invisible" (not "gone") so borealis always calculates their layout
+         dimensions — GONE views have 0x0 size until the next layout pass after
+         becoming VISIBLE, which causes a blank frame during swipe previews. -->
+    <RotatableImage
+        id="reader/preview_image"
+        width="100%"
+        height="100%"
+        positionType="absolute"
+        positionTop="0"
+        positionLeft="0"
+        visibility="invisible"/>
+
+    <RotatableImage
+        id="reader/preview_image_b"
+        width="100%"
+        height="100%"
+        positionType="absolute"
+        positionTop="0"
+        positionLeft="0"
+        visibility="invisible"/>
 
     <!-- Page counter overlay (top-right, auto-hides, rotates with content) -->
     <RotatableLabel

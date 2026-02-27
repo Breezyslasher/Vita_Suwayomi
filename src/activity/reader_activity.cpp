@@ -356,10 +356,10 @@ void ReaderActivity::onContentAvailable() {
 
     // Hide preview images initially
     if (previewImage) {
-        previewImage->setVisibility(brls::Visibility::GONE);
+        previewImage->setVisibility(brls::Visibility::INVISIBLE);
     }
     if (previewImageB) {
-        previewImageB->setVisibility(brls::Visibility::GONE);
+        previewImageB->setVisibility(brls::Visibility::INVISIBLE);
     }
 
     // NOBORU-style touch handling with swipe controls
@@ -1363,7 +1363,7 @@ void ReaderActivity::loadPages() {
                 pageImage->setVisibility(brls::Visibility::GONE);
             }
             if (previewImage) {
-                previewImage->setVisibility(brls::Visibility::GONE);
+                previewImage->setVisibility(brls::Visibility::INVISIBLE);
             }
             if (webtoonScroll) {
                 webtoonScroll->setVisibility(brls::Visibility::VISIBLE);
@@ -2947,7 +2947,7 @@ void ReaderActivity::loadPreviewPage(int index) {
         m_previewIsTransition = true;
 
         // Hide previewImage since we're using transitionBox as the incoming view
-        previewImage->setVisibility(brls::Visibility::GONE);
+        previewImage->setVisibility(brls::Visibility::INVISIBLE);
 
         brls::Logger::debug("Loading transition preview for page {}", index);
         return;
@@ -3270,11 +3270,11 @@ void ReaderActivity::resetSwipeState() {
 
     // Hide both preview images and reset slide offsets
     if (previewImage) {
-        previewImage->setVisibility(brls::Visibility::GONE);
+        previewImage->setVisibility(brls::Visibility::INVISIBLE);
         previewImage->resetSlideOffset();
     }
     if (previewImageB) {
-        previewImageB->setVisibility(brls::Visibility::GONE);
+        previewImageB->setVisibility(brls::Visibility::INVISIBLE);
         previewImageB->resetSlideOffset();
     }
 }
@@ -3456,7 +3456,7 @@ void ReaderActivity::updateReaderMode() {
             pageImage->setVisibility(brls::Visibility::GONE);
         }
         if (previewImage) {
-            previewImage->setVisibility(brls::Visibility::GONE);
+            previewImage->setVisibility(brls::Visibility::INVISIBLE);
         }
         if (webtoonScroll) {
             webtoonScroll->setVisibility(brls::Visibility::VISIBLE);
