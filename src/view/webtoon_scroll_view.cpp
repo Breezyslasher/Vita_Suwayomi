@@ -357,6 +357,9 @@ void WebtoonScrollView::drawTransitionPage(NVGcontext* vg, int pageIndex,
     nvgFillColor(vg, nvgRGBA(150, 150, 150, 100));
     nvgFill(vg);
 
+    // Set font face for text rendering (required by nanoVG)
+    nvgFontFace(vg, "regular");
+
     auto it = m_transitionInfo.find(pageIndex);
     if (it != m_transitionInfo.end()) {
         float fontSize1 = 20.0f;
@@ -429,6 +432,9 @@ void WebtoonScrollView::drawFailedPage(NVGcontext* vg, int pageIndex,
 
     float centerX = drawX + drawW * 0.5f;
     float centerY = drawY + drawH * 0.5f;
+
+    // Set font face for text rendering (required by nanoVG)
+    nvgFontFace(vg, "regular");
 
     // Error message
     nvgFontSize(vg, 16.0f);
