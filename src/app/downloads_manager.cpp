@@ -709,7 +709,7 @@ DownloadedChapter* DownloadsManager::getChapterDownload(int mangaId, int chapter
     return nullptr;
 }
 
-std::vector<DownloadedChapter>* DownloadsManager::getChapterDownloads(int mangaId, std::unique_lock<std::mutex>& lock) {
+std::deque<DownloadedChapter>* DownloadsManager::getChapterDownloads(int mangaId, std::unique_lock<std::mutex>& lock) {
     lock = std::unique_lock<std::mutex>(m_mutex);
     for (auto& manga : m_downloads) {
         if (manga.mangaId == mangaId) {

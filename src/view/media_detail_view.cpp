@@ -23,7 +23,7 @@
 namespace vitasuwayomi {
 
 // Find a chapter in a download list by index or id (linear scan, typically <50 elements)
-static DownloadedChapter* findChapterDl(std::vector<DownloadedChapter>* chapters, int key) {
+static DownloadedChapter* findChapterDl(std::deque<DownloadedChapter>* chapters, int key) {
     if (!chapters) return nullptr;
     for (auto& ch : *chapters) {
         if (ch.chapterIndex == key || ch.chapterId == key) return &ch;

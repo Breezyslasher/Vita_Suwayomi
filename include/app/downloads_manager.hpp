@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <deque>
 #include <unordered_map>
 #include <functional>
 #include <mutex>
@@ -61,8 +62,10 @@ struct DownloadItem {
     int64_t totalBytes = 0;     // Total downloaded size
     LocalDownloadState state = LocalDownloadState::QUEUED;
 
-    // Downloaded chapters
-    std::vector<DownloadedChapter> chapters;
+    // Downloaded chapters — std::deque so that push_back never invalidates
+    // pointers/references to existing elements (the download thread holds a
+    // DownloadedChapter& while other threads may queue new chapters).
+    std::deque<DownloadedChapter> chapters;
     int totalChapters = 0;      // Total chapters downloaded
     int completedChapters = 0;  // Fully downloaded chapters
 
@@ -144,9 +147,9 @@ public:
     DownloadedChapter* getChapterDownload(int mangaId, int chapterIndex);
 
     // Get all downloaded chapters for a manga (single mutex lock, zero allocations).
-    // Returns pointer to the internal chapter vector, or nullptr if manga not found.
+    // Returns pointer to the internal chapter deque, or nullptr if manga not found.
     // Caller must use the returned lock_guard to keep the data valid.
-    std::vector<DownloadedChapter>* getChapterDownloads(int mangaId, std::unique_lock<std::mutex>& lock);
+    std::deque<DownloadedChapter>* getChapterDownloads(int mangaId, std::unique_lock<std::mutex>& lock);
 
     // Check if manga/chapter is downloaded
     bool isMangaDownloaded(int mangaId) const;
