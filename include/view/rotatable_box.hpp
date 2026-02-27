@@ -33,12 +33,25 @@ public:
     void setSlideOffset(float x, float y);
     void resetSlideOffset();
 
+    /**
+     * Set a custom background color drawn via NanoVG inside draw().
+     * This replaces the borealis backgroundColor XML attribute, which is
+     * drawn at the view's layout position BEFORE draw() is called and
+     * therefore ignores slide offsets. By drawing the background manually
+     * inside draw(), it correctly follows the slide offset transform.
+     */
+    void setCustomBackground(NVGcolor color);
+
     static brls::View* create();
 
 private:
     float m_rotationDegrees = 0.0f;
     float m_slideX = 0.0f;
     float m_slideY = 0.0f;
+
+    // Custom NanoVG background (drawn inside draw() so it follows slide offset)
+    bool m_hasCustomBg = false;
+    NVGcolor m_customBgColor = {};
 };
 
 } // namespace vitasuwayomi

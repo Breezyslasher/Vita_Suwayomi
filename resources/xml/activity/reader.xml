@@ -54,7 +54,6 @@
         axis="column"
         justifyContent="center"
         alignItems="center"
-        backgroundColor="#14141e"
         positionType="absolute"
         positionTop="0"
         positionLeft="0"
