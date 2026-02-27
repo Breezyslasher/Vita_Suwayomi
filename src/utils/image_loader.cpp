@@ -53,6 +53,7 @@ std::string ImageLoader::s_accessToken;
 std::mutex ImageLoader::s_authMutex;
 std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
+std::set<std::string> ImageLoader::s_pendingFullSizeUrls;
 std::mutex ImageLoader::s_queueMutex;
 std::condition_variable ImageLoader::s_queueCV;
 int ImageLoader::s_maxConcurrentLoads = 3;  // Worker thread count - kept low for PS Vita memory limits
@@ -876,6 +877,14 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     int totalSegments = request.totalSegments;
     std::shared_ptr<bool> alive = request.alive;
 
+    // Remove URL from the pending dedup set now that a worker has picked it up.
+    // This must happen before any early return so new requests for this URL can
+    // be queued if the current load is skipped (e.g., owner destroyed).
+    {
+        std::lock_guard<std::mutex> lock(s_queueMutex);
+        s_pendingFullSizeUrls.erase(url);
+    }
+
     // Early out if owner was destroyed before we started
     if (alive && !*alive) return;
 
@@ -1068,15 +1077,36 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                     segSrcHeights.push_back(endY - startY);
                 }
 
-                if (allOK && !segmentDatas.empty() && (target || callback)) {
-                    brls::sync([segDatas = std::move(segmentDatas), origW, origH,
-                                segHeights = std::move(segSrcHeights), callback, target, alive]() {
-                        if (alive && !*alive) return;
-                        if (target) {
-                            target->setImageSegments(segDatas, origW, origH, segHeights);
-                            if (callback) callback(target);
-                        }
-                    });
+                if (allOK && !segmentDatas.empty()) {
+                    // Store compact metadata under the main cache key so that
+                    // loadAsyncFullSize can reconstruct from cached segments
+                    // without re-reading the file from disk.
+                    // Format: "ASEG" + uint16 count + uint16 origW + uint16 origH + uint16[] segHeights
+                    std::vector<uint8_t> meta;
+                    meta.resize(4 + 2 + 2 + 2 + 2 * autoSegments);
+                    meta[0] = 'A'; meta[1] = 'S'; meta[2] = 'E'; meta[3] = 'G';
+                    uint16_t cnt = static_cast<uint16_t>(autoSegments);
+                    uint16_t mw = static_cast<uint16_t>(std::min(origW, 65535));
+                    uint16_t mh = static_cast<uint16_t>(std::min(origH, 65535));
+                    memcpy(&meta[4], &cnt, 2);
+                    memcpy(&meta[6], &mw, 2);
+                    memcpy(&meta[8], &mh, 2);
+                    for (int s = 0; s < autoSegments; s++) {
+                        uint16_t sh = static_cast<uint16_t>(segSrcHeights[s]);
+                        memcpy(&meta[10 + s * 2], &sh, 2);
+                    }
+                    cachePut(url + "_full", meta);
+
+                    if (target || callback) {
+                        brls::sync([segDatas = std::move(segmentDatas), origW, origH,
+                                    segHeights = std::move(segSrcHeights), callback, target, alive]() {
+                            if (alive && !*alive) return;
+                            if (target) {
+                                target->setImageSegments(segDatas, origW, origH, segHeights);
+                                if (callback) callback(target);
+                            }
+                        });
+                    }
                     return;  // Done - skip normal single-texture path
                 }
 
@@ -1187,15 +1217,57 @@ void ImageLoader::loadAsyncFullSize(const std::string& url, RotatableLoadCallbac
     {
         std::vector<uint8_t> cachedData;
         if (cacheGet(cacheKey, cachedData)) {
-            target->setImageFromMem(cachedData.data(), cachedData.size());
-            if (callback) callback(target);
-            return;
+            // Check for auto-segment metadata marker (stored when tall images are split)
+            if (cachedData.size() >= 10 &&
+                cachedData[0] == 'A' && cachedData[1] == 'S' &&
+                cachedData[2] == 'E' && cachedData[3] == 'G') {
+                // Reconstruct from cached segments
+                uint16_t cnt, mw, mh;
+                memcpy(&cnt, &cachedData[4], 2);
+                memcpy(&mw, &cachedData[6], 2);
+                memcpy(&mh, &cachedData[8], 2);
+                int segCount = cnt;
+                int origW = mw, origH = mh;
+
+                std::vector<std::vector<uint8_t>> segDatas;
+                std::vector<int> segHeights;
+                bool allFound = true;
+
+                for (int s = 0; s < segCount && allFound; s++) {
+                    std::string segCK = url + "_full_autoseg" + std::to_string(s);
+                    std::vector<uint8_t> segData;
+                    if (cacheGet(segCK, segData)) {
+                        segDatas.push_back(std::move(segData));
+                        if (static_cast<size_t>(10 + s * 2 + 2) <= cachedData.size()) {
+                            uint16_t sh;
+                            memcpy(&sh, &cachedData[10 + s * 2], 2);
+                            segHeights.push_back(sh);
+                        }
+                    } else {
+                        allFound = false;  // Segment evicted, need full reload
+                    }
+                }
+
+                if (allFound && !segDatas.empty()) {
+                    target->setImageSegments(segDatas, origW, origH, segHeights);
+                    if (callback) callback(target);
+                    return;
+                }
+                // Segments evicted from cache, fall through to full reload
+                brls::Logger::debug("ImageLoader: Auto-seg cache partial miss for {}, reloading", url);
+            } else {
+                // Normal single-texture cache hit
+                target->setImageFromMem(cachedData.data(), cachedData.size());
+                if (callback) callback(target);
+                return;
+            }
         }
     }
 
-    // Add to rotatable queue
+    // Add to rotatable queue (also track in pending set for dedup)
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
+        s_pendingFullSizeUrls.insert(url);
         s_rotatableLoadQueue.push({url, callback, target, 0, 1, alive});
     }
 
@@ -1384,9 +1456,15 @@ void ImageLoader::preloadFullSize(const std::string& url) {
         }
     }
 
-    // Queue for full-size loading using rotatable queue (same as reader pages)
+    // Check if already queued or being processed to avoid duplicate disk I/O and decode work.
+    // On Vita's memory card, concurrent reads are serialized at the hardware level,
+    // so duplicate reads waste time and starve the worker pool.
     {
         std::lock_guard<std::mutex> lock(s_queueMutex);
+        if (s_pendingFullSizeUrls.count(url)) {
+            return;  // Already queued or being processed
+        }
+        s_pendingFullSizeUrls.insert(url);
         s_rotatableLoadQueue.push({url, nullptr, nullptr});  // No callback/target for preload
     }
 
@@ -1410,6 +1488,7 @@ void ImageLoader::cancelAll() {
         while (!s_rotatableLoadQueue.empty()) {
             s_rotatableLoadQueue.pop();
         }
+        s_pendingFullSizeUrls.clear();
     }
     // Also clear pending texture uploads
     {

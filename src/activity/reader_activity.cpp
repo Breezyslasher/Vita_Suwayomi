@@ -1219,6 +1219,32 @@ void ReaderActivity::loadPages() {
                 }
                 loadedFromLocal = true;
                 *sharedLoadedFromLocal = true;
+
+                // Use DownloadsManager metadata for chapter navigation instead of
+                // blocking on network requests. This makes downloaded chapters load
+                // instantly without waiting for server round-trips.
+                {
+                    std::unique_lock<std::mutex> dlLock;
+                    auto* dlChapters = localMgr.getChapterDownloads(mangaId, dlLock);
+                    if (dlChapters && !dlChapters->empty()) {
+                        for (const auto& dlChapter : *dlChapters) {
+                            if (dlChapter.state != LocalDownloadState::COMPLETED) continue;
+                            Chapter ch;
+                            ch.id = dlChapter.chapterId;
+                            ch.name = dlChapter.name;
+                            ch.chapterNumber = dlChapter.chapterNumber;
+                            ch.index = dlChapter.chapterIndex;
+                            ch.downloaded = true;
+                            sharedChapters->push_back(ch);
+
+                            // Get current chapter name
+                            if (dlChapter.chapterId == chapterIndex || dlChapter.chapterIndex == chapterIndex) {
+                                *sharedChapterName = dlChapter.name;
+                            }
+                        }
+                        *sharedTotalChapters = static_cast<int>(sharedChapters->size());
+                    }
+                }  // dlLock released
             } else {
                 brls::Logger::warning("ReaderActivity: Local chapter marked as downloaded but no pages found");
             }
@@ -1236,8 +1262,9 @@ void ReaderActivity::loadPages() {
         // Use pages as-is (no splitting)
         *sharedPages = std::move(rawPages);
 
-        // Fetch chapter details and navigation from server (skip when offline)
-        if (Application::getInstance().isConnected()) {
+        // For server-loaded pages, fetch chapter metadata now (required for navigation).
+        // Downloaded chapters already got metadata from DownloadsManager above.
+        if (!loadedFromLocal && Application::getInstance().isConnected()) {
             Chapter chapter;
             if (client.fetchChapter(mangaId, chapterIndex, chapter)) {
                 *sharedChapterName = chapter.name;

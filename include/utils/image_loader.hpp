@@ -12,6 +12,7 @@
 #include <list>
 #include <mutex>
 #include <queue>
+#include <set>
 #include <atomic>
 #include <condition_variable>
 #include <vector>
@@ -133,6 +134,7 @@ private:
     // Shared queue for worker threads
     static std::queue<LoadRequest> s_loadQueue;
     static std::queue<RotatableLoadRequest> s_rotatableLoadQueue;
+    static std::set<std::string> s_pendingFullSizeUrls;  // URLs queued or being processed (dedup)
     static std::mutex s_queueMutex;
     static std::condition_variable s_queueCV;  // Wake workers when items are queued
     static int s_maxConcurrentLoads;

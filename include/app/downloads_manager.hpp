@@ -87,8 +87,19 @@ public:
 
     // Queue manga chapter(s) for download
     bool queueChapterDownload(int mangaId, int chapterId, int chapterIndex,
-                              const std::string& mangaTitle, const std::string& chapterName = "");
+                              const std::string& mangaTitle, const std::string& chapterName = "",
+                              float chapterNumber = 0.0f);
+
+    // ChapterInfo for batch queueing (carries chapter number and name)
+    struct ChapterQueueInfo {
+        int chapterId;
+        int chapterIndex;
+        float chapterNumber;
+        std::string chapterName;
+    };
     bool queueChaptersDownload(int mangaId, const std::vector<std::pair<int,int>>& chapters,
+                               const std::string& mangaTitle);
+    bool queueChaptersDownload(int mangaId, const std::vector<ChapterQueueInfo>& chapters,
                                const std::string& mangaTitle);
 
     // Start downloading queued items
