@@ -1586,47 +1586,14 @@ void SettingsTab::runNetworkTest() {
             }
         }
 
-        // Show results in a custom box layout so newlines render properly
+        // Show results in a brls::Dialog (proper overlay, no page transition)
         brls::sync([results]() {
-            // Full-screen overlay to block hover/touch on background items
-            auto* overlay = new brls::Box();
-            overlay->setAxis(brls::Axis::COLUMN);
-            overlay->setWidth(960);
-            overlay->setHeight(544);
-            overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
-            overlay->setAlignItems(brls::AlignItems::CENTER);
-            overlay->setJustifyContent(brls::JustifyContent::CENTER);
-            overlay->setFocusable(false);
-
-            // Intercept all touch events on the overlay background
-            overlay->addGestureRecognizer(new brls::TapGestureRecognizer(
-                [](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
-                    // Consume tap - do nothing
-                }));
-            overlay->addGestureRecognizer(new brls::PanGestureRecognizer(
-                [](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-                    // Consume pan - do nothing
-                }, brls::PanAxis::ANY));
-
-            auto* dialogBox = new brls::Box();
-            dialogBox->setAxis(brls::Axis::COLUMN);
-            dialogBox->setWidth(500);
-            dialogBox->setHeight(420);
-            dialogBox->setPadding(20);
-            dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
-            dialogBox->setCornerRadius(12);
-
-            auto* titleLabel = new brls::Label();
-            titleLabel->setText("Network Test Results");
-            titleLabel->setFontSize(22);
-            titleLabel->setMarginBottom(15);
-            dialogBox->addView(titleLabel);
-
-            auto* scrollView = new brls::ScrollingFrame();
-            scrollView->setGrow(1.0f);
+            brls::Dialog* dialog = new brls::Dialog("Network Test Results");
+            dialog->setCancelable(true);
 
             auto* contentBox = new brls::Box();
             contentBox->setAxis(brls::Axis::COLUMN);
+            contentBox->setPadding(16);
 
             // Split results by newline and add each as a separate label
             std::istringstream stream(results);
@@ -1637,7 +1604,6 @@ void SettingsTab::runNetworkTest() {
                     label->setText(" ");
                     label->setFontSize(8);
                 } else if (line.find("--") == 0) {
-                    // Section headers
                     label->setText(line);
                     label->setFontSize(16);
                     label->setTextColor(nvgRGB(100, 180, 255));
@@ -1651,30 +1617,9 @@ void SettingsTab::runNetworkTest() {
                 contentBox->addView(label);
             }
 
-            scrollView->setContentView(contentBox);
-            dialogBox->addView(scrollView);
-
-            auto* closeBtn = new brls::Button();
-            closeBtn->setText("Close");
-            closeBtn->setMarginTop(15);
-            closeBtn->registerClickAction([](brls::View* view) {
-                brls::Application::popActivity();
-                return true;
-            });
-            closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
-            closeBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-                brls::Application::popActivity();
-                return true;
-            }, true);
-            dialogBox->addView(closeBtn);
-
-            overlay->addView(dialogBox);
-
-            auto* activity = new brls::Activity(overlay);
-            brls::Application::pushActivity(activity);
-
-            // Give the close button focus/hover
-            brls::Application::giveFocus(closeBtn);
+            dialog->addView(contentBox);
+            dialog->addButton("Close", []() {});
+            dialog->open();
         });
     }).detach();
 }
