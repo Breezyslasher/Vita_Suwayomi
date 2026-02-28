@@ -1631,7 +1631,7 @@ void SettingsTab::runNetworkTest() {
                 contentBox->addView(label);
             }
 
-            scrollView->setContent(contentBox);
+            scrollView->setContentView(contentBox);
             dialogBox->addView(scrollView);
 
             auto* closeBtn = new brls::Button();
