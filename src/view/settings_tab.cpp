@@ -1593,7 +1593,7 @@ void SettingsTab::runNetworkTest() {
             overlay->setAxis(brls::Axis::COLUMN);
             overlay->setWidth(960);
             overlay->setHeight(544);
-            overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 128));
+            overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
             overlay->setAlignItems(brls::AlignItems::CENTER);
             overlay->setJustifyContent(brls::JustifyContent::CENTER);
             overlay->setFocusable(false);
@@ -1672,6 +1672,9 @@ void SettingsTab::runNetworkTest() {
 
             auto* activity = new brls::Activity(overlay);
             brls::Application::pushActivity(activity);
+
+            // Give the close button focus/hover
+            brls::Application::giveFocus(closeBtn);
         });
     }).detach();
 }
