@@ -243,7 +243,10 @@ private:
     std::string createChapterDir(const std::string& mangaDir, int chapterIndex,
                                   const std::string& chapterName);
 
-    std::vector<DownloadItem> m_downloads;
+    // Use deque so push_back never invalidates references/pointers to
+    // existing elements.  The download thread holds a DownloadedChapter&
+    // reference while other threads may queue new chapters via push_back.
+    std::deque<DownloadItem> m_downloads;
     mutable std::mutex m_mutex;
     std::atomic<bool> m_downloading{false};
     std::atomic<bool> m_downloadThreadActive{false};  // True while download thread is running
