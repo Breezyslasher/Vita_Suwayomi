@@ -38,6 +38,14 @@ public:
     HttpClient();
     ~HttpClient();
 
+    // Non-copyable (m_curl is a raw handle — copying would double-free)
+    HttpClient(const HttpClient&) = delete;
+    HttpClient& operator=(const HttpClient&) = delete;
+
+    // Movable
+    HttpClient(HttpClient&& other) noexcept;
+    HttpClient& operator=(HttpClient&& other) noexcept;
+
     // Initialize/cleanup (call once globally)
     static bool globalInit();
     static void globalCleanup();
