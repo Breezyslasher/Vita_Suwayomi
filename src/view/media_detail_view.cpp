@@ -224,8 +224,9 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     // callback always reflects the current download status, not stale bind-time values.
     int mangaId = m_view->m_manga.id;
     int chapterIdx = chapter.index;
+    std::weak_ptr<bool> aliveWeakForBtn = m_view->m_alive;
     cell->registerAction("Download", brls::ControllerButton::BUTTON_X,
-        [view, capturedChapter, cell, mangaId, chapterIdx](brls::View*) {
+        [view, capturedChapter, cell, mangaId, chapterIdx, aliveWeakForBtn](brls::View*) {
         int curState = view->getDownloadStateForRow(cell->rowIndex);
         bool queued = curState == static_cast<int>(LocalDownloadState::QUEUED);
         bool downloading = curState == static_cast<int>(LocalDownloadState::DOWNLOADING);
@@ -233,8 +234,13 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
             if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
-                brls::Application::notify("Removed from queue");
-                view->refreshVisibleDownloadIcons();
+                // Defer UI refresh to next frame to avoid mutating the view
+                // hierarchy while borealis is still dispatching the button event.
+                brls::sync([view, aliveWeakForBtn]() {
+                    auto alive = aliveWeakForBtn.lock();
+                    if (!alive || !*alive) return;
+                    view->refreshVisibleDownloadIcons();
+                });
             }
         } else if (downloaded) {
             view->deleteChapterDownload(capturedChapter);
@@ -245,7 +251,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     });
 
     // Download button click
-    cell->dlBtn->registerClickAction([view, capturedChapter, cell, mangaId, chapterIdx](brls::View*) {
+    cell->dlBtn->registerClickAction([view, capturedChapter, cell, mangaId, chapterIdx, aliveWeakForBtn](brls::View*) {
         int curState = view->getDownloadStateForRow(cell->rowIndex);
         bool queued = curState == static_cast<int>(LocalDownloadState::QUEUED);
         bool downloading = curState == static_cast<int>(LocalDownloadState::DOWNLOADING);
@@ -253,8 +259,11 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
             if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
-                brls::Application::notify("Removed from queue");
-                view->refreshVisibleDownloadIcons();
+                brls::sync([view, aliveWeakForBtn]() {
+                    auto alive = aliveWeakForBtn.lock();
+                    if (!alive || !*alive) return;
+                    view->refreshVisibleDownloadIcons();
+                });
             }
         } else if (downloaded) {
             view->deleteChapterDownload(capturedChapter);
@@ -2695,18 +2704,9 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
             }
         }
 
-        brls::sync([this, downloadMode, serverQueued, localQueued, aliveWeak]() {
+        brls::sync([this, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
-            if (serverQueued || localQueued) {
-                std::string msg = "Queued";
-                if (serverQueued) msg += " server";
-                if (serverQueued && localQueued) msg += " +";
-                if (localQueued) msg += " local";
-                brls::Application::notify(msg);
-            } else {
-                brls::Application::notify("Failed to queue download");
-            }
             refreshVisibleDownloadIcons();
         });
     });
@@ -2751,19 +2751,9 @@ void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
             }
         }
 
-        brls::sync([this, downloadMode, serverDeleted, localDeleted, aliveWeak]() {
+        brls::sync([this, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
-            if (serverDeleted > 0 || localDeleted > 0) {
-                std::string msg = "Deleted";
-                if (serverDeleted > 0) msg += " server";
-                if (serverDeleted > 0 && localDeleted > 0) msg += " +";
-                if (localDeleted > 0) msg += " local";
-                msg += " download";
-                brls::Application::notify(msg);
-            } else {
-                brls::Application::notify("Failed to delete download");
-            }
             refreshVisibleDownloadIcons();
         });
     });

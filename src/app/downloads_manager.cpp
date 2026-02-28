@@ -23,6 +23,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+// WebP decoding for format conversion during download
+#include <webp/decode.h>
+
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
@@ -678,7 +681,7 @@ bool DownloadsManager::deleteChapterDownload(int mangaId, int chapterIndex) {
 
 std::vector<DownloadItem> DownloadsManager::getDownloads() const {
     std::lock_guard<std::mutex> lock(m_mutex);
-    return m_downloads;
+    return std::vector<DownloadItem>(m_downloads.begin(), m_downloads.end());
 }
 
 DownloadItem* DownloadsManager::getMangaDownload(int mangaId) {
@@ -1623,24 +1626,33 @@ int64_t DownloadsManager::getTotalDownloadSize() const {
 }
 
 void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) {
+    // Copy critical fields up front.  The 'chapter' reference lives inside a
+    // std::deque element inside m_downloads (a std::vector).  If another thread
+    // calls queueChapterDownload() while we are downloading, m_downloads may
+    // reallocate, which can invalidate the reference.  Using local copies for
+    // path construction and logging avoids reading from potentially freed memory.
+    const int chapterIndex = chapter.chapterIndex;
+    const int chapterId = chapter.chapterId;
+    const std::string chapterName = chapter.name;
+
     brls::Logger::info("DownloadsManager: Downloading chapter {} (id={}) for manga {}",
-                       chapter.chapterIndex, chapter.chapterId, mangaId);
+                       chapterIndex, chapterId, mangaId);
 
     try {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         // Fetch pages from server using chapter ID (not index)
-        brls::Logger::info("DownloadsManager: Fetching pages for chapter id={}", chapter.chapterId);
+        brls::Logger::info("DownloadsManager: Fetching pages for chapter id={}", chapterId);
         std::vector<Page> pages;
-        if (!client.fetchChapterPages(mangaId, chapter.chapterId, pages)) {
+        if (!client.fetchChapterPages(mangaId, chapterId, pages)) {
             brls::Logger::error("DownloadsManager: Failed to fetch pages for chapter {} (id={})",
-                               chapter.chapterIndex, chapter.chapterId);
+                               chapterIndex, chapterId);
             std::lock_guard<std::mutex> lock(m_mutex);
             chapter.state = LocalDownloadState::FAILED;
             saveStateUnlocked();
             return;
         }
-        brls::Logger::info("DownloadsManager: Got {} pages for chapter {}", pages.size(), chapter.chapterId);
+        brls::Logger::info("DownloadsManager: Got {} pages for chapter {}", pages.size(), chapterId);
 
         chapter.pageCount = static_cast<int>(pages.size());
 
@@ -1667,7 +1679,7 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
         // If resuming, log the progress
         if (existingCount > 0) {
             brls::Logger::info("DownloadsManager: Resuming chapter {} - {}/{} pages already downloaded",
-                              chapter.chapterIndex, existingCount, pages.size());
+                              chapterIndex, existingCount, pages.size());
         }
 
         // Reset pages vector but preserve count of existing pages
@@ -1697,8 +1709,8 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
 
         brls::Logger::info("DownloadsManager: Creating chapter dir in {}", mangaDir);
 
-        // Create chapter directory
-        std::string chapterDir = createChapterDir(mangaDir, chapter.chapterIndex, chapter.name);
+        // Create chapter directory (use local copies, not chapter ref which may be invalidated)
+        std::string chapterDir = createChapterDir(mangaDir, chapterIndex, chapterName);
         chapter.localPath = chapterDir;
 
         brls::Logger::info("DownloadsManager: Starting page downloads to {}", chapterDir);
@@ -1723,7 +1735,7 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
             if (existingPages[i]) {
                 // Page already exists - construct the expected path and mark as downloaded
                 std::string expectedPath = m_downloadsPath + "/manga_" + std::to_string(mangaId) +
-                                          "/chapter_" + std::to_string(chapter.chapterIndex) +
+                                          "/chapter_" + std::to_string(chapterIndex) +
                                           "/page_" + std::to_string(page.index) + ".jpg";
                 chapter.pages[i].localPath = expectedPath;
                 chapter.pages[i].downloaded = true;
@@ -1753,7 +1765,7 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
                     std::this_thread::sleep_for(std::chrono::milliseconds(500 * attempt));
                     if (!m_downloading.load()) break;
                 }
-                if (downloadPage(mangaId, chapter.chapterIndex, page.index, imageUrl, localPath)) {
+                if (downloadPage(mangaId, chapterIndex, page.index, imageUrl, localPath)) {
                     pageSuccess = true;
                     break;
                 }
@@ -1806,11 +1818,11 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
 
                 saveStateUnlocked();
             }
-            brls::Logger::info("DownloadsManager: Chapter {} download completed", chapter.chapterIndex);
+            brls::Logger::info("DownloadsManager: Chapter {} download completed", chapterIndex);
 
             // Notify completion callback
             if (m_chapterCompletionCallback) {
-                m_chapterCompletionCallback(mangaId, chapter.chapterIndex, true);
+                m_chapterCompletionCallback(mangaId, chapterIndex, true);
             }
         } else {
             {
@@ -1819,16 +1831,16 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
                 saveStateUnlocked();
             }
             brls::Logger::error("DownloadsManager: Chapter {} incomplete ({}/{})",
-                               chapter.chapterIndex, chapter.downloadedPages, chapter.pageCount);
+                               chapterIndex, chapter.downloadedPages, chapter.pageCount);
 
             // Notify completion callback (failure)
             if (m_chapterCompletionCallback) {
-                m_chapterCompletionCallback(mangaId, chapter.chapterIndex, false);
+                m_chapterCompletionCallback(mangaId, chapterIndex, false);
             }
         }
     } catch (const std::exception& e) {
         brls::Logger::error("DownloadsManager: Exception downloading chapter {}: {}",
-                           chapter.chapterIndex, e.what());
+                           chapterIndex, e.what());
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             chapter.state = LocalDownloadState::FAILED;
@@ -1836,11 +1848,11 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
         }
         // Notify completion callback (failure)
         if (m_chapterCompletionCallback) {
-            m_chapterCompletionCallback(mangaId, chapter.chapterIndex, false);
+            m_chapterCompletionCallback(mangaId, chapterIndex, false);
         }
     } catch (...) {
         brls::Logger::error("DownloadsManager: Unknown exception downloading chapter {}",
-                           chapter.chapterIndex);
+                           chapterIndex);
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             chapter.state = LocalDownloadState::FAILED;
@@ -1848,7 +1860,7 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
         }
         // Notify completion callback (failure)
         if (m_chapterCompletionCallback) {
-            m_chapterCompletionCallback(mangaId, chapter.chapterIndex, false);
+            m_chapterCompletionCallback(mangaId, chapterIndex, false);
         }
     }
 }
@@ -1898,6 +1910,11 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
 
     // Stream directly to file - no memory buffering (like NOBORU does)
     if (http.downloadToFile(imageUrl, localPath)) {
+        // Convert WebP to JPEG so the reader can use stb_image (fast) instead
+        // of libwebp (slow) at load time.  This also makes processImageQuality
+        // work on WebP sources since stbi_load cannot decode WebP.
+        convertWebPToJpeg(localPath);
+
         // Process image quality if needed (resize/recompress)
         processImageQuality(localPath);
         brls::Logger::debug("DownloadsManager: Page {} downloaded successfully", pageIndex);
@@ -2000,6 +2017,75 @@ bool DownloadsManager::processImageQuality(const std::string& filePath) {
                            w, h, newW, newH, jpegQuality);
     }
 
+    return result != 0;
+}
+
+bool DownloadsManager::convertWebPToJpeg(const std::string& filePath) {
+    // Read the first 12 bytes to check the WebP magic number (RIFF....WEBP)
+    // without loading the entire file into memory.
+#ifdef __vita__
+    SceUID fd = sceIoOpen(filePath.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) return false;
+
+    unsigned char header[12];
+    SceSSize bytesRead = sceIoRead(fd, header, 12);
+    if (bytesRead < 12) {
+        sceIoClose(fd);
+        return false;  // Too small to be WebP
+    }
+
+    bool isWebP = (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' &&
+                   header[8] == 'W' && header[9] == 'E' && header[10] == 'B' && header[11] == 'P');
+    if (!isWebP) {
+        sceIoClose(fd);
+        return false;  // Not WebP, nothing to do
+    }
+
+    // Read the full file
+    SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+    if (fileSize <= 0 || fileSize > 50 * 1024 * 1024) {
+        sceIoClose(fd);
+        return false;
+    }
+
+    std::vector<uint8_t> fileData(fileSize);
+    bytesRead = sceIoRead(fd, fileData.data(), fileSize);
+    sceIoClose(fd);
+    if (bytesRead != fileSize) return false;
+#else
+    std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) return false;
+    auto fileSize = file.tellg();
+    if (fileSize < 12 || fileSize > 50 * 1024 * 1024) return false;
+    file.seekg(0, std::ios::beg);
+    std::vector<uint8_t> fileData(fileSize);
+    if (!file.read(reinterpret_cast<char*>(fileData.data()), fileSize)) return false;
+    file.close();
+
+    bool isWebP = (fileData[0] == 'R' && fileData[1] == 'I' && fileData[2] == 'F' && fileData[3] == 'F' &&
+                   fileData[8] == 'W' && fileData[9] == 'E' && fileData[10] == 'B' && fileData[11] == 'P');
+    if (!isWebP) return false;
+#endif
+
+    // Decode WebP to RGB
+    int width = 0, height = 0;
+    uint8_t* rgb = WebPDecodeRGB(fileData.data(), fileData.size(), &width, &height);
+    if (!rgb || width <= 0 || height <= 0) {
+        if (rgb) WebPFree(rgb);
+        brls::Logger::warning("DownloadsManager: WebP decode failed for {}", filePath);
+        return false;
+    }
+
+    // Re-encode as JPEG at high quality (90) and overwrite the file
+    int result = stbi_write_jpg(filePath.c_str(), width, height, 3, rgb, 90);
+    WebPFree(rgb);
+
+    if (result) {
+        brls::Logger::info("DownloadsManager: Converted WebP {}x{} to JPEG: {}", width, height, filePath);
+    } else {
+        brls::Logger::error("DownloadsManager: Failed to write JPEG for WebP conversion: {}", filePath);
+    }
     return result != 0;
 }
 

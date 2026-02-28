@@ -181,7 +181,7 @@ private:
     static std::queue<PendingRotatableTextureUpdate> s_pendingRotatableTextures;
     static std::mutex s_pendingRotatableMutex;
     static std::atomic<bool> s_pendingRotatableScheduled;
-    static constexpr int MAX_ROTATABLE_TEXTURES_PER_FRAME = 2;  // Fewer than thumbnails - these are large
+    static constexpr int MAX_ROTATABLE_TEXTURES_PER_FRAME = 1;  // 1 per frame to avoid stutter during scroll
 
     // Queue a RotatableImage texture for batched upload (single-texture path)
     static void queueRotatableTextureUpdate(const std::vector<uint8_t>& data, RotatableImage* target,

@@ -228,6 +228,10 @@ private:
     // Process downloaded image quality (resize/recompress based on quality setting)
     bool processImageQuality(const std::string& filePath);
 
+    // Convert WebP images to JPEG so the reader loads with fast stb_image
+    // instead of the slower libwebp decoder.  No-op for non-WebP files.
+    bool convertWebPToJpeg(const std::string& filePath);
+
     // Internal save without locking (caller must hold m_mutex)
     void saveStateUnlocked();
 
@@ -239,7 +243,10 @@ private:
     std::string createChapterDir(const std::string& mangaDir, int chapterIndex,
                                   const std::string& chapterName);
 
-    std::vector<DownloadItem> m_downloads;
+    // Use deque so push_back never invalidates references/pointers to
+    // existing elements.  The download thread holds a DownloadedChapter&
+    // reference while other threads may queue new chapters via push_back.
+    std::deque<DownloadItem> m_downloads;
     mutable std::mutex m_mutex;
     std::atomic<bool> m_downloading{false};
     std::atomic<bool> m_downloadThreadActive{false};  // True while download thread is running
