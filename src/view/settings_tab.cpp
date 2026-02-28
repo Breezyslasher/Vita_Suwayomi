@@ -1589,21 +1589,89 @@ void SettingsTab::runNetworkTest() {
 
         // Show results dialog on main thread
         brls::sync([results]() {
-            brls::Dialog* dialog = new brls::Dialog("Network Test");
+            brls::Dialog* dialog = new brls::Dialog("Network Test Results");
             dialog->setCancelable(true);
 
-            auto* box = new brls::Box();
-            box->setAxis(brls::Axis::COLUMN);
-            box->setPadding(16);
-            box->setWidth(brls::View::AUTO);
+            auto* scrollView = new brls::ScrollView();
+            scrollView->setGrow(1.0f);
 
-            auto* label = new brls::Label();
-            label->setText(results);
-            label->setFontSize(18);
-            label->setHorizontalAlign(brls::HorizontalAlign::LEFT);
-            box->addView(label);
+            auto* contentBox = new brls::Box();
+            contentBox->setAxis(brls::Axis::COLUMN);
+            contentBox->setPadding(20);
+            contentBox->setGrow(1.0f);
 
-            dialog->addView(box);
+            // Helper to add a section
+            auto addSection = [&](const std::string& title, const std::vector<std::pair<std::string, std::string>>& items) {
+                auto* header = new brls::Label();
+                header->setText(title);
+                header->setFontSize(22);
+                header->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+                header->setMargins(8, 0, 4, 0);
+                contentBox->addView(header);
+
+                for (const auto& [key, value] : items) {
+                    auto* row = new brls::Box();
+                    row->setAxis(brls::Axis::ROW);
+                    row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+                    row->setAlignItems(brls::AlignItems::CENTER);
+                    row->setPaddingLeft(12);
+                    row->setPaddingRight(12);
+                    row->setMargins(2, 0, 2, 0);
+
+                    auto* keyLabel = new brls::Label();
+                    keyLabel->setText(key);
+                    keyLabel->setFontSize(18);
+                    keyLabel->setTextColor(nvgRGB(180, 180, 180));
+                    row->addView(keyLabel);
+
+                    auto* valueLabel = new brls::Label();
+                    valueLabel->setText(value);
+                    valueLabel->setFontSize(18);
+                    valueLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
+                    row->addView(valueLabel);
+
+                    contentBox->addView(row);
+                }
+            };
+
+            // Parse results and build structured sections
+            // We'll re-parse the results string by sections
+            std::vector<std::pair<std::string, std::string>> currentItems;
+            std::string currentSection;
+            std::istringstream stream(results);
+            std::string line;
+            while (std::getline(stream, line)) {
+                if (line.empty()) continue;
+                if (line.find("===") != std::string::npos) {
+                    // Flush previous section
+                    if (!currentSection.empty() && !currentItems.empty()) {
+                        addSection(currentSection, currentItems);
+                        currentItems.clear();
+                    }
+                    // Extract section name between === markers
+                    size_t start = line.find("=== ");
+                    size_t end = line.find(" ===", start + 4);
+                    if (start != std::string::npos && end != std::string::npos) {
+                        currentSection = line.substr(start + 4, end - start - 4);
+                    }
+                } else {
+                    size_t colonPos = line.find(": ");
+                    if (colonPos != std::string::npos) {
+                        std::string key = line.substr(0, colonPos);
+                        std::string value = line.substr(colonPos + 2);
+                        currentItems.push_back({key, value});
+                    } else {
+                        currentItems.push_back({"", line});
+                    }
+                }
+            }
+            // Flush last section
+            if (!currentSection.empty() && !currentItems.empty()) {
+                addSection(currentSection, currentItems);
+            }
+
+            scrollView->setContentView(contentBox);
+            dialog->addView(scrollView);
             dialog->addButton("Close", []() {});
             dialog->open();
         });
