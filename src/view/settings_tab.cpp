@@ -1592,7 +1592,7 @@ void SettingsTab::runNetworkTest() {
             brls::Dialog* dialog = new brls::Dialog("Network Test Results");
             dialog->setCancelable(true);
 
-            auto* scrollView = new brls::ScrollView();
+            auto* scrollView = new brls::ScrollingFrame();
             scrollView->setGrow(1.0f);
 
             auto* contentBox = new brls::Box();
