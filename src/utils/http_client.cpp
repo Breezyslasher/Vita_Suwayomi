@@ -50,6 +50,33 @@ HttpClient::~HttpClient() {
     }
 }
 
+HttpClient::HttpClient(HttpClient&& other) noexcept
+    : m_curl(other.m_curl)
+    , m_timeout(other.m_timeout)
+    , m_followRedirects(other.m_followRedirects)
+    , m_userAgent(std::move(other.m_userAgent))
+    , m_defaultHeaders(std::move(other.m_defaultHeaders))
+{
+    other.m_curl = nullptr;  // Prevent double-free
+}
+
+HttpClient& HttpClient::operator=(HttpClient&& other) noexcept {
+    if (this != &other) {
+        // Clean up our current handle
+        if (m_curl) {
+            curl_easy_cleanup((CURL*)m_curl);
+        }
+        // Take ownership from other
+        m_curl = other.m_curl;
+        m_timeout = other.m_timeout;
+        m_followRedirects = other.m_followRedirects;
+        m_userAgent = std::move(other.m_userAgent);
+        m_defaultHeaders = std::move(other.m_defaultHeaders);
+        other.m_curl = nullptr;  // Prevent double-free
+    }
+    return *this;
+}
+
 size_t HttpClient::writeCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     size_t totalSize = size * nmemb;
     WriteCallbackData* data = (WriteCallbackData*)userp;

@@ -487,13 +487,17 @@ static std::string base64EncodeImage(const std::string& input) {
 
 // Helper to apply authentication headers to HTTP client
 static void applyAuthHeaders(HttpClient& client) {
-    // Prefer JWT Bearer auth if access token is available
-    if (!ImageLoader::getAccessToken().empty()) {
-        client.setDefaultHeader("Authorization", "Bearer " + ImageLoader::getAccessToken());
-    } else if (!ImageLoader::getAuthUsername().empty() && !ImageLoader::getAuthPassword().empty()) {
-        // Fall back to Basic Auth
-        std::string credentials = ImageLoader::getAuthUsername() + ":" + ImageLoader::getAuthPassword();
-        client.setDefaultHeader("Authorization", "Basic " + base64EncodeImage(credentials));
+    // Read tokens once into local variables to avoid TOCTOU races
+    std::string token = ImageLoader::getAccessToken();
+    if (!token.empty()) {
+        client.setDefaultHeader("Authorization", "Bearer " + token);
+    } else {
+        std::string username = ImageLoader::getAuthUsername();
+        std::string password = ImageLoader::getAuthPassword();
+        if (!username.empty() && !password.empty()) {
+            std::string credentials = username + ":" + password;
+            client.setDefaultHeader("Authorization", "Basic " + base64EncodeImage(credentials));
+        }
     }
 }
 
@@ -525,7 +529,7 @@ static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2)
             // Always re-apply auth headers: even if OUR refresh failed,
             // another thread may have already refreshed the token successfully.
             tokenRefreshed = true;
-            client = HttpClient();
+            client.clearDefaultHeaders();
             applyAuthHeaders(client);
             if (refreshed) {
                 brls::Logger::info("ImageLoader: Token refreshed, retrying download");
