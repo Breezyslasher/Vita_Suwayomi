@@ -1,308 +1,206 @@
-23:29:07.079 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
-23:29:07.665 [INFO] DownloadsManager: Initializing...
-23:29:07.712 [DEBUG] DownloadsManager: Loading state (153478 bytes)
-23:29:07.860 [DEBUG] DownloadsManager: Loaded manga 405 with 63 chapters
-23:29:07.862 [INFO] DownloadsManager: State loaded with 1 downloads
-23:29:07.863 [INFO] DownloadsManager: Validating downloaded files...
-23:29:10.151 [INFO] DownloadsManager: Validation complete - 1102 pages valid, 0 pages missing
-23:29:10.152 [INFO] DownloadsManager: Initialized with 1 downloads
-23:29:10.158 [INFO] VitaSuwayomi 1.0.0 initializing...
-23:29:10.168 [DEBUG] sceIoMkdir result: -0x7ffeffef
-23:29:10.177 [INFO] Loading saved settings...
-23:29:10.188 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
-23:29:10.208 [DEBUG] loadSettings: File size = 3772
-23:29:10.220 [DEBUG] loadSettings: Read 3772 bytes
-23:29:10.227 [INFO] loadSettings: serverUrl=http://192.168.1.28:4568
-23:29:10.233 [DEBUG] Loaded 4 hidden categories
-23:29:10.243 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
-23:29:10.252 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
-23:29:10.264 [INFO] loadSettings: enabledSourceLanguages count = 2
-23:29:10.275 [INFO] loadSettings: localUrl=http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
-23:29:10.286 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=3, defaultSort=0, groupMode=0
-23:29:10.293 [DEBUG] Loaded 2 per-category sort modes
-23:29:10.299 [DEBUG] Loaded 2 search history entries
-23:29:10.306 [DEBUG] Loaded 12 per-manga reader settings
-23:29:10.315 [INFO] Restored auth credentials for user: Breezyslasher
-23:29:10.324 [INFO] Restored auth tokens
-23:29:10.335 [INFO] Settings loaded successfully
-23:29:10.346 [INFO] Settings load result: success
-23:29:10.358 [INFO] Applied theme: Dark
-23:29:10.364 [INFO] Debug logging disabled
-23:29:10.378 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
-23:29:10.385 [INFO] Application::run - isConnected=false, serverUrl=http://192.168.1.28:4568
-23:29:10.394 [INFO] Restoring saved connection...
-23:29:10.403 [INFO] Attempting to refresh JWT tokens...
-23:29:10.684 [INFO] Token refreshed successfully
-23:29:10.695 [INFO] Token refresh successful
-23:29:10.707 [INFO] Fetching server info via GraphQL...
-23:29:10.902 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2085
-23:29:10.908 [INFO] Connection restored successfully
-23:29:10.919 [INFO] Syncing offline reading progress to server...
-23:29:11.032 [INFO] MainActivity: Tabs created, isOnline=false
-23:29:11.205 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
-23:29:11.226 [INFO] LibrarySectionTab: Loaded 13 categories from cache
-23:29:11.392 [INFO] LibrarySectionTab: Loaded 13 manga from cache for category 1
-23:29:11.407 [INFO] RecyclingGrid: Building 3 rows for 13 items (first 2 immediate)
-23:29:11.462 [INFO] ImageLoader: Starting 3 worker threads
-23:29:12.088 [INFO] GraphQL: Fetching manga for category 1 with filter
-23:29:12.089 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
-23:29:12.089 [INFO] DownloadsManager: Synced 1 chapter progress, marked 1 as read
-23:29:12.221 [INFO] RecyclingGrid: Incremental build complete - 13 cells in 3 rows
-23:29:12.335 [INFO] Offline reading progress synced to server
-23:29:12.762 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
-23:29:12.883 [INFO] GraphQL: Fetched 13 manga for category 1 (filter method)
-23:29:12.889 [INFO] LibrarySectionTab: Got 13 manga for category 1 from server
-23:29:13.144 [INFO] LibrarySectionTab: Loaded 13 manga from cache for category 1
-23:29:13.343 [INFO] GraphQL: Fetching manga for category 1 with filter
-23:29:13.793 [INFO] GraphQL: Fetched 13 manga for category 1 (filter method)
-23:29:13.804 [INFO] LibrarySectionTab: Got 13 manga for category 1 from server
-23:29:54.978 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
-23:30:10.650 [INFO] SearchTab: Got 83 sources
-23:30:27.979 [INFO] SearchTab: Got 24 popular manga
-23:30:31.020 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
-23:30:31.041 [INFO] Settings saved successfully (3786 bytes)
-23:30:32.376 [INFO] SearchTab: Found 20 results for 'Surving ro'
-23:30:32.395 [INFO] RecyclingGrid: Building 4 rows for 20 items (first 2 immediate)
-23:30:33.418 [INFO] RecyclingGrid: Incremental build complete - 20 cells in 4 rows
-23:30:33.464 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x311->130x180
-23:30:33.469 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x262->154x180
-23:30:33.495 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x337->120x180
-23:30:33.984 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x322->125x180
-23:30:34.039 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x312->129x180
-23:30:34.073 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x325->124x180
-23:30:34.300 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x335->120x180
-23:30:34.423 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x308->131x179
-23:30:34.465 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x318->127x180
-23:30:34.786 [INFO] ImageLoader: WebP scaled RGBA decode OK 600x853->126x180
-23:30:34.903 [INFO] ImageLoader: WebP scaled RGBA decode OK 200x314->114x180
-23:30:34.952 [INFO] ImageLoader: WebP scaled RGBA decode OK 600x852->126x180
-23:30:35.081 [INFO] ImageLoader: WebP scaled RGBA decode OK 600x863->125x180
-23:30:35.316 [INFO] ImageLoader: WebP scaled RGBA decode OK 200x288->125x180
-23:30:35.355 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x320->126x180
-23:30:35.739 [INFO] ImageLoader: WebP scaled RGBA decode OK 280x400->126x180
-23:30:36.146 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x297->136x180
-23:30:36.173 [INFO] ImageLoader: WebP scaled RGBA decode OK 280x400->126x180
-23:30:36.328 [INFO] ImageLoader: WebP scaled RGBA decode OK 600x848->127x180
-23:30:36.570 [INFO] ImageLoader: WebP scaled RGBA decode OK 280x400->126x180
-23:30:41.562 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
-23:30:41.582 [INFO] Settings saved successfully (3805 bytes)
-23:30:43.203 [INFO] SearchTab: Found 20 results for 'Surving romance'
-23:30:43.218 [INFO] RecyclingGrid: Building 4 rows for 20 items (first 2 immediate)
-23:30:43.796 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x315->128x180
-23:30:43.796 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x337->120x180
-23:30:43.827 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x325->124x180
-23:30:44.288 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x337->120x180
-23:30:44.312 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x327->123x180
-23:30:44.354 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x300->135x180
-23:30:44.443 [INFO] RecyclingGrid: Incremental build complete - 20 cells in 4 rows
-23:30:44.686 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x317->127x180
-23:30:44.819 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x324->125x180
-23:30:44.834 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x324->125x180
-23:30:44.941 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x324->125x180
-23:30:45.226 [INFO] ImageLoader: WebP scaled RGBA decode OK 280x400->126x180
-23:30:45.283 [INFO] ImageLoader: WebP scaled RGBA decode OK 280x400->126x180
-23:30:45.346 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x362->111x180
-23:30:45.720 [INFO] ImageLoader: WebP scaled RGBA decode OK 193x278->124x180
-23:30:45.768 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x333->121x179
-23:30:45.814 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x300->135x180
-23:30:46.546 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x312->129x180
-23:30:52.822 [INFO] MangaDetailView: Creating for 'Surviving Romance' id=1699
-23:30:53.301 [INFO] MangaDetailView: Using combined query for details + chapters
-23:30:53.316 [INFO] GraphQL: Fetching manga details + chapters for manga 1699 in single request
-23:30:53.337 [INFO] GraphQL: Fetched 0 track records for manga 1699
-23:30:53.362 [INFO] MangaDetailView: Combined query got manga details + 0 chapters
-23:30:53.451 [INFO] MangaDetailView: Updated and cached manga details from combined query
-23:30:56.635 [INFO] MangaDetailView: Adding to library with category selection
-23:31:07.633 [INFO] MangaDetailView: Creating for 'Surviving Romance' id=1699
-23:31:07.642 [INFO] MangaDetailView: Loaded details from cache for 'Surviving Romance'
-23:31:08.091 [INFO] MangaDetailView: Using combined query for details + chapters
-23:31:08.101 [INFO] GraphQL: Fetching manga details + chapters for manga 1699 in single request
-23:31:08.710 [INFO] GraphQL: Fetched 0 track records for manga 1699
-23:31:08.740 [INFO] MangaDetailView: Combined query got manga details + 103 chapters
-23:31:08.786 [INFO] MangaDetailView: Updated and cached manga details from combined query
-23:31:14.953 [INFO] SearchTab: Got 24 popular manga
-23:31:14.978 [INFO] RecyclingGrid: Building 4 rows for 24 items (first 2 immediate)
-23:31:15.270 [INFO] ImageLoader: WebP scaled RGBA decode OK 160x213->135x180
-23:31:15.292 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x321->126x180
-23:31:15.405 [INFO] ImageLoader: WebP scaled RGBA decode OK 280x400->126x180
-23:31:15.523 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x315->128x180
-23:31:15.760 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x348->116x180
-23:31:16.065 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x337->120x180
-23:31:16.436 [INFO] RecyclingGrid: Incremental build complete - 24 cells in 4 rows
-23:31:16.861 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x321->126x180
-23:31:16.883 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x322->125x180
-23:31:16.901 [INFO] ImageLoader: WebP scaled RGBA decode OK 225x317->127x180
-23:31:17.803 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
-23:31:17.818 [INFO] LibrarySectionTab: Loaded 13 categories from cache
-23:31:17.986 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
-23:31:17.999 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
-23:31:18.688 [INFO] GraphQL: Fetching manga for category 1 with filter
-23:31:18.688 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
-23:31:18.865 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
-23:31:18.875 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
-23:31:18.898 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
-23:31:19.245 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
-23:31:19.416 [INFO] GraphQL: Fetching manga for category 1 with filter
-23:31:19.516 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
-23:31:19.525 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
-23:31:45.595 [INFO] HistoryTab: Displayed 20 history items
-23:31:46.735 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
-23:31:46.753 [INFO] LibrarySectionTab: Loaded 13 categories from cache
-23:31:46.917 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
-23:31:46.926 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
-23:31:47.588 [INFO] GraphQL: Fetching manga for category 1 with filter
-23:31:47.588 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
-23:31:47.797 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
-23:31:47.811 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
-23:31:47.829 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
-23:31:48.184 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
-23:31:48.362 [INFO] GraphQL: Fetching manga for category 1 with filter
-23:31:48.546 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
-23:31:48.552 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
-23:31:49.845 [INFO] LibrarySectionTab: Loaded 4 manga from cache for category 2
-23:31:49.855 [INFO] RecyclingGrid: Building 1 rows for 4 items (first 1 immediate)
-23:31:50.088 [INFO] GraphQL: Fetching manga for category 2 with filter
-23:31:50.212 [INFO] GraphQL: Fetched 5 manga for category 2 (filter method)
-23:31:50.283 [INFO] LibrarySectionTab: Got 5 manga for category 2 from server
-23:31:50.373 [INFO] RecyclingGrid: Building 1 rows for 5 items (first 1 immediate)
-23:32:06.941 [INFO] MangaDetailView: Creating for 'Surviving Romance' id=1699
-23:32:07.456 [INFO] MangaDetailView: Loaded 103 chapters from cache for manga 1699
-23:32:07.557 [INFO] GraphQL: Fetched 0 track records for manga 1699
-23:32:07.881 [INFO] MangaDetailView: Got 103 chapters
-23:32:16.408 [INFO] ReaderActivity: manga=1699, chapter=138173, startPage=0
-23:32:16.719 [INFO] ReaderActivity: content available for manga 1699
-23:32:16.730 [INFO] ReaderActivity: global defaults - readingMode=1, pageScaleMode=0, rotation=90
-23:32:16.743 [INFO] ReaderActivity: local cache has 12 per-manga settings
-23:32:16.752 [INFO] ReaderActivity: fetching server meta for manga 1699...
-23:32:16.819 [INFO] ReaderActivity: server returned 0 meta entries
-23:32:16.828 [INFO] ReaderActivity: no server settings, checking local cache for manga 1699
-23:32:16.841 [INFO] ReaderActivity: NO local settings found, using global defaults
-23:32:16.874 [INFO] ReaderActivity: auto-detected webtoon format for 'Surviving Romance', applying webtoon defaults
-23:32:16.881 [INFO] ReaderActivity: keepScreenOn enabled, disabled screen dimming
-23:32:16.897 [INFO] ReaderActivity: SAVING settings for manga 1699 - readingMode=2, pageScaleMode=1, rotation=0, webtoon=true
-23:32:16.908 [INFO] ReaderActivity: local cache now has 13 per-manga settings
-23:32:16.918 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
-23:32:16.945 [INFO] Settings saved successfully (3949 bytes)
-23:32:16.960 [INFO] ReaderActivity: saveSettings returned true
-23:32:16.970 [INFO] ReaderActivity: Fetching chapter 138173 from server
-23:32:16.978 [INFO] GraphQL: Fetching pages for chapter id=138173
-23:32:17.499 [INFO] ReaderActivity: saved settings to server for manga 1699
-23:32:18.534 [INFO] GraphQL: Fetched 93 pages for chapter 138173
-23:32:18.951 [INFO] Loaded 93 pages
-23:32:18.959 [INFO] loadPages: startPage=0 → page 0/94 url=http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/0
-23:32:19.210 [INFO] WebtoonScrollView: Set 94 pages, startPage=0, totalHeight=178760
-23:32:19.224 [INFO] Preloading next chapter id=138174
-23:32:19.233 [INFO] GraphQL: Fetching pages for chapter id=138174
-23:32:19.324 [INFO] ImageLoader: [TIMING] I/O took 113ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/2 (27482 bytes, network)
-23:32:19.353 [INFO] ImageLoader: [TIMING] I/O took 143ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/0 (58962 bytes, network)
-23:32:19.364 [INFO] ImageLoader: [TIMING] I/O took 154ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/1 (32428 bytes, network)
-23:32:19.677 [INFO] ImageLoader: [TIMING] Decode took 343ms, total 466ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/2
-23:32:19.761 [INFO] ImageLoader: [TIMING] Decode took 386ms, total 551ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/1
-23:32:19.811 [INFO] ImageLoader: [TIMING] I/O took 99ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/3 (53900 bytes, network)
-23:32:19.918 [INFO] ImageLoader: [TIMING] Decode took 553ms, total 708ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/0
-23:32:20.006 [INFO] ImageLoader: [TIMING] I/O took 212ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/4 (129214 bytes, network)
-23:32:20.020 [INFO] WEBTOON_HEIGHT: page 2 below anchor/viewport (anchor=-1, start=3840 visTop=-0), delta=746.7, no adjust
-23:32:20.249 [INFO] ImageLoader: [TIMING] Decode took 425ms, total 537ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/3
-23:32:20.259 [INFO] WEBTOON_HEIGHT: page 1 below anchor/viewport (anchor=-1, start=1920 visTop=-0), delta=746.7, no adjust
-23:32:20.469 [INFO] ImageLoader: [TIMING] Decode took 454ms, total 676ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/4
-23:32:20.479 [INFO] GraphQL: Fetched 78 pages for chapter 138174
-23:32:20.592 [INFO] WEBTOON_HEIGHT: page 0 below anchor/viewport (anchor=-1, start=0 visTop=-0), delta=-6.4, no adjust
-23:32:20.807 [INFO] WEBTOON_HEIGHT: page 3 below anchor/viewport (anchor=-1, start=7247 visTop=-0), delta=746.7, no adjust
-23:32:20.817 [INFO] Next chapter preloaded: 78 pages
-23:32:20.973 [INFO] ImageLoader: [TIMING] I/O took 148ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/1 (17978 bytes, network)
-23:32:20.974 [INFO] ImageLoader: [TIMING] I/O took 148ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/2 (21770 bytes, network)
-23:32:20.990 [INFO] ImageLoader: [TIMING] I/O took 164ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/0 (59018 bytes, network)
-23:32:21.031 [INFO] WEBTOON_HEIGHT: page 4 below anchor/viewport (anchor=-1, start=9914 visTop=-0), delta=746.7, no adjust
-23:32:21.163 [INFO] ImageLoader: [TIMING] Decode took 180ms, total 338ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/1
-23:32:21.378 [INFO] ImageLoader: [TIMING] Decode took 382ms, total 552ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/2
-23:32:21.551 [INFO] ImageLoader: [TIMING] Decode took 513ms, total 726ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/0
-23:32:24.376 [INFO] ReaderActivity: SAVING settings for manga 1699 - readingMode=2, pageScaleMode=1, rotation=90, webtoon=true
-23:32:24.385 [INFO] ReaderActivity: local cache now has 13 per-manga settings
-23:32:24.398 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
-23:32:24.425 [INFO] Settings saved successfully (3950 bytes)
-23:32:24.437 [INFO] ReaderActivity: saveSettings returned true
-23:32:24.589 [INFO] ReaderActivity: saved settings to server for manga 1699
-23:32:33.952 [INFO] ImageLoader: [TIMING] I/O took 167ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/5 (24066 bytes, network)
-23:32:34.306 [INFO] ImageLoader: [TIMING] Decode took 344ms, total 521ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/5
-23:32:34.556 [INFO] WEBTOON_HEIGHT: page 5 below anchor/viewport (anchor=-1, start=7135 visTop=556), delta=746.7, no adjust
-23:32:35.854 [INFO] ImageLoader: [TIMING] I/O took 80ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/6 (25434 bytes, network)
-23:32:36.205 [INFO] ImageLoader: [TIMING] Decode took 342ms, total 432ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/6
-23:32:36.456 [INFO] WEBTOON_HEIGHT: page 6 below anchor/viewport (anchor=-1, start=8648 visTop=1325), delta=746.7, no adjust
-23:32:49.221 [INFO] ImageLoader: [TIMING] I/O took 68ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/7 (43524 bytes, network)
-23:32:49.584 [INFO] ImageLoader: [TIMING] Decode took 355ms, total 430ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/7
-23:32:49.837 [INFO] WEBTOON_HEIGHT: page 7 below anchor/viewport (anchor=-1, start=10160 visTop=3703), delta=746.7, no adjust
-23:32:51.961 [INFO] ImageLoader: [TIMING] I/O took 55ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/8 (60804 bytes, network)
-23:32:52.338 [INFO] ImageLoader: [TIMING] Decode took 370ms, total 432ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/8
-23:32:52.590 [INFO] WEBTOON_HEIGHT: page 8 below anchor/viewport (anchor=-1, start=11673 visTop=5621), delta=746.7, no adjust
-23:32:53.040 [INFO] ImageLoader: [TIMING] I/O took 186ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/9 (169538 bytes, network)
-23:32:53.491 [INFO] ImageLoader: [TIMING] Decode took 445ms, total 637ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/9
-23:32:53.535 [INFO] ImageLoader: [TIMING] I/O took 378ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/10 (109844 bytes, network)
-23:32:53.584 [INFO] ImageLoader: [TIMING] I/O took 143ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/11 (52498 bytes, network)
-23:32:53.753 [INFO] WEBTOON_HEIGHT: page 9 below anchor/viewport (anchor=-1, start=13185 visTop=9261), delta=746.7, no adjust
-23:32:53.974 [INFO] ImageLoader: [TIMING] Decode took 427ms, total 817ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/10
-23:32:54.004 [INFO] ImageLoader: [TIMING] Decode took 407ms, total 563ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/11
-23:32:54.247 [INFO] WEBTOON_HEIGHT: page 10 below anchor/viewport (anchor=-1, start=14698 visTop=9929), delta=746.7, no adjust
-23:32:54.455 [INFO] WEBTOON_HEIGHT: page 11 below anchor/viewport (anchor=-1, start=16210 visTop=9929), delta=746.7, no adjust
-23:32:54.946 [INFO] ImageLoader: [TIMING] I/O took 37ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/12 (328 bytes, network)
-23:32:54.995 [INFO] ImageLoader: [TIMING] Decode took 37ms, total 86ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/12
-23:32:55.044 [INFO] WEBTOON_HEIGHT: page 12 below anchor/viewport (anchor=-1, start=17723 visTop=10447), delta=-1571.6, no adjust
-23:32:56.044 [INFO] ImageLoader: [TIMING] I/O took 83ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/13 (82478 bytes, network)
-23:32:56.445 [INFO] ImageLoader: [TIMING] Decode took 389ms, total 484ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/13
-23:32:56.694 [INFO] WEBTOON_HEIGHT: page 13 below anchor/viewport (anchor=-1, start=17921 visTop=13310), delta=746.7, no adjust
-23:32:56.796 [INFO] ImageLoader: [TIMING] I/O took 73ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/14 (63998 bytes, network)
-23:32:57.184 [INFO] ImageLoader: [TIMING] Decode took 376ms, total 461ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/14
-23:32:57.351 [INFO] ImageLoader: [TIMING] I/O took 155ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/15 (49588 bytes, network)
-23:32:57.434 [INFO] WEBTOON_HEIGHT: page 14 below anchor/viewport (anchor=-1, start=19433 visTop=15026), delta=746.7, no adjust
-23:32:57.740 [INFO] ImageLoader: [TIMING] Decode took 380ms, total 544ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/15
-23:32:57.981 [INFO] WEBTOON_HEIGHT: page 15 below anchor/viewport (anchor=-1, start=20946 visTop=16083), delta=746.7, no adjust
-23:32:58.160 [INFO] ImageLoader: [TIMING] I/O took 67ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/16 (35116 bytes, network)
-23:32:58.199 [INFO] ImageLoader: [TIMING] I/O took 73ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/17 (63596 bytes, network)
-23:32:58.525 [INFO] ImageLoader: [TIMING] Decode took 353ms, total 432ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/16
-23:32:58.599 [INFO] ImageLoader: [TIMING] Decode took 388ms, total 474ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/17
-23:32:58.771 [INFO] WEBTOON_HEIGHT: page 16 below anchor/viewport (anchor=-1, start=22458 visTop=18008), delta=746.7, no adjust
-23:32:58.986 [INFO] WEBTOON_HEIGHT: page 17 below anchor/viewport (anchor=-1, start=23971 visTop=18008), delta=746.7, no adjust
-23:32:59.366 [INFO] ImageLoader: [TIMING] I/O took 286ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/18 (50666 bytes, network)
-23:32:59.740 [INFO] ImageLoader: [TIMING] Decode took 361ms, total 659ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/18
-23:32:59.981 [INFO] WEBTOON_HEIGHT: page 18 below anchor/viewport (anchor=-1, start=25483 visTop=19522), delta=746.7, no adjust
-23:33:00.188 [INFO] ImageLoader: [TIMING] I/O took 44ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/19 (31658 bytes, network)
-23:33:00.544 [INFO] ImageLoader: [TIMING] Decode took 344ms, total 399ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/19
-23:33:00.798 [INFO] WEBTOON_HEIGHT: page 19 below anchor/viewport (anchor=-1, start=26996 visTop=20472), delta=746.7, no adjust
-23:33:02.154 [INFO] ImageLoader: [TIMING] I/O took 71ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/20 (39878 bytes, network)
-23:33:02.523 [INFO] ImageLoader: [TIMING] Decode took 357ms, total 440ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/20
-23:33:02.768 [INFO] WEBTOON_HEIGHT: page 20 below anchor/viewport (anchor=-1, start=28508 visTop=22565), delta=746.7, no adjust
-23:33:03.023 [INFO] ImageLoader: [TIMING] I/O took 226ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/21 (66672 bytes, network)
-23:33:03.412 [INFO] ImageLoader: [TIMING] Decode took 377ms, total 615ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/21
-23:33:03.666 [INFO] WEBTOON_HEIGHT: page 21 below anchor/viewport (anchor=-1, start=30021 visTop=24479), delta=746.7, no adjust
-23:33:03.910 [INFO] ImageLoader: [TIMING] I/O took 497ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/22 (61066 bytes, network)
-23:33:04.087 [INFO] ImageLoader: [TIMING] I/O took 119ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/23 (3626 bytes, network)
-23:33:04.103 [INFO] ImageLoader: [TIMING] Decode took 8ms, total 134ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/23
-23:33:04.132 [INFO] WEBTOON_HEIGHT: page 23 below anchor/viewport (anchor=-1, start=32622 visTop=26257), delta=-1873.8, no adjust
-23:33:04.298 [INFO] ImageLoader: [TIMING] Decode took 376ms, total 885ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/22
-23:33:04.535 [INFO] WEBTOON_HEIGHT: page 22 below anchor/viewport (anchor=-1, start=31533 visTop=26583), delta=746.7, no adjust
-23:33:05.535 [INFO] ImageLoader: [TIMING] I/O took 619ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/24 (52390 bytes, network)
-23:33:05.569 [INFO] ImageLoader: [TIMING] I/O took 266ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/25 (57566 bytes, network)
-23:33:05.920 [INFO] ImageLoader: [TIMING] Decode took 371ms, total 1004ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/24
-23:33:05.956 [INFO] ImageLoader: [TIMING] Decode took 379ms, total 653ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/25
-23:33:06.019 [INFO] ImageLoader: [TIMING] I/O took 131ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/26 (57252 bytes, network)
-23:33:06.190 [INFO] WEBTOON_HEIGHT: page 24 below anchor/viewport (anchor=-1, start=33072 visTop=30778), delta=746.7, no adjust
-23:33:06.409 [INFO] WEBTOON_HEIGHT: page 25 below anchor/viewport (anchor=-1, start=34584 visTop=30778), delta=746.7, no adjust
-23:33:06.425 [INFO] ImageLoader: [TIMING] Decode took 395ms, total 537ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/26
-23:33:06.662 [INFO] WEBTOON_HEIGHT: page 26 below anchor/viewport (anchor=-1, start=36097 visTop=30778), delta=746.7, no adjust
-23:33:08.795 [INFO] ImageLoader: [TIMING] I/O took 121ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/27 (39852 bytes, network)
-23:33:08.963 [INFO] ImageLoader: [TIMING] I/O took 256ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/28 (62536 bytes, network)
-23:33:09.159 [INFO] ImageLoader: [TIMING] Decode took 357ms, total 486ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/27
-23:33:09.363 [INFO] ImageLoader: [TIMING] Decode took 387ms, total 656ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/28
-23:33:09.452 [INFO] WEBTOON_HEIGHT: page 27 below anchor/viewport (anchor=-1, start=37609 visTop=32969), delta=746.7, no adjust
-23:33:09.666 [INFO] WEBTOON_HEIGHT: page 28 below anchor/viewport (anchor=-1, start=39122 visTop=32969), delta=746.7, no adjust
-23:33:10.136 [INFO] ImageLoader: [TIMING] I/O took 328ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/29 (43784 bytes, network)
-23:33:10.498 [INFO] ImageLoader: [TIMING] Decode took 351ms, total 691ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/29
-23:33:10.742 [INFO] WEBTOON_HEIGHT: page 29 below anchor/viewport (anchor=-1, start=40634 visTop=34434), delta=746.7, no adjust
-23:33:11.298 [INFO] ImageLoader: [TIMING] I/O took 206ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/30 (181444 bytes, network)
-23:33:11.780 [INFO] ImageLoader: [TIMING] Decode took 470ms, total 688ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/30
-23:33:12.027 [INFO] WEBTOON_HEIGHT: page 30 below anchor/viewport (anchor=-1, start=42147 visTop=35752), delta=746.7, no adjust
-23:35:26.980 [INFO] ImageLoader: Got 401 for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/31, attempting token refresh...
-23:35:26.982 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/updateChapter) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.req
-23:35:27.002 [INFO] GraphQL returned Unauthorized, attempting token refresh...
-23:35:27.238 [INFO] Token refreshed successfully
-23:35:27.251 [INFO] Token was recently refreshed (1s ago), skipping duplicate refresh
-23:35:27.251 [INFO] ImageLoader: Token refreshed, retrying download
+23:55:19.039 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+23:55:19.631 [INFO] DownloadsManager: Initializing...
+23:55:19.679 [DEBUG] DownloadsManager: Loading state (153478 bytes)
+23:55:19.828 [DEBUG] DownloadsManager: Loaded manga 405 with 63 chapters
+23:55:19.830 [INFO] DownloadsManager: State loaded with 1 downloads
+23:55:19.830 [INFO] DownloadsManager: Validating downloaded files...
+23:55:21.937 [INFO] DownloadsManager: Validation complete - 1102 pages valid, 0 pages missing
+23:55:21.938 [INFO] DownloadsManager: Initialized with 1 downloads
+23:55:21.945 [INFO] VitaSuwayomi 1.0.0 initializing...
+23:55:21.957 [DEBUG] sceIoMkdir result: -0x7ffeffef
+23:55:21.967 [INFO] Loading saved settings...
+23:55:21.972 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+23:55:21.981 [DEBUG] loadSettings: File size = 3950
+23:55:21.998 [DEBUG] loadSettings: Read 3950 bytes
+23:55:22.007 [INFO] loadSettings: serverUrl=http://192.168.1.28:4568
+23:55:22.017 [DEBUG] Loaded 4 hidden categories
+23:55:22.030 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+23:55:22.041 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+23:55:22.084 [INFO] loadSettings: enabledSourceLanguages count = 2
+23:55:22.089 [INFO] loadSettings: localUrl=http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+23:55:22.095 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=3, defaultSort=0, groupMode=0
+23:55:22.104 [DEBUG] Loaded 2 per-category sort modes
+23:55:22.113 [DEBUG] Loaded 4 search history entries
+23:55:22.125 [DEBUG] Loaded 13 per-manga reader settings
+23:55:22.136 [INFO] Restored auth credentials for user: Breezyslasher
+23:55:22.147 [INFO] Restored auth tokens
+23:55:22.155 [INFO] Settings loaded successfully
+23:55:22.160 [INFO] Settings load result: success
+23:55:22.166 [INFO] Applied theme: Dark
+23:55:22.175 [INFO] Debug logging disabled
+23:55:22.187 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+23:55:22.197 [INFO] Application::run - isConnected=false, serverUrl=http://192.168.1.28:4568
+23:55:22.208 [INFO] Restoring saved connection...
+23:55:22.219 [INFO] Attempting to refresh JWT tokens...
+23:55:22.273 [INFO] Token refreshed successfully
+23:55:22.279 [INFO] Token refresh successful
+23:55:22.284 [INFO] Fetching server info via GraphQL...
+23:55:22.307 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2085
+23:55:22.315 [INFO] Connection restored successfully
+23:55:22.330 [INFO] Syncing offline reading progress to server...
+23:55:22.381 [INFO] DownloadsManager: Synced 1 chapter progress, marked 1 as read
+23:55:22.447 [INFO] MainActivity: Tabs created, isOnline=false
+23:55:22.616 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x185
+23:55:22.632 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+23:55:22.791 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+23:55:22.803 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+23:55:22.861 [INFO] ImageLoader: Starting 3 worker threads
+23:55:23.496 [INFO] GraphQL: Fetching manga for category 1 with filter
+23:55:23.496 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+23:55:23.525 [INFO] Offline reading progress synced to server
+23:55:23.642 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+23:55:23.918 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+23:55:23.927 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+23:55:24.055 [INFO] LibrarySectionTab: Loaded 12 manga from cache for category 1
+23:55:24.231 [INFO] GraphQL: Fetching manga for category 1 with filter
+23:55:24.322 [INFO] GraphQL: Fetched 12 manga for category 1 (filter method)
+23:55:24.333 [INFO] LibrarySectionTab: Got 12 manga for category 1 from server
+23:55:48.108 [INFO] LibrarySectionTab: Loaded 5 manga from cache for category 2
+23:55:48.123 [INFO] RecyclingGrid: Building 1 rows for 5 items (first 1 immediate)
+23:55:48.428 [INFO] GraphQL: Fetching manga for category 2 with filter
+23:55:51.273 [INFO] GraphQL: Fetched 5 manga for category 2 (filter method)
+23:55:51.279 [INFO] LibrarySectionTab: Got 5 manga for category 2 from server
+23:56:05.521 [INFO] MangaDetailView: Creating for 'Surviving Romance' id=1699
+23:56:06.067 [INFO] MangaDetailView: Loaded 103 chapters from cache for manga 1699
+23:56:06.079 [INFO] GraphQL: Fetched 0 track records for manga 1699
+23:56:07.573 [INFO] MangaDetailView: Got 103 chapters
+23:56:59.603 [INFO] MangaDetailView: Continuing from chapter id=138173, page=25
+23:56:59.617 [INFO] MangaDetailView: Reading chapter id=138173, startPage=25
+23:56:59.625 [INFO] ReaderActivity: manga=1699, chapter=138173, startPage=25
+23:56:59.928 [INFO] ReaderActivity: content available for manga 1699
+23:56:59.939 [INFO] ReaderActivity: global defaults - readingMode=1, pageScaleMode=0, rotation=90
+23:56:59.948 [INFO] ReaderActivity: local cache has 13 per-manga settings
+23:56:59.959 [INFO] ReaderActivity: fetching server meta for manga 1699...
+23:57:00.025 [INFO] ReaderActivity: server returned 6 meta entries
+23:57:00.031 [INFO] ReaderActivity: server meta [cropBorders] = false
+23:57:00.036 [INFO] ReaderActivity: server meta [isWebtoonFormat] = true
+23:57:00.045 [INFO] ReaderActivity: server meta [readerMode] = 2
+23:57:00.054 [INFO] ReaderActivity: server meta [rotation] = 90
+23:57:00.065 [INFO] ReaderActivity: server meta [scaleType] = 1
+23:57:00.076 [INFO] ReaderActivity: server meta [webtoonSidePadding] = 0
+23:57:00.085 [INFO] ReaderActivity: loaded settings from server for manga 1699
+23:57:00.090 [INFO] ReaderActivity: using server settings (skipping local cache)
+23:57:00.098 [INFO] ReaderActivity: keepScreenOn enabled, disabled screen dimming
+23:57:00.114 [INFO] ReaderActivity: Fetching chapter 138173 from server
+23:57:00.125 [INFO] GraphQL: Fetching pages for chapter id=138173
+23:57:00.325 [INFO] GraphQL: Fetched 93 pages for chapter 138173
+23:57:00.724 [INFO] Loaded 93 pages
+23:57:00.730 [INFO] loadPages: startPage=25 → page 25/94 url=http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/25
+23:57:00.984 [INFO] WebtoonScrollView: Set 94 pages, startPage=25, totalHeight=178760
+23:57:00.993 [INFO] Preloading next chapter id=138174
+23:57:01.005 [INFO] GraphQL: Fetching pages for chapter id=138174
+23:57:01.162 [INFO] ImageLoader: [TIMING] I/O took 183ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/23 (3626 bytes, network)
+23:57:01.175 [INFO] ImageLoader: [TIMING] Decode took 8ms, total 196ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/23
+23:57:01.194 [INFO] WEBTOON_HEIGHT: page 23 (anchor=25, start=25024, visTop=27200), scroll adjusted by 1062.8 (hDelta=-1873.8)
+23:57:01.227 [INFO] ImageLoader: [TIMING] I/O took 248ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/22 (61066 bytes, network)
+23:57:01.262 [INFO] GraphQL: Fetched 78 pages for chapter 138174
+23:57:01.274 [INFO] Next chapter preloaded: 78 pages
+23:57:01.366 [INFO] ImageLoader: [TIMING] I/O took 388ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/21 (66672 bytes, network)
+23:57:01.397 [INFO] ImageLoader: [TIMING] I/O took 215ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/24 (52390 bytes, network)
+23:57:01.620 [INFO] ImageLoader: [TIMING] Decode took 384ms, total 642ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/22
+23:57:01.784 [INFO] ImageLoader: [TIMING] Decode took 412ms, total 806ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/21
+23:57:01.815 [INFO] ImageLoader: [TIMING] Decode took 410ms, total 633ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/24
+23:57:01.924 [INFO] WEBTOON_HEIGHT: page 22 (anchor=25, start=23958, visTop=26137), scroll adjusted by -423.5 (hDelta=746.7)
+23:57:01.964 [INFO] ImageLoader: [TIMING] I/O took 313ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/25 (57566 bytes, network)
+23:57:01.991 [INFO] ImageLoader: [TIMING] I/O took 117ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/27 (39852 bytes, network)
+23:57:02.154 [INFO] WEBTOON_HEIGHT: page 21 (anchor=25, start=22869, visTop=26561), scroll adjusted by -423.5 (hDelta=746.7)
+23:57:02.158 [INFO] ImageLoader: [TIMING] I/O took 327ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/26 (57252 bytes, network)
+23:57:02.378 [INFO] ImageLoader: [TIMING] Decode took 407ms, total 726ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/25
+23:57:02.433 [INFO] WEBTOON_HEIGHT: page 24 (anchor=25, start=25920, visTop=26984), scroll adjusted by -423.5 (hDelta=746.7)
+23:57:02.414 [INFO] ImageLoader: [TIMING] Decode took 417ms, total 540ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/27
+23:57:02.522 [INFO] ImageLoader: [TIMING] I/O took 73ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/28 (62536 bytes, network)
+23:57:02.716 [INFO] WEBTOON_HEIGHT: page 25 below anchor/viewport (anchor=25, start=27433 visTop=27408), delta=746.7, no adjust
+23:57:02.771 [INFO] ImageLoader: [TIMING] Decode took 407ms, total 940ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/26
+23:57:02.719 [INFO] ImageLoader: [TIMING] I/O took 200ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/29 (43784 bytes, network)
+23:57:02.947 [INFO] ImageLoader: [TIMING] Decode took 418ms, total 498ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/28
+23:57:02.994 [INFO] WEBTOON_HEIGHT: page 27 below anchor/viewport (anchor=25, start=30034 visTop=27408), delta=746.7, no adjust
+23:57:03.165 [INFO] ImageLoader: [TIMING] I/O took 178ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/0 (59018 bytes, network)
+23:57:03.222 [INFO] WEBTOON_HEIGHT: page 26 below anchor/viewport (anchor=25, start=28945 visTop=27408), delta=746.7, no adjust
+23:57:03.226 [INFO] ImageLoader: [TIMING] Decode took 408ms, total 707ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/29
+23:57:03.226 [INFO] ImageLoader: [TIMING] I/O took 422ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/30 (181444 bytes, network)
+23:57:03.469 [INFO] WEBTOON_HEIGHT: page 28 below anchor/viewport (anchor=25, start=31970 visTop=27408), delta=746.7, no adjust
+23:57:03.472 [INFO] ImageLoader: [TIMING] I/O took 197ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/1 (17978 bytes, network)
+23:57:03.702 [INFO] WEBTOON_HEIGHT: page 29 below anchor/viewport (anchor=25, start=33483 visTop=27408), delta=746.7, no adjust
+23:57:03.721 [INFO] ImageLoader: [TIMING] Decode took 546ms, total 734ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/0
+23:57:03.784 [INFO] ImageLoader: [TIMING] I/O took 41ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/2 (21770 bytes, network)
+23:57:03.792 [INFO] ImageLoader: [TIMING] Decode took 510ms, total 988ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/30
+23:57:03.888 [INFO] ImageLoader: [TIMING] Decode took 176ms, total 613ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/1
+23:57:04.063 [INFO] WEBTOON_HEIGHT: page 30 below anchor/viewport (anchor=25, start=34995 visTop=27408), delta=746.7, no adjust
+23:57:04.130 [INFO] ImageLoader: [TIMING] I/O took 36ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/20 (39878 bytes, network)
+23:57:04.159 [INFO] ImageLoader: [TIMING] Decode took 367ms, total 416ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/2/page/2
+23:57:04.502 [INFO] ImageLoader: [TIMING] Decode took 365ms, total 408ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/20
+23:57:04.750 [INFO] WEBTOON_HEIGHT: page 20 (anchor=25, start=21780, visTop=27985), scroll adjusted by -423.5 (hDelta=746.7)
+23:57:06.063 [INFO] ImageLoader: [TIMING] I/O took 233ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/31 (56228 bytes, network)
+23:57:06.450 [INFO] ImageLoader: [TIMING] Decode took 375ms, total 621ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/31
+23:57:06.686 [INFO] WEBTOON_HEIGHT: page 31 below anchor/viewport (anchor=25, start=36931 visTop=30920), delta=746.7, no adjust
+23:57:06.856 [INFO] ImageLoader: [TIMING] I/O took 74ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/32 (29952 bytes, network)
+23:57:07.212 [INFO] ImageLoader: [TIMING] Decode took 346ms, total 430ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/32
+23:57:07.454 [INFO] WEBTOON_HEIGHT: page 32 below anchor/viewport (anchor=25, start=38444 visTop=31950), delta=746.7, no adjust
+23:57:08.682 [INFO] ImageLoader: [TIMING] I/O took 198ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/33 (77626 bytes, network)
+23:57:09.088 [INFO] ImageLoader: [TIMING] Decode took 400ms, total 605ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/33
+23:57:09.339 [INFO] WEBTOON_HEIGHT: page 33 below anchor/viewport (anchor=25, start=39956 visTop=32644), delta=746.7, no adjust
+23:57:10.848 [INFO] ImageLoader: [TIMING] I/O took 312ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/34 (64124 bytes, network)
+23:57:11.234 [INFO] ImageLoader: [TIMING] Decode took 374ms, total 698ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/34
+23:57:11.473 [INFO] WEBTOON_HEIGHT: page 34 below anchor/viewport (anchor=25, start=41469 visTop=35055), delta=746.7, no adjust
+23:57:12.208 [INFO] ImageLoader: [TIMING] I/O took 39ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/35 (328 bytes, network)
+23:57:12.256 [INFO] ImageLoader: [TIMING] Decode took 38ms, total 87ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/35
+23:57:12.309 [INFO] WEBTOON_HEIGHT: page 35 below anchor/viewport (anchor=25, start=42981 visTop=35826), delta=-1571.6, no adjust
+23:57:14.167 [INFO] ImageLoader: [TIMING] I/O took 328ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/36 (32296 bytes, network)
+23:57:14.532 [INFO] ImageLoader: [TIMING] Decode took 356ms, total 693ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/36
+23:57:14.777 [INFO] WEBTOON_HEIGHT: page 36 below anchor/viewport (anchor=25, start=43179 visTop=37281), delta=746.7, no adjust
+23:57:17.692 [INFO] ImageLoader: [TIMING] I/O took 451ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/37 (44162 bytes, network)
+23:57:18.066 [INFO] ImageLoader: [TIMING] Decode took 368ms, total 826ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/37
+23:57:18.313 [INFO] WEBTOON_HEIGHT: page 37 below anchor/viewport (anchor=25, start=44691 visTop=39352), delta=746.7, no adjust
+23:57:19.061 [INFO] ImageLoader: [TIMING] I/O took 68ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/38 (46506 bytes, network)
+23:57:19.436 [INFO] ImageLoader: [TIMING] Decode took 363ms, total 443ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/38
+23:57:19.682 [INFO] WEBTOON_HEIGHT: page 38 below anchor/viewport (anchor=25, start=46204 visTop=41426), delta=746.7, no adjust
+23:57:20.254 [INFO] ImageLoader: [TIMING] I/O took 144ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/39 (48080 bytes, network)
+23:57:20.352 [INFO] ImageLoader: [TIMING] I/O took 73ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/40 (48204 bytes, network)
+23:57:20.641 [INFO] ImageLoader: [TIMING] Decode took 375ms, total 530ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/39
+23:57:20.741 [INFO] ImageLoader: [TIMING] Decode took 376ms, total 462ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/40
+23:57:20.892 [INFO] WEBTOON_HEIGHT: page 39 below anchor/viewport (anchor=25, start=47716 visTop=42104), delta=746.7, no adjust
+23:57:21.104 [INFO] WEBTOON_HEIGHT: page 40 below anchor/viewport (anchor=25, start=49229 visTop=42104), delta=746.7, no adjust
+23:58:43.620 [INFO] ImageLoader: [TIMING] I/O took 542ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/41 (31068 bytes, network)
+23:58:43.973 [INFO] ImageLoader: [TIMING] Decode took 346ms, total 895ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/41
+23:58:44.217 [INFO] WEBTOON_HEIGHT: page 41 below anchor/viewport (anchor=25, start=50741 visTop=44607), delta=746.7, no adjust
+23:58:44.435 [INFO] ImageLoader: [TIMING] I/O took 123ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/42 (41032 bytes, network)
+23:58:44.808 [INFO] ImageLoader: [TIMING] Decode took 360ms, total 496ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/42
+23:58:45.049 [INFO] WEBTOON_HEIGHT: page 42 below anchor/viewport (anchor=25, start=52254 visTop=46041), delta=746.7, no adjust
+23:58:46.023 [INFO] ImageLoader: [TIMING] I/O took 611ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/43 (48252 bytes, network)
+23:58:46.393 [INFO] ImageLoader: [TIMING] Decode took 358ms, total 980ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/43
+23:58:46.637 [INFO] WEBTOON_HEIGHT: page 43 below anchor/viewport (anchor=25, start=53766 visTop=47552), delta=746.7, no adjust
+23:58:46.883 [INFO] ImageLoader: [TIMING] I/O took 51ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/44 (23378 bytes, network)
+23:58:47.239 [INFO] ImageLoader: [TIMING] Decode took 346ms, total 407ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/44
+23:58:47.487 [INFO] WEBTOON_HEIGHT: page 44 below anchor/viewport (anchor=25, start=55279 visTop=48258), delta=746.7, no adjust
+23:58:48.853 [INFO] ImageLoader: [TIMING] I/O took 69ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/45 (31430 bytes, network)
+23:58:49.221 [INFO] ImageLoader: [TIMING] Decode took 358ms, total 437ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/45
+23:58:49.470 [INFO] WEBTOON_HEIGHT: page 45 below anchor/viewport (anchor=25, start=56791 visTop=50047), delta=746.7, no adjust
+23:58:50.251 [INFO] ImageLoader: [TIMING] I/O took 66ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/46 (20396 bytes, network)
+23:58:50.600 [INFO] ImageLoader: [TIMING] Decode took 341ms, total 415ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/46
+23:58:50.839 [INFO] WEBTOON_HEIGHT: page 46 below anchor/viewport (anchor=25, start=58304 visTop=51234), delta=746.7, no adjust
+23:58:55.202 [INFO] ImageLoader: [TIMING] I/O took 2282ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/47 (7204 bytes, network)
+23:58:55.252 [INFO] ImageLoader: [TIMING] Decode took 44ms, total 2333ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/47
+23:58:55.282 [INFO] ImageLoader: [TIMING] I/O took 1210ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/48 (42584 bytes, network)
+23:58:55.296 [INFO] WEBTOON_HEIGHT: page 47 below anchor/viewport (anchor=25, start=59816 visTop=54935), delta=-1571.6, no adjust
+23:58:55.662 [INFO] ImageLoader: [TIMING] Decode took 368ms, total 1590ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/48
+23:58:55.910 [INFO] WEBTOON_HEIGHT: page 48 below anchor/viewport (anchor=25, start=60014 visTop=55200), delta=746.7, no adjust
+23:58:56.963 [INFO] ImageLoader: [TIMING] I/O took 305ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/49 (112738 bytes, network)
+23:58:57.395 [INFO] ImageLoader: [TIMING] Decode took 419ms, total 737ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/49
+23:58:57.632 [INFO] WEBTOON_HEIGHT: page 49 below anchor/viewport (anchor=25, start=61526 visTop=56415), delta=746.7, no adjust
+23:58:58.930 [INFO] ImageLoader: [TIMING] I/O took 854ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/50 (77690 bytes, network)
+23:58:59.318 [INFO] ImageLoader: [TIMING] Decode took 375ms, total 1241ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/50
+23:58:59.560 [INFO] WEBTOON_HEIGHT: page 50 below anchor/viewport (anchor=25, start=63039 visTop=59313), delta=746.7, no adjust
+23:58:59.941 [INFO] ImageLoader: [TIMING] I/O took 1147ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/51 (51508 bytes, network)
+23:59:00.313 [INFO] ImageLoader: [TIMING] Decode took 361ms, total 1520ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/51
+23:59:00.563 [INFO] WEBTOON_HEIGHT: page 51 below anchor/viewport (anchor=25, start=64551 visTop=59467), delta=746.7, no adjust
+23:59:01.033 [INFO] ImageLoader: [TIMING] I/O took 2172ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/52 (45080 bytes, network)
+23:59:01.393 [INFO] ImageLoader: [TIMING] Decode took 356ms, total 2532ms for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/52
+23:59:01.636 [INFO] WEBTOON_HEIGHT: page 52 below anchor/viewport (anchor=25, start=66064 visTop=59471), delta=746.7, no adjust
+00:01:01.649 [INFO] ImageLoader: Got 401 for http://192.168.1.28:4568/api/v1/manga/1699/chapter/1/page/53, attempting token refresh...
+00:01:01.662 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/updateChapter) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.req
+00:01:01.669 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/updateChapter) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.req
+00:01:01.673 [INFO] GraphQL returned Unauthorized, attempting token refresh...
+00:01:01.685 [INFO] GraphQL returned Unauthorized, attempting token refresh...
+00:01:01.707 [INFO] Token refreshed successfully
+00:01:01.720 [INFO] Token was recently refreshed (0s ago), skipping duplicate refresh
+00:01:01.720 [INFO] ImageLoader: Token refreshed, retrying download
