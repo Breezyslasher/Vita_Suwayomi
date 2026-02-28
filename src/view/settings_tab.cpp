@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <sstream>
 #include <thread>
 
 #ifdef __vita__
@@ -1585,12 +1586,70 @@ void SettingsTab::runNetworkTest() {
             }
         }
 
-        // Show results dialog on main thread using simple text dialog
+        // Show results in a custom box layout so newlines render properly
         brls::sync([results]() {
-            brls::Dialog* dialog = new brls::Dialog(results);
-            dialog->setCancelable(true);
-            dialog->addButton("Close", []() {});
-            dialog->open();
+            auto* dialogBox = new brls::Box();
+            dialogBox->setAxis(brls::Axis::COLUMN);
+            dialogBox->setWidth(500);
+            dialogBox->setHeight(420);
+            dialogBox->setPadding(20);
+            dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+            dialogBox->setCornerRadius(12);
+
+            auto* titleLabel = new brls::Label();
+            titleLabel->setText("Network Test Results");
+            titleLabel->setFontSize(22);
+            titleLabel->setMarginBottom(15);
+            dialogBox->addView(titleLabel);
+
+            auto* scrollView = new brls::ScrollingFrame();
+            scrollView->setGrow(1.0f);
+
+            auto* contentBox = new brls::Box();
+            contentBox->setAxis(brls::Axis::COLUMN);
+
+            // Split results by newline and add each as a separate label
+            std::istringstream stream(results);
+            std::string line;
+            while (std::getline(stream, line)) {
+                auto* label = new brls::Label();
+                if (line.empty()) {
+                    label->setText(" ");
+                    label->setFontSize(8);
+                } else if (line.find("--") == 0) {
+                    // Section headers
+                    label->setText(line);
+                    label->setFontSize(16);
+                    label->setTextColor(nvgRGB(100, 180, 255));
+                    label->setMarginTop(5);
+                } else {
+                    label->setText(line);
+                    label->setFontSize(15);
+                    label->setTextColor(nvgRGB(200, 200, 200));
+                }
+                label->setMarginBottom(2);
+                contentBox->addView(label);
+            }
+
+            scrollView->setContent(contentBox);
+            dialogBox->addView(scrollView);
+
+            auto* closeBtn = new brls::Button();
+            closeBtn->setText("Close");
+            closeBtn->setMarginTop(15);
+            closeBtn->registerClickAction([](brls::View* view) {
+                brls::Application::popActivity();
+                return true;
+            });
+            closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
+            closeBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+                brls::Application::popActivity();
+                return true;
+            }, true);
+            dialogBox->addView(closeBtn);
+
+            auto* activity = new brls::Activity(dialogBox);
+            brls::Application::pushActivity(activity);
         });
     }).detach();
 }
