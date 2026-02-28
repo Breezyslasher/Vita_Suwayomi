@@ -1588,6 +1588,26 @@ void SettingsTab::runNetworkTest() {
 
         // Show results in a custom box layout so newlines render properly
         brls::sync([results]() {
+            // Full-screen overlay to block hover/touch on background items
+            auto* overlay = new brls::Box();
+            overlay->setAxis(brls::Axis::COLUMN);
+            overlay->setWidth(960);
+            overlay->setHeight(544);
+            overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 128));
+            overlay->setAlignItems(brls::AlignItems::CENTER);
+            overlay->setJustifyContent(brls::JustifyContent::CENTER);
+            overlay->setFocusable(false);
+
+            // Intercept all touch events on the overlay background
+            overlay->addGestureRecognizer(new brls::TapGestureRecognizer(
+                [](brls::TapGestureStatus status, brls::Sound* soundToPlay) {
+                    // Consume tap - do nothing
+                }));
+            overlay->addGestureRecognizer(new brls::PanGestureRecognizer(
+                [](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                    // Consume pan - do nothing
+                }, brls::PanAxis::ANY));
+
             auto* dialogBox = new brls::Box();
             dialogBox->setAxis(brls::Axis::COLUMN);
             dialogBox->setWidth(500);
@@ -1648,7 +1668,9 @@ void SettingsTab::runNetworkTest() {
             }, true);
             dialogBox->addView(closeBtn);
 
-            auto* activity = new brls::Activity(dialogBox);
+            overlay->addView(dialogBox);
+
+            auto* activity = new brls::Activity(overlay);
             brls::Application::pushActivity(activity);
         });
     }).detach();
