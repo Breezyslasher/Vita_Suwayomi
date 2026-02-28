@@ -1072,9 +1072,27 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         // Check image format
         bool isWebP = false;
         bool isJpegOrPng = false;
+        bool isTGA = false;
         bool isValidImage = false;
 
-        if (imageBody.size() > 12) {
+        if (imageBody.size() > 18) {
+            unsigned char* data = reinterpret_cast<unsigned char*>(imageBody.data());
+
+            // TGA (uncompressed true-color, 32-bit BGRA) - pass through directly to
+            // NanoVG without decode/re-encode since it's already in GPU-ready format.
+            // Check header: ID=0, colormap=0, type=2, bpp=32.
+            if (data[0] == 0 && data[1] == 0 && data[2] == 2 && data[16] == 32) {
+                int tgaW = data[12] | (data[13] << 8);
+                int tgaH = data[14] | (data[15] << 8);
+                size_t expectedSize = 18 + static_cast<size_t>(tgaW) * tgaH * 4;
+                if (tgaW > 0 && tgaH > 0 && imageBody.size() >= expectedSize) {
+                    isTGA = true;
+                    isValidImage = true;
+                }
+            }
+        }
+
+        if (!isValidImage && imageBody.size() > 12) {
             unsigned char* data = reinterpret_cast<unsigned char*>(imageBody.data());
 
             // JPEG
@@ -1104,7 +1122,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             }
         }
 
-        // Fallback: try stb_image for unrecognized formats (.bin, TGA, etc.)
+        // Fallback: try stb_image for unrecognized formats (.bin, etc.)
         if (!isValidImage && imageBody.size() > 4) {
             int testW, testH, testC;
             if (stbi_info_from_memory(
@@ -1119,6 +1137,29 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
 
         if (!isValidImage) {
             brls::Logger::warning("ImageLoader: Invalid image format for {}", url);
+            return;
+        }
+
+        // TGA pass-through: already in GPU-ready format, skip decode/conversion
+        if (isTGA) {
+            brls::Logger::debug("ImageLoader: TGA pass-through ({} bytes) for {}", imageBody.size(), url);
+            std::vector<uint8_t> imageData(imageBody.begin(), imageBody.end());
+
+            std::string cacheKey = url + "_full";
+            if (totalSegments > 1) {
+                cacheKey += "_seg" + std::to_string(segment);
+            }
+            cachePut(cacheKey, imageData);
+
+            {
+                auto decodeEndTime = std::chrono::steady_clock::now();
+                auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeEndTime - loadStartTime).count();
+                brls::Logger::info("ImageLoader: [TIMING] TGA pass-through, total {}ms for {}", totalMs, url);
+            }
+
+            if (target || callback) {
+                queueRotatableTextureUpdate(imageData, target, callback, alive);
+            }
             return;
         }
 

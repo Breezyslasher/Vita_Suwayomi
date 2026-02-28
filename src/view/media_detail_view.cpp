@@ -224,8 +224,9 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     // callback always reflects the current download status, not stale bind-time values.
     int mangaId = m_view->m_manga.id;
     int chapterIdx = chapter.index;
+    std::weak_ptr<bool> aliveWeakForBtn = m_view->m_alive;
     cell->registerAction("Download", brls::ControllerButton::BUTTON_X,
-        [view, capturedChapter, cell, mangaId, chapterIdx](brls::View*) {
+        [view, capturedChapter, cell, mangaId, chapterIdx, aliveWeakForBtn](brls::View*) {
         int curState = view->getDownloadStateForRow(cell->rowIndex);
         bool queued = curState == static_cast<int>(LocalDownloadState::QUEUED);
         bool downloading = curState == static_cast<int>(LocalDownloadState::DOWNLOADING);
@@ -233,7 +234,13 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
             if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
-                view->refreshVisibleDownloadIcons();
+                // Defer UI refresh to next frame to avoid mutating the view
+                // hierarchy while borealis is still dispatching the button event.
+                brls::sync([view, aliveWeakForBtn]() {
+                    auto alive = aliveWeakForBtn.lock();
+                    if (!alive || !*alive) return;
+                    view->refreshVisibleDownloadIcons();
+                });
             }
         } else if (downloaded) {
             view->deleteChapterDownload(capturedChapter);
@@ -244,7 +251,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     });
 
     // Download button click
-    cell->dlBtn->registerClickAction([view, capturedChapter, cell, mangaId, chapterIdx](brls::View*) {
+    cell->dlBtn->registerClickAction([view, capturedChapter, cell, mangaId, chapterIdx, aliveWeakForBtn](brls::View*) {
         int curState = view->getDownloadStateForRow(cell->rowIndex);
         bool queued = curState == static_cast<int>(LocalDownloadState::QUEUED);
         bool downloading = curState == static_cast<int>(LocalDownloadState::DOWNLOADING);
@@ -252,7 +259,11 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
             if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
-                view->refreshVisibleDownloadIcons();
+                brls::sync([view, aliveWeakForBtn]() {
+                    auto alive = aliveWeakForBtn.lock();
+                    if (!alive || !*alive) return;
+                    view->refreshVisibleDownloadIcons();
+                });
             }
         } else if (downloaded) {
             view->deleteChapterDownload(capturedChapter);

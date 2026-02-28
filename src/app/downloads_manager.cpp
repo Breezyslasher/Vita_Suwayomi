@@ -23,6 +23,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+// WebP decoding for format conversion during download
+#include <webp/decode.h>
+
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
@@ -1898,6 +1901,11 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
 
     // Stream directly to file - no memory buffering (like NOBORU does)
     if (http.downloadToFile(imageUrl, localPath)) {
+        // Convert WebP to JPEG so the reader can use stb_image (fast) instead
+        // of libwebp (slow) at load time.  This also makes processImageQuality
+        // work on WebP sources since stbi_load cannot decode WebP.
+        convertWebPToJpeg(localPath);
+
         // Process image quality if needed (resize/recompress)
         processImageQuality(localPath);
         brls::Logger::debug("DownloadsManager: Page {} downloaded successfully", pageIndex);
@@ -2000,6 +2008,75 @@ bool DownloadsManager::processImageQuality(const std::string& filePath) {
                            w, h, newW, newH, jpegQuality);
     }
 
+    return result != 0;
+}
+
+bool DownloadsManager::convertWebPToJpeg(const std::string& filePath) {
+    // Read the first 12 bytes to check the WebP magic number (RIFF....WEBP)
+    // without loading the entire file into memory.
+#ifdef __vita__
+    SceUID fd = sceIoOpen(filePath.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) return false;
+
+    unsigned char header[12];
+    SceSSize bytesRead = sceIoRead(fd, header, 12);
+    if (bytesRead < 12) {
+        sceIoClose(fd);
+        return false;  // Too small to be WebP
+    }
+
+    bool isWebP = (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' &&
+                   header[8] == 'W' && header[9] == 'E' && header[10] == 'B' && header[11] == 'P');
+    if (!isWebP) {
+        sceIoClose(fd);
+        return false;  // Not WebP, nothing to do
+    }
+
+    // Read the full file
+    SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+    if (fileSize <= 0 || fileSize > 50 * 1024 * 1024) {
+        sceIoClose(fd);
+        return false;
+    }
+
+    std::vector<uint8_t> fileData(fileSize);
+    bytesRead = sceIoRead(fd, fileData.data(), fileSize);
+    sceIoClose(fd);
+    if (bytesRead != fileSize) return false;
+#else
+    std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) return false;
+    auto fileSize = file.tellg();
+    if (fileSize < 12 || fileSize > 50 * 1024 * 1024) return false;
+    file.seekg(0, std::ios::beg);
+    std::vector<uint8_t> fileData(fileSize);
+    if (!file.read(reinterpret_cast<char*>(fileData.data()), fileSize)) return false;
+    file.close();
+
+    bool isWebP = (fileData[0] == 'R' && fileData[1] == 'I' && fileData[2] == 'F' && fileData[3] == 'F' &&
+                   fileData[8] == 'W' && fileData[9] == 'E' && fileData[10] == 'B' && fileData[11] == 'P');
+    if (!isWebP) return false;
+#endif
+
+    // Decode WebP to RGB
+    int width = 0, height = 0;
+    uint8_t* rgb = WebPDecodeRGB(fileData.data(), fileData.size(), &width, &height);
+    if (!rgb || width <= 0 || height <= 0) {
+        if (rgb) WebPFree(rgb);
+        brls::Logger::warning("DownloadsManager: WebP decode failed for {}", filePath);
+        return false;
+    }
+
+    // Re-encode as JPEG at high quality (90) and overwrite the file
+    int result = stbi_write_jpg(filePath.c_str(), width, height, 3, rgb, 90);
+    WebPFree(rgb);
+
+    if (result) {
+        brls::Logger::info("DownloadsManager: Converted WebP {}x{} to JPEG: {}", width, height, filePath);
+    } else {
+        brls::Logger::error("DownloadsManager: Failed to write JPEG for WebP conversion: {}", filePath);
+    }
     return result != 0;
 }
 

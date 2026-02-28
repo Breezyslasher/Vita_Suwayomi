@@ -228,6 +228,10 @@ private:
     // Process downloaded image quality (resize/recompress based on quality setting)
     bool processImageQuality(const std::string& filePath);
 
+    // Convert WebP images to JPEG so the reader loads with fast stb_image
+    // instead of the slower libwebp decoder.  No-op for non-WebP files.
+    bool convertWebPToJpeg(const std::string& filePath);
+
     // Internal save without locking (caller must hold m_mutex)
     void saveStateUnlocked();
 
