@@ -174,6 +174,13 @@ void WebtoonScrollView::setupGestures() {
                 // Mark that the user has started scrolling (enables auto-extend)
                 if (!m_userHasScrolled) m_userHasScrolled = true;
 
+                // Don't update anchor here — it must stay fixed at the value
+                // set by prependPages/setPages so that ALL prepended pages
+                // always get scroll compensation when their images load with
+                // different-than-estimated heights.  Tracking anchor to
+                // m_currentPage caused pages the user just scrolled past to
+                // lose compensation, resulting in visible content jumps.
+
                 // Calculate velocity for momentum
                 auto now = std::chrono::steady_clock::now();
                 auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastTouchTime).count();
@@ -519,6 +526,7 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
     m_leadingExtendTriggered = false;
     m_userHasScrolled = false;
     m_extendingChapter = false;
+    m_anchorPage = -1;
 
     // Scroll to start page BEFORE loading images so we load from the
     // resume position, not from page 0
@@ -531,6 +539,11 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
         if (minScroll > maxScroll) minScroll = maxScroll;
         m_scrollY = std::max(minScroll, std::min(maxScroll, targetScroll));
         m_currentPage = startPage;
+
+        // Set anchor so only pages before startPage get scroll compensation
+        // when images load with different-than-estimated heights. Without this,
+        // the cascading drift pushes visibleTop past the start page.
+        m_anchorPage = startPage;
     }
 
     // Load visible images starting from current scroll position
@@ -562,6 +575,7 @@ void WebtoonScrollView::clearPages() {
     m_leadingExtendTriggered = false;
     m_userHasScrolled = false;
     m_extendingChapter = false;
+    m_anchorPage = -1;
 
     // Reset zoom state
     resetZoom();
@@ -639,7 +653,6 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     std::vector<Page> newPages;
     std::vector<std::shared_ptr<RotatableImage>> newImages;
     std::vector<float> newHeights;
-    float addedHeight = 0.0f;
 
     for (size_t i = 0; i < pages.size(); i++) {
         const std::string& url = pages[i].imageUrl;
@@ -656,8 +669,6 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
         newPages.push_back(pages[i]);
         newImages.push_back(pageImg);
         newHeights.push_back(pageHeight);
-        addedHeight += pageHeight;
-        if (i > 0) addedHeight += m_pageGap;
     }
 
     // Append ALL existing pages (keeping the leading transition as chapter separator)
@@ -715,9 +726,9 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     }
 
     // Adjust scroll position so existing content stays at the exact same screen position.
-    // We added 'addedHeight' of content before the existing pages plus one gap
-    // between the last new page and the first old page.
-    float scrollAdjust = addedHeight + (pages.empty() ? 0.0f : m_pageGap);
+    // Use getPageOffset(shift) which returns the offset in scroll-axis space,
+    // correctly handling horizontal layout where effective page size differs from height.
+    float scrollAdjust = getPageOffset(shift);
     float prevScrollY = m_scrollY;
     m_scrollY -= scrollAdjust;
 
@@ -727,8 +738,14 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
     // Adjust current page index
     m_currentPage += shift;
 
-    brls::Logger::info("WEBTOON_PREPEND: scrollAdjust={:.1f}, scrollY {:.1f} -> {:.1f}, shift={}",
-                        scrollAdjust, prevScrollY, m_scrollY, shift);
+    // Set anchor page so that only pages before this index get scroll
+    // compensation when their image heights change. This prevents the
+    // cascading drift where each compensation shifts visibleTop and
+    // causes further pages to appear above the viewport.
+    m_anchorPage = m_currentPage;
+
+    brls::Logger::info("WEBTOON_PREPEND: scrollAdjust={:.1f}, scrollY {:.1f} -> {:.1f}, shift={}, anchor={}",
+                        scrollAdjust, prevScrollY, m_scrollY, shift, m_anchorPage);
 
     // Reset overscroll
     m_overscrollAmount = 0.0f;
@@ -751,16 +768,10 @@ void WebtoonScrollView::trimPagesFromStart(int count) {
     brls::Logger::info("WEBTOON_TRIM_START: removing {} pages from start, total={}, scrollY={:.1f}",
                         count, m_pages.size(), m_scrollY);
 
-    // Calculate height of pages being removed
-    float removedHeight = 0.0f;
-    for (int i = 0; i < count; i++) {
-        removedHeight += m_pageHeights[i];
-        if (i > 0) removedHeight += m_pageGap;
-    }
-    // Add the gap between removed section and remaining section
-    if (count < static_cast<int>(m_pages.size())) {
-        removedHeight += m_pageGap;
-    }
+    // Calculate effective size of pages being removed in scroll-axis space.
+    // Must be computed BEFORE removing from arrays. getPageOffset handles
+    // horizontal layout correctly (uses effective page sizes, not raw heights).
+    float removedEffective = getPageOffset(count);
 
     // Remove from vectors
     m_pages.erase(m_pages.begin(), m_pages.begin() + count);
@@ -809,13 +820,18 @@ void WebtoonScrollView::trimPagesFromStart(int count) {
     }
 
     // Adjust scroll: content above was removed, so shift scroll up
-    m_scrollY += removedHeight;
+    m_scrollY += removedEffective;
 
     // Adjust current page
     m_currentPage = std::max(0, m_currentPage - count);
 
-    brls::Logger::info("WEBTOON_TRIM_START: done, total={}, scrollY={:.1f}, removedHeight={:.0f}",
-                        m_pages.size(), m_scrollY, removedHeight);
+    // Adjust anchor page (shift by trimmed count, disable if trimmed away)
+    if (m_anchorPage >= 0) {
+        m_anchorPage = std::max(-1, m_anchorPage - count);
+    }
+
+    brls::Logger::info("WEBTOON_TRIM_START: done, total={}, scrollY={:.1f}, removedEffective={:.0f}, anchor={}",
+                        m_pages.size(), m_scrollY, removedEffective, m_anchorPage);
 }
 
 void WebtoonScrollView::trimPagesFromEnd(int count) {
@@ -847,7 +863,8 @@ void WebtoonScrollView::trimPagesFromEnd(int count) {
 
     // Clamp scroll position in case the user was scrolled near the end
     float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
-    float minScroll = -(m_totalHeight - viewSize);
+    float totalContent = getTotalContentSize();
+    float minScroll = -(totalContent - viewSize);
     if (minScroll > 0.0f) minScroll = 0.0f;
     if (m_scrollY < minScroll) {
         m_scrollY = minScroll;
@@ -911,6 +928,7 @@ void WebtoonScrollView::scrollToPage(int pageIndex) {
 
     m_scrollY = std::max(minScroll, std::min(maxScroll, targetScroll));
     m_scrollVelocity = 0.0f;
+    m_anchorPage = -1;  // Clear anchor - explicit scroll sets a new viewport
 
     updateVisibleImages();
     updateCurrentPage();
@@ -1042,6 +1060,9 @@ void WebtoonScrollView::onFrame() {
 
         updateVisibleImages();
         updateCurrentPage();
+
+        // Don't update anchor during momentum — keep it fixed so
+        // prepended pages always get scroll compensation (see STAY handler).
     }
 }
 
@@ -1171,19 +1192,34 @@ void WebtoonScrollView::updateVisibleImages() {
                             m_pageHeights[pageIndex] = newHeight;
                             imgPtr->setHeight(newHeight);
 
-                            // Compensate scroll for any page whose top is above the
-                            // viewport top. This keeps the content the user is looking
-                            // at pinned in place:
-                            // - Pages fully above viewport: adjust (they shift everything down)
-                            // - The page straddling the top edge: adjust (its top is pinned)
-                            // - Pages fully below viewport: no adjust needed
-                            if (pageStart < visibleTop) {
-                                m_scrollY -= heightDelta;
-                                brls::Logger::info("WEBTOON_HEIGHT: page {} (start={:.0f} < visTop={:.0f}), scroll adjusted by {:.1f}",
-                                                    pageIndex, pageStart, visibleTop, -heightDelta);
+                            // Compensate scroll for pages above the user's reading
+                            // position so visible content stays pinned in place.
+                            //
+                            // Use anchor-page check when available (after prepend/append)
+                            // to avoid cascading drift: only pages before the anchor
+                            // get compensation. Otherwise fall back to position check.
+                            bool shouldAdjust = false;
+                            if (m_anchorPage >= 0) {
+                                shouldAdjust = (pageIndex < m_anchorPage);
                             } else {
-                                brls::Logger::info("WEBTOON_HEIGHT: page {} below viewport top (start={:.0f} visTop={:.0f}), delta={:.1f}, no adjust",
-                                                    pageIndex, pageStart, visibleTop, heightDelta);
+                                shouldAdjust = (pageStart < visibleTop);
+                            }
+
+                            if (shouldAdjust) {
+                                // In horizontal layout, scroll is in effective-size
+                                // space (height * availableH/availableW), not raw height.
+                                float scrollDelta = heightDelta;
+                                if (isHorizontalLayout()) {
+                                    float aw = m_viewWidth - (m_sidePadding * 2);
+                                    float ah = m_viewHeight - (m_sidePadding * 2);
+                                    if (aw > 0) scrollDelta = heightDelta * (ah / aw);
+                                }
+                                m_scrollY -= scrollDelta;
+                                brls::Logger::info("WEBTOON_HEIGHT: page {} (anchor={}, start={:.0f}, visTop={:.0f}), scroll adjusted by {:.1f} (hDelta={:.1f})",
+                                                    pageIndex, m_anchorPage, pageStart, visibleTop, -scrollDelta, heightDelta);
+                            } else {
+                                brls::Logger::info("WEBTOON_HEIGHT: page {} below anchor/viewport (anchor={}, start={:.0f} visTop={:.0f}), delta={:.1f}, no adjust",
+                                                    pageIndex, m_anchorPage, pageStart, visibleTop, heightDelta);
                             }
                         }
                     }
@@ -1200,8 +1236,17 @@ void WebtoonScrollView::updateVisibleImages() {
                         m_totalHeight += heightDelta;
                         m_pageHeights[pageIndex] = FAILED_PAGE_HEIGHT;
 
-                        if (pageStart < visibleTop) {
-                            m_scrollY -= heightDelta;
+                        bool shouldAdjust = (m_anchorPage >= 0)
+                            ? (pageIndex < m_anchorPage)
+                            : (pageStart < visibleTop);
+                        if (shouldAdjust) {
+                            float scrollDelta = heightDelta;
+                            if (isHorizontalLayout()) {
+                                float aw = m_viewWidth - (m_sidePadding * 2);
+                                float ah = m_viewHeight - (m_sidePadding * 2);
+                                if (aw > 0) scrollDelta = heightDelta * (ah / aw);
+                            }
+                            m_scrollY -= scrollDelta;
                         }
                     }
 

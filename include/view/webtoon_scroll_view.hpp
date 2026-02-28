@@ -255,6 +255,12 @@ private:
     std::set<int> m_loadingPages;     // Pages currently being loaded
     std::set<int> m_failedPages;      // Pages that failed to load
 
+    // Anchor page for scroll compensation after prepend/append.
+    // Only pages with index < m_anchorPage get scroll adjustment when
+    // their image height changes, preventing cascading drift.
+    // -1 means disabled (use legacy position-based check).
+    int m_anchorPage = -1;
+
     // Transition page data
     struct TransitionInfo {
         std::string line1;
