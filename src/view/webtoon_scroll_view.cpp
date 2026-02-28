@@ -174,15 +174,12 @@ void WebtoonScrollView::setupGestures() {
                 // Mark that the user has started scrolling (enables auto-extend)
                 if (!m_userHasScrolled) m_userHasScrolled = true;
 
-                // Update anchor to track the user's current reading page.
-                // This keeps the cascade-prevention active (index-based check
-                // doesn't drift like position-based) while allowing compensation
-                // for pages the user has scrolled past.  Don't clear it — the
-                // scroll gesture that triggered a prepend is often still active
-                // when the first async image loads arrive.
-                // Note: m_currentPage is from the previous frame; close enough
-                // since updateCurrentPage() runs below.
-                if (m_anchorPage >= 0) m_anchorPage = m_currentPage;
+                // Don't update anchor here — it must stay fixed at the value
+                // set by prependPages/setPages so that ALL prepended pages
+                // always get scroll compensation when their images load with
+                // different-than-estimated heights.  Tracking anchor to
+                // m_currentPage caused pages the user just scrolled past to
+                // lose compensation, resulting in visible content jumps.
 
                 // Calculate velocity for momentum
                 auto now = std::chrono::steady_clock::now();
@@ -837,8 +834,13 @@ void WebtoonScrollView::trimPagesFromStart(int count) {
     // Adjust current page
     m_currentPage = std::max(0, m_currentPage - count);
 
-    brls::Logger::info("WEBTOON_TRIM_START: done, total={}, scrollY={:.1f}, removedHeight={:.0f}",
-                        m_pages.size(), m_scrollY, removedHeight);
+    // Adjust anchor page (shift by trimmed count, disable if trimmed away)
+    if (m_anchorPage >= 0) {
+        m_anchorPage = std::max(-1, m_anchorPage - count);
+    }
+
+    brls::Logger::info("WEBTOON_TRIM_START: done, total={}, scrollY={:.1f}, removedHeight={:.0f}, anchor={}",
+                        m_pages.size(), m_scrollY, removedHeight, m_anchorPage);
 }
 
 void WebtoonScrollView::trimPagesFromEnd(int count) {
@@ -1067,8 +1069,8 @@ void WebtoonScrollView::onFrame() {
         updateVisibleImages();
         updateCurrentPage();
 
-        // Keep anchor tracking the reading position during momentum
-        if (m_anchorPage >= 0) m_anchorPage = m_currentPage;
+        // Don't update anchor during momentum — keep it fixed so
+        // prepended pages always get scroll compensation (see STAY handler).
     }
 }
 
