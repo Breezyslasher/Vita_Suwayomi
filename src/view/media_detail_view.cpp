@@ -233,7 +233,6 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
             if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
-                brls::Application::notify("Removed from queue");
                 view->refreshVisibleDownloadIcons();
             }
         } else if (downloaded) {
@@ -253,7 +252,6 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
             if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
-                brls::Application::notify("Removed from queue");
                 view->refreshVisibleDownloadIcons();
             }
         } else if (downloaded) {
@@ -2695,18 +2693,9 @@ void MangaDetailView::downloadChapter(const Chapter& chapter) {
             }
         }
 
-        brls::sync([this, downloadMode, serverQueued, localQueued, aliveWeak]() {
+        brls::sync([this, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
-            if (serverQueued || localQueued) {
-                std::string msg = "Queued";
-                if (serverQueued) msg += " server";
-                if (serverQueued && localQueued) msg += " +";
-                if (localQueued) msg += " local";
-                brls::Application::notify(msg);
-            } else {
-                brls::Application::notify("Failed to queue download");
-            }
             refreshVisibleDownloadIcons();
         });
     });
@@ -2751,19 +2740,9 @@ void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
             }
         }
 
-        brls::sync([this, downloadMode, serverDeleted, localDeleted, aliveWeak]() {
+        brls::sync([this, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
-            if (serverDeleted > 0 || localDeleted > 0) {
-                std::string msg = "Deleted";
-                if (serverDeleted > 0) msg += " server";
-                if (serverDeleted > 0 && localDeleted > 0) msg += " +";
-                if (localDeleted > 0) msg += " local";
-                msg += " download";
-                brls::Application::notify(msg);
-            } else {
-                brls::Application::notify("Failed to delete download");
-            }
             refreshVisibleDownloadIcons();
         });
     });

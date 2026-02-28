@@ -1200,20 +1200,25 @@ void WebtoonScrollView::updateVisibleImages() {
         RotatableImage* img = imgPtr.get();
 
         // Load the image
-        // IMPORTANT: Do NOT capture pageIndex by value — after prepend/append,
-        // indices shift and the captured value becomes stale. Instead, look up
-        // the current index of imgPtr in the callback by scanning m_pageImages.
+        // Capture the index at queue time for O(1) lookup in the common case.
+        // After prepend/append, indices shift, so verify imgPtr still matches
+        // and fall back to linear scan only when it doesn't.
         ImageLoader::loadAsyncFullSize(page.imageUrl,
-            [this, aliveWeak, imgPtr](RotatableImage* loadedImg) {
+            [this, aliveWeak, imgPtr, capturedIdx = i](RotatableImage* loadedImg) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
 
-                // Find the CURRENT index of this image (may have shifted due to prepend/append)
-                int pageIndex = -1;
-                for (int idx = 0; idx < static_cast<int>(m_pageImages.size()); idx++) {
-                    if (m_pageImages[idx] == imgPtr) {
-                        pageIndex = idx;
-                        break;
+                // Fast path: check if the image is still at the captured index
+                int pageIndex = capturedIdx;
+                if (pageIndex < 0 || pageIndex >= static_cast<int>(m_pageImages.size()) ||
+                    m_pageImages[pageIndex] != imgPtr) {
+                    // Index shifted (prepend/append happened) — fall back to linear scan
+                    pageIndex = -1;
+                    for (int idx = 0; idx < static_cast<int>(m_pageImages.size()); idx++) {
+                        if (m_pageImages[idx] == imgPtr) {
+                            pageIndex = idx;
+                            break;
+                        }
                     }
                 }
                 if (pageIndex < 0) {
@@ -1245,7 +1250,6 @@ void WebtoonScrollView::updateVisibleImages() {
 
                             m_totalHeight += heightDelta;
                             m_pageHeights[pageIndex] = newHeight;
-                            imgPtr->setHeight(newHeight);
                             invalidateOffsetCache();
 
                             // Compensate scroll for pages above the user's reading
@@ -1316,25 +1320,24 @@ void WebtoonScrollView::updateVisibleImages() {
 
     // Unload images that are far from the visible area to free GPU memory
     // This is important when multiple chapters accumulate via append/prepend
-    // Only iterate pages outside the keep range (avoid scanning all pages)
+    // Iterate m_loadedPages (small set, typically ~10 entries) instead of all
+    // pages to avoid O(n) per-frame cost with 170+ pages across chapters.
     int keepStart = std::max(0, firstVisible - UNLOAD_PAGES);
     int keepEnd = std::min(static_cast<int>(m_pages.size()) - 1, lastVisible + UNLOAD_PAGES);
 
-    // Unload pages before the keep range
-    for (int i = 0; i < keepStart; i++) {
-        if (isTransitionPage(i)) continue;
-        if (m_loadedPages.count(i) > 0 && m_pageImages[i] && m_pageImages[i]->hasImage()) {
-            m_pageImages[i]->clearImage();
-            m_loadedPages.erase(i);
+    // Collect pages to unload (can't erase from set while iterating)
+    std::vector<int> toUnload;
+    for (int i : m_loadedPages) {
+        if (i < keepStart || i > keepEnd) {
+            if (!isTransitionPage(i) && i < static_cast<int>(m_pageImages.size()) &&
+                m_pageImages[i] && m_pageImages[i]->hasImage()) {
+                toUnload.push_back(i);
+            }
         }
     }
-    // Unload pages after the keep range
-    for (int i = keepEnd + 1; i < static_cast<int>(m_pages.size()); i++) {
-        if (isTransitionPage(i)) continue;
-        if (m_loadedPages.count(i) > 0 && m_pageImages[i] && m_pageImages[i]->hasImage()) {
-            m_pageImages[i]->clearImage();
-            m_loadedPages.erase(i);
-        }
+    for (int i : toUnload) {
+        m_pageImages[i]->clearImage();
+        m_loadedPages.erase(i);
     }
 
     // Auto-extend: seamlessly load next/prev chapter when approaching transition pages.
