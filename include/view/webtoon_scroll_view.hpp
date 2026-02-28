@@ -187,6 +187,7 @@ private:
     bool isPageVisible(int pageIndex) const;
 
     // Calculate the offset for a page (Y for vertical, X for horizontal)
+    // Uses cached prefix sums for O(1) lookup
     float getPageOffset(int pageIndex) const;
 
     // Check if layout should be horizontal (at 90 or 270 rotation)
@@ -200,6 +201,15 @@ private:
 
     // Update current page based on scroll position
     void updateCurrentPage();
+
+    // Rebuild prefix-sum offset cache from m_pageHeights (const: modifies mutable cache)
+    void rebuildOffsetCache() const;
+
+    // Invalidate the offset cache (call when page heights change)
+    void invalidateOffsetCache();
+
+    // Find the first page whose offset is <= the given position (binary search)
+    int findPageAtOffset(float offset) const;
 
     // Apply momentum scrolling
     void applyMomentum();
@@ -275,6 +285,12 @@ private:
     float m_pageGap = 0.0f;           // Gap between pages (0 for seamless webtoon)
     std::vector<float> m_pageHeights; // Height of each page
     float m_rotationDegrees = 0.0f;   // Image rotation (0, 90, 180, 270)
+
+    // Prefix-sum offset cache for O(1) page offset lookups and O(log n) searches.
+    // m_offsetCache[i] = sum of effective page sizes for pages 0..i-1 (including gaps).
+    // m_offsetCache[0] = 0, m_offsetCache[n] = total content size.
+    mutable std::vector<float> m_offsetCache;
+    mutable bool m_offsetCacheDirty = true;
 
     // Callbacks
     ScrollProgressCallback m_progressCallback;

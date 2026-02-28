@@ -5,6 +5,7 @@
 
 #include "view/webtoon_scroll_view.hpp"
 #include "utils/image_loader.hpp"
+#include <algorithm>
 #include <cmath>
 #include <map>
 
@@ -308,16 +309,15 @@ int WebtoonScrollView::getPageAtPosition(float tapX, float tapY) const {
         }
     }
 
-    // Subtract the view origin (since tap coords start from view origin)
-    // The draw function uses x + m_scrollY or y + m_scrollY as starting offset
-
-    float offset = 0.0f;
-    for (int i = 0; i < static_cast<int>(m_pageHeights.size()); i++) {
-        float pageSize = getEffectivePageSize(i);
-        if (contentPos >= offset && contentPos < offset + pageSize) {
-            return i;
+    // Use binary search to find which page contains the tap position
+    rebuildOffsetCache();
+    int page = findPageAtOffset(contentPos);
+    if (page >= 0 && page < static_cast<int>(m_pageHeights.size())) {
+        float pageStart = m_offsetCache[page];
+        float pageSize = getEffectivePageSize(page);
+        if (contentPos >= pageStart && contentPos < pageStart + pageSize) {
+            return page;
         }
-        offset += pageSize + m_pageGap;
     }
     return -1;
 }
@@ -510,6 +510,8 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
         m_totalHeight -= m_pageGap;
     }
 
+    invalidateOffsetCache();
+
     // Reset state
     m_scrollY = 0.0f;
     m_scrollVelocity = 0.0f;
@@ -566,6 +568,7 @@ void WebtoonScrollView::clearPages() {
     m_failedPages.clear();
     m_transitionInfo.clear();
     m_totalHeight = 0.0f;
+    invalidateOffsetCache();
     m_scrollY = 0.0f;
     m_scrollVelocity = 0.0f;
     m_overscrollAmount = 0.0f;
@@ -617,6 +620,8 @@ void WebtoonScrollView::appendPages(const std::vector<Page>& pages) {
         }
         m_totalHeight += pageHeight;
     }
+
+    invalidateOffsetCache();
 
     // Kill momentum — prevent the user from flying through placeholder pages
     // at high speed, which causes jarring jumps when images load with different heights.
@@ -725,6 +730,8 @@ void WebtoonScrollView::prependPages(const std::vector<Page>& pages) {
         if (i > 0) m_totalHeight += m_pageGap;
     }
 
+    invalidateOffsetCache();
+
     // Adjust scroll position so existing content stays at the exact same screen position.
     // Use getPageOffset(shift) which returns the offset in scroll-axis space,
     // correctly handling horizontal layout where effective page size differs from height.
@@ -819,6 +826,8 @@ void WebtoonScrollView::trimPagesFromStart(int count) {
         if (i > 0) m_totalHeight += m_pageGap;
     }
 
+    invalidateOffsetCache();
+
     // Adjust scroll: content above was removed, so shift scroll up
     m_scrollY += removedEffective;
 
@@ -860,6 +869,8 @@ void WebtoonScrollView::trimPagesFromEnd(int count) {
         m_totalHeight += m_pageHeights[i];
         if (i > 0) m_totalHeight += m_pageGap;
     }
+
+    invalidateOffsetCache();
 
     // Clamp scroll position in case the user was scrolled near the end
     float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
@@ -961,6 +972,7 @@ void WebtoonScrollView::setSidePadding(int percent) {
     }
     float paddingRatio = percent / 100.0f;
     m_sidePadding = m_viewWidth * paddingRatio;
+    invalidateOffsetCache();
 }
 
 void WebtoonScrollView::setRotation(float degrees) {
@@ -989,6 +1001,7 @@ void WebtoonScrollView::setRotation(float degrees) {
         }
     }
 
+    invalidateOffsetCache();
     brls::Logger::debug("WebtoonScrollView: setRotation({}) -> {} degrees", degrees, m_rotationDegrees);
 }
 
@@ -1025,15 +1038,50 @@ float WebtoonScrollView::getTotalContentSize() const {
         return m_totalHeight;
     }
 
-    // Horizontal layout: recalculate total width
-    float totalWidth = 0.0f;
-    for (size_t i = 0; i < m_pageHeights.size(); i++) {
-        totalWidth += getEffectivePageSize(static_cast<int>(i));
-        if (i < m_pageHeights.size() - 1) {
-            totalWidth += m_pageGap;
+    // Horizontal layout: use offset cache (last entry = total size + trailing gap)
+    rebuildOffsetCache();
+    if (m_offsetCache.size() > 1) {
+        // Subtract trailing m_pageGap since there's no gap after the last page
+        return m_offsetCache.back() - m_pageGap;
+    }
+    return 0.0f;
+}
+
+void WebtoonScrollView::rebuildOffsetCache() const {
+    if (!m_offsetCacheDirty) return;
+
+    int n = static_cast<int>(m_pageHeights.size());
+    m_offsetCache.resize(n + 1);
+    m_offsetCache[0] = 0.0f;
+    // Match getPageOffset semantics: each page followed by m_pageGap
+    for (int i = 0; i < n; i++) {
+        m_offsetCache[i + 1] = m_offsetCache[i] + getEffectivePageSize(i) + m_pageGap;
+    }
+    m_offsetCacheDirty = false;
+}
+
+void WebtoonScrollView::invalidateOffsetCache() {
+    m_offsetCacheDirty = true;
+}
+
+int WebtoonScrollView::findPageAtOffset(float targetOffset) const {
+    rebuildOffsetCache();
+    int n = static_cast<int>(m_pageHeights.size());
+    if (n == 0) return 0;
+
+    // Binary search: find the last page whose start offset <= targetOffset
+    int lo = 0, hi = n - 1;
+    int result = 0;
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (m_offsetCache[mid] <= targetOffset) {
+            result = mid;
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
         }
     }
-    return totalWidth;
+    return result;
 }
 
 void WebtoonScrollView::onFrame() {
@@ -1067,15 +1115,12 @@ void WebtoonScrollView::onFrame() {
 }
 
 float WebtoonScrollView::getPageOffset(int pageIndex) const {
-    if (pageIndex < 0 || pageIndex >= static_cast<int>(m_pageHeights.size())) {
+    if (pageIndex <= 0 || pageIndex >= static_cast<int>(m_pageHeights.size())) {
         return 0.0f;
     }
 
-    float offset = 0.0f;
-    for (int i = 0; i < pageIndex; i++) {
-        offset += getEffectivePageSize(i) + m_pageGap;
-    }
-    return offset;
+    rebuildOffsetCache();
+    return m_offsetCache[pageIndex];
 }
 
 bool WebtoonScrollView::isPageVisible(int pageIndex) const {
@@ -1083,34 +1128,44 @@ bool WebtoonScrollView::isPageVisible(int pageIndex) const {
         return false;
     }
 
-    float pageStart = getPageOffset(pageIndex);
+    rebuildOffsetCache();
+    float pageStart = m_offsetCache[pageIndex];
     float pageSize = getEffectivePageSize(pageIndex);
     float pageEnd = pageStart + pageSize;
 
-    if (isHorizontalLayout()) {
-        float visibleLeft = -m_scrollY;
-        float visibleRight = visibleLeft + m_viewWidth;
-        return (pageEnd > visibleLeft && pageStart < visibleRight);
-    } else {
-        float visibleTop = -m_scrollY;
-        float visibleBottom = visibleTop + m_viewHeight;
-        return (pageEnd > visibleTop && pageStart < visibleBottom);
-    }
+    float visibleStart = -m_scrollY;
+    float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+    float visibleEnd = visibleStart + viewSize;
+    return (pageEnd > visibleStart && pageStart < visibleEnd);
 }
 
 void WebtoonScrollView::updateVisibleImages() {
-    // Find visible pages and preload nearby pages
-    int firstVisible = -1;
-    int lastVisible = -1;
+    if (m_pages.empty()) return;
 
-    for (int i = 0; i < static_cast<int>(m_pages.size()); i++) {
-        if (isPageVisible(i)) {
-            if (firstVisible < 0) firstVisible = i;
-            lastVisible = i;
-        }
+    // Use binary search to find visible page range (O(log n) instead of O(n))
+    rebuildOffsetCache();
+    int n = static_cast<int>(m_pages.size());
+
+    float visibleStart = -m_scrollY;
+    float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+    float visibleEnd = visibleStart + viewSize;
+
+    // Find first page that overlaps the visible area
+    // findPageAtOffset returns the last page whose start <= visibleStart,
+    // which is exactly the topmost visible (or partially visible) page.
+    int firstVisible = findPageAtOffset(visibleStart);
+    // Clamp to valid range
+    firstVisible = std::max(0, std::min(firstVisible, n - 1));
+
+    // Find last visible page by scanning forward from firstVisible
+    int lastVisible = firstVisible;
+    for (int i = firstVisible; i < n; i++) {
+        float pageStart = m_offsetCache[i];
+        if (pageStart > visibleEnd) break;
+        lastVisible = i;
     }
 
-    if (firstVisible < 0) {
+    if (firstVisible < 0 || firstVisible >= n) {
         return;  // No visible pages
     }
 
@@ -1191,6 +1246,7 @@ void WebtoonScrollView::updateVisibleImages() {
                             m_totalHeight += heightDelta;
                             m_pageHeights[pageIndex] = newHeight;
                             imgPtr->setHeight(newHeight);
+                            invalidateOffsetCache();
 
                             // Compensate scroll for pages above the user's reading
                             // position so visible content stays pinned in place.
@@ -1235,6 +1291,7 @@ void WebtoonScrollView::updateVisibleImages() {
                         float heightDelta = FAILED_PAGE_HEIGHT - oldHeight;
                         m_totalHeight += heightDelta;
                         m_pageHeights[pageIndex] = FAILED_PAGE_HEIGHT;
+                        invalidateOffsetCache();
 
                         bool shouldAdjust = (m_anchorPage >= 0)
                             ? (pageIndex < m_anchorPage)
@@ -1259,18 +1316,24 @@ void WebtoonScrollView::updateVisibleImages() {
 
     // Unload images that are far from the visible area to free GPU memory
     // This is important when multiple chapters accumulate via append/prepend
-    int unloadStart = std::max(0, firstVisible - UNLOAD_PAGES);
-    int unloadEnd = std::min(static_cast<int>(m_pages.size()) - 1, lastVisible + UNLOAD_PAGES);
+    // Only iterate pages outside the keep range (avoid scanning all pages)
+    int keepStart = std::max(0, firstVisible - UNLOAD_PAGES);
+    int keepEnd = std::min(static_cast<int>(m_pages.size()) - 1, lastVisible + UNLOAD_PAGES);
 
-    for (int i = 0; i < static_cast<int>(m_pages.size()); i++) {
-        if (i >= unloadStart && i <= unloadEnd) continue;  // Within keep range
-        if (isTransitionPage(i)) continue;  // Transition pages have no images
-
+    // Unload pages before the keep range
+    for (int i = 0; i < keepStart; i++) {
+        if (isTransitionPage(i)) continue;
         if (m_loadedPages.count(i) > 0 && m_pageImages[i] && m_pageImages[i]->hasImage()) {
             m_pageImages[i]->clearImage();
             m_loadedPages.erase(i);
-            // Don't erase from m_loadingPages or add to m_failedPages -
-            // the page will be re-loaded when it comes back into range
+        }
+    }
+    // Unload pages after the keep range
+    for (int i = keepEnd + 1; i < static_cast<int>(m_pages.size()); i++) {
+        if (isTransitionPage(i)) continue;
+        if (m_loadedPages.count(i) > 0 && m_pageImages[i] && m_pageImages[i]->hasImage()) {
+            m_pageImages[i]->clearImage();
+            m_loadedPages.erase(i);
         }
     }
 
@@ -1327,27 +1390,29 @@ void WebtoonScrollView::updateVisibleImages() {
 }
 
 void WebtoonScrollView::updateCurrentPage() {
-    // Find the page at the start of the visible area
+    if (m_pages.empty()) return;
+
+    // Use binary search to find the page at the start of the visible area (O(log n))
+    rebuildOffsetCache();
     float visibleStart = -m_scrollY;
 
+    int pageAtTop = findPageAtOffset(visibleStart);
+    int n = static_cast<int>(m_pages.size());
+    pageAtTop = std::max(0, std::min(pageAtTop, n - 1));
+
+    // Check if the page end extends past the visible start
+    float pageEnd = m_offsetCache[pageAtTop] + getEffectivePageSize(pageAtTop);
     int newCurrentPage = 0;
-    float offset = 0.0f;
 
-    for (int i = 0; i < static_cast<int>(m_pageHeights.size()); i++) {
-        float pageSize = getEffectivePageSize(i);
-        float pageEnd = offset + pageSize;
-
-        if (pageEnd > visibleStart) {
-            // Skip transition pages for progress reporting
-            if (!isTransitionPage(i)) {
-                newCurrentPage = i;
-            } else if (i + 1 < static_cast<int>(m_pageHeights.size())) {
-                newCurrentPage = i + 1;  // Report next real page
-            }
-            break;
+    if (pageEnd > visibleStart) {
+        // Skip transition pages for progress reporting
+        if (!isTransitionPage(pageAtTop)) {
+            newCurrentPage = pageAtTop;
+        } else if (pageAtTop + 1 < n) {
+            newCurrentPage = pageAtTop + 1;
         }
-
-        offset = pageEnd + m_pageGap;
+    } else if (pageAtTop + 1 < n) {
+        newCurrentPage = pageAtTop + 1;
     }
 
     if (newCurrentPage != m_currentPage) {
@@ -1388,6 +1453,22 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
 
     bool horizontal = isHorizontalLayout();
 
+    // Rebuild offset cache once for O(1) lookups in the draw loop
+    rebuildOffsetCache();
+    int pageCount = static_cast<int>(m_pageImages.size());
+
+    // Use binary search to find the range of pages to draw (with 100px margin)
+    // This avoids iterating all pages every frame - critical for chapters with 90+ pages
+    float margin = 100.0f;
+    float visibleStart = -m_scrollY - margin;
+    float visibleEnd = -m_scrollY + (horizontal ? width : height) + margin;
+    int drawStart = std::max(0, findPageAtOffset(visibleStart));
+    // Step back one to catch partially visible pages
+    if (drawStart > 0) drawStart--;
+    int drawEnd = std::min(pageCount - 1, findPageAtOffset(visibleEnd));
+    // Step forward one to catch partially visible pages
+    if (drawEnd < pageCount - 1) drawEnd++;
+
     if (horizontal) {
         // Horizontal layout (for 90/270 rotation)
         float availableHeight = height - (m_sidePadding * 2);
@@ -1398,7 +1479,7 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         // 270° CW: original top maps to LEFT side, so pages flow left-to-right
         bool rightToLeft = (rotation == 90);
 
-        for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
+        for (int i = drawStart; i <= drawEnd && i < pageCount; i++) {
             RotatableImage* img = m_pageImages[i].get();
 
             float pageWidth;
@@ -1418,30 +1499,25 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
                 }
             }
 
-            // Calculate screen X position based on layout direction
-            float contentOffset = getPageOffset(i);
+            // Calculate screen X position based on layout direction (O(1) offset lookup)
+            float contentOffset = m_offsetCache[i];
             float pageX_screen;
             if (rightToLeft) {
                 // RTL: content start at right edge, pages flow leftward
-                // screenX = x + width - scrollY - contentOffset - pageWidth
                 pageX_screen = x + width - m_scrollY - contentOffset - pageWidth;
             } else {
                 // LTR: content start at left edge, pages flow rightward
                 pageX_screen = x + m_scrollY + contentOffset;
             }
-            float pageRight = pageX_screen + pageWidth;
 
-            // Check if page is in visible area
-            if (pageRight >= x - 100 && pageX_screen <= x + width + 100) {
-                if (isTransitionPage(i)) {
-                    drawTransitionPage(vg, i, pageX_screen, pageY, pageWidth, availableHeight);
-                } else if (isFailedPage(i)) {
-                    drawFailedPage(vg, i, pageX_screen, pageY, pageWidth, availableHeight);
-                } else if (img) {
-                    img->setWidth(pageWidth);
-                    img->setHeight(availableHeight);
-                    img->draw(vg, pageX_screen, pageY, pageWidth, availableHeight, style, ctx);
-                }
+            if (isTransitionPage(i)) {
+                drawTransitionPage(vg, i, pageX_screen, pageY, pageWidth, availableHeight);
+            } else if (isFailedPage(i)) {
+                drawFailedPage(vg, i, pageX_screen, pageY, pageWidth, availableHeight);
+            } else if (img) {
+                img->setWidth(pageWidth);
+                img->setHeight(availableHeight);
+                img->draw(vg, pageX_screen, pageY, pageWidth, availableHeight, style, ctx);
             }
         }
     } else {
@@ -1454,11 +1530,11 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
         // 0°: normal top-to-bottom
         bool bottomToTop = (rotation == 180);
 
-        for (int i = 0; i < static_cast<int>(m_pageImages.size()); i++) {
+        for (int i = drawStart; i <= drawEnd && i < pageCount; i++) {
             float pageHeight = m_pageHeights[i];
 
-            // Calculate screen Y position based on layout direction
-            float contentOffset = getPageOffset(i);
+            // Calculate screen Y position based on layout direction (O(1) offset lookup)
+            float contentOffset = m_offsetCache[i];
             float pageY_screen;
             if (bottomToTop) {
                 // BTT: content start at bottom edge, pages flow upward
@@ -1467,20 +1543,16 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
                 // TTB: content start at top edge, pages flow downward
                 pageY_screen = y + m_scrollY + contentOffset;
             }
-            float pageBottom = pageY_screen + pageHeight;
 
-            // Check if page is in visible area
-            if (pageBottom >= y - 100 && pageY_screen <= y + height + 100) {
-                if (isTransitionPage(i)) {
-                    drawTransitionPage(vg, i, pageX, pageY_screen, availableWidth, pageHeight);
-                } else if (isFailedPage(i)) {
-                    drawFailedPage(vg, i, pageX, pageY_screen, availableWidth, pageHeight);
-                } else {
-                    RotatableImage* img = m_pageImages[i].get();
-                    if (img) {
-                        img->setWidth(availableWidth);
-                        img->draw(vg, pageX, pageY_screen, availableWidth, pageHeight, style, ctx);
-                    }
+            if (isTransitionPage(i)) {
+                drawTransitionPage(vg, i, pageX, pageY_screen, availableWidth, pageHeight);
+            } else if (isFailedPage(i)) {
+                drawFailedPage(vg, i, pageX, pageY_screen, availableWidth, pageHeight);
+            } else {
+                RotatableImage* img = m_pageImages[i].get();
+                if (img) {
+                    img->setWidth(availableWidth);
+                    img->draw(vg, pageX, pageY_screen, availableWidth, pageHeight, style, ctx);
                 }
             }
         }
