@@ -1793,18 +1793,54 @@ void MangaDetailView::showMangaMenu() {
 
     bool online = Application::getInstance().isConnected();
 
+    // Check download states to decide which menu items to show
+    DownloadsManager& dm = DownloadsManager::getInstance();
+    bool hasActiveDownloads = false;  // any downloading, queued, or completed
+    bool hasDownloadingOrQueued = false;
+    int downloadedCount = 0;
+    int unreadDownloadingOrQueued = 0;
+    int unreadCount = 0;
+    int totalChapters = static_cast<int>(chapters.size());
+
+    for (const auto& ch : chapters) {
+        if (!ch.read) unreadCount++;
+
+        DownloadedChapter* localCh = dm.getChapterDownload(mangaId, ch.index);
+        if (localCh) {
+            if (localCh->state == LocalDownloadState::DOWNLOADING ||
+                localCh->state == LocalDownloadState::QUEUED) {
+                hasDownloadingOrQueued = true;
+                hasActiveDownloads = true;
+                if (!ch.read) unreadDownloadingOrQueued++;
+            } else if (localCh->state == LocalDownloadState::COMPLETED) {
+                hasActiveDownloads = true;
+                downloadedCount++;
+            }
+        }
+        if (ch.downloaded) {
+            hasActiveDownloads = true;
+            downloadedCount++;
+        }
+    }
+
+    bool allDownloaded = (downloadedCount >= totalChapters && totalChapters > 0);
+    bool allUnreadDownloading = (unreadCount > 0 && unreadDownloadingOrQueued >= unreadCount);
+
     // Build options list with action IDs so hidden items don't shift indices
     struct MenuAction { std::string label; int actionId; };
     std::vector<MenuAction> actions;
     std::vector<std::string> options;
 
-    if (online) {
+    // Hide download options if all chapters are downloaded or all unread are downloading
+    if (online && !allDownloaded && !allUnreadDownloading) {
         actions.push_back({"Download all", 0});
         actions.push_back({"Download unread", 1});
     }
-    actions.push_back({"Remove all chapters", 2});
+    // Combined "Cancel & Remove downloads" - only show if there are any downloads
+    if (hasActiveDownloads) {
+        actions.push_back({"Cancel & Remove downloads", 2});
+    }
     if (online) {
-        actions.push_back({"Cancel downloading chapters", 3});
         actions.push_back({"Reset cover", 4});
     }
 
@@ -1831,14 +1867,30 @@ void MangaDetailView::showMangaMenu() {
                         downloadUnreadChapters();
                     });
                     break;
-                case 2: {  // Remove all chapters
-                    brls::sync([mangaId, chapters]() {
-                        // Get download mode setting
-                        DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
-                        brls::Logger::debug("Remove all chapters: downloadMode = {} (0=Server, 1=Local, 2=Both)",
-                                           static_cast<int>(downloadMode));
+                case 2: {  // Cancel & Remove downloads (combined)
+                    brls::sync([this, mangaId, chapters, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                        auto alive = aliveWeak.lock();
+                        if (!alive || !*alive) return;
 
-                        // Collect server-downloaded chapter IDs and indexes (from chapter data)
+                        // First cancel all downloading/queued chapters
+                        DownloadsManager& dm = DownloadsManager::getInstance();
+                        int cancelledCount = 0;
+                        for (const auto& ch : chapters) {
+                            DownloadedChapter* localCh = dm.getChapterDownload(mangaId, ch.index);
+                            if (localCh && (localCh->state == LocalDownloadState::QUEUED ||
+                                           localCh->state == LocalDownloadState::DOWNLOADING)) {
+                                if (dm.cancelChapterDownload(mangaId, ch.index)) {
+                                    cancelledCount++;
+                                }
+                            }
+                        }
+                        if (cancelledCount > 0) {
+                            dm.pauseDownloads();
+                        }
+
+                        // Then remove all downloaded chapters
+                        DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+
                         std::vector<int> serverChapterIds;
                         std::vector<int> serverChapterIndexes;
                         if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
@@ -1850,8 +1902,6 @@ void MangaDetailView::showMangaMenu() {
                             }
                         }
 
-                        // Collect locally-downloaded chapter indexes from DownloadsManager
-                        DownloadsManager& dm = DownloadsManager::getInstance();
                         std::vector<int> localChapterIndexes;
                         if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
                             for (const auto& ch : chapters) {
@@ -1861,71 +1911,56 @@ void MangaDetailView::showMangaMenu() {
                             }
                         }
 
-                        if (serverChapterIndexes.empty() && localChapterIndexes.empty()) {
-                            brls::Application::notify("No downloads to delete");
+                        if (serverChapterIndexes.empty() && localChapterIndexes.empty() && cancelledCount == 0) {
+                            brls::Application::notify("No downloads to remove");
                             return;
                         }
 
+                        std::string msg;
+                        if (cancelledCount > 0) {
+                            msg = "Cancelled " + std::to_string(cancelledCount);
+                        }
                         int totalToDelete = 0;
-                        if (downloadMode == DownloadMode::SERVER_ONLY) {
-                            totalToDelete = serverChapterIndexes.size();
-                        } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
-                            totalToDelete = localChapterIndexes.size();
-                        } else {
-                            // BOTH - count unique chapters (some may be in both)
-                            std::set<int> uniqueIndexes(serverChapterIndexes.begin(), serverChapterIndexes.end());
-                            uniqueIndexes.insert(localChapterIndexes.begin(), localChapterIndexes.end());
-                            totalToDelete = uniqueIndexes.size();
+                        if (!serverChapterIndexes.empty() || !localChapterIndexes.empty()) {
+                            if (downloadMode == DownloadMode::SERVER_ONLY) {
+                                totalToDelete = serverChapterIndexes.size();
+                            } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
+                                totalToDelete = localChapterIndexes.size();
+                            } else {
+                                std::set<int> uniqueIndexes(serverChapterIndexes.begin(), serverChapterIndexes.end());
+                                uniqueIndexes.insert(localChapterIndexes.begin(), localChapterIndexes.end());
+                                totalToDelete = uniqueIndexes.size();
+                            }
+                            if (!msg.empty()) msg += ", deleting ";
+                            else msg = "Deleting ";
+                            msg += std::to_string(totalToDelete) + " downloads...";
+                        }
+                        if (!msg.empty()) {
+                            brls::Application::notify(msg);
                         }
 
-                        brls::Application::notify("Deleting " + std::to_string(totalToDelete) + " downloads...");
-
-                        // Run delete in async without capturing 'this'
-                        asyncRun([downloadMode, mangaId, serverChapterIds, serverChapterIndexes, localChapterIndexes]() {
-                            int serverDeletedCount = 0;
-                            int localDeletedCount = 0;
-
-                            // Delete from server if applicable
-                            if (!serverChapterIds.empty() &&
-                                (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
-                                SuwayomiClient& client = SuwayomiClient::getInstance();
-                                if (client.deleteChapterDownloads(serverChapterIds, mangaId, serverChapterIndexes)) {
-                                    serverDeletedCount = serverChapterIds.size();
+                        if (totalToDelete > 0) {
+                            asyncRun([downloadMode, mangaId, serverChapterIds, serverChapterIndexes, localChapterIndexes]() {
+                                if (!serverChapterIds.empty() &&
+                                    (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
+                                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                                    client.deleteChapterDownloads(serverChapterIds, mangaId, serverChapterIndexes);
                                 }
-                            }
-
-                            // Delete from local if applicable
-                            if (!localChapterIndexes.empty() &&
-                                (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
-                                DownloadsManager& dm = DownloadsManager::getInstance();
-                                for (int chapterIndex : localChapterIndexes) {
-                                    if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
-                                        localDeletedCount++;
+                                if (!localChapterIndexes.empty() &&
+                                    (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
+                                    DownloadsManager& dm = DownloadsManager::getInstance();
+                                    for (int chapterIndex : localChapterIndexes) {
+                                        dm.deleteChapterDownload(mangaId, chapterIndex);
                                     }
                                 }
-                            }
-
-                            brls::sync([downloadMode, serverDeletedCount, localDeletedCount]() {
-                                if (downloadMode == DownloadMode::SERVER_ONLY) {
-                                    brls::Application::notify("Deleted " + std::to_string(serverDeletedCount) + " server downloads");
-                                } else if (downloadMode == DownloadMode::LOCAL_ONLY) {
-                                    brls::Application::notify("Deleted " + std::to_string(localDeletedCount) + " local downloads");
-                                } else {
-                                    brls::Application::notify("Deleted " + std::to_string(serverDeletedCount) + " server + " +
-                                                             std::to_string(localDeletedCount) + " local downloads");
-                                }
+                                brls::sync([]() {
+                                    brls::Application::notify("Downloads removed");
+                                });
                             });
-                        });
+                        }
                     });
                     break;
                 }
-                case 3:  // Cancel downloading chapters
-                    brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-                        auto alive = aliveWeak.lock();
-                        if (!alive || !*alive) return;
-                        cancelAllDownloading();
-                    });
-                    break;
                 case 4:  // Reset cover
                     brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
                         auto alive = aliveWeak.lock();

@@ -1593,12 +1593,11 @@ void SettingsTab::runNetworkTest() {
             dialog->setCancelable(true);
 
             auto* scrollView = new brls::ScrollingFrame();
-            scrollView->setGrow(1.0f);
+            scrollView->setHeight(400);
 
             auto* contentBox = new brls::Box();
             contentBox->setAxis(brls::Axis::COLUMN);
             contentBox->setPadding(20);
-            contentBox->setGrow(1.0f);
 
             // Helper to add a section
             auto addSection = [&](const std::string& title, const std::vector<std::pair<std::string, std::string>>& items) {
