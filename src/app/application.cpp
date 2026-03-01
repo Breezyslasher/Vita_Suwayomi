@@ -90,8 +90,63 @@ void Application::run() {
             }
         }
 
-        // Test connection before proceeding
+        // Test connection with a PROTECTED query (not just aboutServer which is public)
+        // This catches auth mode mismatches that testConnection() would miss
+        bool authValid = false;
         if (client.testConnection()) {
+            brls::Logger::info("Server reachable, validating auth with protected query...");
+
+            if (authMode == AuthMode::NONE) {
+                // No auth - if testConnection works, we're good
+                authValid = true;
+            } else if (client.validateAuthWithProtectedQuery()) {
+                brls::Logger::info("Auth validated with protected query");
+                authValid = true;
+            } else {
+                // Auth failed on protected query - try all auth modes automatically
+                brls::Logger::warning("Protected query failed with saved mode {}, trying all modes...",
+                    static_cast<int>(authMode));
+
+                std::string username = getAuthUsername();
+                std::string password = getAuthPassword();
+
+                if (!username.empty() && !password.empty()) {
+                    // Try all modes: UI_LOGIN, SIMPLE_LOGIN, BASIC_AUTH
+                    AuthMode tryModes[] = { AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN, AuthMode::BASIC_AUTH };
+                    for (AuthMode tryMode : tryModes) {
+                        if (tryMode == authMode) continue;  // Already failed with this mode
+
+                        brls::Logger::info("Trying auth mode: {}", static_cast<int>(tryMode));
+                        client.setAuthMode(tryMode);
+                        client.logout();
+
+                        if (tryMode == AuthMode::BASIC_AUTH) {
+                            client.setAuthCredentials(username, password);
+                        } else {
+                            if (!client.login(username, password)) continue;
+                        }
+
+                        if (client.validateAuthWithProtectedQuery()) {
+                            brls::Logger::info("Auth succeeded with mode {}", static_cast<int>(tryMode));
+                            m_settings.authMode = static_cast<int>(tryMode);
+                            m_settings.accessToken = client.getAccessToken();
+                            m_settings.refreshToken = client.getRefreshToken();
+                            saveSettings();
+                            authValid = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!authValid) {
+                    brls::Logger::error("All auth modes failed, showing login screen");
+                }
+            }
+        } else {
+            brls::Logger::warning("Server not reachable");
+        }
+
+        if (authValid) {
             brls::Logger::info("Connection restored successfully");
             m_isConnected = true;
 
@@ -113,7 +168,7 @@ void Application::run() {
 
             pushMainActivity();
         } else {
-            // Connection failed - could be offline or auth expired
+            // Connection or auth failed - could be offline or auth expired
             // Check if we have downloads, if so go to main activity (offline mode)
             auto downloads = DownloadsManager::getInstance().getDownloads();
             if (!downloads.empty()) {

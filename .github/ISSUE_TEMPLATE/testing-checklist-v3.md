@@ -17,26 +17,42 @@ assignees: ''
 
 ## Authentication & Connection
 
-### Login & Credentials
+### Login & Auto-Detection
 - [ ] Connect to Suwayomi server with URL
-- [ ] Login with username/password (Basic Auth)
+- [ ] Auth mode auto-detected on connect (no manual selection needed)
 - [ ] Credentials persist after app restart
-- [ ] App handles invalid credentials gracefully
-- [ ] App handles server offline gracefully
-- [ ] Connection status shows correctly
+- [ ] Status label shows "Checking server..." then "Detecting auth mode..." during connect
+- [ ] Status shows detected auth mode on success: "Connected! (UI Login (JWT))"
 
-### Auth Modes
-- [ ] Auth mode cycles through: None, Basic Auth, Simple Login, UI Login
-- [ ] Selected auth mode displays on login screen
-- [ ] Wrong auth mode shows helpful error message
+### Error Messages
+- [ ] Empty URL shows: "Please enter server URL"
+- [ ] Server offline/wrong URL shows: "Server offline or wrong URL"
+- [ ] Auth required but no credentials shows: "Server requires auth - enter username & password"
+- [ ] Wrong credentials shows: "Wrong username or password"
+- [ ] Connection test (Test button) detects server reachability and auth type
+
+### Auto-Detection Flow
+- [ ] No-auth server: auto-detects None, connects without credentials
+- [ ] Basic Auth server: auto-detects Basic Auth, validates credentials
+- [ ] JWT server (UI Login): auto-detects UI Login, login + validates protected query
+- [ ] JWT server (Simple Login): tries UI Login first, falls back to Simple Login
+- [ ] Auth mode label updates to show detected mode after connect
+- [ ] Manual auth mode override still works (tap to cycle)
 
 ### JWT Authentication (Simple Login / UI Login)
 - [ ] JWT login sends username/password and receives tokens
 - [ ] Access token stored and used for API calls
+- [ ] Protected query validation after login (categories query)
+- [ ] If wrong JWT mode selected, auto-switches to correct mode
 - [ ] Refresh token stored for token renewal
 - [ ] JWT tokens persist after restart
-- [ ] Server JWT support auto-detected
-- [ ] Basic Auth selected but server uses JWT shows guidance
+
+### Connection Restore (App Restart)
+- [ ] Saved JWT tokens refreshed on startup
+- [ ] Auth validated with protected query (not just public aboutServer)
+- [ ] If saved auth mode wrong, auto-tries all modes (UI Login, Simple Login, Basic Auth)
+- [ ] Correct mode saved after auto-detection on restore
+- [ ] Falls back to login screen if all auth modes fail
 
 ### URL Configuration
 - [ ] Local server URL (LAN) works

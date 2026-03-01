@@ -402,6 +402,10 @@ public:
     // Also returns an error message if detection fails
     AuthMode detectServerAuthMode(const std::string& url, std::string& errorMessage);
 
+    // Validate that authentication works for protected queries (not just public ones like aboutServer)
+    // Returns true if a protected query (categories) succeeds with current auth
+    bool validateAuthWithProtectedQuery();
+
     // Extension Management
     bool fetchExtensionList(std::vector<Extension>& extensions);
     bool fetchInstalledExtensions(std::vector<Extension>& extensions);  // Server-side filtered: installed only

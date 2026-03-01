@@ -2066,6 +2066,36 @@ AuthMode SuwayomiClient::detectServerAuthMode(const std::string& url, std::strin
     }
 }
 
+bool SuwayomiClient::validateAuthWithProtectedQuery() {
+    // Use a lightweight protected query to verify auth actually works
+    // aboutServer is public and always succeeds - we need to test a protected endpoint
+    const char* query = R"(
+        query {
+            categories {
+                nodes {
+                    id
+                }
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query);
+    if (response.empty()) {
+        brls::Logger::warning("validateAuthWithProtectedQuery: query returned empty (auth likely failed)");
+        return false;
+    }
+
+    // Check if response contains data (not just errors)
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        brls::Logger::warning("validateAuthWithProtectedQuery: no data in response");
+        return false;
+    }
+
+    brls::Logger::info("validateAuthWithProtectedQuery: auth validated successfully");
+    return true;
+}
+
 bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
     // Try GraphQL first (primary API)
     brls::Logger::info("Fetching server info via GraphQL...");
