@@ -122,47 +122,60 @@ void LoginActivity::onTestConnectionPressed() {
         return;
     }
 
+    if (m_connecting) return;
+    m_connecting = true;
+
     if (statusLabel) statusLabel->setText("Testing connection...");
 
-    SuwayomiClient& client = SuwayomiClient::getInstance();
-    client.setServerUrl(m_serverUrl);
+    std::string serverUrl = m_serverUrl;
+    std::string username = m_username;
+    std::string password = m_password;
 
-    // Step 1: Check basic reachability
-    if (!client.connectToServer(m_serverUrl)) {
-        if (statusLabel) statusLabel->setText("Cannot reach server - check URL");
-        return;
-    }
+    asyncRun([this, serverUrl, username, password]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        client.setServerUrl(serverUrl);
 
-    // Step 2: Fetch server info (public endpoint)
-    ServerInfo info;
-    if (client.fetchServerInfo(info)) {
-        std::string msg = "Reachable! Server v" + info.version;
-        if (statusLabel) statusLabel->setText(msg);
-    } else {
-        if (statusLabel) statusLabel->setText("Server is reachable!");
-    }
+        // Step 1: Check basic reachability
+        if (!client.connectToServer(serverUrl)) {
+            brls::sync([this]() {
+                if (statusLabel) statusLabel->setText("Cannot reach server - check URL");
+                m_connecting = false;
+            });
+            return;
+        }
 
-    // Step 3: Auto-detect auth mode
-    bool serverRequiresAuth = client.checkServerRequiresAuth(m_serverUrl);
-    if (!serverRequiresAuth) {
-        if (statusLabel) statusLabel->setText("Server OK - no auth required");
-        m_authMode = AuthMode::NONE;
-        return;
-    }
+        // Step 2: Fetch server info (public endpoint)
+        ServerInfo info;
+        bool hasInfo = client.fetchServerInfo(info);
+        std::string infoVersion = hasInfo ? info.version : "";
 
-    // Server requires auth - detect the type
-    std::string errorMsg;
-    AuthMode detectedMode = client.detectServerAuthMode(m_serverUrl, errorMsg);
-    std::string modeName = getAuthModeName(detectedMode);
+        // Step 3: Auto-detect auth mode
+        bool serverRequiresAuth = client.checkServerRequiresAuth(serverUrl);
+        if (!serverRequiresAuth) {
+            brls::sync([this]() {
+                if (statusLabel) statusLabel->setText("Server OK - no auth required");
+                m_authMode = AuthMode::NONE;
+                m_connecting = false;
+            });
+            return;
+        }
 
-    if (m_username.empty() || m_password.empty()) {
-        if (statusLabel) statusLabel->setText("Auth required (" + modeName + ") - enter credentials");
-        m_authMode = detectedMode;
-        return;
-    }
+        // Server requires auth - detect the type
+        std::string errorMsg;
+        AuthMode detectedMode = client.detectServerAuthMode(serverUrl, errorMsg);
+        std::string modeName = getAuthModeName(detectedMode);
 
-    if (statusLabel) statusLabel->setText("Server OK, auth: " + modeName);
-    m_authMode = detectedMode;
+        brls::sync([this, username, password, detectedMode, modeName]() {
+            m_authMode = detectedMode;
+            m_connecting = false;
+
+            if (username.empty() || password.empty()) {
+                if (statusLabel) statusLabel->setText("Auth required (" + modeName + ") - enter credentials");
+            } else {
+                if (statusLabel) statusLabel->setText("Server OK, auth: " + modeName);
+            }
+        });
+    });
 }
 
 void LoginActivity::onConnectPressed() {
@@ -171,138 +184,166 @@ void LoginActivity::onConnectPressed() {
         return;
     }
 
+    if (m_connecting) return;
+    m_connecting = true;
+
     if (statusLabel) statusLabel->setText("Connecting...");
 
-    SuwayomiClient& client = SuwayomiClient::getInstance();
-    client.setServerUrl(m_serverUrl);
+    // Capture values for background thread
+    std::string serverUrl = m_serverUrl;
+    std::string username = m_username;
+    std::string password = m_password;
 
-    bool connected = false;
+    asyncRun([this, serverUrl, username, password]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        client.setServerUrl(serverUrl);
 
-    // Step 1: Check if server is reachable at all (using basic connectivity test)
-    if (statusLabel) statusLabel->setText("Checking server...");
-    if (!client.connectToServer(m_serverUrl)) {
-        // Server not reachable - provide specific error
-        if (statusLabel) statusLabel->setText("Cannot reach server");
-        return;
-    }
+        bool connected = false;
+        AuthMode authMode = AuthMode::NONE;
 
-    // Server is reachable - now check auth requirements
-    if (statusLabel) statusLabel->setText("Detecting auth mode...");
-    bool serverRequiresAuth = client.checkServerRequiresAuth(m_serverUrl);
-
-    if (!serverRequiresAuth) {
-        // No auth required - already connected from step 1
-        brls::Logger::info("Server does not require auth");
-        m_authMode = AuthMode::NONE;
-        client.setAuthMode(AuthMode::NONE);
-        connected = true;
-    } else {
-        // Server requires auth - need credentials
-        if (m_username.empty() || m_password.empty()) {
-            if (statusLabel) statusLabel->setText("Server requires auth - enter username & password");
+        // Step 1: Check if server is reachable at all
+        brls::sync([this]() {
+            if (statusLabel) statusLabel->setText("Checking server...");
+        });
+        if (!client.connectToServer(serverUrl)) {
+            brls::sync([this]() {
+                if (statusLabel) statusLabel->setText("Cannot reach server");
+                m_connecting = false;
+            });
             return;
         }
 
-        // Step 2: Detect if server supports JWT or only Basic Auth
-        bool supportsJWT = client.checkServerSupportsJWTLogin(m_serverUrl);
+        // Server is reachable - now check auth requirements
+        brls::sync([this]() {
+            if (statusLabel) statusLabel->setText("Detecting auth mode...");
+        });
+        bool serverRequiresAuth = client.checkServerRequiresAuth(serverUrl);
 
-        if (supportsJWT) {
-            // Server supports JWT - try UI_LOGIN first, then SIMPLE_LOGIN
-            AuthMode tryModes[] = { AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN };
-            bool loginOk = false;
-
-            for (AuthMode tryMode : tryModes) {
-                std::string modeName = getAuthModeName(tryMode);
-                brls::Logger::info("Trying auth mode: {}", modeName);
-                if (statusLabel) statusLabel->setText("Trying " + modeName + "...");
-
-                client.setAuthMode(tryMode);
-                client.logout();  // Clear any previous tokens
-
-                if (!client.login(m_username, m_password)) {
-                    brls::Logger::info("{}: login failed - bad credentials?", modeName);
-                    // Login mutation failed - likely wrong credentials
-                    // Don't try more modes, credentials are the issue
-                    if (statusLabel) statusLabel->setText("Wrong username or password");
-                    brls::Application::notify("Check your credentials");
-                    return;
-                }
-
-                // Login succeeded - validate with a protected query
-                if (client.validateAuthWithProtectedQuery()) {
-                    brls::Logger::info("Auto-detected auth mode: {}", modeName);
-                    m_authMode = tryMode;
-                    loginOk = true;
-                    connected = true;
-                    break;
-                }
-
-                brls::Logger::info("{}: login ok but protected query failed, trying next", modeName);
-            }
-
-            if (!loginOk) {
-                // JWT modes didn't work - try Basic Auth as fallback
-                brls::Logger::info("JWT modes failed, trying Basic Auth fallback");
-                if (statusLabel) statusLabel->setText("Trying Basic Auth...");
-                client.setAuthMode(AuthMode::BASIC_AUTH);
-                client.logout();
-                client.setAuthCredentials(m_username, m_password);
-
-                if (client.validateAuthWithProtectedQuery()) {
-                    brls::Logger::info("Auth succeeded with Basic Auth fallback");
-                    m_authMode = AuthMode::BASIC_AUTH;
-                    connected = true;
-                } else {
-                    if (statusLabel) statusLabel->setText("Wrong username or password");
-                    brls::Application::notify("All auth modes failed - check credentials");
-                    return;
-                }
-            }
+        if (!serverRequiresAuth) {
+            brls::Logger::info("Server does not require auth");
+            authMode = AuthMode::NONE;
+            client.setAuthMode(AuthMode::NONE);
+            connected = true;
         } else {
-            // Server only supports Basic Auth
-            brls::Logger::info("Auto-detected: Basic Auth");
-            m_authMode = AuthMode::BASIC_AUTH;
-            client.setAuthMode(AuthMode::BASIC_AUTH);
-            client.setAuthCredentials(m_username, m_password);
-
-            // Validate credentials with a protected query
-            if (statusLabel) statusLabel->setText("Authenticating...");
-            if (!client.validateAuthWithProtectedQuery()) {
-                if (statusLabel) statusLabel->setText("Wrong username or password");
-                brls::Application::notify("Check your credentials");
+            // Server requires auth - need credentials
+            if (username.empty() || password.empty()) {
+                brls::sync([this]() {
+                    if (statusLabel) statusLabel->setText("Server requires auth - enter username & password");
+                    m_connecting = false;
+                });
                 return;
             }
-            connected = true;
+
+            // Step 2: Detect if server supports JWT or only Basic Auth
+            bool supportsJWT = client.checkServerSupportsJWTLogin(serverUrl);
+
+            if (supportsJWT) {
+                AuthMode tryModes[] = { AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN };
+                bool loginOk = false;
+
+                for (AuthMode tryMode : tryModes) {
+                    std::string modeName = getAuthModeName(tryMode);
+                    brls::Logger::info("Trying auth mode: {}", modeName);
+                    brls::sync([this, modeName]() {
+                        if (statusLabel) statusLabel->setText("Trying " + modeName + "...");
+                    });
+
+                    client.setAuthMode(tryMode);
+                    client.logout();
+
+                    if (!client.login(username, password)) {
+                        brls::Logger::info("{}: login failed - bad credentials?", modeName);
+                        brls::sync([this]() {
+                            if (statusLabel) statusLabel->setText("Wrong username or password");
+                            m_connecting = false;
+                        });
+                        return;
+                    }
+
+                    if (client.validateAuthWithProtectedQuery()) {
+                        brls::Logger::info("Auto-detected auth mode: {}", modeName);
+                        authMode = tryMode;
+                        loginOk = true;
+                        connected = true;
+                        break;
+                    }
+
+                    brls::Logger::info("{}: login ok but protected query failed, trying next", modeName);
+                }
+
+                if (!loginOk) {
+                    brls::Logger::info("JWT modes failed, trying Basic Auth fallback");
+                    brls::sync([this]() {
+                        if (statusLabel) statusLabel->setText("Trying Basic Auth...");
+                    });
+                    client.setAuthMode(AuthMode::BASIC_AUTH);
+                    client.logout();
+                    client.setAuthCredentials(username, password);
+
+                    if (client.validateAuthWithProtectedQuery()) {
+                        brls::Logger::info("Auth succeeded with Basic Auth fallback");
+                        authMode = AuthMode::BASIC_AUTH;
+                        connected = true;
+                    } else {
+                        brls::sync([this]() {
+                            if (statusLabel) statusLabel->setText("Wrong username or password");
+                            m_connecting = false;
+                        });
+                        return;
+                    }
+                }
+            } else {
+                brls::Logger::info("Auto-detected: Basic Auth");
+                authMode = AuthMode::BASIC_AUTH;
+                client.setAuthMode(AuthMode::BASIC_AUTH);
+                client.setAuthCredentials(username, password);
+
+                brls::sync([this]() {
+                    if (statusLabel) statusLabel->setText("Authenticating...");
+                });
+                if (!client.validateAuthWithProtectedQuery()) {
+                    brls::sync([this]() {
+                        if (statusLabel) statusLabel->setText("Wrong username or password");
+                        m_connecting = false;
+                    });
+                    return;
+                }
+                connected = true;
+            }
         }
-    }
 
-    if (connected) {
-        // Save server URL and auth credentials
-        Application::getInstance().setServerUrl(m_serverUrl);
-        Application::getInstance().setAuthCredentials(m_username, m_password);
-        Application::getInstance().setConnected(true);
+        // Back to UI thread for final result
+        brls::sync([this, connected, authMode, serverUrl, username, password]() {
+            m_connecting = false;
 
-        // Save auto-detected auth mode and tokens
-        AppSettings& settings = Application::getInstance().getSettings();
-        settings.authMode = static_cast<int>(m_authMode);
-        settings.accessToken = client.getAccessToken();
-        settings.refreshToken = client.getRefreshToken();
+            if (connected) {
+                m_authMode = authMode;
 
-        if (settings.localServerUrl.empty()) {
-            settings.localServerUrl = m_serverUrl;
-        }
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                Application::getInstance().setServerUrl(serverUrl);
+                Application::getInstance().setAuthCredentials(username, password);
+                Application::getInstance().setConnected(true);
 
-        Application::getInstance().saveSettings();
+                AppSettings& settings = Application::getInstance().getSettings();
+                settings.authMode = static_cast<int>(authMode);
+                settings.accessToken = client.getAccessToken();
+                settings.refreshToken = client.getRefreshToken();
 
-        std::string modeName = getAuthModeName(m_authMode);
-        if (statusLabel) statusLabel->setText("Connected! (" + modeName + ")");
+                if (settings.localServerUrl.empty()) {
+                    settings.localServerUrl = serverUrl;
+                }
 
-        brls::sync([this]() {
-            Application::getInstance().pushMainActivity();
+                Application::getInstance().saveSettings();
+
+                std::string modeName = getAuthModeName(authMode);
+                if (statusLabel) statusLabel->setText("Connected! (" + modeName + ")");
+
+                Application::getInstance().pushMainActivity();
+            } else {
+                if (statusLabel) statusLabel->setText("Connection failed");
+            }
         });
-    } else {
-        if (statusLabel) statusLabel->setText("Connection failed");
-    }
+    });
 }
 
 void LoginActivity::onOfflinePressed() {

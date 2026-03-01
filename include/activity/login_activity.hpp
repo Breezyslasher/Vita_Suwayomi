@@ -38,6 +38,7 @@ private:
     std::string m_username;
     std::string m_password;
     AuthMode m_authMode = AuthMode::NONE;
+    bool m_connecting = false;
 
     std::string getAuthModeName(AuthMode mode);
 };
