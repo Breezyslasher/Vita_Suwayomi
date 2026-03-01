@@ -88,25 +88,6 @@ void LoginActivity::onContentAvailable() {
         passwordLabel->addGestureRecognizer(new brls::TapGestureRecognizer(passwordLabel));
     }
 
-    // Auth mode display (auto-detected on connect)
-    if (authModeLabel) {
-        if (m_authMode == AuthMode::NONE && m_serverUrl.empty()) {
-            authModeLabel->setText("Auth Mode: Auto-detect");
-        } else {
-            authModeLabel->setText("Auth Mode: " + getAuthModeName(m_authMode));
-        }
-        // Still allow manual override if user taps
-        authModeLabel->registerClickAction([this](brls::View* view) {
-            // Cycle through auth modes (manual override)
-            int currentMode = static_cast<int>(m_authMode);
-            currentMode = (currentMode + 1) % 4;
-            m_authMode = static_cast<AuthMode>(currentMode);
-            authModeLabel->setText("Auth Mode: " + getAuthModeName(m_authMode));
-            return true;
-        });
-        authModeLabel->addGestureRecognizer(new brls::TapGestureRecognizer(authModeLabel));
-    }
-
     // Connect button
     if (loginButton) {
         loginButton->setText("Connect");
@@ -166,7 +147,6 @@ void LoginActivity::onTestConnectionPressed() {
     if (!serverRequiresAuth) {
         if (statusLabel) statusLabel->setText("Server OK - no auth required");
         m_authMode = AuthMode::NONE;
-        if (authModeLabel) authModeLabel->setText("Auth Mode: None");
         return;
     }
 
@@ -178,13 +158,11 @@ void LoginActivity::onTestConnectionPressed() {
     if (m_username.empty() || m_password.empty()) {
         if (statusLabel) statusLabel->setText("Auth required (" + modeName + ") - enter credentials");
         m_authMode = detectedMode;
-        if (authModeLabel) authModeLabel->setText("Auth Mode: " + modeName);
         return;
     }
 
     if (statusLabel) statusLabel->setText("Server OK, auth: " + modeName);
     m_authMode = detectedMode;
-    if (authModeLabel) authModeLabel->setText("Auth Mode: " + modeName);
 }
 
 void LoginActivity::onConnectPressed() {
@@ -204,8 +182,7 @@ void LoginActivity::onConnectPressed() {
     if (statusLabel) statusLabel->setText("Checking server...");
     if (!client.connectToServer(m_serverUrl)) {
         // Server not reachable - provide specific error
-        if (statusLabel) statusLabel->setText("Server offline or wrong URL");
-        brls::Application::notify("Cannot reach " + m_serverUrl);
+        if (statusLabel) statusLabel->setText("Cannot reach server");
         return;
     }
 
@@ -217,7 +194,6 @@ void LoginActivity::onConnectPressed() {
         // No auth required - already connected from step 1
         brls::Logger::info("Server does not require auth");
         m_authMode = AuthMode::NONE;
-        if (authModeLabel) authModeLabel->setText("Auth Mode: None");
         client.setAuthMode(AuthMode::NONE);
         connected = true;
     } else {
@@ -256,7 +232,6 @@ void LoginActivity::onConnectPressed() {
                 if (client.validateAuthWithProtectedQuery()) {
                     brls::Logger::info("Auto-detected auth mode: {}", modeName);
                     m_authMode = tryMode;
-                    if (authModeLabel) authModeLabel->setText("Auth Mode: " + modeName);
                     loginOk = true;
                     connected = true;
                     break;
@@ -276,7 +251,6 @@ void LoginActivity::onConnectPressed() {
                 if (client.validateAuthWithProtectedQuery()) {
                     brls::Logger::info("Auth succeeded with Basic Auth fallback");
                     m_authMode = AuthMode::BASIC_AUTH;
-                    if (authModeLabel) authModeLabel->setText("Auth Mode: Basic Auth");
                     connected = true;
                 } else {
                     if (statusLabel) statusLabel->setText("Wrong username or password");
@@ -288,7 +262,6 @@ void LoginActivity::onConnectPressed() {
             // Server only supports Basic Auth
             brls::Logger::info("Auto-detected: Basic Auth");
             m_authMode = AuthMode::BASIC_AUTH;
-            if (authModeLabel) authModeLabel->setText("Auth Mode: Basic Auth");
             client.setAuthMode(AuthMode::BASIC_AUTH);
             client.setAuthCredentials(m_username, m_password);
 
