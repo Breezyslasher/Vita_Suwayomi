@@ -49,14 +49,6 @@
             marginBottom="15"
             focusable="true"/>
 
-        <!-- Auth Mode -->
-        <brls:Label
-            id="login/auth_mode_label"
-            text="Auth Mode: None"
-            fontSize="18"
-            marginBottom="30"
-            focusable="true"/>
-
     </brls:Box>
 
     <!-- Buttons -->

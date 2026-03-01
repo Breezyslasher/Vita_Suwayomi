@@ -1959,17 +1959,20 @@ bool SuwayomiClient::connectToServer(const std::string& url) {
 }
 
 bool SuwayomiClient::checkServerRequiresAuth(const std::string& url) {
-    // Make a simple request WITHOUT authentication to check if server requires auth
-    // Returns true if server responds with 401 Unauthorized
+    // Make a request WITHOUT authentication to check if server requires auth
+    // Uses a PROTECTED query (categories) instead of a public one (aboutServer)
+    // so we can reliably detect when auth is needed
     brls::Logger::info("Checking if server requires authentication...");
 
     // Create a basic HTTP client without any auth headers
     vitasuwayomi::HttpClient http;
     http.setTimeout(10);
+    http.setDefaultHeader("Accept", "application/json");
 
-    // Try the GraphQL endpoint first (most common)
+    // Try the GraphQL endpoint with a PROTECTED query (categories requires auth)
+    // aboutServer is public and would return 200 even when auth is required
     std::string testUrl = url + "/api/graphql";
-    std::string body = R"({"query":"{ aboutServer { name } }"})";
+    std::string body = R"({"query":"{ categories { nodes { id } } }"})";
 
     vitasuwayomi::HttpResponse response = http.post(testUrl, body, "application/json");
 
@@ -1978,12 +1981,32 @@ bool SuwayomiClient::checkServerRequiresAuth(const std::string& url) {
         return true;
     }
 
+    // If we got a 200, verify it's a valid Suwayomi GraphQL response with actual data
+    // A non-Suwayomi server (e.g. nginx serving HTML) would return 200 but not valid GraphQL JSON
+    if (response.statusCode == 200 && response.body.find("\"data\"") != std::string::npos) {
+        brls::Logger::info("Server does not require authentication (protected query succeeded)");
+        return false;
+    }
+
     // Also try REST endpoint as fallback check
     testUrl = url + "/api/v1/settings/about";
     response = http.get(testUrl);
 
     if (response.statusCode == 401) {
         brls::Logger::info("Server requires authentication (got 401 from REST)");
+        return true;
+    }
+
+    // If REST returned 200, verify it contains Suwayomi JSON data
+    if (response.statusCode == 200) {
+        size_t firstChar = response.body.find_first_not_of(" \t\n\r");
+        if (firstChar != std::string::npos && response.body[firstChar] == '{' &&
+            response.body.find("\"version\"") != std::string::npos) {
+            brls::Logger::info("Server does not require authentication (REST about succeeded)");
+            return false;
+        }
+        // Response is 200 but not valid Suwayomi JSON - likely a web server returning HTML
+        brls::Logger::warning("REST response is not valid Suwayomi JSON, assuming auth required");
         return true;
     }
 
@@ -2126,6 +2149,14 @@ bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
             return false;
         }
 
+        // Validate the source list response is actually JSON (not HTML from a web server)
+        std::string trimmedBody = response.body;
+        size_t firstChar = trimmedBody.find_first_not_of(" \t\n\r");
+        if (firstChar == std::string::npos || trimmedBody[firstChar] != '[') {
+            brls::Logger::error("Source list response is not JSON - server may not be Suwayomi");
+            return false;
+        }
+
         // If source list works, server is reachable but about endpoint might not exist
         info.name = "Suwayomi";
         info.version = "Unknown";
@@ -2136,6 +2167,17 @@ bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
 
     brls::Logger::debug("Server response: {}", response.body.substr(0, 200));
 
+    // Validate the response is actually JSON (not HTML from a reverse proxy/web server)
+    // A non-Suwayomi server (e.g. nginx) may return 200 with HTML for any path
+    {
+        size_t firstChar = response.body.find_first_not_of(" \t\n\r");
+        if (firstChar == std::string::npos ||
+            (response.body[firstChar] != '{' && response.body[firstChar] != '[')) {
+            brls::Logger::warning("REST about response is not JSON (likely HTML from a web server)");
+            return false;
+        }
+    }
+
     // Parse About response (name, version, revision, buildType, buildTime, github, discord)
     info.name = extractJsonValue(response.body, "name");
     info.version = extractJsonValue(response.body, "version");
@@ -2144,6 +2186,13 @@ bool SuwayomiClient::fetchServerInfo(ServerInfo& info) {
     info.buildTime = extractJsonInt64(response.body, "buildTime");
     info.github = extractJsonValue(response.body, "github");
     info.discord = extractJsonValue(response.body, "discord");
+
+    // Validate the response actually contains Suwayomi data
+    // A real Suwayomi server always returns a version string
+    if (info.version.empty() && info.name.empty()) {
+        brls::Logger::warning("REST about response has no version or name - server may not be Suwayomi");
+        return false;
+    }
 
     // Fallback name if not set
     if (info.name.empty()) info.name = "Suwayomi";
