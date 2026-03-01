@@ -86,7 +86,14 @@ void Application::run() {
                 m_settings.accessToken = client.getAccessToken();
                 m_settings.refreshToken = client.getRefreshToken();
             } else {
-                brls::Logger::warning("Token refresh failed, will try basic connection test");
+                brls::Logger::warning("Token refresh failed, clearing stale tokens for basic auth fallback");
+                // Clear stale JWT tokens so createHttpClient() falls back to Basic auth credentials.
+                // This handles the case where the server switched from JWT to Basic auth mode -
+                // without clearing, createHttpClient() keeps sending the stale Bearer token
+                // which the server rejects with 401 on every request.
+                client.setTokens("", "");
+                m_settings.accessToken = "";
+                m_settings.refreshToken = "";
             }
         }
 
@@ -143,7 +150,54 @@ void Application::run() {
                 }
             }
         } else {
-            brls::Logger::warning("Server not reachable");
+            brls::Logger::warning("Server not reachable with current auth mode {}", static_cast<int>(authMode));
+
+            // testConnection() can fail due to auth mode mismatch (not just network issues).
+            // For example, if server switched from JWT to Basic auth and token clearing wasn't
+            // enough, or if the auth mode changed in other ways.
+            // Try all auth modes as fallback before giving up.
+            std::string username = getAuthUsername();
+            std::string password = getAuthPassword();
+
+            if (!username.empty() && !password.empty()) {
+                brls::Logger::info("Have credentials, trying auth mode fallback...");
+                // Try BASIC_AUTH first since it's the most common fallback from JWT
+                AuthMode tryModes[] = { AuthMode::BASIC_AUTH, AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN, AuthMode::NONE };
+                for (AuthMode tryMode : tryModes) {
+                    if (tryMode == authMode) continue;  // Already failed with this mode
+
+                    brls::Logger::info("Trying auth mode: {}", static_cast<int>(tryMode));
+                    client.setAuthMode(tryMode);
+                    client.logout();
+
+                    if (tryMode == AuthMode::BASIC_AUTH) {
+                        client.setAuthCredentials(username, password);
+                    } else if (tryMode == AuthMode::NONE) {
+                        // No credentials needed
+                    } else {
+                        if (!client.login(username, password)) continue;
+                    }
+
+                    if (client.testConnection() && client.validateAuthWithProtectedQuery()) {
+                        brls::Logger::info("Connection succeeded with auth mode {}", static_cast<int>(tryMode));
+                        m_settings.authMode = static_cast<int>(tryMode);
+                        m_settings.accessToken = client.getAccessToken();
+                        m_settings.refreshToken = client.getRefreshToken();
+                        saveSettings();
+                        authValid = true;
+                        break;
+                    }
+                }
+
+                if (!authValid) {
+                    // Restore original auth mode so login screen starts from a known state
+                    client.setAuthMode(authMode);
+                    if (authMode == AuthMode::BASIC_AUTH) {
+                        client.setAuthCredentials(username, password);
+                    }
+                    brls::Logger::error("All auth mode fallbacks failed");
+                }
+            }
         }
 
         if (authValid) {
