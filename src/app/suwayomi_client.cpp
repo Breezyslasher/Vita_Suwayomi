@@ -2350,16 +2350,38 @@ bool SuwayomiClient::loginGraphQL(const std::string& username, const std::string
     m_accessToken = extractJsonValue(loginData, "accessToken");
     m_refreshToken = extractJsonValue(loginData, "refreshToken");
 
-    if (m_accessToken.empty()) {
-        brls::Logger::error("Login failed: No access token received");
+    // Capture Set-Cookie header for simple_login mode (cookie-based session)
+    // The server may return a session cookie instead of/in addition to JWT tokens
+    auto cookieIt = response.headers.find("Set-Cookie");
+    if (cookieIt == response.headers.end()) {
+        cookieIt = response.headers.find("set-cookie");
+    }
+    if (cookieIt != response.headers.end() && !cookieIt->second.empty()) {
+        m_sessionCookie = cookieIt->second;
+        // Strip cookie attributes (Path, HttpOnly, etc.) - only keep the cookie value
+        size_t semicolonPos = m_sessionCookie.find(';');
+        if (semicolonPos != std::string::npos) {
+            m_sessionCookie = m_sessionCookie.substr(0, semicolonPos);
+        }
+        brls::Logger::info("Login: captured session cookie");
+    }
+
+    if (m_accessToken.empty() && m_sessionCookie.empty()) {
+        brls::Logger::error("Login failed: No access token or session cookie received");
         return false;
     }
 
-    brls::Logger::info("Login successful, received tokens");
+    if (!m_accessToken.empty()) {
+        brls::Logger::info("Login successful, received JWT tokens");
+    } else {
+        brls::Logger::info("Login successful, received session cookie (simple_login)");
+    }
 
     // Update image loader with auth info and access token
     ImageLoader::setAuthCredentials(username, password);
-    ImageLoader::setAccessToken(m_accessToken);
+    if (!m_accessToken.empty()) {
+        ImageLoader::setAccessToken(m_accessToken);
+    }
 
     return true;
 }

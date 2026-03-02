@@ -252,12 +252,8 @@ void LoginActivity::onConnectPressed() {
                     client.logout();
 
                     if (!client.login(username, password)) {
-                        brls::Logger::info("{}: login failed - bad credentials?", modeName);
-                        brls::sync([this]() {
-                            if (statusLabel) statusLabel->setText("Wrong username or password");
-                            m_connecting = false;
-                        });
-                        return;
+                        brls::Logger::info("{}: login call failed, trying next mode", modeName);
+                        continue;
                     }
 
                     if (client.validateAuthWithProtectedQuery()) {

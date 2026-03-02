@@ -118,29 +118,45 @@ void Application::run() {
                 std::string password = getAuthPassword();
 
                 if (!username.empty() && !password.empty()) {
-                    // Try all modes: UI_LOGIN, SIMPLE_LOGIN, BASIC_AUTH
-                    AuthMode tryModes[] = { AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN, AuthMode::BASIC_AUTH };
-                    for (AuthMode tryMode : tryModes) {
-                        if (tryMode == authMode) continue;  // Already failed with this mode
-
-                        brls::Logger::info("Trying auth mode: {}", static_cast<int>(tryMode));
-                        client.setAuthMode(tryMode);
+                    // First try a fresh login with the saved mode (cookies may have expired)
+                    if (authMode == AuthMode::SIMPLE_LOGIN || authMode == AuthMode::UI_LOGIN) {
+                        brls::Logger::info("Trying fresh login with saved mode {}", static_cast<int>(authMode));
+                        client.setAuthMode(authMode);
                         client.logout();
-
-                        if (tryMode == AuthMode::BASIC_AUTH) {
-                            client.setAuthCredentials(username, password);
-                        } else {
-                            if (!client.login(username, password)) continue;
-                        }
-
-                        if (client.validateAuthWithProtectedQuery()) {
-                            brls::Logger::info("Auth succeeded with mode {}", static_cast<int>(tryMode));
-                            m_settings.authMode = static_cast<int>(tryMode);
+                        if (client.login(username, password) && client.validateAuthWithProtectedQuery()) {
+                            brls::Logger::info("Fresh login succeeded with saved mode {}", static_cast<int>(authMode));
                             m_settings.accessToken = client.getAccessToken();
                             m_settings.refreshToken = client.getRefreshToken();
                             saveSettings();
                             authValid = true;
-                            break;
+                        }
+                    }
+
+                    if (!authValid) {
+                        // Try all modes: UI_LOGIN, SIMPLE_LOGIN, BASIC_AUTH
+                        AuthMode tryModes[] = { AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN, AuthMode::BASIC_AUTH };
+                        for (AuthMode tryMode : tryModes) {
+                            if (tryMode == authMode) continue;  // Already tried with fresh login above
+
+                            brls::Logger::info("Trying auth mode: {}", static_cast<int>(tryMode));
+                            client.setAuthMode(tryMode);
+                            client.logout();
+
+                            if (tryMode == AuthMode::BASIC_AUTH) {
+                                client.setAuthCredentials(username, password);
+                            } else {
+                                if (!client.login(username, password)) continue;
+                            }
+
+                            if (client.validateAuthWithProtectedQuery()) {
+                                brls::Logger::info("Auth succeeded with mode {}", static_cast<int>(tryMode));
+                                m_settings.authMode = static_cast<int>(tryMode);
+                                m_settings.accessToken = client.getAccessToken();
+                                m_settings.refreshToken = client.getRefreshToken();
+                                saveSettings();
+                                authValid = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -161,31 +177,49 @@ void Application::run() {
 
             if (!username.empty() && !password.empty()) {
                 brls::Logger::info("Have credentials, trying auth mode fallback...");
-                // Try BASIC_AUTH first since it's the most common fallback from JWT
-                AuthMode tryModes[] = { AuthMode::BASIC_AUTH, AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN, AuthMode::NONE };
-                for (AuthMode tryMode : tryModes) {
-                    if (tryMode == authMode) continue;  // Already failed with this mode
 
-                    brls::Logger::info("Trying auth mode: {}", static_cast<int>(tryMode));
-                    client.setAuthMode(tryMode);
+                // First try a fresh login with the saved mode (cookies/tokens may have expired)
+                if (authMode == AuthMode::SIMPLE_LOGIN || authMode == AuthMode::UI_LOGIN) {
+                    brls::Logger::info("Trying fresh login with saved mode {}", static_cast<int>(authMode));
+                    client.setAuthMode(authMode);
                     client.logout();
-
-                    if (tryMode == AuthMode::BASIC_AUTH) {
-                        client.setAuthCredentials(username, password);
-                    } else if (tryMode == AuthMode::NONE) {
-                        // No credentials needed
-                    } else {
-                        if (!client.login(username, password)) continue;
-                    }
-
-                    if (client.testConnection() && client.validateAuthWithProtectedQuery()) {
-                        brls::Logger::info("Connection succeeded with auth mode {}", static_cast<int>(tryMode));
-                        m_settings.authMode = static_cast<int>(tryMode);
+                    if (client.login(username, password) &&
+                        client.testConnection() && client.validateAuthWithProtectedQuery()) {
+                        brls::Logger::info("Fresh login succeeded with saved mode {}", static_cast<int>(authMode));
                         m_settings.accessToken = client.getAccessToken();
                         m_settings.refreshToken = client.getRefreshToken();
                         saveSettings();
                         authValid = true;
-                        break;
+                    }
+                }
+
+                if (!authValid) {
+                    // Try BASIC_AUTH first since it's the most common fallback from JWT
+                    AuthMode tryModes[] = { AuthMode::BASIC_AUTH, AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN, AuthMode::NONE };
+                    for (AuthMode tryMode : tryModes) {
+                        if (tryMode == authMode) continue;  // Already tried with fresh login above
+
+                        brls::Logger::info("Trying auth mode: {}", static_cast<int>(tryMode));
+                        client.setAuthMode(tryMode);
+                        client.logout();
+
+                        if (tryMode == AuthMode::BASIC_AUTH) {
+                            client.setAuthCredentials(username, password);
+                        } else if (tryMode == AuthMode::NONE) {
+                            // No credentials needed
+                        } else {
+                            if (!client.login(username, password)) continue;
+                        }
+
+                        if (client.testConnection() && client.validateAuthWithProtectedQuery()) {
+                            brls::Logger::info("Connection succeeded with auth mode {}", static_cast<int>(tryMode));
+                            m_settings.authMode = static_cast<int>(tryMode);
+                            m_settings.accessToken = client.getAccessToken();
+                            m_settings.refreshToken = client.getRefreshToken();
+                            saveSettings();
+                            authValid = true;
+                            break;
+                        }
                     }
                 }
 
