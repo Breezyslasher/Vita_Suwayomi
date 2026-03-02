@@ -110,6 +110,15 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     if (oldItemCount > 0 && oldItemCount % m_columns != 0 && oldRowCount > 0) {
         int cellsInLastRow = oldItemCount - (oldRowCount - 1) * m_columns;
 
+        // Move focus away if it's on a cell in the partial row being removed
+        int partialStart = static_cast<int>(m_cells.size()) - cellsInLastRow;
+        for (int i = partialStart; i < static_cast<int>(m_cells.size()); i++) {
+            if (m_cells[i] && m_cells[i]->isFocused()) {
+                brls::Application::giveFocus(m_contentBox);
+                break;
+            }
+        }
+
         // Remove cell pointers for the partial row (view memory freed by removeView)
         for (int i = 0; i < cellsInLastRow; i++) {
             m_cells.pop_back();
@@ -283,6 +292,17 @@ void RecyclingGrid::setOnSelectionChanged(std::function<void(int count)> callbac
 
 void RecyclingGrid::clearViews() {
     m_incrementalBuildActive = false;  // Cancel any pending incremental build
+
+    // Move focus away from cells before deleting them (same reason as setupGrid)
+    for (auto* cell : m_cells) {
+        if (cell && cell->isFocused()) {
+            if (m_contentBox) {
+                brls::Application::giveFocus(m_contentBox);
+            }
+            break;
+        }
+    }
+
     m_items.clear();
     m_rows.clear();
     m_cells.clear();
@@ -298,6 +318,17 @@ void RecyclingGrid::setupGrid() {
 
     // Reset scroll-based loading state
     m_lastScrollLoadY = 0.0f;
+
+    // CRITICAL: Move focus away from cells before deleting them.
+    // clearViews() will destroy all cells, but brls may still hold
+    // a pointer to the currently-focused cell. Without this, brls
+    // accesses freed memory on the next frame → vtable crash.
+    for (auto* cell : m_cells) {
+        if (cell && cell->isFocused()) {
+            brls::Application::giveFocus(m_contentBox);
+            break;
+        }
+    }
 
     // Clear existing views
     m_contentBox->clearViews();
