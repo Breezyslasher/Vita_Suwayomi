@@ -85,6 +85,7 @@ void Application::run() {
                 // Update stored tokens
                 m_settings.accessToken = client.getAccessToken();
                 m_settings.refreshToken = client.getRefreshToken();
+                m_settings.sessionCookie = client.getSessionCookie();
             } else {
                 brls::Logger::warning("Token refresh failed, clearing stale tokens for basic auth fallback");
                 // Clear stale JWT tokens so createHttpClient() falls back to Basic auth credentials.
@@ -127,6 +128,7 @@ void Application::run() {
                             brls::Logger::info("Fresh login succeeded with saved mode {}", static_cast<int>(authMode));
                             m_settings.accessToken = client.getAccessToken();
                             m_settings.refreshToken = client.getRefreshToken();
+                            m_settings.sessionCookie = client.getSessionCookie();
                             saveSettings();
                             authValid = true;
                         }
@@ -153,6 +155,7 @@ void Application::run() {
                                 m_settings.authMode = static_cast<int>(tryMode);
                                 m_settings.accessToken = client.getAccessToken();
                                 m_settings.refreshToken = client.getRefreshToken();
+                                m_settings.sessionCookie = client.getSessionCookie();
                                 saveSettings();
                                 authValid = true;
                                 break;
@@ -188,6 +191,7 @@ void Application::run() {
                         brls::Logger::info("Fresh login succeeded with saved mode {}", static_cast<int>(authMode));
                         m_settings.accessToken = client.getAccessToken();
                         m_settings.refreshToken = client.getRefreshToken();
+                        m_settings.sessionCookie = client.getSessionCookie();
                         saveSettings();
                         authValid = true;
                     }
@@ -216,6 +220,7 @@ void Application::run() {
                             m_settings.authMode = static_cast<int>(tryMode);
                             m_settings.accessToken = client.getAccessToken();
                             m_settings.refreshToken = client.getRefreshToken();
+                            m_settings.sessionCookie = client.getSessionCookie();
                             saveSettings();
                             authValid = true;
                             break;
@@ -841,6 +846,7 @@ bool Application::loadSettings() {
     m_settings.authMode = extractInt("authMode");
     m_settings.accessToken = extractString("accessToken");
     m_settings.refreshToken = extractString("refreshToken");
+    m_settings.sessionCookie = extractString("sessionCookie");
 
     // Apply auth credentials and mode to SuwayomiClient
     SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -855,6 +861,12 @@ bool Application::loadSettings() {
     if (!m_settings.accessToken.empty() || !m_settings.refreshToken.empty()) {
         client.setTokens(m_settings.accessToken, m_settings.refreshToken);
         brls::Logger::info("Restored auth tokens");
+    }
+
+    // Restore session cookie for simple_login
+    if (!m_settings.sessionCookie.empty()) {
+        client.setSessionCookie(m_settings.sessionCookie);
+        brls::Logger::info("Restored session cookie");
     }
 
     brls::Logger::info("Settings loaded successfully");
@@ -879,6 +891,7 @@ bool Application::saveSettings() {
     json += "  \"authMode\": " + std::to_string(m_settings.authMode) + ",\n";
     json += "  \"accessToken\": \"" + m_settings.accessToken + "\",\n";
     json += "  \"refreshToken\": \"" + m_settings.refreshToken + "\",\n";
+    json += "  \"sessionCookie\": \"" + m_settings.sessionCookie + "\",\n";
 
     // UI settings
     json += "  \"theme\": " + std::to_string(static_cast<int>(m_settings.theme)) + ",\n";

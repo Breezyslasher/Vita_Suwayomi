@@ -324,6 +324,7 @@ void LoginActivity::onConnectPressed() {
                 settings.authMode = static_cast<int>(authMode);
                 settings.accessToken = client.getAccessToken();
                 settings.refreshToken = client.getRefreshToken();
+                settings.sessionCookie = client.getSessionCookie();
 
                 if (settings.localServerUrl.empty()) {
                     settings.localServerUrl = serverUrl;

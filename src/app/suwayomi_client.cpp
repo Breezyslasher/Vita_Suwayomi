@@ -195,8 +195,12 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
             // Cookie-based session - use JWT token if available, otherwise try basic auth
             if (!m_accessToken.empty()) {
                 http.setDefaultHeader("Authorization", "Bearer " + m_accessToken);
-                // Also send as cookie for server compatibility
-                http.setDefaultHeader("Cookie", "suwayomi-server-token=" + m_accessToken);
+                // Prefer actual session cookie from Set-Cookie header over synthetic token cookie
+                if (!m_sessionCookie.empty()) {
+                    http.setDefaultHeader("Cookie", m_sessionCookie);
+                } else {
+                    http.setDefaultHeader("Cookie", "suwayomi-server-token=" + m_accessToken);
+                }
             } else if (!m_sessionCookie.empty()) {
                 http.setDefaultHeader("Cookie", m_sessionCookie);
             } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
@@ -2266,7 +2270,7 @@ bool SuwayomiClient::isAuthenticated() const {
         case AuthMode::BASIC_AUTH:
             return !m_authUsername.empty() && !m_authPassword.empty();
         case AuthMode::SIMPLE_LOGIN:
-            return !m_sessionCookie.empty();
+            return !m_accessToken.empty() || !m_sessionCookie.empty();
         case AuthMode::UI_LOGIN:
             return !m_accessToken.empty();
         default:
@@ -2416,11 +2420,6 @@ bool SuwayomiClient::refreshToken() {
         return true;  // No token refresh needed for basic auth or no auth
     }
 
-    if (m_refreshToken.empty()) {
-        brls::Logger::error("Cannot refresh token: No refresh token available");
-        return false;
-    }
-
     // Dedup: if token was refreshed within the last 5 seconds by another thread,
     // skip the refresh and return success so the caller retries with the new token.
     // This prevents the thundering herd when multiple worker threads all hit 401
@@ -2432,10 +2431,29 @@ bool SuwayomiClient::refreshToken() {
         return true;
     }
 
-    if (refreshTokenGraphQL()) {
-        m_lastTokenRefreshTime = now;
-        return true;
+    // Try GraphQL refresh if we have a refresh token
+    if (!m_refreshToken.empty()) {
+        if (refreshTokenGraphQL()) {
+            m_lastTokenRefreshTime = now;
+            return true;
+        }
+        brls::Logger::warning("Token refresh failed via GraphQL");
+    } else {
+        brls::Logger::info("No refresh token available, skipping GraphQL refresh");
     }
+
+    // Fallback: re-login with stored credentials (important for simple_login mode
+    // where the server may not issue refresh tokens)
+    if (!m_authUsername.empty() && !m_authPassword.empty()) {
+        brls::Logger::info("Attempting re-login with stored credentials...");
+        if (loginGraphQL(m_authUsername, m_authPassword)) {
+            m_lastTokenRefreshTime = now;
+            brls::Logger::info("Re-login successful, tokens refreshed");
+            return true;
+        }
+        brls::Logger::error("Re-login with stored credentials also failed");
+    }
+
     return false;
 }
 
