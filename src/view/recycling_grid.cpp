@@ -354,17 +354,47 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
         int startIdx = row * m_columns;
         int endIdx = std::min(startIdx + m_columns, (int)m_items.size());
 
-        // For list mode, auto-adapt row height based on title length
+        // For list mode, auto-adapt row height based on title width
         int rowHeight = m_cellHeight;
         if (m_listMode) {
-            int maxTitleLen = 0;
+            int maxWidthUnits = 0;
             for (int i = startIdx; i < endIdx; i++) {
-                int titleLen = static_cast<int>(m_items[i].title.length());
-                if (titleLen > maxTitleLen) {
-                    maxTitleLen = titleLen;
+                // Estimate visual width in "width units" (1 unit ≈ 1 Latin char width).
+                // CJK / wide characters (multi-byte UTF-8) count as 2 units since
+                // they render roughly twice as wide as Latin characters.
+                const std::string& title = m_items[i].title;
+                int widthUnits = 0;
+                for (size_t j = 0; j < title.size(); ) {
+                    unsigned char c = static_cast<unsigned char>(title[j]);
+                    if (c < 0x80) {
+                        // ASCII: 1 byte, 1 width unit
+                        widthUnits += 1;
+                        j += 1;
+                    } else if (c < 0xC0) {
+                        // Continuation byte (shouldn't appear here), skip
+                        j += 1;
+                    } else if (c < 0xE0) {
+                        // 2-byte sequence (Latin extended, etc): 1 width unit
+                        widthUnits += 1;
+                        j += 2;
+                    } else if (c < 0xF0) {
+                        // 3-byte sequence (CJK, Japanese, Korean, etc): 2 width units
+                        widthUnits += 2;
+                        j += 3;
+                    } else {
+                        // 4-byte sequence (emoji, etc): 2 width units
+                        widthUnits += 2;
+                        j += 4;
+                    }
+                }
+                if (widthUnits > maxWidthUnits) {
+                    maxWidthUnits = widthUnits;
                 }
             }
-            int lines = (maxTitleLen + 44) / 45;
+            // At font 14 on the Vita (900px cell, ~32px padding), roughly 108
+            // Latin-width characters fit per line.
+            int charsPerLine = 100;  // Slightly conservative
+            int lines = (maxWidthUnits + charsPerLine - 1) / charsPerLine;
             if (lines < 1) lines = 1;
             if (lines > 3) lines = 3;
             rowHeight = 40 + (lines * 20);
