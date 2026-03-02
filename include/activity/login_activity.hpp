@@ -21,7 +21,6 @@ public:
 
 private:
     void onConnectPressed();
-    void onTestConnectionPressed();
     void onOfflinePressed();
 
     BRLS_BIND(brls::Label, titleLabel, "login/title");
@@ -30,7 +29,6 @@ private:
     BRLS_BIND(brls::Label, usernameLabel, "login/username_label");
     BRLS_BIND(brls::Label, passwordLabel, "login/password_label");
     BRLS_BIND(brls::Button, loginButton, "login/login_button");
-    BRLS_BIND(brls::Button, testButton, "login/pin_button");
     BRLS_BIND(brls::Button, offlineButton, "login/offline_button");
     BRLS_BIND(brls::Label, statusLabel, "login/status");
 
