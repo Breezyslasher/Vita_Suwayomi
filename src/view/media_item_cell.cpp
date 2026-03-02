@@ -189,11 +189,22 @@ MangaItemCell::~MangaItemCell() {
 
 void MangaItemCell::updateDisplay() {
     // Set title - Komikku style, left-aligned, up to 2 lines
+    // Truncation and font size adapt to grid column count
     if (m_titleLabel) {
         std::string title = m_manga.title;
-        // Allow enough characters for 2 lines (~20 chars per line at font 11)
-        if (title.length() > 40) {
-            title = title.substr(0, 38) + "..";
+
+        // Max characters depends on grid size (wider cells fit more text)
+        int maxChars = 40;  // Default for 6 columns
+        if (m_gridColumns <= 4) {
+            maxChars = 55;   // Wider cells: ~27 chars per line x 2 lines
+        } else if (m_gridColumns <= 6) {
+            maxChars = 40;   // Default: ~20 chars per line x 2 lines
+        } else {
+            maxChars = 28;   // Narrow cells: ~14 chars per line x 2 lines
+        }
+
+        if (static_cast<int>(title.length()) > maxChars) {
+            title = title.substr(0, maxChars - 2) + "..";
         }
         m_originalTitle = title;
         m_titleLabel->setText(title);
@@ -229,8 +240,17 @@ void MangaItemCell::updateDisplay() {
     if (m_subtitleLabel) {
         if (!m_manga.author.empty()) {
             std::string author = m_manga.author;
-            if (author.length() > 18) {
-                author = author.substr(0, 16) + "..";
+            // Max subtitle chars depends on grid size
+            int maxSubChars = 18;
+            if (m_gridColumns <= 4) {
+                maxSubChars = 28;
+            } else if (m_gridColumns <= 6) {
+                maxSubChars = 18;
+            } else {
+                maxSubChars = 14;
+            }
+            if (static_cast<int>(author.length()) > maxSubChars) {
+                author = author.substr(0, maxSubChars - 2) + "..";
             }
             m_subtitleLabel->setText(author);
         } else if (m_manga.chapterCount > 0) {
@@ -425,6 +445,35 @@ void MangaItemCell::updateFocusInfo(bool focused) {
         // Restore truncated title
         m_titleLabel->setText(m_originalTitle);
         m_descriptionLabel->setVisibility(brls::Visibility::GONE);
+    }
+}
+
+void MangaItemCell::setGridColumns(int columns) {
+    if (m_gridColumns == columns) return;
+    m_gridColumns = columns;
+
+    // Adapt title font size and re-truncate based on grid column count
+    if (m_titleLabel) {
+        int fontSize = 11;  // Default for 6 columns
+        if (columns <= 4) {
+            fontSize = 14;
+        } else if (columns <= 6) {
+            fontSize = 11;
+        } else {
+            fontSize = 9;
+        }
+        m_titleLabel->setFontSize(fontSize);
+    }
+    if (m_subtitleLabel) {
+        int subFontSize = 9;
+        if (columns <= 4) {
+            subFontSize = 11;
+        } else if (columns <= 6) {
+            subFontSize = 9;
+        } else {
+            subFontSize = 8;
+        }
+        m_subtitleLabel->setFontSize(subFontSize);
     }
 }
 

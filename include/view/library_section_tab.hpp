@@ -49,6 +49,7 @@ private:
     void selectCategory(int categoryId);
     void onMangaSelected(const Manga& manga);
     void triggerLibraryUpdate();
+    void pollUpdateProgress(int generation);
     void updateCategoryButtonStyles();
     void sortMangaList();
     void cycleSortMode();
@@ -104,6 +105,12 @@ private:
 
     // UI Components
     brls::Label* m_titleLabel = nullptr;
+    brls::Label* m_updateStatusLabel = nullptr;  // "Updating X%" beside title
+
+    // Update progress tracking
+    bool m_isUpdating = false;
+    int m_updateTotalJobs = 0;        // Total jobs when update started
+    int m_updatePollGeneration = 0;   // Generation counter to cancel stale polls
 
     // Category tabs row
     brls::Box* m_categoryTabsBox = nullptr;        // Outer container (clips)
