@@ -69,6 +69,10 @@ public:
     // Load thumbnails around a specific cell index (called on focus change)
     void loadThumbnailsNearIndex(int index);
 
+    // Reset m_thumbnailLoaded on all cells so they can reload.
+    // Called after ImageLoader::cancelAll() to fix stale thumbnail states.
+    void resetThumbnailLoadStates();
+
     // Override draw to check scroll position and load visible thumbnails
     void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) override;
 

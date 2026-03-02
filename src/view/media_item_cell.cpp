@@ -279,6 +279,12 @@ void MangaItemCell::updateDisplay() {
 }
 
 void MangaItemCell::setManga(const Manga& manga) {
+    // Invalidate any in-flight thumbnail loads for the previous manga.
+    // Without this, a stale worker-thread load could finish after the new load
+    // and overwrite the correct cover (race condition during sort changes).
+    if (m_alive) *m_alive = false;
+    m_alive = std::make_shared<bool>(true);
+
     m_manga = manga;
     m_thumbnailLoaded = false;
     updateDisplay();
@@ -286,6 +292,10 @@ void MangaItemCell::setManga(const Manga& manga) {
 }
 
 void MangaItemCell::setMangaDeferred(const Manga& manga) {
+    // Invalidate any in-flight thumbnail loads for the previous manga.
+    if (m_alive) *m_alive = false;
+    m_alive = std::make_shared<bool>(true);
+
     // Set manga data but don't load thumbnail yet
     m_manga = manga;
     m_thumbnailLoaded = false;
@@ -318,6 +328,13 @@ void MangaItemCell::unloadThumbnail() {
         0, 0, 0, 0                               // 1 transparent pixel (BGRA)
     };
     m_thumbnailImage->setImageFromMem(s_clearPixel, sizeof(s_clearPixel));
+    m_thumbnailLoaded = false;
+}
+
+void MangaItemCell::resetThumbnailLoadState() {
+    // Just reset the load flag without clearing the existing image.
+    // This allows loadThumbnailIfNeeded() to reload the thumbnail from cache/network
+    // while keeping the old image visible until the new one arrives (no visual flash).
     m_thumbnailLoaded = false;
 }
 

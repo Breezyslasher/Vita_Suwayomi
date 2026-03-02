@@ -621,6 +621,20 @@ void RecyclingGrid::updateVisibleCells() {
     }
 }
 
+void RecyclingGrid::resetThumbnailLoadStates() {
+    // Reset m_thumbnailLoaded on all cells so they can reload via loadThumbnailIfNeeded().
+    // Called after ImageLoader::cancelAll() which may cancel pending thumbnail loads,
+    // leaving cells with m_thumbnailLoaded=true but no actual thumbnail applied.
+    // Uses resetThumbnailLoadState() (not unloadThumbnail) to keep the old image visible
+    // until the new one loads from cache, avoiding a visual flash.
+    for (auto* cell : m_cells) {
+        if (cell) {
+            cell->resetThumbnailLoadState();
+        }
+    }
+    brls::Logger::debug("RecyclingGrid: Reset thumbnail load states for {} cells", m_cells.size());
+}
+
 void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) {
     // Call parent draw first
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
