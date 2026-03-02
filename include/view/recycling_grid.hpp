@@ -129,6 +129,11 @@ private:
     int m_incrementalBuildRow = 0;
     int m_totalRowsNeeded = 0;
     bool m_incrementalBuildActive = false;
+
+    // Pending focus - when focusIndex is called during incremental build and the
+    // target cell doesn't exist yet, store the index here. buildNextRowBatch
+    // applies it once the cell is created, preventing focus from jumping to cell 0.
+    int m_pendingFocusIndex = -1;
 };
 
 } // namespace vitasuwayomi

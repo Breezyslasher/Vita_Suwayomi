@@ -294,6 +294,7 @@ void RecyclingGrid::clearViews() {
 void RecyclingGrid::setupGrid() {
     // Cancel any ongoing incremental build
     m_incrementalBuildActive = false;
+    m_pendingFocusIndex = -1;
 
     // Reset scroll-based loading state
     m_lastScrollLoadY = 0.0f;
@@ -499,6 +500,13 @@ void RecyclingGrid::buildNextRowBatch() {
 
     createRowRange(m_incrementalBuildRow, endRow);
     m_incrementalBuildRow = endRow;
+
+    // Apply pending focus if the target cell was just created
+    if (m_pendingFocusIndex >= 0 && m_pendingFocusIndex < static_cast<int>(m_cells.size())) {
+        brls::Application::giveFocus(m_cells[m_pendingFocusIndex]);
+        m_focusedIndex = m_pendingFocusIndex;
+        m_pendingFocusIndex = -1;
+    }
 
     if (m_incrementalBuildRow < m_totalRowsNeeded) {
         // More rows to build - schedule next batch
@@ -822,10 +830,16 @@ void RecyclingGrid::focusIndex(int index) {
     if (index >= 0 && index < static_cast<int>(m_cells.size())) {
         brls::Application::giveFocus(m_cells[index]);
         m_focusedIndex = index;
+        m_pendingFocusIndex = -1;
+    } else if (index >= 0 && m_incrementalBuildActive) {
+        // Cell doesn't exist yet (still being built incrementally).
+        // Store as pending - buildNextRowBatch will apply it once the cell is created.
+        m_pendingFocusIndex = index;
     } else if (!m_cells.empty()) {
         // Fall back to first cell if index is out of range
         brls::Application::giveFocus(m_cells[0]);
         m_focusedIndex = 0;
+        m_pendingFocusIndex = -1;
     }
 }
 

@@ -1357,12 +1357,16 @@ void LibrarySectionTab::pollUpdateProgress(int generation) {
 }
 
 void LibrarySectionTab::sortMangaList() {
-    // Preserve focus: get currently focused manga ID before sorting
+    // Preserve focus: get currently focused manga ID before sorting.
+    // Read from the grid's internal items (not m_mangaList) because the caller
+    // may have already replaced m_mangaList with new server data while the grid
+    // still holds the old items. Using m_mangaList[idx] would read the wrong manga.
     int focusedMangaId = -1;
     if (m_contentGrid) {
         int focusedIdx = m_contentGrid->getFocusedIndex();
-        if (focusedIdx >= 0 && focusedIdx < static_cast<int>(m_mangaList.size())) {
-            focusedMangaId = m_mangaList[focusedIdx].id;
+        const Manga* focusedItem = m_contentGrid->getItem(focusedIdx);
+        if (focusedItem) {
+            focusedMangaId = focusedItem->id;
         }
     }
 
