@@ -480,6 +480,11 @@ void LibrarySectionTab::onFocusGained() {
         if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::GONE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
+        // Clear any stale buttons so they can't steal focus via UP navigation
+        if (m_categoryScrollContainer && !m_categoryButtons.empty()) {
+            m_categoryScrollContainer->clearViews();
+            m_categoryButtons.clear();
+        }
     } else {
         // BY_CATEGORY and BY_SOURCE both show tabs
         if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::VISIBLE);
@@ -697,7 +702,7 @@ void LibrarySectionTab::loadCategories() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
 
-                    if (!m_categoriesLoaded) {
+                    if (!m_categoriesLoaded && m_groupMode == LibraryGroupMode::BY_CATEGORY) {
                         m_categoriesLoaded = true;
                         createCategoryTabs();
                         selectCategory(0);
@@ -725,6 +730,17 @@ void LibrarySectionTab::loadCategories() {
         brls::sync([this, categories, prefetchedManga, resolvedCategoryId, usedCombinedQuery, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
+
+            // Guard: user may have switched group mode while fetch was in progress.
+            // Creating category tabs when mode is BY_SOURCE or NO_GROUPING would
+            // destroy source tabs or create visible tabs when they should be hidden.
+            if (m_groupMode != LibraryGroupMode::BY_CATEGORY) {
+                // Still update categories data for use if user switches mode later
+                m_categories = categories;
+                m_categoriesLoaded = true;
+                m_combinedQueryCategoryId = -1;
+                return;
+            }
 
             // Only recreate category tabs if categories actually changed
             bool categoriesChanged = (m_categories.size() != categories.size());
@@ -1538,8 +1554,10 @@ void LibrarySectionTab::sortMangaList() {
 
         // Handle empty state after filtering (e.g., "Downloads Only" with no local downloads)
         if (m_mangaList.empty()) {
-            // Transfer focus: prefer category button, fall back to sort button
-            if (m_focusGridAfterLoad && m_selectedCategoryIndex >= 0 &&
+            // Transfer focus: prefer category button (only when tabs are visible),
+            // fall back to sort button
+            if (m_focusGridAfterLoad && m_groupMode != LibraryGroupMode::NO_GROUPING &&
+                m_selectedCategoryIndex >= 0 &&
                 m_selectedCategoryIndex < static_cast<int>(m_categoryButtons.size())) {
                 brls::Application::giveFocus(m_categoryButtons[m_selectedCategoryIndex]);
             } else if (m_sortBtn) {
@@ -2849,6 +2867,12 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
         if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::GONE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
+        // Clear category/source buttons so hidden buttons can't steal focus
+        // when pressing UP from the grid (borealis may traverse into GONE containers)
+        if (m_categoryScrollContainer) {
+            m_categoryScrollContainer->clearViews();
+        }
+        m_categoryButtons.clear();
         loadAllManga();
     } else if (mode == LibraryGroupMode::BY_SOURCE) {
         // Show tabs and L/R hints, loadBySource will populate with source names
@@ -2937,6 +2961,8 @@ void LibrarySectionTab::loadAllManga() {
         brls::sync([this, allManga, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
+            // Guard: user may have switched group mode while fetch was in progress
+            if (m_groupMode != LibraryGroupMode::NO_GROUPING) return;
 
             m_fullMangaList = allManga;
             m_mangaList = allManga;
@@ -3056,6 +3082,10 @@ void LibrarySectionTab::loadBySource() {
         brls::sync([this, allManga, aliveWeak, applySourceGrouping]() mutable {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
+            // Guard: user may have switched group mode while fetch was in progress.
+            // Applying source grouping when mode is BY_CATEGORY would destroy
+            // category tabs and create source tabs, corrupting focus state.
+            if (m_groupMode != LibraryGroupMode::BY_SOURCE) return;
             applySourceGrouping(allManga);
         });
     });
