@@ -113,6 +113,7 @@ private:
     std::vector<brls::Button*> m_categoryButtons;
     int m_selectedCategoryIndex = 0;               // Index in m_categories
     float m_categoryScrollOffset = 0.0f;           // Current scroll offset
+    float m_tabPanStartOffset = 0.0f;              // Pan gesture start offset
 
     // Action buttons
     brls::Box* m_updateContainer = nullptr;

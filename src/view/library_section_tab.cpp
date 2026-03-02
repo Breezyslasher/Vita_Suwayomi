@@ -77,6 +77,29 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryScrollContainer->setShrink(0);  // Don't shrink - allow scrolling beyond visible area
     m_categoryTabsBox->addView(m_categoryScrollContainer);
 
+    // Add horizontal pan gesture for touch scrolling on category/source tabs
+    m_categoryTabsBox->addGestureRecognizer(new brls::PanGestureRecognizer(
+        [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            if (!m_categoryScrollContainer) return;
+
+            if (status.state == brls::GestureState::START) {
+                m_tabPanStartOffset = m_categoryScrollOffset;
+            }
+            else if (status.state == brls::GestureState::STAY || status.state == brls::GestureState::END) {
+                float deltaX = status.position.x - status.startPosition.x;
+                float newOffset = m_tabPanStartOffset + deltaX;
+
+                // Clamp to valid range
+                float contentWidth = m_categoryScrollContainer->getWidth();
+                float visibleWidth = m_categoryTabsBox->getWidth();
+                if (visibleWidth <= 0) visibleWidth = 500.0f;
+                float minOffset = std::min(0.0f, -(contentWidth - visibleWidth));
+
+                m_categoryScrollOffset = std::max(minOffset, std::min(newOffset, 0.0f));
+                m_categoryScrollContainer->setTranslationX(m_categoryScrollOffset);
+            }
+        }, brls::PanAxis::HORIZONTAL));
+
     topRow->addView(m_categoryTabsBox);
 
     // R button hint (after category tabs)
