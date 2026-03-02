@@ -294,6 +294,7 @@ void RecyclingGrid::clearViews() {
 void RecyclingGrid::setupGrid() {
     // Cancel any ongoing incremental build
     m_incrementalBuildActive = false;
+    m_pendingFocusIndex = -1;
 
     // Reset scroll-based loading state
     m_lastScrollLoadY = 0.0f;
@@ -354,17 +355,47 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
         int startIdx = row * m_columns;
         int endIdx = std::min(startIdx + m_columns, (int)m_items.size());
 
-        // For list mode with auto-size, calculate row height based on title length
+        // For list mode, auto-adapt row height based on title width
         int rowHeight = m_cellHeight;
-        if (m_listMode && m_listRowSize == 3) {  // Auto mode
-            int maxTitleLen = 0;
+        if (m_listMode) {
+            int maxWidthUnits = 0;
             for (int i = startIdx; i < endIdx; i++) {
-                int titleLen = static_cast<int>(m_items[i].title.length());
-                if (titleLen > maxTitleLen) {
-                    maxTitleLen = titleLen;
+                // Estimate visual width in "width units" (1 unit ≈ 1 Latin char width).
+                // CJK / wide characters (multi-byte UTF-8) count as 2 units since
+                // they render roughly twice as wide as Latin characters.
+                const std::string& title = m_items[i].title;
+                int widthUnits = 0;
+                for (size_t j = 0; j < title.size(); ) {
+                    unsigned char c = static_cast<unsigned char>(title[j]);
+                    if (c < 0x80) {
+                        // ASCII: 1 byte, 1 width unit
+                        widthUnits += 1;
+                        j += 1;
+                    } else if (c < 0xC0) {
+                        // Continuation byte (shouldn't appear here), skip
+                        j += 1;
+                    } else if (c < 0xE0) {
+                        // 2-byte sequence (Latin extended, etc): 1 width unit
+                        widthUnits += 1;
+                        j += 2;
+                    } else if (c < 0xF0) {
+                        // 3-byte sequence (CJK, Japanese, Korean, etc): 2 width units
+                        widthUnits += 2;
+                        j += 3;
+                    } else {
+                        // 4-byte sequence (emoji, etc): 2 width units
+                        widthUnits += 2;
+                        j += 4;
+                    }
+                }
+                if (widthUnits > maxWidthUnits) {
+                    maxWidthUnits = widthUnits;
                 }
             }
-            int lines = (maxTitleLen + 44) / 45;
+            // At font 14 on the Vita (900px cell, ~32px padding), roughly 108
+            // Latin-width characters fit per line.
+            int charsPerLine = 100;  // Slightly conservative
+            int lines = (maxWidthUnits + charsPerLine - 1) / charsPerLine;
             if (lines < 1) lines = 1;
             if (lines > 3) lines = 3;
             rowHeight = 40 + (lines * 20);
@@ -383,7 +414,6 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
             // Apply display mode to cell
             if (m_listMode) {
                 cell->setListMode(true);
-                cell->setListRowSize(m_listRowSize);
             } else if (m_compactMode) {
                 cell->setCompactMode(true);
             }
@@ -470,6 +500,13 @@ void RecyclingGrid::buildNextRowBatch() {
 
     createRowRange(m_incrementalBuildRow, endRow);
     m_incrementalBuildRow = endRow;
+
+    // Apply pending focus if the target cell was just created
+    if (m_pendingFocusIndex >= 0 && m_pendingFocusIndex < static_cast<int>(m_cells.size())) {
+        brls::Application::giveFocus(m_cells[m_pendingFocusIndex]);
+        m_focusedIndex = m_pendingFocusIndex;
+        m_pendingFocusIndex = -1;
+    }
 
     if (m_incrementalBuildRow < m_totalRowsNeeded) {
         // More rows to build - schedule next batch
@@ -749,27 +786,10 @@ void RecyclingGrid::setListMode(bool listMode) {
     m_compactMode = false;  // Disable compact mode if enabling list
 
     if (m_listMode) {
-        // List mode: 1 column, larger cells
+        // List mode: 1 column, auto-adapt row height to title length
         m_columns = 1;
         m_cellWidth = 900;
-        // Apply list row size setting
-        switch (m_listRowSize) {
-            case 0:  // Small
-                m_cellHeight = 60;
-                break;
-            case 1:  // Medium (default)
-                m_cellHeight = 80;
-                break;
-            case 2:  // Large
-                m_cellHeight = 100;
-                break;
-            case 3:  // Auto - will be handled per-cell in setupGrid
-                m_cellHeight = 0;  // Dynamic height
-                break;
-            default:
-                m_cellHeight = 80;
-                break;
-        }
+        m_cellHeight = 0;  // Dynamic height, calculated per-row in createRowRange
         m_rowMargin = 5;
     } else {
         // Reset to default grid
@@ -785,34 +805,8 @@ void RecyclingGrid::setListMode(bool listMode) {
 }
 
 void RecyclingGrid::setListRowSize(int rowSize) {
-    if (m_listRowSize == rowSize) return;
-    m_listRowSize = rowSize;
-
-    // If currently in list mode, update dimensions and rebuild
-    if (m_listMode) {
-        switch (m_listRowSize) {
-            case 0:  // Small
-                m_cellHeight = 60;
-                break;
-            case 1:  // Medium (default)
-                m_cellHeight = 80;
-                break;
-            case 2:  // Large
-                m_cellHeight = 100;
-                break;
-            case 3:  // Auto - dynamic height
-                m_cellHeight = 0;
-                break;
-            default:
-                m_cellHeight = 80;
-                break;
-        }
-
-        // Rebuild grid if we have items
-        if (!m_items.empty()) {
-            setupGrid();
-        }
-    }
+    // No-op: list mode always auto-adapts row height to title length
+    (void)rowSize;
 }
 
 void RecyclingGrid::setShowLibraryBadge(bool show) {
@@ -836,10 +830,16 @@ void RecyclingGrid::focusIndex(int index) {
     if (index >= 0 && index < static_cast<int>(m_cells.size())) {
         brls::Application::giveFocus(m_cells[index]);
         m_focusedIndex = index;
+        m_pendingFocusIndex = -1;
+    } else if (index >= 0 && m_incrementalBuildActive) {
+        // Cell doesn't exist yet (still being built incrementally).
+        // Store as pending - buildNextRowBatch will apply it once the cell is created.
+        m_pendingFocusIndex = index;
     } else if (!m_cells.empty()) {
         // Fall back to first cell if index is out of range
         brls::Application::giveFocus(m_cells[0]);
         m_focusedIndex = 0;
+        m_pendingFocusIndex = -1;
     }
 }
 

@@ -623,17 +623,6 @@ void SettingsTab::createLibrarySection() {
         });
     m_contentBox->addView(gridSizeSelector);
 
-    // List row size selector (for list view mode)
-    auto* listRowSizeSelector = new brls::SelectorCell();
-    listRowSizeSelector->init("List Row Size",
-        {"Small (compact)", "Medium (default)", "Large (spacious)", "Auto (fit title)"},
-        static_cast<int>(settings.listRowSize),
-        [&settings](int index) {
-            settings.listRowSize = static_cast<ListRowSize>(index);
-            Application::getInstance().saveSettings();
-        });
-    m_contentBox->addView(listRowSizeSelector);
-
     // Library grouping mode selector
     auto* groupModeSelector = new brls::SelectorCell();
     groupModeSelector->init("Library Grouping",
