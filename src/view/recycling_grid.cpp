@@ -354,7 +354,23 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
         int startIdx = row * m_columns;
         int endIdx = std::min(startIdx + m_columns, (int)m_items.size());
 
+        // For list mode with auto-size, calculate row height based on title length
         int rowHeight = m_cellHeight;
+        if (m_listMode && m_listRowSize == 3) {  // Auto mode
+            int maxTitleLen = 0;
+            for (int i = startIdx; i < endIdx; i++) {
+                int titleLen = static_cast<int>(m_items[i].title.length());
+                if (titleLen > maxTitleLen) {
+                    maxTitleLen = titleLen;
+                }
+            }
+            int lines = (maxTitleLen + 44) / 45;
+            if (lines < 1) lines = 1;
+            if (lines > 3) lines = 3;
+            rowHeight = 40 + (lines * 20);
+            if (rowHeight < 60) rowHeight = 60;
+            if (rowHeight > 120) rowHeight = 120;
+        }
 
         rowBox->setHeight(rowHeight);
 
@@ -733,10 +749,27 @@ void RecyclingGrid::setListMode(bool listMode) {
     m_compactMode = false;  // Disable compact mode if enabling list
 
     if (m_listMode) {
-        // List mode: 1 column, cover thumbnail + title
+        // List mode: 1 column, larger cells
         m_columns = 1;
         m_cellWidth = 900;
-        m_cellHeight = 80;  // Fixed height, cover auto-adapts
+        // Apply list row size setting
+        switch (m_listRowSize) {
+            case 0:  // Small
+                m_cellHeight = 60;
+                break;
+            case 1:  // Medium (default)
+                m_cellHeight = 80;
+                break;
+            case 2:  // Large
+                m_cellHeight = 100;
+                break;
+            case 3:  // Auto - will be handled per-cell in setupGrid
+                m_cellHeight = 0;  // Dynamic height
+                break;
+            default:
+                m_cellHeight = 80;
+                break;
+        }
         m_rowMargin = 5;
     } else {
         // Reset to default grid
@@ -752,8 +785,34 @@ void RecyclingGrid::setListMode(bool listMode) {
 }
 
 void RecyclingGrid::setListRowSize(int rowSize) {
-    // No-op: list row size is now auto-adapted with cover thumbnails
-    (void)rowSize;
+    if (m_listRowSize == rowSize) return;
+    m_listRowSize = rowSize;
+
+    // If currently in list mode, update dimensions and rebuild
+    if (m_listMode) {
+        switch (m_listRowSize) {
+            case 0:  // Small
+                m_cellHeight = 60;
+                break;
+            case 1:  // Medium (default)
+                m_cellHeight = 80;
+                break;
+            case 2:  // Large
+                m_cellHeight = 100;
+                break;
+            case 3:  // Auto - dynamic height
+                m_cellHeight = 0;
+                break;
+            default:
+                m_cellHeight = 80;
+                break;
+        }
+
+        // Rebuild grid if we have items
+        if (!m_items.empty()) {
+            setupGrid();
+        }
+    }
 }
 
 void RecyclingGrid::setShowLibraryBadge(bool show) {
