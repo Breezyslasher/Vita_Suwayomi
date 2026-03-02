@@ -321,6 +321,13 @@ void MangaItemCell::unloadThumbnail() {
     m_thumbnailLoaded = false;
 }
 
+void MangaItemCell::resetThumbnailLoadState() {
+    // Just reset the load flag without clearing the existing image.
+    // This allows loadThumbnailIfNeeded() to reload the thumbnail from cache/network
+    // while keeping the old image visible until the new one arrives (no visual flash).
+    m_thumbnailLoaded = false;
+}
+
 void MangaItemCell::loadThumbnail() {
     if (!m_thumbnailImage || m_thumbnailLoaded) return;
 

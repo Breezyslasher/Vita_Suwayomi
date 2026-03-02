@@ -428,15 +428,37 @@ LibrarySectionTab::~LibrarySectionTab() {
 void LibrarySectionTab::willDisappear(bool resetState) {
     brls::Box::willDisappear(resetState);
 
-    // Invalidate alive flag BEFORE destruction so pending async callbacks bail out
-    if (m_alive) *m_alive = false;
-
     // Cancel pending image loads to free up worker threads and network bandwidth
     ImageLoader::cancelAll();
+
+    // Reset thumbnail load states on all grid cells. cancelAll() may have cancelled
+    // pending loads that already set m_thumbnailLoaded=true (set optimistically in
+    // loadThumbnail). Without this reset, cells would show stale/wrong covers and
+    // refuse to reload because they think they're already loaded.
+    if (m_contentGrid) {
+        m_contentGrid->resetThumbnailLoadStates();
+    }
+    m_thumbnailsInvalidated = true;
 }
 
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
+
+    // Re-create the alive flag so new async callbacks (server refreshes, etc.) work.
+    // willDisappear() previously set *m_alive=false; old callbacks that captured the
+    // old weak_ptr will still bail out, while new ones will use the fresh flag.
+    m_alive = std::make_shared<bool>(true);
+
+    // Reload thumbnails that were invalidated by willDisappear's cancelAll().
+    // The cell load states were reset there, so loadThumbnailsNearIndex will
+    // reload visible covers from the LRU memory cache (fast, no network hit).
+    if (m_thumbnailsInvalidated && m_contentGrid) {
+        int focusedIdx = m_contentGrid->getFocusedIndex();
+        if (focusedIdx >= 0) {
+            m_contentGrid->loadThumbnailsNearIndex(focusedIdx);
+        }
+        m_thumbnailsInvalidated = false;
+    }
 
     // Show/hide update button + hint icon based on connectivity
     if (m_updateContainer) {
@@ -2539,75 +2561,12 @@ void LibrarySectionTab::updateMangaCellsIncrementally(const std::vector<Manga>& 
 
     brls::Logger::debug("LibrarySectionTab: Metadata changed, updating cells in place");
 
-    // Update the manga list
+    // Update the manga list and apply sort via sortMangaList(), which uses
+    // updateDataOrder() to properly handle thumbnail updates when manga
+    // change positions. Previously used updateCellData() here which preserved
+    // old thumbnails even when the sort order changed, causing cover mismatches.
     m_mangaList = newManga;
-
-    // Apply current sort mode to get the correct order
-    // But use updateCellData to avoid reloading thumbnails
-    LibrarySortMode effectiveMode = m_sortMode;
-    if (effectiveMode == LibrarySortMode::DEFAULT) {
-        int defaultSort = Application::getInstance().getSettings().defaultLibrarySortMode;
-        effectiveMode = static_cast<LibrarySortMode>(defaultSort);
-    }
-
-    // For DOWNLOADED_ONLY mode, we need to re-filter
-    if (effectiveMode == LibrarySortMode::DOWNLOADED_ONLY) {
-        // This requires full sort since filtering changes structure
-        sortMangaList();
-    } else if (m_contentGrid && m_contentGrid->getItemCount() == static_cast<int>(m_mangaList.size())) {
-        // Same size and not filtering, can update in place
-        // Apply the sort to m_mangaList first
-        switch (effectiveMode) {
-            case LibrarySortMode::TITLE_ASC:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.title < b.title; });
-                break;
-            case LibrarySortMode::TITLE_DESC:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.title > b.title; });
-                break;
-            case LibrarySortMode::UNREAD_DESC:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.unreadCount > b.unreadCount; });
-                break;
-            case LibrarySortMode::UNREAD_ASC:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.unreadCount < b.unreadCount; });
-                break;
-            case LibrarySortMode::RECENTLY_ADDED_DESC:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.inLibraryAt > b.inLibraryAt; });
-                break;
-            case LibrarySortMode::RECENTLY_ADDED_ASC:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.inLibraryAt < b.inLibraryAt; });
-                break;
-            case LibrarySortMode::LAST_READ:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.lastReadAt > b.lastReadAt; });
-                break;
-            case LibrarySortMode::DATE_UPDATED_DESC:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.latestChapterUploadDate > b.latestChapterUploadDate; });
-                break;
-            case LibrarySortMode::DATE_UPDATED_ASC:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.latestChapterUploadDate < b.latestChapterUploadDate; });
-                break;
-            case LibrarySortMode::TOTAL_CHAPTERS:
-                std::sort(m_mangaList.begin(), m_mangaList.end(),
-                    [](const Manga& a, const Manga& b) { return a.chapterCount > b.chapterCount; });
-                break;
-            default:
-                break;
-        }
-
-        // Update cells in place without reloading thumbnails
-        m_contentGrid->updateCellData(m_mangaList);
-    } else {
-        // Size mismatch, need full rebuild
-        sortMangaList();
-    }
+    sortMangaList();
 
     // Update cache
     m_cachedMangaList.clear();
