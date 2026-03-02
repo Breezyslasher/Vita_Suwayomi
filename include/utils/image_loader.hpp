@@ -31,10 +31,14 @@ public:
     // Set JWT access token for Bearer auth
     static void setAccessToken(const std::string& token);
 
+    // Set session cookie for SIMPLE_LOGIN mode
+    static void setSessionCookie(const std::string& cookie);
+
     // Get authentication credentials (thread-safe copies for use from worker threads)
     static std::string getAuthUsername();
     static std::string getAuthPassword();
     static std::string getAccessToken();
+    static std::string getSessionCookie();
 
     // Load image asynchronously from URL (with thumbnail downscaling) - for brls::Image
     static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target);
@@ -120,8 +124,9 @@ private:
     static bool cacheGet(const std::string& url, std::vector<uint8_t>& data);
     static std::string s_authUsername;
     static std::string s_authPassword;
-    static std::string s_accessToken;  // JWT access token for Bearer auth
-    static std::mutex s_authMutex;     // Protects s_authUsername/Password/AccessToken
+    static std::string s_accessToken;    // JWT access token for Bearer auth
+    static std::string s_sessionCookie;  // Session cookie for SIMPLE_LOGIN
+    static std::mutex s_authMutex;       // Protects s_authUsername/Password/AccessToken/SessionCookie
 
     // Worker thread pool - persistent threads that reuse HTTP connections
     // Each worker has its own HttpClient for TCP connection reuse (keep-alive)

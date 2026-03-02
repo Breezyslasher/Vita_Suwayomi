@@ -728,8 +728,9 @@ private:
     // hit 401 simultaneously and all try to refresh the token
     time_t m_lastTokenRefreshTime = 0;
 
-    // Login GraphQL methods
+    // Login methods
     bool loginGraphQL(const std::string& username, const std::string& password);
+    bool loginSimpleREST(const std::string& username, const std::string& password);
     bool refreshTokenGraphQL();
 };
 

@@ -188,6 +188,7 @@ struct AppSettings {
     int authMode = 0;
     std::string accessToken;           // JWT access token (for ui_login/simple_login)
     std::string refreshToken;          // JWT refresh token (for ui_login/simple_login)
+    std::string sessionCookie;         // Session cookie (for simple_login)
 
     // Display Settings
     bool showUnreadBadge = true;
