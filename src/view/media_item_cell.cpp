@@ -279,6 +279,12 @@ void MangaItemCell::updateDisplay() {
 }
 
 void MangaItemCell::setManga(const Manga& manga) {
+    // Invalidate any in-flight thumbnail loads for the previous manga.
+    // Without this, a stale worker-thread load could finish after the new load
+    // and overwrite the correct cover (race condition during sort changes).
+    if (m_alive) *m_alive = false;
+    m_alive = std::make_shared<bool>(true);
+
     m_manga = manga;
     m_thumbnailLoaded = false;
     updateDisplay();
@@ -286,6 +292,10 @@ void MangaItemCell::setManga(const Manga& manga) {
 }
 
 void MangaItemCell::setMangaDeferred(const Manga& manga) {
+    // Invalidate any in-flight thumbnail loads for the previous manga.
+    if (m_alive) *m_alive = false;
+    m_alive = std::make_shared<bool>(true);
+
     // Set manga data but don't load thumbnail yet
     m_manga = manga;
     m_thumbnailLoaded = false;
