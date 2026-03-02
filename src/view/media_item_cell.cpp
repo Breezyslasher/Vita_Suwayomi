@@ -88,18 +88,19 @@ MangaItemCell::MangaItemCell() {
     m_titleOverlay->setPositionLeft(0);
     m_titleOverlay->setPositionRight(0);  // Stretch to fill width
 
-    // Title label - at bottom of card
+    // Title label - at bottom of card, wraps to 2 lines for longer titles
     m_titleLabel = new brls::Label();
     m_titleLabel->setFontSize(11);
     m_titleLabel->setTextColor(nvgRGB(255, 255, 255));
     m_titleLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
     m_titleOverlay->addView(m_titleLabel);
 
-    // Subtitle (author) - smaller, below title
+    // Subtitle (author) - smaller, below title, single line
     m_subtitleLabel = new brls::Label();
     m_subtitleLabel->setFontSize(9);
     m_subtitleLabel->setTextColor(nvgRGB(180, 180, 180));
     m_subtitleLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
+    m_subtitleLabel->setSingleLine(true);
     m_titleOverlay->addView(m_subtitleLabel);
 
     this->addView(m_titleOverlay);
@@ -187,11 +188,12 @@ MangaItemCell::~MangaItemCell() {
 }
 
 void MangaItemCell::updateDisplay() {
-    // Set title - Komikku style, left-aligned
+    // Set title - Komikku style, left-aligned, up to 2 lines
     if (m_titleLabel) {
         std::string title = m_manga.title;
-        if (title.length() > 16) {
-            title = title.substr(0, 14) + "..";
+        // Allow enough characters for 2 lines (~20 chars per line at font 11)
+        if (title.length() > 40) {
+            title = title.substr(0, 38) + "..";
         }
         m_originalTitle = title;
         m_titleLabel->setText(title);

@@ -719,7 +719,7 @@ void RecyclingGrid::setGridSize(int columns) {
     } else if (m_compactMode) {
         m_cellHeight = static_cast<int>(m_cellWidth * 1.4);  // Taller for compact (cover only)
     } else {
-        m_cellHeight = static_cast<int>(m_cellWidth * 1.3);  // Normal height with title
+        m_cellHeight = static_cast<int>(m_cellWidth * 1.4);  // Normal height with 2-line title
     }
 
     brls::Logger::info("RecyclingGrid: Grid size set to {} columns, cell {}x{}",
