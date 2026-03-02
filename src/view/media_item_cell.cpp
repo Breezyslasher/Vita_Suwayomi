@@ -210,30 +210,9 @@ void MangaItemCell::updateDisplay() {
         m_titleLabel->setText(title);
     }
 
-    // Update list mode title as well
+    // Update list mode title - show full title (row auto-adapts to fit)
     if (m_listTitleLabel) {
-        std::string listTitle = m_manga.title;
-        // In auto mode (3), show full title without truncation
-        // In other modes, truncate based on row size
-        if (m_listRowSize != 3) {
-            int maxChars = 60;  // Default (medium)
-            switch (m_listRowSize) {
-                case 0:  // Small
-                    maxChars = 45;
-                    break;
-                case 1:  // Medium
-                    maxChars = 60;
-                    break;
-                case 2:  // Large
-                    maxChars = 80;
-                    break;
-            }
-            if (static_cast<int>(listTitle.length()) > maxChars) {
-                listTitle = listTitle.substr(0, maxChars - 2) + "..";
-            }
-        }
-        // In auto mode, show full title (no truncation)
-        m_listTitleLabel->setText(listTitle);
+        m_listTitleLabel->setText(m_manga.title);
     }
 
     // Set subtitle (author or chapter count)
@@ -510,12 +489,8 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
 }
 
 void MangaItemCell::setListRowSize(int rowSize) {
-    if (m_listRowSize == rowSize) return;
-    m_listRowSize = rowSize;
-    // Update display if already in list mode
-    if (m_listMode) {
-        updateDisplay();
-    }
+    // No-op: list mode always auto-adapts row height to title length
+    (void)rowSize;
 }
 
 void MangaItemCell::applyDisplayMode() {
@@ -540,25 +515,9 @@ void MangaItemCell::applyDisplayMode() {
             m_listInfoBox->setVisibility(brls::Visibility::VISIBLE);
         }
 
-        // Adjust title font size based on row size
+        // Font size for list mode
         if (m_listTitleLabel) {
-            switch (m_listRowSize) {
-                case 0:  // Small
-                    m_listTitleLabel->setFontSize(12);
-                    break;
-                case 1:  // Medium (default)
-                    m_listTitleLabel->setFontSize(14);
-                    break;
-                case 2:  // Large
-                    m_listTitleLabel->setFontSize(16);
-                    break;
-                case 3:  // Auto - use medium font, text will wrap if needed
-                    m_listTitleLabel->setFontSize(14);
-                    break;
-                default:
-                    m_listTitleLabel->setFontSize(14);
-                    break;
-            }
+            m_listTitleLabel->setFontSize(14);
         }
 
         // Position badges for list mode (left side)
