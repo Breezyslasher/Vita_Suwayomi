@@ -1538,13 +1538,15 @@ void LibrarySectionTab::sortMangaList() {
             }
         }
 
-        // If we found the manga, focus it at its new position
-        // If not found (e.g., switched categories), focus first item if:
-        // - The grid currently has focus (user was navigating the library), OR
-        // - We just switched categories via L/R buttons (m_focusGridAfterLoad flag)
+        // If we found the manga, focus it at its new position.
+        // If not found (e.g., filtered out by DOWNLOADED_ONLY), focus first item
+        // when the user WAS focused on a grid cell (focusedMangaId >= 0) or when
+        // switching categories. Using hasCellFocus() alone doesn't work here
+        // because setDataSource() already deleted the old cells, so no new cell
+        // has focus yet — we must rely on the saved focusedMangaId instead.
         if (newIndex >= 0) {
             m_contentGrid->focusIndex(newIndex);
-        } else if (!m_mangaList.empty() && (m_contentGrid->hasCellFocus() || m_focusGridAfterLoad)) {
+        } else if (!m_mangaList.empty() && (focusedMangaId >= 0 || m_focusGridAfterLoad)) {
             // Previous focused manga not in new list, focus first item
             m_contentGrid->focusIndex(0);
         }
