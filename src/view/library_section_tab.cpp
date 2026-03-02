@@ -339,9 +339,6 @@ LibrarySectionTab::LibrarySectionTab() {
     // Apply library display settings from user preferences
     const auto& settings = Application::getInstance().getSettings();
 
-    // Apply list row size first (before list mode, so it's ready when list mode is set)
-    m_contentGrid->setListRowSize(static_cast<int>(settings.listRowSize));
-
     // Apply display mode (Grid/Compact/List)
     switch (settings.libraryDisplayMode) {
         case LibraryDisplayMode::GRID_NORMAL:
@@ -1541,7 +1538,7 @@ void LibrarySectionTab::sortMangaList() {
         // If not found (e.g., switched categories), focus first item if:
         // - The grid currently has focus (user was navigating the library), OR
         // - We just switched categories via L/R buttons (m_focusGridAfterLoad flag)
-        if (newIndex >= 0) {
+        if (newIndex >= 0 && (m_contentGrid->hasCellFocus() || m_focusGridAfterLoad)) {
             m_contentGrid->focusIndex(newIndex);
         } else if (!m_mangaList.empty() && (m_contentGrid->hasCellFocus() || m_focusGridAfterLoad)) {
             // Previous focused manga not in new list, focus first item

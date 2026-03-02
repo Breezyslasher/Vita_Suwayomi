@@ -210,29 +210,14 @@ void MangaItemCell::updateDisplay() {
         m_titleLabel->setText(title);
     }
 
-    // Update list mode title as well
+    // Update list mode title
     if (m_listTitleLabel) {
         std::string listTitle = m_manga.title;
-        // In auto mode (3), show full title without truncation
-        // In other modes, truncate based on row size
-        if (m_listRowSize != 3) {
-            int maxChars = 60;  // Default (medium)
-            switch (m_listRowSize) {
-                case 0:  // Small
-                    maxChars = 45;
-                    break;
-                case 1:  // Medium
-                    maxChars = 60;
-                    break;
-                case 2:  // Large
-                    maxChars = 80;
-                    break;
-            }
-            if (static_cast<int>(listTitle.length()) > maxChars) {
-                listTitle = listTitle.substr(0, maxChars - 2) + "..";
-            }
+        // Truncate to fit alongside cover thumbnail
+        int maxChars = 55;
+        if (static_cast<int>(listTitle.length()) > maxChars) {
+            listTitle = listTitle.substr(0, maxChars - 2) + "..";
         }
-        // In auto mode, show full title (no truncation)
         m_listTitleLabel->setText(listTitle);
     }
 
@@ -510,24 +495,28 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
 }
 
 void MangaItemCell::setListRowSize(int rowSize) {
-    if (m_listRowSize == rowSize) return;
-    m_listRowSize = rowSize;
-    // Update display if already in list mode
-    if (m_listMode) {
-        updateDisplay();
-    }
+    // No-op: list row size is now auto-adapted with cover thumbnails
+    (void)rowSize;
 }
 
 void MangaItemCell::applyDisplayMode() {
     if (m_listMode) {
-        // List mode: simple horizontal layout with title only (no cover)
+        // List mode: horizontal layout with cover thumbnail + title
         this->setAxis(brls::Axis::ROW);
         this->setJustifyContent(brls::JustifyContent::FLEX_START);
         this->setAlignItems(brls::AlignItems::CENTER);
 
-        // Hide thumbnail in list mode - titles only
+        // Show cover thumbnail sized to fit the row height
         if (m_thumbnailImage) {
-            m_thumbnailImage->setVisibility(brls::Visibility::GONE);
+            m_thumbnailImage->setVisibility(brls::Visibility::VISIBLE);
+            m_thumbnailImage->setPositionType(brls::PositionType::RELATIVE);
+            m_thumbnailImage->setGrow(0.0f);
+            // Cover sized to row: height matches cell, width is proportional (manga cover ~0.7 ratio)
+            m_thumbnailImage->setWidth(56);
+            m_thumbnailImage->setHeight(76);
+            m_thumbnailImage->setCornerRadius(4);
+            m_thumbnailImage->setMargins(2, 8, 2, 8);
+            m_thumbnailImage->setScalingType(brls::ImageScalingType::FIT);
         }
 
         // Hide grid title overlay
@@ -535,50 +524,34 @@ void MangaItemCell::applyDisplayMode() {
             m_titleOverlay->setVisibility(brls::Visibility::GONE);
         }
 
-        // Show list info box (title label is already added and updated by updateDisplay)
+        // Show list info box with title
         if (m_listInfoBox) {
             m_listInfoBox->setVisibility(brls::Visibility::VISIBLE);
         }
 
-        // Adjust title font size based on row size
+        // Fixed font size for list mode
         if (m_listTitleLabel) {
-            switch (m_listRowSize) {
-                case 0:  // Small
-                    m_listTitleLabel->setFontSize(12);
-                    break;
-                case 1:  // Medium (default)
-                    m_listTitleLabel->setFontSize(14);
-                    break;
-                case 2:  // Large
-                    m_listTitleLabel->setFontSize(16);
-                    break;
-                case 3:  // Auto - use medium font, text will wrap if needed
-                    m_listTitleLabel->setFontSize(14);
-                    break;
-                default:
-                    m_listTitleLabel->setFontSize(14);
-                    break;
-            }
+            m_listTitleLabel->setFontSize(14);
         }
 
-        // Position badges for list mode (left side)
+        // Position badges after the cover thumbnail area
         if (m_unreadBadge) {
             m_unreadBadge->setPositionTop(4);
             m_unreadBadge->setPositionLeft(8);
         }
         if (m_newBadge) {
             m_newBadge->setPositionTop(4);
-            m_newBadge->setPositionLeft(40);  // Position next to unread badge
+            m_newBadge->setPositionLeft(40);
         }
         // Position start hint for list mode (top-right)
         if (m_startHintIcon) {
             m_startHintIcon->setPositionTop(4);
             m_startHintIcon->setPositionRight(4);
         }
-        // Position star badge for list mode (top-right, below start hint)
+        // Position star badge for list mode (top-right)
         if (m_starBadge) {
             m_starBadge->setPositionTop(4);
-            m_starBadge->setPositionRight(72);  // Left of start hint
+            m_starBadge->setPositionRight(72);
         }
 
     } else if (m_compactMode) {
@@ -587,7 +560,7 @@ void MangaItemCell::applyDisplayMode() {
         this->setJustifyContent(brls::JustifyContent::FLEX_END);
         this->setAlignItems(brls::AlignItems::STRETCH);
 
-        // Thumbnail - fill the cell (restore visibility if coming from list mode)
+        // Thumbnail - fill the cell (restore from list mode's relative layout)
         if (m_thumbnailImage) {
             m_thumbnailImage->setVisibility(brls::Visibility::VISIBLE);
             m_thumbnailImage->setPositionType(brls::PositionType::ABSOLUTE);
@@ -597,6 +570,8 @@ void MangaItemCell::applyDisplayMode() {
             m_thumbnailImage->setPositionBottom(0);
             m_thumbnailImage->setGrow(1.0f);
             m_thumbnailImage->setCornerRadius(8);
+            m_thumbnailImage->setMargins(0, 0, 0, 0);
+            m_thumbnailImage->setScalingType(brls::ImageScalingType::FILL);
         }
 
         // Hide title overlay in compact mode
@@ -635,7 +610,7 @@ void MangaItemCell::applyDisplayMode() {
         this->setJustifyContent(brls::JustifyContent::FLEX_END);
         this->setAlignItems(brls::AlignItems::STRETCH);
 
-        // Thumbnail - fill the cell (restore visibility if coming from list mode)
+        // Thumbnail - fill the cell (restore from list mode's relative layout)
         if (m_thumbnailImage) {
             m_thumbnailImage->setVisibility(brls::Visibility::VISIBLE);
             m_thumbnailImage->setPositionType(brls::PositionType::ABSOLUTE);
@@ -645,6 +620,8 @@ void MangaItemCell::applyDisplayMode() {
             m_thumbnailImage->setPositionBottom(0);
             m_thumbnailImage->setGrow(1.0f);
             m_thumbnailImage->setCornerRadius(8);
+            m_thumbnailImage->setMargins(0, 0, 0, 0);
+            m_thumbnailImage->setScalingType(brls::ImageScalingType::FILL);
         }
 
         // Show title overlay
