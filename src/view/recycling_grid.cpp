@@ -388,6 +388,9 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
                 cell->setCompactMode(true);
             }
 
+            // Pass grid column count so cell can adapt title font/truncation
+            cell->setGridColumns(m_columns);
+
             // Apply library badge setting (for browser/search tabs)
             if (m_showLibraryBadge) {
                 cell->setShowLibraryBadge(true);

@@ -28,6 +28,7 @@ public:
     void setCompactMode(bool compact);  // Hide title overlay (covers only)
     void setListMode(bool listMode);    // Horizontal list layout
     void setListRowSize(int rowSize);   // List row size: 0=small, 1=medium, 2=large, 3=auto
+    void setGridColumns(int columns);   // Set grid column count (adapts title font/truncation)
     void setShowLibraryBadge(bool show);  // Show star badge for library items (browser/search only)
 
     void onFocusGained() override;
@@ -51,6 +52,7 @@ private:
     bool m_listMode = false;
     bool m_showLibraryBadge = false;  // Whether to show star badge for library items
     int m_listRowSize = 1;  // 0=small, 1=medium, 2=large, 3=auto
+    int m_gridColumns = 6;  // Grid column count (affects title font/truncation)
 
     Manga m_manga;
     std::string m_originalTitle;

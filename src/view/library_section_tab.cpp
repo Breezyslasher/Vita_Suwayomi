@@ -34,12 +34,28 @@ LibrarySectionTab::LibrarySectionTab() {
     this->setPadding(20);
     this->setGrow(1.0f);
 
-    // Title
+    // Title row (title + update status side by side)
+    auto* titleRow = new brls::Box();
+    titleRow->setAxis(brls::Axis::ROW);
+    titleRow->setJustifyContent(brls::JustifyContent::FLEX_START);
+    titleRow->setAlignItems(brls::AlignItems::CENTER);
+    titleRow->setMarginBottom(10);
+
     m_titleLabel = new brls::Label();
     m_titleLabel->setText("Library");
     m_titleLabel->setFontSize(28);
-    m_titleLabel->setMarginBottom(10);
-    this->addView(m_titleLabel);
+    titleRow->addView(m_titleLabel);
+
+    // Update progress label (hidden by default, shown during updates)
+    m_updateStatusLabel = new brls::Label();
+    m_updateStatusLabel->setText("");
+    m_updateStatusLabel->setFontSize(18);
+    m_updateStatusLabel->setTextColor(nvgRGBA(0, 200, 170, 255));
+    m_updateStatusLabel->setMarginLeft(12);
+    m_updateStatusLabel->setVisibility(brls::Visibility::GONE);
+    titleRow->addView(m_updateStatusLabel);
+
+    this->addView(titleRow);
 
     // Top row with category tabs and buttons
     auto* topRow = new brls::Box();
@@ -1200,41 +1216,145 @@ void LibrarySectionTab::triggerLibraryUpdate() {
         return;
     }
 
+    // Don't start a new update if one is already in progress
+    if (m_isUpdating) {
+        return;
+    }
+
     brls::Logger::info("LibrarySectionTab: Triggering update for category {} ({})",
                       m_currentCategoryId, m_currentCategoryName);
 
-    std::string categoryName = m_currentCategoryName;
-    if (categoryName.empty() || m_currentCategoryId == 0) {
-        categoryName = "all manga";
+    // Show "Updating..." beside the title immediately
+    m_isUpdating = true;
+    m_updateTotalJobs = 0;
+    if (m_updateStatusLabel) {
+        m_updateStatusLabel->setText("Updating...");
+        m_updateStatusLabel->setVisibility(brls::Visibility::VISIBLE);
     }
-
-    std::string message = "Checking for new chapters in " + categoryName + "...";
-    brls::Application::notify(message);
 
     std::weak_ptr<bool> aliveWeak = m_alive;
     int categoryId = m_currentCategoryId;
+    int generation = ++m_updatePollGeneration;
 
-    asyncRun([categoryId, categoryName, aliveWeak]() {
+    asyncRun([categoryId, aliveWeak, generation, this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         bool success = false;
         if (categoryId == 0) {
-            // Update all library
             success = client.triggerLibraryUpdate();
         } else {
-            // Update specific category
             success = client.triggerLibraryUpdate(categoryId);
         }
 
-        brls::sync([success, categoryName, aliveWeak]() {
+        brls::sync([success, aliveWeak, generation, this]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
+            if (generation != m_updatePollGeneration) return;
 
             if (success) {
-                brls::Application::notify("Update started for " + categoryName);
+                // Start polling for progress
+                pollUpdateProgress(generation);
             } else {
+                // Update failed - hide status and show error
+                m_isUpdating = false;
+                if (m_updateStatusLabel) {
+                    m_updateStatusLabel->setVisibility(brls::Visibility::GONE);
+                }
                 brls::Application::notify("Failed to start update");
             }
+        });
+    });
+}
+
+void LibrarySectionTab::pollUpdateProgress(int generation) {
+    if (generation != m_updatePollGeneration) return;
+    if (!isValid()) return;
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+
+    asyncRun([aliveWeak, generation, this]() {
+        // Small delay between polls to avoid hammering the server
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        int pending = 0, running = 0;
+        bool isRunning = false;
+        bool gotStatus = client.fetchUpdateSummary(pending, running, isRunning);
+
+        brls::sync([aliveWeak, generation, gotStatus, pending, running, isRunning, this]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            if (generation != m_updatePollGeneration) return;
+
+            if (!gotStatus) {
+                // Couldn't fetch status - stop polling, hide label
+                m_isUpdating = false;
+                if (m_updateStatusLabel) {
+                    m_updateStatusLabel->setVisibility(brls::Visibility::GONE);
+                }
+                return;
+            }
+
+            if (!isRunning) {
+                // Update finished
+                m_isUpdating = false;
+                if (m_updateStatusLabel) {
+                    m_updateStatusLabel->setText("Updated!");
+                    // Hide after a short moment via next poll cycle
+                    // Use a delayed sync to hide it
+                }
+
+                // Reload current view to show updated data
+                if (m_groupMode == LibraryGroupMode::BY_CATEGORY) {
+                    loadCategoryManga(m_currentCategoryId);
+                } else if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+                    loadAllManga();
+                } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+                    loadBySource();
+                }
+
+                // Hide the "Updated!" text after 2 seconds
+                std::weak_ptr<bool> hideAlive = m_alive;
+                int hideGen = generation;
+                asyncRun([hideAlive, hideGen, this]() {
+                    std::this_thread::sleep_for(std::chrono::seconds(2));
+                    brls::sync([hideAlive, hideGen, this]() {
+                        auto alive2 = hideAlive.lock();
+                        if (!alive2 || !*alive2) return;
+                        if (hideGen != m_updatePollGeneration) return;
+                        if (m_updateStatusLabel) {
+                            m_updateStatusLabel->setVisibility(brls::Visibility::GONE);
+                        }
+                    });
+                });
+                return;
+            }
+
+            // Update is still running - calculate progress
+            int totalActive = pending + running;
+            if (m_updateTotalJobs == 0 && totalActive > 0) {
+                // First poll - capture total
+                m_updateTotalJobs = totalActive;
+            }
+
+            if (m_updateTotalJobs > 0) {
+                int completed = m_updateTotalJobs - totalActive;
+                if (completed < 0) completed = 0;
+                int percent = (completed * 100) / m_updateTotalJobs;
+                if (percent > 100) percent = 100;
+
+                std::string statusText = "Updating " + std::to_string(percent) + "%";
+                if (m_updateStatusLabel) {
+                    m_updateStatusLabel->setText(statusText);
+                }
+            } else {
+                if (m_updateStatusLabel) {
+                    m_updateStatusLabel->setText("Updating...");
+                }
+            }
+
+            // Continue polling
+            pollUpdateProgress(generation);
         });
     });
 }
