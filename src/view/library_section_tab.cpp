@@ -2034,7 +2034,8 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
                 }
             }
             }); // end brls::sync
-        }
+        },
+        -1
     );
     brls::Application::pushActivity(new brls::Activity(dropdown));
 }
