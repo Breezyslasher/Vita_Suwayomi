@@ -502,13 +502,18 @@ static void applyAuthHeaders(HttpClient& client) {
     std::string sessionCookie = ImageLoader::getSessionCookie();
     std::string token = ImageLoader::getAccessToken();
 
-    if (!sessionCookie.empty()) {
-        // SIMPLE_LOGIN: session cookie from POST /login.html
-        client.setDefaultHeader("Cookie", sessionCookie);
-    } else if (!token.empty()) {
-        // UI_LOGIN: JWT Bearer token
-        client.setDefaultHeader("Authorization", "Bearer " + token);
-        client.setDefaultHeader("Cookie", "suwayomi-server-token=" + token);
+    if (!sessionCookie.empty() || !token.empty()) {
+        // Build cookie header with all available cookies for cross-mode compatibility
+        std::string cookies;
+        if (!sessionCookie.empty()) {
+            cookies = sessionCookie;
+        }
+        if (!token.empty()) {
+            if (!cookies.empty()) cookies += "; ";
+            cookies += "suwayomi-server-token=" + token;
+            client.setDefaultHeader("Authorization", "Bearer " + token);
+        }
+        client.setDefaultHeader("Cookie", cookies);
     } else {
         // BASIC_AUTH fallback
         std::string username = ImageLoader::getAuthUsername();
