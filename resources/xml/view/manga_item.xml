@@ -2,7 +2,7 @@
 <brls:Box
     id="manga_item/container"
     width="140"
-    height="220"
+    height="235"
     axis="column"
     focusable="true"
     marginRight="15"
@@ -64,14 +64,13 @@
 
     </brls:Box>
 
-    <!-- Title -->
+    <!-- Title (up to 2 lines for longer titles) -->
     <brls:Label
         id="manga_item/title"
         text="Manga Title"
         width="140"
         fontSize="12"
         marginTop="5"
-        singleLine="true"
         horizontalAlign="left"/>
 
     <!-- Subtitle (author/chapters) -->
