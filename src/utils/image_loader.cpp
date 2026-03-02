@@ -491,6 +491,8 @@ static void applyAuthHeaders(HttpClient& client) {
     std::string token = ImageLoader::getAccessToken();
     if (!token.empty()) {
         client.setDefaultHeader("Authorization", "Bearer " + token);
+        // Also send as cookie for server compatibility (Suwayomi checks both)
+        client.setDefaultHeader("Cookie", "suwayomi-server-token=" + token);
     } else {
         std::string username = ImageLoader::getAuthUsername();
         std::string password = ImageLoader::getAuthPassword();

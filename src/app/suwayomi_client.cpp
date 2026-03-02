@@ -66,6 +66,12 @@ std::string SuwayomiClient::executeGraphQLInternal(const std::string& query, con
 
     std::string url = buildGraphQLUrl();
 
+    // Log auth state for debugging
+    brls::Logger::debug("GraphQL auth: mode={}, token_len={}, has_cookie={}",
+                       static_cast<int>(m_authMode),
+                       m_accessToken.length(),
+                       !m_sessionCookie.empty());
+
     // Build GraphQL request body
     std::string body = "{\"query\":\"";
 
@@ -165,6 +171,13 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
     }
 
     // Apply authentication based on auth mode
+    // The Suwayomi server accepts tokens from three sources (checked in order):
+    //   1. Authorization: Bearer <token>  header
+    //   2. Cookie: suwayomi-server-token=<token>  cookie
+    //   3. ?token=<token>  query parameter
+    // We send BOTH the header and the cookie to maximize compatibility,
+    // because some server versions/configs may not read the Authorization
+    // header properly for GraphQL endpoints.
     switch (m_authMode) {
         case AuthMode::NONE:
             // No authentication
@@ -182,6 +195,8 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
             // Cookie-based session - use JWT token if available, otherwise try basic auth
             if (!m_accessToken.empty()) {
                 http.setDefaultHeader("Authorization", "Bearer " + m_accessToken);
+                // Also send as cookie for server compatibility
+                http.setDefaultHeader("Cookie", "suwayomi-server-token=" + m_accessToken);
             } else if (!m_sessionCookie.empty()) {
                 http.setDefaultHeader("Cookie", m_sessionCookie);
             } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
@@ -195,6 +210,8 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
             // JWT-based authentication
             if (!m_accessToken.empty()) {
                 http.setDefaultHeader("Authorization", "Bearer " + m_accessToken);
+                // Also send as cookie for server compatibility
+                http.setDefaultHeader("Cookie", "suwayomi-server-token=" + m_accessToken);
             } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
                 // Fallback to basic auth if no token yet
                 std::string credentials = m_authUsername + ":" + m_authPassword;
@@ -2371,8 +2388,14 @@ bool SuwayomiClient::loginGraphQL(const std::string& username, const std::string
         return false;
     }
 
+    // Reset refresh timestamp so the first refresh after login isn't skipped by dedup
+    m_lastTokenRefreshTime = 0;
+
     if (!m_accessToken.empty()) {
         brls::Logger::info("Login successful, received JWT tokens");
+        brls::Logger::debug("Login: accessToken length={}, first8={}...",
+                           m_accessToken.length(),
+                           m_accessToken.substr(0, 8));
     } else {
         brls::Logger::info("Login successful, received session cookie (simple_login)");
     }
@@ -2476,6 +2499,9 @@ bool SuwayomiClient::refreshTokenGraphQL() {
     m_accessToken = newAccessToken;
     ImageLoader::setAccessToken(m_accessToken);
     brls::Logger::info("Token refreshed successfully");
+    brls::Logger::debug("Refresh: new accessToken length={}, first8={}...",
+                       m_accessToken.length(),
+                       m_accessToken.substr(0, 8));
 
     return true;
 }
