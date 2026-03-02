@@ -50,6 +50,7 @@ public:
     void toggleSelection(int index);
     void clearSelection();
     std::vector<int> getSelectedIndices() const;
+    bool isIndexSelected(int index) const;
     std::vector<Manga> getSelectedManga() const;
     int getSelectionCount() const;
     void setOnSelectionChanged(std::function<void(int count)> callback);

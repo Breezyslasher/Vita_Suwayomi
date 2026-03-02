@@ -753,6 +753,10 @@ std::vector<int> RecyclingGrid::getSelectedIndices() const {
     return std::vector<int>(m_selectedIndices.begin(), m_selectedIndices.end());
 }
 
+bool RecyclingGrid::isIndexSelected(int index) const {
+    return m_selectedIndices.count(index) > 0;
+}
+
 std::vector<Manga> RecyclingGrid::getSelectedManga() const {
     std::vector<Manga> result;
     for (int idx : m_selectedIndices) {

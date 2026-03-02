@@ -1931,7 +1931,9 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
 
     std::vector<std::string> options;
     if (m_selectionMode) {
-        options = {"Select / Deselect", "Download", "Mark as Read", "Mark as Unread",
+        bool isSelected = m_contentGrid && m_contentGrid->isIndexSelected(index);
+        std::string selectLabel = isSelected ? "Deselect" : "Select";
+        options = {selectLabel, "Download", "Mark as Read", "Mark as Unread",
                    "Change Categories", "Remove from Library", "Cancel Selection"};
     } else {
         options = {"Select", "Download", "Track", "Mark as Read", "Mark as Unread",
