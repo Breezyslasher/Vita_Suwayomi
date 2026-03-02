@@ -192,19 +192,14 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
             break;
 
         case AuthMode::SIMPLE_LOGIN:
-            // Cookie-based session - use JWT token if available, otherwise try basic auth
-            if (!m_accessToken.empty()) {
-                http.setDefaultHeader("Authorization", "Bearer " + m_accessToken);
-                // Prefer actual session cookie from Set-Cookie header over synthetic token cookie
-                if (!m_sessionCookie.empty()) {
-                    http.setDefaultHeader("Cookie", m_sessionCookie);
-                } else {
-                    http.setDefaultHeader("Cookie", "suwayomi-server-token=" + m_accessToken);
-                }
-            } else if (!m_sessionCookie.empty()) {
+            // Session-based auth - send the session cookie from POST /login.html
+            // SIMPLE_LOGIN uses Javalin server-side sessions, NOT JWT tokens.
+            // The session cookie (e.g. JSESSIONID=xxx) tracks the server-side session
+            // that has the "logged-in" attribute set.
+            if (!m_sessionCookie.empty()) {
                 http.setDefaultHeader("Cookie", m_sessionCookie);
             } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
-                // Fallback to basic auth for initial requests
+                // Fallback to basic auth if no session yet
                 std::string credentials = m_authUsername + ":" + m_authPassword;
                 http.setDefaultHeader("Authorization", "Basic " + base64Encode(credentials));
             }
@@ -2261,6 +2256,7 @@ void SuwayomiClient::setTokens(const std::string& accessToken, const std::string
 void SuwayomiClient::setSessionCookie(const std::string& cookie) {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_sessionCookie = cookie;
+    ImageLoader::setSessionCookie(cookie);
 }
 
 bool SuwayomiClient::isAuthenticated() const {
@@ -2270,7 +2266,7 @@ bool SuwayomiClient::isAuthenticated() const {
         case AuthMode::BASIC_AUTH:
             return !m_authUsername.empty() && !m_authPassword.empty();
         case AuthMode::SIMPLE_LOGIN:
-            return !m_accessToken.empty() || !m_sessionCookie.empty();
+            return !m_sessionCookie.empty();
         case AuthMode::UI_LOGIN:
             return !m_accessToken.empty();
         default:
@@ -2283,6 +2279,9 @@ void SuwayomiClient::logout() {
     m_accessToken.clear();
     m_refreshToken.clear();
     m_sessionCookie.clear();
+    // Clear ImageLoader auth state
+    ImageLoader::setAccessToken("");
+    ImageLoader::setSessionCookie("");
     // Keep username/password for re-login if needed
 }
 
@@ -2302,9 +2301,13 @@ bool SuwayomiClient::login(const std::string& username, const std::string& passw
             return testConnection();
 
         case AuthMode::SIMPLE_LOGIN:
+            // SIMPLE_LOGIN uses session-based auth via POST /login.html
+            // The server sets a Javalin session attribute, tracked by session cookie
+            ImageLoader::setAuthCredentials(username, password);
+            return loginSimpleREST(username, password);
+
         case AuthMode::UI_LOGIN:
-            // Both use the same GraphQL login mutation
-            // The difference is in how the tokens/cookies are used
+            // UI_LOGIN uses JWT tokens via GraphQL login mutation
             ImageLoader::setAuthCredentials(username, password);
             return loginGraphQL(username, password);
 
@@ -2413,6 +2416,85 @@ bool SuwayomiClient::loginGraphQL(const std::string& username, const std::string
     return true;
 }
 
+bool SuwayomiClient::loginSimpleREST(const std::string& username, const std::string& password) {
+    // SIMPLE_LOGIN uses session-based auth via POST /login.html
+    // The Suwayomi server expects form params "user" and "pass",
+    // sets a Javalin session attribute "logged-in", and returns a
+    // 303 redirect with a session cookie (e.g. JSESSIONID).
+    brls::Logger::info("loginSimpleREST: Attempting session-based login...");
+
+    vitasuwayomi::HttpClient http;
+    http.setDefaultHeader("Accept", "text/html,application/json");
+
+    int timeout = Application::getInstance().getSettings().connectionTimeout;
+    if (timeout > 0) {
+        http.setTimeout(timeout);
+    }
+
+    std::string url = m_serverUrl + "/login.html";
+
+    // Build form-encoded body with server's expected param names
+    std::string body = "user=" + vitasuwayomi::HttpClient::urlEncode(username) +
+                       "&pass=" + vitasuwayomi::HttpClient::urlEncode(password);
+
+    // Use request() directly to disable redirect following.
+    // We need to capture Set-Cookie from the 303 redirect response.
+    vitasuwayomi::HttpRequest req;
+    req.url = url;
+    req.method = "POST";
+    req.body = body;
+    req.headers["Content-Type"] = "application/x-www-form-urlencoded";
+    req.followRedirects = false;
+    req.timeout = timeout > 0 ? timeout : 30;
+
+    vitasuwayomi::HttpResponse response = http.request(req);
+
+    brls::Logger::info("loginSimpleREST: response status={}", response.statusCode);
+
+    // Capture session cookie from Set-Cookie header
+    std::string setCookie;
+    auto cookieIt = response.headers.find("Set-Cookie");
+    if (cookieIt == response.headers.end()) {
+        cookieIt = response.headers.find("set-cookie");
+    }
+    if (cookieIt != response.headers.end() && !cookieIt->second.empty()) {
+        setCookie = cookieIt->second;
+        // Strip cookie attributes (Path, HttpOnly, etc.) - keep only name=value
+        size_t semicolonPos = setCookie.find(';');
+        if (semicolonPos != std::string::npos) {
+            setCookie = setCookie.substr(0, semicolonPos);
+        }
+        brls::Logger::info("loginSimpleREST: captured session cookie");
+    }
+
+    // 303 See Other = successful login (server redirects after setting session)
+    if (response.statusCode == 303 || response.statusCode == 302 || response.statusCode == 301) {
+        if (!setCookie.empty()) {
+            m_sessionCookie = setCookie;
+            // Clear JWT tokens - SIMPLE_LOGIN uses session cookies only
+            m_accessToken.clear();
+            m_refreshToken.clear();
+            // Update ImageLoader so image requests also use the session cookie
+            ImageLoader::setSessionCookie(m_sessionCookie);
+            ImageLoader::setAccessToken("");
+            brls::Logger::info("loginSimpleREST: login successful (redirect + session cookie)");
+            return true;
+        }
+        // Got redirect but no cookie - unusual, but try proceeding
+        brls::Logger::warning("loginSimpleREST: got redirect but no Set-Cookie header");
+        return false;
+    }
+
+    // 200 typically means the login page was returned with an error
+    if (response.statusCode == 200) {
+        brls::Logger::warning("loginSimpleREST: login failed (credentials rejected)");
+        return false;
+    }
+
+    brls::Logger::error("loginSimpleREST: unexpected status {}", response.statusCode);
+    return false;
+}
+
 bool SuwayomiClient::refreshToken() {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
@@ -2422,8 +2504,6 @@ bool SuwayomiClient::refreshToken() {
 
     // Dedup: if token was refreshed within the last 5 seconds by another thread,
     // skip the refresh and return success so the caller retries with the new token.
-    // This prevents the thundering herd when multiple worker threads all hit 401
-    // simultaneously and each tries to refresh independently.
     time_t now = time(nullptr);
     if (m_lastTokenRefreshTime > 0 && (now - m_lastTokenRefreshTime) < 5) {
         brls::Logger::info("Token was recently refreshed ({}s ago), skipping duplicate refresh",
@@ -2431,7 +2511,21 @@ bool SuwayomiClient::refreshToken() {
         return true;
     }
 
-    // Try GraphQL refresh if we have a refresh token
+    // SIMPLE_LOGIN: re-login via REST to get a new session cookie
+    if (m_authMode == AuthMode::SIMPLE_LOGIN) {
+        if (!m_authUsername.empty() && !m_authPassword.empty()) {
+            brls::Logger::info("SIMPLE_LOGIN: re-login via REST to refresh session...");
+            if (loginSimpleREST(m_authUsername, m_authPassword)) {
+                m_lastTokenRefreshTime = now;
+                brls::Logger::info("SIMPLE_LOGIN: session refreshed successfully");
+                return true;
+            }
+            brls::Logger::error("SIMPLE_LOGIN: session refresh failed");
+        }
+        return false;
+    }
+
+    // UI_LOGIN: try GraphQL refresh if we have a refresh token
     if (!m_refreshToken.empty()) {
         if (refreshTokenGraphQL()) {
             m_lastTokenRefreshTime = now;
@@ -2442,8 +2536,7 @@ bool SuwayomiClient::refreshToken() {
         brls::Logger::info("No refresh token available, skipping GraphQL refresh");
     }
 
-    // Fallback: re-login with stored credentials (important for simple_login mode
-    // where the server may not issue refresh tokens)
+    // Fallback: re-login with stored credentials
     if (!m_authUsername.empty() && !m_authPassword.empty()) {
         brls::Logger::info("Attempting re-login with stored credentials...");
         if (loginGraphQL(m_authUsername, m_authPassword)) {

@@ -75,23 +75,34 @@ void Application::run() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         client.setServerUrl(m_serverUrl);
 
-        // If we have JWT tokens, try to refresh them first (they may be expired)
+        // Try to restore auth session
         AuthMode authMode = client.getAuthMode();
-        if ((authMode == AuthMode::SIMPLE_LOGIN || authMode == AuthMode::UI_LOGIN) &&
-            !client.getRefreshToken().empty()) {
+        if (authMode == AuthMode::SIMPLE_LOGIN) {
+            // SIMPLE_LOGIN uses server-side sessions via POST /login.html.
+            // Sessions expire, so always re-login with stored credentials.
+            std::string username = getAuthUsername();
+            std::string password = getAuthPassword();
+            if (!username.empty() && !password.empty()) {
+                brls::Logger::info("SIMPLE_LOGIN: re-establishing session...");
+                if (client.login(username, password)) {
+                    brls::Logger::info("SIMPLE_LOGIN: session established");
+                    m_settings.sessionCookie = client.getSessionCookie();
+                } else {
+                    brls::Logger::warning("SIMPLE_LOGIN: session login failed");
+                    client.setSessionCookie("");
+                    m_settings.sessionCookie = "";
+                }
+            }
+        } else if (authMode == AuthMode::UI_LOGIN && !client.getRefreshToken().empty()) {
+            // UI_LOGIN uses JWT tokens - try to refresh them (they may be expired)
             brls::Logger::info("Attempting to refresh JWT tokens...");
             if (client.refreshToken()) {
                 brls::Logger::info("Token refresh successful");
-                // Update stored tokens
                 m_settings.accessToken = client.getAccessToken();
                 m_settings.refreshToken = client.getRefreshToken();
                 m_settings.sessionCookie = client.getSessionCookie();
             } else {
                 brls::Logger::warning("Token refresh failed, clearing stale tokens for basic auth fallback");
-                // Clear stale JWT tokens so createHttpClient() falls back to Basic auth credentials.
-                // This handles the case where the server switched from JWT to Basic auth mode -
-                // without clearing, createHttpClient() keeps sending the stale Bearer token
-                // which the server rejects with 401 on every request.
                 client.setTokens("", "");
                 m_settings.accessToken = "";
                 m_settings.refreshToken = "";

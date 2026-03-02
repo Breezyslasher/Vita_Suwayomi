@@ -50,6 +50,7 @@ std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
 std::string ImageLoader::s_accessToken;
+std::string ImageLoader::s_sessionCookie;
 std::mutex ImageLoader::s_authMutex;
 std::queue<ImageLoader::LoadRequest> ImageLoader::s_loadQueue;
 std::queue<ImageLoader::RotatableLoadRequest> ImageLoader::s_rotatableLoadQueue;
@@ -467,6 +468,16 @@ std::string ImageLoader::getAccessToken() {
     return s_accessToken;
 }
 
+void ImageLoader::setSessionCookie(const std::string& cookie) {
+    std::lock_guard<std::mutex> lock(s_authMutex);
+    s_sessionCookie = cookie;
+}
+
+std::string ImageLoader::getSessionCookie() {
+    std::lock_guard<std::mutex> lock(s_authMutex);
+    return s_sessionCookie;
+}
+
 // Helper for Base64 encoding
 static std::string base64EncodeImage(const std::string& input) {
     static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -487,13 +498,19 @@ static std::string base64EncodeImage(const std::string& input) {
 
 // Helper to apply authentication headers to HTTP client
 static void applyAuthHeaders(HttpClient& client) {
-    // Read tokens once into local variables to avoid TOCTOU races
+    // Read auth state once into local variables to avoid TOCTOU races
+    std::string sessionCookie = ImageLoader::getSessionCookie();
     std::string token = ImageLoader::getAccessToken();
-    if (!token.empty()) {
+
+    if (!sessionCookie.empty()) {
+        // SIMPLE_LOGIN: session cookie from POST /login.html
+        client.setDefaultHeader("Cookie", sessionCookie);
+    } else if (!token.empty()) {
+        // UI_LOGIN: JWT Bearer token
         client.setDefaultHeader("Authorization", "Bearer " + token);
-        // Also send as cookie for server compatibility (Suwayomi checks both)
         client.setDefaultHeader("Cookie", "suwayomi-server-token=" + token);
     } else {
+        // BASIC_AUTH fallback
         std::string username = ImageLoader::getAuthUsername();
         std::string password = ImageLoader::getAuthPassword();
         if (!username.empty() && !password.empty()) {
