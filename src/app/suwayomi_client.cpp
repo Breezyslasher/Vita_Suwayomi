@@ -197,7 +197,13 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
             // The session cookie (e.g. JSESSIONID=xxx) tracks the server-side session
             // that has the "logged-in" attribute set.
             if (!m_sessionCookie.empty()) {
-                http.setDefaultHeader("Cookie", m_sessionCookie);
+                // Build cookie header: session cookie, plus JWT cookie if available
+                // (for cross-mode compatibility if server mode doesn't match client)
+                std::string cookies = m_sessionCookie;
+                if (!m_accessToken.empty()) {
+                    cookies += "; suwayomi-server-token=" + m_accessToken;
+                }
+                http.setDefaultHeader("Cookie", cookies);
             } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
                 // Fallback to basic auth if no session yet
                 std::string credentials = m_authUsername + ":" + m_authPassword;
@@ -209,8 +215,16 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
             // JWT-based authentication
             if (!m_accessToken.empty()) {
                 http.setDefaultHeader("Authorization", "Bearer " + m_accessToken);
-                // Also send as cookie for server compatibility
-                http.setDefaultHeader("Cookie", "suwayomi-server-token=" + m_accessToken);
+                // Send JWT as cookie, plus session cookie if available
+                // (for cross-mode compatibility if server mode doesn't match client)
+                std::string cookies = "suwayomi-server-token=" + m_accessToken;
+                if (!m_sessionCookie.empty()) {
+                    cookies += "; " + m_sessionCookie;
+                }
+                http.setDefaultHeader("Cookie", cookies);
+            } else if (!m_sessionCookie.empty()) {
+                // Have session cookie but no JWT - send session cookie
+                http.setDefaultHeader("Cookie", m_sessionCookie);
             } else if (!m_authUsername.empty() && !m_authPassword.empty()) {
                 // Fallback to basic auth if no token yet
                 std::string credentials = m_authUsername + ":" + m_authPassword;
@@ -2279,6 +2293,10 @@ void SuwayomiClient::logout() {
     m_accessToken.clear();
     m_refreshToken.clear();
     m_sessionCookie.clear();
+    // Reset refresh dedup timer so the next auth mode attempt can refresh immediately.
+    // Without this, switching from UI_LOGIN to SIMPLE_LOGIN in the fallback loop would
+    // be blocked by the dedup timer from the UI_LOGIN refresh.
+    m_lastTokenRefreshTime = 0;
     // Clear ImageLoader auth state
     ImageLoader::setAccessToken("");
     ImageLoader::setSessionCookie("");
@@ -2407,10 +2425,13 @@ bool SuwayomiClient::loginGraphQL(const std::string& username, const std::string
         brls::Logger::info("Login successful, received session cookie (simple_login)");
     }
 
-    // Update image loader with auth info and access token
+    // Update image loader with auth info
     ImageLoader::setAuthCredentials(username, password);
     if (!m_accessToken.empty()) {
         ImageLoader::setAccessToken(m_accessToken);
+    }
+    if (!m_sessionCookie.empty()) {
+        ImageLoader::setSessionCookie(m_sessionCookie);
     }
 
     return true;
@@ -2526,6 +2547,10 @@ bool SuwayomiClient::refreshToken() {
     }
 
     // UI_LOGIN: try GraphQL refresh if we have a refresh token
+    if (m_authMode != AuthMode::UI_LOGIN) {
+        return false;  // Only UI_LOGIN uses JWT refresh
+    }
+
     if (!m_refreshToken.empty()) {
         if (refreshTokenGraphQL()) {
             m_lastTokenRefreshTime = now;

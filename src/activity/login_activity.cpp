@@ -97,15 +97,6 @@ void LoginActivity::onContentAvailable() {
         });
     }
 
-    // Test connection button
-    if (testButton) {
-        testButton->setText("Test");
-        testButton->registerClickAction([this](brls::View* view) {
-            onTestConnectionPressed();
-            return true;
-        });
-    }
-
     // Offline mode button
     if (offlineButton) {
         offlineButton->setText("Offline");
@@ -114,68 +105,6 @@ void LoginActivity::onContentAvailable() {
             return true;
         });
     }
-}
-
-void LoginActivity::onTestConnectionPressed() {
-    if (m_serverUrl.empty()) {
-        if (statusLabel) statusLabel->setText("Please enter server URL first");
-        return;
-    }
-
-    if (m_connecting) return;
-    m_connecting = true;
-
-    if (statusLabel) statusLabel->setText("Testing connection...");
-
-    std::string serverUrl = m_serverUrl;
-    std::string username = m_username;
-    std::string password = m_password;
-
-    asyncRun([this, serverUrl, username, password]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
-        client.setServerUrl(serverUrl);
-
-        // Step 1: Check basic reachability
-        if (!client.connectToServer(serverUrl)) {
-            brls::sync([this]() {
-                if (statusLabel) statusLabel->setText("Cannot reach server - check URL");
-                m_connecting = false;
-            });
-            return;
-        }
-
-        // Step 2: Fetch server info (public endpoint)
-        ServerInfo info;
-        bool hasInfo = client.fetchServerInfo(info);
-        std::string infoVersion = hasInfo ? info.version : "";
-
-        // Step 3: Auto-detect auth mode
-        bool serverRequiresAuth = client.checkServerRequiresAuth(serverUrl);
-        if (!serverRequiresAuth) {
-            brls::sync([this]() {
-                if (statusLabel) statusLabel->setText("Server OK - no auth required");
-                m_authMode = AuthMode::NONE;
-                m_connecting = false;
-            });
-            return;
-        }
-
-        // Server requires auth - detect the type
-        std::string errorMsg;
-        AuthMode detectedMode = client.detectServerAuthMode(serverUrl, errorMsg);
-        std::string modeName = getAuthModeName(detectedMode);
-
-        brls::sync([this, username, password, detectedMode, modeName]() {
-            m_authMode = detectedMode;
-            m_connecting = false;
-
-            if (username.empty() || password.empty()) {
-                if (statusLabel) statusLabel->setText("Auth required (" + modeName + ") - enter credentials");
-            } else {
-                if (statusLabel) statusLabel->setText("Server OK, auth: " + modeName);
-            }
-        });
-    });
 }
 
 void LoginActivity::onConnectPressed() {

@@ -549,7 +549,7 @@ public:
     void clearAuth();
 
     // Authentication mode
-    void setAuthMode(AuthMode mode) { m_authMode = mode; }
+    void setAuthMode(AuthMode mode) { m_authMode = mode; m_lastTokenRefreshTime = 0; }
     AuthMode getAuthMode() const { return m_authMode; }
 
     // Login methods for different auth modes

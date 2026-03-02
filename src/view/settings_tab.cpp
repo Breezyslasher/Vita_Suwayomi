@@ -208,10 +208,10 @@ void SettingsTab::createAccountSection() {
     connectionStatusLabel->setMarginBottom(8);
     m_contentBox->addView(connectionStatusLabel);
 
-    // Reconnect button (try to connect to saved server)
+    // Reconnect button (full auth restoration, same as app restart)
     auto* reconnectCell = new brls::DetailCell();
     reconnectCell->setText("Reconnect");
-    reconnectCell->setDetailText("Try to connect to server");
+    reconnectCell->setDetailText("Restore connection (same as app restart)");
     reconnectCell->registerClickAction([this, connectionStatusLabel](brls::View* view) {
         Application& app = Application::getInstance();
         std::string url = app.getActiveServerUrl();
@@ -220,23 +220,189 @@ void SettingsTab::createAccountSection() {
             return true;
         }
 
-        brls::Application::notify("Connecting to " + url + "...");
+        brls::Application::notify("Reconnecting to " + url + "...");
 
         asyncRun([url, connectionStatusLabel]() {
+            Application& app = Application::getInstance();
             SuwayomiClient& client = SuwayomiClient::getInstance();
             client.setServerUrl(url);
 
-            bool success = client.testConnection();
+            // Step 1: Restore auth session (same as app startup)
+            AuthMode authMode = client.getAuthMode();
+            if (authMode == AuthMode::SIMPLE_LOGIN) {
+                std::string username = app.getAuthUsername();
+                std::string password = app.getAuthPassword();
+                if (!username.empty() && !password.empty()) {
+                    brls::Logger::info("Reconnect: SIMPLE_LOGIN re-establishing session...");
+                    if (client.login(username, password)) {
+                        brls::Logger::info("Reconnect: SIMPLE_LOGIN session established");
+                        app.getSettings().sessionCookie = client.getSessionCookie();
+                    } else {
+                        brls::Logger::warning("Reconnect: SIMPLE_LOGIN session login failed");
+                        client.setSessionCookie("");
+                        app.getSettings().sessionCookie = "";
+                    }
+                }
+            } else if (authMode == AuthMode::UI_LOGIN && !client.getRefreshToken().empty()) {
+                brls::Logger::info("Reconnect: Attempting to refresh JWT tokens...");
+                if (client.refreshToken()) {
+                    brls::Logger::info("Reconnect: Token refresh successful");
+                    app.getSettings().accessToken = client.getAccessToken();
+                    app.getSettings().refreshToken = client.getRefreshToken();
+                    app.getSettings().sessionCookie = client.getSessionCookie();
+                } else {
+                    brls::Logger::warning("Reconnect: Token refresh failed, clearing stale tokens");
+                    client.setTokens("", "");
+                    app.getSettings().accessToken = "";
+                    app.getSettings().refreshToken = "";
+                }
+            }
 
-            brls::sync([success, connectionStatusLabel]() {
-                if (success) {
-                    Application::getInstance().setConnected(true);
+            // Step 2: Test connection with protected query (not just public endpoint)
+            bool authValid = false;
+            if (client.testConnection()) {
+                brls::Logger::info("Reconnect: Server reachable, validating auth...");
+
+                if (authMode == AuthMode::NONE) {
+                    authValid = true;
+                } else if (client.validateAuthWithProtectedQuery()) {
+                    brls::Logger::info("Reconnect: Auth validated");
+                    authValid = true;
+                } else {
+                    // Auth failed - try all auth modes automatically
+                    brls::Logger::warning("Reconnect: Protected query failed, trying all modes...");
+                    std::string username = app.getAuthUsername();
+                    std::string password = app.getAuthPassword();
+
+                    if (!username.empty() && !password.empty()) {
+                        // Try fresh login with saved mode first
+                        if (authMode == AuthMode::SIMPLE_LOGIN || authMode == AuthMode::UI_LOGIN) {
+                            client.setAuthMode(authMode);
+                            client.logout();
+                            if (client.login(username, password) && client.validateAuthWithProtectedQuery()) {
+                                brls::Logger::info("Reconnect: Fresh login succeeded with saved mode");
+                                app.getSettings().accessToken = client.getAccessToken();
+                                app.getSettings().refreshToken = client.getRefreshToken();
+                                app.getSettings().sessionCookie = client.getSessionCookie();
+                                app.saveSettings();
+                                authValid = true;
+                            }
+                        }
+
+                        if (!authValid) {
+                            // Try all modes: UI_LOGIN, SIMPLE_LOGIN, BASIC_AUTH
+                            AuthMode tryModes[] = { AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN, AuthMode::BASIC_AUTH };
+                            for (AuthMode tryMode : tryModes) {
+                                if (tryMode == authMode) continue;
+                                brls::Logger::info("Reconnect: Trying auth mode {}", static_cast<int>(tryMode));
+                                client.setAuthMode(tryMode);
+                                client.logout();
+
+                                if (tryMode == AuthMode::BASIC_AUTH) {
+                                    client.setAuthCredentials(username, password);
+                                } else {
+                                    if (!client.login(username, password)) continue;
+                                }
+
+                                if (client.validateAuthWithProtectedQuery()) {
+                                    brls::Logger::info("Reconnect: Auth succeeded with mode {}", static_cast<int>(tryMode));
+                                    app.getSettings().authMode = static_cast<int>(tryMode);
+                                    app.getSettings().accessToken = client.getAccessToken();
+                                    app.getSettings().refreshToken = client.getRefreshToken();
+                                    app.getSettings().sessionCookie = client.getSessionCookie();
+                                    app.saveSettings();
+                                    authValid = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // testConnection failed - could be auth mode mismatch
+                brls::Logger::warning("Reconnect: Server not reachable, trying auth fallback...");
+                std::string username = app.getAuthUsername();
+                std::string password = app.getAuthPassword();
+
+                if (!username.empty() && !password.empty()) {
+                    if (authMode == AuthMode::SIMPLE_LOGIN || authMode == AuthMode::UI_LOGIN) {
+                        client.setAuthMode(authMode);
+                        client.logout();
+                        if (client.login(username, password) &&
+                            client.testConnection() && client.validateAuthWithProtectedQuery()) {
+                            brls::Logger::info("Reconnect: Fresh login succeeded");
+                            app.getSettings().accessToken = client.getAccessToken();
+                            app.getSettings().refreshToken = client.getRefreshToken();
+                            app.getSettings().sessionCookie = client.getSessionCookie();
+                            app.saveSettings();
+                            authValid = true;
+                        }
+                    }
+
+                    if (!authValid) {
+                        AuthMode tryModes[] = { AuthMode::BASIC_AUTH, AuthMode::UI_LOGIN, AuthMode::SIMPLE_LOGIN, AuthMode::NONE };
+                        for (AuthMode tryMode : tryModes) {
+                            if (tryMode == authMode) continue;
+                            brls::Logger::info("Reconnect: Trying auth mode {}", static_cast<int>(tryMode));
+                            client.setAuthMode(tryMode);
+                            client.logout();
+
+                            if (tryMode == AuthMode::BASIC_AUTH) {
+                                client.setAuthCredentials(username, password);
+                            } else if (tryMode != AuthMode::NONE) {
+                                if (!client.login(username, password)) continue;
+                            }
+
+                            if (client.testConnection() && client.validateAuthWithProtectedQuery()) {
+                                brls::Logger::info("Reconnect: Succeeded with mode {}", static_cast<int>(tryMode));
+                                app.getSettings().authMode = static_cast<int>(tryMode);
+                                app.getSettings().accessToken = client.getAccessToken();
+                                app.getSettings().refreshToken = client.getRefreshToken();
+                                app.getSettings().sessionCookie = client.getSessionCookie();
+                                app.saveSettings();
+                                authValid = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!authValid) {
+                        // Restore original auth mode
+                        client.setAuthMode(authMode);
+                        if (authMode == AuthMode::BASIC_AUTH) {
+                            client.setAuthCredentials(app.getAuthUsername(), app.getAuthPassword());
+                        }
+                    }
+                }
+            }
+
+            // Step 3: Update state and sync
+            brls::sync([authValid, connectionStatusLabel]() {
+                Application& app = Application::getInstance();
+                if (authValid) {
+                    app.setConnected(true);
                     brls::Application::notify("Connected!");
                     if (connectionStatusLabel) {
                         connectionStatusLabel->setText("Status: Connected");
                     }
+
+                    // Sync offline reading progress to server
+                    DownloadsManager& dm = DownloadsManager::getInstance();
+                    if (!dm.getDownloads().empty()) {
+                        brls::Logger::info("Reconnect: Syncing offline reading progress...");
+                        vitasuwayomi::asyncRun([]() {
+                            DownloadsManager::getInstance().syncProgressToServer();
+                        });
+                    }
+
+                    // Resume incomplete downloads
+                    dm.resumeDownloadsIfNeeded();
                 } else {
+                    app.setConnected(false);
                     brls::Application::notify("Connection failed");
+                    if (connectionStatusLabel) {
+                        connectionStatusLabel->setText("Status: Offline");
+                    }
                 }
             });
         });

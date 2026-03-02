@@ -64,12 +64,6 @@
             marginRight="15"/>
 
         <brls:Button
-            id="login/pin_button"
-            text="Test"
-            width="100"
-            marginRight="15"/>
-
-        <brls:Button
             id="login/offline_button"
             text="Offline"
             width="120"/>
