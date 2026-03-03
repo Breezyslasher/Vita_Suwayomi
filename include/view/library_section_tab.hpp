@@ -93,6 +93,10 @@ private:
     // Check if this tab is still valid (not destroyed)
     bool isValid() const { return m_alive && *m_alive; }
 
+    // Check if the current focus is within this tab's view hierarchy.
+    // Returns false when a dropdown/overlay is on top (focus is outside this tab).
+    bool hasFocusWithin() const;
+
     // Currently selected category
     int m_currentCategoryId = 0;
     std::string m_currentCategoryName = "Library";

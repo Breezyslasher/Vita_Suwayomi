@@ -425,6 +425,19 @@ LibrarySectionTab::~LibrarySectionTab() {
     brls::Logger::debug("LibrarySectionTab: Destroyed");
 }
 
+bool LibrarySectionTab::hasFocusWithin() const {
+    brls::View* focused = brls::Application::getCurrentFocus();
+    if (!focused) return false;
+
+    // Walk up from the focused view to see if it's a descendant of this tab
+    brls::View* current = focused;
+    while (current) {
+        if (current == this) return true;
+        current = current->hasParent() ? current->getParent() : nullptr;
+    }
+    return false;
+}
+
 void LibrarySectionTab::willDisappear(bool resetState) {
     brls::Box::willDisappear(resetState);
 
@@ -1550,6 +1563,14 @@ void LibrarySectionTab::sortMangaList() {
         } else {
             // Items were filtered out or list size changed, need full rebuild
             m_contentGrid->setDataSource(m_mangaList);
+        }
+
+        // Skip focus transfer when an overlay (dropdown/dialog) is on top.
+        // Background async completions (category load, etc.) update the grid data
+        // above, but must not steal focus from the active dropdown menu.
+        if (!hasFocusWithin()) {
+            m_focusGridAfterLoad = false;
+            return;
         }
 
         // Handle empty state after filtering (e.g., "Downloads Only" with no local downloads)
