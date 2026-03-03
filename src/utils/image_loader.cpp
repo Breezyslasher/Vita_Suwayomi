@@ -105,6 +105,42 @@ static constexpr int MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN = 3;
 // concurrently, which can push the Vita past its memory limit.
 static std::mutex s_decodeMutex;
 
+// Signal that an OOM condition occurred during image decode.
+// This sets a cooldown period during which new thumbnail loads are skipped
+// to let the system recover before allocating more decode buffers.
+static void signalOOM(const char* context) {
+    int prev = s_oomCooldownFrames.load();
+    if (prev < OOM_COOLDOWN_DURATION) {
+        s_oomCooldownFrames.store(OOM_COOLDOWN_DURATION);
+        brls::Logger::error("ImageLoader: OOM in {} - entering {}-frame cooldown", context, OOM_COOLDOWN_DURATION);
+    }
+}
+
+// Track a decode failure. After MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN
+// consecutive failures, trigger the OOM cooldown since the system is likely
+// under memory pressure even if individual errors are not explicit OOM.
+static void trackDecodeFailure(const char* context) {
+    int fails = s_consecutiveDecodeFailures.fetch_add(1) + 1;
+    if (fails >= MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN) {
+        signalOOM(context);
+    }
+}
+
+// Reset the consecutive failure counter on a successful decode.
+static void trackDecodeSuccess() {
+    s_consecutiveDecodeFailures.store(0);
+}
+
+// Check whether we are in an OOM cooldown period (decrements the counter).
+static bool isUnderMemoryPressure() {
+    int frames = s_oomCooldownFrames.load();
+    if (frames > 0) {
+        s_oomCooldownFrames.fetch_sub(1);
+        return true;
+    }
+    return false;
+}
+
 // Helper to extract manga ID from thumbnail URL
 // URLs look like: http://server/api/v1/manga/123/thumbnail or /api/v1/manga/123/thumbnail
 static int extractMangaIdFromUrl(const std::string& url) {
@@ -196,42 +232,6 @@ static int calculateSegments(int width, int height, int maxSize) {
     if (height <= maxSize) return 1;
     // Split based on height, keeping each segment within maxSize
     return (height + maxSize - 1) / maxSize;
-}
-
-// Signal that an OOM condition occurred during image decode.
-// This sets a cooldown period during which new thumbnail loads are skipped
-// to let the system recover before allocating more decode buffers.
-static void signalOOM(const char* context) {
-    int prev = s_oomCooldownFrames.load();
-    if (prev < OOM_COOLDOWN_DURATION) {
-        s_oomCooldownFrames.store(OOM_COOLDOWN_DURATION);
-        brls::Logger::error("ImageLoader: OOM in {} - entering {}-frame cooldown", context, OOM_COOLDOWN_DURATION);
-    }
-}
-
-// Track a decode failure. After MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN
-// consecutive failures, trigger the OOM cooldown since the system is likely
-// under memory pressure even if individual errors are not explicit OOM.
-static void trackDecodeFailure(const char* context) {
-    int fails = s_consecutiveDecodeFailures.fetch_add(1) + 1;
-    if (fails >= MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN) {
-        signalOOM(context);
-    }
-}
-
-// Reset the consecutive failure counter on a successful decode.
-static void trackDecodeSuccess() {
-    s_consecutiveDecodeFailures.store(0);
-}
-
-// Check whether we are in an OOM cooldown period (decrements the counter).
-static bool isUnderMemoryPressure() {
-    int frames = s_oomCooldownFrames.load();
-    if (frames > 0) {
-        s_oomCooldownFrames.fetch_sub(1);
-        return true;
-    }
-    return false;
 }
 
 // Convert WebP to TGA for a specific segment of a tall image
