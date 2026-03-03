@@ -75,6 +75,10 @@ std::string LibraryCache::getCategoriesFilePath() {
     return getCacheDir() + "/categories.txt";
 }
 
+std::string LibraryCache::getAllLibraryFilePath() {
+    return getCacheDir() + "/all_library.txt";
+}
+
 std::string LibraryCache::getCoverCachePath(int mangaId) {
     return getCoverCacheDir() + "/" + std::to_string(mangaId) + ".tga";
 }
@@ -420,6 +424,113 @@ void LibraryCache::invalidateCategoryCache(int categoryId) {
 #endif
 }
 
+bool LibraryCache::saveAllLibraryManga(const std::vector<Manga>& manga) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::string path = getAllLibraryFilePath();
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd < 0) {
+        brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
+        return false;
+    }
+
+    for (const auto& m : manga) {
+        std::string line = serializeManga(m) + "\n";
+        sceIoWrite(fd, line.c_str(), line.size());
+    }
+
+    sceIoClose(fd);
+#else
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    for (const auto& m : manga) {
+        file << serializeManga(m) << "\n";
+    }
+
+    file.close();
+#endif
+
+    brls::Logger::debug("LibraryCache: Saved {} manga to all-library cache", manga.size());
+    return true;
+}
+
+bool LibraryCache::loadAllLibraryManga(std::vector<Manga>& manga) {
+    if (!m_enabled) return false;
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::string path = getAllLibraryFilePath();
+    manga.clear();
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) {
+        return false;
+    }
+
+    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+    if (size <= 0 || size > 10 * 1024 * 1024) {
+        sceIoClose(fd);
+        return false;
+    }
+
+    std::vector<char> buffer(size + 1);
+    sceIoRead(fd, buffer.data(), size);
+    buffer[size] = '\0';
+    sceIoClose(fd);
+
+    std::istringstream stream(buffer.data());
+    std::string line;
+    while (std::getline(stream, line)) {
+        if (line.empty()) continue;
+        Manga m;
+        if (deserializeManga(line, m)) {
+            manga.push_back(m);
+        }
+    }
+#else
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return false;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        Manga m;
+        if (deserializeManga(line, m)) {
+            manga.push_back(m);
+        }
+    }
+
+    file.close();
+#endif
+
+    brls::Logger::debug("LibraryCache: Loaded {} manga from all-library cache", manga.size());
+    return !manga.empty();
+}
+
+bool LibraryCache::hasAllLibraryCache() {
+    std::string path = getAllLibraryFilePath();
+
+#ifdef __vita__
+    SceIoStat stat;
+    return sceIoGetstat(path.c_str(), &stat) >= 0;
+#else
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+#endif
+}
+
 bool LibraryCache::saveCoverImage(int mangaId, const std::vector<uint8_t>& imageData) {
     if (!m_coverCacheEnabled || imageData.empty()) return false;
 
@@ -529,7 +640,8 @@ void LibraryCache::clearLibraryCache() {
     if (dfd >= 0) {
         SceIoDirent entry;
         while (sceIoDread(dfd, &entry) > 0) {
-            if (strstr(entry.d_name, "category_") != nullptr) {
+            if (strstr(entry.d_name, "category_") != nullptr ||
+                strcmp(entry.d_name, "all_library.txt") == 0) {
                 std::string path = dir + "/" + entry.d_name;
                 sceIoRemove(path.c_str());
             }
@@ -541,7 +653,8 @@ void LibraryCache::clearLibraryCache() {
     if (d) {
         struct dirent* entry;
         while ((entry = readdir(d)) != nullptr) {
-            if (strstr(entry->d_name, "category_") != nullptr) {
+            if (strstr(entry->d_name, "category_") != nullptr ||
+                strcmp(entry->d_name, "all_library.txt") == 0) {
                 std::string path = dir + "/" + entry->d_name;
                 remove(path.c_str());
             }
