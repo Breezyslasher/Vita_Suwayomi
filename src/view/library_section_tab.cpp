@@ -557,12 +557,17 @@ void LibrarySectionTab::loadCategories() {
         loadAllManga();
         // Fetch/load categories for potential mode switch later
         if (Application::getInstance().isConnected()) {
-            asyncRun([this, aliveWeak]() {
+            bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+            asyncRun([this, aliveWeak, cacheEnabled]() {
                 SuwayomiClient& client = SuwayomiClient::getInstance();
                 std::vector<Category> categories;
                 if (client.fetchCategories(categories)) {
                     std::sort(categories.begin(), categories.end(),
                               [](const Category& a, const Category& b) { return a.order < b.order; });
+                    // Save categories to cache so offline mode switch works
+                    if (cacheEnabled) {
+                        LibraryCache::getInstance().saveCategories(categories);
+                    }
                     brls::sync([this, categories, aliveWeak]() {
                         auto alive = aliveWeak.lock();
                         if (!alive || !*alive) return;
@@ -596,12 +601,17 @@ void LibrarySectionTab::loadCategories() {
         loadBySource();
         // Fetch/load categories for potential mode switch later
         if (Application::getInstance().isConnected()) {
-            asyncRun([this, aliveWeak]() {
+            bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+            asyncRun([this, aliveWeak, cacheEnabled]() {
                 SuwayomiClient& client = SuwayomiClient::getInstance();
                 std::vector<Category> categories;
                 if (client.fetchCategories(categories)) {
                     std::sort(categories.begin(), categories.end(),
                               [](const Category& a, const Category& b) { return a.order < b.order; });
+                    // Save categories to cache so offline mode switch works
+                    if (cacheEnabled) {
+                        LibraryCache::getInstance().saveCategories(categories);
+                    }
                     brls::sync([this, categories, aliveWeak]() {
                         auto alive = aliveWeak.lock();
                         if (!alive || !*alive) return;
@@ -2970,18 +2980,38 @@ void LibrarySectionTab::loadAllManga() {
         m_titleLabel->setText("All Manga");
     }
 
-    // When offline, aggregate cached category manga as fallback
+    // When offline, load from cache
     if (!Application::getInstance().isConnected()) {
         bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
         if (cacheEnabled) {
             LibraryCache& cache = LibraryCache::getInstance();
             std::vector<Manga> allCached;
+
+            // Try all-library cache first (populated when NO_GROUPING/BY_SOURCE fetches online)
+            if (cache.loadAllLibraryManga(allCached)) {
+                brls::Logger::info("LibrarySectionTab: Loaded {} manga from all-library cache (offline)",
+                                  allCached.size());
+                // Store categories for potential mode switch to BY_CATEGORY while offline
+                if (m_categories.empty()) {
+                    std::vector<Category> categories;
+                    if (cache.loadCategories(categories)) {
+                        std::sort(categories.begin(), categories.end(),
+                                  [](const Category& a, const Category& b) { return a.order < b.order; });
+                        m_categories = categories;
+                    }
+                }
+                m_fullMangaList = allCached;
+                m_mangaList = allCached;
+                sortMangaList();
+                m_loaded = true;
+                return;
+            }
+
+            // Fall back to aggregating per-category caches
             std::set<int> seenIds;
 
-            // Load cached categories and merge their manga
             std::vector<Category> categories;
             if (cache.loadCategories(categories)) {
-                // Store categories for potential mode switch to BY_CATEGORY while offline
                 if (m_categories.empty()) {
                     std::sort(categories.begin(), categories.end(),
                               [](const Category& a, const Category& b) { return a.order < b.order; });
@@ -3011,7 +3041,7 @@ void LibrarySectionTab::loadAllManga() {
             }
 
             if (!allCached.empty()) {
-                brls::Logger::info("LibrarySectionTab: Loaded {} manga from cache for all-manga view (offline)",
+                brls::Logger::info("LibrarySectionTab: Loaded {} manga from category caches for all-manga view (offline)",
                                   allCached.size());
                 m_fullMangaList = allCached;
                 m_mangaList = allCached;
@@ -3025,9 +3055,10 @@ void LibrarySectionTab::loadAllManga() {
         return;
     }
 
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak]() {
+    asyncRun([this, aliveWeak, cacheEnabled]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> allManga;
 
@@ -3040,6 +3071,11 @@ void LibrarySectionTab::loadAllManga() {
                 brls::Application::notify("Failed to load library - check connection");
             });
             return;
+        }
+
+        // Save to cache if enabled
+        if (cacheEnabled) {
+            LibraryCache::getInstance().saveAllLibraryManga(allManga);
         }
 
         brls::sync([this, allManga, aliveWeak]() {
@@ -3102,17 +3138,35 @@ void LibrarySectionTab::loadBySource() {
         }
     };
 
-    // When offline, aggregate cached category manga as fallback
+    // When offline, load from cache
     if (!Application::getInstance().isConnected()) {
         bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
         if (cacheEnabled) {
             LibraryCache& cache = LibraryCache::getInstance();
             std::vector<Manga> allCached;
+
+            // Try all-library cache first (populated when NO_GROUPING/BY_SOURCE fetches online)
+            if (cache.loadAllLibraryManga(allCached)) {
+                brls::Logger::info("LibrarySectionTab: Loaded {} manga from all-library cache for by-source view (offline)",
+                                  allCached.size());
+                // Store categories for potential mode switch to BY_CATEGORY while offline
+                if (m_categories.empty()) {
+                    std::vector<Category> categories;
+                    if (cache.loadCategories(categories)) {
+                        std::sort(categories.begin(), categories.end(),
+                                  [](const Category& a, const Category& b) { return a.order < b.order; });
+                        m_categories = categories;
+                    }
+                }
+                applySourceGrouping(allCached);
+                return;
+            }
+
+            // Fall back to aggregating per-category caches
             std::set<int> seenIds;
 
             std::vector<Category> categories;
             if (cache.loadCategories(categories)) {
-                // Store categories for potential mode switch to BY_CATEGORY while offline
                 if (m_categories.empty()) {
                     std::sort(categories.begin(), categories.end(),
                               [](const Category& a, const Category& b) { return a.order < b.order; });
@@ -3141,7 +3195,7 @@ void LibrarySectionTab::loadBySource() {
             }
 
             if (!allCached.empty()) {
-                brls::Logger::info("LibrarySectionTab: Loaded {} manga from cache for by-source view (offline)",
+                brls::Logger::info("LibrarySectionTab: Loaded {} manga from category caches for by-source view (offline)",
                                   allCached.size());
                 applySourceGrouping(allCached);
                 return;
@@ -3152,9 +3206,10 @@ void LibrarySectionTab::loadBySource() {
         return;
     }
 
+    bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
     std::weak_ptr<bool> aliveWeak = m_alive;
 
-    asyncRun([this, aliveWeak, applySourceGrouping]() {
+    asyncRun([this, aliveWeak, applySourceGrouping, cacheEnabled]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> allManga;
 
@@ -3167,6 +3222,11 @@ void LibrarySectionTab::loadBySource() {
                 brls::Application::notify("Failed to load library - check connection");
             });
             return;
+        }
+
+        // Save to cache if enabled
+        if (cacheEnabled) {
+            LibraryCache::getInstance().saveAllLibraryManga(allManga);
         }
 
         brls::sync([this, allManga, aliveWeak, applySourceGrouping]() mutable {

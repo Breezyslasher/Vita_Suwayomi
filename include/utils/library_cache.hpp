@@ -31,6 +31,11 @@ public:
     bool hasCategoryCache(int categoryId);
     void invalidateCategoryCache(int categoryId);
 
+    // All-library manga caching (flat list for NO_GROUPING / BY_SOURCE modes)
+    bool saveAllLibraryManga(const std::vector<Manga>& manga);
+    bool loadAllLibraryManga(std::vector<Manga>& manga);
+    bool hasAllLibraryCache();
+
     // Individual manga details caching (for detail view)
     bool saveMangaDetails(const Manga& manga);
     bool loadMangaDetails(int mangaId, Manga& manga);
@@ -79,6 +84,7 @@ private:
     std::string getMangaDetailsCacheDir();
     std::string getCategoryFilePath(int categoryId);
     std::string getCategoriesFilePath();
+    std::string getAllLibraryFilePath();
     std::string getMangaDetailsFilePath(int mangaId);
     bool ensureDirectoryExists(const std::string& path);
 

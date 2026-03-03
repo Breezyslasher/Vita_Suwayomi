@@ -2790,6 +2790,40 @@ std::string SuwayomiClient::getExtensionIconUrl(const std::string& apkName) {
 }
 
 // ============================================================================
+// Server Image Settings (serveConversions)
+// ============================================================================
+
+bool SuwayomiClient::applyServerImageSettings() {
+    // Configure serveConversions on the server so it converts non-PNG/JPEG
+    // formats (e.g. WebP, AVIF) to JPEG before serving to this client.
+    // The PS Vita handles JPEG/PNG natively and more efficiently.
+    const char* query = R"(
+        mutation SetSettings($input: SetSettingsInput!) {
+            setSettings(input: $input) {
+                settings {
+                    ip
+                }
+            }
+        }
+    )";
+
+    // Set serveConversions: convert default (all non-standard) to JPEG,
+    // but keep PNG and JPEG as-is (target matching source mime skips conversion).
+    // serveConversions is a list of SettingsDownloadConversionTypeInput objects,
+    // each with a mimeType field (use "default" as fallback for unmatched types).
+    std::string variables = R"({"input":{"settings":{"serveConversions":[{"mimeType":"default","target":"image/jpeg","compressionLevel":0.9},{"mimeType":"image/jpeg","target":"image/jpeg"},{"mimeType":"image/png","target":"image/png"}]}}})";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("Failed to apply server image settings (serveConversions)");
+        return false;
+    }
+
+    brls::Logger::info("Server image settings applied: serveConversions set to convert to JPEG/PNG only");
+    return true;
+}
+
+// ============================================================================
 // Extension Repository Management
 // ============================================================================
 

@@ -575,6 +575,9 @@ public:
     // Returns the URL as-is if it's already a server URL or if proxy isn't available
     std::string buildProxiedImageUrl(const std::string& externalUrl) const;
 
+    // Apply server image settings (configure serveConversions to send only PNG/JPEG)
+    bool applyServerImageSettings();
+
     // Get update summary
     bool fetchUpdateSummary(int& pendingUpdates, int& runningJobs, bool& isUpdating);
 

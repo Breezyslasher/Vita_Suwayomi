@@ -193,6 +193,9 @@ struct AppSettings {
     // Display Settings
     bool showUnreadBadge = true;
 
+    // Server image settings (applied once on first connection)
+    bool serverImageSettingsApplied = false;
+
     // Per-manga reader settings (keyed by manga ID)
     // If a manga has custom settings, they override the defaults above
     std::map<int, MangaReaderSettings> mangaReaderSettings;
