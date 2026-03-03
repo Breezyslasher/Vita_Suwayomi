@@ -254,6 +254,18 @@ void Application::run() {
             brls::Logger::info("Connection restored successfully");
             m_isConnected = true;
 
+            // Apply server image settings on first run (convert to PNG/JPEG only)
+            if (!m_settings.serverImageSettingsApplied) {
+                brls::Logger::info("First run: applying server image settings...");
+                if (SuwayomiClient::getInstance().applyServerImageSettings()) {
+                    m_settings.serverImageSettingsApplied = true;
+                    saveSettings();
+                    brls::Logger::info("Server image settings applied successfully");
+                } else {
+                    brls::Logger::warning("Failed to apply server image settings, will retry next launch");
+                }
+            }
+
             // Sync offline reading progress to server in background
             DownloadsManager& dm = DownloadsManager::getInstance();
             if (!dm.getDownloads().empty()) {
@@ -603,6 +615,9 @@ bool Application::loadSettings() {
 
     // Load display settings
     m_settings.showUnreadBadge = extractBool("showUnreadBadge", true);
+
+    // Load server image settings flag
+    m_settings.serverImageSettingsApplied = extractBool("serverImageSettingsApplied", false);
 
     // Load library grid customization
     int displayModeInt = extractInt("libraryDisplayMode");
@@ -973,6 +988,9 @@ bool Application::saveSettings() {
 
     // Display settings
     json += "  \"showUnreadBadge\": " + std::string(m_settings.showUnreadBadge ? "true" : "false") + ",\n";
+
+    // Server image settings flag
+    json += "  \"serverImageSettingsApplied\": " + std::string(m_settings.serverImageSettingsApplied ? "true" : "false") + ",\n";
 
     // Library grid customization
     json += "  \"libraryDisplayMode\": " + std::to_string(static_cast<int>(m_settings.libraryDisplayMode)) + ",\n";

@@ -259,6 +259,17 @@ void LoginActivity::onConnectPressed() {
                     settings.localServerUrl = serverUrl;
                 }
 
+                // Apply server image settings on first connection (convert to PNG/JPEG only)
+                if (!settings.serverImageSettingsApplied) {
+                    brls::Logger::info("First connection: applying server image settings...");
+                    if (client.applyServerImageSettings()) {
+                        settings.serverImageSettingsApplied = true;
+                        brls::Logger::info("Server image settings applied successfully");
+                    } else {
+                        brls::Logger::warning("Failed to apply server image settings, will retry next launch");
+                    }
+                }
+
                 Application::getInstance().saveSettings();
 
                 std::string modeName = getAuthModeName(authMode);
