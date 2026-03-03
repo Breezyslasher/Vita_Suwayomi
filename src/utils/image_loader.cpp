@@ -452,12 +452,20 @@ static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSi
     return tgaData;
 }
 
+// Check whether a VP8StatusCode indicates a non-recoverable error that will
+// fail regardless of colorspace, resolution, or retry strategy.
+static bool isNonRecoverableWebPStatus(VP8StatusCode status) {
+    return status == VP8_STATUS_UNSUPPORTED_FEATURE ||
+           status == VP8_STATUS_INVALID_PARAM;
+}
+
 // Internal helper: attempt a single WebP decode at the given target dimensions.
 // Uses bypass_filtering and no_fancy_upsampling to reduce memory and improve
 // reliability on PS Vita's constrained hardware.
-// Returns empty vector on failure.
+// Returns empty vector on failure; sets *outStatus to the libwebp status code.
 static std::vector<uint8_t> tryWebPDecode(const uint8_t* webpData, size_t webpSize,
-                                           int srcW, int srcH, int targetW, int targetH) {
+                                           int srcW, int srcH, int targetW, int targetH,
+                                           VP8StatusCode* outStatus = nullptr) {
     bool needsScaling = (targetW != srcW || targetH != srcH);
 
     if (needsScaling) {
@@ -476,6 +484,7 @@ static std::vector<uint8_t> tryWebPDecode(const uint8_t* webpData, size_t webpSi
         config.output.colorspace = MODE_RGBA;
 
         VP8StatusCode decStatus = WebPDecode(webpData, webpSize, &config);
+        if (outStatus) *outStatus = decStatus;
         if (decStatus == VP8_STATUS_OK) {
             auto tgaData = createTGAFromRGBA(config.output.u.RGBA.rgba, targetW, targetH);
             WebPFreeDecBuffer(&config.output);
@@ -487,9 +496,19 @@ static std::vector<uint8_t> tryWebPDecode(const uint8_t* webpData, size_t webpSi
         if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
             signalOOM("WebPDecode RGBA scaled");
         }
+        WebPFreeDecBuffer(&config.output);
+
+        // Non-recoverable errors (unsupported feature, invalid param) won't
+        // be fixed by switching colorspace or resolution — bail out immediately
+        // to avoid wasting memory on futile retries.
+        if (isNonRecoverableWebPStatus(decStatus)) {
+            brls::Logger::warning("ImageLoader: WebP non-recoverable error (status={}) for {}x{}->{}x{}, skipping retries",
+                                  static_cast<int>(decStatus), srcW, srcH, targetW, targetH);
+            return {};
+        }
+
         brls::Logger::warning("ImageLoader: WebP scaled RGBA failed (status={}) for {}x{}->{}x{}, trying RGB",
                               static_cast<int>(decStatus), srcW, srcH, targetW, targetH);
-        WebPFreeDecBuffer(&config.output);
 
         // --- Attempt 2: Scaled RGB decode (25% less memory) ---
         if (!WebPInitDecoderConfig(&config)) return {};
@@ -501,6 +520,7 @@ static std::vector<uint8_t> tryWebPDecode(const uint8_t* webpData, size_t webpSi
         config.output.colorspace = MODE_RGB;
 
         decStatus = WebPDecode(webpData, webpSize, &config);
+        if (outStatus) *outStatus = decStatus;
         if (decStatus == VP8_STATUS_OK) {
             // Convert RGB to RGBA for TGA
             uint8_t* rgb = config.output.u.RGBA.rgba;
@@ -535,8 +555,10 @@ static std::vector<uint8_t> tryWebPDecode(const uint8_t* webpData, size_t webpSi
     // No scaling needed — decode at full resolution
     uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &srcW, &srcH);
     if (!rgba) {
+        if (outStatus) *outStatus = VP8_STATUS_BITSTREAM_ERROR;
         return {};
     }
+    if (outStatus) *outStatus = VP8_STATUS_OK;
     trackDecodeSuccess();
     auto tgaData = createTGAFromRGBA(rgba, srcW, srcH);
     WebPFree(rgba);
@@ -570,11 +592,21 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
 
     int width = features.width;
     int height = features.height;
-    brls::Logger::debug("ImageLoader: WebP {}x{} hasAlpha={} format={} truncated={}",
-                        width, height, features.has_alpha, features.format, isTruncated);
+    brls::Logger::debug("ImageLoader: WebP {}x{} hasAlpha={} format={} hasAnimation={} truncated={}",
+                        width, height, features.has_alpha, features.format, features.has_animation, isTruncated);
 
     if (width <= 0 || height <= 0) {
         brls::Logger::error("ImageLoader: WebP has invalid dimensions {}x{}", width, height);
+        return {};
+    }
+
+    // Animated WebP cannot be decoded by the simple WebPDecode API — it returns
+    // VP8_STATUS_UNSUPPORTED_FEATURE.  Skip straight to the FFmpeg/stb fallback
+    // chain in the caller to avoid wasting memory on futile decode attempts.
+    if (features.has_animation) {
+        brls::Logger::warning("ImageLoader: Animated WebP detected ({}x{}, {}KB) — skipping libwebp simple decoder",
+                              width, height, webpSize / 1024);
+        trackDecodeFailure("WebP animated");
         return {};
     }
 
@@ -588,8 +620,19 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
     }
 
     // Attempt 1: Decode at requested target size
-    auto result = tryWebPDecode(webpData, webpSize, width, height, targetW, targetH);
+    VP8StatusCode lastStatus = VP8_STATUS_OK;
+    auto result = tryWebPDecode(webpData, webpSize, width, height, targetW, targetH, &lastStatus);
     if (!result.empty()) return result;
+
+    // Non-recoverable errors (unsupported feature, invalid param) won't be
+    // helped by reducing resolution — skip the half-size retry to avoid
+    // wasting memory on the Vita's constrained hardware.
+    if (isNonRecoverableWebPStatus(lastStatus)) {
+        brls::Logger::error("ImageLoader: WebP libwebp non-recoverable (status={}) for {}x{} ({}KB, truncated={})",
+                            static_cast<int>(lastStatus), width, height, webpSize / 1024, isTruncated);
+        trackDecodeFailure("WebP non-recoverable");
+        return {};
+    }
 
     // Attempt 2: Retry at half the target size (reduces decode memory pressure).
     // Particularly helps with truncated data or borderline-OOM situations.
@@ -1484,6 +1527,13 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         }
         if (imageData.empty()) {
             brls::Logger::error("ImageLoader: All WebP decode attempts failed for {}", url);
+            // Signal memory pressure after exhausting all fallbacks.
+            // Even though the final error may not be OOM, the repeated decode
+            // attempts (libwebp, FFmpeg, stb_image) allocate and free large
+            // buffers that fragment the Vita's limited heap.  Entering cooldown
+            // gives the allocator time to consolidate before processing more
+            // thumbnails, preventing cascading failures that lead to crashes.
+            signalOOM("WebP all fallbacks exhausted");
             return;
         }
     } else {
@@ -2044,6 +2094,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 );
                 if (imageData.empty()) {
                     brls::Logger::error("ImageLoader: All decode attempts failed for {}", url);
+                    signalOOM("WebP full-size all fallbacks exhausted");
                     return;
                 }
                 brls::Logger::info("ImageLoader: stb_image fallback succeeded for {}", url);
