@@ -18,6 +18,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <map>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -796,6 +797,30 @@ void LibrarySectionTab::loadCategories() {
             LibraryCache::getInstance().saveCategories(categories);
             if (usedCombinedQuery && !prefetchedManga.empty()) {
                 LibraryCache::getInstance().saveCategoryManga(resolvedCategoryId, prefetchedManga);
+            }
+
+            // Cross-cache: fetch all library manga and save as all-library cache
+            // so BY_SOURCE and NO_GROUPING modes work offline even if the user
+            // was in BY_CATEGORY mode when online.
+            std::vector<Manga> allManga;
+            SuwayomiClient& allClient = SuwayomiClient::getInstance();
+            if (allClient.fetchLibraryManga(allManga)) {
+                LibraryCache::getInstance().saveAllLibraryManga(allManga);
+
+                // Also build per-category caches for all categories at once
+                std::map<int, std::vector<Manga>> byCategory;
+                for (const auto& manga : allManga) {
+                    if (manga.categoryIds.empty()) {
+                        byCategory[0].push_back(manga);
+                    } else {
+                        for (int catId : manga.categoryIds) {
+                            byCategory[catId].push_back(manga);
+                        }
+                    }
+                }
+                for (const auto& pair : byCategory) {
+                    LibraryCache::getInstance().saveCategoryManga(pair.first, pair.second);
+                }
             }
         }
 
@@ -3122,6 +3147,23 @@ void LibrarySectionTab::loadAllManga() {
         // Save to cache if enabled
         if (cacheEnabled) {
             LibraryCache::getInstance().saveAllLibraryManga(allManga);
+
+            // Cross-cache: build per-category caches from the all-library data
+            // so BY_CATEGORY mode works offline even if categories were loaded
+            // via NO_GROUPING. Each manga has categoryIds we can group by.
+            std::map<int, std::vector<Manga>> byCategory;
+            for (const auto& manga : allManga) {
+                if (manga.categoryIds.empty()) {
+                    byCategory[0].push_back(manga);  // Default category
+                } else {
+                    for (int catId : manga.categoryIds) {
+                        byCategory[catId].push_back(manga);
+                    }
+                }
+            }
+            for (const auto& pair : byCategory) {
+                LibraryCache::getInstance().saveCategoryManga(pair.first, pair.second);
+            }
         }
 
         brls::sync([this, allManga, aliveWeak]() {
@@ -3273,6 +3315,23 @@ void LibrarySectionTab::loadBySource() {
         // Save to cache if enabled
         if (cacheEnabled) {
             LibraryCache::getInstance().saveAllLibraryManga(allManga);
+
+            // Cross-cache: build per-category caches from the all-library data
+            // so BY_CATEGORY mode works offline even if categories were loaded
+            // via BY_SOURCE. Each manga has categoryIds we can group by.
+            std::map<int, std::vector<Manga>> byCategory;
+            for (const auto& manga : allManga) {
+                if (manga.categoryIds.empty()) {
+                    byCategory[0].push_back(manga);  // Default category
+                } else {
+                    for (int catId : manga.categoryIds) {
+                        byCategory[catId].push_back(manga);
+                    }
+                }
+            }
+            for (const auto& pair : byCategory) {
+                LibraryCache::getInstance().saveCategoryManga(pair.first, pair.second);
+            }
         }
 
         brls::sync([this, allManga, aliveWeak, applySourceGrouping]() mutable {

@@ -648,6 +648,21 @@ Manga SuwayomiClient::parseMangaFromGraphQL(const std::string& json) {
         manga.latestChapterUploadDate = extractJsonInt64(latestChapter, "uploadDate");
     }
 
+    // Parse category IDs from nested categories object
+    std::string categoriesObj = extractJsonObject(json, "categories");
+    if (!categoriesObj.empty()) {
+        std::string catNodes = extractJsonArray(categoriesObj, "nodes");
+        if (!catNodes.empty()) {
+            std::vector<std::string> catItems = splitJsonArray(catNodes);
+            for (const auto& catItem : catItems) {
+                int catId = extractJsonInt(catItem, "id");
+                if (catId > 0) {
+                    manga.categoryIds.push_back(catId);
+                }
+            }
+        }
+    }
+
     return manga;
 }
 
@@ -959,6 +974,11 @@ bool SuwayomiClient::fetchLibraryMangaGraphQL(std::vector<Manga>& manga) {
                     }
                     source {
                         displayName
+                    }
+                    categories {
+                        nodes {
+                            id
+                        }
                     }
                 }
                 totalCount
