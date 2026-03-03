@@ -1,0 +1,59 @@
+21:49:24.297 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+21:49:24.999 [INFO] DownloadsManager: Initializing...
+21:49:25.005 [DEBUG] DownloadsManager: No saved state found
+21:49:25.006 [INFO] DownloadsManager: Initialized with 0 downloads
+21:49:25.006 [INFO] VitaSuwayomi 1.0.0 initializing...
+21:49:25.008 [DEBUG] sceIoMkdir result: -0x7ffeffef
+21:49:25.008 [INFO] Loading saved settings...
+21:49:25.008 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+21:49:25.010 [DEBUG] loadSettings: File size = 1580
+21:49:25.025 [DEBUG] loadSettings: Read 1580 bytes
+21:49:25.032 [INFO] loadSettings: serverUrl=Http://192.168.1.28:4568
+21:49:25.037 [DEBUG] Loaded 4 hidden categories
+21:49:25.042 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+21:49:25.051 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+21:49:25.060 [INFO] loadSettings: enabledSourceLanguages count = 0
+21:49:25.069 [INFO] loadSettings: localUrl=Http://192.168.1.28:4568, remoteUrl=(empty), useRemote=false, autoSwitch=false
+21:49:25.083 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=1, defaultSort=0, groupMode=1
+21:49:25.094 [DEBUG] Loaded 1 per-category sort modes
+21:49:25.102 [DEBUG] Loaded 0 search history entries
+21:49:25.107 [DEBUG] Loaded 0 per-manga reader settings
+21:49:25.113 [INFO] Restored auth credentials for user: Breezyslasher
+21:49:25.122 [INFO] Settings loaded successfully
+21:49:25.131 [INFO] Settings load result: success
+21:49:25.141 [INFO] Applied theme: Dark
+21:49:25.152 [INFO] Debug logging disabled
+21:49:25.166 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+21:49:25.171 [INFO] Application::run - isConnected=false, serverUrl=Http://192.168.1.28:4568
+21:49:25.177 [INFO] Restoring saved connection...
+21:49:25.182 [INFO] Fetching server info via GraphQL...
+21:49:25.253 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2085
+21:49:25.262 [INFO] Server reachable, validating auth with protected query...
+21:49:25.292 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/categories) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.requir
+21:49:25.302 [INFO] GraphQL returned Unauthorized, attempting token refresh...
+21:49:25.314 [INFO] No refresh token available, skipping GraphQL refresh
+21:49:25.322 [INFO] Attempting re-login with stored credentials...
+21:49:25.365 [INFO] Login successful, received JWT tokens
+21:49:25.371 [INFO] Re-login successful, tokens refreshed
+21:49:25.380 [INFO] Token refreshed successfully, retrying GraphQL request
+21:49:25.412 [INFO] validateAuthWithProtectedQuery: auth validated successfully
+21:49:25.422 [INFO] Auth validated with protected query
+21:49:25.434 [INFO] Connection restored successfully
+21:49:25.553 [INFO] MainActivity: Tabs created, isOnline=false
+21:49:25.725 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+21:49:28.302 [INFO] RecyclingGrid: Building 7 rows for 40 items (first 2 immediate)
+21:49:28.360 [INFO] ImageLoader: Starting 3 worker threads
+21:49:30.952 [INFO] RecyclingGrid: Incremental build complete - 40 cells in 7 rows
+21:49:54.249 [INFO] MangaDetailView: Creating for 'My Wife And I Dominate The Three Realms' id=356
+21:49:57.761 [INFO] GraphQL: Fetched 1 track records for manga 356
+21:49:57.788 [INFO] MangaDetailView: Got 139 chapters
+21:50:01.040 [INFO] MangaDetailView: Resetting cover for manga 356
+21:50:04.413 [INFO] RecyclingGrid: Building 5 rows for 28 items (first 2 immediate)
+21:50:06.468 [INFO] RecyclingGrid: Incremental build complete - 28 cells in 5 rows
+21:50:07.276 [WARNING] ImageLoader: WebP scaled RGBA decode failed (status=4) for 180x261->124x180, trying RGB
+21:50:07.287 [ERROR] ImageLoader: WebP scaled decode completely failed (status=4) for 180x261 (1561KB)
+21:50:15.435 [INFO] RecyclingGrid: Building 14 rows for 82 items (first 2 immediate)
+21:50:21.068 [INFO] RecyclingGrid: Incremental build complete - 82 cells in 14 rows
+21:50:23.456 [WARNING] ImageLoader: WebP scaled RGBA decode failed (status=4) for 291x498->105x180, trying RGB
+21:50:23.471 [ERROR] ImageLoader: WebP scaled decode completely failed (status=4) for 291x498 (2329KB)
+21:50:24.610 [INFO] ImageLoader: WebP scaled RGBA decode OK 193x278->124x180
