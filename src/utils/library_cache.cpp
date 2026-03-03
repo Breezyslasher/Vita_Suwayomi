@@ -492,6 +492,17 @@ bool LibraryCache::loadCoverImage(int mangaId, std::vector<uint8_t>& imageData) 
     return !imageData.empty();
 }
 
+bool LibraryCache::deleteCoverImage(int mangaId) {
+    std::lock_guard<std::mutex> lock(m_coverMutex);
+    std::string path = getCoverCachePath(mangaId);
+
+#ifdef __vita__
+    return sceIoRemove(path.c_str()) >= 0;
+#else
+    return remove(path.c_str()) == 0;
+#endif
+}
+
 bool LibraryCache::hasCoverCache(int mangaId) {
     std::string path = getCoverCachePath(mangaId);
 

@@ -39,6 +39,7 @@ public:
     // Cover image caching
     bool saveCoverImage(int mangaId, const std::vector<uint8_t>& imageData);
     bool loadCoverImage(int mangaId, std::vector<uint8_t>& imageData);
+    bool deleteCoverImage(int mangaId);
     bool hasCoverCache(int mangaId);
     std::string getCoverCachePath(int mangaId);
 
