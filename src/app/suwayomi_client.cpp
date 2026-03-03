@@ -920,9 +920,9 @@ bool SuwayomiClient::fetchLibraryMangaGraphQL(std::vector<Manga>& manga) {
     const char* query = R"(
         query GetLibraryManga {
             mangas(
-                filter: {
-                    inLibrary: { equalTo: true }
-                }
+                condition: { inLibrary: true }
+                first: 500
+                orderBy: TITLE
             ) {
                 nodes {
                     id
