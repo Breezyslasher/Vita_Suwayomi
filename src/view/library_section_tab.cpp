@@ -555,7 +555,7 @@ void LibrarySectionTab::loadCategories() {
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
         m_categoriesLoaded = true;
         loadAllManga();
-        // Still fetch categories in background for potential mode switch later
+        // Fetch/load categories for potential mode switch later
         if (Application::getInstance().isConnected()) {
             asyncRun([this, aliveWeak]() {
                 SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -570,6 +570,20 @@ void LibrarySectionTab::loadCategories() {
                     });
                 }
             });
+        } else {
+            // Offline: load categories from cache for potential mode switch
+            bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+            if (cacheEnabled && m_categories.empty()) {
+                LibraryCache& cache = LibraryCache::getInstance();
+                std::vector<Category> cachedCategories;
+                if (cache.loadCategories(cachedCategories)) {
+                    std::sort(cachedCategories.begin(), cachedCategories.end(),
+                              [](const Category& a, const Category& b) { return a.order < b.order; });
+                    m_categories = cachedCategories;
+                    brls::Logger::info("LibrarySectionTab: Loaded {} categories from cache (NO_GROUPING offline)",
+                                      cachedCategories.size());
+                }
+            }
         }
         return;
     }
@@ -580,7 +594,7 @@ void LibrarySectionTab::loadCategories() {
         if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
         m_categoriesLoaded = true;
         loadBySource();
-        // Still fetch categories in background for potential mode switch later
+        // Fetch/load categories for potential mode switch later
         if (Application::getInstance().isConnected()) {
             asyncRun([this, aliveWeak]() {
                 SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -595,6 +609,20 @@ void LibrarySectionTab::loadCategories() {
                     });
                 }
             });
+        } else {
+            // Offline: load categories from cache for potential mode switch
+            bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+            if (cacheEnabled && m_categories.empty()) {
+                LibraryCache& cache = LibraryCache::getInstance();
+                std::vector<Category> cachedCategories;
+                if (cache.loadCategories(cachedCategories)) {
+                    std::sort(cachedCategories.begin(), cachedCategories.end(),
+                              [](const Category& a, const Category& b) { return a.order < b.order; });
+                    m_categories = cachedCategories;
+                    brls::Logger::info("LibrarySectionTab: Loaded {} categories from cache (BY_SOURCE offline)",
+                                      cachedCategories.size());
+                }
+            }
         }
         return;
     }
@@ -2877,9 +2905,38 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
         if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, true);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
+        // If categories are empty (e.g. started offline in another group mode),
+        // try loading from cache so BY_CATEGORY mode can display properly
+        if (m_categories.empty()) {
+            bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+            if (cacheEnabled) {
+                LibraryCache& cache = LibraryCache::getInstance();
+                std::vector<Category> cachedCategories;
+                if (cache.loadCategories(cachedCategories)) {
+                    std::sort(cachedCategories.begin(), cachedCategories.end(),
+                              [](const Category& a, const Category& b) { return a.order < b.order; });
+                    m_categories = cachedCategories;
+                    brls::Logger::info("LibrarySectionTab: Loaded {} categories from cache for mode switch",
+                                      cachedCategories.size());
+                }
+            }
+        }
         if (!m_categories.empty()) {
             createCategoryTabs();
-            selectCategory(m_currentCategoryId);
+            // Select previously viewed category, or default, or first available
+            int targetId = m_currentCategoryId;
+            if (targetId == 0) {
+                targetId = Application::getInstance().getSettings().defaultCategoryId;
+            }
+            bool found = false;
+            for (const auto& cat : m_categories) {
+                if (cat.id == targetId) { found = true; break; }
+            }
+            if (found) {
+                selectCategory(targetId);
+            } else if (!m_categories.empty()) {
+                selectCategory(m_categories[0].id);
+            }
         }
     } else if (mode == LibraryGroupMode::NO_GROUPING) {
         // Hide tabs and L/R bumper hints entirely
@@ -2924,6 +2981,12 @@ void LibrarySectionTab::loadAllManga() {
             // Load cached categories and merge their manga
             std::vector<Category> categories;
             if (cache.loadCategories(categories)) {
+                // Store categories for potential mode switch to BY_CATEGORY while offline
+                if (m_categories.empty()) {
+                    std::sort(categories.begin(), categories.end(),
+                              [](const Category& a, const Category& b) { return a.order < b.order; });
+                    m_categories = categories;
+                }
                 for (const auto& cat : categories) {
                     std::vector<Manga> catManga;
                     if (cache.loadCategoryManga(cat.id, catManga)) {
@@ -3049,6 +3112,12 @@ void LibrarySectionTab::loadBySource() {
 
             std::vector<Category> categories;
             if (cache.loadCategories(categories)) {
+                // Store categories for potential mode switch to BY_CATEGORY while offline
+                if (m_categories.empty()) {
+                    std::sort(categories.begin(), categories.end(),
+                              [](const Category& a, const Category& b) { return a.order < b.order; });
+                    m_categories = categories;
+                }
                 for (const auto& cat : categories) {
                     std::vector<Manga> catManga;
                     if (cache.loadCategoryManga(cat.id, catManga)) {
