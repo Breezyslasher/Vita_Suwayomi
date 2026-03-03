@@ -227,6 +227,36 @@ static bool getWebPDimensions(const uint8_t* webpData, size_t webpSize, int& wid
     return WebPGetInfo(webpData, webpSize, &width, &height) != 0;
 }
 
+// Validate RIFF container integrity for WebP data.
+// Returns true if the data looks like a complete (or at least decodable) WebP.
+// Sets isTruncated=true if the RIFF header declares more data than we have.
+static bool validateWebPContainer(const uint8_t* data, size_t size, bool& isTruncated) {
+    isTruncated = false;
+    if (size < 12) return false;
+
+    // Check RIFF magic
+    if (data[0] != 'R' || data[1] != 'I' || data[2] != 'F' || data[3] != 'F') return false;
+    // Check WEBP magic
+    if (data[8] != 'W' || data[9] != 'E' || data[10] != 'B' || data[11] != 'P') return false;
+
+    // RIFF container declares file size as (data[4..7] little-endian) + 8 bytes for RIFF header
+    uint32_t declaredSize = static_cast<uint32_t>(data[4])
+                          | (static_cast<uint32_t>(data[5]) << 8)
+                          | (static_cast<uint32_t>(data[6]) << 16)
+                          | (static_cast<uint32_t>(data[7]) << 24);
+    uint64_t expectedTotal = static_cast<uint64_t>(declaredSize) + 8;
+
+    if (size < expectedTotal) {
+        // We have less data than the RIFF header claims — truncated download
+        isTruncated = true;
+        double pct = (size * 100.0) / expectedTotal;
+        brls::Logger::warning("ImageLoader: WebP truncated - have {} of {} bytes ({:.0f}%)",
+                              size, expectedTotal, pct);
+        // Still return true — libwebp may be able to partially decode it
+    }
+    return true;
+}
+
 // Calculate number of segments needed for a tall image
 static int calculateSegments(int width, int height, int maxSize) {
     if (height <= maxSize) return 1;
@@ -279,6 +309,9 @@ static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, siz
     config.options.crop_top = startY;
     config.options.crop_width = width;
     config.options.crop_height = actualHeight;
+    // Reduce memory usage during segment decode
+    config.options.bypass_filtering = 1;
+    config.options.no_fancy_upsampling = 1;
 
     // Scale if needed
     if (targetW != width || targetH != actualHeight) {
@@ -419,86 +452,56 @@ static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSi
     return tgaData;
 }
 
-// Helper function to convert WebP to TGA format with downscaling
-// Uses WebPDecode with scaled output for large images to avoid allocating
-// the full-resolution buffer (e.g., 800x15000 = 48MB RGBA).
-static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t webpSize, int maxSize) {
-    // Use WebPGetFeatures for detailed error info instead of just WebPGetInfo
-    WebPBitstreamFeatures features;
-    VP8StatusCode status = WebPGetFeatures(webpData, webpSize, &features);
-    if (status != VP8_STATUS_OK) {
-        brls::Logger::error("ImageLoader: WebPGetFeatures failed (status={}, dataSize={})",
-                            static_cast<int>(status), webpSize);
-        return {};
-    }
+// Internal helper: attempt a single WebP decode at the given target dimensions.
+// Uses bypass_filtering and no_fancy_upsampling to reduce memory and improve
+// reliability on PS Vita's constrained hardware.
+// Returns empty vector on failure.
+static std::vector<uint8_t> tryWebPDecode(const uint8_t* webpData, size_t webpSize,
+                                           int srcW, int srcH, int targetW, int targetH) {
+    bool needsScaling = (targetW != srcW || targetH != srcH);
 
-    int width = features.width;
-    int height = features.height;
-    brls::Logger::debug("ImageLoader: WebP {}x{} hasAlpha={} format={}",
-                        width, height, features.has_alpha, features.format);
-
-    if (width <= 0 || height <= 0) {
-        brls::Logger::error("ImageLoader: WebP has invalid dimensions {}x{}", width, height);
-        return {};
-    }
-
-    // Calculate target dimensions
-    int targetW = width;
-    int targetH = height;
-    if (maxSize > 0 && (width > maxSize || height > maxSize)) {
-        float scale = (float)maxSize / std::max(width, height);
-        targetW = std::max(1, (int)(width * scale));
-        targetH = std::max(1, (int)(height * scale));
-    }
-
-    bool needsScaling = (targetW != width || targetH != height);
-
-    // For large images that need downscaling, use WebPDecode with built-in scaling.
-    // This avoids allocating the full-resolution buffer (which can be 48MB+ for
-    // tall webtoon strips like 800x15000).
     if (needsScaling) {
+        // --- Attempt 1: Scaled RGBA decode ---
         WebPDecoderConfig config;
-        if (!WebPInitDecoderConfig(&config)) {
-            brls::Logger::error("ImageLoader: WebPInitDecoderConfig failed");
-            return {};
-        }
+        if (!WebPInitDecoderConfig(&config)) return {};
 
-        // Configure scaled output - decoder will only allocate target-size buffer
         config.options.use_scaling = 1;
         config.options.scaled_width = targetW;
         config.options.scaled_height = targetH;
+        // Reduce memory usage and improve robustness for thumbnails:
+        // bypass_filtering skips loop-filtering (slightly lower quality, much less memory)
+        // no_fancy_upsampling uses simpler chroma upsampling (less memory, faster)
+        config.options.bypass_filtering = 1;
+        config.options.no_fancy_upsampling = 1;
         config.output.colorspace = MODE_RGBA;
 
         VP8StatusCode decStatus = WebPDecode(webpData, webpSize, &config);
-        if (decStatus != VP8_STATUS_OK) {
-            if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
-                signalOOM("WebPDecode RGBA scaled");
-            }
-            brls::Logger::warning("ImageLoader: WebP scaled RGBA decode failed (status={}) for {}x{}->{}x{}, trying RGB",
-                                  static_cast<int>(decStatus), width, height, targetW, targetH);
-
-            // Try RGB (uses 25% less memory)
+        if (decStatus == VP8_STATUS_OK) {
+            auto tgaData = createTGAFromRGBA(config.output.u.RGBA.rgba, targetW, targetH);
             WebPFreeDecBuffer(&config.output);
-            if (!WebPInitDecoderConfig(&config)) {
-                return {};
-            }
-            config.options.use_scaling = 1;
-            config.options.scaled_width = targetW;
-            config.options.scaled_height = targetH;
-            config.output.colorspace = MODE_RGB;
+            trackDecodeSuccess();
+            brls::Logger::info("ImageLoader: WebP RGBA decode OK {}x{}->{}x{}", srcW, srcH, targetW, targetH);
+            return tgaData;
+        }
 
-            decStatus = WebPDecode(webpData, webpSize, &config);
-            if (decStatus != VP8_STATUS_OK) {
-                if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
-                    signalOOM("WebPDecode RGB scaled");
-                }
-                brls::Logger::error("ImageLoader: WebP scaled decode completely failed (status={}) for {}x{} ({}KB)",
-                                    static_cast<int>(decStatus), width, height, webpSize / 1024);
-                WebPFreeDecBuffer(&config.output);
-                trackDecodeFailure("WebP scaled decode");
-                return {};
-            }
+        if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
+            signalOOM("WebPDecode RGBA scaled");
+        }
+        brls::Logger::warning("ImageLoader: WebP scaled RGBA failed (status={}) for {}x{}->{}x{}, trying RGB",
+                              static_cast<int>(decStatus), srcW, srcH, targetW, targetH);
+        WebPFreeDecBuffer(&config.output);
 
+        // --- Attempt 2: Scaled RGB decode (25% less memory) ---
+        if (!WebPInitDecoderConfig(&config)) return {};
+        config.options.use_scaling = 1;
+        config.options.scaled_width = targetW;
+        config.options.scaled_height = targetH;
+        config.options.bypass_filtering = 1;
+        config.options.no_fancy_upsampling = 1;
+        config.output.colorspace = MODE_RGB;
+
+        decStatus = WebPDecode(webpData, webpSize, &config);
+        if (decStatus == VP8_STATUS_OK) {
             // Convert RGB to RGBA for TGA
             uint8_t* rgb = config.output.u.RGBA.rgba;
             size_t pixelCount = static_cast<size_t>(targetW) * static_cast<size_t>(targetH);
@@ -517,34 +520,92 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
                 rgbaVec[i * 4 + 3] = 255;
             }
             WebPFreeDecBuffer(&config.output);
-
-            brls::Logger::info("ImageLoader: WebP scaled RGB decode OK {}x{}->{}x{}", width, height, targetW, targetH);
             trackDecodeSuccess();
+            brls::Logger::info("ImageLoader: WebP RGB decode OK {}x{}->{}x{}", srcW, srcH, targetW, targetH);
             return createTGAFromRGBA(rgbaVec.data(), targetW, targetH);
         }
 
-        // Scaled RGBA decode succeeded
-        trackDecodeSuccess();
-        auto tgaData = createTGAFromRGBA(config.output.u.RGBA.rgba, targetW, targetH);
+        if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
+            signalOOM("WebPDecode RGB scaled");
+        }
         WebPFreeDecBuffer(&config.output);
-
-        brls::Logger::info("ImageLoader: WebP scaled RGBA decode OK {}x{}->{}x{}", width, height, targetW, targetH);
-        return tgaData;
-    }
-
-    // Image fits within maxSize - decode at full resolution (no scaling needed)
-    uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &width, &height);
-    if (!rgba) {
-        brls::Logger::error("ImageLoader: WebPDecodeRGBA failed for {}x{} ({}KB)",
-                            width, height, webpSize / 1024);
-        trackDecodeFailure("WebP full-res decode");
         return {};
     }
 
+    // No scaling needed — decode at full resolution
+    uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &srcW, &srcH);
+    if (!rgba) {
+        return {};
+    }
     trackDecodeSuccess();
-    auto tgaData = createTGAFromRGBA(rgba, width, height);
+    auto tgaData = createTGAFromRGBA(rgba, srcW, srcH);
     WebPFree(rgba);
     return tgaData;
+}
+
+// Helper function to convert WebP to TGA format with downscaling.
+// Uses WebPDecode with scaled output for large images to avoid allocating
+// the full-resolution buffer (e.g., 800x15000 = 48MB RGBA).
+// Includes multiple fallback strategies:
+//   1. Validate RIFF container for truncation detection
+//   2. Decode at target size with bypass_filtering for robustness
+//   3. On failure, retry at half the target size
+//   4. Try RGB colorspace (25% less memory) at each size
+static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t webpSize, int maxSize) {
+    // Validate RIFF container integrity before spending time on decode
+    bool isTruncated = false;
+    if (!validateWebPContainer(webpData, webpSize, isTruncated)) {
+        brls::Logger::error("ImageLoader: Invalid WebP container (dataSize={})", webpSize);
+        return {};
+    }
+
+    // Use WebPGetFeatures for detailed error info
+    WebPBitstreamFeatures features;
+    VP8StatusCode status = WebPGetFeatures(webpData, webpSize, &features);
+    if (status != VP8_STATUS_OK) {
+        brls::Logger::error("ImageLoader: WebPGetFeatures failed (status={}, dataSize={}, truncated={})",
+                            static_cast<int>(status), webpSize, isTruncated);
+        return {};
+    }
+
+    int width = features.width;
+    int height = features.height;
+    brls::Logger::debug("ImageLoader: WebP {}x{} hasAlpha={} format={} truncated={}",
+                        width, height, features.has_alpha, features.format, isTruncated);
+
+    if (width <= 0 || height <= 0) {
+        brls::Logger::error("ImageLoader: WebP has invalid dimensions {}x{}", width, height);
+        return {};
+    }
+
+    // Calculate target dimensions
+    int targetW = width;
+    int targetH = height;
+    if (maxSize > 0 && (width > maxSize || height > maxSize)) {
+        float scale = (float)maxSize / std::max(width, height);
+        targetW = std::max(1, (int)(width * scale));
+        targetH = std::max(1, (int)(height * scale));
+    }
+
+    // Attempt 1: Decode at requested target size
+    auto result = tryWebPDecode(webpData, webpSize, width, height, targetW, targetH);
+    if (!result.empty()) return result;
+
+    // Attempt 2: Retry at half the target size (reduces decode memory pressure).
+    // Particularly helps with truncated data or borderline-OOM situations.
+    int halfW = std::max(1, targetW / 2);
+    int halfH = std::max(1, targetH / 2);
+    if (halfW != targetW || halfH != targetH) {
+        brls::Logger::warning("ImageLoader: WebP retrying at half size {}x{} (was {}x{})",
+                              halfW, halfH, targetW, targetH);
+        result = tryWebPDecode(webpData, webpSize, width, height, halfW, halfH);
+        if (!result.empty()) return result;
+    }
+
+    brls::Logger::error("ImageLoader: WebP libwebp decode failed for {}x{} ({}KB, truncated={})",
+                        width, height, webpSize / 1024, isTruncated);
+    trackDecodeFailure("WebP all attempts");
+    return {};
 }
 
 // Convert SVG to TGA with rasterization via nanosvg
@@ -1409,6 +1470,20 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     } else if (isWebP) {
         imageData = convertWebPtoTGA(decData, decSize, s_maxThumbnailSize);
         if (imageData.empty()) {
+            // Fallback: try FFmpeg decoder for WebP — it wraps libwebp but with
+            // additional error recovery and can handle some corrupted/truncated
+            // data that the raw libwebp API rejects.
+            brls::Logger::warning("ImageLoader: libwebp failed, trying FFmpeg fallback for {}", url);
+            imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "WebP");
+        }
+        if (imageData.empty()) {
+            // Last resort: try stb_image in case the server mis-labeled the format
+            // (e.g., a JPEG served with a .webp URL or wrong Content-Type)
+            brls::Logger::warning("ImageLoader: FFmpeg WebP fallback failed, trying stb_image for {}", url);
+            imageData = convertImageToTGA(decData, decSize, s_maxThumbnailSize);
+        }
+        if (imageData.empty()) {
+            brls::Logger::error("ImageLoader: All WebP decode attempts failed for {}", url);
             return;
         }
     } else {
@@ -1948,9 +2023,20 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 );
             }
             if (imageData.empty()) {
-                // WebP decode failed - fall back to stb_image in case format was
+                // WebP decode failed - try FFmpeg fallback (wraps libwebp with
+                // better error recovery for corrupted/truncated data)
+                brls::Logger::warning("ImageLoader: WebP conversion failed for {}, trying FFmpeg fallback", url);
+                imageData = convertFFmpegImageToTGA(
+                    reinterpret_cast<const uint8_t*>(imageBody.data()),
+                    imageBody.size(),
+                    MAX_TEXTURE_SIZE,
+                    "WebP"
+                );
+            }
+            if (imageData.empty()) {
+                // Last resort: try stb_image in case format was
                 // misidentified or stb can handle this particular encoding
-                brls::Logger::warning("ImageLoader: WebP conversion failed for {}, trying stb_image fallback", url);
+                brls::Logger::warning("ImageLoader: FFmpeg WebP fallback failed for {}, trying stb_image", url);
                 imageData = convertImageToTGA(
                     reinterpret_cast<const uint8_t*>(imageBody.data()),
                     imageBody.size(),
