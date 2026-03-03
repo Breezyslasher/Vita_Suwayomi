@@ -1350,6 +1350,11 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     LoadCallback callback = request.callback;
     std::shared_ptr<bool> alive = request.alive;
 
+    // Early out if the owning cell was destroyed before we started processing.
+    // This prevents wasting worker time (and curl resources) on stale requests
+    // queued before a grid rebuild (e.g., switching from BY_SOURCE to NO_GROUPING).
+    if (alive && !*alive) return;
+
     // Skip thumbnail loads while the system is recovering from OOM.
     // Thumbnails are non-critical and can be loaded later when scrolled to.
     if (isUnderMemoryPressure()) {
@@ -1387,6 +1392,17 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             }
         }
     }
+
+    // Skip network requests when offline. Thumbnails that aren't in disk cache
+    // cannot be loaded without a server connection. Without this check, hundreds
+    // of doomed HTTP requests (each with retries) flood the worker threads,
+    // exhaust curl handles / file descriptors, and crash the Vita.
+    if (!Application::getInstance().isConnected()) {
+        return;
+    }
+
+    // Re-check alive flag after disk cache I/O
+    if (alive && !*alive) return;
 
     // Authenticated GET with automatic JWT refresh on 401/403
     HttpResponse resp = authenticatedGet(url, 2);
@@ -1740,6 +1756,12 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
 #endif
     } else {
+        // Skip network requests when offline to avoid flooding workers with
+        // doomed HTTP requests that exhaust curl handles and crash the Vita.
+        if (!Application::getInstance().isConnected()) {
+            return;
+        }
+
         // Load from HTTP with automatic JWT refresh on 401/403
         HttpResponse resp = authenticatedGet(url, 2);
         if (resp.success && !resp.body.empty()) {

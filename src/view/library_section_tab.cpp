@@ -684,10 +684,31 @@ void LibrarySectionTab::loadCategories() {
         brls::Logger::info("LibrarySectionTab: Offline, using cached categories only");
         m_combinedQueryCategoryId = -1;
         if (!m_categoriesLoaded) {
-            // No cache either - create empty tabs
             m_categoriesLoaded = true;
-            createCategoryTabs();
-            selectCategory(0);
+            // No categories cache (e.g. was in BY_SOURCE mode online and categories
+            // were never fetched). Fall back to all-library cache so the user can
+            // still see their manga under a single "Library" tab.
+            brls::Logger::info("LibrarySectionTab: No cached categories, falling back to all-library cache");
+            if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+            if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::GONE);
+            if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::GONE);
+            this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
+            this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
+            if (m_titleLabel) m_titleLabel->setText("Library");
+
+            bool fallbackCacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+            if (fallbackCacheEnabled) {
+                LibraryCache& fallbackCache = LibraryCache::getInstance();
+                std::vector<Manga> allCached;
+                if (fallbackCache.loadAllLibraryManga(allCached)) {
+                    brls::Logger::info("LibrarySectionTab: Loaded {} manga from all-library cache (category fallback)",
+                                      allCached.size());
+                    m_fullMangaList = allCached;
+                    m_mangaList = allCached;
+                    sortMangaList();
+                    m_loaded = true;
+                }
+            }
         }
         return;
     }
@@ -2946,6 +2967,31 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
                 selectCategory(targetId);
             } else if (!m_categories.empty()) {
                 selectCategory(m_categories[0].id);
+            }
+        } else if (!Application::getInstance().isConnected()) {
+            // Offline with no cached categories (e.g. was in BY_SOURCE mode when online
+            // and categories were never fetched/cached). Fall back to showing all cached
+            // manga under a single "Library" tab so the user can still browse.
+            brls::Logger::info("LibrarySectionTab: No cached categories, falling back to all-library cache");
+            if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+            if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::GONE);
+            if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::GONE);
+            this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
+            this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
+            if (m_titleLabel) m_titleLabel->setText("Library");
+
+            bool cacheEnabled2 = Application::getInstance().getSettings().cacheLibraryData;
+            if (cacheEnabled2) {
+                LibraryCache& cache2 = LibraryCache::getInstance();
+                std::vector<Manga> allCached;
+                if (cache2.loadAllLibraryManga(allCached)) {
+                    brls::Logger::info("LibrarySectionTab: Loaded {} manga from all-library cache (category fallback)",
+                                      allCached.size());
+                    m_fullMangaList = allCached;
+                    m_mangaList = allCached;
+                    sortMangaList();
+                    m_loaded = true;
+                }
             }
         }
     } else if (mode == LibraryGroupMode::NO_GROUPING) {
