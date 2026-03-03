@@ -108,7 +108,7 @@ bool LibraryCache::ensureDirectoryExists(const std::string& path) {
 
 std::string LibraryCache::serializeManga(const Manga& manga) {
     std::ostringstream ss;
-    // Format: id|title|author|artist|description|thumbnailUrl|status|inLibrary|chapterCount|unreadCount|downloadCount|sourceName
+    // Format: id|title|author|artist|description|thumbnailUrl|status|inLibrary|chapterCount|unreadCount|downloadCount|sourceName|inLibraryAt|lastReadAt|latestChapterUploadDate
     ss << manga.id << "|"
        << manga.title << "|"
        << manga.author << "|"
@@ -120,7 +120,10 @@ std::string LibraryCache::serializeManga(const Manga& manga) {
        << manga.chapterCount << "|"
        << manga.unreadCount << "|"
        << manga.downloadedCount << "|"
-       << manga.sourceName;
+       << manga.sourceName << "|"
+       << manga.inLibraryAt << "|"
+       << manga.lastReadAt << "|"
+       << manga.latestChapterUploadDate;
     return ss.str();
 }
 
@@ -149,6 +152,10 @@ bool LibraryCache::deserializeManga(const std::string& line, Manga& manga) {
         manga.downloadedCount = std::stoi(parts[10]);
         // sourceName added later; old caches have only 11 fields
         if (parts.size() > 11) manga.sourceName = parts[11];
+        // Sort-related timestamps added later; old caches have only 12 fields
+        if (parts.size() > 12) manga.inLibraryAt = std::stoll(parts[12]);
+        if (parts.size() > 13) manga.lastReadAt = std::stoll(parts[13]);
+        if (parts.size() > 14) manga.latestChapterUploadDate = std::stoll(parts[14]);
         return true;
     } catch (...) {
         return false;
@@ -651,6 +658,9 @@ std::string LibraryCache::serializeMangaDetails(const Manga& manga) {
     ss << "chapterCount=" << manga.chapterCount << "\n";
     ss << "lastChapterRead=" << manga.lastChapterRead << "\n";
     ss << "sourceName=" << escapeString(manga.sourceName) << "\n";
+    ss << "inLibraryAt=" << manga.inLibraryAt << "\n";
+    ss << "lastReadAt=" << manga.lastReadAt << "\n";
+    ss << "latestChapterUploadDate=" << manga.latestChapterUploadDate << "\n";
 
     // Serialize genres as comma-separated
     ss << "genre=";
@@ -692,6 +702,9 @@ bool LibraryCache::deserializeMangaDetails(const std::string& data, Manga& manga
             else if (key == "chapterCount") manga.chapterCount = std::stoi(value);
             else if (key == "lastChapterRead") manga.lastChapterRead = std::stoi(value);
             else if (key == "sourceName") manga.sourceName = unescapeString(value);
+            else if (key == "inLibraryAt") manga.inLibraryAt = std::stoll(value);
+            else if (key == "lastReadAt") manga.lastReadAt = std::stoll(value);
+            else if (key == "latestChapterUploadDate") manga.latestChapterUploadDate = std::stoll(value);
             else if (key == "genre") {
                 manga.genre.clear();
                 if (!value.empty()) {
