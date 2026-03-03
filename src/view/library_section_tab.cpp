@@ -415,6 +415,13 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
 
+    // Disable server-only actions at construction if already offline
+    // This prevents hover transfer errors to hidden Start/Back button hints
+    if (!Application::getInstance().isConnected()) {
+        this->setActionAvailable(brls::ControllerButton::BUTTON_START, false);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_BACK, false);
+    }
+
     // Load categories first, then create tabs
     loadCategories();
 }
@@ -475,10 +482,15 @@ void LibrarySectionTab::onFocusGained() {
     }
 
     // Show/hide update button + hint icon based on connectivity
+    bool connected = Application::getInstance().isConnected();
     if (m_updateContainer) {
-        m_updateContainer->setVisibility(Application::getInstance().isConnected()
+        m_updateContainer->setVisibility(connected
             ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
+
+    // Disable server-only actions when offline to prevent hover transfer to hidden hints
+    this->setActionAvailable(brls::ControllerButton::BUTTON_START, connected);
+    this->setActionAvailable(brls::ControllerButton::BUTTON_BACK, connected);
 
     // Check if group mode was changed externally (e.g. from settings tab)
     LibraryGroupMode savedMode = Application::getInstance().getSettings().libraryGroupMode;
