@@ -657,6 +657,10 @@ void ImageLoader::processPendingTextures() {
             if (update.alive && !*update.alive) {
                 continue;
             }
+            // Skip empty data to avoid passing garbage to NVG
+            if (update.data.empty()) {
+                continue;
+            }
             update.target->setImageFromMem(update.data.data(), update.data.size());
             if (update.callback) update.callback(update.target);
         }
@@ -753,6 +757,10 @@ void ImageLoader::processPendingRotatableTextures() {
             if (update.alive && !*update.alive) {
                 continue;  // Owner destroyed, skip
             }
+            // Skip empty data to avoid passing garbage to NVG
+            if (!update.isSegmented && update.data.empty()) {
+                continue;
+            }
             auto uploadStart = std::chrono::steady_clock::now();
             if (update.isSegmented) {
                 update.target->setImageSegments(update.segmentDatas, update.origW, update.origH, update.segHeights);
@@ -796,14 +804,27 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         if (mangaId > 0) {
             std::vector<uint8_t> diskData;
             if (LibraryCache::getInstance().loadCoverImage(mangaId, diskData)) {
-                // Found in disk cache - add to memory LRU cache
-                cachePut(url, diskData);
-                // Queue for batched texture upload (prevents main thread freeze
-                // when 50+ covers load from disk cache simultaneously)
-                if (target) {
-                    queueTextureUpdate(diskData, target, callback, alive);
+                // Validate cached data looks like a valid TGA (our output format).
+                // Previously, raw undecoded image data could be cached by the
+                // fallback path, causing repeated "Cannot set texture: 0" errors
+                // and potential OOM crashes when loading many covers.
+                bool validTGA = diskData.size() > 18 &&
+                                diskData[0] == 0 && diskData[1] == 0 &&
+                                diskData[2] == 2 && diskData[16] == 32;
+                if (!validTGA) {
+                    // Corrupt/non-TGA cached data - delete it and re-download
+                    brls::Logger::warning("ImageLoader: Removing invalid cached cover for manga {}", mangaId);
+                    LibraryCache::getInstance().deleteCoverImage(mangaId);
+                } else {
+                    // Found valid TGA in disk cache - add to memory LRU cache
+                    cachePut(url, diskData);
+                    // Queue for batched texture upload (prevents main thread freeze
+                    // when 50+ covers load from disk cache simultaneously)
+                    if (target) {
+                        queueTextureUpdate(diskData, target, callback, alive);
+                    }
+                    return;
                 }
-                return;
             }
         }
     }
@@ -884,8 +905,12 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             s_maxThumbnailSize
         );
         if (imageData.empty()) {
-            // Fallback: use raw data if conversion fails
-            imageData.assign(resp.body.begin(), resp.body.end());
+            // Image decode failed - skip this image entirely.
+            // Do NOT fall back to raw data: it wastes memory (no downscaling),
+            // gets cached (persisting the problem), and will fail again in NVG
+            // causing "Cannot set texture: 0" errors and potential OOM crashes
+            // on the Vita when many covers fail simultaneously.
+            return;
         }
     }
 
