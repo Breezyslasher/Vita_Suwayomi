@@ -1,0 +1,198 @@
+14:17:18.729 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+14:17:19.337 [INFO] DownloadsManager: Initializing...
+14:17:19.343 [DEBUG] DownloadsManager: No saved state found
+14:17:19.344 [INFO] DownloadsManager: Initialized with 0 downloads
+14:17:19.344 [INFO] VitaSuwayomi 1.0.0 initializing...
+14:17:19.345 [DEBUG] sceIoMkdir result: -0x7ffeffef
+14:17:19.346 [INFO] Loading saved settings...
+14:17:19.346 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+14:17:19.348 [DEBUG] loadSettings: File size = 1618
+14:17:19.363 [DEBUG] loadSettings: Read 1618 bytes
+14:17:19.370 [INFO] loadSettings: serverUrl=Http://192.168.1.28:4568
+14:17:19.375 [DEBUG] Loaded 4 hidden categories
+14:17:19.381 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+14:17:19.390 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+14:17:19.399 [INFO] loadSettings: enabledSourceLanguages count = 0
+14:17:19.409 [INFO] loadSettings: localUrl=Http://192.168.1.28:4568, remoteUrl=(empty), useRemote=false, autoSwitch=false
+14:17:19.423 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=1, defaultSort=0, groupMode=1
+14:17:19.434 [DEBUG] Loaded 1 per-category sort modes
+14:17:19.439 [DEBUG] Loaded 0 search history entries
+14:17:19.445 [DEBUG] Loaded 0 per-manga reader settings
+14:17:19.452 [INFO] Restored auth credentials for user: Breezyslasher
+14:17:19.460 [INFO] Settings loaded successfully
+14:17:19.470 [INFO] Settings load result: success
+14:17:19.481 [INFO] Applied theme: Dark
+14:17:19.492 [INFO] Debug logging disabled
+14:17:19.506 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+14:17:19.511 [INFO] Application::run - isConnected=false, serverUrl=Http://192.168.1.28:4568
+14:17:19.517 [INFO] Restoring saved connection...
+14:17:19.523 [INFO] Fetching server info via GraphQL...
+14:17:19.602 [ERROR] HTTP error: Could not connect to server
+14:17:19.611 [WARNING] GraphQL request failed: Could not connect to server (0)
+14:17:19.622 [INFO] GraphQL failed, falling back to REST API...
+14:17:19.633 [INFO] Fetching server info from: Http://192.168.1.28:4568/api/v1/settings/about
+14:17:19.703 [ERROR] HTTP error: Could not connect to server
+14:17:19.708 [WARNING] REST about endpoint failed (0), trying source list...
+14:17:19.804 [ERROR] HTTP error: Could not connect to server
+14:17:19.811 [ERROR] Failed to connect to server: Could not connect to server (0)
+14:17:19.820 [WARNING] Server not reachable with current auth mode 3
+14:17:19.829 [INFO] Have credentials, trying auth mode fallback...
+14:17:19.840 [INFO] Trying fresh login with saved mode 3
+14:17:19.908 [ERROR] HTTP error: Could not connect to server
+14:17:19.919 [ERROR] Login request failed: Could not connect to server
+14:17:19.925 [INFO] Trying auth mode: 1
+14:17:19.930 [INFO] Fetching server info via GraphQL...
+14:17:20.009 [ERROR] HTTP error: Could not connect to server
+14:17:20.017 [WARNING] GraphQL request failed: Could not connect to server (0)
+14:17:20.026 [INFO] GraphQL failed, falling back to REST API...
+14:17:20.037 [INFO] Fetching server info from: Http://192.168.1.28:4568/api/v1/settings/about
+14:17:20.110 [ERROR] HTTP error: Could not connect to server
+14:17:20.121 [WARNING] REST about endpoint failed (0), trying source list...
+14:17:20.211 [ERROR] HTTP error: Could not connect to server
+14:17:20.216 [ERROR] Failed to connect to server: Could not connect to server (0)
+14:17:20.223 [INFO] Trying auth mode: 2
+14:17:20.232 [INFO] loginSimpleREST: Attempting session-based login...
+14:17:20.312 [ERROR] HTTP error: Could not connect to server
+14:17:20.322 [INFO] loginSimpleREST: response status=0
+14:17:20.333 [ERROR] loginSimpleREST: unexpected status 0
+14:17:20.345 [INFO] Trying auth mode: 0
+14:17:20.350 [INFO] Fetching server info via GraphQL...
+14:17:20.413 [ERROR] HTTP error: Could not connect to server
+14:17:20.420 [WARNING] GraphQL request failed: Could not connect to server (0)
+14:17:20.428 [INFO] GraphQL failed, falling back to REST API...
+14:17:20.437 [INFO] Fetching server info from: Http://192.168.1.28:4568/api/v1/settings/about
+14:17:20.514 [ERROR] HTTP error: Could not connect to server
+14:17:20.525 [WARNING] REST about endpoint failed (0), trying source list...
+14:17:20.615 [ERROR] HTTP error: Could not connect to server
+14:17:20.620 [ERROR] Failed to connect to server: Could not connect to server (0)
+14:17:20.625 [ERROR] All auth mode fallbacks failed
+14:17:20.632 [ERROR] Connection failed and no downloads, showing login
+14:18:09.838 [INFO] LoginActivity: Entering offline mode
+14:18:09.849 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+14:18:09.881 [INFO] Settings saved successfully (1618 bytes)
+14:18:09.995 [INFO] MainActivity: Tabs created, isOnline=false
+14:18:10.163 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+14:18:10.272 [INFO] LibrarySectionTab: Loaded 454 manga from all-library cache for by-source view (offline)
+14:18:10.564 [INFO] RecyclingGrid: Building 7 rows for 40 items (first 2 immediate)
+14:18:10.628 [INFO] ImageLoader: Starting 3 worker threads
+14:18:13.245 [INFO] RecyclingGrid: Incremental build complete - 40 cells in 7 rows
+14:18:28.749 [INFO] RecyclingGrid: Building 14 rows for 83 items (first 2 immediate)
+14:18:34.633 [INFO] RecyclingGrid: Incremental build complete - 83 cells in 14 rows
+14:18:35.122 [ERROR] HTTP error: Could not connect to server
+14:18:35.324 [ERROR] HTTP error: Could not connect to server
+14:18:35.425 [ERROR] HTTP error: Could not connect to server
+14:18:36.227 [ERROR] HTTP error: Could not connect to server
+14:18:36.428 [ERROR] HTTP error: Could not connect to server
+14:18:36.529 [ERROR] HTTP error: Could not connect to server
+14:18:38.332 [ERROR] HTTP error: Could not connect to server
+14:18:38.342 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/507/thumbnail (status 0)
+14:18:38.436 [ERROR] HTTP error: Could not connect to server
+14:18:38.436 [ERROR] HTTP error: Could not connect to server
+14:18:38.450 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/658/thumbnail (status 0)
+14:18:38.537 [ERROR] HTTP error: Could not connect to server
+14:18:38.638 [ERROR] HTTP error: Could not connect to server
+14:18:38.648 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/369/thumbnail (status 0)
+14:18:38.739 [ERROR] HTTP error: Could not connect to server
+14:18:39.541 [ERROR] HTTP error: Could not connect to server
+14:18:39.643 [ERROR] HTTP error: Could not connect to server
+14:18:39.844 [ERROR] HTTP error: Could not connect to server
+14:18:46.893 [INFO] ImageLoader: Got 401 for Http://192.168.1.28:4568/api/v1/manga/409/thumbnail, attempting token refresh...
+14:18:46.894 [INFO] ImageLoader: Got 401 for Http://192.168.1.28:4568/api/v1/manga/437/thumbnail, attempting token refresh...
+14:18:46.895 [INFO] ImageLoader: Got 401 for Http://192.168.1.28:4568/api/v1/manga/379/thumbnail, attempting token refresh...
+14:18:46.907 [INFO] No refresh token available, skipping GraphQL refresh
+14:18:46.929 [INFO] Attempting re-login with stored credentials...
+14:18:46.976 [INFO] Login successful, received JWT tokens
+14:18:46.986 [INFO] Re-login successful, tokens refreshed
+14:18:46.997 [INFO] Token was recently refreshed (0s ago), skipping duplicate refresh
+14:18:46.997 [INFO] ImageLoader: Token refreshed, retrying download
+14:18:47.007 [INFO] ImageLoader: Token refreshed, retrying download
+14:18:47.007 [INFO] Token was recently refreshed (1s ago), skipping duplicate refresh
+14:18:47.029 [INFO] ImageLoader: Token refreshed, retrying download
+14:18:49.410 [ERROR] HTTP error: Could not connect to server
+14:18:49.410 [ERROR] HTTP error: Could not connect to server
+14:18:49.411 [ERROR] HTTP error: Could not connect to server
+14:18:49.425 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/437/thumbnail (status 0)
+14:18:49.440 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/379/thumbnail (status 0)
+14:18:49.617 [ERROR] HTTP error: Could not connect to server
+14:18:49.617 [ERROR] HTTP error: Could not connect to server
+14:18:50.519 [ERROR] HTTP error: Could not connect to server
+14:18:50.720 [ERROR] HTTP error: Could not connect to server
+14:18:50.721 [ERROR] HTTP error: Could not connect to server
+14:18:52.624 [ERROR] HTTP error: Could not connect to server
+14:18:52.633 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/438/thumbnail (status 0)
+14:18:52.725 [ERROR] HTTP error: Could not connect to server
+14:18:52.826 [ERROR] HTTP error: Could not connect to server
+14:18:52.826 [ERROR] HTTP error: Could not connect to server
+14:18:52.832 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/528/thumbnail (status 0)
+14:18:52.837 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/463/thumbnail (status 0)
+14:18:53.028 [ERROR] HTTP error: Could not connect to server
+14:18:53.028 [ERROR] HTTP error: Could not connect to server
+14:18:53.829 [ERROR] HTTP error: Could not connect to server
+14:18:54.131 [ERROR] HTTP error: Could not connect to server
+14:18:54.131 [ERROR] HTTP error: Could not connect to server
+14:18:55.934 [ERROR] HTTP error: Could not connect to server
+14:18:55.946 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/512/thumbnail (status 0)
+14:18:56.036 [ERROR] HTTP error: Could not connect to server
+14:18:56.237 [ERROR] HTTP error: Could not connect to server
+14:18:56.237 [ERROR] HTTP error: Could not connect to server
+14:18:56.246 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/331/thumbnail (status 0)
+14:18:56.258 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/655/thumbnail (status 0)
+14:18:56.439 [ERROR] HTTP error: Could not connect to server
+14:18:56.439 [ERROR] HTTP error: Could not connect to server
+14:18:57.141 [ERROR] HTTP error: Could not connect to server
+14:18:57.542 [ERROR] HTTP error: Could not connect to server
+14:18:57.542 [ERROR] HTTP error: Could not connect to server
+14:18:59.245 [ERROR] HTTP error: Could not connect to server
+14:18:59.254 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/401/thumbnail (status 0)
+14:18:59.346 [ERROR] HTTP error: Could not connect to server
+14:18:59.648 [ERROR] HTTP error: Could not connect to server
+14:18:59.648 [ERROR] HTTP error: Could not connect to server
+14:18:59.654 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/456/thumbnail (status 0)
+14:18:59.660 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/513/thumbnail (status 0)
+14:18:59.849 [ERROR] HTTP error: Could not connect to server
+14:18:59.849 [ERROR] HTTP error: Could not connect to server
+14:19:00.451 [ERROR] HTTP error: Could not connect to server
+14:19:00.953 [ERROR] HTTP error: Could not connect to server
+14:19:00.953 [ERROR] HTTP error: Could not connect to server
+14:19:02.556 [ERROR] HTTP error: Could not connect to server
+14:19:02.567 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/461/thumbnail (status 0)
+14:19:02.656 [ERROR] HTTP error: Could not connect to server
+14:19:03.060 [ERROR] HTTP error: Could not connect to server
+14:19:03.060 [ERROR] HTTP error: Could not connect to server
+14:19:03.069 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/402/thumbnail (status 0)
+14:19:03.081 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/411/thumbnail (status 0)
+14:19:03.261 [ERROR] HTTP error: Could not connect to server
+14:19:03.261 [ERROR] HTTP error: Could not connect to server
+14:19:03.763 [ERROR] HTTP error: Could not connect to server
+14:19:04.365 [ERROR] HTTP error: Could not connect to server
+14:19:04.365 [ERROR] HTTP error: Could not connect to server
+14:19:05.867 [ERROR] HTTP error: Could not connect to server
+14:19:05.876 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/423/thumbnail (status 0)
+14:19:05.968 [ERROR] HTTP error: Could not connect to server
+14:19:06.470 [ERROR] HTTP error: Could not connect to server
+14:19:06.470 [ERROR] HTTP error: Could not connect to server
+14:19:06.475 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/395/thumbnail (status 0)
+14:19:06.481 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/336/thumbnail (status 0)
+14:19:06.671 [ERROR] HTTP error: Could not connect to server
+14:19:07.073 [ERROR] HTTP error: Could not connect to server
+14:19:07.775 [ERROR] HTTP error: Could not connect to server
+14:19:09.178 [ERROR] HTTP error: Could not connect to server
+14:19:09.187 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/613/thumbnail (status 0)
+14:19:09.880 [ERROR] HTTP error: Could not connect to server
+14:19:09.892 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/602/thumbnail (status 0)
+14:19:49.110 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+14:19:49.144 [INFO] Settings saved successfully (1618 bytes)
+14:19:50.226 [INFO] LibrarySectionTab: Loaded 454 manga from all-library cache (offline)
+14:19:50.274 [INFO] RecyclingGrid: Building 76 rows for 454 items (first 2 immediate)
+14:19:50.447 [ERROR] HTTP error: Could not connect to server
+14:19:50.648 [ERROR] HTTP error: Could not connect to server
+14:19:50.850 [ERROR] HTTP error: Could not connect to server
+14:19:51.552 [ERROR] HTTP error: Could not connect to server
+14:19:51.753 [ERROR] HTTP error: Could not connect to server
+14:19:51.954 [ERROR] HTTP error: Could not connect to server
+14:19:53.658 [ERROR] HTTP error: Could not connect to server
+14:19:53.664 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/303/thumbnail (status 0)
+14:19:53.861 [ERROR] HTTP error: Could not connect to server
+14:19:53.861 [ERROR] HTTP error: Could not connect to server
+14:19:53.875 [WARNING] ImageLoader: Failed to load Http://192.168.1.28:4568/api/v1/manga/534/thumbnail (status 0)
+14:19:54.062 [ERROR] HTTP error: Could not connect to server
