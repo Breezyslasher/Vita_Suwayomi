@@ -2808,8 +2808,10 @@ bool SuwayomiClient::applyServerImageSettings() {
     )";
 
     // Set serveConversions: convert default (all non-standard) to JPEG,
-    // but keep PNG and JPEG as-is (target "none" disables conversion).
-    std::string variables = R"({"input":{"settings":{"serveConversions":{"default":{"target":"image/jpeg","compressionLevel":0.9},"image/jpeg":{"target":"none"},"image/png":{"target":"none"}}}}})";
+    // but keep PNG and JPEG as-is (target matching source mime skips conversion).
+    // serveConversions is a list of SettingsDownloadConversionTypeInput objects,
+    // each with a mimeType field (use "default" as fallback for unmatched types).
+    std::string variables = R"({"input":{"settings":{"serveConversions":[{"mimeType":"default","target":"image/jpeg","compressionLevel":0.9},{"mimeType":"image/jpeg","target":"image/jpeg"},{"mimeType":"image/png","target":"image/png"}]}}})";
 
     std::string response = executeGraphQL(query, variables);
     if (response.empty()) {
