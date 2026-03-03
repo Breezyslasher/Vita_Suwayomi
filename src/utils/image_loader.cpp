@@ -14,6 +14,7 @@
 #include <webp/decode.h>
 #include <cstring>
 #include <cmath>
+#include <new>
 #include <thread>
 #include <chrono>
 #include <fstream>
@@ -89,6 +90,21 @@ std::queue<ImageLoader::PendingRotatableTextureUpdate> ImageLoader::s_pendingRot
 std::mutex ImageLoader::s_pendingRotatableMutex;
 std::atomic<bool> ImageLoader::s_pendingRotatableScheduled{false};
 
+// Memory pressure tracking: when decode operations fail (OOM, unsupported
+// features, etc.), set a cooldown to let the system recover before attempting
+// more decodes that could push the Vita past its memory limit.
+static std::atomic<int> s_oomCooldownFrames{0};
+static constexpr int OOM_COOLDOWN_DURATION = 60;  // ~1 second at 60fps
+// Track consecutive decode failures to detect memory-pressure patterns even
+// when the individual failure codes are not VP8_STATUS_OUT_OF_MEMORY.
+static std::atomic<int> s_consecutiveDecodeFailures{0};
+static constexpr int MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN = 3;
+
+// Serialize heavy decode operations so only one worker decodes at a time.
+// This prevents 3 workers from each allocating multi-MB decode buffers
+// concurrently, which can push the Vita past its memory limit.
+static std::mutex s_decodeMutex;
+
 // Helper to extract manga ID from thumbnail URL
 // URLs look like: http://server/api/v1/manga/123/thumbnail or /api/v1/manga/123/thumbnail
 static int extractMangaIdFromUrl(const std::string& url) {
@@ -141,7 +157,13 @@ static std::vector<uint8_t> createTGAFromRGBA(const uint8_t* rgba, int width, in
     size_t imageSize = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
     // Sanity check: reject absurdly large images (>256MB pixel data)
     if (imageSize > 256 * 1024 * 1024) return {};
-    std::vector<uint8_t> tgaData(18 + imageSize);
+    std::vector<uint8_t> tgaData;
+    try {
+        tgaData.resize(18 + imageSize);
+    } catch (const std::bad_alloc&) {
+        signalOOM("createTGAFromRGBA");
+        return {};
+    }
 
     uint8_t* header = tgaData.data();
     memset(header, 0, 18);
@@ -174,6 +196,42 @@ static int calculateSegments(int width, int height, int maxSize) {
     if (height <= maxSize) return 1;
     // Split based on height, keeping each segment within maxSize
     return (height + maxSize - 1) / maxSize;
+}
+
+// Signal that an OOM condition occurred during image decode.
+// This sets a cooldown period during which new thumbnail loads are skipped
+// to let the system recover before allocating more decode buffers.
+static void signalOOM(const char* context) {
+    int prev = s_oomCooldownFrames.load();
+    if (prev < OOM_COOLDOWN_DURATION) {
+        s_oomCooldownFrames.store(OOM_COOLDOWN_DURATION);
+        brls::Logger::error("ImageLoader: OOM in {} - entering {}-frame cooldown", context, OOM_COOLDOWN_DURATION);
+    }
+}
+
+// Track a decode failure. After MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN
+// consecutive failures, trigger the OOM cooldown since the system is likely
+// under memory pressure even if individual errors are not explicit OOM.
+static void trackDecodeFailure(const char* context) {
+    int fails = s_consecutiveDecodeFailures.fetch_add(1) + 1;
+    if (fails >= MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN) {
+        signalOOM(context);
+    }
+}
+
+// Reset the consecutive failure counter on a successful decode.
+static void trackDecodeSuccess() {
+    s_consecutiveDecodeFailures.store(0);
+}
+
+// Check whether we are in an OOM cooldown period (decrements the counter).
+static bool isUnderMemoryPressure() {
+    int frames = s_oomCooldownFrames.load();
+    if (frames > 0) {
+        s_oomCooldownFrames.fetch_sub(1);
+        return true;
+    }
+    return false;
 }
 
 // Convert WebP to TGA for a specific segment of a tall image
@@ -233,6 +291,9 @@ static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, siz
 
     VP8StatusCode decStatus = WebPDecode(webpData, webpSize, &config);
     if (decStatus != VP8_STATUS_OK) {
+        if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
+            signalOOM("WebPDecode segment");
+        }
         brls::Logger::error("ImageLoader: WebP segment crop+scale failed (status={}) for {}x{} seg {}/{}",
                             static_cast<int>(decStatus), width, height, segment + 1, totalSegments);
         WebPFreeDecBuffer(&config.output);
@@ -289,17 +350,23 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
 
     // Extract and optionally scale the segment
     std::vector<uint8_t> segmentRgba;
-    if (targetW != width || targetH != actualHeight) {
-        // Need to scale - extract segment first, then scale
-        std::vector<uint8_t> extracted(width * actualHeight * 4);
-        memcpy(extracted.data(), rgba + (startY * width * 4), width * actualHeight * 4);
+    try {
+        if (targetW != width || targetH != actualHeight) {
+            // Need to scale - extract segment first, then scale
+            std::vector<uint8_t> extracted(width * actualHeight * 4);
+            memcpy(extracted.data(), rgba + (startY * width * 4), width * actualHeight * 4);
 
-        segmentRgba.resize(targetW * targetH * 4);
-        downscaleRGBA(extracted.data(), width, actualHeight, segmentRgba.data(), targetW, targetH);
-    } else {
-        // Just extract the segment
-        segmentRgba.resize(width * actualHeight * 4);
-        memcpy(segmentRgba.data(), rgba + (startY * width * 4), width * actualHeight * 4);
+            segmentRgba.resize(targetW * targetH * 4);
+            downscaleRGBA(extracted.data(), width, actualHeight, segmentRgba.data(), targetW, targetH);
+        } else {
+            // Just extract the segment
+            segmentRgba.resize(width * actualHeight * 4);
+            memcpy(segmentRgba.data(), rgba + (startY * width * 4), width * actualHeight * 4);
+        }
+    } catch (const std::bad_alloc&) {
+        stbi_image_free(rgba);
+        signalOOM("convertImageToTGASegment");
+        return tgaData;
     }
 
     stbi_image_free(rgba);
@@ -334,13 +401,19 @@ static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSi
     uint8_t* finalRgba = rgba;
     std::vector<uint8_t> scaledRgba;
 
-    if (targetW != width || targetH != height) {
-        scaledRgba.resize(targetW * targetH * 4);
-        downscaleRGBA(rgba, width, height, scaledRgba.data(), targetW, targetH);
-        finalRgba = scaledRgba.data();
-    }
+    try {
+        if (targetW != width || targetH != height) {
+            scaledRgba.resize(targetW * targetH * 4);
+            downscaleRGBA(rgba, width, height, scaledRgba.data(), targetW, targetH);
+            finalRgba = scaledRgba.data();
+        }
 
-    tgaData = createTGAFromRGBA(finalRgba, targetW, targetH);
+        tgaData = createTGAFromRGBA(finalRgba, targetW, targetH);
+    } catch (const std::bad_alloc&) {
+        stbi_image_free(rgba);
+        signalOOM("convertImageToTGA");
+        return {};
+    }
 
     stbi_image_free(rgba);
     return tgaData;
@@ -398,6 +471,9 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
 
         VP8StatusCode decStatus = WebPDecode(webpData, webpSize, &config);
         if (decStatus != VP8_STATUS_OK) {
+            if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
+                signalOOM("WebPDecode RGBA scaled");
+            }
             brls::Logger::warning("ImageLoader: WebP scaled RGBA decode failed (status={}) for {}x{}->{}x{}, trying RGB",
                                   static_cast<int>(decStatus), width, height, targetW, targetH);
 
@@ -413,16 +489,27 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
 
             decStatus = WebPDecode(webpData, webpSize, &config);
             if (decStatus != VP8_STATUS_OK) {
+                if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
+                    signalOOM("WebPDecode RGB scaled");
+                }
                 brls::Logger::error("ImageLoader: WebP scaled decode completely failed (status={}) for {}x{} ({}KB)",
                                     static_cast<int>(decStatus), width, height, webpSize / 1024);
                 WebPFreeDecBuffer(&config.output);
+                trackDecodeFailure("WebP scaled decode");
                 return {};
             }
 
             // Convert RGB to RGBA for TGA
             uint8_t* rgb = config.output.u.RGBA.rgba;
             size_t pixelCount = static_cast<size_t>(targetW) * static_cast<size_t>(targetH);
-            std::vector<uint8_t> rgbaVec(pixelCount * 4);
+            std::vector<uint8_t> rgbaVec;
+            try {
+                rgbaVec.resize(pixelCount * 4);
+            } catch (const std::bad_alloc&) {
+                WebPFreeDecBuffer(&config.output);
+                signalOOM("WebP RGB->RGBA alloc");
+                return {};
+            }
             for (size_t i = 0; i < pixelCount; i++) {
                 rgbaVec[i * 4 + 0] = rgb[i * 3 + 0];
                 rgbaVec[i * 4 + 1] = rgb[i * 3 + 1];
@@ -432,10 +519,12 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
             WebPFreeDecBuffer(&config.output);
 
             brls::Logger::info("ImageLoader: WebP scaled RGB decode OK {}x{}->{}x{}", width, height, targetW, targetH);
+            trackDecodeSuccess();
             return createTGAFromRGBA(rgbaVec.data(), targetW, targetH);
         }
 
         // Scaled RGBA decode succeeded
+        trackDecodeSuccess();
         auto tgaData = createTGAFromRGBA(config.output.u.RGBA.rgba, targetW, targetH);
         WebPFreeDecBuffer(&config.output);
 
@@ -448,9 +537,11 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
     if (!rgba) {
         brls::Logger::error("ImageLoader: WebPDecodeRGBA failed for {}x{} ({}KB)",
                             width, height, webpSize / 1024);
+        trackDecodeFailure("WebP full-res decode");
         return {};
     }
 
+    trackDecodeSuccess();
     auto tgaData = createTGAFromRGBA(rgba, width, height);
     WebPFree(rgba);
     return tgaData;
@@ -770,7 +861,19 @@ static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* data, size_t 
         return result;
     }
 
-    std::vector<uint8_t> rgba(dstW * dstH * 4);
+    std::vector<uint8_t> rgba;
+    try {
+        rgba.resize(static_cast<size_t>(dstW) * dstH * 4);
+    } catch (const std::bad_alloc&) {
+        sws_freeContext(swsCtx);
+        av_frame_free(&frame);
+        av_packet_free(&pkt);
+        avcodec_free_context(&codecCtx);
+        avformat_close_input(&fmtCtx);
+        avio_context_free(&avioCtx);
+        signalOOM("FFmpeg RGBA alloc");
+        return result;
+    }
     uint8_t* dstSlice[1] = {rgba.data()};
     int dstStride[1] = {dstW * 4};
 
@@ -1143,6 +1246,13 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     LoadCallback callback = request.callback;
     std::shared_ptr<bool> alive = request.alive;
 
+    // Skip thumbnail loads while the system is recovering from OOM.
+    // Thumbnails are non-critical and can be loaded later when scrolled to.
+    if (isUnderMemoryPressure()) {
+        brls::Logger::debug("ImageLoader: Skipping thumbnail load (OOM cooldown) for {}", url);
+        return;
+    }
+
     // Check disk cache first (this runs on a background thread, so disk I/O is fine)
     if (Application::getInstance().getSettings().cacheCoverImages) {
         int mangaId = extractMangaIdFromUrl(url);
@@ -1250,35 +1360,61 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         return;
     }
 
+    // Move the HTTP response body into a local vector so we hold a compact copy.
+    // The `resp` object (with its string, headers, etc.) is freed here, reducing
+    // peak memory during the decode step that follows.
+    std::vector<uint8_t> bodyVec;
+    try {
+        bodyVec.assign(bodyData, bodyData + bodySize);
+    } catch (const std::bad_alloc&) {
+        signalOOM("executeLoad bodyVec alloc");
+        return;
+    }
+    { std::string().swap(resp.body); }  // release resp.body memory now
+    const uint8_t* decData = bodyVec.data();
+    size_t decSize = bodyVec.size();
+
+    // Serialize decodes: only one worker thread decodes at a time.
+    // This prevents 3 concurrent WebP/stb/FFmpeg decode buffers from
+    // pushing the Vita past its ~128MB user-space memory limit.
+    std::lock_guard<std::mutex> decodeLock(s_decodeMutex);
+
+    // Re-check OOM cooldown after acquiring the lock (another thread may have
+    // encountered OOM while we were waiting).
+    if (isUnderMemoryPressure()) {
+        brls::Logger::debug("ImageLoader: Skipping decode (OOM cooldown) for {}", url);
+        return;
+    }
+
     // Convert and downscale all image formats for thumbnails
     std::vector<uint8_t> imageData;
     if (isSVG) {
-        imageData = convertSVGtoTGA(bodyData, bodySize, s_maxThumbnailSize);
+        imageData = convertSVGtoTGA(decData, decSize, s_maxThumbnailSize);
         if (imageData.empty()) {
             brls::Logger::error("ImageLoader: SVG conversion failed for {}", url);
             return;
         }
     } else if (isAVIF) {
-        imageData = convertFFmpegImageToTGA(bodyData, bodySize, s_maxThumbnailSize, "AVIF");
+        imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "AVIF");
         if (imageData.empty()) {
             brls::Logger::error("ImageLoader: AVIF conversion failed for {}", url);
             return;
         }
     } else if (isHEIF) {
-        imageData = convertFFmpegImageToTGA(bodyData, bodySize, s_maxThumbnailSize, "HEIF");
+        imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "HEIF");
         if (imageData.empty()) {
             brls::Logger::error("ImageLoader: HEIF conversion failed for {}", url);
             return;
         }
     } else if (isWebP) {
-        imageData = convertWebPtoTGA(bodyData, bodySize, s_maxThumbnailSize);
+        imageData = convertWebPtoTGA(decData, decSize, s_maxThumbnailSize);
         if (imageData.empty()) {
             return;
         }
     } else {
         // Downscale JPEG/PNG thumbnails too (not just WebP)
         // This reduces memory usage and makes cache more effective
-        imageData = convertImageToTGA(bodyData, bodySize, s_maxThumbnailSize);
+        imageData = convertImageToTGA(decData, decSize, s_maxThumbnailSize);
         if (imageData.empty()) {
             // Image decode failed - skip this image entirely.
             // Do NOT fall back to raw data: it wastes memory (no downscaling),
@@ -1364,10 +1500,19 @@ void ImageLoader::workerThreadFunc(int workerId) {
         httpClient.clearDefaultHeaders();
         applyAuthHeaders(httpClient);
 
-        if (isRotatable) {
-            executeRotatableLoad(rotatableRequest);
-        } else {
-            executeLoad(request);
+        // Top-level safety net: catch any std::bad_alloc that slipped past
+        // the per-function try-catch blocks.  Without this, an uncaught
+        // exception terminates the whole app on PS Vita with stack corruption.
+        try {
+            if (isRotatable) {
+                executeRotatableLoad(rotatableRequest);
+            } else {
+                executeLoad(request);
+            }
+        } catch (const std::bad_alloc&) {
+            signalOOM("worker top-level");
+        } catch (...) {
+            brls::Logger::error("ImageLoader: Unknown exception in worker {}", workerId);
         }
     }
 
@@ -1612,6 +1757,17 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         // Convert images to TGA with size limit for Vita GPU (max texture 2048x2048)
         const int MAX_TEXTURE_SIZE = 2048;
 
+        // Serialize decodes across all worker threads to prevent concurrent
+        // multi-MB decode buffers from exhausting the Vita's memory.
+        std::lock_guard<std::mutex> decodeLock(s_decodeMutex);
+
+        // Re-check memory pressure and alive flag after acquiring the lock
+        if (isUnderMemoryPressure()) {
+            brls::Logger::debug("ImageLoader: Skipping rotatable decode (OOM cooldown) for {}", url);
+            return;
+        }
+        if (alive && !*alive) return;
+
         // SVG, AVIF, and HEIF are decoded to TGA directly (no auto-split support yet)
         // They go through convertSVGtoTGA / convertFFmpegImageToTGA which handle sizing
         if (isSVG) {
@@ -1696,6 +1852,11 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
 
                 for (int seg = 0; seg < autoSegments && allOK; seg++) {
                     if (alive && !*alive) return;  // Owner destroyed during processing
+                    if (isUnderMemoryPressure()) {
+                        brls::Logger::warning("ImageLoader: Aborting auto-split at seg {}/{} (OOM cooldown)", seg, autoSegments);
+                        allOK = false;
+                        break;
+                    }
 
                     std::vector<uint8_t> segData;
                     if (isWebP) {
