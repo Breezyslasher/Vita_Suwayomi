@@ -38,6 +38,20 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+// NanoSVG for SVG parsing and rasterization (header-only, lightweight)
+#define NANOSVG_IMPLEMENTATION
+#include "nanosvg.h"
+#define NANOSVGRAST_IMPLEMENTATION
+#include "nanosvgrast.h"
+
+// FFmpeg for AVIF/HEIF decoding (libraries already linked)
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
+}
+
 namespace vitasuwayomi {
 
 // Static member initialization
@@ -442,6 +456,337 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
     return tgaData;
 }
 
+// Convert SVG to TGA with rasterization via nanosvg
+// SVG is rasterized at the target size for crisp rendering
+static std::vector<uint8_t> convertSVGtoTGA(const uint8_t* data, size_t dataSize, int maxSize) {
+    // nsvgParse modifies the input string, so make a mutable copy
+    std::string svgStr(reinterpret_cast<const char*>(data), dataSize);
+
+    NSVGimage* image = nsvgParse(&svgStr[0], "px", 96.0f);
+    if (!image) {
+        brls::Logger::error("ImageLoader: nsvgParse failed");
+        return {};
+    }
+
+    if (image->width <= 0 || image->height <= 0) {
+        brls::Logger::error("ImageLoader: SVG has invalid dimensions {}x{}", image->width, image->height);
+        nsvgDelete(image);
+        return {};
+    }
+
+    // Calculate rasterization scale to fit within maxSize
+    float scale = 1.0f;
+    int w = static_cast<int>(image->width);
+    int h = static_cast<int>(image->height);
+
+    if (maxSize > 0 && (w > maxSize || h > maxSize)) {
+        scale = static_cast<float>(maxSize) / std::max(w, h);
+        w = std::max(1, static_cast<int>(w * scale));
+        h = std::max(1, static_cast<int>(h * scale));
+    }
+
+    // Sanity check dimensions for Vita memory
+    if (static_cast<size_t>(w) * h * 4 > 256 * 1024 * 1024) {
+        brls::Logger::error("ImageLoader: SVG rasterized size too large {}x{}", w, h);
+        nsvgDelete(image);
+        return {};
+    }
+
+    NSVGrasterizer* rast = nsvgCreateRasterizer();
+    if (!rast) {
+        brls::Logger::error("ImageLoader: nsvgCreateRasterizer failed");
+        nsvgDelete(image);
+        return {};
+    }
+
+    std::vector<uint8_t> rgba(w * h * 4);
+    nsvgRasterize(rast, image, 0, 0, scale, rgba.data(), w, h, w * 4);
+
+    nsvgDeleteRasterizer(rast);
+    nsvgDelete(image);
+
+    brls::Logger::info("ImageLoader: SVG rasterized to {}x{} (scale={})", w, h, scale);
+    return createTGAFromRGBA(rgba.data(), w, h);
+}
+
+// Detect if data is SVG (text-based XML with <svg element)
+static bool isSVGData(const uint8_t* data, size_t size) {
+    if (size < 4) return false;
+
+    // Skip BOM if present
+    size_t offset = 0;
+    if (size >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) {
+        offset = 3;  // UTF-8 BOM
+    }
+
+    // Skip leading whitespace
+    while (offset < size && (data[offset] == ' ' || data[offset] == '\t' ||
+           data[offset] == '\r' || data[offset] == '\n')) {
+        offset++;
+    }
+
+    // Check for XML declaration or SVG tag
+    size_t remaining = size - offset;
+    if (remaining >= 5 && memcmp(data + offset, "<?xml", 5) == 0) return true;
+    if (remaining >= 4 && memcmp(data + offset, "<svg", 4) == 0) return true;
+    // Also check for SVG with namespace prefix
+    if (remaining >= 5 && memcmp(data + offset, "<SVG", 4) == 0) return true;
+
+    return false;
+}
+
+// Detect AVIF format (ISOBMFF container with 'avif'/'avis'/'mif1' brand)
+static bool isAVIFData(const uint8_t* data, size_t size) {
+    if (size < 12) return false;
+    // ISOBMFF: bytes 4-7 = 'ftyp', bytes 8-11 = brand
+    if (data[4] == 'f' && data[5] == 't' && data[6] == 'y' && data[7] == 'p') {
+        if (memcmp(data + 8, "avif", 4) == 0) return true;
+        if (memcmp(data + 8, "avis", 4) == 0) return true;
+        // mif1 can be either AVIF or HEIF - check compatible brands
+        if (memcmp(data + 8, "mif1", 4) == 0) {
+            // Read box size and scan compatible brands for 'avif'
+            uint32_t boxSize = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+            if (boxSize > size) boxSize = static_cast<uint32_t>(size);
+            for (uint32_t i = 16; i + 4 <= boxSize; i += 4) {
+                if (memcmp(data + i, "avif", 4) == 0) return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Detect HEIF/HEIC format (ISOBMFF container with 'heic'/'heix'/'hevc'/'heim' brand)
+static bool isHEIFData(const uint8_t* data, size_t size) {
+    if (size < 12) return false;
+    if (data[4] == 'f' && data[5] == 't' && data[6] == 'y' && data[7] == 'p') {
+        if (memcmp(data + 8, "heic", 4) == 0) return true;
+        if (memcmp(data + 8, "heix", 4) == 0) return true;
+        if (memcmp(data + 8, "hevc", 4) == 0) return true;
+        if (memcmp(data + 8, "heim", 4) == 0) return true;
+        if (memcmp(data + 8, "heis", 4) == 0) return true;
+        // mif1 without avif brand = likely HEIF
+        if (memcmp(data + 8, "mif1", 4) == 0) {
+            uint32_t boxSize = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+            if (boxSize > size) boxSize = static_cast<uint32_t>(size);
+            for (uint32_t i = 16; i + 4 <= boxSize; i += 4) {
+                if (memcmp(data + i, "heic", 4) == 0 || memcmp(data + i, "hevc", 4) == 0) return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Custom AVIOContext read callback for FFmpeg memory-based I/O
+struct FFmpegMemoryBuffer {
+    const uint8_t* data;
+    size_t size;
+    size_t pos;
+};
+
+static int ffmpegReadPacket(void* opaque, uint8_t* buf, int buf_size) {
+    FFmpegMemoryBuffer* mb = static_cast<FFmpegMemoryBuffer*>(opaque);
+    size_t remaining = mb->size - mb->pos;
+    if (remaining <= 0) return AVERROR_EOF;
+    size_t toRead = std::min(static_cast<size_t>(buf_size), remaining);
+    memcpy(buf, mb->data + mb->pos, toRead);
+    mb->pos += toRead;
+    return static_cast<int>(toRead);
+}
+
+static int64_t ffmpegSeek(void* opaque, int64_t offset, int whence) {
+    FFmpegMemoryBuffer* mb = static_cast<FFmpegMemoryBuffer*>(opaque);
+    switch (whence) {
+        case SEEK_SET:
+            mb->pos = static_cast<size_t>(offset);
+            break;
+        case SEEK_CUR:
+            mb->pos += static_cast<size_t>(offset);
+            break;
+        case SEEK_END:
+            mb->pos = mb->size + static_cast<size_t>(offset);
+            break;
+        case AVSEEK_SIZE:
+            return static_cast<int64_t>(mb->size);
+        default:
+            return -1;
+    }
+    if (mb->pos > mb->size) mb->pos = mb->size;
+    return static_cast<int64_t>(mb->pos);
+}
+
+// Decode AVIF or HEIF image using FFmpeg and convert to TGA
+// Works by creating a memory-based AVIOContext, using avformat to demux,
+// then avcodec to decode the single image frame, and swscale to convert to RGBA.
+static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* data, size_t dataSize, int maxSize, const char* formatName) {
+    std::vector<uint8_t> result;
+
+    // Allocate I/O buffer for AVIOContext
+    const int ioBufferSize = 32768;
+    uint8_t* ioBuffer = static_cast<uint8_t*>(av_malloc(ioBufferSize));
+    if (!ioBuffer) {
+        brls::Logger::error("ImageLoader: av_malloc failed for {} I/O buffer", formatName);
+        return result;
+    }
+
+    FFmpegMemoryBuffer memBuf = {data, dataSize, 0};
+
+    AVIOContext* avioCtx = avio_alloc_context(ioBuffer, ioBufferSize, 0, &memBuf,
+                                               ffmpegReadPacket, nullptr, ffmpegSeek);
+    if (!avioCtx) {
+        av_free(ioBuffer);
+        brls::Logger::error("ImageLoader: avio_alloc_context failed for {}", formatName);
+        return result;
+    }
+
+    AVFormatContext* fmtCtx = avformat_alloc_context();
+    if (!fmtCtx) {
+        avio_context_free(&avioCtx);
+        brls::Logger::error("ImageLoader: avformat_alloc_context failed for {}", formatName);
+        return result;
+    }
+    fmtCtx->pb = avioCtx;
+
+    // Open input from memory
+    int ret = avformat_open_input(&fmtCtx, nullptr, nullptr, nullptr);
+    if (ret < 0) {
+        char errbuf[128];
+        av_strerror(ret, errbuf, sizeof(errbuf));
+        brls::Logger::error("ImageLoader: avformat_open_input failed for {}: {}", formatName, errbuf);
+        avformat_close_input(&fmtCtx);
+        avio_context_free(&avioCtx);
+        return result;
+    }
+
+    ret = avformat_find_stream_info(fmtCtx, nullptr);
+    if (ret < 0) {
+        brls::Logger::error("ImageLoader: avformat_find_stream_info failed for {}", formatName);
+        avformat_close_input(&fmtCtx);
+        avio_context_free(&avioCtx);
+        return result;
+    }
+
+    // Find the video/image stream
+    int streamIdx = -1;
+    for (unsigned i = 0; i < fmtCtx->nb_streams; i++) {
+        if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            streamIdx = static_cast<int>(i);
+            break;
+        }
+    }
+    if (streamIdx < 0) {
+        brls::Logger::error("ImageLoader: No video stream found in {} data", formatName);
+        avformat_close_input(&fmtCtx);
+        avio_context_free(&avioCtx);
+        return result;
+    }
+
+    // Open codec
+    AVCodecParameters* codecPar = fmtCtx->streams[streamIdx]->codecpar;
+    const AVCodec* codec = avcodec_find_decoder(codecPar->codec_id);
+    if (!codec) {
+        brls::Logger::error("ImageLoader: No decoder found for {} (codec_id={})", formatName, static_cast<int>(codecPar->codec_id));
+        avformat_close_input(&fmtCtx);
+        avio_context_free(&avioCtx);
+        return result;
+    }
+
+    AVCodecContext* codecCtx = avcodec_alloc_context3(codec);
+    if (!codecCtx) {
+        brls::Logger::error("ImageLoader: avcodec_alloc_context3 failed for {}", formatName);
+        avformat_close_input(&fmtCtx);
+        avio_context_free(&avioCtx);
+        return result;
+    }
+
+    avcodec_parameters_to_context(codecCtx, codecPar);
+    ret = avcodec_open2(codecCtx, codec, nullptr);
+    if (ret < 0) {
+        brls::Logger::error("ImageLoader: avcodec_open2 failed for {}", formatName);
+        avcodec_free_context(&codecCtx);
+        avformat_close_input(&fmtCtx);
+        avio_context_free(&avioCtx);
+        return result;
+    }
+
+    // Read and decode one frame
+    AVPacket* pkt = av_packet_alloc();
+    AVFrame* frame = av_frame_alloc();
+    bool decoded = false;
+
+    while (av_read_frame(fmtCtx, pkt) >= 0 && !decoded) {
+        if (pkt->stream_index == streamIdx) {
+            ret = avcodec_send_packet(codecCtx, pkt);
+            if (ret >= 0) {
+                ret = avcodec_receive_frame(codecCtx, frame);
+                if (ret >= 0) {
+                    decoded = true;
+                }
+            }
+        }
+        av_packet_unref(pkt);
+    }
+
+    // Flush decoder if needed
+    if (!decoded) {
+        avcodec_send_packet(codecCtx, nullptr);
+        if (avcodec_receive_frame(codecCtx, frame) >= 0) {
+            decoded = true;
+        }
+    }
+
+    if (!decoded || frame->width <= 0 || frame->height <= 0) {
+        brls::Logger::error("ImageLoader: Failed to decode {} frame", formatName);
+        av_frame_free(&frame);
+        av_packet_free(&pkt);
+        avcodec_free_context(&codecCtx);
+        avformat_close_input(&fmtCtx);
+        avio_context_free(&avioCtx);
+        return result;
+    }
+
+    int srcW = frame->width;
+    int srcH = frame->height;
+    int dstW = srcW;
+    int dstH = srcH;
+
+    // Downscale if needed
+    if (maxSize > 0 && (srcW > maxSize || srcH > maxSize)) {
+        float scale = static_cast<float>(maxSize) / std::max(srcW, srcH);
+        dstW = std::max(1, static_cast<int>(srcW * scale));
+        dstH = std::max(1, static_cast<int>(srcH * scale));
+    }
+
+    // Convert to RGBA using swscale
+    SwsContext* swsCtx = sws_getContext(srcW, srcH, static_cast<AVPixelFormat>(frame->format),
+                                         dstW, dstH, AV_PIX_FMT_RGBA,
+                                         SWS_BILINEAR, nullptr, nullptr, nullptr);
+    if (!swsCtx) {
+        brls::Logger::error("ImageLoader: sws_getContext failed for {}", formatName);
+        av_frame_free(&frame);
+        av_packet_free(&pkt);
+        avcodec_free_context(&codecCtx);
+        avformat_close_input(&fmtCtx);
+        avio_context_free(&avioCtx);
+        return result;
+    }
+
+    std::vector<uint8_t> rgba(dstW * dstH * 4);
+    uint8_t* dstSlice[1] = {rgba.data()};
+    int dstStride[1] = {dstW * 4};
+
+    sws_scale(swsCtx, frame->data, frame->linesize, 0, srcH, dstSlice, dstStride);
+
+    sws_freeContext(swsCtx);
+    av_frame_free(&frame);
+    av_packet_free(&pkt);
+    avcodec_free_context(&codecCtx);
+    avformat_close_input(&fmtCtx);
+    avio_context_free(&avioCtx);
+
+    brls::Logger::info("ImageLoader: {} decoded {}x{} -> {}x{}", formatName, srcW, srcH, dstW, dstH);
+    return createTGAFromRGBA(rgba.data(), dstW, dstH);
+}
+
 void ImageLoader::setAuthCredentials(const std::string& username, const std::string& password) {
     std::lock_guard<std::mutex> lock(s_authMutex);
     s_authUsername = username;
@@ -842,9 +1187,15 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
 
     // Check image format
     bool isWebP = false;
+    bool isSVG = false;
+    bool isAVIF = false;
+    bool isHEIF = false;
     bool isKnownFormat = false;
 
-    if (resp.body.size() > 12) {
+    const uint8_t* bodyData = reinterpret_cast<const uint8_t*>(resp.body.data());
+    size_t bodySize = resp.body.size();
+
+    if (bodySize > 12) {
         unsigned char* data = reinterpret_cast<unsigned char*>(resp.body.data());
 
         if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) {
@@ -864,16 +1215,30 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             isWebP = true;
             isKnownFormat = true;
         }
+        else if (isAVIFData(bodyData, bodySize)) {
+            isAVIF = true;
+            isKnownFormat = true;
+            brls::Logger::info("ImageLoader: Detected AVIF format for {}", url);
+        }
+        else if (isHEIFData(bodyData, bodySize)) {
+            isHEIF = true;
+            isKnownFormat = true;
+            brls::Logger::info("ImageLoader: Detected HEIF/HEIC format for {}", url);
+        }
+    }
+
+    // Check for SVG (text-based, needs different detection)
+    if (!isKnownFormat && isSVGData(bodyData, bodySize)) {
+        isSVG = true;
+        isKnownFormat = true;
+        brls::Logger::info("ImageLoader: Detected SVG format for {}", url);
     }
 
     // For unrecognized formats (.bin, etc.), try stb_image as fallback
     // stb_image can auto-detect JPEG, PNG, BMP, GIF, TGA, PSD, PIC
-    if (!isKnownFormat && !isWebP && resp.body.size() > 4) {
+    if (!isKnownFormat && bodySize > 4) {
         int testW, testH, testC;
-        if (stbi_info_from_memory(
-                reinterpret_cast<const unsigned char*>(resp.body.data()),
-                static_cast<int>(resp.body.size()),
-                &testW, &testH, &testC)) {
+        if (stbi_info_from_memory(bodyData, static_cast<int>(bodySize), &testW, &testH, &testC)) {
             isKnownFormat = true;
             brls::Logger::info("ImageLoader: stb_image detected unknown format image {}x{} for {}",
                               testW, testH, url);
@@ -887,23 +1252,33 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
 
     // Convert and downscale all image formats for thumbnails
     std::vector<uint8_t> imageData;
-    if (isWebP) {
-        imageData = convertWebPtoTGA(
-            reinterpret_cast<const uint8_t*>(resp.body.data()),
-            resp.body.size(),
-            s_maxThumbnailSize
-        );
+    if (isSVG) {
+        imageData = convertSVGtoTGA(bodyData, bodySize, s_maxThumbnailSize);
+        if (imageData.empty()) {
+            brls::Logger::error("ImageLoader: SVG conversion failed for {}", url);
+            return;
+        }
+    } else if (isAVIF) {
+        imageData = convertFFmpegImageToTGA(bodyData, bodySize, s_maxThumbnailSize, "AVIF");
+        if (imageData.empty()) {
+            brls::Logger::error("ImageLoader: AVIF conversion failed for {}", url);
+            return;
+        }
+    } else if (isHEIF) {
+        imageData = convertFFmpegImageToTGA(bodyData, bodySize, s_maxThumbnailSize, "HEIF");
+        if (imageData.empty()) {
+            brls::Logger::error("ImageLoader: HEIF conversion failed for {}", url);
+            return;
+        }
+    } else if (isWebP) {
+        imageData = convertWebPtoTGA(bodyData, bodySize, s_maxThumbnailSize);
         if (imageData.empty()) {
             return;
         }
     } else {
         // Downscale JPEG/PNG thumbnails too (not just WebP)
         // This reduces memory usage and makes cache more effective
-        imageData = convertImageToTGA(
-            reinterpret_cast<const uint8_t*>(resp.body.data()),
-            resp.body.size(),
-            s_maxThumbnailSize
-        );
+        imageData = convertImageToTGA(bodyData, bodySize, s_maxThumbnailSize);
         if (imageData.empty()) {
             // Image decode failed - skip this image entirely.
             // Do NOT fall back to raw data: it wastes memory (no downscaling),
@@ -1122,9 +1497,15 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         bool isWebP = false;
         bool isJpegOrPng = false;
         bool isTGA = false;
+        bool isSVG = false;
+        bool isAVIF = false;
+        bool isHEIF = false;
         bool isValidImage = false;
 
-        if (imageBody.size() > 18) {
+        const uint8_t* imgData = reinterpret_cast<const uint8_t*>(imageBody.data());
+        size_t imgSize = imageBody.size();
+
+        if (imgSize > 18) {
             unsigned char* data = reinterpret_cast<unsigned char*>(imageBody.data());
 
             // TGA (uncompressed true-color, 32-bit BGRA) - pass through directly to
@@ -1134,14 +1515,14 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 int tgaW = data[12] | (data[13] << 8);
                 int tgaH = data[14] | (data[15] << 8);
                 size_t expectedSize = 18 + static_cast<size_t>(tgaW) * tgaH * 4;
-                if (tgaW > 0 && tgaH > 0 && imageBody.size() >= expectedSize) {
+                if (tgaW > 0 && tgaH > 0 && imgSize >= expectedSize) {
                     isTGA = true;
                     isValidImage = true;
                 }
             }
         }
 
-        if (!isValidImage && imageBody.size() > 12) {
+        if (!isValidImage && imgSize > 12) {
             unsigned char* data = reinterpret_cast<unsigned char*>(imageBody.data());
 
             // JPEG
@@ -1169,15 +1550,31 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 isWebP = true;
                 isValidImage = true;
             }
+            // AVIF (ISOBMFF with avif/avis/mif1 brand)
+            else if (isAVIFData(imgData, imgSize)) {
+                isAVIF = true;
+                isValidImage = true;
+                brls::Logger::info("ImageLoader: Detected AVIF format for {}", url);
+            }
+            // HEIF/HEIC (ISOBMFF with heic/heix/hevc brand)
+            else if (isHEIFData(imgData, imgSize)) {
+                isHEIF = true;
+                isValidImage = true;
+                brls::Logger::info("ImageLoader: Detected HEIF/HEIC format for {}", url);
+            }
+        }
+
+        // Check for SVG (text-based format)
+        if (!isValidImage && isSVGData(imgData, imgSize)) {
+            isSVG = true;
+            isValidImage = true;
+            brls::Logger::info("ImageLoader: Detected SVG format for {}", url);
         }
 
         // Fallback: try stb_image for unrecognized formats (.bin, etc.)
-        if (!isValidImage && imageBody.size() > 4) {
+        if (!isValidImage && imgSize > 4) {
             int testW, testH, testC;
-            if (stbi_info_from_memory(
-                    reinterpret_cast<const unsigned char*>(imageBody.data()),
-                    static_cast<int>(imageBody.size()),
-                    &testW, &testH, &testC)) {
+            if (stbi_info_from_memory(imgData, static_cast<int>(imgSize), &testW, &testH, &testC)) {
                 isJpegOrPng = true;  // stb_image can handle it
                 isValidImage = true;
                 brls::Logger::info("ImageLoader: stb_image detected unknown format {}x{} for {}", testW, testH, url);
@@ -1214,6 +1611,45 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
 
         // Convert images to TGA with size limit for Vita GPU (max texture 2048x2048)
         const int MAX_TEXTURE_SIZE = 2048;
+
+        // SVG, AVIF, and HEIF are decoded to TGA directly (no auto-split support yet)
+        // They go through convertSVGtoTGA / convertFFmpegImageToTGA which handle sizing
+        if (isSVG) {
+            std::vector<uint8_t> imageData = convertSVGtoTGA(imgData, imgSize, MAX_TEXTURE_SIZE);
+            if (imageData.empty()) {
+                brls::Logger::error("ImageLoader: SVG conversion failed for {}", url);
+                return;
+            }
+            std::string cacheKey = url + "_full";
+            cachePut(cacheKey, imageData);
+            auto decodeEndTime = std::chrono::steady_clock::now();
+            auto decodeMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeEndTime - decodeStartTime).count();
+            auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeEndTime - loadStartTime).count();
+            brls::Logger::info("ImageLoader: [TIMING] SVG decode took {}ms, total {}ms for {}", decodeMs, totalMs, url);
+            if (target || callback) {
+                queueRotatableTextureUpdate(imageData, target, callback, alive);
+            }
+            return;
+        }
+
+        if (isAVIF || isHEIF) {
+            const char* fmtName = isAVIF ? "AVIF" : "HEIF";
+            std::vector<uint8_t> imageData = convertFFmpegImageToTGA(imgData, imgSize, MAX_TEXTURE_SIZE, fmtName);
+            if (imageData.empty()) {
+                brls::Logger::error("ImageLoader: {} conversion failed for {}", fmtName, url);
+                return;
+            }
+            std::string cacheKey = url + "_full";
+            cachePut(cacheKey, imageData);
+            auto decodeEndTime = std::chrono::steady_clock::now();
+            auto decodeMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeEndTime - decodeStartTime).count();
+            auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(decodeEndTime - loadStartTime).count();
+            brls::Logger::info("ImageLoader: [TIMING] {} decode took {}ms, total {}ms for {}", fmtName, decodeMs, totalMs, url);
+            if (target || callback) {
+                queueRotatableTextureUpdate(imageData, target, callback, alive);
+            }
+            return;
+        }
 
         // Auto-split tall images to preserve width quality.
         // Without splitting, an 800x15000 image gets scaled to 109x2048 (proportional),
@@ -1656,6 +2092,43 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
             } else {
                 uint16_t len = (data[i + 2] << 8) | data[i + 3];
                 i += 2 + len;
+            }
+        }
+    }
+
+    // SVG - parse with nanosvg to get dimensions
+    if (isSVGData(data, imageData.size())) {
+        std::string svgCopy(imageData);
+        NSVGimage* svgImg = nsvgParse(&svgCopy[0], "px", 96.0f);
+        if (svgImg && svgImg->width > 0 && svgImg->height > 0) {
+            width = static_cast<int>(svgImg->width);
+            height = static_cast<int>(svgImg->height);
+            suggestedSegments = 1;  // SVG is rasterized at target size, no splitting needed
+            brls::Logger::info("ImageLoader: SVG {}x{}", width, height);
+            nsvgDelete(svgImg);
+            return true;
+        }
+        if (svgImg) nsvgDelete(svgImg);
+    }
+
+    // AVIF/HEIF - use stb_image fallback for dimension check, or try FFmpeg probing
+    if (isAVIFData(data, imageData.size()) || isHEIFData(data, imageData.size())) {
+        // For AVIF/HEIF, dimensions are embedded in the ISOBMFF container.
+        // Use a lightweight approach: parse ispe box for dimensions.
+        // The 'ispe' (image spatial extents) box contains width and height as uint32.
+        for (size_t i = 0; i + 12 < imageData.size(); i++) {
+            if (data[i] == 'i' && data[i+1] == 's' && data[i+2] == 'p' && data[i+3] == 'e') {
+                // ispe box: 4 bytes version/flags, then 4 bytes width, 4 bytes height
+                if (i + 4 + 4 + 4 + 4 <= imageData.size()) {
+                    size_t off = i + 4 + 4;  // skip box type + version/flags
+                    width = (data[off] << 24) | (data[off+1] << 16) | (data[off+2] << 8) | data[off+3];
+                    height = (data[off+4] << 24) | (data[off+5] << 16) | (data[off+6] << 8) | data[off+7];
+                    if (width > 0 && height > 0) {
+                        suggestedSegments = calculateSegments(width, height, MAX_TEXTURE_SIZE);
+                        brls::Logger::info("ImageLoader: AVIF/HEIF {}x{} -> {} segments", width, height, suggestedSegments);
+                        return true;
+                    }
+                }
             }
         }
     }
