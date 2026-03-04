@@ -87,6 +87,10 @@ MangaItemCell::MangaItemCell() {
     m_titleOverlay->setPositionBottom(0);
     m_titleOverlay->setPositionLeft(0);
     m_titleOverlay->setPositionRight(0);  // Stretch to fill width
+    m_titleOverlay->setClipsToBounds(true);
+    // Limit overlay height so titles don't cover the entire cover.
+    // 2 lines of title (fontSize 11, ~14px line height) + 1 line subtitle (~12px) + padding (10px)
+    m_titleOverlay->setMaxHeight(50);
 
     // Title label - at bottom of card, wraps to 2 lines for longer titles
     m_titleLabel = new brls::Label();
@@ -488,6 +492,16 @@ void MangaItemCell::setGridColumns(int columns) {
             subFontSize = 8;
         }
         m_subtitleLabel->setFontSize(subFontSize);
+    }
+    // Adjust overlay max height for font size so title stays at most 2 lines
+    if (m_titleOverlay) {
+        if (columns <= 4) {
+            m_titleOverlay->setMaxHeight(66);  // 2 lines @ 14px font + subtitle @ 11px + padding
+        } else if (columns <= 6) {
+            m_titleOverlay->setMaxHeight(50);  // 2 lines @ 11px font + subtitle @ 9px + padding
+        } else {
+            m_titleOverlay->setMaxHeight(42);  // 2 lines @ 9px font + subtitle @ 8px + padding
+        }
     }
 }
 

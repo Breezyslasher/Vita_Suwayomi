@@ -988,9 +988,9 @@ void SearchTab::onSourceSelected(const Source& source) {
 void SearchTab::onMangaSelected(const Manga& manga) {
     brls::Logger::debug("SearchTab: Selected manga '{}' id={}", manga.title, manga.id);
 
-    // Push manga detail view
+    // Push manga detail view with slide-left transition
     auto* detailView = new MangaDetailView(manga);
-    brls::Application::pushActivity(new brls::Activity(detailView));
+    brls::Application::pushActivity(new brls::Activity(detailView), brls::TransitionAnimation::SLIDE_LEFT);
 }
 
 void SearchTab::populateSearchResultsBySource() {
