@@ -132,6 +132,9 @@ private:
     brls::Button* m_sortBtn = nullptr;
     brls::Image* m_sortIcon = nullptr;
 
+    // Pull-to-refresh indicator (shown during swipe-down gesture on category tabs)
+    brls::Label* m_pullIndicatorLabel = nullptr;
+
     // Main content grid
     RecyclingGrid* m_contentGrid = nullptr;
 

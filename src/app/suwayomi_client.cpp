@@ -3833,6 +3833,59 @@ bool SuwayomiClient::triggerLibraryUpdate(int categoryId) {
     return response.success && response.statusCode == 200;
 }
 
+bool SuwayomiClient::triggerLibraryUpdate(const std::vector<int>& categoryIds) {
+    if (categoryIds.empty()) {
+        return triggerLibraryUpdate();
+    }
+
+    // Single category: delegate to existing overload
+    if (categoryIds.size() == 1) {
+        return triggerLibraryUpdate(categoryIds[0]);
+    }
+
+    // Multiple categories: use GraphQL mutation with array
+    std::string idList = "[";
+    for (size_t i = 0; i < categoryIds.size(); i++) {
+        if (i > 0) idList += ",";
+        idList += std::to_string(categoryIds[i]);
+    }
+    idList += "]";
+
+    const char* query = R"(
+        mutation UpdateCategoryManga($categories: [Int!]!) {
+            updateCategoryManga(input: { categories: $categories }) {
+                updateStatus {
+                    isRunning
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"categories\":" + idList + "}";
+    std::string response = executeGraphQL(query, variables);
+
+    if (!response.empty()) {
+        brls::Logger::info("GraphQL: Successfully triggered update for {} categories", categoryIds.size());
+        return true;
+    }
+
+    // REST fallback: trigger each category individually
+    brls::Logger::info("GraphQL failed for multi-category update, falling back to REST...");
+    bool anySuccess = false;
+    vitasuwayomi::HttpClient http = createHttpClient();
+    http.setDefaultHeader("Content-Type", "application/json");
+    std::string url = buildApiUrl("/update/fetch");
+
+    for (int catId : categoryIds) {
+        std::string body = "{\"categoryId\":" + std::to_string(catId) + "}";
+        vitasuwayomi::HttpResponse resp = http.post(url, body);
+        if (resp.success && resp.statusCode == 200) {
+            anySuccess = true;
+        }
+    }
+    return anySuccess;
+}
+
 bool SuwayomiClient::fetchRecentUpdates(int page, std::vector<RecentUpdate>& updates) {
     vitasuwayomi::HttpClient http = createHttpClient();
 
