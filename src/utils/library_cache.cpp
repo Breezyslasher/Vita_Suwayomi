@@ -112,7 +112,7 @@ bool LibraryCache::ensureDirectoryExists(const std::string& path) {
 
 std::string LibraryCache::serializeManga(const Manga& manga) {
     std::ostringstream ss;
-    // Format: id|title|author|artist|description|thumbnailUrl|status|inLibrary|chapterCount|unreadCount|downloadCount|sourceName|inLibraryAt|lastReadAt|latestChapterUploadDate
+    // Format: id|title|author|artist|description|thumbnailUrl|status|inLibrary|chapterCount|unreadCount|downloadCount|sourceName|inLibraryAt|lastReadAt|latestChapterUploadDate|categoryIds
     ss << manga.id << "|"
        << manga.title << "|"
        << manga.author << "|"
@@ -127,7 +127,12 @@ std::string LibraryCache::serializeManga(const Manga& manga) {
        << manga.sourceName << "|"
        << manga.inLibraryAt << "|"
        << manga.lastReadAt << "|"
-       << manga.latestChapterUploadDate;
+       << manga.latestChapterUploadDate << "|";
+    // Serialize categoryIds as comma-separated list (e.g. "1,3,5")
+    for (size_t i = 0; i < manga.categoryIds.size(); i++) {
+        if (i > 0) ss << ",";
+        ss << manga.categoryIds[i];
+    }
     return ss.str();
 }
 
@@ -160,6 +165,16 @@ bool LibraryCache::deserializeManga(const std::string& line, Manga& manga) {
         if (parts.size() > 12) manga.inLibraryAt = std::stoll(parts[12]);
         if (parts.size() > 13) manga.lastReadAt = std::stoll(parts[13]);
         if (parts.size() > 14) manga.latestChapterUploadDate = std::stoll(parts[14]);
+        // categoryIds added for cross-mode offline caching; old caches have only 15 fields
+        if (parts.size() > 15 && !parts[15].empty()) {
+            std::istringstream catSs(parts[15]);
+            std::string catToken;
+            while (std::getline(catSs, catToken, ',')) {
+                if (!catToken.empty()) {
+                    manga.categoryIds.push_back(std::stoi(catToken));
+                }
+            }
+        }
         return true;
     } catch (...) {
         return false;

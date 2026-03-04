@@ -2734,6 +2734,18 @@ void MangaDetailView::showCategoryDialog() {
             }
 
             int mangaId = m_manga.id;
+
+            // Find current category index so we don't falsely pre-select the first one
+            int currentIdx = -1;
+            if (!m_manga.categoryIds.empty()) {
+                for (int i = 0; i < static_cast<int>(categories.size()); i++) {
+                    if (categories[i].id == m_manga.categoryIds[0]) {
+                        currentIdx = i;
+                        break;
+                    }
+                }
+            }
+
             brls::Dropdown* dropdown = new brls::Dropdown(
                 "Move to Category", options,
                 [this, mangaId, aliveWeak](int selected) {
@@ -2756,7 +2768,7 @@ void MangaDetailView::showCategoryDialog() {
                             }
                         });
                     });
-                }, 0);
+                }, currentIdx);
             brls::Application::pushActivity(new brls::Activity(dropdown));
         });
     });

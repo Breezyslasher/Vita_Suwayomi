@@ -18,6 +18,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <map>
 #include <mutex>
 #include <set>
 #include <thread>
@@ -210,8 +211,10 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
     // Hide entire container (button + hint icon) at construction if already offline
+    // Also disable focusability to prevent hover/focus transfer to hidden button
     if (!Application::getInstance().isConnected()) {
         m_updateContainer->setVisibility(brls::Visibility::GONE);
+        m_updateBtn->setFocusable(false);
     }
     m_updateContainer->addView(m_updateBtn);
     buttonBox->addView(m_updateContainer);
@@ -414,6 +417,13 @@ LibrarySectionTab::LibrarySectionTab() {
         return true;
     });
 
+    // Disable server-only actions at construction if already offline
+    // This prevents hover transfer errors to hidden Start/Back button hints
+    if (!Application::getInstance().isConnected()) {
+        this->setActionAvailable(brls::ControllerButton::BUTTON_START, false);
+        this->setActionAvailable(brls::ControllerButton::BUTTON_BACK, false);
+    }
+
     // Load categories first, then create tabs
     loadCategories();
 }
@@ -474,10 +484,19 @@ void LibrarySectionTab::onFocusGained() {
     }
 
     // Show/hide update button + hint icon based on connectivity
+    bool connected = Application::getInstance().isConnected();
     if (m_updateContainer) {
-        m_updateContainer->setVisibility(Application::getInstance().isConnected()
+        m_updateContainer->setVisibility(connected
             ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
+    // Toggle focusability to prevent hover/focus transfer to hidden update button
+    if (m_updateBtn) {
+        m_updateBtn->setFocusable(connected);
+    }
+
+    // Disable server-only actions when offline to prevent hover transfer to hidden hints
+    this->setActionAvailable(brls::ControllerButton::BUTTON_START, connected);
+    this->setActionAvailable(brls::ControllerButton::BUTTON_BACK, connected);
 
     // Check if group mode was changed externally (e.g. from settings tab)
     LibraryGroupMode savedMode = Application::getInstance().getSettings().libraryGroupMode;
@@ -684,10 +703,31 @@ void LibrarySectionTab::loadCategories() {
         brls::Logger::info("LibrarySectionTab: Offline, using cached categories only");
         m_combinedQueryCategoryId = -1;
         if (!m_categoriesLoaded) {
-            // No cache either - create empty tabs
             m_categoriesLoaded = true;
-            createCategoryTabs();
-            selectCategory(0);
+            // No categories cache (e.g. was in BY_SOURCE mode online and categories
+            // were never fetched). Fall back to all-library cache so the user can
+            // still see their manga under a single "Library" tab.
+            brls::Logger::info("LibrarySectionTab: No cached categories, falling back to all-library cache");
+            if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+            if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::GONE);
+            if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::GONE);
+            this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
+            this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
+            if (m_titleLabel) m_titleLabel->setText("Library");
+
+            bool fallbackCacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+            if (fallbackCacheEnabled) {
+                LibraryCache& fallbackCache = LibraryCache::getInstance();
+                std::vector<Manga> allCached;
+                if (fallbackCache.loadAllLibraryManga(allCached)) {
+                    brls::Logger::info("LibrarySectionTab: Loaded {} manga from all-library cache (category fallback)",
+                                      allCached.size());
+                    m_fullMangaList = allCached;
+                    m_mangaList = allCached;
+                    sortMangaList();
+                    m_loaded = true;
+                }
+            }
         }
         return;
     }
@@ -775,6 +815,30 @@ void LibrarySectionTab::loadCategories() {
             LibraryCache::getInstance().saveCategories(categories);
             if (usedCombinedQuery && !prefetchedManga.empty()) {
                 LibraryCache::getInstance().saveCategoryManga(resolvedCategoryId, prefetchedManga);
+            }
+
+            // Cross-cache: fetch all library manga and save as all-library cache
+            // so BY_SOURCE and NO_GROUPING modes work offline even if the user
+            // was in BY_CATEGORY mode when online.
+            std::vector<Manga> allManga;
+            SuwayomiClient& allClient = SuwayomiClient::getInstance();
+            if (allClient.fetchLibraryManga(allManga)) {
+                LibraryCache::getInstance().saveAllLibraryManga(allManga);
+
+                // Also build per-category caches for all categories at once
+                std::map<int, std::vector<Manga>> byCategory;
+                for (const auto& manga : allManga) {
+                    if (manga.categoryIds.empty()) {
+                        byCategory[0].push_back(manga);
+                    } else {
+                        for (int catId : manga.categoryIds) {
+                            byCategory[catId].push_back(manga);
+                        }
+                    }
+                }
+                for (const auto& pair : byCategory) {
+                    LibraryCache::getInstance().saveCategoryManga(pair.first, pair.second);
+                }
             }
         }
 
@@ -2157,66 +2221,175 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         return;
     }
 
-    std::vector<std::string> catNames;
-    for (const auto& cat : m_categories) {
-        catNames.push_back(cat.name);
+    // Build set of category IDs that any selected manga belongs to
+    std::set<int> checkedCatIds;
+    for (const auto& manga : mangaList) {
+        for (int catId : manga.categoryIds) {
+            checkedCatIds.insert(catId);
+        }
     }
 
+    // Shared state for toggling checkmarks
+    auto selectedCats = std::make_shared<std::set<int>>(checkedCatIds);
+    auto checkLabels = std::make_shared<std::vector<brls::Label*>>();
+
+    // Create dialog box (matching other dialog designs)
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(550);
+    dialogBox->setHeight(450);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setCornerRadius(12);
+
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Set Categories");
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(10);
+    dialogBox->addView(titleLabel);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Tap to toggle categories");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setMarginBottom(15);
+    dialogBox->addView(infoLabel);
+
+    // Create buttons early so they can be captured in lambdas
     std::vector<Manga> capturedList = mangaList;
 
-    auto* dropdown = new brls::Dropdown(
-        "Move to Category",
-        catNames,
-        [this, capturedList](int selected) {
-            if (selected < 0 || selected >= (int)m_categories.size()) return;
-            // Defer to next frame so dropdown fully closes first
-            brls::sync([this, capturedList, selected]() {
-            int destCategoryId = m_categories[selected].id;
-            std::string catName = m_categories[selected].name;
-            int srcCategoryId = m_currentCategoryId;
+    auto* saveBtn = new brls::Button();
+    saveBtn->setText("Save");
+    saveBtn->setMarginTop(15);
+    saveBtn->setMarginRight(10);
 
-            // If moving to the same category, do nothing
-            if (destCategoryId == srcCategoryId) {
-                brls::Application::notify("Already in " + catName);
-                if (m_selectionMode) exitSelectionMode();
-                return;
+    auto* cancelBtn = new brls::Button();
+    cancelBtn->setText("Cancel");
+    cancelBtn->setMarginTop(15);
+
+    // Scrollable category list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
+
+    auto* catList = new brls::Box();
+    catList->setAxis(brls::Axis::COLUMN);
+
+    for (size_t i = 0; i < m_categories.size(); i++) {
+        const auto& cat = m_categories[i];
+        int catId = cat.id;
+
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setFocusable(true);
+        row->setPadding(10, 12, 10, 12);
+        row->setMarginBottom(6);
+        row->setCornerRadius(8);
+        row->setAlignItems(brls::AlignItems::CENTER);
+
+        bool isChecked = selectedCats->count(catId) > 0;
+        row->setBackgroundColor(isChecked ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+
+        // Checkmark label
+        auto* checkLabel = new brls::Label();
+        checkLabel->setFontSize(16);
+        checkLabel->setWidth(24);
+        checkLabel->setMarginRight(8);
+        if (isChecked) {
+            checkLabel->setText("\u2713");
+            checkLabel->setTextColor(nvgRGBA(0, 200, 150, 255));
+        } else {
+            checkLabel->setText("");
+        }
+        row->addView(checkLabel);
+        checkLabels->push_back(checkLabel);
+
+        // Category name
+        auto* nameLabel = new brls::Label();
+        nameLabel->setText(cat.name);
+        nameLabel->setFontSize(16);
+        nameLabel->setGrow(1.0f);
+        row->addView(nameLabel);
+
+        // Toggle on click
+        row->registerClickAction([catId, selectedCats, checkLabels, i, row](brls::View*) {
+            if (selectedCats->count(catId)) {
+                selectedCats->erase(catId);
+                (*checkLabels)[i]->setText("");
+                row->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
+            } else {
+                selectedCats->insert(catId);
+                (*checkLabels)[i]->setText("\u2713");
+                (*checkLabels)[i]->setTextColor(nvgRGBA(0, 200, 150, 255));
+                row->setBackgroundColor(nvgRGBA(0, 100, 80, 200));
+            }
+            return true;
+        });
+        row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
+
+        // Register B button on each row to cancel
+        row->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+            brls::Application::popActivity();
+            return true;
+        }, true);
+
+        catList->addView(row);
+    }
+
+    scrollView->setContentView(catList);
+    dialogBox->addView(scrollView);
+
+    // Button row
+    auto* buttonRow = new brls::Box();
+    buttonRow->setAxis(brls::Axis::ROW);
+    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
+    buttonRow->setMarginTop(15);
+
+    // Save button action
+    saveBtn->registerClickAction([this, capturedList, selectedCats](brls::View*) {
+        std::vector<int> newCatIds(selectedCats->begin(), selectedCats->end());
+
+        if (newCatIds.empty()) {
+            brls::Application::notify("Select at least one category");
+            return true;
+        }
+
+        brls::Application::popActivity();
+
+        std::weak_ptr<bool> aliveWeak = m_alive;
+        std::vector<Manga> asyncList = capturedList;
+        bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+        int srcCategoryId = m_currentCategoryId;
+        bool removedFromCurrent = selectedCats->count(srcCategoryId) == 0;
+
+        brls::Application::notify("Updating categories...");
+
+        asyncRun([this, asyncList, newCatIds, srcCategoryId, removedFromCurrent, aliveWeak, cacheEnabled]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            int successCount = 0;
+            std::vector<int> changedMangaIds;
+            for (const auto& manga : asyncList) {
+                if (client.setMangaCategories(manga.id, newCatIds)) {
+                    successCount++;
+                    changedMangaIds.push_back(manga.id);
+                }
             }
 
-            std::weak_ptr<bool> aliveWeak = m_alive;
-            std::vector<Manga> asyncList = capturedList;
-            bool cacheEnabled = Application::getInstance().getSettings().cacheLibraryData;
+            brls::sync([this, successCount, changedMangaIds, newCatIds, srcCategoryId, removedFromCurrent, aliveWeak, cacheEnabled]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
 
-            brls::Application::notify("Moving to " + catName + "...");
+                brls::Application::notify("Updated " + std::to_string(successCount) + " manga");
 
-            asyncRun([this, asyncList, destCategoryId, srcCategoryId, catName, aliveWeak, cacheEnabled]() {
-                SuwayomiClient& client = SuwayomiClient::getInstance();
-                int successCount = 0;
-                std::vector<int> movedMangaIds;
-                for (const auto& manga : asyncList) {
-                    std::vector<int> catIds = {destCategoryId};
-                    if (client.setMangaCategories(manga.id, catIds)) {
-                        successCount++;
-                        movedMangaIds.push_back(manga.id);
-                    }
-                }
+                if (changedMangaIds.empty()) return;
 
-                brls::sync([this, successCount, movedMangaIds, catName, srcCategoryId, destCategoryId, aliveWeak, cacheEnabled]() {
-                    auto alive = aliveWeak.lock();
-                    if (!alive || !*alive) return;
+                if (removedFromCurrent) {
+                    std::set<int> idsToRemove(changedMangaIds.begin(), changedMangaIds.end());
 
-                    brls::Application::notify("Moved " + std::to_string(successCount) +
-                                              " manga to " + catName);
-
-                    if (movedMangaIds.empty()) return;
-
-                    // Remove moved manga from current display without full refresh
-                    std::set<int> idsToRemove(movedMangaIds.begin(), movedMangaIds.end());
-
-                    // Get focus info before removal
                     int focusedIdx = m_contentGrid ? m_contentGrid->getFocusedIndex() : -1;
                     bool hadCellFocus = m_contentGrid && m_contentGrid->hasCellFocus();
 
-                    // Remove from working lists
                     m_mangaList.erase(
                         std::remove_if(m_mangaList.begin(), m_mangaList.end(),
                             [&idsToRemove](const Manga& m) { return idsToRemove.count(m.id) > 0; }),
@@ -2226,18 +2399,14 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
                             [&idsToRemove](const Manga& m) { return idsToRemove.count(m.id) > 0; }),
                         m_fullMangaList.end());
 
-                    // Update grid with removed items
                     if (m_contentGrid) {
-                        m_contentGrid->removeItems(movedMangaIds);
+                        m_contentGrid->removeItems(changedMangaIds);
                     }
 
-                    // Update cache for source category
                     if (cacheEnabled) {
                         LibraryCache::getInstance().saveCategoryManga(srcCategoryId, m_fullMangaList);
-                        LibraryCache::getInstance().invalidateCategoryCache(destCategoryId);
                     }
 
-                    // Update cached manga list
                     m_cachedMangaList.clear();
                     for (const auto& m : m_fullMangaList) {
                         CachedMangaItem cached;
@@ -2249,10 +2418,8 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
                         m_cachedMangaList.push_back(cached);
                     }
 
-                    // Handle focus transfer after removal
                     if (hadCellFocus && m_contentGrid) {
                         if (m_mangaList.empty()) {
-                            // Grid is now empty, focus category or sort button
                             if (m_selectedCategoryIndex >= 0 &&
                                 m_selectedCategoryIndex < static_cast<int>(m_categoryButtons.size())) {
                                 brls::Application::giveFocus(m_categoryButtons[m_selectedCategoryIndex]);
@@ -2260,21 +2427,77 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
                                 brls::Application::giveFocus(m_sortBtn);
                             }
                         } else {
-                            // Focus the item at the same position or the last item
                             int newIdx = std::min(focusedIdx, static_cast<int>(m_mangaList.size()) - 1);
                             if (newIdx >= 0) {
                                 m_contentGrid->focusIndex(newIdx);
                             }
                         }
                     }
-                });
-            });
+                } else {
+                    std::set<int> changedSet(changedMangaIds.begin(), changedMangaIds.end());
+                    for (auto& m : m_mangaList) {
+                        if (changedSet.count(m.id)) m.categoryIds = newCatIds;
+                    }
+                    for (auto& m : m_fullMangaList) {
+                        if (changedSet.count(m.id)) m.categoryIds = newCatIds;
+                    }
+                }
 
-            if (m_selectionMode) exitSelectionMode();
+                if (cacheEnabled) {
+                    for (int catId : newCatIds) {
+                        LibraryCache::getInstance().invalidateCategoryCache(catId);
+                    }
+                }
             });
-        }
-    );
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+        });
+
+        if (m_selectionMode) exitSelectionMode();
+        return true;
+    });
+    saveBtn->addGestureRecognizer(new brls::TapGestureRecognizer(saveBtn));
+
+    // Register B button on save button
+    saveBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    // Cancel button action
+    cancelBtn->registerClickAction([](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    });
+    cancelBtn->addGestureRecognizer(new brls::TapGestureRecognizer(cancelBtn));
+
+    // Register B button on cancel button
+    cancelBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    buttonRow->addView(saveBtn);
+    buttonRow->addView(cancelBtn);
+    dialogBox->addView(buttonRow);
+
+    // Register B button on dialog box
+    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    // Set up navigation
+    auto& catChildren = catList->getChildren();
+    if (!catChildren.empty()) {
+        catChildren.front()->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.front());
+        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, saveBtn);
+        saveBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+        cancelBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+    }
+    saveBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, saveBtn);
+    cancelBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, cancelBtn);
+
+    // Push as new activity
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
 
 void LibrarySectionTab::showMigrateSourceMenu(const Manga& manga) {
@@ -2947,6 +3170,31 @@ void LibrarySectionTab::setGroupMode(LibraryGroupMode mode) {
             } else if (!m_categories.empty()) {
                 selectCategory(m_categories[0].id);
             }
+        } else if (!Application::getInstance().isConnected()) {
+            // Offline with no cached categories (e.g. was in BY_SOURCE mode when online
+            // and categories were never fetched/cached). Fall back to showing all cached
+            // manga under a single "Library" tab so the user can still browse.
+            brls::Logger::info("LibrarySectionTab: No cached categories, falling back to all-library cache");
+            if (m_categoryTabsBox) m_categoryTabsBox->setVisibility(brls::Visibility::GONE);
+            if (m_lHintIcon) m_lHintIcon->setVisibility(brls::Visibility::GONE);
+            if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::GONE);
+            this->setActionAvailable(brls::ControllerButton::BUTTON_LB, false);
+            this->setActionAvailable(brls::ControllerButton::BUTTON_RB, false);
+            if (m_titleLabel) m_titleLabel->setText("Library");
+
+            bool cacheEnabled2 = Application::getInstance().getSettings().cacheLibraryData;
+            if (cacheEnabled2) {
+                LibraryCache& cache2 = LibraryCache::getInstance();
+                std::vector<Manga> allCached;
+                if (cache2.loadAllLibraryManga(allCached)) {
+                    brls::Logger::info("LibrarySectionTab: Loaded {} manga from all-library cache (category fallback)",
+                                      allCached.size());
+                    m_fullMangaList = allCached;
+                    m_mangaList = allCached;
+                    sortMangaList();
+                    m_loaded = true;
+                }
+            }
         }
     } else if (mode == LibraryGroupMode::NO_GROUPING) {
         // Hide tabs and L/R bumper hints entirely
@@ -3076,6 +3324,23 @@ void LibrarySectionTab::loadAllManga() {
         // Save to cache if enabled
         if (cacheEnabled) {
             LibraryCache::getInstance().saveAllLibraryManga(allManga);
+
+            // Cross-cache: build per-category caches from the all-library data
+            // so BY_CATEGORY mode works offline even if categories were loaded
+            // via NO_GROUPING. Each manga has categoryIds we can group by.
+            std::map<int, std::vector<Manga>> byCategory;
+            for (const auto& manga : allManga) {
+                if (manga.categoryIds.empty()) {
+                    byCategory[0].push_back(manga);  // Default category
+                } else {
+                    for (int catId : manga.categoryIds) {
+                        byCategory[catId].push_back(manga);
+                    }
+                }
+            }
+            for (const auto& pair : byCategory) {
+                LibraryCache::getInstance().saveCategoryManga(pair.first, pair.second);
+            }
         }
 
         brls::sync([this, allManga, aliveWeak]() {
@@ -3227,6 +3492,23 @@ void LibrarySectionTab::loadBySource() {
         // Save to cache if enabled
         if (cacheEnabled) {
             LibraryCache::getInstance().saveAllLibraryManga(allManga);
+
+            // Cross-cache: build per-category caches from the all-library data
+            // so BY_CATEGORY mode works offline even if categories were loaded
+            // via BY_SOURCE. Each manga has categoryIds we can group by.
+            std::map<int, std::vector<Manga>> byCategory;
+            for (const auto& manga : allManga) {
+                if (manga.categoryIds.empty()) {
+                    byCategory[0].push_back(manga);  // Default category
+                } else {
+                    for (int catId : manga.categoryIds) {
+                        byCategory[catId].push_back(manga);
+                    }
+                }
+            }
+            for (const auto& pair : byCategory) {
+                LibraryCache::getInstance().saveCategoryManga(pair.first, pair.second);
+            }
         }
 
         brls::sync([this, allManga, aliveWeak, applySourceGrouping]() mutable {
