@@ -45,7 +45,7 @@ private:
     bool m_tracking = false;
     bool m_triggered = false;
 
-    static constexpr float MAX_MOVEMENT = 15.0f;  // Max pixels allowed to move while holding
+    static constexpr float MAX_MOVEMENT = 25.0f;  // Max pixels allowed to move while holding (Vita touchscreen has jitter)
 };
 
 } // namespace vitasuwayomi

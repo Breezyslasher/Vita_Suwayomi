@@ -397,6 +397,24 @@ void MangaItemCell::onFocusLost() {
     }
 }
 
+void MangaItemCell::setPressed(bool pressed) {
+    m_pressed = pressed;
+}
+
+void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float height,
+                          brls::Style style, brls::FrameContext* ctx) {
+    // Draw normally first
+    brls::Box::draw(vg, x, y, width, height, style, ctx);
+
+    // Overlay a semi-transparent dark rect when pressed for touch feedback
+    if (m_pressed) {
+        nvgBeginPath(vg);
+        nvgRoundedRect(vg, x, y, width, height, 8);
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, 80));
+        nvgFill(vg);
+    }
+}
+
 void MangaItemCell::setSelected(bool selected) {
     m_selected = selected;
     updateSelectionVisual();
