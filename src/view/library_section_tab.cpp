@@ -1387,9 +1387,9 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
 void LibrarySectionTab::onMangaSelected(const Manga& manga) {
     brls::Logger::debug("LibrarySectionTab: Selected manga '{}' id={}", manga.title, manga.id);
 
-    // Push manga detail view with slide-left transition
+    // Push manga detail view
     auto* detailView = new MangaDetailView(manga);
-    brls::Application::pushActivity(new brls::Activity(detailView), brls::TransitionAnimation::SLIDE_LEFT);
+    brls::Application::pushActivity(new brls::Activity(detailView));
 }
 
 void LibrarySectionTab::triggerLibraryUpdate() {

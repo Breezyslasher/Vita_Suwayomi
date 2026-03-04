@@ -312,9 +312,9 @@ void SourceBrowseTab::showSearchDialog() {
 void SourceBrowseTab::onMangaSelected(const Manga& manga) {
     brls::Logger::info("Selected manga: {} (id: {})", manga.title, manga.id);
 
-    // Push manga detail view with slide-left transition
+    // Push manga detail view
     auto* detailView = new MangaDetailView(manga);
-    brls::Application::pushActivity(new brls::Activity(detailView), brls::TransitionAnimation::SLIDE_LEFT);
+    brls::Application::pushActivity(new brls::Activity(detailView));
 }
 
 } // namespace vitasuwayomi
