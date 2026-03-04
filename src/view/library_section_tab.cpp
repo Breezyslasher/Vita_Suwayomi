@@ -263,6 +263,7 @@ LibrarySectionTab::LibrarySectionTab() {
             static brls::Point pullStart;
             static bool validPull = false;
             static constexpr float PULL_THRESHOLD = 60.0f;
+            static constexpr float SHOW_THRESHOLD = 10.0f;
 
             if (status.state == brls::GestureState::START) {
                 pullStart = status.position;
@@ -274,17 +275,48 @@ LibrarySectionTab::LibrarySectionTab() {
                 if (dy > 0 && std::abs(dy) > std::abs(dx) * 1.5f) {
                     validPull = true;
                 }
+
+                // Show/update pull indicator
+                if (m_pullIndicatorLabel) {
+                    if (dy > SHOW_THRESHOLD && validPull) {
+                        m_pullIndicatorLabel->setVisibility(brls::Visibility::VISIBLE);
+                        if (dy > PULL_THRESHOLD) {
+                            m_pullIndicatorLabel->setText("Release to update");
+                            m_pullIndicatorLabel->setTextColor(nvgRGBA(0, 200, 170, 255));
+                        } else {
+                            m_pullIndicatorLabel->setText("Pull down to update");
+                            m_pullIndicatorLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
+                        }
+                    } else {
+                        m_pullIndicatorLabel->setVisibility(brls::Visibility::GONE);
+                    }
+                }
             } else if (status.state == brls::GestureState::END) {
                 float dy = status.position.y - pullStart.y;
                 if (validPull && dy > PULL_THRESHOLD) {
                     triggerLibraryUpdate();
                 }
                 validPull = false;
+                // Hide indicator
+                if (m_pullIndicatorLabel) {
+                    m_pullIndicatorLabel->setVisibility(brls::Visibility::GONE);
+                }
             }
         },
         brls::PanAxis::VERTICAL));
 
     this->addView(topRow);
+
+    // Pull-to-refresh indicator label (hidden by default, shown during swipe-down gesture)
+    m_pullIndicatorLabel = new brls::Label();
+    m_pullIndicatorLabel->setText("Pull down to update");
+    m_pullIndicatorLabel->setFontSize(16);
+    m_pullIndicatorLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
+    m_pullIndicatorLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    m_pullIndicatorLabel->setMarginTop(2);
+    m_pullIndicatorLabel->setMarginBottom(4);
+    m_pullIndicatorLabel->setVisibility(brls::Visibility::GONE);
+    this->addView(m_pullIndicatorLabel);
 
     // Content grid
     m_contentGrid = new RecyclingGrid();
@@ -1386,11 +1418,36 @@ void LibrarySectionTab::triggerLibraryUpdate() {
     int categoryId = m_currentCategoryId;
     int generation = ++m_updatePollGeneration;
 
-    asyncRun([categoryId, aliveWeak, generation, this]() {
+    // For BY_SOURCE mode: collect category IDs from the current source's manga
+    // so we only update categories that contain this source's books
+    std::vector<int> sourceCategoryIds;
+    if (m_groupMode == LibraryGroupMode::BY_SOURCE && !m_currentSourceName.empty()) {
+        auto it = m_mangaBySource.find(m_currentSourceName);
+        if (it != m_mangaBySource.end()) {
+            std::set<int> uniqueCatIds;
+            for (const auto& manga : it->second) {
+                if (manga.categoryIds.empty()) {
+                    uniqueCatIds.insert(0);  // Default category
+                } else {
+                    for (int catId : manga.categoryIds) {
+                        uniqueCatIds.insert(catId);
+                    }
+                }
+            }
+            sourceCategoryIds.assign(uniqueCatIds.begin(), uniqueCatIds.end());
+            brls::Logger::info("LibrarySectionTab: BY_SOURCE update for '{}' - {} categories",
+                              m_currentSourceName, sourceCategoryIds.size());
+        }
+    }
+
+    asyncRun([categoryId, sourceCategoryIds, aliveWeak, generation, this]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
         bool success = false;
-        if (categoryId == 0) {
+        if (!sourceCategoryIds.empty()) {
+            // BY_SOURCE mode: update only the categories containing this source's manga
+            success = client.triggerLibraryUpdate(sourceCategoryIds);
+        } else if (categoryId == 0) {
             success = client.triggerLibraryUpdate();
         } else {
             success = client.triggerLibraryUpdate(categoryId);

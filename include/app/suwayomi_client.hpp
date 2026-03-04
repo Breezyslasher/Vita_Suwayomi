@@ -488,6 +488,7 @@ public:
     bool fetchLibraryMangaByCategory(int categoryId, std::vector<Manga>& manga);
     bool triggerLibraryUpdate();
     bool triggerLibraryUpdate(int categoryId);
+    bool triggerLibraryUpdate(const std::vector<int>& categoryIds);
     bool fetchRecentUpdates(int page, std::vector<RecentUpdate>& updates);
 
     // Download Management
