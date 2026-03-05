@@ -1131,6 +1131,48 @@ bool SuwayomiClient::fetchMangaGraphQL(int mangaId, Manga& manga) {
     return true;
 }
 
+bool SuwayomiClient::refreshMangaGraphQL(int mangaId) {
+    const char* query = R"(
+        mutation RefreshManga($id: Int!) {
+            fetchManga(input: { id: $id }) {
+                manga {
+                    id
+                    initialized
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"id\":" + std::to_string(mangaId) + "}";
+    brls::Logger::info("GraphQL: Refreshing manga {} from source (fetchManga mutation)", mangaId);
+    std::string response = executeGraphQL(query, variables);
+    return !response.empty() && response.find("\"id\"") != std::string::npos;
+}
+
+bool SuwayomiClient::refreshChaptersGraphQL(int mangaId) {
+    const char* query = R"(
+        mutation FetchChapters($mangaId: Int!) {
+            fetchChapters(input: { mangaId: $mangaId }) {
+                chapters {
+                    id
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"mangaId\":" + std::to_string(mangaId) + "}";
+    brls::Logger::info("GraphQL: Fetching chapters from source for manga {} (fetchChapters mutation)", mangaId);
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::warning("GraphQL: fetchChapters mutation returned empty response for manga {}", mangaId);
+        return false;
+    }
+    // Check for successful response
+    bool success = response.find("\"fetchChapters\"") != std::string::npos;
+    brls::Logger::info("GraphQL: fetchChapters mutation for manga {} {}", mangaId, success ? "succeeded" : "failed");
+    return success;
+}
+
 bool SuwayomiClient::addMangaToLibraryGraphQL(int mangaId) {
     const char* query = R"(
         mutation AddToLibrary($id: Int!) {
@@ -1959,6 +2001,21 @@ bool SuwayomiClient::fetchMangaWithChaptersGraphQL(int mangaId, Manga& manga, st
             chapters.push_back(ch);
         }
         brls::Logger::debug("GraphQL combined: Fetched {} chapters for manga {}", chapters.size(), mangaId);
+    }
+
+    // If 0 chapters returned, the server may not have fetched them from the source yet.
+    // Use fetchChapters mutation to tell the server to fetch chapter list from source,
+    // then re-query chapters.
+    if (chapters.empty() && manga.id > 0) {
+        brls::Logger::info("GraphQL combined: 0 chapters for manga {} - triggering fetchChapters mutation to fetch from source", mangaId);
+        // First ensure manga is initialized
+        refreshMangaGraphQL(mangaId);
+        // Then fetch chapters from source
+        if (refreshChaptersGraphQL(mangaId)) {
+            // Re-fetch chapters now that the server has scraped them
+            fetchChaptersGraphQL(mangaId, chapters);
+            brls::Logger::info("GraphQL combined: After fetchChapters mutation, got {} chapters", chapters.size());
+        }
     }
 
     return manga.id > 0;
@@ -3294,6 +3351,16 @@ std::string SuwayomiClient::getMangaThumbnailUrl(int mangaId) {
 bool SuwayomiClient::fetchChapters(int mangaId, std::vector<Chapter>& chapters) {
     // Try GraphQL first (primary API)
     if (fetchChaptersGraphQL(mangaId, chapters)) {
+        // If 0 chapters, the server may not have fetched from source yet.
+        // Trigger fetchChapters mutation to fetch chapter list from source, then re-query.
+        if (chapters.empty()) {
+            brls::Logger::info("fetchChapters: 0 chapters for manga {} - triggering fetchChapters mutation", mangaId);
+            refreshMangaGraphQL(mangaId);  // Ensure manga is initialized first
+            if (refreshChaptersGraphQL(mangaId)) {
+                fetchChaptersGraphQL(mangaId, chapters);
+                brls::Logger::info("fetchChapters: After fetchChapters mutation, got {} chapters", chapters.size());
+            }
+        }
         return true;
     }
 
