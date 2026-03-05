@@ -568,6 +568,7 @@ void SearchTab::clearSearchHistory() {
 
 void SearchTab::showSources() {
     m_loadGeneration++;  // Invalidate any in-flight async callbacks
+    hideLoadingIndicator();  // Cancel any visible loading text from prior browse/search
     m_browseMode = BrowseMode::SOURCES;
     m_titleLabel->setText("Browse");
     m_searchLabel->setVisibility(brls::Visibility::GONE);
@@ -1300,6 +1301,7 @@ void SearchTab::handleBackNavigation() {
     if (m_isNavigatingBack) return;  // Prevent double back-press
     m_isNavigatingBack = true;
     m_loadGeneration++;  // Invalidate any in-flight async callbacks
+    hideLoadingIndicator();  // Hide any loading text left from cancelled async loads
     if (m_browseMode == BrowseMode::SEARCH_RESULTS) {
         if (m_isGlobalSearch) {
             // Global search: go back to sources list
