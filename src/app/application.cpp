@@ -31,6 +31,88 @@ static const char* SETTINGS_DIR = "ux0:data/VitaSuwayomi";
 static const char* SETTINGS_PATH = "./VitaSuwayomi_settings.json";
 #endif
 
+// Obfuscation helpers for storing sensitive fields (password, tokens) on disk.
+// Uses XOR with a static key + base64 encoding. This is NOT cryptographic security
+// (the key is in the binary), but prevents plain-text passwords in the config file.
+static const char OBFUSCATION_KEY[] = "VitaSuwayomi$2025!SecretKey";
+static const char OBFUSCATION_PREFIX[] = "enc:";
+
+static std::string base64EncodeLocal(const std::vector<uint8_t>& input) {
+    static const char* b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    int val = 0, valb = -6;
+    for (uint8_t c : input) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            out.push_back(b64[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) out.push_back(b64[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (out.size() % 4) out.push_back('=');
+    return out;
+}
+
+static std::vector<uint8_t> base64DecodeLocal(const std::string& input) {
+    static const int T[256] = {
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,-1,-1,63,
+        52,53,54,55,56,57,58,59,60,61,-1,-1,-1,-1,-1,-1,
+        -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,
+        15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1,
+        -1,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,
+        41,42,43,44,45,46,47,48,49,50,51,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+        -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
+    };
+    std::vector<uint8_t> out;
+    int val = 0, valb = -8;
+    for (unsigned char c : input) {
+        if (T[c] == -1) break;
+        val = (val << 6) + T[c];
+        valb += 6;
+        if (valb >= 0) {
+            out.push_back(static_cast<uint8_t>((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+    return out;
+}
+
+static std::string obfuscate(const std::string& plaintext) {
+    if (plaintext.empty()) return "";
+    size_t keyLen = sizeof(OBFUSCATION_KEY) - 1;
+    std::vector<uint8_t> xored(plaintext.size());
+    for (size_t i = 0; i < plaintext.size(); i++) {
+        xored[i] = static_cast<uint8_t>(plaintext[i]) ^ static_cast<uint8_t>(OBFUSCATION_KEY[i % keyLen]);
+    }
+    return std::string(OBFUSCATION_PREFIX) + base64EncodeLocal(xored);
+}
+
+static std::string deobfuscate(const std::string& stored) {
+    if (stored.empty()) return "";
+    // If not obfuscated (legacy plain text), return as-is for migration
+    if (stored.substr(0, sizeof(OBFUSCATION_PREFIX) - 1) != OBFUSCATION_PREFIX) {
+        return stored;
+    }
+    std::string b64 = stored.substr(sizeof(OBFUSCATION_PREFIX) - 1);
+    std::vector<uint8_t> xored = base64DecodeLocal(b64);
+    size_t keyLen = sizeof(OBFUSCATION_KEY) - 1;
+    std::string plaintext(xored.size(), '\0');
+    for (size_t i = 0; i < xored.size(); i++) {
+        plaintext[i] = static_cast<char>(xored[i] ^ static_cast<uint8_t>(OBFUSCATION_KEY[i % keyLen]));
+    }
+    return plaintext;
+}
+
 Application& Application::getInstance() {
     static Application instance;
     return instance;
@@ -1620,13 +1702,13 @@ bool Application::loadSettings() {
         }
     }
 
-    // Load auth credentials (stored separately for security)
+    // Load auth credentials (deobfuscate sensitive fields; handles legacy plain text)
     m_authUsername = extractString("authUsername");
-    m_authPassword = extractString("authPassword");
+    m_authPassword = deobfuscate(extractString("authPassword"));
     m_settings.authMode = extractInt("authMode");
-    m_settings.accessToken = extractString("accessToken");
-    m_settings.refreshToken = extractString("refreshToken");
-    m_settings.sessionCookie = extractString("sessionCookie");
+    m_settings.accessToken = deobfuscate(extractString("accessToken"));
+    m_settings.refreshToken = deobfuscate(extractString("refreshToken"));
+    m_settings.sessionCookie = deobfuscate(extractString("sessionCookie"));
 
     // Apply auth credentials and mode to SuwayomiClient
     SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -1665,13 +1747,13 @@ bool Application::saveSettings() {
     json += "  \"serverUrl\": \"" + m_serverUrl + "\",\n";
     json += "  \"currentCategoryId\": " + std::to_string(m_currentCategoryId) + ",\n";
 
-    // Auth credentials (stored for persistence)
+    // Auth credentials (obfuscated for security - not stored as plain text)
     json += "  \"authUsername\": \"" + m_authUsername + "\",\n";
-    json += "  \"authPassword\": \"" + m_authPassword + "\",\n";
+    json += "  \"authPassword\": \"" + obfuscate(m_authPassword) + "\",\n";
     json += "  \"authMode\": " + std::to_string(m_settings.authMode) + ",\n";
-    json += "  \"accessToken\": \"" + m_settings.accessToken + "\",\n";
-    json += "  \"refreshToken\": \"" + m_settings.refreshToken + "\",\n";
-    json += "  \"sessionCookie\": \"" + m_settings.sessionCookie + "\",\n";
+    json += "  \"accessToken\": \"" + obfuscate(m_settings.accessToken) + "\",\n";
+    json += "  \"refreshToken\": \"" + obfuscate(m_settings.refreshToken) + "\",\n";
+    json += "  \"sessionCookie\": \"" + obfuscate(m_settings.sessionCookie) + "\",\n";
 
     // UI settings
     json += "  \"theme\": " + std::to_string(static_cast<int>(m_settings.theme)) + ",\n";
