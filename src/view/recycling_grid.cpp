@@ -465,52 +465,19 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
             }
 
             int index = i;
-            cell->registerClickAction([this, index](brls::View* view) {
+            cell->registerClickAction([this, cell, index](brls::View* view) {
                 if (m_longPressTriggered) {
                     m_longPressTriggered = false;
                     return true;
+                }
+                // Transfer focus to the tapped cell (touch support)
+                if (!cell->isFocused()) {
+                    brls::Application::giveFocus(cell);
                 }
                 onItemClicked(index);
                 return true;
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
-
-            // Touch press feedback: dim cell on touch-down, restore on release,
-            // transfer focus on touch, and play tap sound on short taps.
-            // Focus transfer is deferred until END to avoid triggering click
-            // when the user is actually scrolling/swiping.
-            cell->addGestureRecognizer(new brls::PanGestureRecognizer(
-                [this, cell, index](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-                    static constexpr float SCROLL_THRESHOLD = 15.0f;
-                    if (status.state == brls::GestureState::START) {
-                        cell->setPressed(true);
-                    } else if (status.state == brls::GestureState::STAY) {
-                        // If the user moves beyond threshold, they are scrolling
-                        if (cell->isPressed()) {
-                            float dx = status.position.x - status.startPosition.x;
-                            float dy = status.position.y - status.startPosition.y;
-                            float dist = std::sqrt(dx * dx + dy * dy);
-                            if (dist > SCROLL_THRESHOLD) {
-                                cell->setPressed(false);
-                            }
-                        }
-                    } else if (status.state == brls::GestureState::END) {
-                        if (cell->isPressed()) {
-                            cell->setPressed(false);
-                            // Short tap without significant movement: transfer focus
-                            if (!cell->isFocused()) {
-                                brls::Application::giveFocus(cell);
-                            }
-                            if (!m_longPressTriggered) {
-                                *soundToPlay = brls::SOUND_CLICK;
-                            }
-                        }
-                    } else if (status.state == brls::GestureState::FAILED ||
-                               status.state == brls::GestureState::INTERRUPTED) {
-                        cell->setPressed(false);
-                    }
-                },
-                brls::PanAxis::ANY));
 
             cell->addGestureRecognizer(new LongPressGestureRecognizer(
                 cell,
