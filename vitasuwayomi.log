@@ -1,0 +1,115 @@
+10:42:47.175 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+10:42:47.764 [INFO] DownloadsManager: Initializing...
+10:42:47.769 [DEBUG] DownloadsManager: Loading state (20 bytes)
+10:42:47.770 [INFO] DownloadsManager: State loaded with 0 downloads
+10:42:47.770 [INFO] DownloadsManager: Validating downloaded files...
+10:42:47.771 [INFO] DownloadsManager: Validation complete - 0 pages valid, 0 pages missing
+10:42:47.771 [INFO] DownloadsManager: Initialized with 0 downloads
+10:42:47.772 [INFO] VitaSuwayomi 1.0.0 initializing...
+10:42:47.778 [DEBUG] sceIoMkdir result: -0x7ffeffef
+10:42:47.782 [INFO] Loading saved settings...
+10:42:47.788 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+10:42:47.798 [DEBUG] loadSettings: File size = 1841
+10:42:47.811 [DEBUG] loadSettings: Read 1841 bytes
+10:42:47.821 [INFO] loadSettings: serverUrl=https://breezy-book.duckdns.org
+10:42:47.833 [DEBUG] Loaded 4 hidden categories
+10:42:47.843 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+10:42:47.853 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+10:42:47.859 [INFO] loadSettings: enabledSourceLanguages count = 2
+10:42:47.865 [INFO] loadSettings: localUrl=Http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=true, autoSwitch=true
+10:42:47.874 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=1, defaultSort=0, groupMode=0
+10:42:47.882 [DEBUG] Loaded 1 per-category sort modes
+10:42:47.893 [DEBUG] Loaded 1 search history entries
+10:42:47.904 [DEBUG] Loaded 1 per-manga reader settings
+10:42:47.915 [INFO] Restored auth credentials for user: Breezyslasher
+10:42:47.923 [INFO] Settings loaded successfully
+10:42:47.928 [INFO] Settings load result: success
+10:42:47.934 [INFO] Applied theme: Dark
+10:42:47.943 [INFO] Debug logging disabled
+10:42:47.955 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+10:42:47.965 [INFO] Application::run - isConnected=false, serverUrl=https://breezy-book.duckdns.org
+10:42:47.976 [INFO] Restoring saved connection...
+10:42:47.987 [INFO] Fetching server info via GraphQL...
+10:42:48.485 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2087
+10:42:48.491 [INFO] Server reachable, validating auth with protected query...
+10:42:48.882 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/categories) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.requir
+10:42:48.891 [INFO] GraphQL returned Unauthorized, attempting token refresh...
+10:42:48.900 [INFO] No refresh token available, skipping GraphQL refresh
+10:42:48.910 [INFO] Attempting re-login with stored credentials...
+10:42:49.295 [INFO] Login successful, received JWT tokens
+10:42:49.307 [INFO] Re-login successful, tokens refreshed
+10:42:49.314 [INFO] Token refreshed successfully, retrying GraphQL request
+10:42:49.738 [INFO] validateAuthWithProtectedQuery: auth validated successfully
+10:42:49.744 [INFO] Auth validated with protected query
+10:42:49.753 [INFO] Connection restored successfully
+10:42:49.865 [INFO] MainActivity: Tabs created, isOnline=false
+10:42:50.045 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+10:42:50.065 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+10:42:50.228 [INFO] LibrarySectionTab: Loaded 10 manga from cache for category 1
+10:42:50.237 [INFO] RecyclingGrid: Building 2 rows for 10 items (first 2 immediate)
+10:42:50.294 [INFO] ImageLoader: Starting 3 worker threads
+10:42:50.832 [INFO] GraphQL: Fetching manga for category 1 with filter
+10:42:50.832 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+10:42:51.476 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+10:42:51.500 [INFO] GraphQL: Fetched 10 manga for category 1 (filter method)
+10:42:51.520 [INFO] LibrarySectionTab: Got 10 manga for category 1 from server
+10:42:54.229 [INFO] HistoryTab: Displayed 20 history items
+10:43:06.395 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+10:43:07.100 [INFO] SearchTab: Got 85 sources
+10:43:40.585 [INFO] SearchTab: Got 12 popular manga
+10:43:40.611 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+10:43:43.254 [INFO] RecyclingGrid: appendItems - added 12 items, now 24 total (4 rows)
+10:45:09.070 [INFO] RecyclingGrid: appendItems - added 12 items, now 36 total (6 rows)
+10:45:10.929 [INFO] RecyclingGrid: appendItems - added 12 items, now 48 total (8 rows)
+10:45:33.359 [INFO] SearchTab: Got 12 latest manga
+10:45:33.420 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+10:45:38.698 [INFO] RecyclingGrid: appendItems - added 12 items, now 24 total (4 rows)
+10:45:40.065 [INFO] MangaDetailView: Creating for 'Maou ni Natta node, Dungeon Tsukutte Jingai Musume to Honobono suru' id=827
+10:45:40.653 [INFO] ImageLoader: WebP RGBA decode OK 175x238->132x180
+10:45:45.027 [INFO] GraphQL: Fetched 0 track records for manga 827
+10:45:51.367 [INFO] MangaDetailView: Got 125 chapters
+10:46:15.589 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+10:46:15.623 [INFO] Settings saved successfully (1841 bytes)
+10:46:19.170 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+10:46:19.187 [INFO] Settings saved successfully (1841 bytes)
+10:46:20.984 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+10:46:20.994 [INFO] RecyclingGrid: Grid size set to 4 columns, cell 221x309
+10:46:23.009 [INFO] SearchTab: Got 85 sources
+10:46:35.834 [INFO] SearchTab: Got 12 popular manga
+10:46:35.852 [INFO] RecyclingGrid: Building 3 rows for 12 items (first 2 immediate)
+10:46:36.699 [INFO] RecyclingGrid: Incremental build complete - 12 cells in 3 rows
+10:46:42.231 [INFO] RecyclingGrid: appendItems - added 12 items, now 24 total (6 rows)
+10:46:53.472 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+10:46:53.501 [INFO] Settings saved successfully (1841 bytes)
+10:46:55.489 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+10:46:55.515 [INFO] Settings saved successfully (1841 bytes)
+10:46:57.503 [INFO] RecyclingGrid: Grid size set to 8 columns, cell 104x80
+10:46:58.128 [INFO] SearchTab: Got 85 sources
+10:47:03.970 [INFO] SearchTab: Got 12 popular manga
+10:47:03.997 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+10:47:06.780 [INFO] RecyclingGrid: appendItems - added 12 items, now 24 total (3 rows)
+10:47:12.374 [INFO] RecyclingGrid: appendItems - added 12 items, now 36 total (5 rows)
+10:47:25.161 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+10:47:25.183 [INFO] Settings saved successfully (1841 bytes)
+10:47:27.948 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+10:47:27.977 [INFO] Settings saved successfully (1841 bytes)
+10:47:31.922 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+10:47:32.533 [INFO] SearchTab: Got 85 sources
+10:47:42.820 [INFO] SearchTab: Got 12 popular manga
+10:47:42.836 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+10:47:45.316 [INFO] RecyclingGrid: appendItems - added 12 items, now 24 total (4 rows)
+10:47:48.960 [INFO] RecyclingGrid: appendItems - added 12 items, now 36 total (6 rows)
+10:49:07.164 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+10:49:07.184 [INFO] Settings saved successfully (1841 bytes)
+10:49:07.941 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/fetchSourceManga) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.
+10:49:07.952 [INFO] GraphQL returned Unauthorized, attempting token refresh...
+10:49:08.410 [INFO] Token refreshed successfully
+10:49:08.416 [INFO] Token refreshed successfully, retrying GraphQL request
+10:49:09.902 [INFO] SearchTab: Found 12 results for 'One'
+10:49:09.963 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+10:49:12.360 [INFO] RecyclingGrid: appendItems - added 12 items, now 24 total (4 rows)
+10:49:53.825 [INFO] RecyclingGrid: appendItems - added 12 items, now 36 total (6 rows)
+10:49:57.726 [INFO] RecyclingGrid: appendItems - added 12 items, now 48 total (8 rows)
+10:50:03.355 [INFO] SearchTab: Got 12 popular manga
+10:50:03.422 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+10:50:05.713 [INFO] RecyclingGrid: appendItems - added 12 items, now 24 total (4 rows)
