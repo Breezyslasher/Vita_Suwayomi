@@ -348,11 +348,11 @@ brls::RecyclerCell* ExtensionsDataSource::cellForRow(brls::RecyclerFrame* recycl
                     cell->statusLabel->setTextColor(nvgRGB(255, 152, 0));
                 } else {
                     cell->statusLabel->setText("Installed");
-                    cell->statusLabel->setTextColor(nvgRGB(100, 100, 100));
+                    cell->statusLabel->setTextColor(Application::getInstance().getDimTextColor());
                 }
             } else {
                 cell->statusLabel->setText("Install");
-                cell->statusLabel->setTextColor(nvgRGB(0, 150, 136));
+                cell->statusLabel->setTextColor(Application::getInstance().getTealColor());
             }
 
             // Settings button visibility
@@ -825,7 +825,7 @@ ExtensionsTab::ExtensionsTab() {
     // Inline error/offline label (hidden by default)
     m_errorLabel = new brls::Label();
     m_errorLabel->setFontSize(16);
-    m_errorLabel->setTextColor(nvgRGB(180, 180, 180));
+    m_errorLabel->setTextColor(Application::getInstance().getSubtitleColor());
     m_errorLabel->setMarginTop(40);
     m_errorLabel->setMarginLeft(20);
     m_errorLabel->setVisibility(brls::Visibility::GONE);
@@ -1099,7 +1099,7 @@ void ExtensionsTab::showLoading(const std::string& message) {
 void ExtensionsTab::showError(const std::string& message) {
     if (m_errorLabel) {
         m_errorLabel->setText(message);
-        m_errorLabel->setTextColor(nvgRGB(180, 180, 180));
+        m_errorLabel->setTextColor(Application::getInstance().getSubtitleColor());
         m_errorLabel->setVisibility(brls::Visibility::VISIBLE);
     }
     if (m_recycler) {

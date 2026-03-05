@@ -366,47 +366,99 @@ void Application::applyTheme() {
     brls::Logger::info("Applied theme: {}", getThemeString(m_settings.theme));
 }
 
-NVGcolor Application::getAccentColor() const {
-    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
-        return nvgRGB(255, 50, 200);   // Hot pink / neon magenta
-    return nvgRGB(100, 180, 255);      // Default blue
+// ============================================================================
+// Theme Color Palette System
+// To add a new theme: 1) Add enum value to AppTheme in application.hpp
+//                     2) Add a new ThemePalette entry below
+//                     3) Update getThemeString() and applyTheme()
+// ============================================================================
+
+struct ThemePalette {
+    NVGcolor accent;             // Primary accent (buttons, highlights)
+    NVGcolor secondary;          // Secondary accent
+    NVGcolor headerText;         // Section headers
+    NVGcolor subtitle;           // Subtitle/detail text
+    NVGcolor highlight;          // Focus highlight
+    NVGcolor sidebar;            // Sidebar background tint
+    NVGcolor cardBg;             // Card/cell background
+    NVGcolor dialogBg;           // Dialog/overlay background
+    NVGcolor teal;               // Teal accent (badges, status)
+    NVGcolor status;             // Status text color
+    NVGcolor description;        // Description/body text
+    NVGcolor dimText;            // Dimmed text
+    NVGcolor rowBg;              // List row background
+    NVGcolor activeRowBg;        // Active/selected row bg
+    NVGcolor inactiveRowBg;      // Inactive row bg
+    NVGcolor trackingBtn;        // Tracking button
+};
+
+static const ThemePalette& getPalette(AppTheme theme) {
+    // Default palette (used for System, Light, Dark)
+    static const ThemePalette defaultPalette = {
+        nvgRGB(100, 180, 255),          // accent: blue
+        nvgRGB(100, 200, 100),          // secondary: green
+        nvgRGB(100, 180, 255),          // headerText: blue
+        nvgRGB(140, 140, 140),          // subtitle: gray
+        nvgRGBA(0, 200, 200, 60),       // highlight: teal glow
+        nvgRGBA(45, 45, 45, 255),       // sidebar: dark gray
+        nvgRGBA(60, 60, 60, 255),       // cardBg: gray
+        nvgRGBA(30, 30, 30, 255),       // dialogBg: dark
+        nvgRGB(0, 150, 136),            // teal: standard teal
+        nvgRGB(74, 159, 255),           // status: blue accent
+        nvgRGB(192, 192, 192),          // description: light gray
+        nvgRGB(128, 128, 128),          // dimText: gray
+        nvgRGBA(40, 40, 40, 255),       // rowBg: dark
+        nvgRGBA(0, 100, 80, 200),       // activeRowBg: teal
+        nvgRGBA(50, 50, 50, 200),       // inactiveRowBg: gray
+        nvgRGBA(103, 58, 183, 255),     // trackingBtn: purple
+    };
+
+    // Neon Vaporwave / Miami palette
+    static const ThemePalette vaporwavePalette = {
+        nvgRGB(255, 50, 200),           // accent: hot pink / neon magenta
+        nvgRGB(0, 255, 255),            // secondary: cyan / neon teal
+        nvgRGB(0, 255, 200),            // headerText: neon mint/teal
+        nvgRGB(180, 100, 255),          // subtitle: neon purple
+        nvgRGBA(255, 50, 200, 80),      // highlight: hot pink glow
+        nvgRGBA(20, 0, 40, 255),        // sidebar: deep purple-black
+        nvgRGBA(30, 5, 50, 255),        // cardBg: dark purple
+        nvgRGBA(20, 0, 40, 255),        // dialogBg: deep purple
+        nvgRGB(0, 255, 200),            // teal: neon mint
+        nvgRGB(0, 255, 255),            // status: neon cyan
+        nvgRGB(200, 180, 255),          // description: light purple
+        nvgRGB(140, 100, 180),          // dimText: muted purple
+        nvgRGBA(25, 5, 45, 255),        // rowBg: dark purple
+        nvgRGBA(60, 0, 100, 200),       // activeRowBg: purple highlight
+        nvgRGBA(25, 5, 45, 200),        // inactiveRowBg: dark purple
+        nvgRGBA(150, 0, 200, 255),      // trackingBtn: neon purple
+    };
+
+    // Add new theme palettes here:
+    // static const ThemePalette myNewPalette = { ... };
+
+    switch (theme) {
+        case AppTheme::NEON_VAPORWAVE: return vaporwavePalette;
+        // case AppTheme::MY_NEW_THEME: return myNewPalette;
+        default: return defaultPalette;
+    }
 }
 
-NVGcolor Application::getSecondaryColor() const {
-    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
-        return nvgRGB(0, 255, 255);    // Cyan / neon teal
-    return nvgRGB(100, 200, 100);      // Default green
-}
-
-NVGcolor Application::getHeaderTextColor() const {
-    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
-        return nvgRGB(0, 255, 200);    // Neon mint/teal
-    return nvgRGB(100, 180, 255);      // Default blue
-}
-
-NVGcolor Application::getSubtitleColor() const {
-    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
-        return nvgRGB(180, 100, 255);  // Neon purple
-    return nvgRGB(140, 140, 140);      // Default gray
-}
-
-NVGcolor Application::getHighlightColor() const {
-    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
-        return nvgRGBA(255, 50, 200, 80);  // Hot pink glow
-    return nvgRGBA(0, 200, 200, 60);       // Default teal
-}
-
-NVGcolor Application::getSidebarColor() const {
-    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
-        return nvgRGBA(20, 0, 40, 255);    // Deep purple-black
-    return nvgRGBA(45, 45, 45, 255);       // Default dark gray
-}
-
-NVGcolor Application::getCardBackground() const {
-    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
-        return nvgRGBA(30, 5, 50, 255);    // Dark purple
-    return nvgRGBA(60, 60, 60, 255);       // Default gray
-}
+NVGcolor Application::getAccentColor() const { return getPalette(m_settings.theme).accent; }
+NVGcolor Application::getSecondaryColor() const { return getPalette(m_settings.theme).secondary; }
+NVGcolor Application::getHeaderTextColor() const { return getPalette(m_settings.theme).headerText; }
+NVGcolor Application::getSubtitleColor() const { return getPalette(m_settings.theme).subtitle; }
+NVGcolor Application::getHighlightColor() const { return getPalette(m_settings.theme).highlight; }
+NVGcolor Application::getSidebarColor() const { return getPalette(m_settings.theme).sidebar; }
+NVGcolor Application::getCardBackground() const { return getPalette(m_settings.theme).cardBg; }
+NVGcolor Application::getDialogBackground() const { return getPalette(m_settings.theme).dialogBg; }
+NVGcolor Application::getTealColor() const { return getPalette(m_settings.theme).teal; }
+NVGcolor Application::getStatusColor() const { return getPalette(m_settings.theme).status; }
+NVGcolor Application::getDescriptionColor() const { return getPalette(m_settings.theme).description; }
+NVGcolor Application::getDimTextColor() const { return getPalette(m_settings.theme).dimText; }
+NVGcolor Application::getRowBackground() const { return getPalette(m_settings.theme).rowBg; }
+NVGcolor Application::getActiveRowBackground() const { return getPalette(m_settings.theme).activeRowBg; }
+NVGcolor Application::getInactiveRowBackground() const { return getPalette(m_settings.theme).inactiveRowBg; }
+NVGcolor Application::getTrackingButtonColor() const { return getPalette(m_settings.theme).trackingBtn; }
 
 void Application::applyLogLevel() {
     if (m_settings.debugLogging) {

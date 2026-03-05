@@ -90,7 +90,7 @@ void SettingsTab::addSectionSeparator() {
     separator->setMarginBottom(4);
     separator->setMarginLeft(8);
     separator->setMarginRight(8);
-    separator->setBackgroundColor(nvgRGBA(80, 80, 80, 100));
+    separator->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(100, 50, 150, 100) : nvgRGBA(80, 80, 80, 100));
     m_contentBox->addView(separator);
 }
 
@@ -777,7 +777,7 @@ void SettingsTab::showCategoryVisibilityDialog() {
     dialogBox->setWidth(550);
     dialogBox->setHeight(450);
     dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
     dialogBox->setCornerRadius(12);
 
     // Title
@@ -791,7 +791,7 @@ void SettingsTab::showCategoryVisibilityDialog() {
     auto* infoLabel = new brls::Label();
     infoLabel->setText("Tap to toggle visibility in library");
     infoLabel->setFontSize(14);
-    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
     infoLabel->setMarginBottom(15);
     dialogBox->addView(infoLabel);
 
@@ -849,7 +849,7 @@ void SettingsTab::showCategoryVisibilityDialog() {
 
         // Category is visible if NOT in hidden list
         bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
-        catRow->setBackgroundColor(isVisible ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+        catRow->setBackgroundColor(isVisible ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
 
         // Category info box
         auto* infoBox = new brls::Box();
@@ -868,7 +868,7 @@ void SettingsTab::showCategoryVisibilityDialog() {
         auto* countLabel = new brls::Label();
         countLabel->setText(std::to_string(cat.mangaCount) + " manga");
         countLabel->setFontSize(12);
-        countLabel->setTextColor(nvgRGB(120, 120, 120));
+        countLabel->setTextColor(Application::getInstance().getDimTextColor());
         infoBox->addView(countLabel);
 
         catRow->addView(infoBox);
@@ -877,7 +877,7 @@ void SettingsTab::showCategoryVisibilityDialog() {
         auto* statusLabel = new brls::Label();
         statusLabel->setText(isVisible ? "Visible" : "Hidden");
         statusLabel->setFontSize(14);
-        statusLabel->setTextColor(isVisible ? nvgRGB(100, 200, 150) : nvgRGB(150, 100, 100));
+        statusLabel->setTextColor(isVisible ? Application::getInstance().isVaporwaveTheme() ? nvgRGB(0, 255, 200) : nvgRGB(100, 200, 150) : nvgRGB(150, 100, 100));
         statusLabel->setMarginRight(10);
         catRow->addView(statusLabel);
 
@@ -892,13 +892,13 @@ void SettingsTab::showCategoryVisibilityDialog() {
             if (currentlyHidden) {
                 // Show category (remove from hidden)
                 hidden.erase(catId);
-                catRow->setBackgroundColor(nvgRGBA(0, 100, 80, 200));
+                catRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
                 statusLabel->setText("Visible");
-                statusLabel->setTextColor(nvgRGB(100, 200, 150));
+                statusLabel->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGB(0, 255, 200) : nvgRGB(100, 200, 150));
             } else {
                 // Hide category (add to hidden)
                 hidden.insert(catId);
-                catRow->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
+                catRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
                 statusLabel->setText("Hidden");
                 statusLabel->setTextColor(nvgRGB(150, 100, 100));
             }
@@ -1344,7 +1344,7 @@ void SettingsTab::showLanguageFilterDialog() {
     dialogBox->setWidth(500);
     dialogBox->setHeight(400);
     dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
     dialogBox->setCornerRadius(12);
     dialogBox->setFocusable(true);
 
@@ -1359,7 +1359,7 @@ void SettingsTab::showLanguageFilterDialog() {
     auto* infoLabel = new brls::Label();
     infoLabel->setText("Tap languages to toggle. Select 'All' to show all.");
     infoLabel->setFontSize(14);
-    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
     infoLabel->setMarginBottom(10);
     dialogBox->addView(infoLabel);
 
@@ -1388,7 +1388,7 @@ void SettingsTab::showLanguageFilterDialog() {
         langRow->setPadding(8, 12, 8, 12);
         langRow->setMarginBottom(4);
         langRow->setCornerRadius(8);
-        langRow->setBackgroundColor(isEnabled ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+        langRow->setBackgroundColor(isEnabled ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
         langRow->setFocusable(true);
 
         auto* nameLabel = new brls::Label();
@@ -1399,7 +1399,7 @@ void SettingsTab::showLanguageFilterDialog() {
         auto* codeLabel = new brls::Label();
         codeLabel->setText(code);
         codeLabel->setFontSize(14);
-        codeLabel->setTextColor(nvgRGB(120, 120, 120));
+        codeLabel->setTextColor(Application::getInstance().getDimTextColor());
         langRow->addView(codeLabel);
 
         allRows->push_back(langRow);
@@ -1419,7 +1419,7 @@ void SettingsTab::showLanguageFilterDialog() {
                 brls::Application::notify("Showing all languages");
                 // Update all row visuals - "All" is enabled, others are disabled
                 for (size_t i = 0; i < allRows->size(); i++) {
-                    (*allRows)[i]->setBackgroundColor(i == 0 ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+                    (*allRows)[i]->setBackgroundColor(i == 0 ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
                 }
             } else {
                 if (s.enabledSourceLanguages.count(langCode) > 0) {
@@ -1430,12 +1430,12 @@ void SettingsTab::showLanguageFilterDialog() {
 
                 // Update visual state
                 bool nowEnabled = s.enabledSourceLanguages.count(langCode) > 0;
-                langRow->setBackgroundColor(nowEnabled ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+                langRow->setBackgroundColor(nowEnabled ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
 
                 // Update "All" row visual - disabled when any language is selected
                 if (!allRows->empty()) {
                     bool allEnabled = s.enabledSourceLanguages.empty();
-                    (*allRows)[0]->setBackgroundColor(allEnabled ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+                    (*allRows)[0]->setBackgroundColor(allEnabled ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
                 }
             }
 
@@ -1593,7 +1593,7 @@ void SettingsTab::showUrlInputDialog(const std::string& title, const std::string
     auto* hintLabel = new brls::Label();
     hintLabel->setText(hint);
     hintLabel->setFontSize(14);
-    hintLabel->setTextColor(nvgRGB(180, 180, 180));
+    hintLabel->setTextColor(Application::getInstance().getSubtitleColor());
     hintLabel->setMarginBottom(12);
     inputBox->addView(hintLabel);
 
@@ -1803,7 +1803,7 @@ void SettingsTab::showCategoryManagementDialog() {
     dialogBox->setWidth(550);
     dialogBox->setHeight(450);
     dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
     dialogBox->setCornerRadius(12);
 
     // Title
@@ -1817,7 +1817,7 @@ void SettingsTab::showCategoryManagementDialog() {
     auto* infoLabel = new brls::Label();
     infoLabel->setText("Use L/R to move, X to edit, Triangle to delete");
     infoLabel->setFontSize(14);
-    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
     infoLabel->setMarginBottom(15);
     dialogBox->addView(infoLabel);
 
@@ -1876,7 +1876,7 @@ void SettingsTab::showCategoryManagementDialog() {
         catRow->setPadding(10, 12, 10, 12);
         catRow->setMarginBottom(6);
         catRow->setCornerRadius(8);
-        catRow->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
+        catRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
         catRow->setFocusable(true);
 
         // Category info box
@@ -1896,7 +1896,7 @@ void SettingsTab::showCategoryManagementDialog() {
         auto* countLabel = new brls::Label();
         countLabel->setText(std::to_string(cat.mangaCount) + " manga");
         countLabel->setFontSize(12);
-        countLabel->setTextColor(nvgRGB(120, 120, 120));
+        countLabel->setTextColor(Application::getInstance().getDimTextColor());
         infoBox->addView(countLabel);
 
         catRow->addView(infoBox);
@@ -1906,7 +1906,7 @@ void SettingsTab::showCategoryManagementDialog() {
         size_t uiRowIndex = catList->getChildren().size();  // 0-indexed position before adding
         orderLabel->setText("#" + std::to_string(uiRowIndex + 1));
         orderLabel->setFontSize(14);
-        orderLabel->setTextColor(nvgRGB(100, 100, 100));
+        orderLabel->setTextColor(Application::getInstance().getDimTextColor());
         orderLabel->setMarginRight(10);
         catRow->addView(orderLabel);
 
@@ -2121,7 +2121,7 @@ void SettingsTab::showCreateCategoryDialog() {
     auto* infoLabel = new brls::Label();
     infoLabel->setText("Press A to open keyboard");
     infoLabel->setFontSize(14);
-    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
     contentBox->addView(infoLabel);
 
     dialog->addView(contentBox);
@@ -2160,7 +2160,7 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
     auto* infoLabel = new brls::Label();
     infoLabel->setText("Press 'Rename' to change the name");
     infoLabel->setFontSize(14);
-    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
     contentBox->addView(infoLabel);
 
     dialog->addView(contentBox);
@@ -2341,7 +2341,7 @@ void SettingsTab::showStatisticsView() {
     auto* infoLabel = new brls::Label();
     infoLabel->setText("Synced from server and local reading");
     infoLabel->setFontSize(14);
-    infoLabel->setTextColor(nvgRGB(120, 120, 120));
+    infoLabel->setTextColor(Application::getInstance().getDimTextColor());
     infoLabel->setMarginBottom(15);
     statsBox->addView(infoLabel);
 
@@ -2377,7 +2377,7 @@ void SettingsTab::showStatisticsView() {
     auto* timeNoteLabel = new brls::Label();
     timeNoteLabel->setText("Note: Reading time tracking is local only");
     timeNoteLabel->setFontSize(14);
-    timeNoteLabel->setTextColor(nvgRGB(120, 120, 120));
+    timeNoteLabel->setTextColor(Application::getInstance().getDimTextColor());
     timeNoteLabel->setMarginBottom(5);
     statsBox->addView(timeNoteLabel);
 

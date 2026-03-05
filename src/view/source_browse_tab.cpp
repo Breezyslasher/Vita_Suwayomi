@@ -289,10 +289,7 @@ void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
                 if (focusIndexAfterLoad >= 0) {
                     m_contentGrid->focusIndex(focusIndexAfterLoad);
                 } else if (!m_mangaList.empty()) {
-                    brls::View* firstCell = m_contentGrid->getFirstCell();
-                    if (firstCell) {
-                        brls::Application::giveFocus(firstCell);
-                    }
+                    m_contentGrid->focusIndex(0);
                 }
             } else {
                 brls::Application::notify("Failed to load manga");

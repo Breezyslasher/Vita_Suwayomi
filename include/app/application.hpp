@@ -276,6 +276,15 @@ public:
     NVGcolor getHighlightColor() const;     // Focus highlight
     NVGcolor getSidebarColor() const;       // Sidebar background tint
     NVGcolor getCardBackground() const;     // Card/cell background
+    NVGcolor getDialogBackground() const;   // Dialog/overlay background
+    NVGcolor getTealColor() const;          // Teal accent (badges, status)
+    NVGcolor getStatusColor() const;        // Status text color (blue accent)
+    NVGcolor getDescriptionColor() const;   // Description/body text
+    NVGcolor getDimTextColor() const;       // Dimmed text (120-128 gray)
+    NVGcolor getRowBackground() const;      // List row background
+    NVGcolor getActiveRowBackground() const; // Active/selected row bg
+    NVGcolor getInactiveRowBackground() const; // Inactive row bg
+    NVGcolor getTrackingButtonColor() const; // Tracking button background
     bool isVaporwaveTheme() const { return m_settings.theme == AppTheme::NEON_VAPORWAVE; }
 
     // Apply log level based on settings

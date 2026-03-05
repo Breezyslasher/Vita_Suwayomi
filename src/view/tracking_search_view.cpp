@@ -4,6 +4,7 @@
  */
 
 #include "view/tracking_search_view.hpp"
+#include "app/application.hpp"
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
 
@@ -22,7 +23,7 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     this->setAlignItems(brls::AlignItems::CENTER);
     this->setFocusable(true);
     this->setCornerRadius(8);
-    this->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+    this->setBackgroundColor(Application::getInstance().getRowBackground());
     this->setPadding(10);
     this->setMarginBottom(10);
 
@@ -54,7 +55,7 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     // Status label (publishing status, chapters, type)
     m_statusLabel = new brls::Label();
     m_statusLabel->setFontSize(12);
-    m_statusLabel->setTextColor(nvgRGB(130, 200, 130));
+    m_statusLabel->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGB(0, 255, 200) : nvgRGB(130, 200, 130));
     m_statusLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
     m_statusLabel->setMarginBottom(6);
     m_statusLabel->setSingleLine(true);  // Prevent status from wrapping
@@ -63,7 +64,7 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     // Description label (subtext)
     m_descriptionLabel = new brls::Label();
     m_descriptionLabel->setFontSize(13);
-    m_descriptionLabel->setTextColor(nvgRGB(180, 180, 180));
+    m_descriptionLabel->setTextColor(Application::getInstance().getSubtitleColor());
     m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
     //m_descriptionLabel->setMaxLines(2);  // Limit description to 2 lines
     textBox->addView(m_descriptionLabel);
@@ -184,7 +185,7 @@ void TrackingSearchResultCell::onFocusGained() {
         m_titleLabel->setText(m_result.title);
     }
     // Highlight background
-    this->setBackgroundColor(nvgRGBA(60, 60, 80, 255));
+    this->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(50, 10, 80, 255) : nvgRGBA(60, 60, 80, 255));
 }
 
 void TrackingSearchResultCell::onFocusLost() {
@@ -194,7 +195,7 @@ void TrackingSearchResultCell::onFocusLost() {
         m_titleLabel->setText(truncateText(m_result.title, 50));
     }
     // Reset background
-    this->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+    this->setBackgroundColor(Application::getInstance().getRowBackground());
 }
 
 TrackingSearchResultCell::~TrackingSearchResultCell() {
@@ -222,7 +223,7 @@ void TrackingSearchView::setupUI() {
     this->setAlignItems(brls::AlignItems::STRETCH);
     this->setPadding(20);
     this->setGrow(1.0f);
-    this->setBackgroundColor(nvgRGBA(20, 20, 20, 255));
+    this->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(15, 0, 30, 255) : nvgRGBA(20, 20, 20, 255));
 
     // Header with title and result count
     auto* headerBox = new brls::Box();
@@ -242,7 +243,7 @@ void TrackingSearchView::setupUI() {
     auto* countLabel = new brls::Label();
     countLabel->setText(std::to_string(m_results.size()) + " results");
     countLabel->setFontSize(16);
-    countLabel->setTextColor(nvgRGB(150, 150, 150));
+    countLabel->setTextColor(Application::getInstance().getSubtitleColor());
     headerBox->addView(countLabel);
 
     this->addView(headerBox);

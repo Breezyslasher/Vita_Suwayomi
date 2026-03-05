@@ -287,7 +287,7 @@ DownloadsTab::DownloadsTab() {
     m_queueEmptyLabel = new brls::Label();
     m_queueEmptyLabel->setText("No server downloads");
     m_queueEmptyLabel->setFontSize(14);
-    m_queueEmptyLabel->setTextColor(nvgRGBA(120, 120, 120, 255));
+    m_queueEmptyLabel->setTextColor(Application::getInstance().getDimTextColor());
     m_queueEmptyLabel->setMargins(10, 0, 10, 0);
     m_queueSection->addView(m_queueEmptyLabel);
 
@@ -318,7 +318,7 @@ DownloadsTab::DownloadsTab() {
     m_localEmptyLabel = new brls::Label();
     m_localEmptyLabel->setText("No local downloads");
     m_localEmptyLabel->setFontSize(14);
-    m_localEmptyLabel->setTextColor(nvgRGBA(120, 120, 120, 255));
+    m_localEmptyLabel->setTextColor(Application::getInstance().getDimTextColor());
     m_localEmptyLabel->setMargins(10, 0, 10, 0);
     m_localSection->addView(m_localEmptyLabel);
 
@@ -343,14 +343,14 @@ DownloadsTab::DownloadsTab() {
     auto* emptyIcon = new brls::Label();
     emptyIcon->setText("No Downloads");
     emptyIcon->setFontSize(24);
-    emptyIcon->setTextColor(nvgRGB(128, 128, 128));
+    emptyIcon->setTextColor(Application::getInstance().getDimTextColor());
     emptyIcon->setMarginBottom(10);
     m_emptyStateBox->addView(emptyIcon);
 
     auto* emptyHint = new brls::Label();
     emptyHint->setText("Queue chapters for download from manga details");
     emptyHint->setFontSize(16);
-    emptyHint->setTextColor(nvgRGB(100, 100, 100));
+    emptyHint->setTextColor(Application::getInstance().getDimTextColor());
     m_emptyStateBox->addView(emptyHint);
 
     this->addView(m_emptyStateBox);
@@ -652,7 +652,7 @@ void DownloadsTab::refreshQueue() {
                                 } else if (newItem.state == static_cast<int>(DownloadState::DOWNLOADED)) {
                                     m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(30, 50, 60, 200));
                                 } else {
-                                    m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
+                                    m_serverRowElements[i].row->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(25, 5, 45, 200) : nvgRGBA(40, 40, 40, 200));
                                 }
                             }
                         }
@@ -1049,7 +1049,7 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     } else if (state == static_cast<int>(LocalDownloadState::PAUSED)) {
         originalBgColor = nvgRGBA(50, 50, 30, 200);  // Amber tint for paused
     } else {
-        originalBgColor = nvgRGBA(40, 40, 40, 200);
+        originalBgColor = Application::getInstance().isVaporwaveTheme() ? nvgRGBA(25, 5, 45, 200) : nvgRGBA(40, 40, 40, 200);
     }
     row->setBackgroundColor(originalBgColor);
 
@@ -1080,7 +1080,7 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     }
     chapterLabel->setText(chapterText);
     chapterLabel->setFontSize(14);
-    chapterLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
+    chapterLabel->setTextColor(Application::getInstance().getSubtitleColor());
     infoBox->addView(chapterLabel);
 
     row->addView(infoBox);
@@ -1255,7 +1255,7 @@ void DownloadsTab::updateLocalProgress(int mangaId, int chapterIndex, int downlo
                     } else if (state == static_cast<int>(LocalDownloadState::PAUSED)) {
                         elem.row->setBackgroundColor(nvgRGBA(50, 50, 30, 200));
                     } else {
-                        elem.row->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
+                        elem.row->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(25, 5, 45, 200) : nvgRGBA(40, 40, 40, 200));
                     }
                 }
             }
@@ -1467,7 +1467,7 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     } else if (state == static_cast<int>(DownloadState::DOWNLOADED)) {
         originalBgColor = nvgRGBA(30, 50, 60, 200);  // Blue tint for done
     } else {
-        originalBgColor = nvgRGBA(40, 40, 40, 200);
+        originalBgColor = Application::getInstance().isVaporwaveTheme() ? nvgRGBA(25, 5, 45, 200) : nvgRGBA(40, 40, 40, 200);
     }
     row->setBackgroundColor(originalBgColor);
 
@@ -1490,7 +1490,7 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     }
     chapterLabel->setText(chapterText);
     chapterLabel->setFontSize(14);
-    chapterLabel->setTextColor(nvgRGBA(180, 180, 180, 255));
+    chapterLabel->setTextColor(Application::getInstance().getSubtitleColor());
     infoBox->addView(chapterLabel);
 
     row->addView(infoBox);

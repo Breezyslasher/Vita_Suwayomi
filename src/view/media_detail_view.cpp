@@ -43,7 +43,7 @@ ChapterCell::ChapterCell() {
     this->setPadding(10, 14, 10, 14);
     this->setMarginBottom(4);
     this->setCornerRadius(8);
-    this->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+    this->setBackgroundColor(Application::getInstance().getRowBackground());
     this->setFocusable(true);
 
     // Left side: chapter info
@@ -57,7 +57,7 @@ ChapterCell::ChapterCell() {
 
     subtitleLabel = new brls::Label();
     subtitleLabel->setFontSize(11);
-    subtitleLabel->setTextColor(nvgRGB(128, 128, 128));
+    subtitleLabel->setTextColor(Application::getInstance().getDimTextColor());
     subtitleLabel->setVisibility(brls::Visibility::GONE);
     infoBox->addView(subtitleLabel);
 
@@ -71,7 +71,7 @@ ChapterCell::ChapterCell() {
     readLabel = new brls::Label();
     readLabel->setText("[Read]");
     readLabel->setFontSize(11);
-    readLabel->setTextColor(nvgRGB(100, 100, 100));
+    readLabel->setTextColor(Application::getInstance().getDimTextColor());
     readLabel->setMarginRight(8);
     readLabel->setVisibility(brls::Visibility::GONE);
     statusBox->addView(readLabel);
@@ -95,7 +95,7 @@ ChapterCell::ChapterCell() {
 
     dlLabel = new brls::Label();
     dlLabel->setFontSize(10);
-    dlLabel->setTextColor(nvgRGB(255, 255, 255));
+    dlLabel->setTextColor(nvgRGB(255, 255, 255));  // Always white on colored button
     dlLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     dlLabel->setVisibility(brls::Visibility::GONE);
     dlBtn->addView(dlLabel);
@@ -133,9 +133,9 @@ void ChapterCell::prepareForReuse() {
     readLabel->setVisibility(brls::Visibility::GONE);
     dlIcon->setVisibility(brls::Visibility::GONE);
     dlLabel->setVisibility(brls::Visibility::GONE);
-    dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
+    dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));  // Neutral button color
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
-    this->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+    this->setBackgroundColor(Application::getInstance().getRowBackground());
 }
 
 // ============================================================================
@@ -179,7 +179,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         title = "Chapter " + std::to_string(static_cast<int>(chapter.chapterNumber));
     }
     cell->titleLabel->setText(title);
-    cell->titleLabel->setTextColor(chapter.read ? nvgRGB(128, 128, 128) : nvgRGB(255, 255, 255));
+    cell->titleLabel->setTextColor(chapter.read ? Application::getInstance().getDimTextColor() : nvgRGB(255, 255, 255));
 
     // Subtitle (scanlator)
     if (!chapter.scanlator.empty()) {
@@ -289,7 +289,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
          mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
             static brls::Point touchStart;
             static bool isValidSwipe = false;
-            const NVGcolor originalBgColor = nvgRGBA(40, 40, 40, 255);
+            const NVGcolor originalBgColor = Application::getInstance().getRowBackground();
             const float SWIPE_THRESHOLD = 60.0f;
             const float TAP_THRESHOLD = 15.0f;
 
@@ -533,8 +533,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
     this->setGrow(1.0f);
-    this->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
-        ? nvgRGB(10, 0, 20) : nvgRGB(18, 18, 18)); // Vaporwave deep purple or Komikku dark
+    this->setBackgroundColor(Application::getInstance().getSidebarColor());
 
     // Register back button
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View* view) {
@@ -610,8 +609,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     leftPanel->setAxis(brls::Axis::COLUMN);
     leftPanel->setWidth(260);
     leftPanel->setPadding(20);
-    leftPanel->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
-        ? nvgRGB(15, 0, 30) : nvgRGB(28, 28, 28)); // Vaporwave deep purple or Komikku panel
+    leftPanel->setBackgroundColor(Application::getInstance().getDialogBackground());
 
     // Cover image container (centered)
     auto* coverContainer = new brls::Box();
@@ -645,7 +643,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_readButton->setHeight(44);
     m_readButton->setCornerRadius(22);  // Pill-shaped button
     m_readButton->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
-        ? nvgRGBA(255, 50, 200, 255) : nvgRGBA(0, 150, 136, 255)); // Vaporwave pink or teal
+        ? nvgRGBA(255, 50, 200, 255) : nvgRGBA(0, 150, 136, 255)); // Accent-colored CTA button
 
     std::string readText = "Start Reading";
     if (m_manga.lastChapterRead > 0) {
@@ -667,14 +665,14 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_libraryButton->setMarginBottom(10);
     m_libraryButton->setCornerRadius(22);  // Pill-shaped
     if (m_manga.inLibrary) {
-        m_libraryButton->setBackgroundColor(nvgRGBA(180, 60, 60, 255));  // Red for remove
+        m_libraryButton->setBackgroundColor(nvgRGBA(180, 60, 60, 255));  // Red for remove (semantic)
         m_libraryButton->setText("Remove from Library");
         m_libraryButton->registerClickAction([this](brls::View* view) {
             onRemoveFromLibrary();
             return true;
         });
     } else {
-        m_libraryButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
+        m_libraryButton->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
         m_libraryButton->setText("Add to Library");
         m_libraryButton->registerClickAction([this](brls::View* view) {
             onAddToLibrary();
@@ -694,7 +692,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_trackingButton->setHeight(44);
     m_trackingButton->setMarginBottom(10);
     m_trackingButton->setCornerRadius(22);  // Pill-shaped
-    m_trackingButton->setBackgroundColor(nvgRGBA(103, 58, 183, 255));  // Purple for tracking
+    m_trackingButton->setBackgroundColor(Application::getInstance().getTrackingButtonColor());
     m_trackingButton->setText("Tracking");
     m_trackingButton->registerClickAction([this](brls::View* view) {
         showTrackingDialog();
@@ -738,7 +736,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     // Source (always created so async API update can populate it)
     m_sourceLabel = new brls::Label();
     m_sourceLabel->setFontSize(13);
-    m_sourceLabel->setTextColor(nvgRGB(128, 128, 128));
+    m_sourceLabel->setTextColor(Application::getInstance().getDimTextColor());
     m_sourceLabel->setMarginBottom(8);
     if (!m_manga.sourceName.empty()) {
         m_sourceLabel->setText(m_manga.sourceName);
@@ -755,7 +753,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     // Author (always created so async API update can populate it)
     m_authorLabel = new brls::Label();
     m_authorLabel->setFontSize(12);
-    m_authorLabel->setTextColor(nvgRGB(160, 160, 160));
+    m_authorLabel->setTextColor(Application::getInstance().getSubtitleColor());
     m_authorLabel->setMarginRight(15);
     if (!m_manga.author.empty()) {
         m_authorLabel->setText(m_manga.author);
@@ -767,7 +765,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_statusLabel = new brls::Label();
     m_statusLabel->setText(m_manga.getStatusString());
     m_statusLabel->setFontSize(12);
-    m_statusLabel->setTextColor(nvgRGB(74, 159, 255)); // Blue accent
+    m_statusLabel->setTextColor(Application::getInstance().getStatusColor());
     m_statusLabel->setMarginRight(15);
     statsRow->addView(m_statusLabel);
 
@@ -778,7 +776,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     }
     m_chapterCountLabel->setText(chapterInfo);
     m_chapterCountLabel->setFontSize(12);
-    m_chapterCountLabel->setTextColor(nvgRGB(160, 160, 160));
+    m_chapterCountLabel->setTextColor(Application::getInstance().getSubtitleColor());
     statsRow->addView(m_chapterCountLabel);
 
     titleBox->addView(statsRow);
@@ -795,7 +793,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
             auto* genreLabel = new brls::Label();
             genreLabel->setText(m_manga.genre[i]);
             genreLabel->setFontSize(11);
-            genreLabel->setTextColor(nvgRGB(74, 159, 255));
+            genreLabel->setTextColor(Application::getInstance().getStatusColor());
             genreLabel->setMarginRight(12);
             m_genreBox->addView(genreLabel);
         }
@@ -806,7 +804,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     brls::Logger::debug("MangaDetailView: Description length = {}", m_manga.description.length());
     m_descriptionLabel = new brls::Label();
     m_descriptionLabel->setFontSize(12);
-    m_descriptionLabel->setTextColor(nvgRGB(192, 192, 192));
+    m_descriptionLabel->setTextColor(Application::getInstance().getDescriptionColor());
     m_descriptionLabel->setMarginBottom(15);
 
     if (!m_manga.description.empty()) {
@@ -2139,7 +2137,7 @@ void MangaDetailView::onAddToLibrary() {
 
             // Switch button to "Remove from Library"
             if (m_libraryButton) {
-                m_libraryButton->setBackgroundColor(nvgRGBA(180, 60, 60, 255));
+                m_libraryButton->setBackgroundColor(nvgRGBA(180, 60, 60, 255));  // Red = semantic
                 m_libraryButton->setText("Remove from Library");
                 m_libraryButton->registerClickAction([this](brls::View* view) {
                     onRemoveFromLibrary();
@@ -2200,7 +2198,7 @@ void MangaDetailView::onRemoveFromLibrary() {
                 if (!alive || !*alive) return;
                 m_manga.inLibrary = false;
                 if (m_libraryButton) {
-                    m_libraryButton->setBackgroundColor(nvgRGBA(66, 66, 66, 255));
+                    m_libraryButton->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
                     m_libraryButton->setText("Add to Library");
                     m_libraryButton->registerClickAction([this](brls::View* view) {
                         onAddToLibrary();
