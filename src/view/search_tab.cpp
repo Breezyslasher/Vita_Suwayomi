@@ -283,6 +283,33 @@ SearchTab::SearchTab() {
     m_contentGrid = new RecyclingGrid();
     m_contentGrid->setGrow(1.0f);
     m_contentGrid->setShowLibraryBadge(true);  // Show star for library items in browser/search
+
+    // Apply display mode and grid size from settings (same as library)
+    const auto& settings = Application::getInstance().getSettings();
+    switch (settings.libraryDisplayMode) {
+        case LibraryDisplayMode::GRID_NORMAL:
+            m_contentGrid->setCompactMode(false);
+            m_contentGrid->setListMode(false);
+            break;
+        case LibraryDisplayMode::GRID_COMPACT:
+            m_contentGrid->setCompactMode(true);
+            break;
+        case LibraryDisplayMode::LIST:
+            m_contentGrid->setListMode(true);
+            break;
+    }
+    switch (settings.libraryGridSize) {
+        case LibraryGridSize::SMALL:
+            m_contentGrid->setGridSize(4);
+            break;
+        case LibraryGridSize::MEDIUM:
+            m_contentGrid->setGridSize(6);
+            break;
+        case LibraryGridSize::LARGE:
+            m_contentGrid->setGridSize(8);
+            break;
+    }
+
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
@@ -525,6 +552,10 @@ void SearchTab::showSources() {
     m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::GONE);
 
+    // CRITICAL: Move focus to a safe target before clearing any views.
+    // Focus may be on a grid cell or search result row that will be deleted.
+    brls::Application::giveFocus(m_historyBtn);
+
     // Clear manga grid, results by source, and hide search results view
     m_mangaList.clear();
     m_resultsBySource.clear();
@@ -533,7 +564,7 @@ void SearchTab::showSources() {
     if (m_searchResultsScrollView) {
         m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
     }
-    // Clear search results to prevent ghost focus targets
+    // Clear search results (safe now - focus moved above)
     if (m_searchResultsBox) {
         m_searchResultsBox->clearViews();
     }
@@ -680,11 +711,17 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
 
+    // CRITICAL: Move focus away from source list BEFORE clearing views.
+    // The currently focused view may be a source row that clearViews() will delete.
+    // If we clear first, borealis holds a dangling focus pointer and crashes
+    // when giveFocus tries to call onFocusLost() on the freed view.
+    brls::Application::giveFocus(m_popularBtn);
+
     // Hide source list and search results, show content grid
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
     }
-    // Clear source list to prevent ghost focus targets
+    // Clear source list to prevent ghost focus targets (safe now - focus moved above)
     if (m_sourceListBox) {
         m_sourceListBox->clearViews();
     }
@@ -700,9 +737,6 @@ void SearchTab::showSourceBrowser(const Source& source) {
     // Set up navigation from header buttons down to mode buttons (source list is now hidden)
     m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
     m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
-
-    // Transfer focus to Popular button immediately (source row is now hidden)
-    brls::Application::giveFocus(m_popularBtn);
 
     // Load popular manga by default
     m_browseMode = BrowseMode::POPULAR;
@@ -828,16 +862,6 @@ void SearchTab::performSearch(const std::string& query) {
     // Filter sources by language setting first
     filterSourcesByLanguage();
 
-    // Hide source list and grid, will show grouped results
-    if (m_sourceScrollView) {
-        m_sourceScrollView->setVisibility(brls::Visibility::GONE);
-    }
-    // Clear source list to prevent ghost focus targets
-    if (m_sourceListBox) {
-        m_sourceListBox->clearViews();
-    }
-    m_contentGrid->setVisibility(brls::Visibility::GONE);
-
     // Update UI for search mode
     m_browseMode = BrowseMode::SEARCH_RESULTS;
     m_popularBtn->setVisibility(brls::Visibility::GONE);
@@ -846,8 +870,18 @@ void SearchTab::performSearch(const std::string& query) {
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
     m_resultsLabel->setText("Searching " + std::to_string(m_filteredSources.size()) + " sources...");
 
-    // Give focus to back button while searching so user can easily cancel
+    // CRITICAL: Move focus before clearing views to prevent use-after-free
     brls::Application::giveFocus(m_backBtn);
+
+    // Hide source list and grid, will show grouped results
+    if (m_sourceScrollView) {
+        m_sourceScrollView->setVisibility(brls::Visibility::GONE);
+    }
+    // Clear source list (safe now - focus moved above)
+    if (m_sourceListBox) {
+        m_sourceListBox->clearViews();
+    }
+    m_contentGrid->setVisibility(brls::Visibility::GONE);
 
     // Copy filtered sources for async use
     std::vector<Source> sourcesToSearch = m_filteredSources;
@@ -1021,6 +1055,8 @@ void SearchTab::populateSearchResultsBySource() {
             return false;
         }, true);  // hidden action
     }
+    // Move focus to safe target before clearing search result views
+    brls::Application::giveFocus(m_backBtn);
     m_searchResultsBox->clearViews();
 
     // Track first cell for focus transfer
@@ -1068,9 +1104,29 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     sourceLabel->setTextColor(nvgRGB(100, 180, 255));
     m_searchResultsBox->addView(sourceLabel);
 
+    // Calculate cell dimensions based on library display settings (same as grid)
+    const auto& settings = Application::getInstance().getSettings();
+    int columns = 6;  // default medium
+    switch (settings.libraryGridSize) {
+        case LibraryGridSize::SMALL:  columns = 4; break;
+        case LibraryGridSize::MEDIUM: columns = 6; break;
+        case LibraryGridSize::LARGE:  columns = 8; break;
+    }
+    int cellMargin = 12;
+    int availableWidth = 920;
+    int cellWidth = (availableWidth - (columns - 1) * cellMargin) / columns;
+    int cellHeight = static_cast<int>(cellWidth * 1.4);
+    bool compactMode = (settings.libraryDisplayMode == LibraryDisplayMode::GRID_COMPACT);
+    bool listMode = (settings.libraryDisplayMode == LibraryDisplayMode::LIST);
+
+    if (listMode) {
+        cellWidth = 900;
+        cellHeight = 80;
+    }
+
     // Create horizontal scrolling row for cells
     auto* rowBox = new HorizontalScrollRow();
-    rowBox->setHeight(195);
+    rowBox->setHeight(cellHeight + 10);
     rowBox->setMarginBottom(10);
 
     brls::View* firstCell = nullptr;
@@ -1079,9 +1135,15 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     for (size_t i = 0; i < manga.size(); i++) {
         auto* cell = new MangaItemCell();
         cell->setShowLibraryBadge(true);  // Show star for library items in search results
+        if (compactMode) {
+            cell->setCompactMode(true);
+        } else if (listMode) {
+            cell->setListMode(true);
+        }
+        cell->setGridColumns(columns);
         cell->setManga(manga[i]);
-        cell->setWidth(150);
-        cell->setHeight(185);
+        cell->setWidth(cellWidth);
+        cell->setHeight(cellHeight);
         cell->setMarginRight(10);
 
         Manga mangaCopy = manga[i];
@@ -1212,20 +1274,23 @@ void SearchTab::handleBackNavigation() {
                     m_titleLabel->setText(source.name);
                     m_searchLabel->setVisibility(brls::Visibility::GONE);
 
-                    // Hide search results, show content grid
-                    if (m_searchResultsScrollView) {
-                        m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
-                    }
-                    // Clear search results to prevent ghost focus targets
-                    if (m_searchResultsBox) {
-                        m_searchResultsBox->clearViews();
-                    }
-                    m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
-
                     // Update buttons for source browsing mode
                     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
                     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
                     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+
+                    // CRITICAL: Move focus before clearing search result views
+                    brls::Application::giveFocus(m_popularBtn);
+
+                    // Hide search results, show content grid
+                    if (m_searchResultsScrollView) {
+                        m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
+                    }
+                    // Clear search results (safe now - focus moved above)
+                    if (m_searchResultsBox) {
+                        m_searchResultsBox->clearViews();
+                    }
+                    m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
                     // Load popular manga
                     loadPopularManga(m_currentSourceId);
