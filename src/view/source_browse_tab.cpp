@@ -277,20 +277,26 @@ void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
 
             m_isLoadingPage = false;
             if (success) {
-                // Append new manga to list
-                for (const auto& manga : newManga) {
-                    m_mangaList.push_back(manga);
-                }
                 m_hasNextPage = hasNext;
-                updateGrid();
-                updateLoadMoreButton();
 
-                // Focus on first newly loaded item (or first item for initial load)
-                if (focusIndexAfterLoad >= 0) {
-                    m_contentGrid->focusIndex(focusIndexAfterLoad);
-                } else if (!m_mangaList.empty()) {
-                    m_contentGrid->focusIndex(0);
+                if (focusIndexAfterLoad > 0) {
+                    // Subsequent page: append new items without rebuilding existing cells
+                    // This preserves the user's current focus position (no focus steal)
+                    for (const auto& manga : newManga) {
+                        m_mangaList.push_back(manga);
+                    }
+                    m_contentGrid->appendItems(newManga);
+                } else {
+                    // First page: full rebuild
+                    for (const auto& manga : newManga) {
+                        m_mangaList.push_back(manga);
+                    }
+                    updateGrid();
+                    if (!m_mangaList.empty()) {
+                        m_contentGrid->focusIndex(0);
+                    }
                 }
+                updateLoadMoreButton();
             } else {
                 brls::Application::notify("Failed to load manga");
                 // Reset load more button text on failure

@@ -1258,9 +1258,6 @@ void SearchTab::loadNextPage() {
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->appendItems(manga);
                 m_resultsLabel->setText(std::to_string(m_mangaList.size()) + " manga");
-
-                // Focus on first newly loaded item so user can continue browsing
-                m_contentGrid->focusIndex(firstNewItemIndex);
                 m_isLoadingPage = false;
                 hideLoadingIndicator();
             });
