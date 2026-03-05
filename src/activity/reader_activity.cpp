@@ -2390,10 +2390,8 @@ void ReaderActivity::handleDoubleTap(brls::Point position) {
     if (m_isZoomed) {
         // Zoomed in - reset to normal view
         resetZoom();
-    } else {
-        // Not zoomed - zoom in to 2x centered on tap position
-        zoomTo(2.0f, position);
     }
+    // Double-tap only resets zoom; pinch-to-zoom is the only way to zoom in
 }
 
 void ReaderActivity::resetZoom() {
