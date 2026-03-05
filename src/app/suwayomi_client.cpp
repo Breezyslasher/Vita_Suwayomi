@@ -1151,8 +1151,8 @@ bool SuwayomiClient::refreshMangaGraphQL(int mangaId) {
 
 bool SuwayomiClient::refreshChaptersGraphQL(int mangaId) {
     const char* query = R"(
-        mutation FetchChapters($id: Int!) {
-            fetchChapters(input: { id: $id }) {
+        mutation FetchChapters($mangaId: Int!) {
+            fetchChapters(input: { mangaId: $mangaId }) {
                 chapters {
                     id
                 }
@@ -1160,7 +1160,7 @@ bool SuwayomiClient::refreshChaptersGraphQL(int mangaId) {
         }
     )";
 
-    std::string variables = "{\"id\":" + std::to_string(mangaId) + "}";
+    std::string variables = "{\"mangaId\":" + std::to_string(mangaId) + "}";
     brls::Logger::info("GraphQL: Fetching chapters from source for manga {} (fetchChapters mutation)", mangaId);
     std::string response = executeGraphQL(query, variables);
     if (response.empty()) {
