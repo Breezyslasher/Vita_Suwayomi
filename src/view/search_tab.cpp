@@ -1095,9 +1095,29 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     sourceLabel->setTextColor(nvgRGB(100, 180, 255));
     m_searchResultsBox->addView(sourceLabel);
 
+    // Calculate cell dimensions based on library display settings (same as grid)
+    const auto& settings = Application::getInstance().getSettings();
+    int columns = 6;  // default medium
+    switch (settings.libraryGridSize) {
+        case LibraryGridSize::SMALL:  columns = 4; break;
+        case LibraryGridSize::MEDIUM: columns = 6; break;
+        case LibraryGridSize::LARGE:  columns = 8; break;
+    }
+    int cellMargin = 12;
+    int availableWidth = 920;
+    int cellWidth = (availableWidth - (columns - 1) * cellMargin) / columns;
+    int cellHeight = static_cast<int>(cellWidth * 1.4);
+    bool compactMode = (settings.libraryDisplayMode == LibraryDisplayMode::GRID_COMPACT);
+    bool listMode = (settings.libraryDisplayMode == LibraryDisplayMode::LIST);
+
+    if (listMode) {
+        cellWidth = 900;
+        cellHeight = 80;
+    }
+
     // Create horizontal scrolling row for cells
     auto* rowBox = new HorizontalScrollRow();
-    rowBox->setHeight(195);
+    rowBox->setHeight(cellHeight + 10);
     rowBox->setMarginBottom(10);
 
     brls::View* firstCell = nullptr;
@@ -1106,9 +1126,15 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     for (size_t i = 0; i < manga.size(); i++) {
         auto* cell = new MangaItemCell();
         cell->setShowLibraryBadge(true);  // Show star for library items in search results
+        if (compactMode) {
+            cell->setCompactMode(true);
+        } else if (listMode) {
+            cell->setListMode(true);
+        }
+        cell->setGridColumns(columns);
         cell->setManga(manga[i]);
-        cell->setWidth(150);
-        cell->setHeight(185);
+        cell->setWidth(cellWidth);
+        cell->setHeight(cellHeight);
         cell->setMarginRight(10);
 
         Manga mangaCopy = manga[i];

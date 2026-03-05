@@ -51,6 +51,7 @@ private:
     std::string m_searchQuery;
     int m_currentPage = 1;
     bool m_hasNextPage = false;
+    bool m_isLoadingPage = false;
     std::vector<Manga> m_mangaList;
 
     brls::Box* m_headerBox = nullptr;

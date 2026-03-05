@@ -151,9 +151,16 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
             break;
     }
 
+    // Infinite scroll: auto-load next page when nearing the end
+    m_contentGrid->setOnEndReached([this]() {
+        if (m_hasNextPage && !m_isLoadingPage) {
+            loadNextPage();
+        }
+    });
+
     this->addView(m_contentGrid);
 
-    // Load more button (hidden initially)
+    // Load more button (hidden initially, fallback for manual loading)
     m_loadMoreBtn = new brls::Button();
     m_loadMoreBtn->setText("Load More");
     m_loadMoreBtn->setMarginTop(15);
@@ -212,7 +219,8 @@ void SourceBrowseTab::loadSearch(const std::string& query) {
 }
 
 void SourceBrowseTab::loadNextPage() {
-    if (!m_hasNextPage) return;
+    if (!m_hasNextPage || m_isLoadingPage) return;
+    m_isLoadingPage = true;
     m_currentPage++;
 
     // Remember the index of first new item (current list size)
@@ -267,6 +275,7 @@ void SourceBrowseTab::loadManga(int focusIndexAfterLoad) {
             m_loadingLabel->setVisibility(brls::Visibility::GONE);
             m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
+            m_isLoadingPage = false;
             if (success) {
                 // Append new manga to list
                 for (const auto& manga : newManga) {
