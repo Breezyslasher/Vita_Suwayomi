@@ -726,6 +726,8 @@ void SearchTab::showSources() {
     if (firstSourceRow) {
         brls::Application::giveFocus(firstSourceRow);
     }
+
+    m_isNavigatingBack = false;  // Allow back navigation again
 }
 
 void SearchTab::showSourceBrowser(const Source& source) {
@@ -1295,6 +1297,8 @@ void SearchTab::updateModeButtons() {
 }
 
 void SearchTab::handleBackNavigation() {
+    if (m_isNavigatingBack) return;  // Prevent double back-press
+    m_isNavigatingBack = true;
     m_loadGeneration++;  // Invalidate any in-flight async callbacks
     if (m_browseMode == BrowseMode::SEARCH_RESULTS) {
         if (m_isGlobalSearch) {
@@ -1329,6 +1333,7 @@ void SearchTab::handleBackNavigation() {
 
                     // Load popular manga
                     loadPopularManga(m_currentSourceId);
+                    m_isNavigatingBack = false;  // Allow back navigation again
                     return;
                 }
             }

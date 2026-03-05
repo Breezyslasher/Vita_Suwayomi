@@ -102,6 +102,7 @@ private:
 
     // Navigation helper
     void handleBackNavigation();
+    bool m_isNavigatingBack = false;  // Guard against double back-press
 
     // Data
     std::vector<Source> m_sources;
