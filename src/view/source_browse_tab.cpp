@@ -124,6 +124,33 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     // Content grid
     m_contentGrid = new RecyclingGrid();
     m_contentGrid->setGrow(1.0f);
+
+    // Apply display mode and grid size from settings (same as library)
+    const auto& settings = Application::getInstance().getSettings();
+    switch (settings.libraryDisplayMode) {
+        case LibraryDisplayMode::GRID_NORMAL:
+            m_contentGrid->setCompactMode(false);
+            m_contentGrid->setListMode(false);
+            break;
+        case LibraryDisplayMode::GRID_COMPACT:
+            m_contentGrid->setCompactMode(true);
+            break;
+        case LibraryDisplayMode::LIST:
+            m_contentGrid->setListMode(true);
+            break;
+    }
+    switch (settings.libraryGridSize) {
+        case LibraryGridSize::SMALL:
+            m_contentGrid->setGridSize(4);
+            break;
+        case LibraryGridSize::MEDIUM:
+            m_contentGrid->setGridSize(6);
+            break;
+        case LibraryGridSize::LARGE:
+            m_contentGrid->setGridSize(8);
+            break;
+    }
+
     this->addView(m_contentGrid);
 
     // Load more button (hidden initially)
