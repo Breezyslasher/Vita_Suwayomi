@@ -272,6 +272,22 @@
                     width="100%"/>
             </brls:Button>
 
+            <!-- Reset to Defaults button -->
+            <brls:Button
+                id="reader/settings_reset_btn"
+                style="bordered"
+                width="100%"
+                height="40"
+                marginBottom="10">
+                <brls:Label
+                    id="reader/settings_reset_label"
+                    text="Reset to Defaults"
+                    fontSize="14"
+                    textColor="#ff6b6b"
+                    horizontalAlign="center"
+                    width="100%"/>
+            </brls:Button>
+
             <!-- Close hint -->
             <brls:Label
                 text="Press ○ or tap outside to close"

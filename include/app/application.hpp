@@ -129,6 +129,7 @@ struct MangaReaderSettings {
     bool cropBorders = false;
     int webtoonSidePadding = 0;
     bool isWebtoonFormat = false;  // Treat as webtoon (vertical scroll)
+    ReaderBackground readerBackground = ReaderBackground::BLACK;  // Per-manga background color
 };
 
 // Application settings structure
