@@ -281,7 +281,7 @@ void HistoryTab::rebuildHistoryList() {
             auto* dateHeader = new brls::Label();
             dateHeader->setText(dateStr);
             dateHeader->setFontSize(16);
-            dateHeader->setTextColor(nvgRGB(0, 150, 136));  // Teal
+            dateHeader->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGB(0, 255, 200) : nvgRGB(0, 150, 136));  // Teal
             dateHeader->setMarginTop(i > 0 ? 20 : 5);
             dateHeader->setMarginBottom(8);
             m_contentBox->addView(dateHeader);
@@ -543,7 +543,7 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
     auto* resumeLabel = new brls::Label();
     resumeLabel->setText(">");
     resumeLabel->setFontSize(20);
-    resumeLabel->setTextColor(nvgRGB(0, 150, 136));
+    resumeLabel->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGB(0, 255, 200) : nvgRGB(0, 150, 136));
     resumeLabel->setMarginLeft(10);
     itemRow->addView(resumeLabel);
 
@@ -597,7 +597,7 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
             auto* dateHeader = new brls::Label();
             dateHeader->setText(dateStr);
             dateHeader->setFontSize(16);
-            dateHeader->setTextColor(nvgRGB(0, 150, 136));  // Teal
+            dateHeader->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGB(0, 255, 200) : nvgRGB(0, 150, 136));  // Teal
             dateHeader->setMarginTop(globalIndex > 0 ? 20 : 5);
             dateHeader->setMarginBottom(8);
             m_contentBox->addView(dateHeader);

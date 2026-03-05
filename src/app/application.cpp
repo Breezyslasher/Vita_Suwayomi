@@ -351,6 +351,10 @@ void Application::applyTheme() {
         case AppTheme::DARK:
             variant = brls::ThemeVariant::DARK;
             break;
+        case AppTheme::NEON_VAPORWAVE:
+            // Vaporwave uses dark as base variant
+            variant = brls::ThemeVariant::DARK;
+            break;
         case AppTheme::SYSTEM:
         default:
             // Default to dark for Vita
@@ -360,6 +364,48 @@ void Application::applyTheme() {
 
     brls::Application::getPlatform()->setThemeVariant(variant);
     brls::Logger::info("Applied theme: {}", getThemeString(m_settings.theme));
+}
+
+NVGcolor Application::getAccentColor() const {
+    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
+        return nvgRGB(255, 50, 200);   // Hot pink / neon magenta
+    return nvgRGB(100, 180, 255);      // Default blue
+}
+
+NVGcolor Application::getSecondaryColor() const {
+    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
+        return nvgRGB(0, 255, 255);    // Cyan / neon teal
+    return nvgRGB(100, 200, 100);      // Default green
+}
+
+NVGcolor Application::getHeaderTextColor() const {
+    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
+        return nvgRGB(0, 255, 200);    // Neon mint/teal
+    return nvgRGB(100, 180, 255);      // Default blue
+}
+
+NVGcolor Application::getSubtitleColor() const {
+    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
+        return nvgRGB(180, 100, 255);  // Neon purple
+    return nvgRGB(140, 140, 140);      // Default gray
+}
+
+NVGcolor Application::getHighlightColor() const {
+    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
+        return nvgRGBA(255, 50, 200, 80);  // Hot pink glow
+    return nvgRGBA(0, 200, 200, 60);       // Default teal
+}
+
+NVGcolor Application::getSidebarColor() const {
+    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
+        return nvgRGBA(20, 0, 40, 255);    // Deep purple-black
+    return nvgRGBA(45, 45, 45, 255);       // Default dark gray
+}
+
+NVGcolor Application::getCardBackground() const {
+    if (m_settings.theme == AppTheme::NEON_VAPORWAVE)
+        return nvgRGBA(30, 5, 50, 255);    // Dark purple
+    return nvgRGBA(60, 60, 60, 255);       // Default gray
 }
 
 void Application::applyLogLevel() {
@@ -377,6 +423,7 @@ std::string Application::getThemeString(AppTheme theme) {
         case AppTheme::SYSTEM: return "System";
         case AppTheme::LIGHT: return "Light";
         case AppTheme::DARK: return "Dark";
+        case AppTheme::NEON_VAPORWAVE: return "Neon Vaporwave";
         default: return "Unknown";
     }
 }
@@ -507,6 +554,9 @@ bool Application::loadSettings() {
 
     // Load UI settings
     m_settings.theme = static_cast<AppTheme>(extractInt("theme"));
+    if (static_cast<int>(m_settings.theme) < 0 || static_cast<int>(m_settings.theme) > 3) {
+        m_settings.theme = AppTheme::DARK;
+    }
     m_settings.showClock = extractBool("showClock", true);
     m_settings.debugLogging = extractBool("debugLogging", false);
 

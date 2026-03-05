@@ -51,7 +51,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_updateStatusLabel = new brls::Label();
     m_updateStatusLabel->setText("");
     m_updateStatusLabel->setFontSize(18);
-    m_updateStatusLabel->setTextColor(nvgRGBA(0, 200, 170, 255));
+    m_updateStatusLabel->setTextColor(Application::getInstance().getSecondaryColor());
     m_updateStatusLabel->setMarginLeft(12);
     m_updateStatusLabel->setVisibility(brls::Visibility::GONE);
     titleRow->addView(m_updateStatusLabel);
@@ -1214,7 +1214,8 @@ void LibrarySectionTab::updateCategoryButtonStyles() {
         // Style the button based on selection state (Komikku-style)
         if (isSelected) {
             // Highlight selected category with teal accent
-            btn->setBackgroundColor(nvgRGBA(0, 150, 136, 255));
+            btn->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
+                ? nvgRGBA(80, 0, 130, 255) : nvgRGBA(0, 150, 136, 255));
         } else {
             // Normal style - dark gray
             btn->setBackgroundColor(nvgRGBA(50, 50, 50, 255));

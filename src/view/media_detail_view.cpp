@@ -533,7 +533,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
     this->setGrow(1.0f);
-    this->setBackgroundColor(nvgRGB(18, 18, 18)); // Komikku dark background
+    this->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
+        ? nvgRGB(10, 0, 20) : nvgRGB(18, 18, 18)); // Vaporwave deep purple or Komikku dark
 
     // Register back button
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View* view) {
@@ -609,7 +610,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     leftPanel->setAxis(brls::Axis::COLUMN);
     leftPanel->setWidth(260);
     leftPanel->setPadding(20);
-    leftPanel->setBackgroundColor(nvgRGB(28, 28, 28)); // Komikku side panel
+    leftPanel->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
+        ? nvgRGB(15, 0, 30) : nvgRGB(28, 28, 28)); // Vaporwave deep purple or Komikku panel
 
     // Cover image container (centered)
     auto* coverContainer = new brls::Box();
@@ -642,7 +644,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_readButton->setWidth(190);
     m_readButton->setHeight(44);
     m_readButton->setCornerRadius(22);  // Pill-shaped button
-    m_readButton->setBackgroundColor(nvgRGBA(0, 150, 136, 255)); // Teal
+    m_readButton->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
+        ? nvgRGBA(255, 50, 200, 255) : nvgRGBA(0, 150, 136, 255)); // Vaporwave pink or teal
 
     std::string readText = "Start Reading";
     if (m_manga.lastChapterRead > 0) {

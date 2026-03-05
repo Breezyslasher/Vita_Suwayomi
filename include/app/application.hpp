@@ -12,6 +12,7 @@
 #include <map>
 #include <vector>
 #include <cstdint>
+#include <nanovg.h>
 
 // Application version
 #define VITA_SUWAYOMI_VERSION "1.0.0"
@@ -30,7 +31,8 @@ namespace vitasuwayomi {
 enum class AppTheme {
     SYSTEM = 0,  // Follow system setting
     LIGHT = 1,
-    DARK = 2
+    DARK = 2,
+    NEON_VAPORWAVE = 3  // Neon / Miami vaporwave theme
 };
 
 // Reading mode options
@@ -264,6 +266,17 @@ public:
 
     // Apply theme
     void applyTheme();
+
+    // Theme color accessors - returns colors based on current theme
+    // Vaporwave theme overrides these with neon/Miami colors
+    NVGcolor getAccentColor() const;        // Primary accent (buttons, highlights)
+    NVGcolor getSecondaryColor() const;     // Secondary accent
+    NVGcolor getHeaderTextColor() const;    // Section headers
+    NVGcolor getSubtitleColor() const;      // Subtitle/detail text
+    NVGcolor getHighlightColor() const;     // Focus highlight
+    NVGcolor getSidebarColor() const;       // Sidebar background tint
+    NVGcolor getCardBackground() const;     // Card/cell background
+    bool isVaporwaveTheme() const { return m_settings.theme == AppTheme::NEON_VAPORWAVE; }
 
     // Apply log level based on settings
     void applyLogLevel();

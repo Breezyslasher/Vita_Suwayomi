@@ -551,7 +551,7 @@ void SettingsTab::createUISection() {
 
     // Theme selector
     m_themeSelector = new brls::SelectorCell();
-    m_themeSelector->init("Theme", {"System", "Light", "Dark"}, static_cast<int>(settings.theme),
+    m_themeSelector->init("Theme", {"System", "Light", "Dark", "Neon Vaporwave"}, static_cast<int>(settings.theme),
         [this](int index) {
             onThemeChanged(index);
         });
@@ -1761,7 +1761,7 @@ void SettingsTab::runNetworkTest() {
                 } else if (line.find("--") == 0) {
                     label->setText(line);
                     label->setFontSize(16);
-                    label->setTextColor(nvgRGB(100, 180, 255));
+                    label->setTextColor(Application::getInstance().getHeaderTextColor());
                     label->setMarginTop(5);
                 } else {
                     label->setText(line);
