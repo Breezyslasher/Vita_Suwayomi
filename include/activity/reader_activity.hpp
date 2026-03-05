@@ -136,6 +136,7 @@ private:
     BRLS_BIND(brls::Label, settingsDirLabel, "reader/settings_dir_label");
     BRLS_BIND(brls::Label, settingsRotLabel, "reader/settings_rot_label");
     BRLS_BIND(brls::Label, settingsScaleLabel, "reader/settings_scale_label");
+    BRLS_BIND(brls::Button, settingsResetBtn, "reader/settings_reset_btn");
 
     // Webtoon continuous scroll view
     BRLS_BIND(WebtoonScrollView, webtoonScroll, "reader/webtoon_scroll");

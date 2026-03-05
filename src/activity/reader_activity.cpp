@@ -191,6 +191,7 @@ void ReaderActivity::onContentAvailable() {
             cropBorders = it->second.cropBorders;
             webtoonSidePadding = it->second.webtoonSidePadding;
             m_settings.isWebtoonFormat = it->second.isWebtoonFormat;
+            appSettings.readerBackground = it->second.readerBackground;
             hasLocalSettings = true;
             brls::Logger::info("ReaderActivity: FOUND local settings - readingMode={}, pageScaleMode={}, rotation={}, webtoon={}",
                               static_cast<int>(readingMode), static_cast<int>(pageScaleMode), imageRotation,
@@ -1172,6 +1173,44 @@ void ReaderActivity::onContentAvailable() {
             return true;
         });
         settingsScaleBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsScaleBtn));
+    }
+
+    // Reset to defaults button
+    if (settingsResetBtn) {
+        settingsResetBtn->registerClickAction([this](brls::View*) {
+            AppSettings& appSettings = Application::getInstance().getSettings();
+
+            // Remove per-manga settings
+            appSettings.mangaReaderSettings.erase(m_mangaId);
+
+            // Reset to global defaults
+            m_settings.direction = (appSettings.readingMode == ReadingMode::LEFT_TO_RIGHT) ?
+                ReaderDirection::LEFT_TO_RIGHT : ReaderDirection::RIGHT_TO_LEFT;
+            m_settings.scaleMode = static_cast<ReaderScaleMode>(appSettings.pageScaleMode);
+            m_settings.rotation = static_cast<ImageRotation>(appSettings.imageRotation);
+            m_settings.isWebtoonFormat = (appSettings.readingMode == ReadingMode::WEBTOON);
+            m_settings.cropBorders = appSettings.cropBorders;
+            m_settings.webtoonSidePadding = appSettings.webtoonSidePadding;
+
+            updateDirectionLabel();
+            applySettings();
+            updateSettingsLabels();
+            Application::getInstance().saveSettings();
+
+            // Remove server meta for this manga
+            int mangaId = m_mangaId;
+            asyncRun([mangaId]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                client.setMangaMeta(mangaId, "readerMode", "");
+                client.setMangaMeta(mangaId, "rotation", "");
+                client.setMangaMeta(mangaId, "scaleType", "");
+                client.setMangaMeta(mangaId, "isWebtoonFormat", "");
+            });
+
+            brls::Application::notify("Reset to defaults");
+            return true;
+        });
+        settingsResetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsResetBtn));
     }
 
     // Update direction label
@@ -2268,6 +2307,9 @@ void ReaderActivity::saveSettingsToApp() {
     mangaSettings.webtoonSidePadding = m_settings.webtoonSidePadding;
     mangaSettings.isWebtoonFormat = m_settings.isWebtoonFormat;
 
+    // Background color
+    mangaSettings.readerBackground = appSettings.readerBackground;
+
     // Store per-manga settings locally (overrides defaults for this manga)
     appSettings.mangaReaderSettings[m_mangaId] = mangaSettings;
 
@@ -2470,6 +2512,48 @@ void ReaderActivity::showPageError(const std::string& message) {
     });
     m_retryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_retryButton));
     m_errorOverlay->addView(m_retryButton);
+
+    // Download chapter button (for offline reading)
+    if (!m_loadedFromLocal) {
+        auto* downloadButton = new brls::Button();
+        downloadButton->setText("Download Chapter");
+        downloadButton->setWidth(200);
+        downloadButton->setHeight(44);
+        downloadButton->setCornerRadius(22);
+        downloadButton->setMarginTop(10);
+        downloadButton->setBackgroundColor(nvgRGBA(60, 60, 100, 255));
+        std::weak_ptr<bool> dlAlive = m_alive;
+        int mangaId = m_mangaId;
+        int chapterId = m_chapterIndex;  // chapter ID used for both
+        std::string mangaTitle = m_mangaTitle;
+        std::string chapterName = m_chapterName;
+        downloadButton->registerClickAction([dlAlive, mangaId, chapterId, mangaTitle, chapterName](brls::View*) {
+            auto alive = dlAlive.lock();
+            if (!alive || !*alive) return true;
+            if (!Application::getInstance().isConnected()) {
+                brls::Application::notify("App is offline");
+                return true;
+            }
+            DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+            asyncRun([mangaId, chapterId, mangaTitle, chapterName, downloadMode]() {
+                if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
+                    DownloadsManager& dm = DownloadsManager::getInstance();
+                    dm.queueChapterDownload(mangaId, chapterId, chapterId, mangaTitle, chapterName, 0.0f);
+                }
+                if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                    std::vector<int> ids = {chapterId};
+                    client.queueChapterDownloads(ids);
+                }
+                brls::sync([]() {
+                    brls::Application::notify("Chapter download queued");
+                });
+            });
+            return true;
+        });
+        downloadButton->addGestureRecognizer(new brls::TapGestureRecognizer(downloadButton));
+        m_errorOverlay->addView(downloadButton);
+    }
 
     // Intercept all touch events on the overlay so they don't pass through
     // to the container/pageImage behind it (prevents hover transfer errors)

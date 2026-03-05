@@ -181,10 +181,26 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     cell->titleLabel->setText(title);
     cell->titleLabel->setTextColor(chapter.read ? Application::getInstance().getDimTextColor() : nvgRGB(255, 255, 255));
 
-    // Subtitle (scanlator)
-    if (!chapter.scanlator.empty()) {
-        cell->subtitleLabel->setText(chapter.scanlator);
-        cell->subtitleLabel->setVisibility(brls::Visibility::VISIBLE);
+    // Subtitle (scanlator + upload date)
+    {
+        std::string subtitle;
+        if (!chapter.scanlator.empty()) {
+            subtitle = chapter.scanlator;
+        }
+        if (chapter.uploadDate > 0) {
+            time_t rawTime = static_cast<time_t>(chapter.uploadDate / 1000);  // ms to seconds
+            struct tm* timeInfo = localtime(&rawTime);
+            if (timeInfo) {
+                char dateBuf[32];
+                strftime(dateBuf, sizeof(dateBuf), "%b %d, %Y", timeInfo);
+                if (!subtitle.empty()) subtitle += " · ";
+                subtitle += dateBuf;
+            }
+        }
+        if (!subtitle.empty()) {
+            cell->subtitleLabel->setText(subtitle);
+            cell->subtitleLabel->setVisibility(brls::Visibility::VISIBLE);
+        }
     }
 
     // Read indicator
@@ -1046,8 +1062,8 @@ void MangaDetailView::willAppear(bool resetState) {
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             now - m_lastProgressRefresh).count();
-        // Throttle to every 2 seconds to keep it lightweight on Vita
-        if (elapsed >= 2000 || downloadedPages == totalPages) {
+        // Throttle to every 500ms for responsive progress updates
+        if (elapsed >= 500 || downloadedPages == totalPages) {
             m_lastProgressRefresh = now;
             brls::sync([this, aliveWeakForProgress]() {
                 auto alive = aliveWeakForProgress.lock();
@@ -2548,6 +2564,9 @@ void MangaDetailView::showChapterMenu(const Chapter& chapter) {
     if (online) {
         actions.push_back({isRead ? "Mark Unread" : "Mark Read", 1});
     }
+    if (online) {
+        actions.push_back({chapter.bookmarked ? "Remove Bookmark" : "Bookmark", 3});
+    }
     // Show "Delete Download" for already-downloaded chapters even offline;
     // hide "Download" when offline since it requires the server.
     if (isDownloaded) {
@@ -2589,6 +2608,17 @@ void MangaDetailView::showChapterMenu(const Chapter& chapter) {
                         });
                     }
                     break;
+                case 3: {  // Bookmark/Unbookmark
+                    bool wasBookmarked = chapter.bookmarked;
+                    asyncRun([mangaId, chapterIndex, isRead, wasBookmarked]() {
+                        SuwayomiClient::getInstance().updateChapter(mangaId, chapterIndex,
+                            isRead, !wasBookmarked);
+                        brls::sync([wasBookmarked]() {
+                            brls::Application::notify(wasBookmarked ? "Bookmark removed" : "Bookmarked");
+                        });
+                    });
+                    break;
+                }
                 case 2:  // Download/Delete
                     if (isDownloaded) {
                         brls::sync([this, chapter, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
