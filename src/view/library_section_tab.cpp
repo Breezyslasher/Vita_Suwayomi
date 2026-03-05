@@ -282,7 +282,7 @@ LibrarySectionTab::LibrarySectionTab() {
                         m_pullIndicatorLabel->setVisibility(brls::Visibility::VISIBLE);
                         if (dy > PULL_THRESHOLD) {
                             m_pullIndicatorLabel->setText("Release to update");
-                            m_pullIndicatorLabel->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(255, 50, 200, 255) : nvgRGBA(0, 200, 170, 255));
+                            m_pullIndicatorLabel->setTextColor(Application::getInstance().getCtaButtonColor());
                         } else {
                             m_pullIndicatorLabel->setText("Pull down to update");
                             m_pullIndicatorLabel->setTextColor(Application::getInstance().getSubtitleColor());
@@ -2355,7 +2355,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         checkLabel->setMarginRight(8);
         if (isChecked) {
             checkLabel->setText("\u2713");
-            checkLabel->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(255, 50, 200, 255) : nvgRGBA(0, 200, 150, 255));
+            checkLabel->setTextColor(Application::getInstance().getCtaButtonColor());
         } else {
             checkLabel->setText("");
         }
@@ -2378,7 +2378,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
             } else {
                 selectedCats->insert(catId);
                 (*checkLabels)[i]->setText("\u2713");
-                (*checkLabels)[i]->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(255, 50, 200, 255) : nvgRGBA(0, 200, 150, 255));
+                (*checkLabels)[i]->setTextColor(Application::getInstance().getCtaButtonColor());
                 row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
             }
             return true;

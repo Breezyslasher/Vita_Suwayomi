@@ -390,6 +390,16 @@ struct ThemePalette {
     NVGcolor activeRowBg;        // Active/selected row bg
     NVGcolor inactiveRowBg;      // Inactive row bg
     NVGcolor trackingBtn;        // Tracking button
+    NVGcolor ctaButton;          // Call-to-action button (read, retry, checkmarks)
+    NVGcolor sectionHeaderBg;    // Section header background (extensions tab)
+    NVGcolor readerBg;           // Reader/transition dark background
+    NVGcolor errorOverlayBg;     // Error overlay background (translucent)
+    NVGcolor focusedRowBg;       // Focused/hovered row highlight
+    NVGcolor deepBg;             // Very deep/dark background
+    NVGcolor separatorColor;     // Separator lines
+    NVGcolor successText;        // Success/visible status text
+    NVGcolor textColor;          // Primary text color
+    NVGcolor buttonColor;        // Default button background
 };
 
 static const ThemePalette& getPalette(AppTheme theme) {
@@ -411,6 +421,16 @@ static const ThemePalette& getPalette(AppTheme theme) {
         nvgRGBA(0, 100, 80, 200),       // activeRowBg: teal
         nvgRGBA(50, 50, 50, 200),       // inactiveRowBg: gray
         nvgRGBA(103, 58, 183, 255),     // trackingBtn: purple
+        nvgRGBA(0, 150, 136, 255),      // ctaButton: teal
+        nvgRGB(0, 120, 110),            // sectionHeaderBg: dark teal
+        nvgRGBA(20, 20, 30, 255),       // readerBg: dark blue-gray
+        nvgRGBA(26, 26, 46, 200),       // errorOverlayBg: dark translucent
+        nvgRGBA(60, 60, 80, 255),       // focusedRowBg: blue-gray
+        nvgRGBA(20, 20, 20, 255),       // deepBg: near-black
+        nvgRGBA(80, 80, 80, 100),       // separatorColor: gray line
+        nvgRGB(100, 200, 150),          // successText: green
+        nvgRGB(255, 255, 255),          // textColor: white
+        nvgRGBA(66, 66, 66, 255),       // buttonColor: dark gray
     };
 
     // Neon Vaporwave / Miami palette
@@ -431,6 +451,16 @@ static const ThemePalette& getPalette(AppTheme theme) {
         nvgRGBA(60, 0, 100, 200),       // activeRowBg: purple highlight
         nvgRGBA(25, 5, 45, 200),        // inactiveRowBg: dark purple
         nvgRGBA(150, 0, 200, 255),      // trackingBtn: neon purple
+        nvgRGBA(255, 50, 200, 255),     // ctaButton: hot pink
+        nvgRGB(80, 0, 130),             // sectionHeaderBg: dark purple
+        nvgRGBA(20, 0, 40, 255),        // readerBg: deep purple
+        nvgRGBA(30, 0, 50, 200),        // errorOverlayBg: dark purple translucent
+        nvgRGBA(50, 10, 80, 255),       // focusedRowBg: purple
+        nvgRGBA(15, 0, 30, 255),        // deepBg: near-black purple
+        nvgRGBA(100, 50, 150, 100),     // separatorColor: purple line
+        nvgRGB(0, 255, 200),            // successText: neon mint
+        nvgRGB(255, 255, 255),          // textColor: white (bright on dark)
+        nvgRGBA(50, 10, 80, 255),       // buttonColor: purple
     };
 
     // Add new theme palettes here:
@@ -459,6 +489,16 @@ NVGcolor Application::getRowBackground() const { return getPalette(m_settings.th
 NVGcolor Application::getActiveRowBackground() const { return getPalette(m_settings.theme).activeRowBg; }
 NVGcolor Application::getInactiveRowBackground() const { return getPalette(m_settings.theme).inactiveRowBg; }
 NVGcolor Application::getTrackingButtonColor() const { return getPalette(m_settings.theme).trackingBtn; }
+NVGcolor Application::getCtaButtonColor() const { return getPalette(m_settings.theme).ctaButton; }
+NVGcolor Application::getSectionHeaderBg() const { return getPalette(m_settings.theme).sectionHeaderBg; }
+NVGcolor Application::getReaderBackground() const { return getPalette(m_settings.theme).readerBg; }
+NVGcolor Application::getErrorOverlayBg() const { return getPalette(m_settings.theme).errorOverlayBg; }
+NVGcolor Application::getFocusedRowBg() const { return getPalette(m_settings.theme).focusedRowBg; }
+NVGcolor Application::getDeepBackground() const { return getPalette(m_settings.theme).deepBg; }
+NVGcolor Application::getSeparatorColor() const { return getPalette(m_settings.theme).separatorColor; }
+NVGcolor Application::getSuccessTextColor() const { return getPalette(m_settings.theme).successText; }
+NVGcolor Application::getTextColor() const { return getPalette(m_settings.theme).textColor; }
+NVGcolor Application::getButtonColor() const { return getPalette(m_settings.theme).buttonColor; }
 
 void Application::applyLogLevel() {
     if (m_settings.debugLogging) {

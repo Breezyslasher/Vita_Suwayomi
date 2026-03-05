@@ -328,7 +328,7 @@ void WebtoonScrollView::drawTransitionPage(NVGcontext* vg, int pageIndex,
     // Dark background for transition (drawn in screen space)
     nvgBeginPath(vg);
     nvgRect(vg, x, y, width, height);
-    nvgFillColor(vg, Application::getInstance().isVaporwaveTheme() ? nvgRGBA(20, 0, 40, 255) : nvgRGBA(20, 20, 30, 255));
+    nvgFillColor(vg, Application::getInstance().getReaderBackground());
     nvgFill(vg);
 
     // Apply rotation so text matches page content orientation
@@ -453,7 +453,7 @@ void WebtoonScrollView::drawFailedPage(NVGcontext* vg, int pageIndex,
     // Retry prompt
     nvgFontSize(vg, 14.0f);
     nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-    nvgFillColor(vg, Application::getInstance().isVaporwaveTheme() ? nvgRGBA(255, 50, 200, 255) : nvgRGBA(100, 200, 180, 255));
+    nvgFillColor(vg, Application::getInstance().getCtaButtonColor());
     nvgText(vg, centerX, centerY + 4.0f, "Tap to retry", nullptr);
 
     nvgRestore(vg);

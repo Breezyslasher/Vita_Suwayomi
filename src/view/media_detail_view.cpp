@@ -642,8 +642,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_readButton->setWidth(190);
     m_readButton->setHeight(44);
     m_readButton->setCornerRadius(22);  // Pill-shaped button
-    m_readButton->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
-        ? nvgRGBA(255, 50, 200, 255) : nvgRGBA(0, 150, 136, 255)); // Accent-colored CTA button
+    m_readButton->setBackgroundColor(Application::getInstance().getCtaButtonColor());
 
     std::string readText = "Start Reading";
     if (m_manga.lastChapterRead > 0) {

@@ -55,7 +55,7 @@ TrackingSearchResultCell::TrackingSearchResultCell() {
     // Status label (publishing status, chapters, type)
     m_statusLabel = new brls::Label();
     m_statusLabel->setFontSize(12);
-    m_statusLabel->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGB(0, 255, 200) : nvgRGB(130, 200, 130));
+    m_statusLabel->setTextColor(Application::getInstance().getSuccessTextColor());
     m_statusLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
     m_statusLabel->setMarginBottom(6);
     m_statusLabel->setSingleLine(true);  // Prevent status from wrapping
@@ -185,7 +185,7 @@ void TrackingSearchResultCell::onFocusGained() {
         m_titleLabel->setText(m_result.title);
     }
     // Highlight background
-    this->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(50, 10, 80, 255) : nvgRGBA(60, 60, 80, 255));
+    this->setBackgroundColor(Application::getInstance().getFocusedRowBg());
 }
 
 void TrackingSearchResultCell::onFocusLost() {
@@ -223,7 +223,7 @@ void TrackingSearchView::setupUI() {
     this->setAlignItems(brls::AlignItems::STRETCH);
     this->setPadding(20);
     this->setGrow(1.0f);
-    this->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(15, 0, 30, 255) : nvgRGBA(20, 20, 20, 255));
+    this->setBackgroundColor(Application::getInstance().getDeepBackground());
 
     // Header with title and result count
     auto* headerBox = new brls::Box();

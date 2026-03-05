@@ -130,7 +130,7 @@ MangaItemCell::MangaItemCell() {
     m_unreadBadge = new brls::Label();
     m_unreadBadge->setFontSize(10);
     m_unreadBadge->setTextColor(nvgRGB(255, 255, 255));
-    m_unreadBadge->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(0, 255, 200, 255) : nvgRGBA(0, 150, 136, 255)); // Teal badge
+    m_unreadBadge->setBackgroundColor(Application::getInstance().getTealColor()); // Teal badge
     m_unreadBadge->setMargins(6, 0, 0, 6);
     m_unreadBadge->setPositionType(brls::PositionType::ABSOLUTE);
     m_unreadBadge->setPositionTop(0);
@@ -426,7 +426,7 @@ void MangaItemCell::setSelected(bool selected) {
 
 void MangaItemCell::updateSelectionVisual() {
     if (m_selected) {
-        this->setBorderColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(0, 255, 200, 255) : nvgRGBA(0, 150, 136, 255));  // Teal border
+        this->setBorderColor(Application::getInstance().getTealColor());  // Teal border
         this->setBorderThickness(3.0f);
     } else {
         this->setBorderColor(nvgRGBA(0, 0, 0, 0));

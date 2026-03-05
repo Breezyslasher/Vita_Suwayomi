@@ -652,7 +652,7 @@ void DownloadsTab::refreshQueue() {
                                 } else if (newItem.state == static_cast<int>(DownloadState::DOWNLOADED)) {
                                     m_serverRowElements[i].row->setBackgroundColor(nvgRGBA(30, 50, 60, 200));
                                 } else {
-                                    m_serverRowElements[i].row->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(25, 5, 45, 200) : nvgRGBA(40, 40, 40, 200));
+                                    m_serverRowElements[i].row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
                                 }
                             }
                         }
@@ -1049,7 +1049,7 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     } else if (state == static_cast<int>(LocalDownloadState::PAUSED)) {
         originalBgColor = nvgRGBA(50, 50, 30, 200);  // Amber tint for paused
     } else {
-        originalBgColor = Application::getInstance().isVaporwaveTheme() ? nvgRGBA(25, 5, 45, 200) : nvgRGBA(40, 40, 40, 200);
+        originalBgColor = Application::getInstance().getInactiveRowBackground();
     }
     row->setBackgroundColor(originalBgColor);
 
@@ -1255,7 +1255,7 @@ void DownloadsTab::updateLocalProgress(int mangaId, int chapterIndex, int downlo
                     } else if (state == static_cast<int>(LocalDownloadState::PAUSED)) {
                         elem.row->setBackgroundColor(nvgRGBA(50, 50, 30, 200));
                     } else {
-                        elem.row->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(25, 5, 45, 200) : nvgRGBA(40, 40, 40, 200));
+                        elem.row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
                     }
                 }
             }
@@ -1467,7 +1467,7 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     } else if (state == static_cast<int>(DownloadState::DOWNLOADED)) {
         originalBgColor = nvgRGBA(30, 50, 60, 200);  // Blue tint for done
     } else {
-        originalBgColor = Application::getInstance().isVaporwaveTheme() ? nvgRGBA(25, 5, 45, 200) : nvgRGBA(40, 40, 40, 200);
+        originalBgColor = Application::getInstance().getInactiveRowBackground();
     }
     row->setBackgroundColor(originalBgColor);
 

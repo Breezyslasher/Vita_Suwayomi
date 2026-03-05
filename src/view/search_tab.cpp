@@ -649,7 +649,7 @@ void SearchTab::showSources() {
             sourceRow->setMarginBottom(8);
             sourceRow->setPadding(8);
             sourceRow->setCornerRadius(8);
-            sourceRow->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(25, 5, 45, 200) : nvgRGBA(40, 40, 40, 200));
+            sourceRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             sourceRow->setFocusable(true);
 
             // Track first source row for focus transfer

@@ -285,6 +285,16 @@ public:
     NVGcolor getActiveRowBackground() const; // Active/selected row bg
     NVGcolor getInactiveRowBackground() const; // Inactive row bg
     NVGcolor getTrackingButtonColor() const; // Tracking button background
+    NVGcolor getCtaButtonColor() const;    // Call-to-action button (read, retry)
+    NVGcolor getSectionHeaderBg() const;   // Section header background
+    NVGcolor getReaderBackground() const;  // Reader/transition background
+    NVGcolor getErrorOverlayBg() const;    // Error overlay background
+    NVGcolor getFocusedRowBg() const;      // Focused/hovered row
+    NVGcolor getDeepBackground() const;    // Very deep/dark background
+    NVGcolor getSeparatorColor() const;    // Separator lines
+    NVGcolor getSuccessTextColor() const;  // Success/visible status text
+    NVGcolor getTextColor() const;         // Primary text color
+    NVGcolor getButtonColor() const;       // Default button background
     bool isVaporwaveTheme() const { return m_settings.theme == AppTheme::NEON_VAPORWAVE; }
 
     // Apply log level based on settings

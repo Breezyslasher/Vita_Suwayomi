@@ -185,8 +185,7 @@ ExtensionSectionHeader::ExtensionSectionHeader() {
     this->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     this->setAlignItems(brls::AlignItems::CENTER);
     this->setPadding(12, 15, 12, 15);
-    this->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
-        ? nvgRGB(80, 0, 130) : nvgRGB(0, 120, 110));  // Vaporwave purple or teal
+    this->setBackgroundColor(Application::getInstance().getSectionHeaderBg());  // Vaporwave purple or teal
     this->setCornerRadius(4);
     this->setFocusable(true);
 

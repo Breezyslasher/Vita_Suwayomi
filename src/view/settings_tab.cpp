@@ -90,7 +90,7 @@ void SettingsTab::addSectionSeparator() {
     separator->setMarginBottom(4);
     separator->setMarginLeft(8);
     separator->setMarginRight(8);
-    separator->setBackgroundColor(Application::getInstance().isVaporwaveTheme() ? nvgRGBA(100, 50, 150, 100) : nvgRGBA(80, 80, 80, 100));
+    separator->setBackgroundColor(Application::getInstance().getSeparatorColor());
     m_contentBox->addView(separator);
 }
 
