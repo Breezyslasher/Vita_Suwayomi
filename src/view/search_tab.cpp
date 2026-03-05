@@ -368,6 +368,11 @@ void SearchTab::willDisappear(bool resetState) {
 }
 
 void SearchTab::showLoadingIndicator(const std::string& message) {
+    // Clear the results label so we don't show duplicate loading text
+    // (m_resultsLabel is white, m_loadingLabel is accent-colored)
+    if (m_resultsLabel) {
+        m_resultsLabel->setText("");
+    }
     m_isLoading = true;
     m_loadingDotCount = 0;
     m_loadingTimer = 0.0f;
@@ -727,8 +732,6 @@ void SearchTab::showSources() {
     if (firstSourceRow) {
         brls::Application::giveFocus(firstSourceRow);
     }
-
-    m_isNavigatingBack = false;  // Allow back navigation again
 }
 
 void SearchTab::showSourceBrowser(const Source& source) {
@@ -1299,6 +1302,7 @@ void SearchTab::updateModeButtons() {
 
 void SearchTab::handleBackNavigation() {
     if (m_isNavigatingBack) return;  // Prevent double back-press
+    if (m_browseMode == BrowseMode::SOURCES) return;  // Already on sources, nothing to do
     m_isNavigatingBack = true;
     m_loadGeneration++;  // Invalidate any in-flight async callbacks
     hideLoadingIndicator();  // Hide any loading text left from cancelled async loads
@@ -1306,6 +1310,7 @@ void SearchTab::handleBackNavigation() {
         if (m_isGlobalSearch) {
             // Global search: go back to sources list
             showSources();
+            m_isNavigatingBack = false;
         } else {
             // Source-specific search: go back to source's main page (Popular)
             // Find the current source and show its browser again
@@ -1341,10 +1346,12 @@ void SearchTab::handleBackNavigation() {
             }
             // Fallback: go to sources if source not found
             showSources();
+            m_isNavigatingBack = false;
         }
     } else {
         // For POPULAR/LATEST modes: go back to sources list
         showSources();
+        m_isNavigatingBack = false;
     }
 }
 
