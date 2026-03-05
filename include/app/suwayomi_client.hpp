@@ -607,6 +607,7 @@ private:
     bool fetchCategoriesGraphQL(std::vector<Category>& categories);
     bool fetchChaptersGraphQL(int mangaId, std::vector<Chapter>& chapters);
     bool fetchMangaGraphQL(int mangaId, Manga& manga);
+    bool refreshMangaGraphQL(int mangaId);  // fetchManga mutation - tells server to fetch from source
     bool fetchServerInfoGraphQL(ServerInfo& info);
     bool addMangaToLibraryGraphQL(int mangaId);
     bool removeMangaFromLibraryGraphQL(int mangaId);
