@@ -32,7 +32,26 @@ enum class AppTheme {
     SYSTEM = 0,  // Follow system setting
     LIGHT = 1,
     DARK = 2,
-    NEON_VAPORWAVE = 3  // Neon / Miami vaporwave theme
+    NEON_VAPORWAVE = 3,
+    TACHIYOMI = 4,
+    CATPPUCCIN = 5,
+    NORD = 6,
+    TAKO = 7,
+    MIDNIGHT_DUSK = 8,
+    STRAWBERRY = 9,
+    GREEN_APPLE = 10,
+    LAVENDER = 11,
+    MATRIX = 12,
+    DOOM = 13,
+    MOCHA = 14,
+    SAPPHIRE = 15,
+    CLOUDFLARE = 16,
+    TEAL_TURQUOISE = 17,
+    TIDAL_WAVE = 18,
+    YOTSUBA = 19,
+    YIN_YANG = 20,
+    MONOCHROME = 21,
+    COTTON_CANDY = 22,
 };
 
 // Reading mode options

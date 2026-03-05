@@ -2,7 +2,7 @@
 
 ## Overview
 
-VitaSuwayomi uses a **palette-based theme system**. Each theme is a `ThemePalette` struct containing 16 color slots. Adding a new theme requires changes in only 3 files.
+VitaSuwayomi uses a **palette-based theme system**. Each theme is a `ThemePalette` struct containing 26 color slots. Adding a new theme requires changes in only 3 files.
 
 ---
 
@@ -18,7 +18,8 @@ enum class AppTheme {
     LIGHT = 1,
     DARK = 2,
     NEON_VAPORWAVE = 3,
-    MY_NEW_THEME = 4    // <-- Add here, increment the number
+    // ... (4-22 are built-in themes from Komikku)
+    MY_NEW_THEME = 23    // <-- Add here, increment the number
 };
 ```
 
@@ -49,6 +50,16 @@ static const ThemePalette myNewPalette = {
     nvgRGBA(R, G, B, 200),      // activeRowBg: Selected/active row (use alpha ~200)
     nvgRGBA(R, G, B, 200),      // inactiveRowBg: Unselected row (use alpha ~200)
     nvgRGBA(R, G, B, 255),      // trackingBtn: Tracking button color
+    nvgRGBA(R, G, B, 255),      // ctaButton: Call-to-action button
+    nvgRGB(R, G, B),            // sectionHeaderBg: Section header background
+    nvgRGBA(R, G, B, 255),      // readerBg: Reader background
+    nvgRGBA(R, G, B, 200),      // errorOverlayBg: Error overlay (translucent)
+    nvgRGBA(R, G, B, 255),      // focusedRowBg: Focused row highlight
+    nvgRGBA(R, G, B, 255),      // deepBg: Very deep background
+    nvgRGBA(R, G, B, 100),      // separatorColor: Separator lines
+    nvgRGB(R, G, B),            // successText: Success/status text
+    nvgRGB(R, G, B),            // textColor: Primary text color
+    nvgRGBA(R, G, B, 255),      // buttonColor: Default button background
 };
 ```
 
@@ -81,8 +92,8 @@ case AppTheme::MY_NEW_THEME: return "My New Theme";
 **Update theme validation in `loadSettings()`** - increase the max value:
 
 ```cpp
-// Change > 3 to > 4 (or whatever your new max enum value is)
-if (static_cast<int>(m_settings.theme) < 0 || static_cast<int>(m_settings.theme) > 4) {
+// Change > 22 to > 23 (or whatever your new max enum value is)
+if (static_cast<int>(m_settings.theme) < 0 || static_cast<int>(m_settings.theme) > 23) {
 ```
 
 ---
@@ -95,7 +106,7 @@ Find the theme selector and add your theme name to the options list:
 
 ```cpp
 m_themeSelector->init("Theme",
-    {"System", "Light", "Dark", "Neon Vaporwave", "My New Theme"},  // <-- Add here
+    {"System", "Light", "Dark", "Neon Vaporwave", ..., "My New Theme"},  // <-- Add here
     static_cast<int>(settings.theme),
     [this](int index) { onThemeChanged(index); });
 ```
@@ -124,10 +135,26 @@ Here's what each color slot is used for across the app:
 | `activeRowBg` | Active/selected row highlight | Selected category, enabled toggle |
 | `inactiveRowBg` | Inactive row background | Unselected category, disabled toggle |
 | `trackingBtn` | Tracking button | MAL/AniList tracking button |
+| `ctaButton` | Call-to-action button | Read, retry, checkmarks |
+| `sectionHeaderBg` | Section header background | Extensions tab headers |
+| `readerBg` | Reader background | Reader/transition bg |
+| `errorOverlayBg` | Error overlay | Error dialog bg (translucent) |
+| `focusedRowBg` | Focused row highlight | Hovered/focused list item |
+| `deepBg` | Very deep background | Tracking search view bg |
+| `separatorColor` | Separator lines | Settings dividers |
+| `successText` | Success/status text | Visible status labels |
+| `textColor` | Primary text color | Main text |
+| `buttonColor` | Default button bg | Generic buttons |
 
 ---
 
-## Existing Palettes for Reference
+## Built-in Themes (from Komikku/Tachiyomi)
+
+The app includes 19 ported themes from Komikku: Tachiyomi (blue), Catppuccin (purple),
+Nord (arctic blue), Tako (warm orange), Midnight Dusk (pink), Strawberry Daiquiri (red),
+Green Apple, Lavender, Matrix (neon green), Doom (blood red), Mocha (warm brown),
+Sapphire (blue), Cloudflare (orange), Teal Turquoise, Tidal Wave (ocean blue),
+Yotsuba (peach), Yin Yang (white-on-dark), Monochrome (pure B&W), Cotton Candy (pink-teal).
 
 ### Default (System/Light/Dark)
 - Blue accent (#64B4FF), green secondary, gray subtitles
@@ -147,4 +174,4 @@ Here's what each color slot is used for across the app:
 - Active/inactive row backgrounds look best with alpha ~200
 - The highlight color needs low alpha (~60-80) for a subtle glow
 - Test your theme by selecting it in Settings > Theme
-- Some UI elements use `isVaporwaveTheme()` ternaries for special cases beyond the palette. Search for `isVaporwaveTheme` to find them if you want to extend those too.
+- All colors are now fully palette-driven. No more `isVaporwaveTheme()` ternaries needed.

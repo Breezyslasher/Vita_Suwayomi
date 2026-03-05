@@ -297,8 +297,7 @@ brls::RecyclerCell* ExtensionsDataSource::cellForRow(brls::RecyclerFrame* recycl
                 } else {
                     header->titleLabel->setText("Available to Install");
                 }
-                header->setBackgroundColor(Application::getInstance().isVaporwaveTheme()
-                    ? nvgRGB(80, 0, 130) : nvgRGB(0, 120, 110));
+                header->setBackgroundColor(Application::getInstance().getSectionHeaderBg());
                 header->setMarginTop(8);
                 header->setMarginLeft(0);
             } else {

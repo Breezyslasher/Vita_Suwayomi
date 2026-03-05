@@ -551,7 +551,14 @@ void SettingsTab::createUISection() {
 
     // Theme selector
     m_themeSelector = new brls::SelectorCell();
-    m_themeSelector->init("Theme", {"System", "Light", "Dark", "Neon Vaporwave"}, static_cast<int>(settings.theme),
+    m_themeSelector->init("Theme", {
+        "System", "Light", "Dark", "Neon Vaporwave",
+        "Tachiyomi", "Catppuccin", "Nord", "Tako",
+        "Midnight Dusk", "Strawberry Daiquiri", "Green Apple", "Lavender",
+        "Matrix", "Doom", "Mocha", "Sapphire",
+        "Cloudflare", "Teal Turquoise", "Tidal Wave", "Yotsuba",
+        "Yin Yang", "Monochrome", "Cotton Candy"
+    }, static_cast<int>(settings.theme),
         [this](int index) {
             onThemeChanged(index);
         });
@@ -877,7 +884,7 @@ void SettingsTab::showCategoryVisibilityDialog() {
         auto* statusLabel = new brls::Label();
         statusLabel->setText(isVisible ? "Visible" : "Hidden");
         statusLabel->setFontSize(14);
-        statusLabel->setTextColor(isVisible ? Application::getInstance().isVaporwaveTheme() ? nvgRGB(0, 255, 200) : nvgRGB(100, 200, 150) : nvgRGB(150, 100, 100));
+        statusLabel->setTextColor(isVisible ? Application::getInstance().getSuccessTextColor() : nvgRGB(150, 100, 100));
         statusLabel->setMarginRight(10);
         catRow->addView(statusLabel);
 
@@ -894,7 +901,7 @@ void SettingsTab::showCategoryVisibilityDialog() {
                 hidden.erase(catId);
                 catRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
                 statusLabel->setText("Visible");
-                statusLabel->setTextColor(Application::getInstance().isVaporwaveTheme() ? nvgRGB(0, 255, 200) : nvgRGB(100, 200, 150));
+                statusLabel->setTextColor(Application::getInstance().getSuccessTextColor());
             } else {
                 // Hide category (add to hidden)
                 hidden.insert(catId);
