@@ -95,14 +95,14 @@ HistoryTab::HistoryTab() {
     auto* emptyIcon = new brls::Label();
     emptyIcon->setText("No Reading History");
     emptyIcon->setFontSize(24);
-    emptyIcon->setTextColor(nvgRGB(128, 128, 128));
+    emptyIcon->setTextColor(Application::getInstance().getDimTextColor());
     emptyIcon->setMarginBottom(10);
     m_emptyStateBox->addView(emptyIcon);
 
     auto* emptyHint = new brls::Label();
     emptyHint->setText("Start reading manga to see your history here");
     emptyHint->setFontSize(16);
-    emptyHint->setTextColor(nvgRGB(100, 100, 100));
+    emptyHint->setTextColor(Application::getInstance().getDimTextColor());
     m_emptyStateBox->addView(emptyHint);
 
     this->addView(m_emptyStateBox);
@@ -112,7 +112,7 @@ HistoryTab::HistoryTab() {
     m_loadingLabel->setText("Loading history...");
     m_loadingLabel->setFontSize(18);
     m_loadingLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    m_loadingLabel->setTextColor(nvgRGB(150, 150, 150));
+    m_loadingLabel->setTextColor(Application::getInstance().getSubtitleColor());
     m_loadingLabel->setMarginTop(50);
     m_loadingLabel->setVisibility(brls::Visibility::GONE);
     this->addView(m_loadingLabel);
@@ -281,7 +281,7 @@ void HistoryTab::rebuildHistoryList() {
             auto* dateHeader = new brls::Label();
             dateHeader->setText(dateStr);
             dateHeader->setFontSize(16);
-            dateHeader->setTextColor(nvgRGB(0, 150, 136));  // Teal
+            dateHeader->setTextColor(Application::getInstance().getTealColor());  // Teal
             dateHeader->setMarginTop(i > 0 ? 20 : 5);
             dateHeader->setMarginBottom(8);
             m_contentBox->addView(dateHeader);
@@ -475,7 +475,7 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
     itemRow->setPadding(10);
     itemRow->setMarginBottom(6);
     itemRow->setCornerRadius(8);
-    itemRow->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+    itemRow->setBackgroundColor(Application::getInstance().getRowBackground());
     itemRow->setFocusable(true);
     itemRow->setHeight(80);
 
@@ -522,7 +522,7 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
     }
     chapterLabel->setText(chapterText);
     chapterLabel->setFontSize(13);
-    chapterLabel->setTextColor(nvgRGB(180, 180, 180));
+    chapterLabel->setTextColor(Application::getInstance().getSubtitleColor());
     infoBox->addView(chapterLabel);
 
     // Progress and time
@@ -534,7 +534,7 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
     progressText += " - " + formatRelativeTime(item.lastReadAt);
     progressLabel->setText(progressText);
     progressLabel->setFontSize(11);
-    progressLabel->setTextColor(nvgRGB(120, 120, 120));
+    progressLabel->setTextColor(Application::getInstance().getDimTextColor());
     infoBox->addView(progressLabel);
 
     itemRow->addView(infoBox);
@@ -543,7 +543,7 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
     auto* resumeLabel = new brls::Label();
     resumeLabel->setText(">");
     resumeLabel->setFontSize(20);
-    resumeLabel->setTextColor(nvgRGB(0, 150, 136));
+    resumeLabel->setTextColor(Application::getInstance().getTealColor());
     resumeLabel->setMarginLeft(10);
     itemRow->addView(resumeLabel);
 
@@ -597,7 +597,7 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
             auto* dateHeader = new brls::Label();
             dateHeader->setText(dateStr);
             dateHeader->setFontSize(16);
-            dateHeader->setTextColor(nvgRGB(0, 150, 136));  // Teal
+            dateHeader->setTextColor(Application::getInstance().getTealColor());  // Teal
             dateHeader->setMarginTop(globalIndex > 0 ? 20 : 5);
             dateHeader->setMarginBottom(8);
             m_contentBox->addView(dateHeader);

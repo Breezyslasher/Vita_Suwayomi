@@ -60,7 +60,7 @@ MangaItemCell::MangaItemCell() {
     this->setAlignItems(brls::AlignItems::STRETCH);
     this->setFocusable(true);
     this->setCornerRadius(8);
-    this->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    this->setBackgroundColor(Application::getInstance().getCardBackground());
     this->setClipsToBounds(true);
 
     // Cover image - fills the card (no fixed size, uses parent dimensions)
@@ -102,7 +102,7 @@ MangaItemCell::MangaItemCell() {
     // Subtitle (author) - smaller, below title, single line
     m_subtitleLabel = new brls::Label();
     m_subtitleLabel->setFontSize(9);
-    m_subtitleLabel->setTextColor(nvgRGB(180, 180, 180));
+    m_subtitleLabel->setTextColor(Application::getInstance().getSubtitleColor());
     m_subtitleLabel->setHorizontalAlign(brls::HorizontalAlign::LEFT);
     m_subtitleLabel->setSingleLine(true);
     m_titleOverlay->addView(m_subtitleLabel);
@@ -130,7 +130,7 @@ MangaItemCell::MangaItemCell() {
     m_unreadBadge = new brls::Label();
     m_unreadBadge->setFontSize(10);
     m_unreadBadge->setTextColor(nvgRGB(255, 255, 255));
-    m_unreadBadge->setBackgroundColor(nvgRGBA(0, 150, 136, 255)); // Teal badge
+    m_unreadBadge->setBackgroundColor(Application::getInstance().getTealColor()); // Teal badge
     m_unreadBadge->setMargins(6, 0, 0, 6);
     m_unreadBadge->setPositionType(brls::PositionType::ABSOLUTE);
     m_unreadBadge->setPositionTop(0);
@@ -426,7 +426,7 @@ void MangaItemCell::setSelected(bool selected) {
 
 void MangaItemCell::updateSelectionVisual() {
     if (m_selected) {
-        this->setBorderColor(nvgRGBA(0, 150, 136, 255));  // Teal border
+        this->setBorderColor(Application::getInstance().getTealColor());  // Teal border
         this->setBorderThickness(3.0f);
     } else {
         this->setBorderColor(nvgRGBA(0, 0, 0, 0));

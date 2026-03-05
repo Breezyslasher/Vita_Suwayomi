@@ -12,6 +12,7 @@
 #include <map>
 #include <vector>
 #include <cstdint>
+#include <nanovg.h>
 
 // Application version
 #define VITA_SUWAYOMI_VERSION "1.0.0"
@@ -30,7 +31,27 @@ namespace vitasuwayomi {
 enum class AppTheme {
     SYSTEM = 0,  // Follow system setting
     LIGHT = 1,
-    DARK = 2
+    DARK = 2,
+    NEON_VAPORWAVE = 3,
+    TACHIYOMI = 4,
+    CATPPUCCIN = 5,
+    NORD = 6,
+    TAKO = 7,
+    MIDNIGHT_DUSK = 8,
+    STRAWBERRY = 9,
+    GREEN_APPLE = 10,
+    LAVENDER = 11,
+    MATRIX = 12,
+    DOOM = 13,
+    MOCHA = 14,
+    SAPPHIRE = 15,
+    CLOUDFLARE = 16,
+    TEAL_TURQUOISE = 17,
+    TIDAL_WAVE = 18,
+    YOTSUBA = 19,
+    YIN_YANG = 20,
+    MONOCHROME = 21,
+    COTTON_CANDY = 22,
 };
 
 // Reading mode options
@@ -264,6 +285,36 @@ public:
 
     // Apply theme
     void applyTheme();
+
+    // Theme color accessors - returns colors based on current theme
+    // Vaporwave theme overrides these with neon/Miami colors
+    NVGcolor getAccentColor() const;        // Primary accent (buttons, highlights)
+    NVGcolor getSecondaryColor() const;     // Secondary accent
+    NVGcolor getHeaderTextColor() const;    // Section headers
+    NVGcolor getSubtitleColor() const;      // Subtitle/detail text
+    NVGcolor getHighlightColor() const;     // Focus highlight
+    NVGcolor getSidebarColor() const;       // Sidebar background tint
+    NVGcolor getCardBackground() const;     // Card/cell background
+    NVGcolor getDialogBackground() const;   // Dialog/overlay background
+    NVGcolor getTealColor() const;          // Teal accent (badges, status)
+    NVGcolor getStatusColor() const;        // Status text color (blue accent)
+    NVGcolor getDescriptionColor() const;   // Description/body text
+    NVGcolor getDimTextColor() const;       // Dimmed text (120-128 gray)
+    NVGcolor getRowBackground() const;      // List row background
+    NVGcolor getActiveRowBackground() const; // Active/selected row bg
+    NVGcolor getInactiveRowBackground() const; // Inactive row bg
+    NVGcolor getTrackingButtonColor() const; // Tracking button background
+    NVGcolor getCtaButtonColor() const;    // Call-to-action button (read, retry)
+    NVGcolor getSectionHeaderBg() const;   // Section header background
+    NVGcolor getReaderBackground() const;  // Reader/transition background
+    NVGcolor getErrorOverlayBg() const;    // Error overlay background
+    NVGcolor getFocusedRowBg() const;      // Focused/hovered row
+    NVGcolor getDeepBackground() const;    // Very deep/dark background
+    NVGcolor getSeparatorColor() const;    // Separator lines
+    NVGcolor getSuccessTextColor() const;  // Success/visible status text
+    NVGcolor getTextColor() const;         // Primary text color
+    NVGcolor getButtonColor() const;       // Default button background
+    bool isVaporwaveTheme() const { return m_settings.theme == AppTheme::NEON_VAPORWAVE; }
 
     // Apply log level based on settings
     void applyLogLevel();

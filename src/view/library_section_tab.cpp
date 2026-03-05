@@ -51,7 +51,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_updateStatusLabel = new brls::Label();
     m_updateStatusLabel->setText("");
     m_updateStatusLabel->setFontSize(18);
-    m_updateStatusLabel->setTextColor(nvgRGBA(0, 200, 170, 255));
+    m_updateStatusLabel->setTextColor(Application::getInstance().getSecondaryColor());
     m_updateStatusLabel->setMarginLeft(12);
     m_updateStatusLabel->setVisibility(brls::Visibility::GONE);
     titleRow->addView(m_updateStatusLabel);
@@ -282,10 +282,10 @@ LibrarySectionTab::LibrarySectionTab() {
                         m_pullIndicatorLabel->setVisibility(brls::Visibility::VISIBLE);
                         if (dy > PULL_THRESHOLD) {
                             m_pullIndicatorLabel->setText("Release to update");
-                            m_pullIndicatorLabel->setTextColor(nvgRGBA(0, 200, 170, 255));
+                            m_pullIndicatorLabel->setTextColor(Application::getInstance().getCtaButtonColor());
                         } else {
                             m_pullIndicatorLabel->setText("Pull down to update");
-                            m_pullIndicatorLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
+                            m_pullIndicatorLabel->setTextColor(Application::getInstance().getSubtitleColor());
                         }
                     } else {
                         m_pullIndicatorLabel->setVisibility(brls::Visibility::GONE);
@@ -311,7 +311,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_pullIndicatorLabel = new brls::Label();
     m_pullIndicatorLabel->setText("Pull down to update");
     m_pullIndicatorLabel->setFontSize(16);
-    m_pullIndicatorLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
+    m_pullIndicatorLabel->setTextColor(Application::getInstance().getSubtitleColor());
     m_pullIndicatorLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     m_pullIndicatorLabel->setMarginTop(2);
     m_pullIndicatorLabel->setMarginBottom(4);
@@ -1214,10 +1214,10 @@ void LibrarySectionTab::updateCategoryButtonStyles() {
         // Style the button based on selection state (Komikku-style)
         if (isSelected) {
             // Highlight selected category with teal accent
-            btn->setBackgroundColor(nvgRGBA(0, 150, 136, 255));
+            btn->setBackgroundColor(Application::getInstance().getActiveRowBackground());
         } else {
             // Normal style - dark gray
-            btn->setBackgroundColor(nvgRGBA(50, 50, 50, 255));
+            btn->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
         }
     }
 }
@@ -2296,7 +2296,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
     dialogBox->setWidth(550);
     dialogBox->setHeight(450);
     dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(nvgRGBA(30, 30, 30, 255));
+    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
     dialogBox->setCornerRadius(12);
 
     // Title
@@ -2310,7 +2310,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
     auto* infoLabel = new brls::Label();
     infoLabel->setText("Tap to toggle categories");
     infoLabel->setFontSize(14);
-    infoLabel->setTextColor(nvgRGB(150, 150, 150));
+    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
     infoLabel->setMarginBottom(15);
     dialogBox->addView(infoLabel);
 
@@ -2346,7 +2346,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         row->setAlignItems(brls::AlignItems::CENTER);
 
         bool isChecked = selectedCats->count(catId) > 0;
-        row->setBackgroundColor(isChecked ? nvgRGBA(0, 100, 80, 200) : nvgRGBA(50, 50, 50, 200));
+        row->setBackgroundColor(isChecked ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
 
         // Checkmark label
         auto* checkLabel = new brls::Label();
@@ -2355,7 +2355,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         checkLabel->setMarginRight(8);
         if (isChecked) {
             checkLabel->setText("\u2713");
-            checkLabel->setTextColor(nvgRGBA(0, 200, 150, 255));
+            checkLabel->setTextColor(Application::getInstance().getCtaButtonColor());
         } else {
             checkLabel->setText("");
         }
@@ -2374,12 +2374,12 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
             if (selectedCats->count(catId)) {
                 selectedCats->erase(catId);
                 (*checkLabels)[i]->setText("");
-                row->setBackgroundColor(nvgRGBA(50, 50, 50, 200));
+                row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             } else {
                 selectedCats->insert(catId);
                 (*checkLabels)[i]->setText("\u2713");
-                (*checkLabels)[i]->setTextColor(nvgRGBA(0, 200, 150, 255));
-                row->setBackgroundColor(nvgRGBA(0, 100, 80, 200));
+                (*checkLabels)[i]->setTextColor(Application::getInstance().getCtaButtonColor());
+                row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
             }
             return true;
         });

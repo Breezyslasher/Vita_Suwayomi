@@ -44,6 +44,14 @@ private:
     brls::Label* m_titleLabel = nullptr;
     brls::Label* m_searchLabel = nullptr;
     brls::Label* m_resultsLabel = nullptr;
+    brls::Label* m_loadingLabel = nullptr;  // Animated loading indicator
+
+    // Loading indicator animation
+    bool m_isLoading = false;
+    float m_loadingTimer = 0.0f;
+    int m_loadingDotCount = 0;
+    void showLoadingIndicator(const std::string& message = "Loading");
+    void hideLoadingIndicator();
 
     // Header row with title and search icon
     brls::Box* m_headerBox = nullptr;

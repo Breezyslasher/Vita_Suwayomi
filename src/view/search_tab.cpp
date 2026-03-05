@@ -279,6 +279,15 @@ SearchTab::SearchTab() {
     m_resultsLabel->setMarginBottom(10);
     this->addView(m_resultsLabel);
 
+    // Loading indicator label (hidden by default)
+    m_loadingLabel = new brls::Label();
+    m_loadingLabel->setText("");
+    m_loadingLabel->setFontSize(20);
+    m_loadingLabel->setTextColor(Application::getInstance().getAccentColor());
+    m_loadingLabel->setMarginBottom(10);
+    m_loadingLabel->setVisibility(brls::Visibility::GONE);
+    this->addView(m_loadingLabel);
+
     // Content grid
     m_contentGrid = new RecyclingGrid();
     m_contentGrid->setGrow(1.0f);
@@ -358,6 +367,23 @@ void SearchTab::willDisappear(bool resetState) {
     m_isLoadingPage = false;
 }
 
+void SearchTab::showLoadingIndicator(const std::string& message) {
+    m_isLoading = true;
+    m_loadingDotCount = 0;
+    m_loadingTimer = 0.0f;
+    if (m_loadingLabel) {
+        m_loadingLabel->setText(message + "...");
+        m_loadingLabel->setVisibility(brls::Visibility::VISIBLE);
+    }
+}
+
+void SearchTab::hideLoadingIndicator() {
+    m_isLoading = false;
+    if (m_loadingLabel) {
+        m_loadingLabel->setVisibility(brls::Visibility::GONE);
+    }
+}
+
 void SearchTab::onFocusGained() {
     brls::Box::onFocusGained();
 
@@ -378,6 +404,8 @@ void SearchTab::loadSources() {
         return;
     }
 
+    showLoadingIndicator("Loading sources");
+
     asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Source> sources;
@@ -388,6 +416,7 @@ void SearchTab::loadSources() {
             brls::sync([this, sources, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
+                hideLoadingIndicator();
                 m_sources = sources;
                 showSources();
             });
@@ -397,6 +426,7 @@ void SearchTab::loadSources() {
             brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
+                hideLoadingIndicator();
                 m_resultsLabel->setText("App is offline - connect to a server to browse sources");
                 // Focus on history button so user can still navigate
                 brls::Application::giveFocus(m_historyBtn);
@@ -608,7 +638,7 @@ void SearchTab::showSources() {
         langHeader->setFontSize(18);
         langHeader->setMarginTop(10);
         langHeader->setMarginBottom(5);
-        langHeader->setTextColor(nvgRGB(100, 180, 255));
+        langHeader->setTextColor(Application::getInstance().getHeaderTextColor());
         m_sourceListBox->addView(langHeader);
 
         // Source buttons
@@ -619,7 +649,7 @@ void SearchTab::showSources() {
             sourceRow->setMarginBottom(8);
             sourceRow->setPadding(8);
             sourceRow->setCornerRadius(8);
-            sourceRow->setBackgroundColor(nvgRGBA(40, 40, 40, 200));
+            sourceRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             sourceRow->setFocusable(true);
 
             // Track first source row for focus transfer
@@ -753,6 +783,7 @@ void SearchTab::showFilterDialog() {
 void SearchTab::loadPopularManga(int64_t sourceId) {
     brls::Logger::debug("SearchTab: Loading popular manga from source {}", sourceId);
     m_resultsLabel->setText("Loading popular manga...");
+    showLoadingIndicator("Loading popular manga");
     m_currentPage = 1;
     int gen = ++m_loadGeneration;
 
@@ -768,17 +799,16 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;  // Stale callback, user navigated away
+                hideLoadingIndicator();
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
 
-                // Transfer focus to first cell in content grid after loading
+                // Transfer focus to first cell via focusIndex which handles
+                // pending focus during incremental grid builds
                 if (!manga.empty()) {
-                    brls::View* firstCell = m_contentGrid->getFirstCell();
-                    if (firstCell) {
-                        brls::Application::giveFocus(firstCell);
-                    }
+                    m_contentGrid->focusIndex(0);
                 }
             });
         } else {
@@ -787,6 +817,7 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
+                hideLoadingIndicator();
                 m_resultsLabel->setText("Failed to load popular manga");
                 // Focus on Popular button so user can retry
                 brls::Application::giveFocus(m_popularBtn);
@@ -798,6 +829,7 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
 void SearchTab::loadLatestManga(int64_t sourceId) {
     brls::Logger::debug("SearchTab: Loading latest manga from source {}", sourceId);
     m_resultsLabel->setText("Loading latest manga...");
+    showLoadingIndicator("Loading latest manga");
     m_currentPage = 1;
     int gen = ++m_loadGeneration;
 
@@ -813,17 +845,16 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
+                hideLoadingIndicator();
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " manga found");
 
-                // Transfer focus to first cell in content grid after loading
+                // Transfer focus to first cell via focusIndex which handles
+                // pending focus during incremental grid builds
                 if (!manga.empty()) {
-                    brls::View* firstCell = m_contentGrid->getFirstCell();
-                    if (firstCell) {
-                        brls::Application::giveFocus(firstCell);
-                    }
+                    m_contentGrid->focusIndex(0);
                 }
             });
         } else {
@@ -832,6 +863,7 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
+                hideLoadingIndicator();
                 m_resultsLabel->setText("Failed to load latest manga");
                 // Focus on Latest button so user can retry
                 brls::Application::giveFocus(m_latestBtn);
@@ -869,6 +901,7 @@ void SearchTab::performSearch(const std::string& query) {
     m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
     m_resultsLabel->setText("Searching " + std::to_string(m_filteredSources.size()) + " sources...");
+    showLoadingIndicator("Searching sources");
 
     // CRITICAL: Move focus before clearing views to prevent use-after-free
     brls::Application::giveFocus(m_backBtn);
@@ -935,6 +968,7 @@ void SearchTab::performSearch(const std::string& query) {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
             if (gen != m_loadGeneration) return;  // Stale callback, user navigated away
+            hideLoadingIndicator();
             m_mangaList = allResults;
             m_resultsBySource = resultsBySource;
 
@@ -968,6 +1002,7 @@ void SearchTab::performSearch(const std::string& query) {
 void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) {
     brls::Logger::debug("SearchTab: Searching '{}' in source {}", query, sourceId);
     m_resultsLabel->setText("Searching...");
+    showLoadingIndicator("Searching");
     m_browseMode = BrowseMode::SEARCH_RESULTS;
     m_currentPage = 1;
     int gen = ++m_loadGeneration;
@@ -984,17 +1019,16 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
+                hideLoadingIndicator();
                 m_mangaList = manga;
                 m_hasNextPage = hasNextPage;
                 m_contentGrid->setDataSource(m_mangaList);
                 m_resultsLabel->setText(std::to_string(manga.size()) + " results");
 
-                // Transfer focus to first cell in content grid after search results load
+                // Transfer focus to first cell via focusIndex which handles
+                // pending focus during incremental grid builds
                 if (!manga.empty()) {
-                    brls::View* firstCell = m_contentGrid->getFirstCell();
-                    if (firstCell) {
-                        brls::Application::giveFocus(firstCell);
-                    }
+                    m_contentGrid->focusIndex(0);
                 } else {
                     // No results - focus on back button
                     brls::Application::giveFocus(m_backBtn);
@@ -1006,6 +1040,7 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
+                hideLoadingIndicator();
                 m_resultsLabel->setText("Search failed");
                 // Focus on back button so user can go back
                 brls::Application::giveFocus(m_backBtn);
@@ -1101,7 +1136,7 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     sourceLabel->setFontSize(18);
     sourceLabel->setMarginTop(10);
     sourceLabel->setMarginBottom(8);
-    sourceLabel->setTextColor(nvgRGB(100, 180, 255));
+    sourceLabel->setTextColor(Application::getInstance().getHeaderTextColor());
     m_searchResultsBox->addView(sourceLabel);
 
     // Calculate cell dimensions based on library display settings (same as grid)
@@ -1183,6 +1218,7 @@ void SearchTab::loadNextPage() {
     m_isLoadingPage = true;
     m_currentPage++;
     brls::Logger::debug("SearchTab: Loading page {}", m_currentPage);
+    showLoadingIndicator("Loading page " + std::to_string(m_currentPage));
 
     // Remember the index of first new item (current list size)
     int firstNewItemIndex = static_cast<int>(m_mangaList.size());
@@ -1226,6 +1262,7 @@ void SearchTab::loadNextPage() {
                 // Focus on first newly loaded item so user can continue browsing
                 m_contentGrid->focusIndex(firstNewItemIndex);
                 m_isLoadingPage = false;
+                hideLoadingIndicator();
             });
         } else {
             brls::sync([this, gen, aliveWeak]() {
@@ -1233,6 +1270,7 @@ void SearchTab::loadNextPage() {
                 if (!alive || !*alive) return;
                 if (gen != m_loadGeneration) return;
                 m_isLoadingPage = false;
+                hideLoadingIndicator();
             });
         }
     });

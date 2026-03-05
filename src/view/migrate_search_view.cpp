@@ -177,7 +177,7 @@ void MigrateSearchView::createSourceRow(const std::string& sourceName, const std
     sourceLabel->setFontSize(18);
     sourceLabel->setMarginTop(10);
     sourceLabel->setMarginBottom(8);
-    sourceLabel->setTextColor(nvgRGB(100, 180, 255));
+    sourceLabel->setTextColor(Application::getInstance().getHeaderTextColor());
     m_resultsBox->addView(sourceLabel);
 
     // Horizontal scroll row with manga cells

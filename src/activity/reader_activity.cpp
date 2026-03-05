@@ -694,7 +694,7 @@ void ReaderActivity::onContentAvailable() {
         // Draw background via NanoVG inside draw() so it follows the slide offset.
         // The XML backgroundColor attribute is drawn by borealis BEFORE draw() is
         // called, at the layout position, covering views below in z-order during swipes.
-        transitionBox->setCustomBackground(nvgRGBA(20, 20, 30, 255));
+        transitionBox->setCustomBackground(Application::getInstance().getReaderBackground());
         // Also clear borealis-level background to fully transparent so the
         // framework doesn't draw anything at the layout position before draw().
         transitionBox->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
@@ -2431,7 +2431,7 @@ void ReaderActivity::showPageError(const std::string& message) {
     m_errorOverlay->setPositionType(brls::PositionType::ABSOLUTE);
     m_errorOverlay->setPositionTop(0);
     m_errorOverlay->setPositionLeft(0);
-    m_errorOverlay->setBackgroundColor(nvgRGBA(26, 26, 46, 200));
+    m_errorOverlay->setBackgroundColor(Application::getInstance().getErrorOverlayBg());
 
     m_errorLabel = new brls::Label();
     m_errorLabel->setText(message);
@@ -2445,7 +2445,7 @@ void ReaderActivity::showPageError(const std::string& message) {
     m_retryButton->setWidth(160);
     m_retryButton->setHeight(44);
     m_retryButton->setCornerRadius(22);
-    m_retryButton->setBackgroundColor(nvgRGBA(0, 150, 136, 255));
+    m_retryButton->setBackgroundColor(Application::getInstance().getCtaButtonColor());
     std::weak_ptr<bool> retryAlive = m_alive;
     m_retryButton->registerClickAction([this, retryAlive](brls::View* view) {
         if (!Application::getInstance().isConnected() && !m_loadedFromLocal) {

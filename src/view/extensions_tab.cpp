@@ -56,7 +56,7 @@ ExtensionCell::ExtensionCell() {
 
     detailLabel = new brls::Label();
     detailLabel->setFontSize(10);
-    detailLabel->setTextColor(nvgRGB(140, 140, 140));
+    detailLabel->setTextColor(Application::getInstance().getSubtitleColor());
     infoBox->addView(detailLabel);
 
     leftBox->addView(infoBox);
@@ -185,7 +185,7 @@ ExtensionSectionHeader::ExtensionSectionHeader() {
     this->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     this->setAlignItems(brls::AlignItems::CENTER);
     this->setPadding(12, 15, 12, 15);
-    this->setBackgroundColor(nvgRGB(0, 120, 110));  // Teal
+    this->setBackgroundColor(Application::getInstance().getSectionHeaderBg());  // Vaporwave purple or teal
     this->setCornerRadius(4);
     this->setFocusable(true);
 
@@ -297,13 +297,13 @@ brls::RecyclerCell* ExtensionsDataSource::cellForRow(brls::RecyclerFrame* recycl
                 } else {
                     header->titleLabel->setText("Available to Install");
                 }
-                header->setBackgroundColor(nvgRGB(0, 120, 110));
+                header->setBackgroundColor(Application::getInstance().getSectionHeaderBg());
                 header->setMarginTop(8);
                 header->setMarginLeft(0);
             } else {
                 // Language header (dark gray, indented)
                 header->titleLabel->setText(m_tab->getLanguageDisplayName(row.languageCode));
-                header->setBackgroundColor(nvgRGB(60, 60, 60));
+                header->setBackgroundColor(Application::getInstance().getCardBackground());
                 header->setMarginTop(4);
                 header->setMarginLeft(15);
             }
@@ -346,11 +346,11 @@ brls::RecyclerCell* ExtensionsDataSource::cellForRow(brls::RecyclerFrame* recycl
                     cell->statusLabel->setTextColor(nvgRGB(255, 152, 0));
                 } else {
                     cell->statusLabel->setText("Installed");
-                    cell->statusLabel->setTextColor(nvgRGB(100, 100, 100));
+                    cell->statusLabel->setTextColor(Application::getInstance().getDimTextColor());
                 }
             } else {
                 cell->statusLabel->setText("Install");
-                cell->statusLabel->setTextColor(nvgRGB(0, 150, 136));
+                cell->statusLabel->setTextColor(Application::getInstance().getTealColor());
             }
 
             // Settings button visibility
@@ -702,7 +702,7 @@ ExtensionsTab::ExtensionsTab() {
     repoBox->setFocusable(true);
     repoBox->setPadding(8, 8, 8, 8);
     repoBox->setCornerRadius(4);
-    repoBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    repoBox->setBackgroundColor(Application::getInstance().getCardBackground());
     auto* repoIcon = new brls::Image();
     repoIcon->setSize(brls::Size(24, 24));
     repoIcon->setImageFromFile("app0:resources/icons/import.png");
@@ -733,7 +733,7 @@ ExtensionsTab::ExtensionsTab() {
     searchBox->setFocusable(true);
     searchBox->setPadding(8, 8, 8, 8);
     searchBox->setCornerRadius(4);
-    searchBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    searchBox->setBackgroundColor(Application::getInstance().getCardBackground());
     m_searchIcon = new brls::Image();
     m_searchIcon->setSize(brls::Size(24, 24));
     m_searchIcon->setImageFromFile("app0:resources/icons/search.png");
@@ -763,7 +763,7 @@ ExtensionsTab::ExtensionsTab() {
     m_refreshBox->setFocusable(true);
     m_refreshBox->setPadding(8, 8, 8, 8);
     m_refreshBox->setCornerRadius(4);
-    m_refreshBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+    m_refreshBox->setBackgroundColor(Application::getInstance().getCardBackground());
     m_refreshIcon = new brls::Image();
     m_refreshIcon->setSize(brls::Size(24, 24));
     m_refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
@@ -823,7 +823,7 @@ ExtensionsTab::ExtensionsTab() {
     // Inline error/offline label (hidden by default)
     m_errorLabel = new brls::Label();
     m_errorLabel->setFontSize(16);
-    m_errorLabel->setTextColor(nvgRGB(180, 180, 180));
+    m_errorLabel->setTextColor(Application::getInstance().getSubtitleColor());
     m_errorLabel->setMarginTop(40);
     m_errorLabel->setMarginLeft(20);
     m_errorLabel->setVisibility(brls::Visibility::GONE);
@@ -1086,13 +1086,18 @@ void ExtensionsTab::restoreFocusToRow(int rowIndex) {
 }
 
 void ExtensionsTab::showLoading(const std::string& message) {
-    // For now just log - recycler handles its own state
     brls::Logger::debug("Loading: {}", message);
+    if (m_errorLabel) {
+        m_errorLabel->setText(message);
+        m_errorLabel->setTextColor(Application::getInstance().getAccentColor());
+        m_errorLabel->setVisibility(brls::Visibility::VISIBLE);
+    }
 }
 
 void ExtensionsTab::showError(const std::string& message) {
     if (m_errorLabel) {
         m_errorLabel->setText(message);
+        m_errorLabel->setTextColor(Application::getInstance().getSubtitleColor());
         m_errorLabel->setVisibility(brls::Visibility::VISIBLE);
     }
     if (m_recycler) {
@@ -1362,7 +1367,7 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
                     item->setPadding(10, 10, 10, 10);
                     item->setMarginBottom(5);
                     item->setCornerRadius(4);
-                    item->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+                    item->setBackgroundColor(Application::getInstance().getCardBackground());
 
                     auto* label = new brls::Label();
                     label->setText(source.name);
@@ -1443,7 +1448,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                     auto* summaryLabel = new brls::Label();
                     summaryLabel->setText(pref.summary);
                     summaryLabel->setFontSize(11);
-                    summaryLabel->setTextColor(nvgRGB(140, 140, 140));
+                    summaryLabel->setTextColor(Application::getInstance().getSubtitleColor());
                     prefBox->addView(summaryLabel);
                 }
 
@@ -1454,7 +1459,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                 valueBox->setPadding(8, 10, 8, 10);
                 valueBox->setMarginTop(5);
                 valueBox->setCornerRadius(4);
-                valueBox->setBackgroundColor(nvgRGBA(60, 60, 60, 255));
+                valueBox->setBackgroundColor(Application::getInstance().getCardBackground());
 
                 auto* valueLabel = new brls::Label();
                 valueLabel->setFontSize(13);

@@ -37,7 +37,7 @@ StorageView::StorageView() {
     // Storage summary box
     auto* summaryBox = new brls::Box();
     summaryBox->setAxis(brls::Axis::COLUMN);
-    summaryBox->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+    summaryBox->setBackgroundColor(Application::getInstance().getRowBackground());
     summaryBox->setCornerRadius(8);
     summaryBox->setPadding(15);
     summaryBox->setMarginBottom(20);
@@ -45,14 +45,14 @@ StorageView::StorageView() {
     m_totalSizeLabel = new brls::Label();
     m_totalSizeLabel->setText("Total Downloads: Calculating...");
     m_totalSizeLabel->setFontSize(18);
-    m_totalSizeLabel->setTextColor(nvgRGB(0, 150, 136));
+    m_totalSizeLabel->setTextColor(Application::getInstance().getTealColor());
     m_totalSizeLabel->setMarginBottom(8);
     summaryBox->addView(m_totalSizeLabel);
 
     m_cacheSizeLabel = new brls::Label();
     m_cacheSizeLabel->setText("Cache: Calculating...");
     m_cacheSizeLabel->setFontSize(16);
-    m_cacheSizeLabel->setTextColor(nvgRGB(180, 180, 180));
+    m_cacheSizeLabel->setTextColor(Application::getInstance().getSubtitleColor());
     summaryBox->addView(m_cacheSizeLabel);
 
     this->addView(summaryBox);
@@ -223,7 +223,7 @@ void StorageView::loadStorageInfo() {
                 auto* emptyLabel = new brls::Label();
                 emptyLabel->setText("No downloaded content");
                 emptyLabel->setFontSize(16);
-                emptyLabel->setTextColor(nvgRGB(128, 128, 128));
+                emptyLabel->setTextColor(Application::getInstance().getDimTextColor());
                 m_contentBox->addView(emptyLabel);
             } else {
                 for (size_t i = 0; i < m_storageItems.size(); i++) {
@@ -235,7 +235,7 @@ void StorageView::loadStorageInfo() {
                     itemRow->setPadding(10);
                     itemRow->setMarginBottom(6);
                     itemRow->setCornerRadius(8);
-                    itemRow->setBackgroundColor(nvgRGBA(40, 40, 40, 255));
+                    itemRow->setBackgroundColor(Application::getInstance().getRowBackground());
                     itemRow->setFocusable(true);
                     itemRow->setHeight(60);
 
@@ -254,7 +254,7 @@ void StorageView::loadStorageInfo() {
                     auto* chapterLabel = new brls::Label();
                     chapterLabel->setText(std::to_string(item.chapterCount) + " ch");
                     chapterLabel->setFontSize(13);
-                    chapterLabel->setTextColor(nvgRGB(150, 150, 150));
+                    chapterLabel->setTextColor(Application::getInstance().getSubtitleColor());
                     chapterLabel->setWidth(60);
                     itemRow->addView(chapterLabel);
 
@@ -262,7 +262,7 @@ void StorageView::loadStorageInfo() {
                     auto* sizeLabel = new brls::Label();
                     sizeLabel->setText(formatSize(item.sizeBytes));
                     sizeLabel->setFontSize(14);
-                    sizeLabel->setTextColor(nvgRGB(0, 150, 136));
+                    sizeLabel->setTextColor(Application::getInstance().getTealColor());
                     sizeLabel->setWidth(80);
                     sizeLabel->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
                     itemRow->addView(sizeLabel);
