@@ -503,6 +503,58 @@ void MangaItemCell::setGridColumns(int columns) {
             m_titleOverlay->setMaxHeight(42);  // 2 lines @ 9px font + subtitle @ 8px + padding
         }
     }
+
+    // Scale unread badge font size and padding with grid size
+    if (m_unreadBadge) {
+        int badgeFontSize = 10;
+        int badgeMargin = 6;
+        if (columns <= 4) {
+            badgeFontSize = 13;
+            badgeMargin = 8;
+        } else if (columns <= 6) {
+            badgeFontSize = 10;
+            badgeMargin = 6;
+        } else {
+            badgeFontSize = 8;
+            badgeMargin = 4;
+        }
+        m_unreadBadge->setFontSize(badgeFontSize);
+        m_unreadBadge->setMargins(badgeMargin, 0, 0, badgeMargin);
+    }
+
+    // Scale NEW badge font size and position with grid size
+    if (m_newBadge) {
+        int newFontSize = 8;
+        int newTopPos = 26;
+        if (columns <= 4) {
+            newFontSize = 10;
+            newTopPos = 34;
+        } else if (columns <= 6) {
+            newFontSize = 8;
+            newTopPos = 26;
+        } else {
+            newFontSize = 7;
+            newTopPos = 20;
+        }
+        m_newBadge->setFontSize(newFontSize);
+        if (!m_listMode) {
+            m_newBadge->setPositionTop(newTopPos);
+        }
+    }
+
+    // Scale star badge size with grid size
+    if (m_starBadge) {
+        int starSize = 16;
+        if (columns <= 4) {
+            starSize = 20;
+        } else if (columns <= 6) {
+            starSize = 16;
+        } else {
+            starSize = 12;
+        }
+        m_starBadge->setWidth(starSize);
+        m_starBadge->setHeight(starSize);
+    }
 }
 
 void MangaItemCell::setCompactMode(bool compact) {
@@ -618,12 +670,14 @@ void MangaItemCell::applyDisplayMode() {
         }
 
         // Restore badge positions for grid mode (left side)
+        // NEW badge top position scales with grid columns (set in setGridColumns)
         if (m_unreadBadge) {
             m_unreadBadge->setPositionTop(0);
             m_unreadBadge->setPositionLeft(0);
         }
         if (m_newBadge) {
-            m_newBadge->setPositionTop(26);
+            int newTop = (m_gridColumns <= 4) ? 34 : (m_gridColumns >= 8) ? 20 : 26;
+            m_newBadge->setPositionTop(newTop);
             m_newBadge->setPositionLeft(0);
         }
         // Restore start hint position for compact mode (top-right)
@@ -633,7 +687,8 @@ void MangaItemCell::applyDisplayMode() {
         }
         // Star badge position for compact mode (top-right, below start hint area)
         if (m_starBadge) {
-            m_starBadge->setPositionTop(26);
+            int starTop = (m_gridColumns <= 4) ? 34 : (m_gridColumns >= 8) ? 20 : 26;
+            m_starBadge->setPositionTop(starTop);
             m_starBadge->setPositionRight(6);
         }
 
@@ -666,12 +721,14 @@ void MangaItemCell::applyDisplayMode() {
         }
 
         // Restore badge positions for grid mode (left side)
+        // NEW badge top position scales with grid columns (set in setGridColumns)
         if (m_unreadBadge) {
             m_unreadBadge->setPositionTop(0);
             m_unreadBadge->setPositionLeft(0);
         }
         if (m_newBadge) {
-            m_newBadge->setPositionTop(26);
+            int newTop = (m_gridColumns <= 4) ? 34 : (m_gridColumns >= 8) ? 20 : 26;
+            m_newBadge->setPositionTop(newTop);
             m_newBadge->setPositionLeft(0);
         }
         // Restore start hint position for normal grid mode (top-right)
@@ -681,7 +738,8 @@ void MangaItemCell::applyDisplayMode() {
         }
         // Star badge position for normal grid mode (top-right, below start hint area)
         if (m_starBadge) {
-            m_starBadge->setPositionTop(26);
+            int starTop = (m_gridColumns <= 4) ? 34 : (m_gridColumns >= 8) ? 20 : 26;
+            m_starBadge->setPositionTop(starTop);
             m_starBadge->setPositionRight(6);
         }
     }
