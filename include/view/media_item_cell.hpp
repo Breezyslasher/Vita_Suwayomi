@@ -34,6 +34,12 @@ public:
 
     void onFocusGained() override;
     void onFocusLost() override;
+    void draw(NVGcontext* vg, float x, float y, float width, float height,
+              brls::Style style, brls::FrameContext* ctx) override;
+
+    // Touch press feedback
+    void setPressed(bool pressed);
+    bool isPressed() const { return m_pressed; }
 
     // Selection mode
     void setSelected(bool selected);
@@ -49,6 +55,7 @@ private:
     void applyDisplayMode();
 
     bool m_selected = false;
+    bool m_pressed = false;  // Touch press-down state for visual feedback
     bool m_compactMode = false;
     bool m_listMode = false;
     bool m_showLibraryBadge = false;  // Whether to show star badge for library items

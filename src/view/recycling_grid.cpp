@@ -475,11 +475,38 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
 
+            // Touch press feedback: dim cell on touch-down, restore on release,
+            // transfer focus on touch, and play tap sound on short taps
+            cell->addGestureRecognizer(new brls::PanGestureRecognizer(
+                [this, cell, index](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                    if (status.state == brls::GestureState::START) {
+                        cell->setPressed(true);
+                        // Transfer focus to touched cell so user sees full title & hints
+                        if (!cell->isFocused()) {
+                            brls::Application::giveFocus(cell);
+                        }
+                    } else if (status.state == brls::GestureState::END) {
+                        if (cell->isPressed()) {
+                            cell->setPressed(false);
+                            // Play tap sound on release for short taps (not long press)
+                            if (!m_longPressTriggered) {
+                                *soundToPlay = brls::SOUND_CLICK;
+                            }
+                        }
+                    } else if (status.state == brls::GestureState::FAILED ||
+                               status.state == brls::GestureState::INTERRUPTED) {
+                        cell->setPressed(false);
+                    }
+                },
+                brls::PanAxis::ANY));
+
             cell->addGestureRecognizer(new LongPressGestureRecognizer(
                 cell,
-                [this, index](LongPressGestureStatus status) {
+                [this, cell, index](LongPressGestureStatus status) {
                     if (status.state == brls::GestureState::START) {
                         m_longPressTriggered = true;
+                        // Clear press visual since context menu is opening
+                        cell->setPressed(false);
                         if (index >= 0 && index < (int)m_items.size() && m_onItemLongPressed) {
                             m_onItemLongPressed(m_items[index], index);
                         }
