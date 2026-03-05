@@ -476,19 +476,31 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
 
             // Touch press feedback: dim cell on touch-down, restore on release,
-            // transfer focus on touch, and play tap sound on short taps
+            // transfer focus on touch, and play tap sound on short taps.
+            // Focus transfer is deferred until END to avoid triggering click
+            // when the user is actually scrolling/swiping.
             cell->addGestureRecognizer(new brls::PanGestureRecognizer(
                 [this, cell, index](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                    static constexpr float SCROLL_THRESHOLD = 15.0f;
                     if (status.state == brls::GestureState::START) {
                         cell->setPressed(true);
-                        // Transfer focus to touched cell so user sees full title & hints
-                        if (!cell->isFocused()) {
-                            brls::Application::giveFocus(cell);
+                    } else if (status.state == brls::GestureState::STAY) {
+                        // If the user moves beyond threshold, they are scrolling
+                        if (cell->isPressed()) {
+                            float dx = status.position.x - status.startPosition.x;
+                            float dy = status.position.y - status.startPosition.y;
+                            float dist = std::sqrt(dx * dx + dy * dy);
+                            if (dist > SCROLL_THRESHOLD) {
+                                cell->setPressed(false);
+                            }
                         }
                     } else if (status.state == brls::GestureState::END) {
                         if (cell->isPressed()) {
                             cell->setPressed(false);
-                            // Play tap sound on release for short taps (not long press)
+                            // Short tap without significant movement: transfer focus
+                            if (!cell->isFocused()) {
+                                brls::Application::giveFocus(cell);
+                            }
                             if (!m_longPressTriggered) {
                                 *soundToPlay = brls::SOUND_CLICK;
                             }
