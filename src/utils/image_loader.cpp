@@ -105,9 +105,9 @@ static constexpr int MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN = 3;
 // concurrently, which can push the Vita past its memory limit.
 static std::mutex s_decodeMutex;
 
-// Serialize animated WebP processing.  Each animated WebP cover is 2+ MB —
-// with 3 worker threads, simultaneous downloads exhaust the Vita's memory.
-// When one worker is processing an animated WebP, others that encounter one
+// Serialize animated image (WebP/GIF) processing.  Each animated image is 2+ MB
+// — with 3 worker threads, simultaneous downloads exhaust the Vita's memory.
+// When one worker is processing an animated image, others that encounter one
 // re-queue it and move on to the next (non-animated) image in the queue.
 static std::mutex s_animatedWebPMutex;
 
@@ -323,6 +323,187 @@ static std::vector<uint8_t> extractFirstFrameFromAnimatedWebP(const uint8_t* dat
 
     brls::Logger::warning("ImageLoader: No ANMF chunk found in animated WebP ({} bytes)", dataSize);
     return {};
+}
+
+// Detect whether a GIF is animated (has more than one frame).
+// Scans for multiple Image Descriptor blocks (0x2C) or a Netscape loop extension.
+static bool isAnimatedGIF(const uint8_t* data, size_t size) {
+    if (size < 13 || memcmp(data, "GIF", 3) != 0) return false;
+
+    int imageDescriptorCount = 0;
+    size_t pos = 13;  // Skip header (6) + logical screen descriptor (7)
+
+    // Skip Global Color Table if present
+    uint8_t packed = data[10];
+    if (packed & 0x80) {
+        int gctSize = 3 * (1 << ((packed & 0x07) + 1));
+        pos += gctSize;
+    }
+
+    while (pos < size) {
+        uint8_t blockType = data[pos];
+        pos++;
+
+        if (blockType == 0x2C) {
+            // Image Descriptor
+            imageDescriptorCount++;
+            if (imageDescriptorCount >= 2) return true;
+
+            if (pos + 9 > size) break;
+            uint8_t imgPacked = data[pos + 8];
+            pos += 9;
+
+            // Skip Local Color Table if present
+            if (imgPacked & 0x80) {
+                int lctSize = 3 * (1 << ((imgPacked & 0x07) + 1));
+                pos += lctSize;
+            }
+
+            // Skip LZW minimum code size
+            if (pos >= size) break;
+            pos++;  // LZW min code size
+
+            // Skip sub-blocks
+            while (pos < size) {
+                uint8_t subBlockSize = data[pos];
+                pos++;
+                if (subBlockSize == 0) break;
+                pos += subBlockSize;
+            }
+        } else if (blockType == 0x21) {
+            // Extension block
+            if (pos >= size) break;
+            uint8_t label = data[pos];
+            pos++;
+
+            // Check for Netscape loop extension (indicates animation)
+            if (label == 0xFF && pos + 1 < size) {
+                uint8_t extLen = data[pos];
+                if (extLen == 11 && pos + 12 < size &&
+                    memcmp(data + pos + 1, "NETSCAPE2.0", 11) == 0) {
+                    return true;
+                }
+            }
+
+            // Skip sub-blocks
+            while (pos < size) {
+                uint8_t subBlockSize = data[pos];
+                pos++;
+                if (subBlockSize == 0) break;
+                pos += subBlockSize;
+            }
+        } else if (blockType == 0x3B) {
+            // Trailer - end of GIF
+            break;
+        } else {
+            // Unknown block, bail
+            break;
+        }
+    }
+
+    return false;
+}
+
+// Extract just the first frame from an animated GIF by copying the header,
+// global color table, and the first image descriptor block.  This produces a
+// valid single-frame GIF that stb_image can decode, and discards the remaining
+// frames which would otherwise waste memory on the Vita.
+static std::vector<uint8_t> extractFirstFrameFromGIF(const uint8_t* data, size_t size) {
+    if (size < 13 || memcmp(data, "GIF", 3) != 0) return {};
+
+    std::vector<uint8_t> result;
+    try {
+        // Reserve a reasonable upper bound — first frame is typically a small
+        // fraction of a multi-frame GIF.
+        result.reserve(std::min(size, (size_t)(512 * 1024)));
+    } catch (...) {}
+
+    // Copy header (6 bytes) + logical screen descriptor (7 bytes)
+    size_t pos = 0;
+    result.insert(result.end(), data, data + 13);
+    pos = 13;
+
+    // Copy Global Color Table if present
+    uint8_t packed = data[10];
+    if (packed & 0x80) {
+        int gctSize = 3 * (1 << ((packed & 0x07) + 1));
+        if (pos + gctSize > size) return {};
+        result.insert(result.end(), data + pos, data + pos + gctSize);
+        pos += gctSize;
+    }
+
+    // Scan blocks until we find and copy the first image descriptor
+    bool foundImage = false;
+    while (pos < size && !foundImage) {
+        uint8_t blockType = data[pos];
+
+        if (blockType == 0x2C) {
+            // Image Descriptor — copy it and its data
+            if (pos + 10 > size) break;
+            size_t imgStart = pos;
+            pos++;  // block type
+
+            uint8_t imgPacked = data[pos + 8];
+            pos += 9;  // 9-byte image descriptor
+
+            // Local Color Table
+            size_t lctBytes = 0;
+            if (imgPacked & 0x80) {
+                lctBytes = 3 * (1 << ((imgPacked & 0x07) + 1));
+                pos += lctBytes;
+            }
+
+            // LZW minimum code size
+            if (pos >= size) break;
+            pos++;
+
+            // Sub-blocks (image data)
+            while (pos < size) {
+                uint8_t subBlockSize = data[pos];
+                pos++;
+                if (subBlockSize == 0) break;
+                pos += subBlockSize;
+            }
+
+            // Copy everything from imgStart to pos (the full first image block)
+            if (pos <= size) {
+                result.insert(result.end(), data + imgStart, data + pos);
+            }
+            foundImage = true;
+        } else if (blockType == 0x21) {
+            // Extension block — copy it (may be a Graphic Control Extension
+            // needed for the first frame's transparency/delay settings)
+            size_t extStart = pos;
+            pos++;  // block type
+            if (pos >= size) break;
+            pos++;  // extension label
+
+            // Skip sub-blocks to find extent
+            while (pos < size) {
+                uint8_t subBlockSize = data[pos];
+                pos++;
+                if (subBlockSize == 0) break;
+                pos += subBlockSize;
+            }
+
+            if (pos <= size) {
+                result.insert(result.end(), data + extStart, data + pos);
+            }
+        } else if (blockType == 0x3B) {
+            break;
+        } else {
+            break;
+        }
+    }
+
+    if (!foundImage) return {};
+
+    // Append GIF trailer
+    result.push_back(0x3B);
+
+    brls::Logger::info("ImageLoader: Extracted first frame from animated GIF ({} bytes -> {} bytes)",
+                       size, result.size());
+    return result;
 }
 
 // Calculate number of segments needed for a tall image
@@ -1569,8 +1750,48 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         }
     }
 
+    // Detect animated GIFs — they can be multi-MB just like animated WebP
+    // and need the same first-frame extraction treatment.
+    bool isAnimatedGIF_ = false;
+    if (!isWebP && !isSVG && !isAVIF && !isHEIF && bodySize > 13 &&
+        bodyData[0] == 0x47 && bodyData[1] == 0x49 && bodyData[2] == 0x46) {
+        isAnimatedGIF_ = isAnimatedGIF(bodyData, bodySize);
+    }
+
     std::vector<uint8_t> bodyVec;
-    if (isAnimatedWebP) {
+    if (isAnimatedGIF_) {
+        // Same serialization as animated WebP — only one animated image at a time.
+        std::unique_lock<std::mutex> animLock(s_animatedWebPMutex, std::try_to_lock);
+        if (!animLock.owns_lock()) {
+            brls::Logger::info("ImageLoader: Deferring animated GIF (another animated in progress), re-queuing: {}", url);
+            std::string urlCopy = url;
+            LoadCallback cbCopy = callback;
+            brls::Image* tgtCopy = target;
+            auto aliveCopy = alive;
+            { std::string().swap(resp.body); }
+            {
+                std::lock_guard<std::mutex> lock(s_queueMutex);
+                s_loadQueue.push({urlCopy, cbCopy, tgtCopy, true, aliveCopy});
+            }
+            s_queueCV.notify_one();
+            return;
+        }
+
+        brls::Logger::info("ImageLoader: Animated GIF ({}KB), extracting first frame before copy: {}",
+                           bodySize / 1024, url);
+        auto firstFrame = extractFirstFrameFromGIF(bodyData, bodySize);
+        { std::string().swap(resp.body); }
+        bodyData = nullptr;
+        bodySize = 0;
+
+        if (firstFrame.empty()) {
+            brls::Logger::warning("ImageLoader: Failed to extract frame from animated GIF, falling back to full data: {}", url);
+            // Can't extract frame — will fall through and stb_image will decode frame 0
+            // but we already freed resp.body, so we have to bail
+            return;
+        }
+        bodyVec = std::move(firstFrame);
+    } else if (isAnimatedWebP) {
         // Only one animated WebP can be processed at a time.  Each one is 2+ MB;
         // with 3 workers holding them simultaneously the Vita runs out of memory.
         // If another worker is already processing one, free our body immediately
@@ -2059,6 +2280,29 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 } else {
                     brls::Logger::warning("ImageLoader: Failed to extract frame from animated WebP reader page: {}", url);
                     // Continue with original data — convertWebPtoTGA will try extraction again
+                }
+            }
+        }
+
+        // For animated GIFs in the reader path, extract the first frame BEFORE
+        // the decode mutex — same rationale as animated WebP above.
+        if (isJpegOrPng && imageBody.size() > 13) {
+            const uint8_t* gifData = reinterpret_cast<const uint8_t*>(imageBody.data());
+            if (gifData[0] == 0x47 && gifData[1] == 0x49 && gifData[2] == 0x46 &&
+                isAnimatedGIF(gifData, imageBody.size())) {
+                std::lock_guard<std::mutex> animLock(s_animatedWebPMutex);
+
+                brls::Logger::info("ImageLoader: Animated GIF reader page ({}KB), extracting first frame: {}",
+                                   imageBody.size() / 1024, url);
+                auto firstFrame = extractFirstFrameFromGIF(gifData, imageBody.size());
+                if (!firstFrame.empty()) {
+                    brls::Logger::info("ImageLoader: Extracted first frame from animated GIF ({} bytes -> {} bytes)",
+                                       imageBody.size(), firstFrame.size());
+                    imageBody.assign(reinterpret_cast<const char*>(firstFrame.data()), firstFrame.size());
+                    std::vector<uint8_t>().swap(firstFrame);
+                } else {
+                    brls::Logger::warning("ImageLoader: Failed to extract frame from animated GIF reader page: {}", url);
+                    // Continue with original data — stb_image will decode first frame anyway
                 }
             }
         }
