@@ -1,262 +1,82 @@
-23:45:03.112 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
-23:45:03.700 [INFO] DownloadsManager: Initializing...
-23:45:03.706 [DEBUG] DownloadsManager: No saved state found
-23:45:03.706 [INFO] DownloadsManager: Initialized with 0 downloads
-23:45:03.707 [INFO] VitaSuwayomi 1.0.0 initializing...
-23:45:03.708 [DEBUG] sceIoMkdir result: -0x7ffeffef
-23:45:03.709 [INFO] Loading saved settings...
-23:45:03.709 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
-23:45:03.711 [DEBUG] loadSettings: File size = 1838
-23:45:03.721 [DEBUG] loadSettings: Read 1838 bytes
-23:45:03.731 [INFO] loadSettings: serverUrl=Http://192.168.1.28:4568
-23:45:03.740 [DEBUG] Loaded 4 hidden categories
-23:45:03.750 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
-23:45:03.761 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
-23:45:03.773 [INFO] loadSettings: enabledSourceLanguages count = 2
-23:45:03.778 [INFO] loadSettings: localUrl=Http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
-23:45:03.784 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=1, defaultSort=0, groupMode=1
-23:45:03.792 [DEBUG] Loaded 1 per-category sort modes
-23:45:03.801 [DEBUG] Loaded 0 search history entries
-23:45:03.811 [DEBUG] Loaded 1 per-manga reader settings
-23:45:03.822 [INFO] Restored auth credentials for user: Breezyslasher
-23:45:03.833 [INFO] Settings loaded successfully
-23:45:03.843 [INFO] Settings load result: success
-23:45:03.848 [INFO] Applied theme: Dark
-23:45:03.854 [INFO] Debug logging disabled
-23:45:07.047 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
-23:45:07.060 [INFO] Application::run - isConnected=false, serverUrl=Http://192.168.1.28:4568
-23:45:07.070 [INFO] Restoring saved connection...
-23:45:07.081 [INFO] Fetching server info via GraphQL...
-23:45:07.181 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2087
-23:45:07.191 [INFO] Server reachable, validating auth with protected query...
-23:45:07.213 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/categories) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.requir
-23:45:07.215 [INFO] GraphQL returned Unauthorized, attempting token refresh...
-23:45:07.220 [INFO] No refresh token available, skipping GraphQL refresh
-23:45:07.229 [INFO] Attempting re-login with stored credentials...
-23:45:07.274 [INFO] Login successful, received JWT tokens
-23:45:07.284 [INFO] Re-login successful, tokens refreshed
-23:45:07.295 [INFO] Token refreshed successfully, retrying GraphQL request
-23:45:07.320 [INFO] validateAuthWithProtectedQuery: auth validated successfully
-23:45:07.325 [INFO] Auth validated with protected query
-23:45:07.331 [INFO] Connection restored successfully
-23:45:07.439 [INFO] MainActivity: Tabs created, isOnline=false
-23:45:07.615 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
-23:45:19.507 [INFO] RecyclingGrid: Building 7 rows for 40 items (first 2 immediate)
-23:45:19.573 [INFO] ImageLoader: Starting 3 worker threads
-23:45:19.945 [INFO] ImageLoader: Decode OK (113778 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/622/thumbnail
-23:45:19.980 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/622/thumbnail
-23:45:20.164 [INFO] ImageLoader: Decode OK (126018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/522/thumbnail
-23:45:20.209 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/522/thumbnail
-23:45:20.455 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/623/thumbnail
-23:45:20.491 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/623/thumbnail
-23:45:20.740 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/376/thumbnail
-23:45:20.781 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/376/thumbnail
-23:45:21.035 [INFO] ImageLoader: Decode OK (95778 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/654/thumbnail
-23:45:21.113 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/654/thumbnail
-23:45:21.585 [INFO] ImageLoader: Decode OK (86418 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/358/thumbnail
-23:45:21.634 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/358/thumbnail
-23:45:21.735 [INFO] RecyclingGrid: Incremental build complete - 40 cells in 7 rows
-23:45:21.948 [INFO] ImageLoader: Decode OK (90738 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/427/thumbnail
-23:45:21.980 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/427/thumbnail
-23:45:22.024 [INFO] ImageLoader: WebP RGBA decode OK 225x168->180x134
-23:45:22.035 [INFO] ImageLoader: Decode OK (96498 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/364/thumbnail
-23:45:22.077 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/364/thumbnail
-23:45:22.346 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/612/thumbnail
-23:45:22.378 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/612/thumbnail
-23:45:22.685 [INFO] ImageLoader: Decode OK (90738 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/430/thumbnail
-23:45:22.725 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/430/thumbnail
-23:45:22.793 [INFO] ImageLoader: WebP RGBA decode OK 225x293->138x180
-23:45:22.799 [INFO] ImageLoader: Decode OK (99378 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/519/thumbnail
-23:45:22.830 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/519/thumbnail
-23:45:23.201 [INFO] ImageLoader: Decode OK (90738 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/422/thumbnail
-23:45:23.246 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/422/thumbnail
-23:45:23.535 [INFO] ImageLoader: Decode OK (92898 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/367/thumbnail
-23:45:23.571 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/367/thumbnail
-23:45:23.874 [INFO] ImageLoader: Decode OK (90738 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/368/thumbnail
-23:45:23.916 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/368/thumbnail
-23:45:24.205 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/377/thumbnail
-23:45:24.229 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/377/thumbnail
-23:45:24.485 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/609/thumbnail
-23:45:24.580 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/609/thumbnail
-23:45:24.731 [INFO] ImageLoader: Decode OK (129618 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/611/thumbnail
-23:45:24.768 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/611/thumbnail
-23:45:24.910 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/579/thumbnail
-23:45:24.949 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/579/thumbnail
-23:45:25.114 [INFO] ImageLoader: Decode OK (97218 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/582/thumbnail
-23:45:25.150 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/582/thumbnail
-23:45:25.408 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/380/thumbnail
-23:45:25.444 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/380/thumbnail
-23:45:25.560 [INFO] ImageLoader: Decode OK (86418 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/584/thumbnail
-23:45:25.585 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/584/thumbnail
-23:45:25.843 [INFO] ImageLoader: Decode OK (97938 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/532/thumbnail
-23:45:25.893 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/532/thumbnail
-23:45:27.277 [INFO] ImageLoader: Decode OK (129618 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/390/thumbnail
-23:45:27.317 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/390/thumbnail
-23:45:27.633 [INFO] ImageLoader: Decode OK (91458 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/362/thumbnail
-23:45:27.672 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/362/thumbnail
-23:45:27.980 [INFO] ImageLoader: Decode OK (92898 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/387/thumbnail
-23:45:28.019 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/387/thumbnail
-23:45:28.332 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/649/thumbnail
-23:45:28.381 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/649/thumbnail
-23:45:28.592 [INFO] ImageLoader: Decode OK (86418 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/657/thumbnail
-23:45:28.638 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/657/thumbnail
-23:45:28.838 [INFO] ImageLoader: Decode OK (86418 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/645/thumbnail
-23:45:28.874 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/645/thumbnail
-23:45:28.937 [INFO] ImageLoader: WebP RGBA decode OK 225x319->126x180
-23:45:28.946 [INFO] ImageLoader: Decode OK (90738 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/418/thumbnail
-23:45:28.987 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/418/thumbnail
-23:45:29.306 [INFO] ImageLoader: Decode OK (90738 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/477/thumbnail
-23:45:29.342 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/477/thumbnail
-23:45:29.562 [INFO] ImageLoader: Decode OK (86418 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/384/thumbnail
-23:45:29.598 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/384/thumbnail
-23:45:29.842 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/644/thumbnail
-23:45:29.882 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/644/thumbnail
-23:45:30.145 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/434/thumbnail
-23:45:30.187 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/434/thumbnail
-23:45:30.252 [INFO] ImageLoader: WebP RGBA decode OK 225x303->133x180
-23:45:30.258 [INFO] ImageLoader: Decode OK (95778 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/646/thumbnail
-23:45:30.295 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/646/thumbnail
-23:45:30.490 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/586/thumbnail
-23:45:30.515 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/586/thumbnail
-23:45:30.642 [INFO] ImageLoader: Decode OK (97218 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/667/thumbnail
-23:45:30.683 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/667/thumbnail
-23:45:30.985 [INFO] ImageLoader: Decode OK (90738 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/651/thumbnail
-23:45:31.015 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/651/thumbnail
-23:45:31.333 [INFO] ImageLoader: Decode OK (90738 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/589/thumbnail
-23:45:31.386 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/589/thumbnail
-23:45:31.629 [INFO] ImageLoader: Decode OK (86418 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/373/thumbnail
-23:45:31.665 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/373/thumbnail
-23:45:31.947 [INFO] ImageLoader: Decode OK (92178 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/677/thumbnail
-23:45:31.994 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/677/thumbnail
-23:45:36.245 [INFO] RecyclingGrid: Building 14 rows for 83 items (first 2 immediate)
-23:45:36.484 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/527/thumbnail
-23:45:36.526 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/527/thumbnail
-23:45:36.940 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/629/thumbnail
-23:45:36.979 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/629/thumbnail
-23:45:37.089 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/394/thumbnail
-23:45:37.138 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/394/thumbnail
-23:45:37.429 [INFO] ImageLoader: Decode OK (90018 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/474/thumbnail
-23:45:37.468 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/474/thumbnail
-23:45:38.287 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/292/thumbnail
-23:45:38.333 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/292/thumbnail
-23:45:38.430 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/329/thumbnail
-23:45:38.470 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/329/thumbnail
-23:45:38.574 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/393/thumbnail
-23:45:38.618 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/393/thumbnail
-23:45:38.717 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/397/thumbnail
-23:45:38.767 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/397/thumbnail
-23:45:38.906 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/324/thumbnail
-23:45:38.945 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/324/thumbnail
-23:45:39.054 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/431/thumbnail
-23:45:39.102 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/431/thumbnail
-23:45:39.142 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:45:39.151 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/355/thumbnail
-23:45:39.195 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/355/thumbnail
-23:45:39.308 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/682/thumbnail
-23:45:39.348 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/682/thumbnail
-23:45:39.479 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/386/thumbnail
-23:45:39.528 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/386/thumbnail
-23:45:39.641 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/506/thumbnail
-23:45:39.691 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/506/thumbnail
-23:45:39.827 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/662/thumbnail
-23:45:39.872 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/662/thumbnail
-23:45:39.909 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:45:39.921 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/467/thumbnail
-23:45:39.965 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/467/thumbnail
-23:45:40.086 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/453/thumbnail
-23:45:40.130 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/453/thumbnail
-23:45:40.266 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/425/thumbnail
-23:45:40.310 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/425/thumbnail
-23:45:40.409 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/471/thumbnail
-23:45:40.461 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/471/thumbnail
-23:45:40.504 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:45:40.513 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/652/thumbnail
-23:45:40.555 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/652/thumbnail
-23:45:40.660 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/500/thumbnail
-23:45:40.699 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/500/thumbnail
-23:45:40.812 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/630/thumbnail
-23:45:40.853 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/630/thumbnail
-23:45:40.947 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/592/thumbnail
-23:45:40.993 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/592/thumbnail
-23:45:41.135 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/414/thumbnail
-23:45:41.182 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/414/thumbnail
-23:45:41.283 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/505/thumbnail
-23:45:41.322 [INFO] RecyclingGrid: Incremental build complete - 83 cells in 14 rows
-23:45:41.330 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/505/thumbnail
-23:45:41.450 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/391/thumbnail
-23:45:41.498 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/391/thumbnail
-23:45:41.606 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/495/thumbnail
-23:45:41.653 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/495/thumbnail
-23:45:41.769 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/392/thumbnail
-23:45:41.810 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/392/thumbnail
-23:45:41.915 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/417/thumbnail
-23:45:41.962 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/417/thumbnail
-23:45:42.069 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/498/thumbnail
-23:45:42.117 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/498/thumbnail
-23:45:42.222 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/647/thumbnail
-23:45:42.258 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/647/thumbnail
-23:45:42.372 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/640/thumbnail
-23:45:42.412 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/640/thumbnail
-23:45:42.447 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:45:42.460 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/340/thumbnail
-23:45:42.497 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/340/thumbnail
-23:45:42.593 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/342/thumbnail
-23:45:42.639 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/342/thumbnail
-23:45:42.749 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/475/thumbnail
-23:45:42.796 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/475/thumbnail
-23:45:42.926 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/291/thumbnail
-23:45:42.972 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/291/thumbnail
-23:45:43.075 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/403/thumbnail
-23:45:43.122 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/403/thumbnail
-23:45:43.232 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/400/thumbnail
-23:45:43.275 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/400/thumbnail
-23:45:43.385 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/382/thumbnail
-23:45:43.430 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/382/thumbnail
-23:45:43.538 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/381/thumbnail
-23:45:43.586 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/381/thumbnail
-23:45:43.683 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/398/thumbnail
-23:45:43.731 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/398/thumbnail
-23:45:43.847 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/659/thumbnail
-23:45:43.890 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/659/thumbnail
-23:45:44.006 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/594/thumbnail
-23:45:44.048 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/594/thumbnail
-23:45:44.146 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/671/thumbnail
-23:45:44.193 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/671/thumbnail
-23:45:44.223 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:45:44.235 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/668/thumbnail
-23:45:44.280 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/668/thumbnail
-23:45:44.390 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/449/thumbnail
-23:45:44.450 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/449/thumbnail
-23:45:44.586 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/350/thumbnail
-23:45:44.638 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/350/thumbnail
-23:45:44.754 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/627/thumbnail
-23:45:44.803 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/627/thumbnail
-23:45:44.904 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/639/thumbnail
-23:45:44.955 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/639/thumbnail
-23:45:45.075 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/333/thumbnail
-23:45:45.130 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/333/thumbnail
-23:45:45.228 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/620/thumbnail
-23:45:45.287 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/620/thumbnail
-23:45:45.331 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:45:45.341 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/363/thumbnail
-23:45:45.396 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/363/thumbnail
-23:45:45.514 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/360/thumbnail
-23:45:45.567 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/360/thumbnail
-23:45:46.711 [INFO] ImageLoader: Animated WebP (2329KB), extracting first frame before copy: Http://192.168.1.28:4568/api/v1/manga/445/thumbnail
-23:45:46.717 [INFO] ImageLoader: Extracted first frame from animated WebP (2385406 bytes -> 71652 bytes)
-23:45:46.780 [INFO] ImageLoader: WebP RGBA decode OK 291x498->105x180
-23:45:46.792 [INFO] ImageLoader: Decode OK (75618 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/445/thumbnail
-23:45:46.842 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/445/thumbnail
-23:45:52.104 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/345/thumbnail
-23:45:52.160 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/345/thumbnail
-23:45:52.879 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:45:52.892 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/374/thumbnail
-23:45:52.950 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/374/thumbnail
-23:45:53.069 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/326/thumbnail
-23:45:53.133 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/326/thumbnail
-23:45:53.609 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/396/thumbnail
-23:45:53.673 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/396/thumbnail
-23:45:56.089 [INFO] ImageLoader: Decode OK (89518 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/399/thumbnail
-23:45:56.153 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/399/thumbnail
-23:45:56.274 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/598/thumbnail
-23:45:56.336 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/598/thumbnail
+00:03:17.834 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+00:03:18.417 [INFO] DownloadsManager: Initializing...
+00:03:18.423 [DEBUG] DownloadsManager: No saved state found
+00:03:18.424 [INFO] DownloadsManager: Initialized with 0 downloads
+00:03:18.424 [INFO] VitaSuwayomi 1.0.0 initializing...
+00:03:18.425 [DEBUG] sceIoMkdir result: -0x7ffeffef
+00:03:18.426 [INFO] Loading saved settings...
+00:03:18.426 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+00:03:18.428 [DEBUG] loadSettings: File size = 1838
+00:03:18.436 [DEBUG] loadSettings: Read 1838 bytes
+00:03:18.443 [INFO] loadSettings: serverUrl=Http://192.168.1.28:4568
+00:03:18.452 [DEBUG] Loaded 4 hidden categories
+00:03:18.460 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+00:03:18.470 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+00:03:18.481 [INFO] loadSettings: enabledSourceLanguages count = 2
+00:03:18.492 [INFO] loadSettings: localUrl=Http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+00:03:18.502 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=1, defaultSort=0, groupMode=1
+00:03:18.507 [DEBUG] Loaded 1 per-category sort modes
+00:03:18.513 [DEBUG] Loaded 0 search history entries
+00:03:18.522 [DEBUG] Loaded 1 per-manga reader settings
+00:03:18.531 [INFO] Restored auth credentials for user: Breezyslasher
+00:03:18.541 [INFO] Settings loaded successfully
+00:03:18.552 [INFO] Settings load result: success
+00:03:18.563 [INFO] Applied theme: Dark
+00:03:18.571 [INFO] Debug logging disabled
+00:03:18.579 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+00:03:18.585 [INFO] Application::run - isConnected=false, serverUrl=Http://192.168.1.28:4568
+00:03:18.593 [INFO] Restoring saved connection...
+00:03:18.602 [INFO] Fetching server info via GraphQL...
+00:03:18.736 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2087
+00:03:18.747 [INFO] Server reachable, validating auth with protected query...
+00:03:18.916 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/categories) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.requir
+00:03:18.917 [INFO] GraphQL returned Unauthorized, attempting token refresh...
+00:03:18.923 [INFO] No refresh token available, skipping GraphQL refresh
+00:03:18.928 [INFO] Attempting re-login with stored credentials...
+00:03:19.224 [INFO] Login successful, received JWT tokens
+00:03:19.233 [INFO] Re-login successful, tokens refreshed
+00:03:19.242 [INFO] Token refreshed successfully, retrying GraphQL request
+00:03:19.302 [INFO] validateAuthWithProtectedQuery: auth validated successfully
+00:03:19.313 [INFO] Auth validated with protected query
+00:03:19.325 [INFO] Connection restored successfully
+00:03:19.434 [INFO] MainActivity: Tabs created, isOnline=false
+00:03:19.610 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+00:03:28.067 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+00:03:28.384 [INFO] SearchTab: Got 85 sources
+00:03:29.543 [INFO] ImageLoader: Starting 3 worker threads
+00:03:29.603 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.onemangaco-v1.4.34.apk
+00:03:29.618 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.onemangaco-v1.4.34.apk
+00:03:29.655 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.asurascans-v1.4.54.apk
+00:03:29.672 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.asurascans-v1.4.54.apk
+00:03:29.714 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-all.komga-v1.4.64.apk
+00:03:29.728 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-all.komga-v1.4.64.apk
+00:03:29.782 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.kunmanga-v1.4.47.apk
+00:03:29.794 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.kunmanga-v1.4.47.apk
+00:03:29.858 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.lhtranslation-v1.4.47.apk
+00:03:29.870 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.lhtranslation-v1.4.47.apk
+00:03:29.902 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.mangademon-v1.4.17.apk
+00:03:29.918 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.mangademon-v1.4.17.apk
+00:03:29.968 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-all.mangadex-v1.4.206.apk
+00:03:29.988 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-all.mangadex-v1.4.206.apk
+00:03:30.066 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.mangareadorg-v1.4.48.apk
+00:03:30.074 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.mangareadorg-v1.4.48.apk
+00:03:30.105 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.manganelo-v1.4.15.apk
+00:03:30.125 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.manganelo-v1.4.15.apk
+00:03:30.182 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.resetscans-v1.4.56.apk
+00:03:30.200 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.resetscans-v1.4.56.apk
+00:03:30.225 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.tcbscans-v1.4.11.apk
+00:03:30.241 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.tcbscans-v1.4.11.apk
+00:04:02.700 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+00:04:02.802 [INFO] SearchTab: Got 85 sources
+00:04:02.955 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-all.webtoons-v1.4.52.apk
+00:04:02.966 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-all.webtoons-v1.4.52.apk
+00:04:03.135 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-all.thunderscans-v1.4.42.apk
+00:04:03.143 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-all.thunderscans-v1.4.42.apk
+00:04:03.303 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.vizshonenjump-v1.4.22.apk
+00:04:03.314 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.vizshonenjump-v1.4.22.apk
+00:04:03.330 [INFO] ImageLoader: Decode OK (36882 bytes TGA) for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.vizshonenjump-v1.4.22.apk
+00:04:03.340 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/extension/icon/tachiyomi-en.vizshonenjump-v1.4.22.apk
+00:04:07.492 [INFO] SearchTab: Got 12 popular manga
+00:04:07.509 [INFO] RecyclingGrid: Building 2 rows for 12 items (first 2 immediate)
+00:04:07.810 [INFO] ImageLoader: Decode OK (95058 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/700/thumbnail
+00:04:07.878 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/700/thumbnail
