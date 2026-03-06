@@ -81,7 +81,7 @@ public:
     // Set max concurrent loads (default: 6)
     static void setMaxConcurrentLoads(int max);
 
-    // Set max thumbnail size for downscaling (default: 4096)
+    // Set max thumbnail size for downscaling (default: 200)
     static void setMaxThumbnailSize(int maxSize);
 
 private:

@@ -74,7 +74,7 @@ std::set<std::string> ImageLoader::s_pendingFullSizeUrls;
 std::mutex ImageLoader::s_queueMutex;
 std::condition_variable ImageLoader::s_queueCV;
 int ImageLoader::s_maxConcurrentLoads = 3;  // Worker thread count - kept low for PS Vita memory limits
-int ImageLoader::s_maxThumbnailSize = 4096;  // Larger limit for cover image quality
+int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
 
 // Worker thread pool
 std::vector<std::thread> ImageLoader::s_workers;
@@ -713,7 +713,7 @@ static std::vector<uint8_t> decodeGIFToTGA(const uint8_t* data, size_t size, int
     }
 
     long long pixelBytes = (long long)screenWidth * screenHeight * 4;
-    if (pixelBytes > 32 * 1024 * 1024) {
+    if (pixelBytes > 64 * 1024 * 1024) {
         brls::Logger::warning("ImageLoader: GIF too large ({}x{} = {}MB), skipping",
                               screenWidth, screenHeight, pixelBytes / (1024 * 1024));
         return {};
@@ -1032,7 +1032,7 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
         int preW, preH, preC;
         if (stbi_info_from_memory(data, static_cast<int>(dataSize), &preW, &preH, &preC)) {
             long long rgbaBytes = (long long)preW * preH * 4;
-            if (rgbaBytes > 32 * 1024 * 1024) {
+            if (rgbaBytes > 64 * 1024 * 1024) {
                 brls::Logger::warning("ImageLoader: Image too large to decode ({}x{} = {}MB RGBA), skipping",
                                       preW, preH, rgbaBytes / (1024 * 1024));
                 return tgaData;
@@ -1110,7 +1110,7 @@ static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSi
         int preW, preH, preC;
         if (stbi_info_from_memory(data, static_cast<int>(dataSize), &preW, &preH, &preC)) {
             long long rgbaBytes = (long long)preW * preH * 4;
-            if (rgbaBytes > 32 * 1024 * 1024) {
+            if (rgbaBytes > 64 * 1024 * 1024) {
                 brls::Logger::warning("ImageLoader: Image too large to decode ({}x{} = {}MB RGBA), skipping",
                                       preW, preH, rgbaBytes / (1024 * 1024));
                 // Don't signalOOM here — this is a pre-check rejection, not an
