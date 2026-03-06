@@ -2179,10 +2179,20 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             return;
         }
     } else if (isWebP) {
-        // For animated WebP, the first frame was already extracted BEFORE the
-        // decode mutex (to avoid holding 2+ MB in memory).  bodyVec now contains
-        // a small (~70 KB) standalone static WebP — just decode it normally.
+        // For animated WebP, extract just the first frame before decoding.
+        // This avoids holding the entire multi-MB file in memory during decode
+        // — the first frame is typically ~70KB vs the full file being 2+ MB.
         {
+            WebPBitstreamFeatures webpFeat;
+            if (WebPGetFeatures(decData, decSize, &webpFeat) == VP8_STATUS_OK && webpFeat.has_animation) {
+                auto firstFrame = extractFirstFrameFromAnimatedWebP(decData, decSize);
+                if (!firstFrame.empty()) {
+                    // Replace bodyVec with the small first-frame data
+                    bodyVec = std::move(firstFrame);
+                    decData = bodyVec.data();
+                    decSize = bodyVec.size();
+                }
+            }
             imageData = convertWebPtoTGA(decData, decSize, s_maxThumbnailSize);
             if (imageData.empty()) {
                 // Fallback: try FFmpeg decoder for WebP — it wraps libwebp but with
@@ -2210,10 +2220,26 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             }
         }
     } else if (isGIF) {
+        // For animated GIFs, extract just the first frame before decoding.
+        // This avoids holding the entire multi-MB file in memory during LZW
+        // decode — a 10MB animated GIF's first frame is typically only a few KB.
+        const uint8_t* gifDecData = decData;
+        size_t gifDecSize = decSize;
+        std::vector<uint8_t> firstFrame;
+        if (isAnimatedGIF(decData, decSize)) {
+            firstFrame = extractFirstFrameFromGIF(decData, decSize);
+            if (!firstFrame.empty()) {
+                // Release the large original buffer now that we have the small first frame
+                bodyVec.clear();
+                bodyVec.shrink_to_fit();
+                gifDecData = firstFrame.data();
+                gifDecSize = firstFrame.size();
+            }
+        }
         // Decode GIF using our iterative LZW decoder.  This bypasses both FFmpeg
         // (which may lack a GIF decoder in some Vita builds) and stb_image (whose
         // recursive LZW decoder overflows Vita worker thread stacks).
-        imageData = decodeGIFToTGA(decData, decSize, s_maxThumbnailSize);
+        imageData = decodeGIFToTGA(gifDecData, gifDecSize, s_maxThumbnailSize);
         if (imageData.empty()) {
             brls::Logger::error("ImageLoader: GIF decode failed for {}", url);
             return;
@@ -2652,10 +2678,20 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 WebPBitstreamFeatures feat;
                 if (WebPGetFeatures(reinterpret_cast<const uint8_t*>(imageBody.data()),
                                     imageBody.size(), &feat) == VP8_STATUS_OK) {
-                    // Skip auto-split for animated WebP — segmented crop decode
-                    // doesn't work on animated containers.  The normal single-texture
-                    // path in convertWebPtoTGA handles animated WebP via frame extraction.
-                    if (!feat.has_animation) {
+                    if (feat.has_animation) {
+                        // Animated WebP: extract just the first frame and release
+                        // the large original buffer.  This avoids holding the full
+                        // multi-MB file in memory during decode.
+                        auto firstFrame = extractFirstFrameFromAnimatedWebP(
+                            reinterpret_cast<const uint8_t*>(imageBody.data()), imageBody.size());
+                        if (!firstFrame.empty()) {
+                            imageBody.assign(reinterpret_cast<const char*>(firstFrame.data()), firstFrame.size());
+                            firstFrame.clear();
+                            firstFrame.shrink_to_fit();
+                        }
+                        // Skip auto-split — segmented crop decode doesn't work
+                        // on animated containers (now single-frame anyway).
+                    } else {
                         origW = feat.width;
                         origH = feat.height;
                     }
@@ -2837,14 +2873,25 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 return;
             }
         } else if (isGIF) {
+            // For animated GIFs, extract just the first frame before decoding.
+            // This avoids holding the entire multi-MB file in memory during LZW
+            // decode — a 10MB animated GIF's first frame is typically only a few KB.
+            const uint8_t* gifData = reinterpret_cast<const uint8_t*>(imageBody.data());
+            size_t gifSize = imageBody.size();
+            std::vector<uint8_t> firstFrame;
+            if (isAnimatedGIF(gifData, gifSize)) {
+                firstFrame = extractFirstFrameFromGIF(gifData, gifSize);
+                if (!firstFrame.empty()) {
+                    // Release the large original buffer now that we have the small first frame
+                    { std::string().swap(imageBody); }
+                    gifData = firstFrame.data();
+                    gifSize = firstFrame.size();
+                }
+            }
             // Decode GIF using our iterative LZW decoder.  This bypasses both FFmpeg
             // (which may lack a GIF decoder in some Vita builds) and stb_image (whose
             // recursive LZW decoder overflows Vita worker thread stacks).
-            imageData = decodeGIFToTGA(
-                reinterpret_cast<const uint8_t*>(imageBody.data()),
-                imageBody.size(),
-                MAX_TEXTURE_SIZE
-            );
+            imageData = decodeGIFToTGA(gifData, gifSize, MAX_TEXTURE_SIZE);
             if (imageData.empty()) {
                 brls::Logger::error("ImageLoader: GIF decode failed for {}", url);
                 return;
