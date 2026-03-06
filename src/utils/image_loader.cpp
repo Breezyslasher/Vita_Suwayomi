@@ -1717,6 +1717,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     bool isSVG = false;
     bool isAVIF = false;
     bool isHEIF = false;
+    bool isGIF = false;
     bool isKnownFormat = false;
 
     const uint8_t* bodyData = reinterpret_cast<const uint8_t*>(resp.body.data());
@@ -1732,6 +1733,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             isKnownFormat = true;  // PNG
         }
         else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
+            isGIF = true;
             isKnownFormat = true;  // GIF
         }
         else if (data[0] == 0x42 && data[1] == 0x4D) {
@@ -1792,8 +1794,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     // Detect animated GIFs — they can be multi-MB just like animated WebP
     // and need the same first-frame extraction treatment.
     bool isAnimatedGIF_ = false;
-    if (!isWebP && !isSVG && !isAVIF && !isHEIF && bodySize > 13 &&
-        bodyData[0] == 0x47 && bodyData[1] == 0x49 && bodyData[2] == 0x46) {
+    if (isGIF && bodySize > 13) {
         isAnimatedGIF_ = isAnimatedGIF(bodyData, bodySize);
     }
 
@@ -1945,6 +1946,17 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
                 signalOOM("WebP all fallbacks exhausted");
                 return;
             }
+        }
+    } else if (isGIF) {
+        // Decode GIF via FFmpeg instead of stb_image.  stb_image's GIF LZW
+        // decoder (stbi__out_gif_code) is recursive and can recurse up to 4096
+        // levels deep, overflowing the limited stack of PS Vita worker threads
+        // and causing psp2core crashes.  FFmpeg's GIF decoder is iterative and
+        // stack-safe.
+        imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "GIF");
+        if (imageData.empty()) {
+            brls::Logger::error("ImageLoader: GIF FFmpeg decode failed for {}", url);
+            return;
         }
     } else {
         // Downscale JPEG/PNG thumbnails too (not just WebP)
@@ -2200,6 +2212,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         // Check image format
         bool isWebP = false;
         bool isJpegOrPng = false;
+        bool isGIF = false;
         bool isTGA = false;
         bool isSVG = false;
         bool isAVIF = false;
@@ -2239,10 +2252,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 isJpegOrPng = true;
                 isValidImage = true;
             }
-            // GIF (decode via stb_image like JPEG/PNG - raw GIF pass-through
-            // crashes NanoVG on the Vita, especially for animated/large GIFs)
+            // GIF (decode via FFmpeg — stb_image's recursive LZW decoder can
+            // overflow the stack on PS Vita worker threads, causing psp2core crashes)
             else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
-                isJpegOrPng = true;
+                isGIF = true;
                 isValidImage = true;
             }
             // BMP
@@ -2325,10 +2338,9 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
 
         // For animated GIFs in the reader path, extract the first frame BEFORE
         // the decode mutex — same rationale as animated WebP above.
-        if (isJpegOrPng && imageBody.size() > 13) {
+        if (isGIF && imageBody.size() > 13) {
             const uint8_t* gifData = reinterpret_cast<const uint8_t*>(imageBody.data());
-            if (gifData[0] == 0x47 && gifData[1] == 0x49 && gifData[2] == 0x46 &&
-                isAnimatedGIF(gifData, imageBody.size())) {
+            if (isAnimatedGIF(gifData, imageBody.size())) {
                 std::lock_guard<std::mutex> animLock(s_animatedWebPMutex);
 
                 brls::Logger::info("ImageLoader: Animated GIF reader page ({}KB), extracting first frame: {}",
@@ -2617,8 +2629,23 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 brls::Logger::error("ImageLoader: JPEG/PNG conversion failed for {}", url);
                 return;
             }
+        } else if (isGIF) {
+            // Decode GIF via FFmpeg instead of stb_image.  stb_image's GIF LZW
+            // decoder (stbi__out_gif_code) is recursive and can recurse up to 4096
+            // levels deep, overflowing the limited stack of PS Vita worker threads
+            // and causing psp2core crashes.  FFmpeg's GIF decoder is iterative.
+            imageData = convertFFmpegImageToTGA(
+                reinterpret_cast<const uint8_t*>(imageBody.data()),
+                imageBody.size(),
+                MAX_TEXTURE_SIZE,
+                "GIF"
+            );
+            if (imageData.empty()) {
+                brls::Logger::error("ImageLoader: GIF FFmpeg decode failed for {}", url);
+                return;
+            }
         } else {
-            // For GIF and other formats, pass through directly
+            // For other formats, pass through directly
             // NVG will handle loading
             imageData.assign(imageBody.begin(), imageBody.end());
             brls::Logger::debug("ImageLoader: Using image directly ({} bytes)", imageData.size());
