@@ -106,12 +106,6 @@ static constexpr int MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN = 3;
 // concurrently, which can push the Vita past its memory limit.
 static std::mutex s_decodeMutex;
 
-// Serialize animated image (WebP/GIF) processing.  Each animated image is 2+ MB
-// — with 3 worker threads, simultaneous downloads exhaust the Vita's memory.
-// When one worker is processing an animated image, others that encounter one
-// re-queue it and move on to the next (non-animated) image in the queue.
-static std::mutex s_animatedWebPMutex;
-
 // Signal that an OOM condition occurred during image decode.
 // This sets a cooldown period during which new thumbnail loads are skipped
 // to let the system recover before allocating more decode buffers.
@@ -2138,108 +2132,17 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         return;
     }
 
-    // For animated WebP, extract the small first frame BEFORE copying the full
-    // response body.  Animated WebP covers can be 2+ MB — copying that into
-    // bodyVec would briefly require 4+ MB (resp.body + bodyVec) which fragments
-    // the Vita's limited heap and can cause cascading OOM crashes.
-    bool isAnimatedWebP = false;
-    if (isWebP && bodySize > 30) {
-        WebPBitstreamFeatures features;
-        if (WebPGetFeatures(bodyData, bodySize, &features) == VP8_STATUS_OK) {
-            isAnimatedWebP = features.has_animation;
-        }
-    }
-
-    // Detect animated GIFs — they can be multi-MB just like animated WebP
-    // and need the same first-frame extraction treatment.
-    bool isAnimatedGIF_ = false;
-    if (isGIF && bodySize > 13) {
-        isAnimatedGIF_ = isAnimatedGIF(bodyData, bodySize);
-    }
-
+    // Move the HTTP response body into a local vector so we hold a compact copy.
+    // The `resp` object (with its string, headers, etc.) is freed here, reducing
+    // peak memory during the decode step that follows.
     std::vector<uint8_t> bodyVec;
-    if (isAnimatedGIF_) {
-        // Same serialization as animated WebP — only one animated image at a time.
-        std::unique_lock<std::mutex> animLock(s_animatedWebPMutex, std::try_to_lock);
-        if (!animLock.owns_lock()) {
-            brls::Logger::info("ImageLoader: Deferring animated GIF (another animated in progress), re-queuing: {}", url);
-            std::string urlCopy = url;
-            LoadCallback cbCopy = callback;
-            brls::Image* tgtCopy = target;
-            auto aliveCopy = alive;
-            { std::string().swap(resp.body); }
-            {
-                std::lock_guard<std::mutex> lock(s_queueMutex);
-                s_loadQueue.push({urlCopy, cbCopy, tgtCopy, true, aliveCopy});
-            }
-            s_queueCV.notify_one();
-            return;
-        }
-
-        brls::Logger::info("ImageLoader: Animated GIF ({}KB), extracting first frame before copy: {}",
-                           bodySize / 1024, url);
-        auto firstFrame = extractFirstFrameFromGIF(bodyData, bodySize);
-        { std::string().swap(resp.body); }
-        bodyData = nullptr;
-        bodySize = 0;
-
-        if (firstFrame.empty()) {
-            brls::Logger::warning("ImageLoader: Failed to extract frame from animated GIF, falling back to full data: {}", url);
-            // Can't extract frame — will fall through and stb_image will decode frame 0
-            // but we already freed resp.body, so we have to bail
-            return;
-        }
-        bodyVec = std::move(firstFrame);
-    } else if (isAnimatedWebP) {
-        // Only one animated WebP can be processed at a time.  Each one is 2+ MB;
-        // with 3 workers holding them simultaneously the Vita runs out of memory.
-        // If another worker is already processing one, free our body immediately
-        // and re-queue this URL so it gets processed later.
-        std::unique_lock<std::mutex> animLock(s_animatedWebPMutex, std::try_to_lock);
-        if (!animLock.owns_lock()) {
-            brls::Logger::info("ImageLoader: Deferring animated WebP (another in progress), re-queuing: {}", url);
-            // Free the 2+ MB body before re-queuing to reclaim memory immediately
-            std::string urlCopy = url;
-            LoadCallback cbCopy = callback;
-            brls::Image* tgtCopy = target;
-            auto aliveCopy = alive;
-            { std::string().swap(resp.body); }
-            {
-                std::lock_guard<std::mutex> lock(s_queueMutex);
-                s_loadQueue.push({urlCopy, cbCopy, tgtCopy, true, aliveCopy});
-            }
-            s_queueCV.notify_one();
-            return;
-        }
-
-        // We hold the animated WebP lock — safe to process.
-        // Extract first frame directly from resp.body (avoids duplicating the
-        // full multi-MB animated WebP into bodyVec).
-        brls::Logger::info("ImageLoader: Animated WebP ({}KB), extracting first frame before copy: {}",
-                           bodySize / 1024, url);
-        auto firstFrame = extractFirstFrameFromAnimatedWebP(bodyData, bodySize);
-        { std::string().swap(resp.body); }  // free 2+ MB immediately
-        bodyData = nullptr;
-        bodySize = 0;
-
-        if (firstFrame.empty()) {
-            brls::Logger::warning("ImageLoader: Failed to extract frame from animated WebP: {}", url);
-            return;
-        }
-        bodyVec = std::move(firstFrame);  // ~70 KB instead of 2+ MB
-        // animLock released when bodyVec processing continues below
-    } else {
-        // Move the HTTP response body into a local vector so we hold a compact copy.
-        // The `resp` object (with its string, headers, etc.) is freed here, reducing
-        // peak memory during the decode step that follows.
-        try {
-            bodyVec.assign(bodyData, bodyData + bodySize);
-        } catch (const std::bad_alloc&) {
-            signalOOM("executeLoad bodyVec alloc");
-            return;
-        }
-        { std::string().swap(resp.body); }  // release resp.body memory now
+    try {
+        bodyVec.assign(bodyData, bodyData + bodySize);
+    } catch (const std::bad_alloc&) {
+        signalOOM("executeLoad bodyVec alloc");
+        return;
     }
+    { std::string().swap(resp.body); }  // release resp.body memory now
     const uint8_t* decData = bodyVec.data();
     size_t decSize = bodyVec.size();
 
@@ -2660,59 +2563,6 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         if (!isValidImage) {
             brls::Logger::warning("ImageLoader: Invalid image format for {}", url);
             return;
-        }
-
-        // For animated WebP in the reader path, extract the first frame BEFORE
-        // the decode mutex.  Animated WebP pages can be 2+ MB each — when
-        // preloading multiple pages, keeping the full animated data in imageBody
-        // while waiting for the decode lock causes memory spikes that crash the
-        // Vita.  Serialize extraction with s_animatedWebPMutex so only one
-        // worker holds a full animated WebP body at a time.
-        if (isWebP && imageBody.size() > 30) {
-            WebPBitstreamFeatures animFeatures;
-            if (WebPGetFeatures(reinterpret_cast<const uint8_t*>(imageBody.data()),
-                                imageBody.size(), &animFeatures) == VP8_STATUS_OK &&
-                animFeatures.has_animation) {
-                // Serialize animated WebP extraction across all workers
-                std::lock_guard<std::mutex> animLock(s_animatedWebPMutex);
-
-                brls::Logger::info("ImageLoader: Animated WebP reader page ({}KB), extracting first frame: {}",
-                                   imageBody.size() / 1024, url);
-                auto firstFrame = extractFirstFrameFromAnimatedWebP(
-                    reinterpret_cast<const uint8_t*>(imageBody.data()), imageBody.size());
-                if (!firstFrame.empty()) {
-                    brls::Logger::info("ImageLoader: Extracted first frame from animated WebP ({} bytes -> {} bytes)",
-                                       imageBody.size(), firstFrame.size());
-                    // Replace imageBody with the small first frame
-                    imageBody.assign(reinterpret_cast<const char*>(firstFrame.data()), firstFrame.size());
-                    std::vector<uint8_t>().swap(firstFrame);  // free immediately
-                } else {
-                    brls::Logger::warning("ImageLoader: Failed to extract frame from animated WebP reader page: {}", url);
-                    // Continue with original data — convertWebPtoTGA will try extraction again
-                }
-            }
-        }
-
-        // For animated GIFs in the reader path, extract the first frame BEFORE
-        // the decode mutex — same rationale as animated WebP above.
-        if (isGIF && imageBody.size() > 13) {
-            const uint8_t* gifData = reinterpret_cast<const uint8_t*>(imageBody.data());
-            if (isAnimatedGIF(gifData, imageBody.size())) {
-                std::lock_guard<std::mutex> animLock(s_animatedWebPMutex);
-
-                brls::Logger::info("ImageLoader: Animated GIF reader page ({}KB), extracting first frame: {}",
-                                   imageBody.size() / 1024, url);
-                auto firstFrame = extractFirstFrameFromGIF(gifData, imageBody.size());
-                if (!firstFrame.empty()) {
-                    brls::Logger::info("ImageLoader: Extracted first frame from animated GIF ({} bytes -> {} bytes)",
-                                       imageBody.size(), firstFrame.size());
-                    imageBody.assign(reinterpret_cast<const char*>(firstFrame.data()), firstFrame.size());
-                    std::vector<uint8_t>().swap(firstFrame);
-                } else {
-                    brls::Logger::warning("ImageLoader: Failed to extract frame from animated GIF reader page: {}", url);
-                    // Continue with original data — stb_image will decode first frame anyway
-                }
-            }
         }
 
         // TGA pass-through: already in GPU-ready format, skip decode/conversion
