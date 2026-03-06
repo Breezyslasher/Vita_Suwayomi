@@ -257,6 +257,68 @@ static bool validateWebPContainer(const uint8_t* data, size_t size, bool& isTrun
     return true;
 }
 
+// Extract the first frame from an animated WebP by parsing the RIFF/ANMF chunk
+// structure.  Returns a standalone (non-animated) WebP file that can be decoded
+// with the regular WebPDecode API, or empty on failure.
+// This avoids needing libwebpdemux or FFmpeg for animated WebP support.
+static std::vector<uint8_t> extractFirstFrameFromAnimatedWebP(const uint8_t* data, size_t dataSize) {
+    // Minimum: RIFF header (12) + at least one chunk header (8) + ANMF header (16)
+    if (dataSize < 36) return {};
+
+    // Verify RIFF WEBP header
+    if (memcmp(data, "RIFF", 4) != 0 || memcmp(data + 8, "WEBP", 4) != 0) return {};
+
+    // Scan top-level chunks starting after "RIFF size WEBP" (offset 12)
+    size_t offset = 12;
+    while (offset + 8 <= dataSize) {
+        uint32_t chunkSize = static_cast<uint32_t>(data[offset + 4])
+                           | (static_cast<uint32_t>(data[offset + 5]) << 8)
+                           | (static_cast<uint32_t>(data[offset + 6]) << 16)
+                           | (static_cast<uint32_t>(data[offset + 7]) << 24);
+
+        if (memcmp(data + offset, "ANMF", 4) == 0) {
+            // Found first ANMF chunk
+            size_t payloadStart = offset + 8;
+            if (payloadStart + 16 > dataSize) return {};  // need 16-byte frame header
+
+            // ANMF payload: 16-byte header (x,y,w,h,duration,flags) + frame bitstream
+            const uint8_t* frameData = data + payloadStart + 16;
+            size_t frameDataSize = chunkSize > 16 ? chunkSize - 16 : 0;
+
+            // Clamp to available data if truncated
+            if (payloadStart + 16 + frameDataSize > dataSize) {
+                frameDataSize = dataSize - payloadStart - 16;
+            }
+            if (frameDataSize < 8) return {};
+
+            // Build a minimal RIFF WEBP container around the frame bitstream.
+            // The frame data contains VP8/VP8L (and optional ALPH) sub-chunks
+            // that form a valid non-animated WebP payload.
+            uint32_t riffPayload = static_cast<uint32_t>(4 + frameDataSize);  // "WEBP" + data
+            std::vector<uint8_t> result(12 + frameDataSize);
+            memcpy(result.data(),     "RIFF", 4);
+            result[4] = riffPayload & 0xFF;
+            result[5] = (riffPayload >> 8) & 0xFF;
+            result[6] = (riffPayload >> 16) & 0xFF;
+            result[7] = (riffPayload >> 24) & 0xFF;
+            memcpy(result.data() + 8, "WEBP", 4);
+            memcpy(result.data() + 12, frameData, frameDataSize);
+
+            brls::Logger::info("ImageLoader: Extracted first frame from animated WebP ({} bytes -> {} bytes)",
+                               dataSize, result.size());
+            return result;
+        }
+
+        // Advance to next chunk (RIFF chunks are padded to even size)
+        size_t advance = 8 + chunkSize + (chunkSize & 1);
+        if (advance == 0) break;  // prevent infinite loop on corrupted data
+        offset += advance;
+    }
+
+    brls::Logger::warning("ImageLoader: No ANMF chunk found in animated WebP ({} bytes)", dataSize);
+    return {};
+}
+
 // Calculate number of segments needed for a tall image
 static int calculateSegments(int width, int height, int maxSize) {
     if (height <= maxSize) return 1;
@@ -601,13 +663,19 @@ static std::vector<uint8_t> convertWebPtoTGA(const uint8_t* webpData, size_t web
     }
 
     // Animated WebP cannot be decoded by the simple WebPDecode API — it returns
-    // VP8_STATUS_UNSUPPORTED_FEATURE.  Skip straight to the FFmpeg/stb fallback
-    // chain in the caller to avoid wasting memory on futile decode attempts.
+    // VP8_STATUS_UNSUPPORTED_FEATURE.  Extract the first frame from the ANMF
+    // chunk and decode that as a standalone static WebP image.
     if (features.has_animation) {
-        brls::Logger::warning("ImageLoader: Animated WebP detected ({}x{}, {}KB) — skipping libwebp simple decoder",
-                              width, height, webpSize / 1024);
-        trackDecodeFailure("WebP animated");
-        return {};
+        brls::Logger::info("ImageLoader: Animated WebP detected ({}x{}, {}KB) — extracting first frame",
+                           width, height, webpSize / 1024);
+        auto firstFrame = extractFirstFrameFromAnimatedWebP(webpData, webpSize);
+        if (firstFrame.empty()) {
+            brls::Logger::error("ImageLoader: Failed to extract first frame from animated WebP");
+            trackDecodeFailure("WebP animated frame extract");
+            return {};
+        }
+        // Recursively decode the extracted (non-animated) first frame
+        return convertWebPtoTGA(firstFrame.data(), firstFrame.size(), maxSize);
     }
 
     // Calculate target dimensions
@@ -1213,7 +1281,10 @@ void ImageLoader::processPendingTextures() {
             if (update.data.empty()) {
                 continue;
             }
+            brls::Logger::debug("ImageLoader: Uploading texture {} bytes to target {:p}",
+                                update.data.size(), static_cast<void*>(update.target));
             update.target->setImageFromMem(update.data.data(), update.data.size());
+            brls::Logger::debug("ImageLoader: Texture upload OK");
             if (update.callback) update.callback(update.target);
         }
         processed++;
@@ -1480,17 +1551,46 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         return;
     }
 
-    // Move the HTTP response body into a local vector so we hold a compact copy.
-    // The `resp` object (with its string, headers, etc.) is freed here, reducing
-    // peak memory during the decode step that follows.
-    std::vector<uint8_t> bodyVec;
-    try {
-        bodyVec.assign(bodyData, bodyData + bodySize);
-    } catch (const std::bad_alloc&) {
-        signalOOM("executeLoad bodyVec alloc");
-        return;
+    // For animated WebP, extract the small first frame BEFORE copying the full
+    // response body.  Animated WebP covers can be 2+ MB — copying that into
+    // bodyVec would briefly require 4+ MB (resp.body + bodyVec) which fragments
+    // the Vita's limited heap and can cause cascading OOM crashes.
+    bool isAnimatedWebP = false;
+    if (isWebP && bodySize > 30) {
+        WebPBitstreamFeatures features;
+        if (WebPGetFeatures(bodyData, bodySize, &features) == VP8_STATUS_OK) {
+            isAnimatedWebP = features.has_animation;
+        }
     }
-    { std::string().swap(resp.body); }  // release resp.body memory now
+
+    std::vector<uint8_t> bodyVec;
+    if (isAnimatedWebP) {
+        // Extract first frame directly from resp.body (avoids duplicating the
+        // full multi-MB animated WebP into bodyVec).
+        brls::Logger::info("ImageLoader: Animated WebP ({}KB), extracting first frame before copy: {}",
+                           bodySize / 1024, url);
+        auto firstFrame = extractFirstFrameFromAnimatedWebP(bodyData, bodySize);
+        { std::string().swap(resp.body); }  // free 2+ MB immediately
+        bodyData = nullptr;
+        bodySize = 0;
+
+        if (firstFrame.empty()) {
+            brls::Logger::warning("ImageLoader: Failed to extract frame from animated WebP: {}", url);
+            return;
+        }
+        bodyVec = std::move(firstFrame);  // ~70 KB instead of 2+ MB
+    } else {
+        // Move the HTTP response body into a local vector so we hold a compact copy.
+        // The `resp` object (with its string, headers, etc.) is freed here, reducing
+        // peak memory during the decode step that follows.
+        try {
+            bodyVec.assign(bodyData, bodyData + bodySize);
+        } catch (const std::bad_alloc&) {
+            signalOOM("executeLoad bodyVec alloc");
+            return;
+        }
+        { std::string().swap(resp.body); }  // release resp.body memory now
+    }
     const uint8_t* decData = bodyVec.data();
     size_t decSize = bodyVec.size();
 
@@ -1527,30 +1627,10 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             return;
         }
     } else if (isWebP) {
-        // Detect animated WebP early so we can skip straight to FFmpeg (which
-        // can extract the first frame) instead of wasting memory on the
-        // libwebp simple decoder that will fail with VP8_STATUS_UNSUPPORTED_FEATURE.
-        bool isAnimatedWebP = false;
-        if (decSize > 30) {
-            WebPBitstreamFeatures features;
-            if (WebPGetFeatures(decData, decSize, &features) == VP8_STATUS_OK) {
-                isAnimatedWebP = features.has_animation;
-            }
-        }
-
-        if (isAnimatedWebP) {
-            // Go straight to FFmpeg for animated WebP — it can decode the first
-            // frame via its WebP demuxer without needing the WebP demux library.
-            brls::Logger::info("ImageLoader: Animated WebP detected, using FFmpeg for first frame: {}", url);
-            imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "WebP-anim");
-            if (imageData.empty()) {
-                // Animated WebP that FFmpeg can't decode — this is an expected
-                // unsupported-format failure, NOT memory pressure.  Don't signal
-                // OOM which would freeze all other thumbnail loads.
-                brls::Logger::warning("ImageLoader: Animated WebP unsupported for {}", url);
-                return;
-            }
-        } else {
+        // For animated WebP, the first frame was already extracted BEFORE the
+        // decode mutex (to avoid holding 2+ MB in memory).  bodyVec now contains
+        // a small (~70 KB) standalone static WebP — just decode it normally.
+        {
             imageData = convertWebPtoTGA(decData, decSize, s_maxThumbnailSize);
             if (imageData.empty()) {
                 // Fallback: try FFmpeg decoder for WebP — it wraps libwebp but with
@@ -1591,6 +1671,14 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         }
     }
 
+    brls::Logger::info("ImageLoader: Decode OK ({} bytes TGA) for {}", imageData.size(), url);
+
+    // Release download buffer if still held (non-animated paths)
+    if (!bodyVec.empty()) {
+        bodyVec.clear();
+        bodyVec.shrink_to_fit();
+    }
+
     // Cache the image in memory using LRU eviction
     cachePut(url, imageData);
 
@@ -1606,6 +1694,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     if (target) {
         queueTextureUpdate(imageData, target, callback, alive);
     }
+    brls::Logger::info("ImageLoader: Queued texture for {}", url);
 }
 
 void ImageLoader::ensureWorkersStarted() {
@@ -1990,8 +2079,13 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 WebPBitstreamFeatures feat;
                 if (WebPGetFeatures(reinterpret_cast<const uint8_t*>(imageBody.data()),
                                     imageBody.size(), &feat) == VP8_STATUS_OK) {
-                    origW = feat.width;
-                    origH = feat.height;
+                    // Skip auto-split for animated WebP — segmented crop decode
+                    // doesn't work on animated containers.  The normal single-texture
+                    // path in convertWebPtoTGA handles animated WebP via frame extraction.
+                    if (!feat.has_animation) {
+                        origW = feat.width;
+                        origH = feat.height;
+                    }
                 }
             } else {
                 int c;
