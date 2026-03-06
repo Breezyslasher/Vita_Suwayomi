@@ -110,6 +110,11 @@ private:
 
     // Async lifetime guard
     std::shared_ptr<bool> m_alive;
+
+    // Separate lifetime guard for source icon image loads.
+    // Invalidated before clearing the source list so that pending
+    // ImageLoader callbacks don't write to freed brls::Image pointers.
+    std::shared_ptr<bool> m_sourceIconsAlive;
 };
 
 } // namespace vitasuwayomi
