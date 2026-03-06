@@ -167,28 +167,116 @@ static int extractMangaIdFromUrl(const std::string& url) {
 static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
                           uint8_t* dst, int dstW, int dstH) {
     if (!src || !dst || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0) return;
-    float scaleX = (float)srcW / dstW;
-    float scaleY = (float)srcH / dstH;
+    // Use 16.16 fixed-point instead of per-pixel float math
+    const uint32_t fxScaleX = ((uint32_t)srcW << 16) / (uint32_t)dstW;
+    const uint32_t fxScaleY = ((uint32_t)srcH << 16) / (uint32_t)dstH;
 
     for (int y = 0; y < dstH; y++) {
+        int srcY = (int)((uint32_t)y * fxScaleY >> 16);
+        if (srcY >= srcH) srcY = srcH - 1;
+        const uint8_t* srcRow = src + (size_t)srcY * srcW * 4;
+        uint8_t* dstRow = dst + (size_t)y * dstW * 4;
         for (int x = 0; x < dstW; x++) {
-            int srcX = (int)(x * scaleX);
-            int srcY = (int)(y * scaleY);
+            int srcX = (int)((uint32_t)x * fxScaleX >> 16);
             if (srcX >= srcW) srcX = srcW - 1;
-            if (srcY >= srcH) srcY = srcH - 1;
-
-            int srcIdx = (srcY * srcW + srcX) * 4;
-            int dstIdx = (y * dstW + x) * 4;
-
-            dst[dstIdx + 0] = src[srcIdx + 0];
-            dst[dstIdx + 1] = src[srcIdx + 1];
-            dst[dstIdx + 2] = src[srcIdx + 2];
-            dst[dstIdx + 3] = src[srcIdx + 3];
+            memcpy(dstRow + x * 4, srcRow + srcX * 4, 4);
         }
     }
 }
 
-// Helper to create TGA from RGBA data
+// Helper to write a TGA header into the first 18 bytes of a buffer
+static void writeTGAHeader(uint8_t* header, int width, int height) {
+    memset(header, 0, 18);
+    header[2] = 2;
+    header[12] = width & 0xFF;
+    header[13] = (width >> 8) & 0xFF;
+    header[14] = height & 0xFF;
+    header[15] = (height >> 8) & 0xFF;
+    header[16] = 32;
+    header[17] = 0x28;
+}
+
+// Fused downscale + RGBA→BGRA swizzle in a single pass (avoids separate
+// downscaleRGBA + createTGAFromRGBA which touches every pixel twice).
+// Writes directly into a TGA buffer (18-byte header + BGRA pixel data).
+static std::vector<uint8_t> downscaleRGBAtoTGA(const uint8_t* src, int srcW, int srcH,
+                                                int dstW, int dstH) {
+    if (!src || srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0) return {};
+    size_t imageSize = (size_t)dstW * dstH * 4;
+    if (imageSize > 256 * 1024 * 1024) return {};
+    std::vector<uint8_t> tga;
+    try {
+        tga.resize(18 + imageSize);
+    } catch (const std::bad_alloc&) {
+        signalOOM("downscaleRGBAtoTGA");
+        return {};
+    }
+    writeTGAHeader(tga.data(), dstW, dstH);
+
+    const uint32_t fxScaleX = ((uint32_t)srcW << 16) / (uint32_t)dstW;
+    const uint32_t fxScaleY = ((uint32_t)srcH << 16) / (uint32_t)dstH;
+    uint8_t* dst = tga.data() + 18;
+
+    for (int y = 0; y < dstH; y++) {
+        int srcY = (int)((uint32_t)y * fxScaleY >> 16);
+        if (srcY >= srcH) srcY = srcH - 1;
+        const uint8_t* srcRow = src + (size_t)srcY * srcW * 4;
+        uint8_t* dstRow = dst + (size_t)y * dstW * 4;
+        for (int x = 0; x < dstW; x++) {
+            int srcX = (int)((uint32_t)x * fxScaleX >> 16);
+            if (srcX >= srcW) srcX = srcW - 1;
+            const uint8_t* sp = srcRow + srcX * 4;
+            uint8_t* dp = dstRow + x * 4;
+            dp[0] = sp[2];  // B
+            dp[1] = sp[1];  // G
+            dp[2] = sp[0];  // R
+            dp[3] = sp[3];  // A
+        }
+    }
+    return tga;
+}
+
+// Fused segment-extract + downscale + RGBA→BGRA swizzle in one pass.
+// Reads directly from the full RGBA buffer at a vertical offset, avoiding
+// the intermediate memcpy of segment rows.
+static std::vector<uint8_t> downscaleSegmentRGBAtoTGA(const uint8_t* src, int srcW,
+                                                       int startY, int segH,
+                                                       int dstW, int dstH) {
+    if (!src || srcW <= 0 || segH <= 0 || dstW <= 0 || dstH <= 0) return {};
+    size_t imageSize = (size_t)dstW * dstH * 4;
+    if (imageSize > 256 * 1024 * 1024) return {};
+    std::vector<uint8_t> tga;
+    try {
+        tga.resize(18 + imageSize);
+    } catch (const std::bad_alloc&) {
+        signalOOM("downscaleSegmentRGBAtoTGA");
+        return {};
+    }
+    writeTGAHeader(tga.data(), dstW, dstH);
+
+    const uint32_t fxScaleX = ((uint32_t)srcW << 16) / (uint32_t)dstW;
+    const uint32_t fxScaleY = ((uint32_t)segH << 16) / (uint32_t)dstH;
+    uint8_t* dst = tga.data() + 18;
+
+    for (int y = 0; y < dstH; y++) {
+        int srcY = startY + (int)((uint32_t)y * fxScaleY >> 16);
+        const uint8_t* srcRow = src + (size_t)srcY * srcW * 4;
+        uint8_t* dstRow = dst + (size_t)y * dstW * 4;
+        for (int x = 0; x < dstW; x++) {
+            int srcX = (int)((uint32_t)x * fxScaleX >> 16);
+            if (srcX >= srcW) srcX = srcW - 1;
+            const uint8_t* sp = srcRow + srcX * 4;
+            uint8_t* dp = dstRow + x * 4;
+            dp[0] = sp[2];  // B
+            dp[1] = sp[1];  // G
+            dp[2] = sp[0];  // R
+            dp[3] = sp[3];  // A
+        }
+    }
+    return tga;
+}
+
+// Helper to create TGA from RGBA data (swizzles R<->B for TGA's BGRA order)
 static std::vector<uint8_t> createTGAFromRGBA(const uint8_t* rgba, int width, int height) {
     if (width <= 0 || height <= 0 || !rgba) return {};
     size_t imageSize = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
@@ -202,15 +290,7 @@ static std::vector<uint8_t> createTGAFromRGBA(const uint8_t* rgba, int width, in
         return {};
     }
 
-    uint8_t* header = tgaData.data();
-    memset(header, 0, 18);
-    header[2] = 2;
-    header[12] = width & 0xFF;
-    header[13] = (width >> 8) & 0xFF;
-    header[14] = height & 0xFF;
-    header[15] = (height >> 8) & 0xFF;
-    header[16] = 32;
-    header[17] = 0x28;
+    writeTGAHeader(tgaData.data(), width, height);
 
     uint8_t* pixels = tgaData.data() + 18;
     for (int i = 0; i < width * height; i++) {
@@ -219,6 +299,25 @@ static std::vector<uint8_t> createTGAFromRGBA(const uint8_t* rgba, int width, in
         pixels[i * 4 + 2] = rgba[i * 4 + 0];  // R
         pixels[i * 4 + 3] = rgba[i * 4 + 3];  // A
     }
+
+    return tgaData;
+}
+
+// Helper to create TGA from BGRA data (direct memcpy — no swizzle needed)
+static std::vector<uint8_t> createTGAFromBGRA(const uint8_t* bgra, int width, int height) {
+    if (width <= 0 || height <= 0 || !bgra) return {};
+    size_t imageSize = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
+    if (imageSize > 256 * 1024 * 1024) return {};
+    std::vector<uint8_t> tgaData;
+    try {
+        tgaData.resize(18 + imageSize);
+    } catch (const std::bad_alloc&) {
+        signalOOM("createTGAFromBGRA");
+        return {};
+    }
+
+    writeTGAHeader(tgaData.data(), width, height);
+    memcpy(tgaData.data() + 18, bgra, imageSize);
 
     return tgaData;
 }
@@ -645,9 +744,10 @@ static std::vector<uint8_t> decodeGIFToTGA(const uint8_t* data, size_t size, int
 
     // Code table: each entry stores (prefix, suffix) for chain reconstruction
     struct LZWEntry {
-        uint16_t prefix;  // Previous code (or 0xFFFF for single-char entries)
-        uint8_t  suffix;  // Last byte of this code's string
-        uint16_t length;  // Total string length (for stack allocation)
+        uint16_t prefix;    // Previous code (or 0xFFFF for single-char entries)
+        uint8_t  suffix;    // Last byte of this code's string
+        uint8_t  firstChar; // First byte of this code's string (cached for O(1) lookup)
+        uint16_t length;    // Total string length (for stack allocation)
     };
     std::vector<LZWEntry> table(maxCode);
 
@@ -687,6 +787,7 @@ static std::vector<uint8_t> decodeGIFToTGA(const uint8_t* data, size_t size, int
     for (int i = 0; i < clearCode; i++) {
         table[i].prefix = 0xFFFF;
         table[i].suffix = static_cast<uint8_t>(i);
+        table[i].firstChar = static_cast<uint8_t>(i);
         table[i].length = 1;
     }
 
@@ -732,22 +833,19 @@ static std::vector<uint8_t> decodeGIFToTGA(const uint8_t* data, size_t size, int
                     outputCode(code);
                     // Add new entry: prevCode's string + first char of code's string
                     if (nextCode < maxCode) {
-                        // Find first char of code's string
-                        int c = code;
-                        while (table[c].prefix != 0xFFFF) c = table[c].prefix;
                         table[nextCode].prefix = static_cast<uint16_t>(prevCode);
-                        table[nextCode].suffix = table[c].suffix;
+                        table[nextCode].suffix = table[code].firstChar;
+                        table[nextCode].firstChar = table[prevCode].firstChar;
                         table[nextCode].length = table[prevCode].length + 1;
                         nextCode++;
                     }
                 } else {
                     // Code not yet in table (special KwKwK case)
                     // New string = prevCode's string + first char of prevCode's string
-                    int c = prevCode;
-                    while (table[c].prefix != 0xFFFF) c = table[c].prefix;
                     if (nextCode < maxCode) {
                         table[nextCode].prefix = static_cast<uint16_t>(prevCode);
-                        table[nextCode].suffix = table[c].suffix;
+                        table[nextCode].suffix = table[prevCode].firstChar;
+                        table[nextCode].firstChar = table[prevCode].firstChar;
                         table[nextCode].length = table[prevCode].length + 1;
                         nextCode++;
                     }
@@ -777,27 +875,27 @@ static std::vector<uint8_t> decodeGIFToTGA(const uint8_t* data, size_t size, int
         return {};
     }
 
-    // Handle interlaced GIF row ordering
-    auto getRow = [&](int y) -> int {
-        if (!interlaced) return y;
-        // GIF interlace: pass 1 (rows 0,8,16..), pass 2 (4,12,20..), pass 3 (2,6,10..), pass 4 (1,3,5..)
+    // Build interlaced row lookup table (O(n) once instead of O(n²) per-pixel)
+    std::vector<int> rowMap;
+    if (interlaced) {
+        rowMap.resize(imgHeight);
         static const int startRow[] = {0, 4, 2, 1};
         static const int stepRow[]  = {8, 8, 4, 2};
         int row = 0;
         for (int pass = 0; pass < 4; pass++) {
             for (int r = startRow[pass]; r < imgHeight; r += stepRow[pass]) {
-                if (row == y) return r;
-                row++;
+                if (row < imgHeight) rowMap[row++] = r;
             }
         }
-        return y;
-    };
+    }
 
+    int px = 0, rawY = 0;
     for (size_t i = 0; i < pixels.size(); i++) {
-        int px = static_cast<int>(i % imgWidth);
-        int py = getRow(static_cast<int>(i / imgWidth));
         int screenX = imgLeft + px;
-        int screenY = imgTop + py;
+        int screenY = imgTop + (interlaced ? rowMap[rawY] : rawY);
+
+        if (++px >= imgWidth) { px = 0; rawY++; }
+
         if (screenX < 0 || screenX >= screenWidth || screenY < 0 || screenY >= screenHeight)
             continue;
 
@@ -825,17 +923,10 @@ static std::vector<uint8_t> decodeGIFToTGA(const uint8_t* data, size_t size, int
     }
 
     if (dstW != screenWidth || dstH != screenHeight) {
-        std::vector<uint8_t> scaledRgba;
-        try {
-            scaledRgba.resize(static_cast<size_t>(dstW) * dstH * 4);
-        } catch (const std::bad_alloc&) {
-            signalOOM("decodeGIFToTGA scale");
-            return {};
-        }
-        downscaleRGBA(rgba.data(), screenWidth, screenHeight, scaledRgba.data(), dstW, dstH);
         brls::Logger::info("ImageLoader: GIF decoded {}x{} -> {}x{} (iterative LZW)",
                            screenWidth, screenHeight, dstW, dstH);
-        return createTGAFromRGBA(scaledRgba.data(), dstW, dstH);
+        // Fused downscale + RGBA→BGRA swizzle in one pass
+        return downscaleRGBAtoTGA(rgba.data(), screenWidth, screenHeight, dstW, dstH);
     }
 
     brls::Logger::info("ImageLoader: GIF decoded {}x{} (iterative LZW)", screenWidth, screenHeight);
@@ -905,7 +996,7 @@ static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, siz
         config.options.scaled_height = targetH;
     }
 
-    config.output.colorspace = MODE_RGBA;
+    config.output.colorspace = MODE_BGRA;
 
     VP8StatusCode decStatus = WebPDecode(webpData, webpSize, &config);
     if (decStatus != VP8_STATUS_OK) {
@@ -921,7 +1012,7 @@ static std::vector<uint8_t> convertWebPtoTGASegment(const uint8_t* webpData, siz
     brls::Logger::debug("ImageLoader: Segment {}/{} - {}x{} (from {}x{} startY={})",
                         segment + 1, totalSegments, targetW, targetH, width, height, startY);
 
-    auto tgaData = createTGAFromRGBA(config.output.u.RGBA.rgba, targetW, targetH);
+    auto tgaData = createTGAFromBGRA(config.output.u.RGBA.rgba, targetW, targetH);
     WebPFreeDecBuffer(&config.output);
     return tgaData;
 }
@@ -982,20 +1073,15 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
         targetH = std::max(1, (int)(actualHeight * scale));
     }
 
-    // Extract and optionally scale the segment
-    std::vector<uint8_t> segmentRgba;
+    // Fused segment-extract + downscale + RGBA→BGRA swizzle in one pass.
+    // Reads directly from the full RGBA buffer at startY offset, avoiding
+    // the intermediate memcpy of segment rows into a separate buffer.
     try {
         if (targetW != width || targetH != actualHeight) {
-            // Need to scale - extract segment first, then scale
-            std::vector<uint8_t> extracted(width * actualHeight * 4);
-            memcpy(extracted.data(), rgba + (startY * width * 4), width * actualHeight * 4);
-
-            segmentRgba.resize(targetW * targetH * 4);
-            downscaleRGBA(extracted.data(), width, actualHeight, segmentRgba.data(), targetW, targetH);
+            tgaData = downscaleSegmentRGBAtoTGA(rgba, width, startY, actualHeight, targetW, targetH);
         } else {
-            // Just extract the segment
-            segmentRgba.resize(width * actualHeight * 4);
-            memcpy(segmentRgba.data(), rgba + (startY * width * 4), width * actualHeight * 4);
+            // No scaling needed — extract segment rows and swizzle to TGA
+            tgaData = downscaleSegmentRGBAtoTGA(rgba, width, startY, actualHeight, width, actualHeight);
         }
     } catch (const std::bad_alloc&) {
         stbi_image_free(rgba);
@@ -1008,7 +1094,7 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
     brls::Logger::debug("ImageLoader: JPEG/PNG Segment {}/{} - {}x{} (from {}x{} startY={})",
                         segment + 1, totalSegments, targetW, targetH, width, height, startY);
 
-    return createTGAFromRGBA(segmentRgba.data(), targetW, targetH);
+    return tgaData;
 }
 
 // Convert JPEG/PNG to TGA with optional downscaling (using stb_image)
@@ -1050,17 +1136,14 @@ static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSi
         targetH = std::max(1, (int)(height * scale));
     }
 
-    uint8_t* finalRgba = rgba;
-    std::vector<uint8_t> scaledRgba;
-
     try {
         if (targetW != width || targetH != height) {
-            scaledRgba.resize(targetW * targetH * 4);
-            downscaleRGBA(rgba, width, height, scaledRgba.data(), targetW, targetH);
-            finalRgba = scaledRgba.data();
+            // Fused downscale + RGBA→BGRA swizzle in one pass (avoids
+            // touching every pixel twice with separate downscale+swizzle)
+            tgaData = downscaleRGBAtoTGA(rgba, width, height, targetW, targetH);
+        } else {
+            tgaData = createTGAFromRGBA(rgba, targetW, targetH);
         }
-
-        tgaData = createTGAFromRGBA(finalRgba, targetW, targetH);
     } catch (const std::bad_alloc&) {
         stbi_image_free(rgba);
         signalOOM("convertImageToTGA");
@@ -1088,7 +1171,7 @@ static std::vector<uint8_t> tryWebPDecode(const uint8_t* webpData, size_t webpSi
     bool needsScaling = (targetW != srcW || targetH != srcH);
 
     if (needsScaling) {
-        // --- Attempt 1: Scaled RGBA decode ---
+        // --- Attempt 1: Scaled BGRA decode (matches TGA byte order — no swizzle) ---
         WebPDecoderConfig config;
         if (!WebPInitDecoderConfig(&config)) return {};
 
@@ -1100,20 +1183,20 @@ static std::vector<uint8_t> tryWebPDecode(const uint8_t* webpData, size_t webpSi
         // no_fancy_upsampling uses simpler chroma upsampling (less memory, faster)
         config.options.bypass_filtering = 1;
         config.options.no_fancy_upsampling = 1;
-        config.output.colorspace = MODE_RGBA;
+        config.output.colorspace = MODE_BGRA;
 
         VP8StatusCode decStatus = WebPDecode(webpData, webpSize, &config);
         if (outStatus) *outStatus = decStatus;
         if (decStatus == VP8_STATUS_OK) {
-            auto tgaData = createTGAFromRGBA(config.output.u.RGBA.rgba, targetW, targetH);
+            auto tgaData = createTGAFromBGRA(config.output.u.RGBA.rgba, targetW, targetH);
             WebPFreeDecBuffer(&config.output);
             trackDecodeSuccess();
-            brls::Logger::info("ImageLoader: WebP RGBA decode OK {}x{}->{}x{}", srcW, srcH, targetW, targetH);
+            brls::Logger::info("ImageLoader: WebP BGRA decode OK {}x{}->{}x{}", srcW, srcH, targetW, targetH);
             return tgaData;
         }
 
         if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
-            signalOOM("WebPDecode RGBA scaled");
+            signalOOM("WebPDecode BGRA scaled");
         }
         WebPFreeDecBuffer(&config.output);
 
@@ -1126,61 +1209,61 @@ static std::vector<uint8_t> tryWebPDecode(const uint8_t* webpData, size_t webpSi
             return {};
         }
 
-        brls::Logger::warning("ImageLoader: WebP scaled RGBA failed (status={}) for {}x{}->{}x{}, trying RGB",
+        brls::Logger::warning("ImageLoader: WebP scaled BGRA failed (status={}) for {}x{}->{}x{}, trying BGR",
                               static_cast<int>(decStatus), srcW, srcH, targetW, targetH);
 
-        // --- Attempt 2: Scaled RGB decode (25% less memory) ---
+        // --- Attempt 2: Scaled BGR decode (25% less memory) ---
         if (!WebPInitDecoderConfig(&config)) return {};
         config.options.use_scaling = 1;
         config.options.scaled_width = targetW;
         config.options.scaled_height = targetH;
         config.options.bypass_filtering = 1;
         config.options.no_fancy_upsampling = 1;
-        config.output.colorspace = MODE_RGB;
+        config.output.colorspace = MODE_BGR;
 
         decStatus = WebPDecode(webpData, webpSize, &config);
         if (outStatus) *outStatus = decStatus;
         if (decStatus == VP8_STATUS_OK) {
-            // Convert RGB to RGBA for TGA
-            uint8_t* rgb = config.output.u.RGBA.rgba;
+            // Convert BGR to BGRA for TGA
+            uint8_t* bgr = config.output.u.RGBA.rgba;
             size_t pixelCount = static_cast<size_t>(targetW) * static_cast<size_t>(targetH);
-            std::vector<uint8_t> rgbaVec;
+            std::vector<uint8_t> bgraVec;
             try {
-                rgbaVec.resize(pixelCount * 4);
+                bgraVec.resize(pixelCount * 4);
             } catch (const std::bad_alloc&) {
                 WebPFreeDecBuffer(&config.output);
-                signalOOM("WebP RGB->RGBA alloc");
+                signalOOM("WebP BGR->BGRA alloc");
                 return {};
             }
             for (size_t i = 0; i < pixelCount; i++) {
-                rgbaVec[i * 4 + 0] = rgb[i * 3 + 0];
-                rgbaVec[i * 4 + 1] = rgb[i * 3 + 1];
-                rgbaVec[i * 4 + 2] = rgb[i * 3 + 2];
-                rgbaVec[i * 4 + 3] = 255;
+                bgraVec[i * 4 + 0] = bgr[i * 3 + 0];
+                bgraVec[i * 4 + 1] = bgr[i * 3 + 1];
+                bgraVec[i * 4 + 2] = bgr[i * 3 + 2];
+                bgraVec[i * 4 + 3] = 255;
             }
             WebPFreeDecBuffer(&config.output);
             trackDecodeSuccess();
-            brls::Logger::info("ImageLoader: WebP RGB decode OK {}x{}->{}x{}", srcW, srcH, targetW, targetH);
-            return createTGAFromRGBA(rgbaVec.data(), targetW, targetH);
+            brls::Logger::info("ImageLoader: WebP BGR decode OK {}x{}->{}x{}", srcW, srcH, targetW, targetH);
+            return createTGAFromBGRA(bgraVec.data(), targetW, targetH);
         }
 
         if (decStatus == VP8_STATUS_OUT_OF_MEMORY) {
-            signalOOM("WebPDecode RGB scaled");
+            signalOOM("WebPDecode BGR scaled");
         }
         WebPFreeDecBuffer(&config.output);
         return {};
     }
 
-    // No scaling needed — decode at full resolution
-    uint8_t* rgba = WebPDecodeRGBA(webpData, webpSize, &srcW, &srcH);
-    if (!rgba) {
+    // No scaling needed — decode at full resolution directly to BGRA
+    uint8_t* bgra = WebPDecodeBGRA(webpData, webpSize, &srcW, &srcH);
+    if (!bgra) {
         if (outStatus) *outStatus = VP8_STATUS_BITSTREAM_ERROR;
         return {};
     }
     if (outStatus) *outStatus = VP8_STATUS_OK;
     trackDecodeSuccess();
-    auto tgaData = createTGAFromRGBA(rgba, srcW, srcH);
-    WebPFree(rgba);
+    auto tgaData = createTGAFromBGRA(bgra, srcW, srcH);
+    WebPFree(bgra);
     return tgaData;
 }
 
@@ -1598,9 +1681,9 @@ static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* data, size_t 
         dstH = std::max(1, static_cast<int>(srcH * scale));
     }
 
-    // Convert to RGBA using swscale
+    // Convert directly to BGRA using swscale (matches TGA byte order — no swizzle)
     SwsContext* swsCtx = sws_getContext(srcW, srcH, static_cast<AVPixelFormat>(frame->format),
-                                         dstW, dstH, AV_PIX_FMT_RGBA,
+                                         dstW, dstH, AV_PIX_FMT_BGRA,
                                          SWS_BILINEAR, nullptr, nullptr, nullptr);
     if (!swsCtx) {
         brls::Logger::error("ImageLoader: sws_getContext failed for {}", formatName);
@@ -1612,9 +1695,10 @@ static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* data, size_t 
         return result;
     }
 
-    std::vector<uint8_t> rgba;
+    size_t imageSize = static_cast<size_t>(dstW) * dstH * 4;
+    std::vector<uint8_t> tga;
     try {
-        rgba.resize(static_cast<size_t>(dstW) * dstH * 4);
+        tga.resize(18 + imageSize);
     } catch (const std::bad_alloc&) {
         sws_freeContext(swsCtx);
         av_frame_free(&frame);
@@ -1622,10 +1706,11 @@ static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* data, size_t 
         avcodec_free_context(&codecCtx);
         avformat_close_input(&fmtCtx);
         avio_context_free(&avioCtx);
-        signalOOM("FFmpeg RGBA alloc");
+        signalOOM("FFmpeg BGRA alloc");
         return result;
     }
-    uint8_t* dstSlice[1] = {rgba.data()};
+    writeTGAHeader(tga.data(), dstW, dstH);
+    uint8_t* dstSlice[1] = {tga.data() + 18};
     int dstStride[1] = {dstW * 4};
 
     sws_scale(swsCtx, frame->data, frame->linesize, 0, srcH, dstSlice, dstStride);
@@ -1638,7 +1723,7 @@ static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* data, size_t 
     avio_context_free(&avioCtx);
 
     brls::Logger::info("ImageLoader: {} decoded {}x{} -> {}x{}", formatName, srcW, srcH, dstW, dstH);
-    return createTGAFromRGBA(rgba.data(), dstW, dstH);
+    return tga;
 }
 
 void ImageLoader::setAuthCredentials(const std::string& username, const std::string& password) {
