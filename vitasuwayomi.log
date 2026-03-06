@@ -1,60 +1,52 @@
-23:18:05.612 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
-23:18:06.209 [INFO] DownloadsManager: Initializing...
-23:18:06.215 [DEBUG] DownloadsManager: No saved state found
-23:18:06.215 [INFO] DownloadsManager: Initialized with 0 downloads
-23:18:06.216 [INFO] VitaSuwayomi 1.0.0 initializing...
-23:18:06.217 [DEBUG] sceIoMkdir result: -0x7ffeffef
-23:18:06.218 [INFO] Loading saved settings...
-23:18:06.218 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
-23:18:06.220 [DEBUG] loadSettings: File size = 1838
-23:18:06.228 [DEBUG] loadSettings: Read 1838 bytes
-23:18:06.234 [INFO] loadSettings: serverUrl=Http://192.168.1.28:4568
-23:18:06.240 [DEBUG] Loaded 4 hidden categories
-23:18:06.247 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
-23:18:06.256 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
-23:18:06.265 [INFO] loadSettings: enabledSourceLanguages count = 2
-23:18:06.276 [INFO] loadSettings: localUrl=Http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
-23:18:06.289 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=1, defaultSort=0, groupMode=1
-23:18:06.299 [DEBUG] Loaded 1 per-category sort modes
-23:18:06.304 [DEBUG] Loaded 0 search history entries
-23:18:06.310 [DEBUG] Loaded 1 per-manga reader settings
-23:18:06.318 [INFO] Restored auth credentials for user: Breezyslasher
-23:18:06.327 [INFO] Settings loaded successfully
-23:18:06.337 [INFO] Settings load result: success
-23:18:06.348 [INFO] Applied theme: Dark
-23:18:06.359 [INFO] Debug logging disabled
-23:18:06.371 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
-23:18:06.376 [INFO] Application::run - isConnected=false, serverUrl=Http://192.168.1.28:4568
-23:18:06.382 [INFO] Restoring saved connection...
-23:18:06.390 [INFO] Fetching server info via GraphQL...
-23:18:06.420 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2087
-23:18:06.429 [INFO] Server reachable, validating auth with protected query...
-23:18:06.455 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/categories) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.requir
-23:18:06.458 [INFO] GraphQL returned Unauthorized, attempting token refresh...
-23:18:06.469 [INFO] No refresh token available, skipping GraphQL refresh
-23:18:06.477 [INFO] Attempting re-login with stored credentials...
-23:18:06.504 [INFO] Login successful, received JWT tokens
-23:18:06.510 [INFO] Re-login successful, tokens refreshed
-23:18:06.518 [INFO] Token refreshed successfully, retrying GraphQL request
-23:18:06.541 [INFO] validateAuthWithProtectedQuery: auth validated successfully
-23:18:06.550 [INFO] Auth validated with protected query
-23:18:06.562 [INFO] Connection restored successfully
-23:18:06.679 [INFO] MainActivity: Tabs created, isOnline=false
-23:18:06.853 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
-23:18:17.736 [INFO] RecyclingGrid: Building 7 rows for 40 items (first 2 immediate)
-23:18:17.796 [INFO] ImageLoader: Starting 3 worker threads
-23:18:19.989 [INFO] RecyclingGrid: Incremental build complete - 40 cells in 7 rows
-23:18:20.053 [INFO] ImageLoader: WebP RGBA decode OK 225x168->180x134
-23:18:20.744 [INFO] ImageLoader: WebP RGBA decode OK 225x293->138x180
-23:18:23.258 [INFO] RecyclingGrid: Building 14 rows for 83 items (first 2 immediate)
-23:18:26.833 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:18:27.453 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:18:27.918 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:18:28.611 [INFO] RecyclingGrid: Incremental build complete - 83 cells in 14 rows
-23:18:29.504 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:18:31.254 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:18:32.124 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:18:32.409 [INFO] ImageLoader: WebP RGBA decode OK 193x278->124x180
-23:18:36.435 [INFO] ImageLoader: Animated WebP detected, extracting first frame: Http://192.168.1.28:4568/api/v1/manga/445/thumbnail
-23:18:36.451 [INFO] ImageLoader: Extracted first frame from animated WebP (2385406 bytes -> 71652 bytes)
-23:18:36.520 [INFO] ImageLoader: WebP RGBA decode OK 291x498->105x180
+23:42:14.498 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+23:42:15.087 [INFO] DownloadsManager: Initializing...
+23:42:15.093 [DEBUG] DownloadsManager: No saved state found
+23:42:15.094 [INFO] DownloadsManager: Initialized with 0 downloads
+23:42:15.094 [INFO] VitaSuwayomi 1.0.0 initializing...
+23:42:15.095 [DEBUG] sceIoMkdir result: -0x7ffeffef
+23:42:15.096 [INFO] Loading saved settings...
+23:42:15.096 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+23:42:15.098 [DEBUG] loadSettings: File size = 1838
+23:42:15.106 [DEBUG] loadSettings: Read 1838 bytes
+23:42:15.113 [INFO] loadSettings: serverUrl=Http://192.168.1.28:4568
+23:42:15.119 [DEBUG] Loaded 4 hidden categories
+23:42:15.128 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+23:42:15.137 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+23:42:15.147 [INFO] loadSettings: enabledSourceLanguages count = 2
+23:42:15.158 [INFO] loadSettings: localUrl=Http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+23:42:15.172 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=1, defaultSort=0, groupMode=1
+23:42:15.177 [DEBUG] Loaded 1 per-category sort modes
+23:42:15.182 [DEBUG] Loaded 0 search history entries
+23:42:15.189 [DEBUG] Loaded 1 per-manga reader settings
+23:42:15.198 [INFO] Restored auth credentials for user: Breezyslasher
+23:42:15.207 [INFO] Settings loaded successfully
+23:42:15.218 [INFO] Settings load result: success
+23:42:15.229 [INFO] Applied theme: Dark
+23:42:15.241 [INFO] Debug logging disabled
+23:42:15.249 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+23:42:15.254 [INFO] Application::run - isConnected=false, serverUrl=Http://192.168.1.28:4568
+23:42:15.261 [INFO] Restoring saved connection...
+23:42:15.270 [INFO] Fetching server info via GraphQL...
+23:42:15.309 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2087
+23:42:15.319 [INFO] Server reachable, validating auth with protected query...
+23:42:15.353 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/categories) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.requir
+23:42:15.357 [INFO] GraphQL returned Unauthorized, attempting token refresh...
+23:42:15.367 [INFO] No refresh token available, skipping GraphQL refresh
+23:42:15.372 [INFO] Attempting re-login with stored credentials...
+23:42:15.397 [INFO] Login successful, received JWT tokens
+23:42:15.405 [INFO] Re-login successful, tokens refreshed
+23:42:15.414 [INFO] Token refreshed successfully, retrying GraphQL request
+23:42:15.448 [INFO] validateAuthWithProtectedQuery: auth validated successfully
+23:42:15.458 [INFO] Auth validated with protected query
+23:42:15.470 [INFO] Connection restored successfully
+23:42:15.581 [INFO] MainActivity: Tabs created, isOnline=false
+23:42:15.757 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+23:42:26.566 [INFO] RecyclingGrid: Building 7 rows for 40 items (first 2 immediate)
+23:42:26.625 [INFO] ImageLoader: Starting 3 worker threads
+23:42:29.193 [INFO] RecyclingGrid: Incremental build complete - 40 cells in 7 rows
+23:42:31.822 [INFO] RecyclingGrid: Building 14 rows for 83 items (first 2 immediate)
+23:42:37.501 [INFO] RecyclingGrid: Incremental build complete - 83 cells in 14 rows
+23:42:44.062 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/463/thumbnail
+23:42:44.163 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/463/thumbnail
+23:42:44.296 [INFO] ImageLoader: Decode OK (89298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/528/thumbnail
+23:42:44.381 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/528/thumbnail
