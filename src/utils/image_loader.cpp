@@ -184,6 +184,18 @@ static void downscaleRGBA(const uint8_t* src, int srcW, int srcH,
     }
 }
 
+// Helper to write a TGA header into the first 18 bytes of a buffer
+static void writeTGAHeader(uint8_t* header, int width, int height) {
+    memset(header, 0, 18);
+    header[2] = 2;
+    header[12] = width & 0xFF;
+    header[13] = (width >> 8) & 0xFF;
+    header[14] = height & 0xFF;
+    header[15] = (height >> 8) & 0xFF;
+    header[16] = 32;
+    header[17] = 0x28;
+}
+
 // Fused downscale + RGBA→BGRA swizzle in a single pass (avoids separate
 // downscaleRGBA + createTGAFromRGBA which touches every pixel twice).
 // Writes directly into a TGA buffer (18-byte header + BGRA pixel data).
@@ -262,18 +274,6 @@ static std::vector<uint8_t> downscaleSegmentRGBAtoTGA(const uint8_t* src, int sr
         }
     }
     return tga;
-}
-
-// Helper to write a TGA header into the first 18 bytes of a buffer
-static void writeTGAHeader(uint8_t* header, int width, int height) {
-    memset(header, 0, 18);
-    header[2] = 2;
-    header[12] = width & 0xFF;
-    header[13] = (width >> 8) & 0xFF;
-    header[14] = height & 0xFF;
-    header[15] = (height >> 8) & 0xFF;
-    header[16] = 32;
-    header[17] = 0x28;
 }
 
 // Helper to create TGA from RGBA data (swizzles R<->B for TGA's BGRA order)
