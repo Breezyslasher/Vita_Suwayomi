@@ -1113,7 +1113,9 @@ static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSi
             if (rgbaBytes > 32 * 1024 * 1024) {
                 brls::Logger::warning("ImageLoader: Image too large to decode ({}x{} = {}MB RGBA), skipping",
                                       preW, preH, rgbaBytes / (1024 * 1024));
-                signalOOM("convertImageToTGA pre-check");
+                // Don't signalOOM here — this is a pre-check rejection, not an
+                // actual memory failure.  Triggering the global OOM cooldown
+                // would block all other (smaller) image loads for 60 frames.
                 return tgaData;
             }
         }
