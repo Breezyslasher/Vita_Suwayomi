@@ -512,6 +512,342 @@ static std::vector<uint8_t> extractFirstFrameFromGIF(const uint8_t* data, size_t
     return result;
 }
 
+// Iterative GIF first-frame decoder — completely bypasses both FFmpeg and stb_image.
+// FFmpeg's GIF decoder may not be available in all Vita builds (e.g. switchfin packages
+// only include h264/aac/mp3), and stb_image's GIF LZW decoder (stbi__out_gif_code) is
+// recursive with up to 4096 levels of recursion that overflows Vita worker thread stacks.
+// This decoder parses the GIF binary format and uses an iterative LZW decompressor.
+// Input: raw GIF file data (full file or extracted first frame).
+// Output: TGA image data ready for texture upload, or empty vector on failure.
+static std::vector<uint8_t> decodeGIFToTGA(const uint8_t* data, size_t size, int maxSize) {
+    if (size < 13 || memcmp(data, "GIF", 3) != 0) return {};
+
+    // Parse Logical Screen Descriptor
+    int screenWidth  = data[6] | (data[7] << 8);
+    int screenHeight = data[8] | (data[9] << 8);
+    uint8_t packed   = data[10];
+    // data[11] = background color index, data[12] = pixel aspect ratio
+
+    bool hasGCT = (packed & 0x80) != 0;
+    int gctSize = hasGCT ? (1 << ((packed & 0x07) + 1)) : 0;
+
+    // Read Global Color Table
+    uint8_t gct[256 * 3] = {};
+    size_t pos = 13;
+    if (hasGCT) {
+        size_t gctBytes = static_cast<size_t>(gctSize) * 3;
+        if (pos + gctBytes > size) return {};
+        memcpy(gct, data + pos, gctBytes);
+        pos += gctBytes;
+    }
+
+    // Scan for Graphic Control Extension (transparency) and first Image Descriptor
+    int transparentIndex = -1;
+    bool hasTransparency = false;
+
+    while (pos < size) {
+        uint8_t blockType = data[pos];
+
+        if (blockType == 0x21) {
+            // Extension block
+            if (pos + 2 > size) return {};
+            uint8_t label = data[pos + 1];
+            pos += 2;
+
+            if (label == 0xF9 && pos + 1 < size) {
+                // Graphic Control Extension
+                uint8_t blockSize = data[pos];
+                if (blockSize >= 4 && pos + 1 + blockSize <= size) {
+                    uint8_t gcPacked = data[pos + 1];
+                    hasTransparency = (gcPacked & 0x01) != 0;
+                    if (hasTransparency) {
+                        transparentIndex = data[pos + 4];
+                    }
+                }
+            }
+            // Skip sub-blocks
+            while (pos < size) {
+                uint8_t sb = data[pos++];
+                if (sb == 0) break;
+                pos += sb;
+                if (pos > size) return {};
+            }
+        } else if (blockType == 0x2C) {
+            // Image Descriptor — decode this frame
+            break;
+        } else if (blockType == 0x3B) {
+            return {};  // Trailer, no image found
+        } else {
+            return {};  // Unknown block
+        }
+    }
+
+    if (pos >= size || data[pos] != 0x2C) return {};
+
+    // Parse Image Descriptor
+    if (pos + 10 > size) return {};
+    int imgLeft   = data[pos + 1] | (data[pos + 2] << 8);
+    int imgTop    = data[pos + 3] | (data[pos + 4] << 8);
+    int imgWidth  = data[pos + 5] | (data[pos + 6] << 8);
+    int imgHeight = data[pos + 7] | (data[pos + 8] << 8);
+    uint8_t imgPacked = data[pos + 9];
+    pos += 10;
+
+    bool hasLCT = (imgPacked & 0x80) != 0;
+    bool interlaced = (imgPacked & 0x40) != 0;
+    int lctSize = hasLCT ? (1 << ((imgPacked & 0x07) + 1)) : 0;
+
+    // Read Local Color Table (overrides GCT for this frame)
+    uint8_t lct[256 * 3] = {};
+    const uint8_t* colorTable = gct;
+    int colorTableSize = gctSize;
+    if (hasLCT) {
+        size_t lctBytes = static_cast<size_t>(lctSize) * 3;
+        if (pos + lctBytes > size) return {};
+        memcpy(lct, data + pos, lctBytes);
+        pos += lctBytes;
+        colorTable = lct;
+        colorTableSize = lctSize;
+    }
+
+    if (colorTableSize == 0) return {};  // No color table
+
+    // Sanity check dimensions
+    if (imgWidth <= 0 || imgHeight <= 0 || imgWidth > 16384 || imgHeight > 16384) return {};
+    if (screenWidth <= 0 || screenHeight <= 0) {
+        screenWidth = imgWidth;
+        screenHeight = imgHeight;
+    }
+
+    long long pixelBytes = (long long)screenWidth * screenHeight * 4;
+    if (pixelBytes > 32 * 1024 * 1024) {
+        brls::Logger::warning("ImageLoader: GIF too large ({}x{} = {}MB), skipping",
+                              screenWidth, screenHeight, pixelBytes / (1024 * 1024));
+        return {};
+    }
+
+    // LZW Minimum Code Size
+    if (pos >= size) return {};
+    int lzwMinCodeSize = data[pos++];
+    if (lzwMinCodeSize < 2 || lzwMinCodeSize > 12) return {};
+
+    // Collect all sub-block data into a contiguous buffer
+    std::vector<uint8_t> lzwData;
+    try {
+        lzwData.reserve(size - pos);  // upper bound
+    } catch (...) {}
+    while (pos < size) {
+        uint8_t sb = data[pos++];
+        if (sb == 0) break;
+        if (pos + sb > size) return {};
+        lzwData.insert(lzwData.end(), data + pos, data + pos + sb);
+        pos += sb;
+    }
+
+    // --- Iterative LZW Decoder ---
+    const int clearCode = 1 << lzwMinCodeSize;
+    const int endCode   = clearCode + 1;
+    const int maxCode   = 4096;
+
+    // Code table: each entry stores (prefix, suffix) for chain reconstruction
+    struct LZWEntry {
+        uint16_t prefix;  // Previous code (or 0xFFFF for single-char entries)
+        uint8_t  suffix;  // Last byte of this code's string
+        uint16_t length;  // Total string length (for stack allocation)
+    };
+    std::vector<LZWEntry> table(maxCode);
+
+    // Output pixel indices
+    std::vector<uint8_t> pixels;
+    try {
+        pixels.reserve(static_cast<size_t>(imgWidth) * imgHeight);
+    } catch (...) {}
+
+    // Temp buffer for iterative string output (max LZW string = 4096 bytes)
+    uint8_t stringBuf[4096];
+
+    // Bit reader state
+    int bitPos = 0;
+    int totalBits = static_cast<int>(lzwData.size()) * 8;
+
+    auto readBits = [&](int nBits) -> int {
+        if (bitPos + nBits > totalBits) return endCode;
+        int byteIdx = bitPos >> 3;
+        int bitIdx  = bitPos & 7;
+        // Read up to 24 bits from 3 bytes
+        uint32_t val = lzwData[byteIdx];
+        if (byteIdx + 1 < (int)lzwData.size()) val |= (uint32_t)lzwData[byteIdx + 1] << 8;
+        if (byteIdx + 2 < (int)lzwData.size()) val |= (uint32_t)lzwData[byteIdx + 2] << 16;
+        val = (val >> bitIdx) & ((1u << nBits) - 1);
+        bitPos += nBits;
+        return static_cast<int>(val);
+    };
+
+    int codeSize   = lzwMinCodeSize + 1;
+    int nextCode   = endCode + 1;
+    int codeMask   = (1 << codeSize) - 1;
+    int prevCode   = -1;
+    size_t maxPixels = static_cast<size_t>(imgWidth) * imgHeight;
+
+    // Initialize base table entries
+    for (int i = 0; i < clearCode; i++) {
+        table[i].prefix = 0xFFFF;
+        table[i].suffix = static_cast<uint8_t>(i);
+        table[i].length = 1;
+    }
+
+    // Helper: output the string for a code iteratively
+    auto outputCode = [&](int code) {
+        if (code < 0 || code >= maxCode) return;
+        int len = table[code].length;
+        if (len <= 0 || len > 4096) return;
+        // Walk the chain backwards, filling stringBuf from the end
+        int idx = len - 1;
+        int c = code;
+        while (c != 0xFFFF && idx >= 0) {
+            stringBuf[idx--] = table[c].suffix;
+            c = table[c].prefix;
+        }
+        // Append to pixel output
+        int toWrite = std::min(len, static_cast<int>(maxPixels - pixels.size()));
+        if (toWrite > 0) {
+            pixels.insert(pixels.end(), stringBuf, stringBuf + toWrite);
+        }
+    };
+
+    bool done = false;
+    while (!done && pixels.size() < maxPixels) {
+        int code = readBits(codeSize);
+
+        if (code == endCode || code < 0) {
+            done = true;
+        } else if (code == clearCode) {
+            // Reset
+            codeSize = lzwMinCodeSize + 1;
+            codeMask = (1 << codeSize) - 1;
+            nextCode = endCode + 1;
+            prevCode = -1;
+        } else {
+            if (prevCode < 0) {
+                // First code after clear
+                outputCode(code);
+                prevCode = code;
+            } else {
+                if (code < nextCode) {
+                    // Code in table
+                    outputCode(code);
+                    // Add new entry: prevCode's string + first char of code's string
+                    if (nextCode < maxCode) {
+                        // Find first char of code's string
+                        int c = code;
+                        while (table[c].prefix != 0xFFFF) c = table[c].prefix;
+                        table[nextCode].prefix = static_cast<uint16_t>(prevCode);
+                        table[nextCode].suffix = table[c].suffix;
+                        table[nextCode].length = table[prevCode].length + 1;
+                        nextCode++;
+                    }
+                } else {
+                    // Code not yet in table (special KwKwK case)
+                    // New string = prevCode's string + first char of prevCode's string
+                    int c = prevCode;
+                    while (table[c].prefix != 0xFFFF) c = table[c].prefix;
+                    if (nextCode < maxCode) {
+                        table[nextCode].prefix = static_cast<uint16_t>(prevCode);
+                        table[nextCode].suffix = table[c].suffix;
+                        table[nextCode].length = table[prevCode].length + 1;
+                        nextCode++;
+                    }
+                    outputCode(code);
+                }
+                prevCode = code;
+                // Increase code size when needed
+                if (nextCode > codeMask && codeSize < 12) {
+                    codeSize++;
+                    codeMask = (1 << codeSize) - 1;
+                }
+            }
+        }
+    }
+
+    if (pixels.empty()) {
+        brls::Logger::error("ImageLoader: GIF iterative LZW decode produced no pixels");
+        return {};
+    }
+
+    // Convert indexed pixels to RGBA
+    std::vector<uint8_t> rgba;
+    try {
+        rgba.resize(static_cast<size_t>(screenWidth) * screenHeight * 4, 0);
+    } catch (const std::bad_alloc&) {
+        signalOOM("decodeGIFToTGA RGBA");
+        return {};
+    }
+
+    // Handle interlaced GIF row ordering
+    auto getRow = [&](int y) -> int {
+        if (!interlaced) return y;
+        // GIF interlace: pass 1 (rows 0,8,16..), pass 2 (4,12,20..), pass 3 (2,6,10..), pass 4 (1,3,5..)
+        static const int startRow[] = {0, 4, 2, 1};
+        static const int stepRow[]  = {8, 8, 4, 2};
+        int row = 0;
+        for (int pass = 0; pass < 4; pass++) {
+            for (int r = startRow[pass]; r < imgHeight; r += stepRow[pass]) {
+                if (row == y) return r;
+                row++;
+            }
+        }
+        return y;
+    };
+
+    for (size_t i = 0; i < pixels.size(); i++) {
+        int px = static_cast<int>(i % imgWidth);
+        int py = getRow(static_cast<int>(i / imgWidth));
+        int screenX = imgLeft + px;
+        int screenY = imgTop + py;
+        if (screenX < 0 || screenX >= screenWidth || screenY < 0 || screenY >= screenHeight)
+            continue;
+
+        uint8_t colorIdx = pixels[i];
+        if (hasTransparency && colorIdx == transparentIndex)
+            continue;  // Leave as transparent (0,0,0,0)
+
+        if (colorIdx >= colorTableSize)
+            continue;  // Invalid color index
+
+        size_t outIdx = (static_cast<size_t>(screenY) * screenWidth + screenX) * 4;
+        rgba[outIdx + 0] = colorTable[colorIdx * 3 + 0];
+        rgba[outIdx + 1] = colorTable[colorIdx * 3 + 1];
+        rgba[outIdx + 2] = colorTable[colorIdx * 3 + 2];
+        rgba[outIdx + 3] = 255;
+    }
+
+    // Downscale if needed
+    int dstW = screenWidth;
+    int dstH = screenHeight;
+    if (maxSize > 0 && (screenWidth > maxSize || screenHeight > maxSize)) {
+        float scale = static_cast<float>(maxSize) / std::max(screenWidth, screenHeight);
+        dstW = std::max(1, static_cast<int>(screenWidth * scale));
+        dstH = std::max(1, static_cast<int>(screenHeight * scale));
+    }
+
+    if (dstW != screenWidth || dstH != screenHeight) {
+        std::vector<uint8_t> scaledRgba;
+        try {
+            scaledRgba.resize(static_cast<size_t>(dstW) * dstH * 4);
+        } catch (const std::bad_alloc&) {
+            signalOOM("decodeGIFToTGA scale");
+            return {};
+        }
+        downscaleRGBA(rgba.data(), screenWidth, screenHeight, scaledRgba.data(), dstW, dstH);
+        brls::Logger::info("ImageLoader: GIF decoded {}x{} -> {}x{} (iterative LZW)",
+                           screenWidth, screenHeight, dstW, dstH);
+        return createTGAFromRGBA(scaledRgba.data(), dstW, dstH);
+    }
+
+    brls::Logger::info("ImageLoader: GIF decoded {}x{} (iterative LZW)", screenWidth, screenHeight);
+    return createTGAFromRGBA(rgba.data(), dstW, dstH);
+}
+
 // Calculate number of segments needed for a tall image
 static int calculateSegments(int width, int height, int maxSize) {
     if (height <= maxSize) return 1;
@@ -1971,21 +2307,12 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             }
         }
     } else if (isGIF) {
-        // Decode GIF via FFmpeg instead of stb_image.  stb_image's GIF LZW
-        // decoder (stbi__out_gif_code) is recursive and can recurse up to 4096
-        // levels deep, overflowing the limited stack of PS Vita worker threads
-        // and causing psp2core crashes.  FFmpeg's GIF decoder is iterative and
-        // stack-safe.
-        imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "GIF");
+        // Decode GIF using our iterative LZW decoder.  This bypasses both FFmpeg
+        // (which may lack a GIF decoder in some Vita builds) and stb_image (whose
+        // recursive LZW decoder overflows Vita worker thread stacks).
+        imageData = decodeGIFToTGA(decData, decSize, s_maxThumbnailSize);
         if (imageData.empty()) {
-            // Fallback: try stb_image for non-animated (first-frame extracted) GIF data.
-            // stb_image's GIF LZW decoder is recursive, but single-frame GIFs after
-            // first-frame extraction are small enough that stack depth is safe.
-            brls::Logger::warning("ImageLoader: GIF FFmpeg decode failed, trying stb_image fallback for {}", url);
-            imageData = convertImageToTGA(decData, decSize, s_maxThumbnailSize);
-        }
-        if (imageData.empty()) {
-            brls::Logger::error("ImageLoader: All GIF decode attempts failed for {}", url);
+            brls::Logger::error("ImageLoader: GIF decode failed for {}", url);
             return;
         }
     } else {
@@ -2660,26 +2987,16 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 return;
             }
         } else if (isGIF) {
-            // Decode GIF via FFmpeg instead of stb_image.  stb_image's GIF LZW
-            // decoder (stbi__out_gif_code) is recursive and can recurse up to 4096
-            // levels deep, overflowing the limited stack of PS Vita worker threads
-            // and causing psp2core crashes.  FFmpeg's GIF decoder is iterative.
-            imageData = convertFFmpegImageToTGA(
+            // Decode GIF using our iterative LZW decoder.  This bypasses both FFmpeg
+            // (which may lack a GIF decoder in some Vita builds) and stb_image (whose
+            // recursive LZW decoder overflows Vita worker thread stacks).
+            imageData = decodeGIFToTGA(
                 reinterpret_cast<const uint8_t*>(imageBody.data()),
                 imageBody.size(),
-                MAX_TEXTURE_SIZE,
-                "GIF"
+                MAX_TEXTURE_SIZE
             );
             if (imageData.empty()) {
-                brls::Logger::warning("ImageLoader: GIF FFmpeg decode failed, trying stb_image fallback for {}", url);
-                imageData = convertImageToTGA(
-                    reinterpret_cast<const uint8_t*>(imageBody.data()),
-                    imageBody.size(),
-                    MAX_TEXTURE_SIZE
-                );
-            }
-            if (imageData.empty()) {
-                brls::Logger::error("ImageLoader: All GIF decode attempts failed for {}", url);
+                brls::Logger::error("ImageLoader: GIF decode failed for {}", url);
                 return;
             }
         } else {
