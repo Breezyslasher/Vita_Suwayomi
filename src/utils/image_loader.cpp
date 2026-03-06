@@ -1979,8 +1979,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 isJpegOrPng = true;
                 isValidImage = true;
             }
-            // GIF (pass through - typically small enough)
+            // GIF (decode via stb_image like JPEG/PNG - raw GIF pass-through
+            // crashes NanoVG on the Vita, especially for animated/large GIFs)
             else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
+                isJpegOrPng = true;
                 isValidImage = true;
             }
             // BMP
