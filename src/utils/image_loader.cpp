@@ -1527,30 +1527,55 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             return;
         }
     } else if (isWebP) {
-        imageData = convertWebPtoTGA(decData, decSize, s_maxThumbnailSize);
-        if (imageData.empty()) {
-            // Fallback: try FFmpeg decoder for WebP — it wraps libwebp but with
-            // additional error recovery and can handle some corrupted/truncated
-            // data that the raw libwebp API rejects.
-            brls::Logger::warning("ImageLoader: libwebp failed, trying FFmpeg fallback for {}", url);
-            imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "WebP");
+        // Detect animated WebP early so we can skip straight to FFmpeg (which
+        // can extract the first frame) instead of wasting memory on the
+        // libwebp simple decoder that will fail with VP8_STATUS_UNSUPPORTED_FEATURE.
+        bool isAnimatedWebP = false;
+        if (decSize > 30) {
+            WebPBitstreamFeatures features;
+            if (WebPGetFeatures(decData, decSize, &features) == VP8_STATUS_OK) {
+                isAnimatedWebP = features.has_animation;
+            }
         }
-        if (imageData.empty()) {
-            // Last resort: try stb_image in case the server mis-labeled the format
-            // (e.g., a JPEG served with a .webp URL or wrong Content-Type)
-            brls::Logger::warning("ImageLoader: FFmpeg WebP fallback failed, trying stb_image for {}", url);
-            imageData = convertImageToTGA(decData, decSize, s_maxThumbnailSize);
-        }
-        if (imageData.empty()) {
-            brls::Logger::error("ImageLoader: All WebP decode attempts failed for {}", url);
-            // Signal memory pressure after exhausting all fallbacks.
-            // Even though the final error may not be OOM, the repeated decode
-            // attempts (libwebp, FFmpeg, stb_image) allocate and free large
-            // buffers that fragment the Vita's limited heap.  Entering cooldown
-            // gives the allocator time to consolidate before processing more
-            // thumbnails, preventing cascading failures that lead to crashes.
-            signalOOM("WebP all fallbacks exhausted");
-            return;
+
+        if (isAnimatedWebP) {
+            // Go straight to FFmpeg for animated WebP — it can decode the first
+            // frame via its WebP demuxer without needing the WebP demux library.
+            brls::Logger::info("ImageLoader: Animated WebP detected, using FFmpeg for first frame: {}", url);
+            imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "WebP-anim");
+            if (imageData.empty()) {
+                // Animated WebP that FFmpeg can't decode — this is an expected
+                // unsupported-format failure, NOT memory pressure.  Don't signal
+                // OOM which would freeze all other thumbnail loads.
+                brls::Logger::warning("ImageLoader: Animated WebP unsupported for {}", url);
+                return;
+            }
+        } else {
+            imageData = convertWebPtoTGA(decData, decSize, s_maxThumbnailSize);
+            if (imageData.empty()) {
+                // Fallback: try FFmpeg decoder for WebP — it wraps libwebp but with
+                // additional error recovery and can handle some corrupted/truncated
+                // data that the raw libwebp API rejects.
+                brls::Logger::warning("ImageLoader: libwebp failed, trying FFmpeg fallback for {}", url);
+                imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "WebP");
+            }
+            if (imageData.empty()) {
+                // Last resort: try stb_image in case the server mis-labeled the format
+                // (e.g., a JPEG served with a .webp URL or wrong Content-Type)
+                brls::Logger::warning("ImageLoader: FFmpeg WebP fallback failed, trying stb_image for {}", url);
+                imageData = convertImageToTGA(decData, decSize, s_maxThumbnailSize);
+            }
+            if (imageData.empty()) {
+                brls::Logger::error("ImageLoader: All WebP decode attempts failed for {}", url);
+                // Signal memory pressure after exhausting all fallbacks.
+                // Even though the final error may not be OOM, the repeated decode
+                // attempts (libwebp, FFmpeg, stb_image) allocate and free large
+                // buffers that fragment the Vita's limited heap.  Entering cooldown
+                // gives the allocator time to consolidate before processing more
+                // thumbnails, preventing cascading failures that lead to crashes.
+                signalOOM("WebP all fallbacks exhausted");
+                return;
+            }
         }
     } else {
         // Downscale JPEG/PNG thumbnails too (not just WebP)

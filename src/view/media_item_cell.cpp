@@ -189,6 +189,14 @@ MangaItemCell::~MangaItemCell() {
     if (m_alive) {
         *m_alive = false;
     }
+
+    // m_descriptionLabel is not added to the view hierarchy (no parent),
+    // so brls won't auto-delete it.  Free it here to prevent a memory leak
+    // that accumulates with every grid rebuild (~each cell leaks one Label).
+    if (m_descriptionLabel) {
+        delete m_descriptionLabel;
+        m_descriptionLabel = nullptr;
+    }
 }
 
 void MangaItemCell::updateDisplay() {

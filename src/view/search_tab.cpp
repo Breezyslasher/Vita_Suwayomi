@@ -743,6 +743,10 @@ void SearchTab::showSources() {
 }
 
 void SearchTab::showSourceBrowser(const Source& source) {
+    // Invalidate any in-flight async results from previous browse/search so
+    // stale callbacks don't overwrite the new state.
+    m_loadGeneration++;
+
     m_currentSourceId = source.id;
     m_currentSourceName = source.name;
 
@@ -770,6 +774,12 @@ void SearchTab::showSourceBrowser(const Source& source) {
     // pointers (m_alive stays true since SearchTab is alive, so the stale
     // callbacks pass the alive check and crash with a wild pointer).
     if (m_sourceIconsAlive) *m_sourceIconsAlive = false;
+    // Cancel ALL pending image loads (source icons still being fetched/decoded
+    // by worker threads).  Without this, up to 85 source-icon downloads and
+    // their decode pipelines (libwebp → FFmpeg → stb_image) keep running in
+    // the background, burning memory while the 12 new manga thumbnail loads
+    // are queued — the combined allocation pressure crashes the Vita.
+    ImageLoader::cancelAll();
     // Clear source list to prevent ghost focus targets (safe now - focus moved above)
     if (m_sourceListBox) {
         m_sourceListBox->clearViews();
@@ -1319,6 +1329,9 @@ void SearchTab::handleBackNavigation() {
     m_isNavigatingBack = true;
     m_loadGeneration++;  // Invalidate any in-flight async callbacks
     hideLoadingIndicator();  // Hide any loading text left from cancelled async loads
+    // Cancel pending image loads (source icons or manga thumbnails) to free
+    // worker threads and memory before navigating to a new view state.
+    ImageLoader::cancelAll();
     if (m_browseMode == BrowseMode::SEARCH_RESULTS) {
         if (m_isGlobalSearch) {
             // Global search: go back to sources list
