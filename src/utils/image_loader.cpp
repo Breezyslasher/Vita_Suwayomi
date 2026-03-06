@@ -1097,6 +1097,91 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
     return tgaData;
 }
 
+// Convert JPEG/PNG to TGA for ALL segments in one pass (decode once, extract N segments).
+// This avoids the O(N) full stbi_load_from_memory decodes that happen when
+// convertImageToTGASegment is called in a loop for each segment.
+// Returns true on success with segmentDatas filled; false on failure.
+static bool convertImageToTGAAllSegments(const uint8_t* data, size_t dataSize,
+                                          int totalSegments, int maxSize,
+                                          std::vector<std::vector<uint8_t>>& segmentDatas,
+                                          int& outWidth, int& outHeight) {
+    segmentDatas.clear();
+    outWidth = outHeight = 0;
+
+    if (totalSegments < 1) return false;
+
+    // Pre-check dimensions to prevent OOM crash on PS Vita.
+    {
+        int preW, preH, preC;
+        if (stbi_info_from_memory(data, static_cast<int>(dataSize), &preW, &preH, &preC)) {
+            long long rgbaBytes = (long long)preW * preH * 4;
+            if (rgbaBytes > 64 * 1024 * 1024) {
+                brls::Logger::warning("ImageLoader: Image too large to decode ({}x{} = {}MB RGBA), skipping",
+                                      preW, preH, rgbaBytes / (1024 * 1024));
+                return false;
+            }
+        }
+    }
+
+    int width, height, channels;
+    uint8_t* rgba = stbi_load_from_memory(data, static_cast<int>(dataSize), &width, &height, &channels, 4);
+    if (!rgba) {
+        brls::Logger::error("ImageLoader: stb_image failed to decode image (all-segments)");
+        return false;
+    }
+
+    if (width <= 0 || height <= 0) {
+        stbi_image_free(rgba);
+        return false;
+    }
+
+    outWidth = width;
+    outHeight = height;
+
+    // Extract all segments from the single decoded buffer
+    for (int seg = 0; seg < totalSegments; seg++) {
+        int segmentHeight = (height + totalSegments - 1) / totalSegments;
+        int startY = seg * segmentHeight;
+        int endY = std::min(startY + segmentHeight, height);
+        int actualHeight = endY - startY;
+
+        if (actualHeight <= 0 || startY >= height) {
+            stbi_image_free(rgba);
+            return false;
+        }
+
+        int targetW = width;
+        int targetH = actualHeight;
+        if (width > maxSize) {
+            float scale = (float)maxSize / width;
+            targetW = maxSize;
+            targetH = std::max(1, (int)(actualHeight * scale));
+        }
+
+        std::vector<uint8_t> segData;
+        try {
+            segData = downscaleSegmentRGBAtoTGA(rgba, width, startY, actualHeight, targetW, targetH);
+        } catch (const std::bad_alloc&) {
+            stbi_image_free(rgba);
+            signalOOM("convertImageToTGAAllSegments");
+            return false;
+        }
+
+        if (segData.empty()) {
+            stbi_image_free(rgba);
+            return false;
+        }
+
+        segmentDatas.push_back(std::move(segData));
+    }
+
+    stbi_image_free(rgba);
+
+    brls::Logger::info("ImageLoader: JPEG/PNG decoded once, extracted {} segments from {}x{}",
+                       totalSegments, width, height);
+    return true;
+}
+
 // Convert JPEG/PNG to TGA with optional downscaling (using stb_image)
 static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSize, int maxSize) {
     std::vector<uint8_t> tgaData;
@@ -2812,39 +2897,59 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 std::vector<int> segSrcHeights;
                 bool allOK = true;
 
-                for (int seg = 0; seg < autoSegments && allOK; seg++) {
-                    if (alive && !*alive) return;  // Owner destroyed during processing
-                    if (isUnderMemoryPressure()) {
-                        brls::Logger::warning("ImageLoader: Aborting auto-split at seg {}/{} (OOM cooldown)", seg, autoSegments);
-                        allOK = false;
-                        break;
-                    }
+                if (!isWebP) {
+                    // JPEG/PNG optimization: decode the full image ONCE and extract
+                    // all segments from the decoded buffer. This avoids N separate
+                    // stbi_load_from_memory calls (each decoding the entire image)
+                    // when splitting into N segments.
+                    int decW = 0, decH = 0;
+                    allOK = convertImageToTGAAllSegments(
+                        reinterpret_cast<const uint8_t*>(imageBody.data()),
+                        imageBody.size(), autoSegments, segMaxSize,
+                        segmentDatas, decW, decH);
 
-                    std::vector<uint8_t> segData;
-                    if (isWebP) {
+                    if (allOK) {
+                        // Cache each segment and build height list
+                        for (int seg = 0; seg < autoSegments; seg++) {
+                            std::string segCK = url + "_full_autoseg" + std::to_string(seg);
+                            cachePut(segCK, segmentDatas[seg]);
+
+                            int segH = (decH + autoSegments - 1) / autoSegments;
+                            int startY = seg * segH;
+                            int endY = std::min(startY + segH, decH);
+                            segSrcHeights.push_back(endY - startY);
+                        }
+                    }
+                } else {
+                    // WebP: use per-segment crop+scale decode (efficient, no full alloc)
+                    for (int seg = 0; seg < autoSegments && allOK; seg++) {
+                        if (alive && !*alive) return;  // Owner destroyed during processing
+                        if (isUnderMemoryPressure()) {
+                            brls::Logger::warning("ImageLoader: Aborting auto-split at seg {}/{} (OOM cooldown)", seg, autoSegments);
+                            allOK = false;
+                            break;
+                        }
+
+                        std::vector<uint8_t> segData;
                         segData = convertWebPtoTGASegment(
                             reinterpret_cast<const uint8_t*>(imageBody.data()),
                             imageBody.size(), seg, autoSegments, segMaxSize);
-                    } else {
-                        segData = convertImageToTGASegment(
-                            reinterpret_cast<const uint8_t*>(imageBody.data()),
-                            imageBody.size(), seg, autoSegments, segMaxSize);
-                    }
-                    if (segData.empty()) {
-                        allOK = false;
-                        break;
-                    }
+                        if (segData.empty()) {
+                            allOK = false;
+                            break;
+                        }
 
-                    // Cache each segment
-                    std::string segCK = url + "_full_autoseg" + std::to_string(seg);
-                    cachePut(segCK, segData);
-                    segmentDatas.push_back(std::move(segData));
+                        // Cache each segment
+                        std::string segCK = url + "_full_autoseg" + std::to_string(seg);
+                        cachePut(segCK, segData);
+                        segmentDatas.push_back(std::move(segData));
 
-                    // Track source height for proportional display
-                    int segH = (origH + autoSegments - 1) / autoSegments;
-                    int startY = seg * segH;
-                    int endY = std::min(startY + segH, origH);
-                    segSrcHeights.push_back(endY - startY);
+                        // Track source height for proportional display
+                        int segH = (origH + autoSegments - 1) / autoSegments;
+                        int startY = seg * segH;
+                        int endY = std::min(startY + segH, origH);
+                        segSrcHeights.push_back(endY - startY);
+                    }
                 }
 
                 if (allOK && !segmentDatas.empty()) {

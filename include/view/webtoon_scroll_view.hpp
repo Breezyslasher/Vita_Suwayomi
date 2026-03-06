@@ -310,9 +310,12 @@ private:
     // Reduced from 8 to limit VRAM usage when tall images have multiple segment textures
     static constexpr int UNLOAD_PAGES = 5;
 
-    // Momentum friction
+    // Momentum friction (per-frame at 60fps baseline; actual deceleration is time-based)
     static constexpr float MOMENTUM_FRICTION = 0.95f;
     static constexpr float MOMENTUM_MIN_VELOCITY = 0.5f;
+
+    // Frame timing for frame-rate independent momentum
+    std::chrono::steady_clock::time_point m_lastFrameTime;
 
     // Touch thresholds
     static constexpr float TAP_THRESHOLD = 15.0f;

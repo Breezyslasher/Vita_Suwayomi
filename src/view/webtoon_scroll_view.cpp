@@ -22,9 +22,10 @@ WebtoonScrollView::WebtoonScrollView() {
     this->setAlignItems(brls::AlignItems::CENTER);
     this->setGrow(1.0f);
 
-    // Initialize double-tap and pinch cooldown tracking
+    // Initialize double-tap, pinch cooldown, and frame timing
     m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
     m_pinchEndTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+    m_lastFrameTime = std::chrono::steady_clock::now();
 
     // Setup touch gestures
     setupGestures();
@@ -1086,10 +1087,20 @@ int WebtoonScrollView::findPageAtOffset(float targetOffset) const {
 }
 
 void WebtoonScrollView::onFrame() {
+    // Calculate frame delta time for frame-rate independent physics.
+    // Velocity is stored in units of "pixels per frame at 60fps" (~16.67ms).
+    // When the Vita drops frames, dtFrames > 1.0 and we apply proportionally
+    // more scroll and more friction, so deceleration feels the same at any fps.
+    auto now = std::chrono::steady_clock::now();
+    float dtMs = std::chrono::duration_cast<std::chrono::microseconds>(now - m_lastFrameTime).count() / 1000.0f;
+    m_lastFrameTime = now;
+    // Clamp to avoid spiral on very long frames (e.g. loading stalls)
+    float dtFrames = std::min(dtMs / 16.667f, 4.0f);
+
     // Apply momentum scrolling when not touching
     if (!m_isTouching && std::abs(m_scrollVelocity) > MOMENTUM_MIN_VELOCITY) {
-        m_scrollY += m_scrollVelocity;
-        m_scrollVelocity *= MOMENTUM_FRICTION;
+        m_scrollY += m_scrollVelocity * dtFrames;
+        m_scrollVelocity *= std::pow(MOMENTUM_FRICTION, dtFrames);
 
         // Clamp scroll position based on layout direction
         float maxScroll = 0.0f;
