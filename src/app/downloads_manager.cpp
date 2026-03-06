@@ -8,6 +8,7 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/http_client.hpp"
 #include "utils/image_loader.hpp"
+#include "utils/library_cache.hpp"
 
 #include <borealis.hpp>
 #include <sstream>
@@ -1917,6 +1918,13 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
 
         // Process image quality if needed (resize/recompress)
         processImageQuality(localPath);
+
+        // Pre-convert to TGA and save to page cache so the reader loads
+        // downloaded pages instantly without any decode step at read time.
+        if (Application::getInstance().getSettings().pageCacheEnabled) {
+            preConvertToPageCache(mangaId, chapterIndex, pageIndex, localPath);
+        }
+
         brls::Logger::debug("DownloadsManager: Page {} downloaded successfully", pageIndex);
         return true;
     }
@@ -2087,6 +2095,90 @@ bool DownloadsManager::convertWebPToJpeg(const std::string& filePath) {
         brls::Logger::error("DownloadsManager: Failed to write JPEG for WebP conversion: {}", filePath);
     }
     return result != 0;
+}
+
+void DownloadsManager::preConvertToPageCache(int mangaId, int chapterIndex, int pageIndex,
+                                              const std::string& filePath) {
+    // Load the downloaded JPEG image
+    int w, h, channels;
+    unsigned char* rgba = stbi_load(filePath.c_str(), &w, &h, &channels, 4);
+    if (!rgba) {
+        brls::Logger::warning("DownloadsManager: Could not load image for TGA pre-conversion: {}", filePath);
+        return;
+    }
+
+    // Downscale to Vita display size (same as reader pipeline uses)
+    const int MAX_TEXTURE_SIZE = 1280;
+    int targetW = w;
+    int targetH = h;
+    if (w > MAX_TEXTURE_SIZE || h > MAX_TEXTURE_SIZE) {
+        float scale = (float)MAX_TEXTURE_SIZE / std::max(w, h);
+        targetW = std::max(1, (int)(w * scale));
+        targetH = std::max(1, (int)(h * scale));
+    }
+
+    // Build TGA: 18-byte header + BGRA pixel data
+    size_t pixelCount = (size_t)targetW * targetH;
+    std::vector<uint8_t> tgaData(18 + pixelCount * 4);
+
+    // TGA header
+    memset(tgaData.data(), 0, 18);
+    tgaData[2] = 2;  // Uncompressed true-color
+    tgaData[12] = targetW & 0xFF;
+    tgaData[13] = (targetW >> 8) & 0xFF;
+    tgaData[14] = targetH & 0xFF;
+    tgaData[15] = (targetH >> 8) & 0xFF;
+    tgaData[16] = 32;    // 32 bits per pixel
+    tgaData[17] = 0x28;  // Top-left origin + 8 alpha bits
+
+    uint8_t* dst = tgaData.data() + 18;
+
+    if (targetW != w || targetH != h) {
+        // Bilinear downscale + RGBA→BGRA swizzle
+        float xRatio = (float)w / targetW;
+        float yRatio = (float)h / targetH;
+        for (int y = 0; y < targetH; y++) {
+            float srcY = y * yRatio;
+            int sy0 = (int)srcY;
+            int sy1 = std::min(sy0 + 1, h - 1);
+            float fy = srcY - sy0;
+            for (int x = 0; x < targetW; x++) {
+                float srcX = x * xRatio;
+                int sx0 = (int)srcX;
+                int sx1 = std::min(sx0 + 1, w - 1);
+                float fx = srcX - sx0;
+
+                const uint8_t* p00 = rgba + (sy0 * w + sx0) * 4;
+                const uint8_t* p10 = rgba + (sy0 * w + sx1) * 4;
+                const uint8_t* p01 = rgba + (sy1 * w + sx0) * 4;
+                const uint8_t* p11 = rgba + (sy1 * w + sx1) * 4;
+
+                for (int c = 0; c < 4; c++) {
+                    float v = p00[c] * (1 - fx) * (1 - fy) + p10[c] * fx * (1 - fy) +
+                              p01[c] * (1 - fx) * fy + p11[c] * fx * fy;
+                    // RGBA→BGRA: swap R and B channels
+                    int dstC = (c == 0) ? 2 : (c == 2) ? 0 : c;
+                    dst[(y * targetW + x) * 4 + dstC] = (uint8_t)(v + 0.5f);
+                }
+            }
+        }
+    } else {
+        // No resize needed, just RGBA→BGRA swizzle
+        for (size_t i = 0; i < pixelCount; i++) {
+            dst[i * 4 + 0] = rgba[i * 4 + 2];  // B
+            dst[i * 4 + 1] = rgba[i * 4 + 1];  // G
+            dst[i * 4 + 2] = rgba[i * 4 + 0];  // R
+            dst[i * 4 + 3] = rgba[i * 4 + 3];  // A
+        }
+    }
+
+    stbi_image_free(rgba);
+
+    // Save to page cache
+    if (LibraryCache::getInstance().savePageImage(mangaId, chapterIndex, pageIndex, tgaData)) {
+        brls::Logger::info("DownloadsManager: Pre-converted page {} to TGA cache ({}x{}, {} bytes)",
+                          pageIndex, targetW, targetH, tgaData.size());
+    }
 }
 
 std::string DownloadsManager::createMangaDir(int mangaId, const std::string& title) {

@@ -2667,7 +2667,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     // Check page disk cache before downloading (avoids network + expensive decode)
     int pageMangaId = -1, pageChapterIdx = -1, pagePageIdx = -1;
     bool hasPageIds = extractPageUrlIds(url, pageMangaId, pageChapterIdx, pagePageIdx);
-    if (hasPageIds && totalSegments <= 1) {
+    bool pageCacheOn = Application::getInstance().getSettings().pageCacheEnabled;
+    if (pageCacheOn && hasPageIds && totalSegments <= 1) {
         std::vector<uint8_t> diskData;
         if (LibraryCache::getInstance().loadPageImage(pageMangaId, pageChapterIdx, pagePageIdx, diskData)) {
             auto ioEndTime = std::chrono::steady_clock::now();
@@ -3206,7 +3207,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         cachePut(cacheKey, imageData);
 
         // Save to page disk cache for instant loading next time
-        if (hasPageIds && totalSegments <= 1 && !imageData.empty()) {
+        if (pageCacheOn && hasPageIds && totalSegments <= 1 && !imageData.empty()) {
             LibraryCache::getInstance().savePageImage(pageMangaId, pageChapterIdx, pagePageIdx, imageData);
         }
 
