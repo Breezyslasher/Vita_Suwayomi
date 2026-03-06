@@ -105,6 +105,12 @@ static constexpr int MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN = 3;
 // concurrently, which can push the Vita past its memory limit.
 static std::mutex s_decodeMutex;
 
+// Serialize animated WebP processing.  Each animated WebP cover is 2+ MB —
+// with 3 worker threads, simultaneous downloads exhaust the Vita's memory.
+// When one worker is processing an animated WebP, others that encounter one
+// re-queue it and move on to the next (non-animated) image in the queue.
+static std::mutex s_animatedWebPMutex;
+
 // Signal that an OOM condition occurred during image decode.
 // This sets a cooldown period during which new thumbnail loads are skipped
 // to let the system recover before allocating more decode buffers.
@@ -1565,6 +1571,28 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
 
     std::vector<uint8_t> bodyVec;
     if (isAnimatedWebP) {
+        // Only one animated WebP can be processed at a time.  Each one is 2+ MB;
+        // with 3 workers holding them simultaneously the Vita runs out of memory.
+        // If another worker is already processing one, free our body immediately
+        // and re-queue this URL so it gets processed later.
+        std::unique_lock<std::mutex> animLock(s_animatedWebPMutex, std::try_to_lock);
+        if (!animLock.owns_lock()) {
+            brls::Logger::info("ImageLoader: Deferring animated WebP (another in progress), re-queuing: {}", url);
+            // Free the 2+ MB body before re-queuing to reclaim memory immediately
+            std::string urlCopy = url;
+            LoadCallback cbCopy = callback;
+            brls::Image* tgtCopy = target;
+            auto aliveCopy = alive;
+            { std::string().swap(resp.body); }
+            {
+                std::lock_guard<std::mutex> lock(s_queueMutex);
+                s_loadQueue.push({urlCopy, cbCopy, tgtCopy, true, aliveCopy});
+            }
+            s_queueCV.notify_one();
+            return;
+        }
+
+        // We hold the animated WebP lock — safe to process.
         // Extract first frame directly from resp.body (avoids duplicating the
         // full multi-MB animated WebP into bodyVec).
         brls::Logger::info("ImageLoader: Animated WebP ({}KB), extracting first frame before copy: {}",
@@ -1579,6 +1607,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             return;
         }
         bodyVec = std::move(firstFrame);  // ~70 KB instead of 2+ MB
+        // animLock released when bodyVec processing continues below
     } else {
         // Move the HTTP response body into a local vector so we hold a compact copy.
         // The `resp` object (with its string, headers, etc.) is freed here, reducing
@@ -2005,12 +2034,16 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         // the decode mutex.  Animated WebP pages can be 2+ MB each — when
         // preloading multiple pages, keeping the full animated data in imageBody
         // while waiting for the decode lock causes memory spikes that crash the
-        // Vita.  Extract the small first frame (~70 KB) and release the rest.
+        // Vita.  Serialize extraction with s_animatedWebPMutex so only one
+        // worker holds a full animated WebP body at a time.
         if (isWebP && imageBody.size() > 30) {
             WebPBitstreamFeatures animFeatures;
             if (WebPGetFeatures(reinterpret_cast<const uint8_t*>(imageBody.data()),
                                 imageBody.size(), &animFeatures) == VP8_STATUS_OK &&
                 animFeatures.has_animation) {
+                // Serialize animated WebP extraction across all workers
+                std::lock_guard<std::mutex> animLock(s_animatedWebPMutex);
+
                 brls::Logger::info("ImageLoader: Animated WebP reader page ({}KB), extracting first frame: {}",
                                    imageBody.size() / 1024, url);
                 auto firstFrame = extractFirstFrameFromAnimatedWebP(
