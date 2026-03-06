@@ -12,6 +12,7 @@
 
 // WebP decoding support
 #include <webp/decode.h>
+#include <cctype>
 #include <cstring>
 #include <cmath>
 #include <new>
@@ -1135,8 +1136,30 @@ static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* data, size_t 
     }
     fmtCtx->pb = avioCtx;
 
+    // Hint the input format when known — avformat_open_input's auto-detection
+    // can fail on memory buffers, especially for extracted GIF first-frames.
+    // av_find_input_format returns const AVInputFormat* in FFmpeg 5+ but
+    // AVInputFormat* in older versions.  avformat_open_input accepts both.
+#if LIBAVFORMAT_VERSION_MAJOR >= 59
+    const AVInputFormat* inputFmt = nullptr;
+#else
+    AVInputFormat* inputFmt = nullptr;
+#endif
+    if (formatName) {
+        // FFmpeg demuxer names: "gif", "avif" (via mov), "heif" (via mov), "webp" (via image2)
+        // Try the format name in lowercase first
+        std::string fmtLower;
+        for (const char* p = formatName; *p; ++p)
+            fmtLower += static_cast<char>(std::tolower(static_cast<unsigned char>(*p)));
+        inputFmt = av_find_input_format(fmtLower.c_str());
+        // For GIF specifically, ensure we use the "gif" demuxer
+        if (!inputFmt && fmtLower == "gif") {
+            inputFmt = av_find_input_format("gif_pipe");
+        }
+    }
+
     // Open input from memory
-    int ret = avformat_open_input(&fmtCtx, nullptr, nullptr, nullptr);
+    int ret = avformat_open_input(&fmtCtx, nullptr, inputFmt, nullptr);
     if (ret < 0) {
         char errbuf[128];
         av_strerror(ret, errbuf, sizeof(errbuf));
@@ -1955,7 +1978,14 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         // stack-safe.
         imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "GIF");
         if (imageData.empty()) {
-            brls::Logger::error("ImageLoader: GIF FFmpeg decode failed for {}", url);
+            // Fallback: try stb_image for non-animated (first-frame extracted) GIF data.
+            // stb_image's GIF LZW decoder is recursive, but single-frame GIFs after
+            // first-frame extraction are small enough that stack depth is safe.
+            brls::Logger::warning("ImageLoader: GIF FFmpeg decode failed, trying stb_image fallback for {}", url);
+            imageData = convertImageToTGA(decData, decSize, s_maxThumbnailSize);
+        }
+        if (imageData.empty()) {
+            brls::Logger::error("ImageLoader: All GIF decode attempts failed for {}", url);
             return;
         }
     } else {
@@ -2641,7 +2671,15 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 "GIF"
             );
             if (imageData.empty()) {
-                brls::Logger::error("ImageLoader: GIF FFmpeg decode failed for {}", url);
+                brls::Logger::warning("ImageLoader: GIF FFmpeg decode failed, trying stb_image fallback for {}", url);
+                imageData = convertImageToTGA(
+                    reinterpret_cast<const uint8_t*>(imageBody.data()),
+                    imageBody.size(),
+                    MAX_TEXTURE_SIZE
+                );
+            }
+            if (imageData.empty()) {
+                brls::Logger::error("ImageLoader: All GIF decode attempts failed for {}", url);
                 return;
             }
         } else {
