@@ -3226,7 +3226,7 @@ void ReaderActivity::updateSwipePreview(float offset) {
 
     // Debug: log slide positions once when swipe first starts or direction changes
     static int s_lastLoggedOffset = -99999;
-    int roundedOffset = static_cast<int>(offset / 50) * 50;  // log every ~50px
+    int roundedOffset = static_cast<int>(offset / 150) * 150;  // log every ~150px
     if (roundedOffset != s_lastLoggedOffset) {
         s_lastLoggedOffset = roundedOffset;
         brls::Logger::info("SWIPE offset={:.0f} rot={} vert={} extent={:.0f} | "

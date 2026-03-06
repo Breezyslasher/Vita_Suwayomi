@@ -48,6 +48,13 @@ public:
     bool hasCoverCache(int mangaId);
     std::string getCoverCachePath(int mangaId);
 
+    // Reader page image caching (decoded TGA data cached to disk)
+    bool savePageImage(int mangaId, int chapterId, int pageIndex, const std::vector<uint8_t>& imageData);
+    bool loadPageImage(int mangaId, int chapterId, int pageIndex, std::vector<uint8_t>& imageData);
+    bool hasPageCache(int mangaId, int chapterId, int pageIndex);
+    void clearPageCache();  // Clear all cached pages
+    void clearPageCache(int mangaId);  // Clear pages for a specific manga
+
     // Reading history caching
     bool saveHistory(const std::vector<ReadingHistoryItem>& history);
     bool loadHistory(std::vector<ReadingHistoryItem>& history);
@@ -87,6 +94,8 @@ private:
     std::string getAllLibraryFilePath();
     std::string getMangaDetailsFilePath(int mangaId);
     bool ensureDirectoryExists(const std::string& path);
+    std::string getPageCacheDir();
+    std::string getPageCachePath(int mangaId, int chapterId, int pageIndex);
 
     // Serialize/deserialize manga (basic - for category lists)
     std::string serializeManga(const Manga& manga);
@@ -116,6 +125,7 @@ private:
     bool m_initialized = false;
     std::mutex m_mutex;       // Protects metadata operations (categories, manga lists, details)
     std::mutex m_coverMutex;  // Separate mutex for cover image I/O (allows parallel reads by worker threads)
+    std::mutex m_pageMutex;   // Separate mutex for page image I/O
 };
 
 } // namespace vitasuwayomi
