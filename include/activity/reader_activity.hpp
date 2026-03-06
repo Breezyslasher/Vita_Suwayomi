@@ -206,6 +206,12 @@ private:
     brls::Point m_touchStart;
     brls::Point m_touchCurrent;
 
+    // Swipe velocity tracking for flick-to-turn
+    std::chrono::steady_clock::time_point m_swipeStartTime;
+    brls::Point m_lastVelocityPos;
+    std::chrono::steady_clock::time_point m_lastVelocityTime;
+    float m_swipeVelocity = 0.0f;  // pixels/second at release
+
     // 3-page carousel swipe: positive side + current + negative side
     // "Positive" = revealed when swiping positive (right/down on screen)
     // "Negative" = revealed when swiping negative (left/up on screen)
@@ -232,6 +238,8 @@ private:
     bool m_completionTurnPage = false;    // whether to finalize page turn at end
     bool m_completionNavChapter = false;  // whether to navigate chapters after animation
     bool m_completionNavNext = false;     // true = next chapter, false = previous
+    std::chrono::steady_clock::time_point m_completionStartTime;  // For time-based easing
+    float m_completionStartOffset = 0.0f; // Offset when animation started
     void animateSwipeCompletion();        // per-frame step, called via brls::sync
     void finalizePageTurn();              // called when animation reaches target
 
