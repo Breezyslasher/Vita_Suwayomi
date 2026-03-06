@@ -12,6 +12,7 @@
 
 // WebP decoding support
 #include <webp/decode.h>
+#include <cctype>
 #include <cstring>
 #include <cmath>
 #include <new>
@@ -60,7 +61,7 @@ std::list<ImageLoader::CacheEntry> ImageLoader::s_cacheList;
 std::map<std::string, std::list<ImageLoader::CacheEntry>::iterator> ImageLoader::s_cacheMap;
 size_t ImageLoader::s_maxCacheSize = 30;  // LRU cache: 30 entries to limit PS Vita memory usage
 size_t ImageLoader::s_currentCacheMemory = 0;
-static const size_t MAX_CACHE_MEMORY = 25 * 1024 * 1024;  // 25MB max cache memory (Vita has ~192MB total)
+static const size_t MAX_CACHE_MEMORY = 20 * 1024 * 1024;  // 20MB max cache memory (reduced from 25MB to prevent OOM with animated WebP pages)
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
@@ -104,6 +105,12 @@ static constexpr int MAX_CONSECUTIVE_FAILURES_BEFORE_COOLDOWN = 3;
 // This prevents 3 workers from each allocating multi-MB decode buffers
 // concurrently, which can push the Vita past its memory limit.
 static std::mutex s_decodeMutex;
+
+// Serialize animated image (WebP/GIF) processing.  Each animated image is 2+ MB
+// — with 3 worker threads, simultaneous downloads exhaust the Vita's memory.
+// When one worker is processing an animated image, others that encounter one
+// re-queue it and move on to the next (non-animated) image in the queue.
+static std::mutex s_animatedWebPMutex;
 
 // Signal that an OOM condition occurred during image decode.
 // This sets a cooldown period during which new thumbnail loads are skipped
@@ -319,6 +326,528 @@ static std::vector<uint8_t> extractFirstFrameFromAnimatedWebP(const uint8_t* dat
     return {};
 }
 
+// Detect whether a GIF is animated (has more than one frame).
+// Scans for multiple Image Descriptor blocks (0x2C) or a Netscape loop extension.
+static bool isAnimatedGIF(const uint8_t* data, size_t size) {
+    if (size < 13 || memcmp(data, "GIF", 3) != 0) return false;
+
+    int imageDescriptorCount = 0;
+    size_t pos = 13;  // Skip header (6) + logical screen descriptor (7)
+
+    // Skip Global Color Table if present
+    uint8_t packed = data[10];
+    if (packed & 0x80) {
+        int gctSize = 3 * (1 << ((packed & 0x07) + 1));
+        pos += gctSize;
+    }
+
+    while (pos < size) {
+        uint8_t blockType = data[pos];
+        pos++;
+
+        if (blockType == 0x2C) {
+            // Image Descriptor
+            imageDescriptorCount++;
+            if (imageDescriptorCount >= 2) return true;
+
+            if (pos + 9 > size) break;
+            uint8_t imgPacked = data[pos + 8];
+            pos += 9;
+
+            // Skip Local Color Table if present
+            if (imgPacked & 0x80) {
+                int lctSize = 3 * (1 << ((imgPacked & 0x07) + 1));
+                pos += lctSize;
+            }
+
+            // Skip LZW minimum code size
+            if (pos >= size) break;
+            pos++;  // LZW min code size
+
+            // Skip sub-blocks
+            while (pos < size) {
+                uint8_t subBlockSize = data[pos];
+                pos++;
+                if (subBlockSize == 0) break;
+                if (pos + subBlockSize > size) { pos = size; break; }
+                pos += subBlockSize;
+            }
+        } else if (blockType == 0x21) {
+            // Extension block
+            if (pos >= size) break;
+            uint8_t label = data[pos];
+            pos++;
+
+            // Check for Netscape loop extension (indicates animation)
+            if (label == 0xFF && pos + 1 < size) {
+                uint8_t extLen = data[pos];
+                if (extLen == 11 && pos + 12 < size &&
+                    memcmp(data + pos + 1, "NETSCAPE2.0", 11) == 0) {
+                    return true;
+                }
+            }
+
+            // Skip sub-blocks
+            while (pos < size) {
+                uint8_t subBlockSize = data[pos];
+                pos++;
+                if (subBlockSize == 0) break;
+                if (pos + subBlockSize > size) { pos = size; break; }
+                pos += subBlockSize;
+            }
+        } else if (blockType == 0x3B) {
+            // Trailer - end of GIF
+            break;
+        } else {
+            // Unknown block, bail
+            break;
+        }
+    }
+
+    return false;
+}
+
+// Extract just the first frame from an animated GIF by copying the header,
+// global color table, and the first image descriptor block.  This produces a
+// valid single-frame GIF that stb_image can decode, and discards the remaining
+// frames which would otherwise waste memory on the Vita.
+static std::vector<uint8_t> extractFirstFrameFromGIF(const uint8_t* data, size_t size) {
+    if (size < 13 || memcmp(data, "GIF", 3) != 0) return {};
+
+    std::vector<uint8_t> result;
+    try {
+        // Reserve a reasonable upper bound — first frame is typically a small
+        // fraction of a multi-frame GIF.
+        result.reserve(std::min(size, (size_t)(512 * 1024)));
+    } catch (...) {}
+
+    // Copy header (6 bytes) + logical screen descriptor (7 bytes)
+    size_t pos = 0;
+    result.insert(result.end(), data, data + 13);
+    pos = 13;
+
+    // Copy Global Color Table if present
+    uint8_t packed = data[10];
+    if (packed & 0x80) {
+        int gctSize = 3 * (1 << ((packed & 0x07) + 1));
+        if (pos + gctSize > size) return {};
+        result.insert(result.end(), data + pos, data + pos + gctSize);
+        pos += gctSize;
+    }
+
+    // Scan blocks until we find and copy the first image descriptor
+    bool foundImage = false;
+    while (pos < size && !foundImage) {
+        uint8_t blockType = data[pos];
+
+        if (blockType == 0x2C) {
+            // Image Descriptor — copy it and its data
+            if (pos + 10 > size) break;
+            size_t imgStart = pos;
+            pos++;  // block type
+
+            uint8_t imgPacked = data[pos + 8];
+            pos += 9;  // 9-byte image descriptor
+
+            // Local Color Table
+            size_t lctBytes = 0;
+            if (imgPacked & 0x80) {
+                lctBytes = 3 * (1 << ((imgPacked & 0x07) + 1));
+                if (pos + lctBytes > size) break;
+                pos += lctBytes;
+            }
+
+            // LZW minimum code size
+            if (pos >= size) break;
+            pos++;
+
+            // Sub-blocks (image data)
+            while (pos < size) {
+                uint8_t subBlockSize = data[pos];
+                pos++;
+                if (subBlockSize == 0) break;
+                if (pos + subBlockSize > size) { pos = size; break; }
+                pos += subBlockSize;
+            }
+
+            // Copy everything from imgStart to pos (the full first image block)
+            if (pos <= size) {
+                result.insert(result.end(), data + imgStart, data + pos);
+                foundImage = true;
+            }
+        } else if (blockType == 0x21) {
+            // Extension block — copy it (may be a Graphic Control Extension
+            // needed for the first frame's transparency/delay settings)
+            size_t extStart = pos;
+            pos++;  // block type
+            if (pos >= size) break;
+            pos++;  // extension label
+
+            // Skip sub-blocks to find extent
+            while (pos < size) {
+                uint8_t subBlockSize = data[pos];
+                pos++;
+                if (subBlockSize == 0) break;
+                if (pos + subBlockSize > size) { pos = size; break; }
+                pos += subBlockSize;
+            }
+
+            if (pos <= size) {
+                result.insert(result.end(), data + extStart, data + pos);
+            }
+        } else if (blockType == 0x3B) {
+            break;
+        } else {
+            break;
+        }
+    }
+
+    if (!foundImage) return {};
+
+    // Append GIF trailer
+    result.push_back(0x3B);
+
+    brls::Logger::info("ImageLoader: Extracted first frame from animated GIF ({} bytes -> {} bytes)",
+                       size, result.size());
+    return result;
+}
+
+// Iterative GIF first-frame decoder — completely bypasses both FFmpeg and stb_image.
+// FFmpeg's GIF decoder may not be available in all Vita builds (e.g. switchfin packages
+// only include h264/aac/mp3), and stb_image's GIF LZW decoder (stbi__out_gif_code) is
+// recursive with up to 4096 levels of recursion that overflows Vita worker thread stacks.
+// This decoder parses the GIF binary format and uses an iterative LZW decompressor.
+// Input: raw GIF file data (full file or extracted first frame).
+// Output: TGA image data ready for texture upload, or empty vector on failure.
+static std::vector<uint8_t> decodeGIFToTGA(const uint8_t* data, size_t size, int maxSize) {
+    if (size < 13 || memcmp(data, "GIF", 3) != 0) return {};
+
+    // Parse Logical Screen Descriptor
+    int screenWidth  = data[6] | (data[7] << 8);
+    int screenHeight = data[8] | (data[9] << 8);
+    uint8_t packed   = data[10];
+    // data[11] = background color index, data[12] = pixel aspect ratio
+
+    bool hasGCT = (packed & 0x80) != 0;
+    int gctSize = hasGCT ? (1 << ((packed & 0x07) + 1)) : 0;
+
+    // Read Global Color Table
+    uint8_t gct[256 * 3] = {};
+    size_t pos = 13;
+    if (hasGCT) {
+        size_t gctBytes = static_cast<size_t>(gctSize) * 3;
+        if (pos + gctBytes > size) return {};
+        memcpy(gct, data + pos, gctBytes);
+        pos += gctBytes;
+    }
+
+    // Scan for Graphic Control Extension (transparency) and first Image Descriptor
+    int transparentIndex = -1;
+    bool hasTransparency = false;
+
+    while (pos < size) {
+        uint8_t blockType = data[pos];
+
+        if (blockType == 0x21) {
+            // Extension block
+            if (pos + 2 > size) return {};
+            uint8_t label = data[pos + 1];
+            pos += 2;
+
+            if (label == 0xF9 && pos + 1 < size) {
+                // Graphic Control Extension
+                uint8_t blockSize = data[pos];
+                if (blockSize >= 4 && pos + 1 + blockSize <= size) {
+                    uint8_t gcPacked = data[pos + 1];
+                    hasTransparency = (gcPacked & 0x01) != 0;
+                    if (hasTransparency) {
+                        transparentIndex = data[pos + 4];
+                    }
+                }
+            }
+            // Skip sub-blocks
+            while (pos < size) {
+                uint8_t sb = data[pos++];
+                if (sb == 0) break;
+                pos += sb;
+                if (pos > size) return {};
+            }
+        } else if (blockType == 0x2C) {
+            // Image Descriptor — decode this frame
+            break;
+        } else if (blockType == 0x3B) {
+            return {};  // Trailer, no image found
+        } else {
+            return {};  // Unknown block
+        }
+    }
+
+    if (pos >= size || data[pos] != 0x2C) return {};
+
+    // Parse Image Descriptor
+    if (pos + 10 > size) return {};
+    int imgLeft   = data[pos + 1] | (data[pos + 2] << 8);
+    int imgTop    = data[pos + 3] | (data[pos + 4] << 8);
+    int imgWidth  = data[pos + 5] | (data[pos + 6] << 8);
+    int imgHeight = data[pos + 7] | (data[pos + 8] << 8);
+    uint8_t imgPacked = data[pos + 9];
+    pos += 10;
+
+    bool hasLCT = (imgPacked & 0x80) != 0;
+    bool interlaced = (imgPacked & 0x40) != 0;
+    int lctSize = hasLCT ? (1 << ((imgPacked & 0x07) + 1)) : 0;
+
+    // Read Local Color Table (overrides GCT for this frame)
+    uint8_t lct[256 * 3] = {};
+    const uint8_t* colorTable = gct;
+    int colorTableSize = gctSize;
+    if (hasLCT) {
+        size_t lctBytes = static_cast<size_t>(lctSize) * 3;
+        if (pos + lctBytes > size) return {};
+        memcpy(lct, data + pos, lctBytes);
+        pos += lctBytes;
+        colorTable = lct;
+        colorTableSize = lctSize;
+    }
+
+    if (colorTableSize == 0) return {};  // No color table
+
+    // Sanity check dimensions
+    if (imgWidth <= 0 || imgHeight <= 0 || imgWidth > 16384 || imgHeight > 16384) return {};
+    if (screenWidth <= 0 || screenHeight <= 0) {
+        screenWidth = imgWidth;
+        screenHeight = imgHeight;
+    }
+
+    long long pixelBytes = (long long)screenWidth * screenHeight * 4;
+    if (pixelBytes > 32 * 1024 * 1024) {
+        brls::Logger::warning("ImageLoader: GIF too large ({}x{} = {}MB), skipping",
+                              screenWidth, screenHeight, pixelBytes / (1024 * 1024));
+        return {};
+    }
+
+    // LZW Minimum Code Size
+    if (pos >= size) return {};
+    int lzwMinCodeSize = data[pos++];
+    if (lzwMinCodeSize < 2 || lzwMinCodeSize > 12) return {};
+
+    // Collect all sub-block data into a contiguous buffer
+    std::vector<uint8_t> lzwData;
+    try {
+        lzwData.reserve(size - pos);  // upper bound
+    } catch (...) {}
+    while (pos < size) {
+        uint8_t sb = data[pos++];
+        if (sb == 0) break;
+        if (pos + sb > size) return {};
+        lzwData.insert(lzwData.end(), data + pos, data + pos + sb);
+        pos += sb;
+    }
+
+    // --- Iterative LZW Decoder ---
+    const int clearCode = 1 << lzwMinCodeSize;
+    const int endCode   = clearCode + 1;
+    const int maxCode   = 4096;
+
+    // Code table: each entry stores (prefix, suffix) for chain reconstruction
+    struct LZWEntry {
+        uint16_t prefix;  // Previous code (or 0xFFFF for single-char entries)
+        uint8_t  suffix;  // Last byte of this code's string
+        uint16_t length;  // Total string length (for stack allocation)
+    };
+    std::vector<LZWEntry> table(maxCode);
+
+    // Output pixel indices
+    std::vector<uint8_t> pixels;
+    try {
+        pixels.reserve(static_cast<size_t>(imgWidth) * imgHeight);
+    } catch (...) {}
+
+    // Temp buffer for iterative string output (max LZW string = 4096 bytes)
+    uint8_t stringBuf[4096];
+
+    // Bit reader state
+    int bitPos = 0;
+    int totalBits = static_cast<int>(lzwData.size()) * 8;
+
+    auto readBits = [&](int nBits) -> int {
+        if (bitPos + nBits > totalBits) return endCode;
+        int byteIdx = bitPos >> 3;
+        int bitIdx  = bitPos & 7;
+        // Read up to 24 bits from 3 bytes
+        uint32_t val = lzwData[byteIdx];
+        if (byteIdx + 1 < (int)lzwData.size()) val |= (uint32_t)lzwData[byteIdx + 1] << 8;
+        if (byteIdx + 2 < (int)lzwData.size()) val |= (uint32_t)lzwData[byteIdx + 2] << 16;
+        val = (val >> bitIdx) & ((1u << nBits) - 1);
+        bitPos += nBits;
+        return static_cast<int>(val);
+    };
+
+    int codeSize   = lzwMinCodeSize + 1;
+    int nextCode   = endCode + 1;
+    int codeMask   = (1 << codeSize) - 1;
+    int prevCode   = -1;
+    size_t maxPixels = static_cast<size_t>(imgWidth) * imgHeight;
+
+    // Initialize base table entries
+    for (int i = 0; i < clearCode; i++) {
+        table[i].prefix = 0xFFFF;
+        table[i].suffix = static_cast<uint8_t>(i);
+        table[i].length = 1;
+    }
+
+    // Helper: output the string for a code iteratively
+    auto outputCode = [&](int code) {
+        if (code < 0 || code >= maxCode) return;
+        int len = table[code].length;
+        if (len <= 0 || len > 4096) return;
+        // Walk the chain backwards, filling stringBuf from the end
+        int idx = len - 1;
+        int c = code;
+        while (c != 0xFFFF && idx >= 0) {
+            stringBuf[idx--] = table[c].suffix;
+            c = table[c].prefix;
+        }
+        // Append to pixel output
+        int toWrite = std::min(len, static_cast<int>(maxPixels - pixels.size()));
+        if (toWrite > 0) {
+            pixels.insert(pixels.end(), stringBuf, stringBuf + toWrite);
+        }
+    };
+
+    bool done = false;
+    while (!done && pixels.size() < maxPixels) {
+        int code = readBits(codeSize);
+
+        if (code == endCode || code < 0) {
+            done = true;
+        } else if (code == clearCode) {
+            // Reset
+            codeSize = lzwMinCodeSize + 1;
+            codeMask = (1 << codeSize) - 1;
+            nextCode = endCode + 1;
+            prevCode = -1;
+        } else {
+            if (prevCode < 0) {
+                // First code after clear
+                outputCode(code);
+                prevCode = code;
+            } else {
+                if (code < nextCode) {
+                    // Code in table
+                    outputCode(code);
+                    // Add new entry: prevCode's string + first char of code's string
+                    if (nextCode < maxCode) {
+                        // Find first char of code's string
+                        int c = code;
+                        while (table[c].prefix != 0xFFFF) c = table[c].prefix;
+                        table[nextCode].prefix = static_cast<uint16_t>(prevCode);
+                        table[nextCode].suffix = table[c].suffix;
+                        table[nextCode].length = table[prevCode].length + 1;
+                        nextCode++;
+                    }
+                } else {
+                    // Code not yet in table (special KwKwK case)
+                    // New string = prevCode's string + first char of prevCode's string
+                    int c = prevCode;
+                    while (table[c].prefix != 0xFFFF) c = table[c].prefix;
+                    if (nextCode < maxCode) {
+                        table[nextCode].prefix = static_cast<uint16_t>(prevCode);
+                        table[nextCode].suffix = table[c].suffix;
+                        table[nextCode].length = table[prevCode].length + 1;
+                        nextCode++;
+                    }
+                    outputCode(code);
+                }
+                prevCode = code;
+                // Increase code size when needed
+                if (nextCode > codeMask && codeSize < 12) {
+                    codeSize++;
+                    codeMask = (1 << codeSize) - 1;
+                }
+            }
+        }
+    }
+
+    if (pixels.empty()) {
+        brls::Logger::error("ImageLoader: GIF iterative LZW decode produced no pixels");
+        return {};
+    }
+
+    // Convert indexed pixels to RGBA
+    std::vector<uint8_t> rgba;
+    try {
+        rgba.resize(static_cast<size_t>(screenWidth) * screenHeight * 4, 0);
+    } catch (const std::bad_alloc&) {
+        signalOOM("decodeGIFToTGA RGBA");
+        return {};
+    }
+
+    // Handle interlaced GIF row ordering
+    auto getRow = [&](int y) -> int {
+        if (!interlaced) return y;
+        // GIF interlace: pass 1 (rows 0,8,16..), pass 2 (4,12,20..), pass 3 (2,6,10..), pass 4 (1,3,5..)
+        static const int startRow[] = {0, 4, 2, 1};
+        static const int stepRow[]  = {8, 8, 4, 2};
+        int row = 0;
+        for (int pass = 0; pass < 4; pass++) {
+            for (int r = startRow[pass]; r < imgHeight; r += stepRow[pass]) {
+                if (row == y) return r;
+                row++;
+            }
+        }
+        return y;
+    };
+
+    for (size_t i = 0; i < pixels.size(); i++) {
+        int px = static_cast<int>(i % imgWidth);
+        int py = getRow(static_cast<int>(i / imgWidth));
+        int screenX = imgLeft + px;
+        int screenY = imgTop + py;
+        if (screenX < 0 || screenX >= screenWidth || screenY < 0 || screenY >= screenHeight)
+            continue;
+
+        uint8_t colorIdx = pixels[i];
+        if (hasTransparency && colorIdx == transparentIndex)
+            continue;  // Leave as transparent (0,0,0,0)
+
+        if (colorIdx >= colorTableSize)
+            continue;  // Invalid color index
+
+        size_t outIdx = (static_cast<size_t>(screenY) * screenWidth + screenX) * 4;
+        rgba[outIdx + 0] = colorTable[colorIdx * 3 + 0];
+        rgba[outIdx + 1] = colorTable[colorIdx * 3 + 1];
+        rgba[outIdx + 2] = colorTable[colorIdx * 3 + 2];
+        rgba[outIdx + 3] = 255;
+    }
+
+    // Downscale if needed
+    int dstW = screenWidth;
+    int dstH = screenHeight;
+    if (maxSize > 0 && (screenWidth > maxSize || screenHeight > maxSize)) {
+        float scale = static_cast<float>(maxSize) / std::max(screenWidth, screenHeight);
+        dstW = std::max(1, static_cast<int>(screenWidth * scale));
+        dstH = std::max(1, static_cast<int>(screenHeight * scale));
+    }
+
+    if (dstW != screenWidth || dstH != screenHeight) {
+        std::vector<uint8_t> scaledRgba;
+        try {
+            scaledRgba.resize(static_cast<size_t>(dstW) * dstH * 4);
+        } catch (const std::bad_alloc&) {
+            signalOOM("decodeGIFToTGA scale");
+            return {};
+        }
+        downscaleRGBA(rgba.data(), screenWidth, screenHeight, scaledRgba.data(), dstW, dstH);
+        brls::Logger::info("ImageLoader: GIF decoded {}x{} -> {}x{} (iterative LZW)",
+                           screenWidth, screenHeight, dstW, dstH);
+        return createTGAFromRGBA(scaledRgba.data(), dstW, dstH);
+    }
+
+    brls::Logger::info("ImageLoader: GIF decoded {}x{} (iterative LZW)", screenWidth, screenHeight);
+    return createTGAFromRGBA(rgba.data(), dstW, dstH);
+}
+
 // Calculate number of segments needed for a tall image
 static int calculateSegments(int width, int height, int maxSize) {
     if (height <= maxSize) return 1;
@@ -410,6 +939,22 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
 
     if (totalSegments < 1 || segment < 0 || segment >= totalSegments) return tgaData;
 
+    // Pre-check dimensions to prevent OOM crash on PS Vita.
+    // stb_image decodes at full resolution (width*height*4 bytes) before we can
+    // downscale.  Large GIFs or other images can require 10-30+ MB for the
+    // intermediate RGBA buffer, exhausting the Vita's limited memory.
+    {
+        int preW, preH, preC;
+        if (stbi_info_from_memory(data, static_cast<int>(dataSize), &preW, &preH, &preC)) {
+            long long rgbaBytes = (long long)preW * preH * 4;
+            if (rgbaBytes > 32 * 1024 * 1024) {
+                brls::Logger::warning("ImageLoader: Image too large to decode ({}x{} = {}MB RGBA), skipping",
+                                      preW, preH, rgbaBytes / (1024 * 1024));
+                return tgaData;
+            }
+        }
+    }
+
     int width, height, channels;
     // Force 4 channels (RGBA)
     uint8_t* rgba = stbi_load_from_memory(data, static_cast<int>(dataSize), &width, &height, &channels, 4);
@@ -475,6 +1020,24 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
 // Convert JPEG/PNG to TGA with optional downscaling (using stb_image)
 static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSize, int maxSize) {
     std::vector<uint8_t> tgaData;
+
+    // Pre-check dimensions to prevent OOM crash on PS Vita.
+    // stb_image decodes at full resolution (width*height*4 bytes) before we can
+    // downscale.  Large GIFs can require 10-30+ MB for the intermediate RGBA
+    // buffer, exhausting the Vita's limited memory.  WebP avoids this because
+    // libwebp supports scaled decode natively.
+    {
+        int preW, preH, preC;
+        if (stbi_info_from_memory(data, static_cast<int>(dataSize), &preW, &preH, &preC)) {
+            long long rgbaBytes = (long long)preW * preH * 4;
+            if (rgbaBytes > 32 * 1024 * 1024) {
+                brls::Logger::warning("ImageLoader: Image too large to decode ({}x{} = {}MB RGBA), skipping",
+                                      preW, preH, rgbaBytes / (1024 * 1024));
+                signalOOM("convertImageToTGA pre-check");
+                return tgaData;
+            }
+        }
+    }
 
     int width, height, channels;
     // Force 4 channels (RGBA)
@@ -909,8 +1472,30 @@ static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* data, size_t 
     }
     fmtCtx->pb = avioCtx;
 
+    // Hint the input format when known — avformat_open_input's auto-detection
+    // can fail on memory buffers, especially for extracted GIF first-frames.
+    // av_find_input_format returns const AVInputFormat* in FFmpeg 5+ but
+    // AVInputFormat* in older versions.  avformat_open_input accepts both.
+#if LIBAVFORMAT_VERSION_MAJOR >= 59
+    const AVInputFormat* inputFmt = nullptr;
+#else
+    AVInputFormat* inputFmt = nullptr;
+#endif
+    if (formatName) {
+        // FFmpeg demuxer names: "gif", "avif" (via mov), "heif" (via mov), "webp" (via image2)
+        // Try the format name in lowercase first
+        std::string fmtLower;
+        for (const char* p = formatName; *p; ++p)
+            fmtLower += static_cast<char>(std::tolower(static_cast<unsigned char>(*p)));
+        inputFmt = av_find_input_format(fmtLower.c_str());
+        // For GIF specifically, ensure we use the "gif" demuxer
+        if (!inputFmt && fmtLower == "gif") {
+            inputFmt = av_find_input_format("gif_pipe");
+        }
+    }
+
     // Open input from memory
-    int ret = avformat_open_input(&fmtCtx, nullptr, nullptr, nullptr);
+    int ret = avformat_open_input(&fmtCtx, nullptr, inputFmt, nullptr);
     if (ret < 0) {
         char errbuf[128];
         av_strerror(ret, errbuf, sizeof(errbuf));
@@ -1491,6 +2076,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     bool isSVG = false;
     bool isAVIF = false;
     bool isHEIF = false;
+    bool isGIF = false;
     bool isKnownFormat = false;
 
     const uint8_t* bodyData = reinterpret_cast<const uint8_t*>(resp.body.data());
@@ -1506,6 +2092,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             isKnownFormat = true;  // PNG
         }
         else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
+            isGIF = true;
             isKnownFormat = true;  // GIF
         }
         else if (data[0] == 0x42 && data[1] == 0x4D) {
@@ -1563,8 +2150,69 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         }
     }
 
+    // Detect animated GIFs — they can be multi-MB just like animated WebP
+    // and need the same first-frame extraction treatment.
+    bool isAnimatedGIF_ = false;
+    if (isGIF && bodySize > 13) {
+        isAnimatedGIF_ = isAnimatedGIF(bodyData, bodySize);
+    }
+
     std::vector<uint8_t> bodyVec;
-    if (isAnimatedWebP) {
+    if (isAnimatedGIF_) {
+        // Same serialization as animated WebP — only one animated image at a time.
+        std::unique_lock<std::mutex> animLock(s_animatedWebPMutex, std::try_to_lock);
+        if (!animLock.owns_lock()) {
+            brls::Logger::info("ImageLoader: Deferring animated GIF (another animated in progress), re-queuing: {}", url);
+            std::string urlCopy = url;
+            LoadCallback cbCopy = callback;
+            brls::Image* tgtCopy = target;
+            auto aliveCopy = alive;
+            { std::string().swap(resp.body); }
+            {
+                std::lock_guard<std::mutex> lock(s_queueMutex);
+                s_loadQueue.push({urlCopy, cbCopy, tgtCopy, true, aliveCopy});
+            }
+            s_queueCV.notify_one();
+            return;
+        }
+
+        brls::Logger::info("ImageLoader: Animated GIF ({}KB), extracting first frame before copy: {}",
+                           bodySize / 1024, url);
+        auto firstFrame = extractFirstFrameFromGIF(bodyData, bodySize);
+        { std::string().swap(resp.body); }
+        bodyData = nullptr;
+        bodySize = 0;
+
+        if (firstFrame.empty()) {
+            brls::Logger::warning("ImageLoader: Failed to extract frame from animated GIF, falling back to full data: {}", url);
+            // Can't extract frame — will fall through and stb_image will decode frame 0
+            // but we already freed resp.body, so we have to bail
+            return;
+        }
+        bodyVec = std::move(firstFrame);
+    } else if (isAnimatedWebP) {
+        // Only one animated WebP can be processed at a time.  Each one is 2+ MB;
+        // with 3 workers holding them simultaneously the Vita runs out of memory.
+        // If another worker is already processing one, free our body immediately
+        // and re-queue this URL so it gets processed later.
+        std::unique_lock<std::mutex> animLock(s_animatedWebPMutex, std::try_to_lock);
+        if (!animLock.owns_lock()) {
+            brls::Logger::info("ImageLoader: Deferring animated WebP (another in progress), re-queuing: {}", url);
+            // Free the 2+ MB body before re-queuing to reclaim memory immediately
+            std::string urlCopy = url;
+            LoadCallback cbCopy = callback;
+            brls::Image* tgtCopy = target;
+            auto aliveCopy = alive;
+            { std::string().swap(resp.body); }
+            {
+                std::lock_guard<std::mutex> lock(s_queueMutex);
+                s_loadQueue.push({urlCopy, cbCopy, tgtCopy, true, aliveCopy});
+            }
+            s_queueCV.notify_one();
+            return;
+        }
+
+        // We hold the animated WebP lock — safe to process.
         // Extract first frame directly from resp.body (avoids duplicating the
         // full multi-MB animated WebP into bodyVec).
         brls::Logger::info("ImageLoader: Animated WebP ({}KB), extracting first frame before copy: {}",
@@ -1579,6 +2227,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             return;
         }
         bodyVec = std::move(firstFrame);  // ~70 KB instead of 2+ MB
+        // animLock released when bodyVec processing continues below
     } else {
         // Move the HTTP response body into a local vector so we hold a compact copy.
         // The `resp` object (with its string, headers, etc.) is freed here, reducing
@@ -1656,6 +2305,15 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
                 signalOOM("WebP all fallbacks exhausted");
                 return;
             }
+        }
+    } else if (isGIF) {
+        // Decode GIF using our iterative LZW decoder.  This bypasses both FFmpeg
+        // (which may lack a GIF decoder in some Vita builds) and stb_image (whose
+        // recursive LZW decoder overflows Vita worker thread stacks).
+        imageData = decodeGIFToTGA(decData, decSize, s_maxThumbnailSize);
+        if (imageData.empty()) {
+            brls::Logger::error("ImageLoader: GIF decode failed for {}", url);
+            return;
         }
     } else {
         // Downscale JPEG/PNG thumbnails too (not just WebP)
@@ -1826,6 +2484,15 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     // Early out if owner was destroyed before we started
     if (alive && !*alive) return;
 
+    // Skip preload-only requests (no target, no callback) while under memory
+    // pressure.  This prevents the reader's 3-page preload from piling up
+    // downloads and decode buffers while the system is already struggling.
+    // Loads with a target/callback are the current page and must proceed.
+    if (!target && !callback && isUnderMemoryPressure()) {
+        brls::Logger::debug("ImageLoader: Skipping preload (OOM cooldown) for {}", url);
+        return;
+    }
+
     auto loadStartTime = std::chrono::steady_clock::now();
 
     std::string imageBody;
@@ -1902,6 +2569,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         // Check image format
         bool isWebP = false;
         bool isJpegOrPng = false;
+        bool isGIF = false;
         bool isTGA = false;
         bool isSVG = false;
         bool isAVIF = false;
@@ -1941,8 +2609,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 isJpegOrPng = true;
                 isValidImage = true;
             }
-            // GIF (pass through - typically small enough)
+            // GIF (decode via FFmpeg — stb_image's recursive LZW decoder can
+            // overflow the stack on PS Vita worker threads, causing psp2core crashes)
             else if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) {
+                isGIF = true;
                 isValidImage = true;
             }
             // BMP
@@ -1990,6 +2660,59 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         if (!isValidImage) {
             brls::Logger::warning("ImageLoader: Invalid image format for {}", url);
             return;
+        }
+
+        // For animated WebP in the reader path, extract the first frame BEFORE
+        // the decode mutex.  Animated WebP pages can be 2+ MB each — when
+        // preloading multiple pages, keeping the full animated data in imageBody
+        // while waiting for the decode lock causes memory spikes that crash the
+        // Vita.  Serialize extraction with s_animatedWebPMutex so only one
+        // worker holds a full animated WebP body at a time.
+        if (isWebP && imageBody.size() > 30) {
+            WebPBitstreamFeatures animFeatures;
+            if (WebPGetFeatures(reinterpret_cast<const uint8_t*>(imageBody.data()),
+                                imageBody.size(), &animFeatures) == VP8_STATUS_OK &&
+                animFeatures.has_animation) {
+                // Serialize animated WebP extraction across all workers
+                std::lock_guard<std::mutex> animLock(s_animatedWebPMutex);
+
+                brls::Logger::info("ImageLoader: Animated WebP reader page ({}KB), extracting first frame: {}",
+                                   imageBody.size() / 1024, url);
+                auto firstFrame = extractFirstFrameFromAnimatedWebP(
+                    reinterpret_cast<const uint8_t*>(imageBody.data()), imageBody.size());
+                if (!firstFrame.empty()) {
+                    brls::Logger::info("ImageLoader: Extracted first frame from animated WebP ({} bytes -> {} bytes)",
+                                       imageBody.size(), firstFrame.size());
+                    // Replace imageBody with the small first frame
+                    imageBody.assign(reinterpret_cast<const char*>(firstFrame.data()), firstFrame.size());
+                    std::vector<uint8_t>().swap(firstFrame);  // free immediately
+                } else {
+                    brls::Logger::warning("ImageLoader: Failed to extract frame from animated WebP reader page: {}", url);
+                    // Continue with original data — convertWebPtoTGA will try extraction again
+                }
+            }
+        }
+
+        // For animated GIFs in the reader path, extract the first frame BEFORE
+        // the decode mutex — same rationale as animated WebP above.
+        if (isGIF && imageBody.size() > 13) {
+            const uint8_t* gifData = reinterpret_cast<const uint8_t*>(imageBody.data());
+            if (isAnimatedGIF(gifData, imageBody.size())) {
+                std::lock_guard<std::mutex> animLock(s_animatedWebPMutex);
+
+                brls::Logger::info("ImageLoader: Animated GIF reader page ({}KB), extracting first frame: {}",
+                                   imageBody.size() / 1024, url);
+                auto firstFrame = extractFirstFrameFromGIF(gifData, imageBody.size());
+                if (!firstFrame.empty()) {
+                    brls::Logger::info("ImageLoader: Extracted first frame from animated GIF ({} bytes -> {} bytes)",
+                                       imageBody.size(), firstFrame.size());
+                    imageBody.assign(reinterpret_cast<const char*>(firstFrame.data()), firstFrame.size());
+                    std::vector<uint8_t>().swap(firstFrame);
+                } else {
+                    brls::Logger::warning("ImageLoader: Failed to extract frame from animated GIF reader page: {}", url);
+                    // Continue with original data — stb_image will decode first frame anyway
+                }
+            }
         }
 
         // TGA pass-through: already in GPU-ready format, skip decode/conversion
@@ -2263,12 +2986,31 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                 brls::Logger::error("ImageLoader: JPEG/PNG conversion failed for {}", url);
                 return;
             }
+        } else if (isGIF) {
+            // Decode GIF using our iterative LZW decoder.  This bypasses both FFmpeg
+            // (which may lack a GIF decoder in some Vita builds) and stb_image (whose
+            // recursive LZW decoder overflows Vita worker thread stacks).
+            imageData = decodeGIFToTGA(
+                reinterpret_cast<const uint8_t*>(imageBody.data()),
+                imageBody.size(),
+                MAX_TEXTURE_SIZE
+            );
+            if (imageData.empty()) {
+                brls::Logger::error("ImageLoader: GIF decode failed for {}", url);
+                return;
+            }
         } else {
-            // For GIF and other formats, pass through directly
+            // For other formats, pass through directly
             // NVG will handle loading
             imageData.assign(imageBody.begin(), imageBody.end());
             brls::Logger::debug("ImageLoader: Using image directly ({} bytes)", imageData.size());
         }
+
+        // Free the raw downloaded image data now that decode is complete.
+        // This releases the compressed image buffer (can be 2+ MB for WebP)
+        // before we cache the decoded TGA and queue the texture upload,
+        // reducing peak memory usage on the Vita.
+        { std::string().swap(imageBody); }
 
         // Cache the image using LRU (include segment in key if segmented)
         std::string cacheKey = url + "_full";
