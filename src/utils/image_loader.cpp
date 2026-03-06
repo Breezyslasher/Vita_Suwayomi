@@ -1281,7 +1281,10 @@ void ImageLoader::processPendingTextures() {
             if (update.data.empty()) {
                 continue;
             }
+            brls::Logger::debug("ImageLoader: Uploading texture {} bytes to target {:p}",
+                                update.data.size(), static_cast<void*>(update.target));
             update.target->setImageFromMem(update.data.data(), update.data.size());
+            brls::Logger::debug("ImageLoader: Texture upload OK");
             if (update.callback) update.callback(update.target);
         }
         processed++;
@@ -1548,17 +1551,46 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         return;
     }
 
-    // Move the HTTP response body into a local vector so we hold a compact copy.
-    // The `resp` object (with its string, headers, etc.) is freed here, reducing
-    // peak memory during the decode step that follows.
-    std::vector<uint8_t> bodyVec;
-    try {
-        bodyVec.assign(bodyData, bodyData + bodySize);
-    } catch (const std::bad_alloc&) {
-        signalOOM("executeLoad bodyVec alloc");
-        return;
+    // For animated WebP, extract the small first frame BEFORE copying the full
+    // response body.  Animated WebP covers can be 2+ MB — copying that into
+    // bodyVec would briefly require 4+ MB (resp.body + bodyVec) which fragments
+    // the Vita's limited heap and can cause cascading OOM crashes.
+    bool isAnimatedWebP = false;
+    if (isWebP && bodySize > 30) {
+        WebPBitstreamFeatures features;
+        if (WebPGetFeatures(bodyData, bodySize, &features) == VP8_STATUS_OK) {
+            isAnimatedWebP = features.has_animation;
+        }
     }
-    { std::string().swap(resp.body); }  // release resp.body memory now
+
+    std::vector<uint8_t> bodyVec;
+    if (isAnimatedWebP) {
+        // Extract first frame directly from resp.body (avoids duplicating the
+        // full multi-MB animated WebP into bodyVec).
+        brls::Logger::info("ImageLoader: Animated WebP ({}KB), extracting first frame before copy: {}",
+                           bodySize / 1024, url);
+        auto firstFrame = extractFirstFrameFromAnimatedWebP(bodyData, bodySize);
+        { std::string().swap(resp.body); }  // free 2+ MB immediately
+        bodyData = nullptr;
+        bodySize = 0;
+
+        if (firstFrame.empty()) {
+            brls::Logger::warning("ImageLoader: Failed to extract frame from animated WebP: {}", url);
+            return;
+        }
+        bodyVec = std::move(firstFrame);  // ~70 KB instead of 2+ MB
+    } else {
+        // Move the HTTP response body into a local vector so we hold a compact copy.
+        // The `resp` object (with its string, headers, etc.) is freed here, reducing
+        // peak memory during the decode step that follows.
+        try {
+            bodyVec.assign(bodyData, bodyData + bodySize);
+        } catch (const std::bad_alloc&) {
+            signalOOM("executeLoad bodyVec alloc");
+            return;
+        }
+        { std::string().swap(resp.body); }  // release resp.body memory now
+    }
     const uint8_t* decData = bodyVec.data();
     size_t decSize = bodyVec.size();
 
@@ -1595,36 +1627,10 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             return;
         }
     } else if (isWebP) {
-        // Detect animated WebP early so we can skip straight to FFmpeg (which
-        // can extract the first frame) instead of wasting memory on the
-        // libwebp simple decoder that will fail with VP8_STATUS_UNSUPPORTED_FEATURE.
-        bool isAnimatedWebP = false;
-        if (decSize > 30) {
-            WebPBitstreamFeatures features;
-            if (WebPGetFeatures(decData, decSize, &features) == VP8_STATUS_OK) {
-                isAnimatedWebP = features.has_animation;
-            }
-        }
-
-        if (isAnimatedWebP) {
-            // Extract the first frame from the ANMF chunk and decode as static WebP.
-            // This avoids FFmpeg (which fails with "Invalid data found" for animated
-            // WebP from memory on Vita) and works with just the libwebp decode API.
-            brls::Logger::info("ImageLoader: Animated WebP detected, extracting first frame: {}", url);
-            auto firstFrame = extractFirstFrameFromAnimatedWebP(decData, decSize);
-            if (!firstFrame.empty()) {
-                imageData = convertWebPtoTGA(firstFrame.data(), firstFrame.size(), s_maxThumbnailSize);
-            }
-            if (imageData.empty()) {
-                // Frame extraction or decode failed — try FFmpeg as last resort
-                brls::Logger::warning("ImageLoader: First-frame extraction failed, trying FFmpeg for {}", url);
-                imageData = convertFFmpegImageToTGA(decData, decSize, s_maxThumbnailSize, "WebP");
-            }
-            if (imageData.empty()) {
-                brls::Logger::warning("ImageLoader: Animated WebP unsupported for {}", url);
-                return;
-            }
-        } else {
+        // For animated WebP, the first frame was already extracted BEFORE the
+        // decode mutex (to avoid holding 2+ MB in memory).  bodyVec now contains
+        // a small (~70 KB) standalone static WebP — just decode it normally.
+        {
             imageData = convertWebPtoTGA(decData, decSize, s_maxThumbnailSize);
             if (imageData.empty()) {
                 // Fallback: try FFmpeg decoder for WebP — it wraps libwebp but with
@@ -1665,6 +1671,14 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         }
     }
 
+    brls::Logger::info("ImageLoader: Decode OK ({} bytes TGA) for {}", imageData.size(), url);
+
+    // Release download buffer if still held (non-animated paths)
+    if (!bodyVec.empty()) {
+        bodyVec.clear();
+        bodyVec.shrink_to_fit();
+    }
+
     // Cache the image in memory using LRU eviction
     cachePut(url, imageData);
 
@@ -1680,6 +1694,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     if (target) {
         queueTextureUpdate(imageData, target, callback, alive);
     }
+    brls::Logger::info("ImageLoader: Queued texture for {}", url);
 }
 
 void ImageLoader::ensureWorkersStarted() {
