@@ -1583,8 +1583,10 @@ void ReaderActivity::loadPage(int index) {
 }
 
 void ReaderActivity::preloadAdjacentPages() {
-    // Preload next 3 pages for smoother swiping/reading
-    for (int i = 1; i <= 3; i++) {
+    // Preload next 2 pages for smoother swiping/reading.
+    // Reduced from 3 to 2 to lower peak memory usage — each page can be
+    // 2+ MB (animated WebP) and the Vita's RAM is very limited.
+    for (int i = 1; i <= 2; i++) {
         int nextIdx = m_currentPage + i;
         if (nextIdx < static_cast<int>(m_pages.size()) && !isTransitionPage(nextIdx)) {
             ImageLoader::preloadFullSize(m_pages[nextIdx].imageUrl);
@@ -3772,7 +3774,7 @@ void ReaderActivity::preloadNextChapter() {
             brls::Logger::info("Next chapter preloaded: {} pages", m_nextChapterPages.size());
 
             // Preload first few images of next chapter (full size for manga reader)
-            for (size_t i = 0; i < std::min(size_t(3), m_nextChapterPages.size()); i++) {
+            for (size_t i = 0; i < std::min(size_t(2), m_nextChapterPages.size()); i++) {
                 ImageLoader::preloadFullSize(m_nextChapterPages[i].imageUrl);
             }
         }
@@ -3829,7 +3831,7 @@ void ReaderActivity::preloadPrevChapter() {
 
             // Preload last few images (user navigates to end when going back)
             size_t count = m_prevChapterPages.size();
-            for (size_t i = (count > 3 ? count - 3 : 0); i < count; i++) {
+            for (size_t i = (count > 2 ? count - 2 : 0); i < count; i++) {
                 ImageLoader::preloadFullSize(m_prevChapterPages[i].imageUrl);
             }
         }

@@ -60,7 +60,7 @@ std::list<ImageLoader::CacheEntry> ImageLoader::s_cacheList;
 std::map<std::string, std::list<ImageLoader::CacheEntry>::iterator> ImageLoader::s_cacheMap;
 size_t ImageLoader::s_maxCacheSize = 30;  // LRU cache: 30 entries to limit PS Vita memory usage
 size_t ImageLoader::s_currentCacheMemory = 0;
-static const size_t MAX_CACHE_MEMORY = 25 * 1024 * 1024;  // 25MB max cache memory (Vita has ~192MB total)
+static const size_t MAX_CACHE_MEMORY = 20 * 1024 * 1024;  // 20MB max cache memory (reduced from 25MB to prevent OOM with animated WebP pages)
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
@@ -1826,6 +1826,15 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     // Early out if owner was destroyed before we started
     if (alive && !*alive) return;
 
+    // Skip preload-only requests (no target, no callback) while under memory
+    // pressure.  This prevents the reader's 3-page preload from piling up
+    // downloads and decode buffers while the system is already struggling.
+    // Loads with a target/callback are the current page and must proceed.
+    if (!target && !callback && isUnderMemoryPressure()) {
+        brls::Logger::debug("ImageLoader: Skipping preload (OOM cooldown) for {}", url);
+        return;
+    }
+
     auto loadStartTime = std::chrono::steady_clock::now();
 
     std::string imageBody;
@@ -1990,6 +1999,33 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         if (!isValidImage) {
             brls::Logger::warning("ImageLoader: Invalid image format for {}", url);
             return;
+        }
+
+        // For animated WebP in the reader path, extract the first frame BEFORE
+        // the decode mutex.  Animated WebP pages can be 2+ MB each — when
+        // preloading multiple pages, keeping the full animated data in imageBody
+        // while waiting for the decode lock causes memory spikes that crash the
+        // Vita.  Extract the small first frame (~70 KB) and release the rest.
+        if (isWebP && imageBody.size() > 30) {
+            WebPBitstreamFeatures animFeatures;
+            if (WebPGetFeatures(reinterpret_cast<const uint8_t*>(imageBody.data()),
+                                imageBody.size(), &animFeatures) == VP8_STATUS_OK &&
+                animFeatures.has_animation) {
+                brls::Logger::info("ImageLoader: Animated WebP reader page ({}KB), extracting first frame: {}",
+                                   imageBody.size() / 1024, url);
+                auto firstFrame = extractFirstFrameFromAnimatedWebP(
+                    reinterpret_cast<const uint8_t*>(imageBody.data()), imageBody.size());
+                if (!firstFrame.empty()) {
+                    brls::Logger::info("ImageLoader: Extracted first frame from animated WebP ({} bytes -> {} bytes)",
+                                       imageBody.size(), firstFrame.size());
+                    // Replace imageBody with the small first frame
+                    imageBody.assign(reinterpret_cast<const char*>(firstFrame.data()), firstFrame.size());
+                    std::vector<uint8_t>().swap(firstFrame);  // free immediately
+                } else {
+                    brls::Logger::warning("ImageLoader: Failed to extract frame from animated WebP reader page: {}", url);
+                    // Continue with original data — convertWebPtoTGA will try extraction again
+                }
+            }
         }
 
         // TGA pass-through: already in GPU-ready format, skip decode/conversion
@@ -2269,6 +2305,12 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             imageData.assign(imageBody.begin(), imageBody.end());
             brls::Logger::debug("ImageLoader: Using image directly ({} bytes)", imageData.size());
         }
+
+        // Free the raw downloaded image data now that decode is complete.
+        // This releases the compressed image buffer (can be 2+ MB for WebP)
+        // before we cache the decoded TGA and queue the texture upload,
+        // reducing peak memory usage on the Vita.
+        { std::string().swap(imageBody); }
 
         // Cache the image using LRU (include segment in key if segmented)
         std::string cacheKey = url + "_full";
