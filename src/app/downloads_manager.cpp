@@ -8,7 +8,6 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/http_client.hpp"
 #include "utils/image_loader.hpp"
-#include "utils/library_cache.hpp"
 
 #include <borealis.hpp>
 #include <sstream>
@@ -1919,11 +1918,10 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
         // Process image quality if needed (resize/recompress)
         processImageQuality(localPath);
 
-        // Pre-convert to TGA and save to page cache so the reader loads
+        // Pre-convert to TGA in the downloads folder so the reader loads
         // downloaded pages instantly without any decode step at read time.
-        if (Application::getInstance().getSettings().pageCacheEnabled) {
-            preConvertToPageCache(mangaId, chapterIndex, pageIndex, localPath);
-        }
+        // Replaces the JPEG with a GPU-ready TGA file and updates localPath.
+        preConvertToPageCache(mangaId, chapterIndex, pageIndex, localPath);
 
         brls::Logger::debug("DownloadsManager: Page {} downloaded successfully", pageIndex);
         return true;
@@ -2098,7 +2096,7 @@ bool DownloadsManager::convertWebPToJpeg(const std::string& filePath) {
 }
 
 void DownloadsManager::preConvertToPageCache(int mangaId, int chapterIndex, int pageIndex,
-                                              const std::string& filePath) {
+                                              std::string& filePath) {
     // Load the downloaded JPEG image
     int w, h, channels;
     unsigned char* rgba = stbi_load(filePath.c_str(), &w, &h, &channels, 4);
@@ -2174,10 +2172,41 @@ void DownloadsManager::preConvertToPageCache(int mangaId, int chapterIndex, int 
 
     stbi_image_free(rgba);
 
-    // Save to page cache
-    if (LibraryCache::getInstance().savePageImage(mangaId, chapterIndex, pageIndex, tgaData)) {
-        brls::Logger::info("DownloadsManager: Pre-converted page {} to TGA cache ({}x{}, {} bytes)",
-                          pageIndex, targetW, targetH, tgaData.size());
+    // Write TGA to downloads folder, replacing the JPEG.
+    // The reader detects TGA by header and does a zero-decode pass-through.
+    std::string tgaPath = filePath;
+    size_t dotPos = tgaPath.rfind('.');
+    if (dotPos != std::string::npos) {
+        tgaPath = tgaPath.substr(0, dotPos) + ".tga";
+    } else {
+        tgaPath += ".tga";
+    }
+
+    bool writeOk = false;
+#ifdef __vita__
+    SceUID fd = sceIoOpen(tgaPath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd >= 0) {
+        SceSSize written = sceIoWrite(fd, tgaData.data(), tgaData.size());
+        sceIoClose(fd);
+        writeOk = (written == (SceSSize)tgaData.size());
+    }
+#else
+    std::ofstream out(tgaPath, std::ios::binary);
+    if (out.is_open()) {
+        out.write(reinterpret_cast<const char*>(tgaData.data()), tgaData.size());
+        writeOk = out.good();
+        out.close();
+    }
+#endif
+
+    if (writeOk) {
+        // Delete the original JPEG now that TGA is saved
+        deleteFile(filePath);
+        filePath = tgaPath;  // Update so the download state records the .tga path
+        brls::Logger::info("DownloadsManager: Pre-converted page {} to TGA ({}x{}, {} bytes): {}",
+                          pageIndex, targetW, targetH, tgaData.size(), tgaPath);
+    } else {
+        brls::Logger::error("DownloadsManager: Failed to write TGA for page {}: {}", pageIndex, tgaPath);
     }
 }
 

@@ -232,10 +232,11 @@ private:
     // instead of the slower libwebp decoder.  No-op for non-WebP files.
     bool convertWebPToJpeg(const std::string& filePath);
 
-    // Pre-convert a downloaded page to TGA and save to page cache so the
+    // Pre-convert a downloaded page to TGA in the downloads folder so the
     // reader can load it instantly without any decode step.
+    // Updates filePath to the new .tga path on success.
     void preConvertToPageCache(int mangaId, int chapterIndex, int pageIndex,
-                               const std::string& filePath);
+                               std::string& filePath);
 
     // Internal save without locking (caller must hold m_mutex)
     void saveStateUnlocked();

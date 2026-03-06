@@ -1154,9 +1154,9 @@ void SettingsTab::createDownloadsSection() {
     });
     m_contentBox->addView(autoResumeToggle);
 
-    // Page cache toggle
+    // Page cache toggle (caches decoded pages to disk for faster re-loading)
     auto* pageCacheToggle = new brls::BooleanCell();
-    pageCacheToggle->init("Page Cache", settings.pageCacheEnabled, [&settings](bool value) {
+    pageCacheToggle->init("Cache Read Pages", settings.pageCacheEnabled, [&settings](bool value) {
         settings.pageCacheEnabled = value;
         Application::getInstance().saveSettings();
         if (!value) {
