@@ -147,32 +147,67 @@ static bool isUnderMemoryPressure() {
 // Returns true if all three values were extracted
 static bool extractPageUrlIds(const std::string& url, int& mangaId, int& chapterIdx, int& pageIdx) {
     mangaId = chapterIdx = pageIdx = -1;
+
+    // Try HTTP-style URL first: /manga/X/chapter/Y/page/Z
     size_t mPos = url.find("/manga/");
-    if (mPos == std::string::npos) return false;
-    mPos += 7;
-    size_t mEnd = url.find('/', mPos);
-    if (mEnd == std::string::npos) return false;
+    if (mPos != std::string::npos) {
+        mPos += 7;
+        size_t mEnd = url.find('/', mPos);
+        if (mEnd == std::string::npos) return false;
 
-    size_t cPos = url.find("/chapter/", mEnd);
-    if (cPos == std::string::npos) return false;
-    cPos += 9;
-    size_t cEnd = url.find('/', cPos);
-    if (cEnd == std::string::npos) return false;
+        size_t cPos = url.find("/chapter/", mEnd);
+        if (cPos == std::string::npos) return false;
+        cPos += 9;
+        size_t cEnd = url.find('/', cPos);
+        if (cEnd == std::string::npos) return false;
 
-    size_t pPos = url.find("/page/", cEnd);
-    if (pPos == std::string::npos) return false;
-    pPos += 6;
-    size_t pEnd = url.find('/', pPos);
-    if (pEnd == std::string::npos) pEnd = url.length();
+        size_t pPos = url.find("/page/", cEnd);
+        if (pPos == std::string::npos) return false;
+        pPos += 6;
+        size_t pEnd = url.find('/', pPos);
+        if (pEnd == std::string::npos) pEnd = url.length();
 
-    try {
-        mangaId = std::stoi(url.substr(mPos, mEnd - mPos));
-        chapterIdx = std::stoi(url.substr(cPos, cEnd - cPos));
-        pageIdx = std::stoi(url.substr(pPos, pEnd - pPos));
-        return true;
-    } catch (...) {
-        return false;
+        try {
+            mangaId = std::stoi(url.substr(mPos, mEnd - mPos));
+            chapterIdx = std::stoi(url.substr(cPos, cEnd - cPos));
+            pageIdx = std::stoi(url.substr(pPos, pEnd - pPos));
+            return true;
+        } catch (...) {
+            return false;
+        }
     }
+
+    // Try local download path: .../manga_X/chapter_Y/page_Z.ext
+    size_t lmPos = url.find("manga_");
+    if (lmPos != std::string::npos) {
+        lmPos += 6;
+        size_t lmEnd = url.find('/', lmPos);
+        if (lmEnd == std::string::npos) return false;
+
+        size_t lcPos = url.find("chapter_", lmEnd);
+        if (lcPos == std::string::npos) return false;
+        lcPos += 8;
+        size_t lcEnd = url.find('/', lcPos);
+        if (lcEnd == std::string::npos) return false;
+
+        size_t lpPos = url.find("page_", lcEnd);
+        if (lpPos == std::string::npos) return false;
+        lpPos += 5;
+        // Page index ends at '.' (extension) or end of string
+        size_t lpEnd = url.find('.', lpPos);
+        if (lpEnd == std::string::npos) lpEnd = url.length();
+
+        try {
+            mangaId = std::stoi(url.substr(lmPos, lmEnd - lmPos));
+            chapterIdx = std::stoi(url.substr(lcPos, lcEnd - lcPos));
+            pageIdx = std::stoi(url.substr(lpPos, lpEnd - lpPos));
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    return false;
 }
 
 // Helper to extract manga ID from thumbnail URL

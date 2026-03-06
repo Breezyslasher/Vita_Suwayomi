@@ -1329,6 +1329,13 @@ void ReaderActivity::loadPages() {
                 loadedFromLocal = true;
                 *sharedLoadedFromLocal = true;
 
+                // Eagerly preload the first few local pages on the worker threads
+                // so decode starts immediately, before the UI callback fires.
+                // This significantly reduces perceived first-page load time.
+                for (size_t pi = 0; pi < std::min(rawPages.size(), static_cast<size_t>(3)); pi++) {
+                    ImageLoader::preloadFullSize(rawPages[pi].imageUrl);
+                }
+
                 // Use DownloadsManager metadata for chapter navigation instead of
                 // blocking on network requests. This makes downloaded chapters load
                 // instantly without waiting for server round-trips.
