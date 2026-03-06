@@ -368,6 +368,7 @@ static bool isAnimatedGIF(const uint8_t* data, size_t size) {
                 uint8_t subBlockSize = data[pos];
                 pos++;
                 if (subBlockSize == 0) break;
+                if (pos + subBlockSize > size) { pos = size; break; }
                 pos += subBlockSize;
             }
         } else if (blockType == 0x21) {
@@ -390,6 +391,7 @@ static bool isAnimatedGIF(const uint8_t* data, size_t size) {
                 uint8_t subBlockSize = data[pos];
                 pos++;
                 if (subBlockSize == 0) break;
+                if (pos + subBlockSize > size) { pos = size; break; }
                 pos += subBlockSize;
             }
         } else if (blockType == 0x3B) {
@@ -450,6 +452,7 @@ static std::vector<uint8_t> extractFirstFrameFromGIF(const uint8_t* data, size_t
             size_t lctBytes = 0;
             if (imgPacked & 0x80) {
                 lctBytes = 3 * (1 << ((imgPacked & 0x07) + 1));
+                if (pos + lctBytes > size) break;
                 pos += lctBytes;
             }
 
@@ -462,14 +465,15 @@ static std::vector<uint8_t> extractFirstFrameFromGIF(const uint8_t* data, size_t
                 uint8_t subBlockSize = data[pos];
                 pos++;
                 if (subBlockSize == 0) break;
+                if (pos + subBlockSize > size) { pos = size; break; }
                 pos += subBlockSize;
             }
 
             // Copy everything from imgStart to pos (the full first image block)
             if (pos <= size) {
                 result.insert(result.end(), data + imgStart, data + pos);
+                foundImage = true;
             }
-            foundImage = true;
         } else if (blockType == 0x21) {
             // Extension block — copy it (may be a Graphic Control Extension
             // needed for the first frame's transparency/delay settings)
@@ -483,6 +487,7 @@ static std::vector<uint8_t> extractFirstFrameFromGIF(const uint8_t* data, size_t
                 uint8_t subBlockSize = data[pos];
                 pos++;
                 if (subBlockSize == 0) break;
+                if (pos + subBlockSize > size) { pos = size; break; }
                 pos += subBlockSize;
             }
 
@@ -597,6 +602,22 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
 
     if (totalSegments < 1 || segment < 0 || segment >= totalSegments) return tgaData;
 
+    // Pre-check dimensions to prevent OOM crash on PS Vita.
+    // stb_image decodes at full resolution (width*height*4 bytes) before we can
+    // downscale.  Large GIFs or other images can require 10-30+ MB for the
+    // intermediate RGBA buffer, exhausting the Vita's limited memory.
+    {
+        int preW, preH, preC;
+        if (stbi_info_from_memory(data, static_cast<int>(dataSize), &preW, &preH, &preC)) {
+            long long rgbaBytes = (long long)preW * preH * 4;
+            if (rgbaBytes > 32 * 1024 * 1024) {
+                brls::Logger::warning("ImageLoader: Image too large to decode ({}x{} = {}MB RGBA), skipping",
+                                      preW, preH, rgbaBytes / (1024 * 1024));
+                return tgaData;
+            }
+        }
+    }
+
     int width, height, channels;
     // Force 4 channels (RGBA)
     uint8_t* rgba = stbi_load_from_memory(data, static_cast<int>(dataSize), &width, &height, &channels, 4);
@@ -662,6 +683,24 @@ static std::vector<uint8_t> convertImageToTGASegment(const uint8_t* data, size_t
 // Convert JPEG/PNG to TGA with optional downscaling (using stb_image)
 static std::vector<uint8_t> convertImageToTGA(const uint8_t* data, size_t dataSize, int maxSize) {
     std::vector<uint8_t> tgaData;
+
+    // Pre-check dimensions to prevent OOM crash on PS Vita.
+    // stb_image decodes at full resolution (width*height*4 bytes) before we can
+    // downscale.  Large GIFs can require 10-30+ MB for the intermediate RGBA
+    // buffer, exhausting the Vita's limited memory.  WebP avoids this because
+    // libwebp supports scaled decode natively.
+    {
+        int preW, preH, preC;
+        if (stbi_info_from_memory(data, static_cast<int>(dataSize), &preW, &preH, &preC)) {
+            long long rgbaBytes = (long long)preW * preH * 4;
+            if (rgbaBytes > 32 * 1024 * 1024) {
+                brls::Logger::warning("ImageLoader: Image too large to decode ({}x{} = {}MB RGBA), skipping",
+                                      preW, preH, rgbaBytes / (1024 * 1024));
+                signalOOM("convertImageToTGA pre-check");
+                return tgaData;
+            }
+        }
+    }
 
     int width, height, channels;
     // Force 4 channels (RGBA)
