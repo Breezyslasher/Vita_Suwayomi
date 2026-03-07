@@ -203,6 +203,7 @@ SearchTab::SearchTab() {
     m_popularBtn = new brls::Button();
     m_popularBtn->setText("Popular");
     m_popularBtn->setMarginRight(10);
+    m_popularBtn->setCornerRadius(6);
     m_popularBtn->setVisibility(brls::Visibility::GONE);
     m_popularBtn->registerClickAction([this](brls::View* view) {
         m_browseMode = BrowseMode::POPULAR;
@@ -222,6 +223,7 @@ SearchTab::SearchTab() {
     m_latestBtn = new brls::Button();
     m_latestBtn->setText("Latest");
     m_latestBtn->setMarginRight(10);
+    m_latestBtn->setCornerRadius(6);
     m_latestBtn->setVisibility(brls::Visibility::GONE);
     m_latestBtn->registerClickAction([this](brls::View* view) {
         m_browseMode = BrowseMode::LATEST;
@@ -1390,12 +1392,12 @@ void SearchTab::updateModeButtons() {
             }
         }
 
-        // Highlight the active mode button with accent color
-        NVGcolor accentColor = Application::getInstance().getAccentColor();
-        NVGcolor defaultColor = nvgRGBA(0, 0, 0, 0);  // transparent
+        // Highlight the active mode button using same colors as category buttons
+        NVGcolor activeColor = Application::getInstance().getActiveRowBackground();
+        NVGcolor inactiveColor = Application::getInstance().getInactiveRowBackground();
 
-        m_popularBtn->setBackgroundColor(m_browseMode == BrowseMode::POPULAR ? accentColor : defaultColor);
-        m_latestBtn->setBackgroundColor(m_browseMode == BrowseMode::LATEST ? accentColor : defaultColor);
+        m_popularBtn->setBackgroundColor(m_browseMode == BrowseMode::POPULAR ? activeColor : inactiveColor);
+        m_latestBtn->setBackgroundColor(m_browseMode == BrowseMode::LATEST ? activeColor : inactiveColor);
     }
 }
 
