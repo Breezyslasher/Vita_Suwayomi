@@ -38,9 +38,9 @@ SearchTab::SearchTab() {
     m_headerBox->addView(m_titleLabel);
 
     // Button container for history and search buttons
-    auto* buttonContainer = new brls::Box();
-    buttonContainer->setAxis(brls::Axis::ROW);
-    buttonContainer->setAlignItems(brls::AlignItems::FLEX_END);
+    m_buttonContainer = new brls::Box();
+    m_buttonContainer->setAxis(brls::Axis::ROW);
+    m_buttonContainer->setAlignItems(brls::AlignItems::FLEX_END);
 
     // Search history button with Select icon above
     auto* historyContainer = new brls::Box();
@@ -87,7 +87,7 @@ SearchTab::SearchTab() {
         return false;
     }, true);
     historyContainer->addView(m_historyBtn);
-    buttonContainer->addView(historyContainer);
+    m_buttonContainer->addView(historyContainer);
 
     // Global search button with Start icon above
     auto* searchContainer = new brls::Box();
@@ -134,9 +134,9 @@ SearchTab::SearchTab() {
         return false;
     }, true);
     searchContainer->addView(m_globalSearchBtn);
-    buttonContainer->addView(searchContainer);
+    m_buttonContainer->addView(searchContainer);
 
-    m_headerBox->addView(buttonContainer);
+    m_headerBox->addView(m_buttonContainer);
 
     this->addView(m_headerBox);
 
@@ -589,6 +589,8 @@ void SearchTab::showSources() {
     m_latestBtn->setVisibility(brls::Visibility::GONE);
     m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::GONE);
+    // Restore search/history buttons when returning to source list
+    m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
 
     // CRITICAL: Move focus to a safe target before clearing any views.
     // Focus may be on a grid cell or search result row that will be deleted.
@@ -929,11 +931,17 @@ void SearchTab::performSearch(const std::string& query) {
     m_latestBtn->setVisibility(brls::Visibility::GONE);
     m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+    // Hide search/history buttons during global search
+    m_buttonContainer->setVisibility(brls::Visibility::GONE);
     m_resultsLabel->setText("Searching " + std::to_string(m_filteredSources.size()) + " sources...");
     showLoadingIndicator("Searching sources");
 
     // CRITICAL: Move focus before clearing views to prevent use-after-free
     brls::Application::giveFocus(m_backBtn);
+
+    // Cancel all pending image loads from previous search results to prevent
+    // combined memory pressure from old + new thumbnail downloads crashing the Vita.
+    ImageLoader::cancelAll();
 
     // Hide source list and grid, will show grouped results
     if (m_sourceScrollView) {
@@ -942,6 +950,10 @@ void SearchTab::performSearch(const std::string& query) {
     // Clear source list (safe now - focus moved above)
     if (m_sourceListBox) {
         m_sourceListBox->clearViews();
+    }
+    // Clear old search results to free memory before new search
+    if (m_searchResultsBox) {
+        m_searchResultsBox->clearViews();
     }
     m_contentGrid->setVisibility(brls::Visibility::GONE);
 

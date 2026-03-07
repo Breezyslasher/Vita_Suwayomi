@@ -55,6 +55,7 @@ private:
 
     // Header row with title and search icon
     brls::Box* m_headerBox = nullptr;
+    brls::Box* m_buttonContainer = nullptr;  // Container for history + search buttons
     brls::Button* m_historyBtn = nullptr;
     brls::Button* m_globalSearchBtn = nullptr;
 
