@@ -196,14 +196,6 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
     bool hasSlide = (m_slideX != 0.0f || m_slideY != 0.0f);
 
     if (hasSlide) {
-        // Debug: log draw coords and slide offsets (throttled to avoid spam)
-        static int s_drawLogCounter = 0;
-        if ((s_drawLogCounter++ % 180) == 0) {  // ~every 3 seconds at 60fps
-            brls::Logger::info("DRAW slideX={:.0f} slideY={:.0f} x={:.0f} y={:.0f} "
-                "w={:.0f} h={:.0f} rot={:.0f} img={}x{}",
-                m_slideX, m_slideY, x, y, width, height,
-                m_rotationDegrees, m_imageWidth, m_imageHeight);
-        }
 
         // During swipe: clip in the SWIPE direction only to prevent pages
         // from overlapping each other. The cross-axis is left unclipped

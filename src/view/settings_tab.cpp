@@ -1154,6 +1154,19 @@ void SettingsTab::createDownloadsSection() {
     });
     m_contentBox->addView(autoResumeToggle);
 
+    // Page cache toggle (caches decoded pages to disk for faster re-loading)
+    auto* pageCacheToggle = new brls::BooleanCell();
+    pageCacheToggle->init("Cache Read Pages", settings.pageCacheEnabled, [&settings](bool value) {
+        settings.pageCacheEnabled = value;
+        Application::getInstance().saveSettings();
+        if (!value) {
+            // Clear existing page cache when disabled
+            LibraryCache::getInstance().clearPageCache();
+            brls::Application::notify("Page cache cleared");
+        }
+    });
+    m_contentBox->addView(pageCacheToggle);
+
     // Sync progress now button
     auto* syncNowCell = new brls::DetailCell();
     syncNowCell->setText("Sync Progress Now");

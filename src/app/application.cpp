@@ -1396,6 +1396,7 @@ bool Application::loadSettings() {
     m_settings.autoDownloadChapters = extractBool("autoDownloadChapters", false);
     m_settings.deleteAfterRead = extractBool("deleteAfterRead", false);
     m_settings.autoResumeDownloads = extractBool("autoResumeDownloads", true);
+    m_settings.pageCacheEnabled = extractBool("pageCacheEnabled", true);
 
     // Load browse/source settings
     m_settings.showNsfwSources = extractBool("showNsfwSources", false);
@@ -1801,6 +1802,7 @@ bool Application::saveSettings() {
     json += "  \"autoDownloadChapters\": " + std::string(m_settings.autoDownloadChapters ? "true" : "false") + ",\n";
     json += "  \"deleteAfterRead\": " + std::string(m_settings.deleteAfterRead ? "true" : "false") + ",\n";
     json += "  \"autoResumeDownloads\": " + std::string(m_settings.autoResumeDownloads ? "true" : "false") + ",\n";
+    json += "  \"pageCacheEnabled\": " + std::string(m_settings.pageCacheEnabled ? "true" : "false") + ",\n";
 
     // Browse/Source settings
     json += "  \"showNsfwSources\": " + std::string(m_settings.showNsfwSources ? "true" : "false") + ",\n";

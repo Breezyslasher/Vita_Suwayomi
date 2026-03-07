@@ -142,6 +142,74 @@ static bool isUnderMemoryPressure() {
     return false;
 }
 
+// Helper to extract manga ID, chapter index, and page index from a reader page URL
+// URLs look like: http://server/api/v1/manga/622/chapter/75/page/0
+// Returns true if all three values were extracted
+static bool extractPageUrlIds(const std::string& url, int& mangaId, int& chapterIdx, int& pageIdx) {
+    mangaId = chapterIdx = pageIdx = -1;
+
+    // Try HTTP-style URL first: /manga/X/chapter/Y/page/Z
+    size_t mPos = url.find("/manga/");
+    if (mPos != std::string::npos) {
+        mPos += 7;
+        size_t mEnd = url.find('/', mPos);
+        if (mEnd == std::string::npos) return false;
+
+        size_t cPos = url.find("/chapter/", mEnd);
+        if (cPos == std::string::npos) return false;
+        cPos += 9;
+        size_t cEnd = url.find('/', cPos);
+        if (cEnd == std::string::npos) return false;
+
+        size_t pPos = url.find("/page/", cEnd);
+        if (pPos == std::string::npos) return false;
+        pPos += 6;
+        size_t pEnd = url.find('/', pPos);
+        if (pEnd == std::string::npos) pEnd = url.length();
+
+        try {
+            mangaId = std::stoi(url.substr(mPos, mEnd - mPos));
+            chapterIdx = std::stoi(url.substr(cPos, cEnd - cPos));
+            pageIdx = std::stoi(url.substr(pPos, pEnd - pPos));
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    // Try local download path: .../manga_X/chapter_Y/page_Z.ext
+    size_t lmPos = url.find("manga_");
+    if (lmPos != std::string::npos) {
+        lmPos += 6;
+        size_t lmEnd = url.find('/', lmPos);
+        if (lmEnd == std::string::npos) return false;
+
+        size_t lcPos = url.find("chapter_", lmEnd);
+        if (lcPos == std::string::npos) return false;
+        lcPos += 8;
+        size_t lcEnd = url.find('/', lcPos);
+        if (lcEnd == std::string::npos) return false;
+
+        size_t lpPos = url.find("page_", lcEnd);
+        if (lpPos == std::string::npos) return false;
+        lpPos += 5;
+        // Page index ends at '.' (extension) or end of string
+        size_t lpEnd = url.find('.', lpPos);
+        if (lpEnd == std::string::npos) lpEnd = url.length();
+
+        try {
+            mangaId = std::stoi(url.substr(lmPos, lmEnd - lmPos));
+            chapterIdx = std::stoi(url.substr(lcPos, lcEnd - lcPos));
+            pageIdx = std::stoi(url.substr(lpPos, lpEnd - lpPos));
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 // Helper to extract manga ID from thumbnail URL
 // URLs look like: http://server/api/v1/manga/123/thumbnail or /api/v1/manga/123/thumbnail
 static int extractMangaIdFromUrl(const std::string& url) {
@@ -2596,6 +2664,29 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
 
     auto loadStartTime = std::chrono::steady_clock::now();
 
+    // Check page disk cache before downloading (avoids network + expensive decode)
+    int pageMangaId = -1, pageChapterIdx = -1, pagePageIdx = -1;
+    bool hasPageIds = extractPageUrlIds(url, pageMangaId, pageChapterIdx, pagePageIdx);
+    bool pageCacheOn = Application::getInstance().getSettings().pageCacheEnabled;
+    if (pageCacheOn && hasPageIds && totalSegments <= 1) {
+        std::vector<uint8_t> diskData;
+        if (LibraryCache::getInstance().loadPageImage(pageMangaId, pageChapterIdx, pagePageIdx, diskData)) {
+            auto ioEndTime = std::chrono::steady_clock::now();
+            auto ioMs = std::chrono::duration_cast<std::chrono::milliseconds>(ioEndTime - loadStartTime).count();
+            brls::Logger::info("ImageLoader: [TIMING] Disk cache hit {}ms for {} ({} bytes)",
+                              ioMs, url, diskData.size());
+
+            // Put in LRU memory cache too
+            std::string cacheKey = url + "_full";
+            cachePut(cacheKey, diskData);
+
+            if (target || callback) {
+                queueRotatableTextureUpdate(diskData, target, callback, alive);
+            }
+            return;
+        }
+    }
+
     std::string imageBody;
     bool loadSuccess = false;
 
@@ -2786,8 +2877,12 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             return;
         }
 
-        // Convert images to TGA with size limit for Vita GPU (max texture 2048x2048)
-        const int MAX_TEXTURE_SIZE = 2048;
+        // Convert images to TGA with size limit optimized for Vita display.
+        // The Vita renders at 1280x726 internally, so anything larger than 1280
+        // on the longest dimension is wasted resolution. Using 1280 instead of 2048
+        // reduces decode time and memory significantly:
+        // e.g. 1125x1600 → 900x1280 (saves ~40% pixels, ~40% faster decode)
+        const int MAX_TEXTURE_SIZE = 1280;
 
         // Serialize decodes across all worker threads to prevent concurrent
         // multi-MB decode buffers from exhausting the Vita's memory.
@@ -2874,7 +2969,10 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
                                       static_cast<int>(imageBody.size()), &origW, &origH, &c);
             }
 
-            if (origW > 0 && origH > MAX_TEXTURE_SIZE) {
+            if (origW > 0 && origH > MAX_TEXTURE_SIZE * 2) {
+                // Only auto-split if image is MUCH taller than max (webtoon-style).
+                // For normal manga pages slightly taller than max, proportional
+                // scaling into a single texture is faster than multi-segment decode.
                 int autoSegments = (origH + MAX_TEXTURE_SIZE - 1) / MAX_TEXTURE_SIZE;
 
                 // VRAM budget: cap total texture memory per image to prevent GPU exhaustion.
@@ -3107,6 +3205,11 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
             cacheKey += "_seg" + std::to_string(segment);
         }
         cachePut(cacheKey, imageData);
+
+        // Save to page disk cache for instant loading next time
+        if (pageCacheOn && hasPageIds && totalSegments <= 1 && !imageData.empty()) {
+            LibraryCache::getInstance().savePageImage(pageMangaId, pageChapterIdx, pagePageIdx, imageData);
+        }
 
         {
             auto decodeEndTime = std::chrono::steady_clock::now();

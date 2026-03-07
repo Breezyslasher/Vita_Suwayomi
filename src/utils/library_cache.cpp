@@ -50,6 +50,11 @@ bool LibraryCache::init() {
         return false;
     }
 
+    if (!ensureDirectoryExists(getPageCacheDir())) {
+        brls::Logger::error("LibraryCache: Failed to create page cache directory");
+        return false;
+    }
+
     m_initialized = true;
     brls::Logger::info("LibraryCache: Initialized at {}", getCacheDir());
     return true;
@@ -641,9 +646,170 @@ bool LibraryCache::hasCoverCache(int mangaId) {
 #endif
 }
 
+// --- Reader page image caching ---
+
+std::string LibraryCache::getPageCacheDir() {
+    return getCacheDir() + "/pages";
+}
+
+std::string LibraryCache::getPageCachePath(int mangaId, int chapterId, int pageIndex) {
+    return getPageCacheDir() + "/" + std::to_string(mangaId) + "_" +
+           std::to_string(chapterId) + "_" + std::to_string(pageIndex) + ".tga";
+}
+
+bool LibraryCache::savePageImage(int mangaId, int chapterId, int pageIndex, const std::vector<uint8_t>& imageData) {
+    if (imageData.empty()) return false;
+
+    std::lock_guard<std::mutex> lock(m_pageMutex);
+
+    // Ensure page cache directory exists
+    ensureDirectoryExists(getPageCacheDir());
+
+    std::string path = getPageCachePath(mangaId, chapterId, pageIndex);
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+    if (fd < 0) return false;
+    sceIoWrite(fd, imageData.data(), imageData.size());
+    sceIoClose(fd);
+#else
+    std::ofstream file(path, std::ios::binary);
+    if (!file.is_open()) return false;
+    file.write(reinterpret_cast<const char*>(imageData.data()), imageData.size());
+    file.close();
+#endif
+
+    return true;
+}
+
+bool LibraryCache::loadPageImage(int mangaId, int chapterId, int pageIndex, std::vector<uint8_t>& imageData) {
+    std::lock_guard<std::mutex> lock(m_pageMutex);
+
+    std::string path = getPageCachePath(mangaId, chapterId, pageIndex);
+    imageData.clear();
+
+#ifdef __vita__
+    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
+    if (fd < 0) return false;
+
+    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+
+    if (size <= 18 || size > 16 * 1024 * 1024) {  // TGA must be > 18 bytes, max 16MB
+        sceIoClose(fd);
+        return false;
+    }
+
+    imageData.resize(size);
+    sceIoRead(fd, imageData.data(), size);
+    sceIoClose(fd);
+#else
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) return false;
+
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    if (size <= 18 || size > 16 * 1024 * 1024) return false;
+
+    imageData.resize(size);
+    file.read(reinterpret_cast<char*>(imageData.data()), size);
+    file.close();
+#endif
+
+    // Validate TGA header
+    if (imageData.size() > 18 &&
+        imageData[0] == 0 && imageData[1] == 0 &&
+        imageData[2] == 2 && imageData[16] == 32) {
+        return true;
+    }
+
+    // Invalid data, discard
+    imageData.clear();
+    return false;
+}
+
+bool LibraryCache::hasPageCache(int mangaId, int chapterId, int pageIndex) {
+    std::string path = getPageCachePath(mangaId, chapterId, pageIndex);
+
+#ifdef __vita__
+    SceIoStat stat;
+    return sceIoGetstat(path.c_str(), &stat) >= 0;
+#else
+    struct stat st;
+    return stat(path.c_str(), &st) == 0;
+#endif
+}
+
+void LibraryCache::clearPageCache() {
+    std::lock_guard<std::mutex> lock(m_pageMutex);
+    std::string dir = getPageCacheDir();
+
+#ifdef __vita__
+    SceUID dfd = sceIoDopen(dir.c_str());
+    if (dfd >= 0) {
+        SceIoDirent entry;
+        while (sceIoDread(dfd, &entry) > 0) {
+            if (strstr(entry.d_name, ".tga") != nullptr) {
+                std::string path = dir + "/" + entry.d_name;
+                sceIoRemove(path.c_str());
+            }
+        }
+        sceIoDclose(dfd);
+    }
+#else
+    DIR* d = opendir(dir.c_str());
+    if (d) {
+        struct dirent* dentry;
+        while ((dentry = readdir(d)) != nullptr) {
+            if (strstr(dentry->d_name, ".tga") != nullptr) {
+                std::string path = dir + "/" + dentry->d_name;
+                remove(path.c_str());
+            }
+        }
+        closedir(d);
+    }
+#endif
+
+    brls::Logger::info("LibraryCache: Page cache cleared");
+}
+
+void LibraryCache::clearPageCache(int mangaId) {
+    std::lock_guard<std::mutex> lock(m_pageMutex);
+    std::string dir = getPageCacheDir();
+    std::string prefix = std::to_string(mangaId) + "_";
+
+#ifdef __vita__
+    SceUID dfd = sceIoDopen(dir.c_str());
+    if (dfd >= 0) {
+        SceIoDirent entry;
+        while (sceIoDread(dfd, &entry) > 0) {
+            if (strncmp(entry.d_name, prefix.c_str(), prefix.size()) == 0) {
+                std::string path = dir + "/" + entry.d_name;
+                sceIoRemove(path.c_str());
+            }
+        }
+        sceIoDclose(dfd);
+    }
+#else
+    DIR* d = opendir(dir.c_str());
+    if (d) {
+        struct dirent* dentry;
+        while ((dentry = readdir(d)) != nullptr) {
+            if (strncmp(dentry->d_name, prefix.c_str(), prefix.size()) == 0) {
+                std::string path = dir + "/" + dentry->d_name;
+                remove(path.c_str());
+            }
+        }
+        closedir(d);
+    }
+#endif
+}
+
 void LibraryCache::clearAllCache() {
     clearLibraryCache();
     clearCoverCache();
+    clearPageCache();
 }
 
 void LibraryCache::clearLibraryCache() {

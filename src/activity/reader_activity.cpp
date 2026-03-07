@@ -487,6 +487,11 @@ void ReaderActivity::onContentAvailable() {
                     m_swipeToChapter = false;
                     m_previewIsTransition = false;
                     m_swipingToNext = true;
+                    // Velocity tracking for flick-to-turn
+                    m_swipeStartTime = std::chrono::steady_clock::now();
+                    m_lastVelocityPos = status.position;
+                    m_lastVelocityTime = m_swipeStartTime;
+                    m_swipeVelocity = 0.0f;
                     brls::Logger::info("PAN START rot={} vert={} invert={} page={}/{}",
                         static_cast<int>(m_settings.rotation), useVerticalSwipe,
                         invertDirection, m_currentPage, static_cast<int>(m_pages.size()));
@@ -566,6 +571,18 @@ void ReaderActivity::onContentAvailable() {
 
                         // Update visual positions - all 3 pages slide together
                         updateSwipePreview(scaledDelta);
+
+                        // Track velocity: use last ~50ms of movement for release speed
+                        auto now = std::chrono::steady_clock::now();
+                        auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastVelocityTime).count();
+                        if (dt > 30) {
+                            float lastDelta = useVerticalSwipe ?
+                                (m_touchCurrent.y - m_lastVelocityPos.y) :
+                                (m_touchCurrent.x - m_lastVelocityPos.x);
+                            m_swipeVelocity = (dt > 0) ? (std::abs(lastDelta) * 1000.0f / dt) : 0.0f;
+                            m_lastVelocityPos = m_touchCurrent;
+                            m_lastVelocityTime = now;
+                        }
                     }
                 } else if (status.state == brls::GestureState::END) {
                     // Don't turn the page if we were just pinch-zooming
@@ -598,17 +615,26 @@ void ReaderActivity::onContentAvailable() {
                         // Complete swipe animation - use raw delta for threshold
                         float absSwipe = std::abs(rawDelta);
 
+                        // Allow page turn via either distance OR velocity (flick gesture).
+                        // A fast flick (>600 px/s) that moved at least 30px should turn
+                        // the page even if it didn't reach the full 80px threshold.
+                        const float FLICK_VELOCITY_THRESHOLD = 600.0f;  // px/sec
+                        const float FLICK_MIN_DISTANCE = 30.0f;        // minimum travel for flick
+                        bool isFlick = m_swipeVelocity >= FLICK_VELOCITY_THRESHOLD &&
+                                       absSwipe >= FLICK_MIN_DISTANCE;
+                        bool distanceMet = absSwipe >= PAGE_TURN_THRESHOLD;
+
                         bool hasValidPreview = m_previewPageIndex >= 0 &&
                             m_previewPageIndex < static_cast<int>(m_pages.size());
-                        if (absSwipe >= PAGE_TURN_THRESHOLD && (hasValidPreview || m_swipeToChapter)) {
-                            // Swipe was long enough - turn the page
+                        if ((distanceMet || isFlick) && (hasValidPreview || m_swipeToChapter)) {
+                            // Swipe was long enough or fast enough - turn the page
                             completeSwipeAnimation(true);
-                        } else if (absSwipe >= PAGE_TURN_THRESHOLD) {
+                        } else if (distanceMet || isFlick) {
                             // No valid preview in that direction — on a transition page
                             // this triggers chapter navigation, otherwise just snap back
                             completeSwipeAnimation(isTransitionPage(m_currentPage));
                         } else {
-                            // Swipe too short - snap back
+                            // Swipe too short and too slow - snap back
                             completeSwipeAnimation(false);
                         }
                     } else {
@@ -752,6 +778,11 @@ void ReaderActivity::onContentAvailable() {
                     m_swipeToChapter = false;
                     m_previewIsTransition = false;
                     m_swipingToNext = true;  // reset to avoid stale direction
+                    // Velocity tracking for flick-to-turn
+                    m_swipeStartTime = std::chrono::steady_clock::now();
+                    m_lastVelocityPos = status.position;
+                    m_lastVelocityTime = m_swipeStartTime;
+                    m_swipeVelocity = 0.0f;
                     brls::Logger::info("TSWIPE START: page={}/{} url={}",
                         m_currentPage, static_cast<int>(m_pages.size()),
                         m_currentPage < static_cast<int>(m_pages.size()) ? m_pages[m_currentPage].imageUrl : "?");
@@ -832,6 +863,18 @@ void ReaderActivity::onContentAvailable() {
                         }
 
                         updateSwipePreview(scaledDelta);
+
+                        // Track velocity for flick detection
+                        auto now = std::chrono::steady_clock::now();
+                        auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastVelocityTime).count();
+                        if (dt > 30) {
+                            float lastDelta = useVerticalSwipe ?
+                                (m_touchCurrent.y - m_lastVelocityPos.y) :
+                                (m_touchCurrent.x - m_lastVelocityPos.x);
+                            m_swipeVelocity = (dt > 0) ? (std::abs(lastDelta) * 1000.0f / dt) : 0.0f;
+                            m_lastVelocityPos = m_touchCurrent;
+                            m_lastVelocityTime = now;
+                        }
                     }
                 } else if (status.state == brls::GestureState::END) {
                     if (m_pages.empty()) {
@@ -853,11 +896,19 @@ void ReaderActivity::onContentAvailable() {
                         resetSwipeState();
                     } else if (m_isSwipeAnimating) {
                         float absSwipe = std::abs(rawDelta);
+
+                        // Velocity-based flick detection (same as pageImage handler)
+                        const float FLICK_VELOCITY_THRESHOLD = 600.0f;
+                        const float FLICK_MIN_DISTANCE = 30.0f;
+                        bool isFlick = m_swipeVelocity >= FLICK_VELOCITY_THRESHOLD &&
+                                       absSwipe >= FLICK_MIN_DISTANCE;
+                        bool distanceMet = absSwipe >= PAGE_TURN_THRESHOLD;
+
                         bool hasValidPreview = m_previewPageIndex >= 0 &&
                             m_previewPageIndex < static_cast<int>(m_pages.size());
-                        if (absSwipe >= PAGE_TURN_THRESHOLD && (hasValidPreview || m_swipeToChapter)) {
+                        if ((distanceMet || isFlick) && (hasValidPreview || m_swipeToChapter)) {
                             completeSwipeAnimation(true);
-                        } else if (absSwipe >= PAGE_TURN_THRESHOLD) {
+                        } else if (distanceMet || isFlick) {
                             // No preview page in that direction — on a transition page
                             // this triggers chapter navigation, otherwise just snap back
                             completeSwipeAnimation(true);
@@ -1278,6 +1329,13 @@ void ReaderActivity::loadPages() {
                 loadedFromLocal = true;
                 *sharedLoadedFromLocal = true;
 
+                // Eagerly preload the first few local pages on the worker threads
+                // so decode starts immediately, before the UI callback fires.
+                // This significantly reduces perceived first-page load time.
+                for (size_t pi = 0; pi < std::min(rawPages.size(), static_cast<size_t>(3)); pi++) {
+                    ImageLoader::preloadFullSize(rawPages[pi].imageUrl);
+                }
+
                 // Use DownloadsManager metadata for chapter navigation instead of
                 // blocking on network requests. This makes downloaded chapters load
                 // instantly without waiting for server round-trips.
@@ -1583,19 +1641,19 @@ void ReaderActivity::loadPage(int index) {
 }
 
 void ReaderActivity::preloadAdjacentPages() {
-    // Preload next 2 pages for smoother swiping/reading.
-    // Reduced from 3 to 2 to lower peak memory usage — each page can be
-    // 2+ MB (animated WebP) and the Vita's RAM is very limited.
+    // Preload 2 pages ahead and 2 pages behind for smoother swiping in
+    // both directions. This prevents blank frames when swiping backward
+    // through previously-read pages. The Vita's 20MB LRU cache evicts
+    // the oldest entries, so this won't exceed memory limits.
     for (int i = 1; i <= 2; i++) {
         int nextIdx = m_currentPage + i;
         if (nextIdx < static_cast<int>(m_pages.size()) && !isTransitionPage(nextIdx)) {
             ImageLoader::preloadFullSize(m_pages[nextIdx].imageUrl);
         }
-    }
-
-    // Preload previous page (for going back)
-    if (m_currentPage > 0 && !isTransitionPage(m_currentPage - 1)) {
-        ImageLoader::preloadFullSize(m_pages[m_currentPage - 1].imageUrl);
+        int prevIdx = m_currentPage - i;
+        if (prevIdx >= 0 && !isTransitionPage(prevIdx)) {
+            ImageLoader::preloadFullSize(m_pages[prevIdx].imageUrl);
+        }
     }
 }
 
@@ -3175,7 +3233,7 @@ void ReaderActivity::updateSwipePreview(float offset) {
 
     // Debug: log slide positions once when swipe first starts or direction changes
     static int s_lastLoggedOffset = -99999;
-    int roundedOffset = static_cast<int>(offset / 50) * 50;  // log every ~50px
+    int roundedOffset = static_cast<int>(offset / 150) * 150;  // log every ~150px
     if (roundedOffset != s_lastLoggedOffset) {
         s_lastLoggedOffset = roundedOffset;
         brls::Logger::info("SWIPE offset={:.0f} rot={} vert={} extent={:.0f} | "
@@ -3491,6 +3549,14 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
         turnPage, m_swipeToChapter, m_previewIsTransition,
         m_previewPageIndex, m_swipingToNext, m_currentPage);
 
+    // Helper: start the completion animation with time-based easing
+    auto startAnimation = [this]() {
+        m_completionStartTime = std::chrono::steady_clock::now();
+        m_completionStartOffset = m_completionOffset;
+        m_completionAnimating = true;
+        animateSwipeCompletion();
+    };
+
     // Determine target offset for slide animation
     // Use actual view dimensions, not physical screen dimensions
     bool useVerticalSwipe = (m_settings.rotation == ImageRotation::ROTATE_90 ||
@@ -3508,8 +3574,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
         m_completionTurnPage = false;
         m_completionNavChapter = true;
         m_completionNavNext = m_swipingToNext;
-        m_completionAnimating = true;
-        animateSwipeCompletion();
+        startAnimation();
         return;
     }
 
@@ -3521,8 +3586,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
         m_completionTarget = target;
         m_completionTurnPage = true;
         m_completionNavChapter = false;
-        m_completionAnimating = true;
-        animateSwipeCompletion();
+        startAnimation();
         return;
     }
 
@@ -3550,8 +3614,7 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
             m_completionTurnPage = false;
             m_completionNavChapter = true;
             m_completionNavNext = navNext;
-            m_completionAnimating = true;
-            animateSwipeCompletion();
+            startAnimation();
             return;
         }
     }
@@ -3561,17 +3624,30 @@ void ReaderActivity::completeSwipeAnimation(bool turnPage) {
     m_completionTarget = 0.0f;
     m_completionTurnPage = false;
     m_completionNavChapter = false;
-    m_completionAnimating = true;
-    animateSwipeCompletion();
+    startAnimation();
 }
 
 void ReaderActivity::animateSwipeCompletion() {
     if (!m_completionAnimating) return;
     if (m_alive && !*m_alive) { m_completionAnimating = false; return; }
 
-    float diff = m_completionTarget - m_completionOffset;
-    if (std::abs(diff) < 3.0f) {
-        // Close enough to target — finalize
+    // Time-based ease-out animation (frame-rate independent).
+    // Uses a fixed duration so the animation feels the same at 30fps and 60fps.
+    constexpr float ANIM_DURATION_MS = 180.0f;  // Total animation time
+    auto now = std::chrono::steady_clock::now();
+    float elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        now - m_completionStartTime).count() / 1000.0f;
+    float t = std::min(1.0f, elapsed / ANIM_DURATION_MS);
+
+    // Ease-out cubic: starts fast, decelerates smoothly
+    float eased = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+
+    m_completionOffset = m_completionStartOffset +
+        (m_completionTarget - m_completionStartOffset) * eased;
+    updateSwipePreview(m_completionOffset);
+
+    if (t >= 1.0f) {
+        // Animation complete — finalize
         m_completionAnimating = false;
         if (m_completionNavChapter) {
             // Chapter navigation after slide animation
@@ -3590,10 +3666,6 @@ void ReaderActivity::animateSwipeCompletion() {
         }
         return;
     }
-
-    // Ease toward target (~30% of remaining distance per frame)
-    m_completionOffset += diff * 0.3f;
-    updateSwipePreview(m_completionOffset);
 
     // Schedule next frame
     std::weak_ptr<bool> aliveWeak = m_alive;
