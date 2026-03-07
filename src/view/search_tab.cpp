@@ -143,6 +143,8 @@ SearchTab::SearchTab() {
     // Register Start button to open global search dialog
     // Use brls::sync to defer IME opening to avoid crash during controller input handling
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
+        // Ignore when search/history buttons are disabled (e.g. during global search results)
+        if (m_browseMode == BrowseMode::SEARCH_RESULTS) return true;
         brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             auto a = aliveWeak.lock(); if (!a || !*a) return;
             showGlobalSearchDialog();
@@ -152,6 +154,8 @@ SearchTab::SearchTab() {
 
     // Register Select button to open search history
     this->registerAction("History", brls::ControllerButton::BUTTON_BACK, [this](brls::View* view) {
+        // Ignore when search/history buttons are disabled (e.g. during global search results)
+        if (m_browseMode == BrowseMode::SEARCH_RESULTS) return true;
         brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             auto a = aliveWeak.lock(); if (!a || !*a) return;
             showSearchHistoryDialog();
