@@ -2272,6 +2272,8 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
                 } else {
                     // Found valid TGA in disk cache - add to memory LRU cache
                     cachePut(url, diskData);
+                    // Re-check alive after disk I/O
+                    if (alive && !*alive) return;
                     // Queue for batched texture upload (prevents main thread freeze
                     // when 50+ covers load from disk cache simultaneously)
                     if (target) {
@@ -2516,6 +2518,12 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
             LibraryCache::getInstance().saveCoverImage(mangaId, imageData);
         }
     }
+
+    // Re-check alive flag after the (potentially long) decode.  The owning
+    // view may have been destroyed while we were downloading / decoding.
+    // Without this, a stale `target` pointer reaches processPendingTextures()
+    // and crashes on setImageFromMem().
+    if (alive && !*alive) return;
 
     // Queue for batched texture upload on main thread
     if (target) {

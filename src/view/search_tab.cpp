@@ -943,6 +943,11 @@ void SearchTab::performSearch(const std::string& query) {
     // CRITICAL: Move focus before clearing views to prevent use-after-free
     brls::Application::giveFocus(m_backBtn);
 
+    // Invalidate source icon alive flag BEFORE clearing - pending ImageLoader
+    // callbacks for source icons would otherwise write to freed brls::Image
+    // pointers (the stale callbacks pass the alive check and crash).
+    if (m_sourceIconsAlive) *m_sourceIconsAlive = false;
+
     // Cancel all pending image loads from previous search results to prevent
     // combined memory pressure from old + new thumbnail downloads crashing the Vita.
     ImageLoader::cancelAll();
@@ -1341,6 +1346,9 @@ void SearchTab::handleBackNavigation() {
     m_isNavigatingBack = true;
     m_loadGeneration++;  // Invalidate any in-flight async callbacks
     hideLoadingIndicator();  // Hide any loading text left from cancelled async loads
+    // Invalidate source icon alive flag before clearing to prevent stale
+    // texture uploads to freed brls::Image pointers.
+    if (m_sourceIconsAlive) *m_sourceIconsAlive = false;
     // Cancel pending image loads (source icons or manga thumbnails) to free
     // worker threads and memory before navigating to a new view state.
     ImageLoader::cancelAll();
