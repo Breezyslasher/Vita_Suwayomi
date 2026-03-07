@@ -1434,7 +1434,10 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
             list->setAxis(brls::Axis::COLUMN);
             list->setPadding(10, 15, 10, 15);
 
-            for (const auto& pref : prefs) {
+            for (int prefIdx = 0; prefIdx < static_cast<int>(prefs.size()); prefIdx++) {
+                const auto& pref = prefs[prefIdx];
+                if (!pref.visible) continue;
+
                 auto* prefBox = new brls::Box();
                 prefBox->setAxis(brls::Axis::COLUMN);
                 prefBox->setMarginBottom(15);
@@ -1452,7 +1455,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                     prefBox->addView(summaryLabel);
                 }
 
-                // Value display
+                // Value display (interactive)
                 auto* valueBox = new brls::Box();
                 valueBox->setAxis(brls::Axis::ROW);
                 valueBox->setFocusable(true);
@@ -1466,10 +1469,113 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
 
                 if (pref.type == SourcePreferenceType::CHECKBOX || pref.type == SourcePreferenceType::SWITCH) {
                     valueLabel->setText(pref.currentValue ? "Enabled" : "Disabled");
+
+                    // Toggle on click
+                    valueBox->registerClickAction([this, source, prefIdx, pref, valueLabel](brls::View*) {
+                        bool newValue = !pref.currentValue;
+                        SourcePreferenceChange change;
+                        change.position = prefIdx;
+                        if (pref.type == SourcePreferenceType::SWITCH) {
+                            change.switchState = newValue;
+                        } else {
+                            change.checkBoxState = newValue;
+                        }
+
+                        brls::async([this, source, change, newValue, valueLabel, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                            SuwayomiClient& client = SuwayomiClient::getInstance();
+                            bool success = client.updateSourcePreference(source.id, change);
+                            brls::sync([success, newValue, valueLabel, aliveWeak]() {
+                                auto alive = aliveWeak.lock();
+                                if (!alive || !*alive) return;
+                                if (success) {
+                                    valueLabel->setText(newValue ? "Enabled" : "Disabled");
+                                } else {
+                                    brls::Application::notify("Failed to update setting");
+                                }
+                            });
+                        });
+                        return true;
+                    });
                 } else if (pref.type == SourcePreferenceType::LIST) {
-                    valueLabel->setText(pref.selectedValue);
+                    // Show selected entry display name if available
+                    std::string displayValue = pref.selectedValue;
+                    for (size_t i = 0; i < pref.entryValues.size(); i++) {
+                        if (pref.entryValues[i] == pref.selectedValue && i < pref.entries.size()) {
+                            displayValue = pref.entries[i];
+                            break;
+                        }
+                    }
+                    valueLabel->setText(displayValue);
+
+                    // Show dropdown on click
+                    valueBox->registerClickAction([this, source, prefIdx, pref, valueLabel](brls::View*) {
+                        if (pref.entries.empty()) return true;
+
+                        // Find current selection index
+                        int currentIdx = 0;
+                        for (size_t i = 0; i < pref.entryValues.size(); i++) {
+                            if (pref.entryValues[i] == pref.selectedValue) {
+                                currentIdx = static_cast<int>(i);
+                                break;
+                            }
+                        }
+
+                        brls::Dropdown* dropdown = new brls::Dropdown(
+                            pref.title.empty() ? pref.key : pref.title, pref.entries,
+                            [this, source, prefIdx, pref, valueLabel](int selected) {
+                                if (selected < 0 || selected >= static_cast<int>(pref.entryValues.size())) return;
+
+                                std::string selectedVal = pref.entryValues[selected];
+                                std::string displayName = pref.entries[selected];
+
+                                SourcePreferenceChange change;
+                                change.position = prefIdx;
+                                change.listState = selectedVal;
+
+                                brls::async([this, source, change, displayName, valueLabel, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                                    bool success = client.updateSourcePreference(source.id, change);
+                                    brls::sync([success, displayName, valueLabel, aliveWeak]() {
+                                        auto alive = aliveWeak.lock();
+                                        if (!alive || !*alive) return;
+                                        if (success) {
+                                            valueLabel->setText(displayName);
+                                        } else {
+                                            brls::Application::notify("Failed to update setting");
+                                        }
+                                    });
+                                });
+                            }, currentIdx);
+                        brls::Application::pushActivity(new brls::Activity(dropdown));
+                        return true;
+                    });
                 } else if (pref.type == SourcePreferenceType::EDIT_TEXT) {
-                    valueLabel->setText(pref.currentText);
+                    valueLabel->setText(pref.currentText.empty() ? "(empty)" : pref.currentText);
+
+                    // Open IME on click
+                    valueBox->registerClickAction([this, source, prefIdx, pref, valueLabel](brls::View*) {
+                        brls::Application::getImeManager()->openForText([this, source, prefIdx, pref, valueLabel](std::string text) {
+                            SourcePreferenceChange change;
+                            change.position = prefIdx;
+                            change.editTextState = text;
+
+                            brls::async([this, source, change, text, valueLabel, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                                SuwayomiClient& client = SuwayomiClient::getInstance();
+                                bool success = client.updateSourcePreference(source.id, change);
+                                brls::sync([success, text, valueLabel, aliveWeak]() {
+                                    auto alive = aliveWeak.lock();
+                                    if (!alive || !*alive) return;
+                                    if (success) {
+                                        valueLabel->setText(text.empty() ? "(empty)" : text);
+                                    } else {
+                                        brls::Application::notify("Failed to update setting");
+                                    }
+                                });
+                            });
+                        }, pref.dialogTitle.empty() ? pref.title : pref.dialogTitle,
+                           pref.dialogMessage, 256, pref.currentText);
+                        return true;
+                    });
                 } else {
                     valueLabel->setText(pref.key);
                 }
@@ -1543,8 +1649,8 @@ void ExtensionsTab::showAddRepoDialog() {
         // Show loading notification
         brls::Application::notify("Adding extension repository...");
 
-        // Add repository in background thread
-        std::thread([this, text, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+        // Add repository in background
+        brls::async([this, text, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             bool success = client.addExtensionRepo(text);
 
@@ -1559,7 +1665,7 @@ void ExtensionsTab::showAddRepoDialog() {
                     brls::Application::notify("Failed to add repository");
                 }
             });
-        }).detach();
+        });
     }, "Add Extension Repository",
        "", 256,
        "https://raw.githubusercontent.com/yuzono/manga-repo/repo/index.min.json", 0);

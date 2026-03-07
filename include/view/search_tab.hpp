@@ -74,6 +74,7 @@ private:
     std::vector<Source> m_filteredSources;
     void filterSourcesByLanguage();
     void showGlobalSearchDialog();
+    void showSourceSearchDialog();
     void showFilterDialog();
     void showSearchHistoryDialog();
     void addToSearchHistory(const std::string& query);

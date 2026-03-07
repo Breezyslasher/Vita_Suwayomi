@@ -120,7 +120,11 @@ SearchTab::SearchTab() {
     m_globalSearchBtn->registerClickAction([this](brls::View* view) {
         brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             auto a = aliveWeak.lock(); if (!a || !*a) return;
-            showGlobalSearchDialog();
+            if (m_currentSourceId != 0 && (m_browseMode == BrowseMode::POPULAR || m_browseMode == BrowseMode::LATEST)) {
+                showSourceSearchDialog();
+            } else {
+                showGlobalSearchDialog();
+            }
         });
         return true;
     });
@@ -140,14 +144,18 @@ SearchTab::SearchTab() {
 
     this->addView(m_headerBox);
 
-    // Register Start button to open global search dialog
-    // Use brls::sync to defer IME opening to avoid crash during controller input handling
+    // Register Start button to open search dialog
+    // When browsing a source, search within that source; otherwise global search
     this->registerAction("Search", brls::ControllerButton::BUTTON_START, [this](brls::View* view) {
         // Ignore when search/history buttons are disabled (e.g. during global search results)
         if (m_browseMode == BrowseMode::SEARCH_RESULTS) return true;
         brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             auto a = aliveWeak.lock(); if (!a || !*a) return;
-            showGlobalSearchDialog();
+            if (m_currentSourceId != 0 && (m_browseMode == BrowseMode::POPULAR || m_browseMode == BrowseMode::LATEST)) {
+                showSourceSearchDialog();
+            } else {
+                showGlobalSearchDialog();
+            }
         });
         return true;
     });
@@ -506,6 +514,19 @@ void SearchTab::showGlobalSearchDialog() {
     }, "Global Search", "Search across all sources", 256, m_searchQuery);
 }
 
+void SearchTab::showSourceSearchDialog() {
+    m_loadGeneration++;  // Invalidate in-flight loads so they don't steal focus from IME
+    brls::Application::getImeManager()->openForText([this](std::string text) {
+        if (text.empty()) return;
+
+        m_searchQuery = text;
+        m_titleLabel->setText(m_currentSourceName + " - Search: " + text);
+        addToSearchHistory(text);
+        m_isGlobalSearch = false;
+        performSourceSearch(m_currentSourceId, text);
+    }, "Search " + m_currentSourceName, "Search within this source", 256, m_searchQuery);
+}
+
 void SearchTab::showSearchHistoryDialog() {
     m_loadGeneration++;  // Invalidate in-flight loads so they don't steal focus from dialog
     auto& settings = Application::getInstance().getSettings();
@@ -650,11 +671,28 @@ void SearchTab::showSources() {
         // Language header
         auto* langHeader = new brls::Label();
         std::string langName = lang.empty() ? "Unknown" : lang;
-        if (langName == "en") langName = "English";
-        else if (langName == "multi") langName = "Multi-language";
-        else if (langName == "ja") langName = "Japanese";
-        else if (langName == "ko") langName = "Korean";
-        else if (langName == "zh") langName = "Chinese";
+        // Comprehensive language code to display name mapping
+        static const std::map<std::string, std::string> languageNames = {
+            {"all", "All Languages"}, {"en", "English"}, {"ja", "Japanese"},
+            {"ko", "Korean"}, {"zh", "Chinese"}, {"zh-Hans", "Chinese (Simplified)"},
+            {"zh-Hant", "Chinese (Traditional)"}, {"es", "Spanish"},
+            {"es-419", "Spanish (Latin America)"}, {"pt", "Portuguese"},
+            {"pt-BR", "Portuguese (Brazil)"}, {"fr", "French"}, {"de", "German"},
+            {"it", "Italian"}, {"ru", "Russian"}, {"ar", "Arabic"},
+            {"id", "Indonesian"}, {"th", "Thai"}, {"vi", "Vietnamese"},
+            {"pl", "Polish"}, {"tr", "Turkish"}, {"nl", "Dutch"},
+            {"uk", "Ukrainian"}, {"cs", "Czech"}, {"ro", "Romanian"},
+            {"bg", "Bulgarian"}, {"hu", "Hungarian"}, {"el", "Greek"},
+            {"he", "Hebrew"}, {"fa", "Persian"}, {"hi", "Hindi"},
+            {"bn", "Bengali"}, {"ms", "Malay"}, {"fil", "Filipino"},
+            {"my", "Burmese"}, {"multi", "Multi-language"}
+        };
+        auto langIt = languageNames.find(lang);
+        if (langIt != languageNames.end()) {
+            langName = langIt->second;
+        } else if (!lang.empty()) {
+            langName[0] = std::toupper(langName[0]);
+        }
 
         langHeader->setText(langName + " (" + std::to_string(sources.size()) + ")");
         langHeader->setFontSize(18);
@@ -1003,8 +1041,12 @@ void SearchTab::performSearch(const std::string& query) {
                 brls::Logger::warning("SearchTab: Search failed for source '{}'", source.name);
             }
 
-            // Limit to prevent too many requests
-            if (totalResults >= 100) break;
+            // Limit to prevent too many requests on constrained hardware
+            if (totalResults >= 100) {
+                brls::Logger::info("SearchTab: Hit 100-result limit after {} of {} sources",
+                                   searchedSources, sourcesToSearch.size());
+                break;
+            }
         }
 
         brls::Logger::info("SearchTab: Found {} results from {} sources for '{}' ({} failed)",
@@ -1018,7 +1060,11 @@ void SearchTab::performSearch(const std::string& query) {
             }
         }
 
-        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources, gen, aliveWeak]() {
+        int totalSourceCount = static_cast<int>(sourcesToSearch.size());
+        bool wasTruncated = (totalResults >= 100 && searchedSources < totalSourceCount);
+
+        brls::sync([this, allResults, resultsBySource, failedSources, searchedSources,
+                     totalSourceCount, wasTruncated, gen, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
             if (gen != m_loadGeneration) return;  // Stale callback, user navigated away
@@ -1040,7 +1086,11 @@ void SearchTab::performSearch(const std::string& query) {
                 brls::Application::giveFocus(m_backBtn);
             } else {
                 std::string resultText = std::to_string(allResults.size()) + " results from " +
-                                        std::to_string(resultsBySource.size()) + " sources";
+                                        std::to_string(resultsBySource.size()) + "/" +
+                                        std::to_string(totalSourceCount) + " sources";
+                if (wasTruncated) {
+                    resultText += " (limited)";
+                }
                 if (failedSources > 0) {
                     resultText += " (" + std::to_string(failedSources) + " failed)";
                 }
@@ -1324,8 +1374,6 @@ void SearchTab::loadNextPage() {
 }
 
 void SearchTab::updateModeButtons() {
-    // Highlight active mode button (in a real app, you'd change button style)
-    // For now, just ensure visibility is correct
     if (m_browseMode == BrowseMode::SOURCES) {
         m_popularBtn->setVisibility(brls::Visibility::GONE);
         m_latestBtn->setVisibility(brls::Visibility::GONE);
@@ -1341,6 +1389,13 @@ void SearchTab::updateModeButtons() {
                 break;
             }
         }
+
+        // Highlight the active mode button with accent color
+        NVGcolor accentColor = Application::getInstance().getAccentColor();
+        NVGcolor defaultColor = nvgRGBA(0, 0, 0, 0);  // transparent
+
+        m_popularBtn->setBackgroundColor(m_browseMode == BrowseMode::POPULAR ? accentColor : defaultColor);
+        m_latestBtn->setBackgroundColor(m_browseMode == BrowseMode::LATEST ? accentColor : defaultColor);
     }
 }
 
