@@ -591,6 +591,8 @@ void SearchTab::showSources() {
     m_backBtn->setVisibility(brls::Visibility::GONE);
     // Restore search/history buttons when returning to source list
     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
+    m_historyBtn->setFocusable(true);
+    m_globalSearchBtn->setFocusable(true);
 
     // CRITICAL: Move focus to a safe target before clearing any views.
     // Focus may be on a grid cell or search result row that will be deleted.
@@ -933,6 +935,8 @@ void SearchTab::performSearch(const std::string& query) {
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
     // Hide search/history buttons during global search
     m_buttonContainer->setVisibility(brls::Visibility::GONE);
+    m_historyBtn->setFocusable(false);
+    m_globalSearchBtn->setFocusable(false);
     m_resultsLabel->setText("Searching " + std::to_string(m_filteredSources.size()) + " sources...");
     showLoadingIndicator("Searching sources");
 
@@ -1159,10 +1163,6 @@ void SearchTab::populateSearchResultsBySource() {
     if (m_searchResultsScrollView->getParent() == nullptr) {
         this->addView(m_searchResultsScrollView);
     }
-
-    // Set up navigation from header buttons down to back button (source list is now hidden)
-    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
-    m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
 
     // Transfer focus to first manga cell in search results
     if (firstCell) {
