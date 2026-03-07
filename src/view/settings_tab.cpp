@@ -1252,6 +1252,24 @@ void SettingsTab::createBrowseSection() {
         Application::getInstance().saveSettings();
     });
     m_contentBox->addView(nsfwToggle);
+
+    // Max search history
+    auto* searchHistorySelector = new brls::SelectorCell();
+    std::vector<std::string> historyOptions = {"5", "10", "15", "20", "30", "50", "100"};
+    std::vector<int> historyValues = {5, 10, 15, 20, 30, 50, 100};
+    int currentHistoryIndex = 3; // default to 20
+    for (size_t i = 0; i < historyValues.size(); i++) {
+        if (historyValues[i] == settings.maxSearchHistory) {
+            currentHistoryIndex = static_cast<int>(i);
+            break;
+        }
+    }
+    searchHistorySelector->init("Max Search History", historyOptions, currentHistoryIndex,
+        [historyValues](int index) {
+            Application::getInstance().getSettings().maxSearchHistory = historyValues[index];
+            Application::getInstance().saveSettings();
+        });
+    m_contentBox->addView(searchHistorySelector);
 }
 
 void SettingsTab::updateLanguageFilterCellText() {
