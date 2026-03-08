@@ -841,11 +841,6 @@ void SearchTab::showSourceBrowser(const Source& source) {
     }
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
-    // Set up navigation from mode buttons up to header buttons
-    m_popularBtn->setCustomNavigationRoute(brls::FocusDirection::UP, m_historyBtn);
-    m_latestBtn->setCustomNavigationRoute(brls::FocusDirection::UP, m_historyBtn);
-    m_backBtn->setCustomNavigationRoute(brls::FocusDirection::UP, m_globalSearchBtn);
-
     // RIGHT on Back button wraps to header history button
     m_backBtn->setCustomNavigationRoute(brls::FocusDirection::RIGHT, m_historyBtn);
 
