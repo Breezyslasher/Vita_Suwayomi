@@ -100,6 +100,7 @@ private:
     int m_currentPage = 1;
     bool m_hasNextPage = false;
     bool m_isGlobalSearch = false;  // Track if current search is global or source-specific
+    BrowseMode m_previousBrowseMode = BrowseMode::POPULAR;  // Mode before source-specific search
     int m_loadGeneration = 0;       // Incremented on navigation; stale async callbacks check this
 
     // Navigation helper

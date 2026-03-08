@@ -1109,6 +1109,8 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
     brls::Logger::debug("SearchTab: Searching '{}' in source {}", query, sourceId);
     m_resultsLabel->setText("Searching...");
     showLoadingIndicator("Searching");
+    // Remember which mode (Popular/Latest) the user was in before searching
+    m_previousBrowseMode = m_browseMode;
     m_browseMode = BrowseMode::SEARCH_RESULTS;
     m_currentPage = 1;
 
@@ -1429,11 +1431,11 @@ void SearchTab::handleBackNavigation() {
             showSources();
             m_isNavigatingBack = false;
         } else {
-            // Source-specific search: go back to source's main page (Popular)
+            // Source-specific search: go back to the mode the user was in before searching
             // Find the current source and show its browser again
             for (const auto& source : m_sources) {
                 if (source.id == m_currentSourceId) {
-                    m_browseMode = BrowseMode::POPULAR;
+                    m_browseMode = m_previousBrowseMode;
                     m_titleLabel->setText(source.name);
                     m_searchLabel->setVisibility(brls::Visibility::GONE);
 
@@ -1448,7 +1450,7 @@ void SearchTab::handleBackNavigation() {
                     m_globalSearchBtn->setFocusable(true);
 
                     // CRITICAL: Move focus before clearing search result views
-                    brls::Application::giveFocus(m_popularBtn);
+                    brls::Application::giveFocus(m_browseMode == BrowseMode::LATEST ? m_latestBtn : m_popularBtn);
 
                     // Hide search results, show content grid
                     if (m_searchResultsScrollView) {
@@ -1460,8 +1462,13 @@ void SearchTab::handleBackNavigation() {
                     }
                     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
-                    // Load popular manga
-                    loadPopularManga(m_currentSourceId);
+                    // Reload the mode the user was previously browsing
+                    updateModeButtons();
+                    if (m_browseMode == BrowseMode::LATEST) {
+                        loadLatestManga(m_currentSourceId);
+                    } else {
+                        loadPopularManga(m_currentSourceId);
+                    }
                     m_isNavigatingBack = false;  // Allow back navigation again
                     return;
                 }
