@@ -1111,6 +1111,16 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
     showLoadingIndicator("Searching");
     m_browseMode = BrowseMode::SEARCH_RESULTS;
     m_currentPage = 1;
+
+    // Hide Popular/Latest buttons during source-specific search
+    m_popularBtn->setVisibility(brls::Visibility::GONE);
+    m_latestBtn->setVisibility(brls::Visibility::GONE);
+
+    // Hide search and search history buttons
+    m_buttonContainer->setVisibility(brls::Visibility::GONE);
+    m_historyBtn->setFocusable(false);
+    m_globalSearchBtn->setFocusable(false);
+
     int gen = ++m_loadGeneration;
 
     asyncRun([this, sourceId, query, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
@@ -1431,6 +1441,11 @@ void SearchTab::handleBackNavigation() {
                     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
                     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
                     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+
+                    // Restore search/history buttons
+                    m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
+                    m_historyBtn->setFocusable(true);
+                    m_globalSearchBtn->setFocusable(true);
 
                     // CRITICAL: Move focus before clearing search result views
                     brls::Application::giveFocus(m_popularBtn);
