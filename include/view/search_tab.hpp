@@ -76,6 +76,9 @@ private:
     void showGlobalSearchDialog();
     void showSourceSearchDialog();
     void showFilterDialog();
+    void loadSourceFilters();
+    void applyFilters();
+    void resetFilters();
     void showSearchHistoryDialog();
     void showTagFilterDialog();
     void showTagManageDialog(const Source& source);
@@ -97,6 +100,11 @@ private:
     std::map<std::string, std::vector<Manga>> m_resultsBySource;
     void populateSearchResultsBySource();
     brls::View* createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga);
+
+    // Source filter state
+    std::vector<SourceFilter> m_sourceFilters;
+    bool m_filtersLoaded = false;
+    bool m_filtersActive = false;  // True when user has applied filters
 
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;
