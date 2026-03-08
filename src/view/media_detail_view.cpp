@@ -798,12 +798,12 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     titleRow->addView(titleBox);
     rightPanel->addView(titleRow);
 
-    // Genre tags
-    if (!m_manga.genre.empty()) {
-        m_genreBox = new brls::Box();
-        m_genreBox->setAxis(brls::Axis::ROW);
-        m_genreBox->setMarginBottom(10);
+    // Genre tags (always create the box so it can be populated later by async fetch)
+    m_genreBox = new brls::Box();
+    m_genreBox->setAxis(brls::Axis::ROW);
+    m_genreBox->setMarginBottom(10);
 
+    if (!m_manga.genre.empty()) {
         for (size_t i = 0; i < m_manga.genre.size() && i < 6; i++) {
             auto* genreLabel = new brls::Label();
             genreLabel->setText(m_manga.genre[i]);
@@ -812,8 +812,10 @@ MangaDetailView::MangaDetailView(const Manga& manga)
             genreLabel->setMarginRight(12);
             m_genreBox->addView(genreLabel);
         }
-        rightPanel->addView(m_genreBox);
+    } else {
+        m_genreBox->setVisibility(brls::Visibility::GONE);
     }
+    rightPanel->addView(m_genreBox);
 
     // Description (collapsible - shows 2 lines by default, L to expand)
     brls::Logger::debug("MangaDetailView: Description length = {}", m_manga.description.length());
@@ -1188,9 +1190,10 @@ void MangaDetailView::loadDetails() {
         }
     }
 
-    if (m_manga.description.empty() && Application::getInstance().isConnected()) {
-        // Description missing: use combined query to fetch manga details + chapters in one request
-        // This saves a network round-trip vs fetching them separately
+    // Fetch full details when description, genre, or status are missing (common for non-library books from browse/search)
+    bool needsDetailFetch = m_manga.description.empty() || m_manga.genre.empty() || m_manga.status == MangaStatus::UNKNOWN;
+    if (needsDetailFetch && Application::getInstance().isConnected()) {
+        // Use combined query to fetch manga details + chapters in one request
         brls::Logger::info("MangaDetailView: Using combined query for details + chapters");
         int combinedMangaId = m_manga.id;
         asyncRun([this, combinedMangaId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
@@ -1292,6 +1295,19 @@ void MangaDetailView::loadDetails() {
                     if (updatedManga.genre.size() > m_manga.genre.size()) {
                         m_manga.genre = updatedManga.genre;
                         needsUpdate = true;
+                        // Update genre tags UI
+                        if (!m_manga.genre.empty() && m_genreBox) {
+                            m_genreBox->clearViews();
+                            for (size_t i = 0; i < m_manga.genre.size() && i < 6; i++) {
+                                auto* genreLabel = new brls::Label();
+                                genreLabel->setText(m_manga.genre[i]);
+                                genreLabel->setFontSize(11);
+                                genreLabel->setTextColor(Application::getInstance().getStatusColor());
+                                genreLabel->setMarginRight(12);
+                                m_genreBox->addView(genreLabel);
+                            }
+                            m_genreBox->setVisibility(brls::Visibility::VISIBLE);
+                        }
                     }
                     if (!updatedManga.sourceName.empty() && m_manga.sourceName.empty()) {
                         m_manga.sourceName = updatedManga.sourceName;
@@ -1375,7 +1391,7 @@ void MangaDetailView::loadDetails() {
             }
         });
     } else {
-        // Description already available - just load chapters (parallel with cover + tracking above)
+        // All details (description, genre, status) already available - just load chapters
         loadChapters();
     }
 }
