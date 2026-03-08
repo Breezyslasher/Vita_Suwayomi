@@ -842,8 +842,18 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
     // Set up navigation from header buttons down to mode buttons (source list is now hidden)
-    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
-    m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
+    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_popularBtn);
+    m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_popularBtn);
+
+    // Set up navigation from mode buttons up to header buttons
+    m_popularBtn->setCustomNavigationRoute(brls::FocusDirection::UP, m_historyBtn);
+    m_latestBtn->setCustomNavigationRoute(brls::FocusDirection::UP, m_historyBtn);
+    m_backBtn->setCustomNavigationRoute(brls::FocusDirection::UP, m_globalSearchBtn);
+
+    // RIGHT on Back button wraps to header history button
+    m_backBtn->setCustomNavigationRoute(brls::FocusDirection::RIGHT, m_historyBtn);
+    // LEFT on Popular button wraps to header search button
+    m_popularBtn->setCustomNavigationRoute(brls::FocusDirection::LEFT, m_globalSearchBtn);
 
     // Load popular manga by default
     m_browseMode = BrowseMode::POPULAR;
