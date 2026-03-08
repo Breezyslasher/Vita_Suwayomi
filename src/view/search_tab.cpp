@@ -42,6 +42,39 @@ SearchTab::SearchTab() {
     m_buttonContainer->setAxis(brls::Axis::ROW);
     m_buttonContainer->setAlignItems(brls::AlignItems::FLEX_END);
 
+    // Tag filter button (only shown on source list)
+    m_tagFilterBtn = new brls::Button();
+    m_tagFilterBtn->setWidth(44);
+    m_tagFilterBtn->setHeight(44);
+    m_tagFilterBtn->setCornerRadius(8);
+    m_tagFilterBtn->setMarginRight(10);
+    m_tagFilterBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_tagFilterBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* tagIcon = new brls::Image();
+    tagIcon->setWidth(24);
+    tagIcon->setHeight(24);
+    tagIcon->setScalingType(brls::ImageScalingType::FIT);
+    tagIcon->setImageFromFile("app0:resources/icons/tag.png");
+    m_tagFilterBtn->addView(tagIcon);
+
+    m_tagFilterBtn->registerClickAction([this](brls::View* view) {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
+            showTagFilterDialog();
+        });
+        return true;
+    });
+    m_tagFilterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_tagFilterBtn));
+    m_tagFilterBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (m_browseMode != BrowseMode::SOURCES) {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
+            return true;
+        }
+        return false;
+    }, true);
+    m_buttonContainer->addView(m_tagFilterBtn);
+
     // Search history button with Select icon above
     auto* historyContainer = new brls::Box();
     historyContainer->setAxis(brls::Axis::COLUMN);
@@ -169,6 +202,18 @@ SearchTab::SearchTab() {
             showSearchHistoryDialog();
         });
         return true;
+    });
+
+    // Register Y button to open source filters when browsing a source
+    this->registerAction("Filter", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
+        if (m_currentSourceId != 0 && (m_browseMode == BrowseMode::POPULAR || m_browseMode == BrowseMode::LATEST)) {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
+                showFilterDialog();
+            });
+            return true;
+        }
+        return false;  // Let default handling occur (tag management on source list)
     });
 
     // Register Circle button (B) to go back in search/browse modes
@@ -498,6 +543,27 @@ void SearchTab::filterSourcesByLanguage() {
             }
         }
 
+        // Filter by selected tags
+        if (!settings.selectedSourceTagFilters.empty()) {
+            std::string srcId = std::to_string(source.id);
+            auto tagIt = settings.sourceTags.find(srcId);
+            if (tagIt == settings.sourceTags.end() || tagIt->second.empty()) {
+                // Source has no tags, skip if tag filters are active
+                continue;
+            }
+            // Check if source has at least one of the selected filter tags
+            bool hasMatchingTag = false;
+            for (const auto& filterTag : settings.selectedSourceTagFilters) {
+                if (tagIt->second.count(filterTag) > 0) {
+                    hasMatchingTag = true;
+                    break;
+                }
+            }
+            if (!hasMatchingTag) {
+                continue;
+            }
+        }
+
         m_filteredSources.push_back(source);
     }
 
@@ -607,9 +673,18 @@ void SearchTab::showSources() {
     m_titleLabel->setText("Browse");
     m_searchLabel->setVisibility(brls::Visibility::GONE);
 
-    // Filter sources by language setting
+    // Filter sources by language and tags
     filterSourcesByLanguage();
-    m_resultsLabel->setText(std::to_string(m_filteredSources.size()) + " sources");
+    {
+        const auto& settings = Application::getInstance().getSettings();
+        std::string resultText = std::to_string(m_filteredSources.size()) + " sources";
+        if (!settings.selectedSourceTagFilters.empty()) {
+            resultText += " (filtered by " + std::to_string(settings.selectedSourceTagFilters.size()) + " tag";
+            if (settings.selectedSourceTagFilters.size() > 1) resultText += "s";
+            resultText += ")";
+        }
+        m_resultsLabel->setText(resultText);
+    }
 
     // Hide source-specific buttons
     m_popularBtn->setVisibility(brls::Visibility::GONE);
@@ -732,12 +807,35 @@ void SearchTab::showSources() {
             }
             sourceRow->addView(sourceIcon);
 
-            // Source name
+            // Source name and tags container
+            auto* nameTagBox = new brls::Box();
+            nameTagBox->setAxis(brls::Axis::COLUMN);
+            nameTagBox->setGrow(1.0f);
+
             auto* nameLabel = new brls::Label();
             nameLabel->setText(source.name);
             nameLabel->setFontSize(16);
-            nameLabel->setGrow(1.0f);
-            sourceRow->addView(nameLabel);
+            nameTagBox->addView(nameLabel);
+
+            // Show tags for this source
+            {
+                const auto& settings = Application::getInstance().getSettings();
+                std::string srcId = std::to_string(source.id);
+                auto tagIt = settings.sourceTags.find(srcId);
+                if (tagIt != settings.sourceTags.end() && !tagIt->second.empty()) {
+                    auto* tagLabel = new brls::Label();
+                    std::string tagStr;
+                    for (const auto& t : tagIt->second) {
+                        if (!tagStr.empty()) tagStr += ", ";
+                        tagStr += t;
+                    }
+                    tagLabel->setText(tagStr);
+                    tagLabel->setFontSize(12);
+                    tagLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
+                    nameTagBox->addView(tagLabel);
+                }
+            }
+            sourceRow->addView(nameTagBox);
 
             // Click to browse source
             Source sourceCopy = source;
@@ -746,6 +844,15 @@ void SearchTab::showSources() {
                 return true;
             });
             sourceRow->addGestureRecognizer(new brls::TapGestureRecognizer(sourceRow));
+
+            // Y button to manage tags on this source
+            sourceRow->registerAction("Tags", brls::ControllerButton::BUTTON_Y, [this, sourceCopy](brls::View*) {
+                brls::sync([this, sourceCopy, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                    auto a = aliveWeak.lock(); if (!a || !*a) return;
+                    showTagManageDialog(sourceCopy);
+                });
+                return true;
+            }, false);  // visible action
 
             // Register B button on source row to go back (exit tab in SOURCES mode)
             // This ensures B button works when focus is on source rows
@@ -776,10 +883,12 @@ void SearchTab::showSources() {
 
     // Set up navigation from header buttons down to first source row
     if (firstSourceRow) {
+        m_tagFilterBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
         m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
         m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
     } else {
         // No source rows - clear navigation routes to prevent crash
+        m_tagFilterBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
         m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
         m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
     }
@@ -803,9 +912,17 @@ void SearchTab::showSourceBrowser(const Source& source) {
     // Show source-specific buttons
     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    // Filter button hidden until source filters are implemented
+    // Show filter button - will be shown once filters are loaded
     m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+
+    // Reset filter state for new source
+    m_sourceFilters.clear();
+    m_filtersLoaded = false;
+    m_filtersActive = false;
+    if (m_filterBtn) {
+        m_filterBtn->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+    }
 
     // CRITICAL: Move focus away from source list BEFORE clearing views.
     // The currently focused view may be a source row that clearViews() will delete.
@@ -841,21 +958,564 @@ void SearchTab::showSourceBrowser(const Source& source) {
     }
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
-    // RIGHT on Back button wraps to header history button
-    m_backBtn->setCustomNavigationRoute(brls::FocusDirection::RIGHT, m_historyBtn);
-    // LEFT on History/Search buttons goes back to Back button
-    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::LEFT, m_backBtn);
+    // Navigation chain: [< Back] → [Tag] → [History] → [Search]
+    // RIGHT on Back button goes to Tag button
+    m_backBtn->setCustomNavigationRoute(brls::FocusDirection::RIGHT, m_tagFilterBtn);
+    // LEFT on Tag button goes to Back button
+    m_tagFilterBtn->setCustomNavigationRoute(brls::FocusDirection::LEFT, m_backBtn);
+    // LEFT on History button goes to Tag button
+    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::LEFT, m_tagFilterBtn);
 
     // Load popular manga by default
     m_browseMode = BrowseMode::POPULAR;
     loadPopularManga(source.id);
     updateModeButtons();
+
+    // Load source filters in background
+    loadSourceFilters();
+}
+
+void SearchTab::loadSourceFilters() {
+    if (m_filtersLoaded || m_currentSourceId == 0) return;
+
+    asyncRun([this, sourceId = m_currentSourceId, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<SourceFilter> filters;
+
+        if (client.fetchSourceFilters(sourceId, filters)) {
+            brls::sync([this, filters, sourceId, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                if (m_currentSourceId != sourceId) return;  // User navigated away
+                m_sourceFilters = filters;
+                m_filtersLoaded = true;
+
+                // Show the filter button if source has actionable filters
+                bool hasFilters = false;
+                for (const auto& f : filters) {
+                    if (f.type != FilterType::HEADER && f.type != FilterType::SEPARATOR) {
+                        hasFilters = true;
+                        break;
+                    }
+                }
+                if (hasFilters && m_filterBtn) {
+                    m_filterBtn->setVisibility(brls::Visibility::VISIBLE);
+                }
+                brls::Logger::info("Loaded {} filters for source", filters.size());
+            });
+        } else {
+            brls::Logger::warning("Failed to load source filters");
+        }
+    });
+}
+
+void SearchTab::resetFilters() {
+    for (auto& filter : m_sourceFilters) {
+        switch (filter.type) {
+            case FilterType::TEXT:
+                filter.textState = filter.textDefault;
+                break;
+            case FilterType::CHECKBOX:
+                filter.checkBoxState = filter.checkBoxDefault;
+                break;
+            case FilterType::TRISTATE:
+                filter.triState = TriState::IGNORE;
+                break;
+            case FilterType::SELECT:
+                filter.selectState = filter.selectDefault;
+                break;
+            case FilterType::SORT:
+                filter.sortState = filter.sortDefault;
+                break;
+            case FilterType::GROUP:
+                for (auto& child : filter.filters) {
+                    switch (child.type) {
+                        case FilterType::TRISTATE:
+                            child.triState = TriState::IGNORE;
+                            break;
+                        case FilterType::CHECKBOX:
+                            child.checkBoxState = child.checkBoxDefault;
+                            break;
+                        case FilterType::TEXT:
+                            child.textState = child.textDefault;
+                            break;
+                        case FilterType::SELECT:
+                            child.selectState = child.selectDefault;
+                            break;
+                        default: break;
+                    }
+                }
+                break;
+            default: break;
+        }
+    }
+    m_filtersActive = false;
+}
+
+void SearchTab::applyFilters() {
+    if (m_currentSourceId == 0) return;
+
+    m_filtersActive = true;
+    m_currentPage = 1;
+    m_mangaList.clear();
+    m_browseMode = BrowseMode::POPULAR;  // Treat filter search as browsing
+    showLoadingIndicator("Applying filters");
+    m_resultsLabel->setText("Searching with filters...");
+    updateModeButtons();
+
+    // Update filter button to show it's active
+    if (m_filterBtn) {
+        m_filterBtn->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+    }
+
+    int gen = ++m_loadGeneration;
+
+    asyncRun([this, gen, aliveWeak = std::weak_ptr<bool>(m_alive),
+              sourceId = m_currentSourceId, filters = m_sourceFilters]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Manga> manga;
+        bool hasNextPage = false;
+
+        if (client.searchMangaWithFilters(sourceId, "", 1, filters, manga, hasNextPage)) {
+            brls::sync([this, manga, hasNextPage, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                if (gen != m_loadGeneration) return;
+                hideLoadingIndicator();
+                m_mangaList = manga;
+                m_hasNextPage = hasNextPage;
+                m_contentGrid->setDataSource(m_mangaList);
+                m_resultsLabel->setText(std::to_string(manga.size()) + " results (filtered)");
+
+                if (!manga.empty()) {
+                    m_contentGrid->focusIndex(0);
+                }
+            });
+        } else {
+            brls::sync([this, gen, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                if (gen != m_loadGeneration) return;
+                hideLoadingIndicator();
+                m_resultsLabel->setText("Filter search failed");
+                brls::Application::giveFocus(m_filterBtn);
+            });
+        }
+    });
 }
 
 void SearchTab::showFilterDialog() {
-    // Source filter dialog not yet implemented
-    // Would show configurable filters like genres, status, etc.
-    brls::Application::notify("Source filters coming soon");
+    if (m_sourceFilters.empty()) {
+        if (!m_filtersLoaded) {
+            brls::Application::notify("Loading filters...");
+            loadSourceFilters();
+        } else {
+            brls::Application::notify("This source has no filters");
+        }
+        return;
+    }
+
+    m_loadGeneration++;  // Invalidate in-flight loads
+
+    // Build the filter options list
+    std::vector<std::string> options;
+    // Track which filter index each option maps to
+    std::vector<std::pair<int, int>> filterIndices;  // (filter_index, sub_index) where sub_index=-1 for top-level
+
+    for (size_t i = 0; i < m_sourceFilters.size(); i++) {
+        const auto& filter = m_sourceFilters[i];
+
+        switch (filter.type) {
+            case FilterType::HEADER:
+                options.push_back("--- " + filter.name + " ---");
+                filterIndices.push_back({static_cast<int>(i), -1});
+                break;
+
+            case FilterType::SEPARATOR:
+                options.push_back("----------");
+                filterIndices.push_back({static_cast<int>(i), -1});
+                break;
+
+            case FilterType::TEXT:
+                options.push_back(filter.name + ": " +
+                    (filter.textState.empty() ? "(empty)" : filter.textState));
+                filterIndices.push_back({static_cast<int>(i), -1});
+                break;
+
+            case FilterType::CHECKBOX:
+                options.push_back((filter.checkBoxState ? "[x] " : "[  ] ") + filter.name);
+                filterIndices.push_back({static_cast<int>(i), -1});
+                break;
+
+            case FilterType::TRISTATE: {
+                std::string prefix;
+                switch (filter.triState) {
+                    case TriState::IGNORE:  prefix = "[  ] "; break;
+                    case TriState::INCLUDE: prefix = "[+] "; break;
+                    case TriState::EXCLUDE: prefix = "[-] "; break;
+                }
+                options.push_back(prefix + filter.name);
+                filterIndices.push_back({static_cast<int>(i), -1});
+                break;
+            }
+
+            case FilterType::SELECT:
+                if (!filter.selectOptions.empty() && filter.selectState >= 0 &&
+                    filter.selectState < static_cast<int>(filter.selectOptions.size())) {
+                    options.push_back(filter.name + ": " + filter.selectOptions[filter.selectState]);
+                } else {
+                    options.push_back(filter.name + ": (select)");
+                }
+                filterIndices.push_back({static_cast<int>(i), -1});
+                break;
+
+            case FilterType::SORT: {
+                std::string sortLabel = filter.name + ": ";
+                if (!filter.sortOptions.empty() && filter.sortState.index >= 0 &&
+                    filter.sortState.index < static_cast<int>(filter.sortOptions.size())) {
+                    sortLabel += filter.sortOptions[filter.sortState.index];
+                    sortLabel += (filter.sortState.ascending ? " (Asc)" : " (Desc)");
+                } else {
+                    sortLabel += "(default)";
+                }
+                options.push_back(sortLabel);
+                filterIndices.push_back({static_cast<int>(i), -1});
+                break;
+            }
+
+            case FilterType::GROUP:
+                // Show group header
+                options.push_back("=== " + filter.name + " ===");
+                filterIndices.push_back({static_cast<int>(i), -1});
+
+                // Show group children
+                for (size_t j = 0; j < filter.filters.size(); j++) {
+                    const auto& child = filter.filters[j];
+                    switch (child.type) {
+                        case FilterType::TRISTATE: {
+                            std::string prefix;
+                            switch (child.triState) {
+                                case TriState::IGNORE:  prefix = "  [  ] "; break;
+                                case TriState::INCLUDE: prefix = "  [+] "; break;
+                                case TriState::EXCLUDE: prefix = "  [-] "; break;
+                            }
+                            options.push_back(prefix + child.name);
+                            break;
+                        }
+                        case FilterType::CHECKBOX:
+                            options.push_back(std::string("  ") + (child.checkBoxState ? "[x] " : "[  ] ") + child.name);
+                            break;
+                        case FilterType::TEXT:
+                            options.push_back("  " + child.name + ": " +
+                                (child.textState.empty() ? "(empty)" : child.textState));
+                            break;
+                        case FilterType::SELECT:
+                            if (!child.selectOptions.empty() && child.selectState >= 0 &&
+                                child.selectState < static_cast<int>(child.selectOptions.size())) {
+                                options.push_back("  " + child.name + ": " + child.selectOptions[child.selectState]);
+                            } else {
+                                options.push_back("  " + child.name);
+                            }
+                            break;
+                        default:
+                            options.push_back("  " + child.name);
+                            break;
+                    }
+                    filterIndices.push_back({static_cast<int>(i), static_cast<int>(j)});
+                }
+                break;
+        }
+    }
+
+    // Add action buttons at the bottom
+    options.push_back(">> Apply Filters <<");
+    filterIndices.push_back({-1, 0});  // Apply
+    options.push_back(">> Reset Filters <<");
+    filterIndices.push_back({-1, 1});  // Reset
+
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Source Filters", options,
+        [this, filterIndices](int selected) {
+            if (selected < 0 || selected >= static_cast<int>(filterIndices.size())) return;
+
+            brls::sync([this, selected, filterIndices]() {
+                auto [filterIdx, subIdx] = filterIndices[selected];
+
+                // Action buttons
+                if (filterIdx == -1) {
+                    if (subIdx == 0) {
+                        // Apply
+                        applyFilters();
+                    } else {
+                        // Reset
+                        resetFilters();
+                        if (m_filterBtn) {
+                            m_filterBtn->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                        }
+                        brls::Application::notify("Filters reset");
+                        // Reload popular manga
+                        loadPopularManga(m_currentSourceId);
+                    }
+                    return;
+                }
+
+                if (filterIdx < 0 || filterIdx >= static_cast<int>(m_sourceFilters.size())) return;
+                auto& filter = m_sourceFilters[filterIdx];
+
+                // Handle group child
+                if (subIdx >= 0 && filter.type == FilterType::GROUP) {
+                    if (subIdx >= static_cast<int>(filter.filters.size())) return;
+                    auto& child = filter.filters[subIdx];
+
+                    switch (child.type) {
+                        case FilterType::TRISTATE:
+                            // Cycle: IGNORE -> INCLUDE -> EXCLUDE -> IGNORE
+                            switch (child.triState) {
+                                case TriState::IGNORE:  child.triState = TriState::INCLUDE; break;
+                                case TriState::INCLUDE: child.triState = TriState::EXCLUDE; break;
+                                case TriState::EXCLUDE: child.triState = TriState::IGNORE; break;
+                            }
+                            // Re-show dialog to reflect change
+                            showFilterDialog();
+                            break;
+                        case FilterType::CHECKBOX:
+                            child.checkBoxState = !child.checkBoxState;
+                            showFilterDialog();
+                            break;
+                        case FilterType::TEXT:
+                            brls::Application::getImeManager()->openForText(
+                                [this, filterIdx, subIdx](std::string text) {
+                                    if (filterIdx < static_cast<int>(m_sourceFilters.size()) &&
+                                        subIdx < static_cast<int>(m_sourceFilters[filterIdx].filters.size())) {
+                                        m_sourceFilters[filterIdx].filters[subIdx].textState = text;
+                                    }
+                                    showFilterDialog();
+                                }, child.name, "", 256, child.textState);
+                            break;
+                        case FilterType::SELECT: {
+                            // Show sub-dropdown for select options
+                            brls::Dropdown* selectDrop = new brls::Dropdown(
+                                child.name, child.selectOptions,
+                                [this, filterIdx, subIdx](int sel) {
+                                    if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size()) &&
+                                        subIdx < static_cast<int>(m_sourceFilters[filterIdx].filters.size())) {
+                                        m_sourceFilters[filterIdx].filters[subIdx].selectState = sel;
+                                    }
+                                    brls::sync([this]() { showFilterDialog(); });
+                                }, child.selectState);
+                            brls::Application::pushActivity(new brls::Activity(selectDrop));
+                            break;
+                        }
+                        default: break;
+                    }
+                    return;
+                }
+
+                // Handle top-level filters
+                switch (filter.type) {
+                    case FilterType::HEADER:
+                    case FilterType::SEPARATOR:
+                        // No action for headers/separators
+                        showFilterDialog();
+                        break;
+
+                    case FilterType::TEXT:
+                        brls::Application::getImeManager()->openForText(
+                            [this, filterIdx](std::string text) {
+                                if (filterIdx < static_cast<int>(m_sourceFilters.size())) {
+                                    m_sourceFilters[filterIdx].textState = text;
+                                }
+                                showFilterDialog();
+                            }, filter.name, "", 256, filter.textState);
+                        break;
+
+                    case FilterType::CHECKBOX:
+                        filter.checkBoxState = !filter.checkBoxState;
+                        showFilterDialog();
+                        break;
+
+                    case FilterType::TRISTATE:
+                        // Cycle: IGNORE -> INCLUDE -> EXCLUDE -> IGNORE
+                        switch (filter.triState) {
+                            case TriState::IGNORE:  filter.triState = TriState::INCLUDE; break;
+                            case TriState::INCLUDE: filter.triState = TriState::EXCLUDE; break;
+                            case TriState::EXCLUDE: filter.triState = TriState::IGNORE; break;
+                        }
+                        showFilterDialog();
+                        break;
+
+                    case FilterType::SELECT: {
+                        // Show sub-dropdown for select options
+                        brls::Dropdown* selectDrop = new brls::Dropdown(
+                            filter.name, filter.selectOptions,
+                            [this, filterIdx](int sel) {
+                                if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size())) {
+                                    m_sourceFilters[filterIdx].selectState = sel;
+                                }
+                                brls::sync([this]() { showFilterDialog(); });
+                            }, filter.selectState);
+                        brls::Application::pushActivity(new brls::Activity(selectDrop));
+                        break;
+                    }
+
+                    case FilterType::SORT: {
+                        // Show sort options with ascending/descending
+                        std::vector<std::string> sortOpts;
+                        for (const auto& opt : filter.sortOptions) {
+                            sortOpts.push_back(opt + " (Ascending)");
+                            sortOpts.push_back(opt + " (Descending)");
+                        }
+                        int currentSortIdx = filter.sortState.index * 2 + (filter.sortState.ascending ? 0 : 1);
+                        brls::Dropdown* sortDrop = new brls::Dropdown(
+                            filter.name, sortOpts,
+                            [this, filterIdx](int sel) {
+                                if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size())) {
+                                    m_sourceFilters[filterIdx].sortState.index = sel / 2;
+                                    m_sourceFilters[filterIdx].sortState.ascending = (sel % 2 == 0);
+                                }
+                                brls::sync([this]() { showFilterDialog(); });
+                            }, currentSortIdx);
+                        brls::Application::pushActivity(new brls::Activity(sortDrop));
+                        break;
+                    }
+
+                    case FilterType::GROUP:
+                        // Group header - just re-show dialog
+                        showFilterDialog();
+                        break;
+                }
+            });
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void SearchTab::collectAllTags(std::set<std::string>& allTags) {
+    const auto& settings = Application::getInstance().getSettings();
+    for (const auto& [sourceId, tags] : settings.sourceTags) {
+        for (const auto& tag : tags) {
+            allTags.insert(tag);
+        }
+    }
+}
+
+void SearchTab::showTagFilterDialog() {
+    std::set<std::string> allTags;
+    collectAllTags(allTags);
+
+    if (allTags.empty()) {
+        brls::Application::notify("No tags yet - long press a source to add tags");
+        return;
+    }
+
+    auto& settings = Application::getInstance().getSettings();
+
+    // Build options: each tag with a check mark if active
+    std::vector<std::string> options;
+    std::vector<std::string> tagList;
+    for (const auto& tag : allTags) {
+        bool active = settings.selectedSourceTagFilters.count(tag) > 0;
+        options.push_back((active ? "[x] " : "[  ] ") + tag);
+        tagList.push_back(tag);
+    }
+    options.push_back("Clear All Filters");
+
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Filter by Tag", options,
+        [this, tagList](int selected) {
+            if (selected < 0) return;
+
+            brls::sync([this, selected, tagList]() {
+                auto& settings = Application::getInstance().getSettings();
+
+                if (selected == static_cast<int>(tagList.size())) {
+                    // Clear all filters
+                    settings.selectedSourceTagFilters.clear();
+                    Application::getInstance().saveSettings();
+                    showSources();
+                    brls::Application::notify("Tag filters cleared");
+                } else if (selected < static_cast<int>(tagList.size())) {
+                    // Toggle the selected tag filter
+                    const std::string& tag = tagList[selected];
+                    if (settings.selectedSourceTagFilters.count(tag) > 0) {
+                        settings.selectedSourceTagFilters.erase(tag);
+                    } else {
+                        settings.selectedSourceTagFilters.insert(tag);
+                    }
+                    Application::getInstance().saveSettings();
+                    showSources();
+                }
+            });
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void SearchTab::showTagManageDialog(const Source& source) {
+    auto& settings = Application::getInstance().getSettings();
+    std::string sourceIdStr = std::to_string(source.id);
+
+    // Get current tags for this source
+    std::set<std::string> currentTags;
+    auto it = settings.sourceTags.find(sourceIdStr);
+    if (it != settings.sourceTags.end()) {
+        currentTags = it->second;
+    }
+
+    // Collect all existing tags across all sources
+    std::set<std::string> allTags;
+    collectAllTags(allTags);
+
+    // Build options: existing tags with check marks + "Add new tag" + "Done"
+    std::vector<std::string> options;
+    std::vector<std::string> tagList;
+    for (const auto& tag : allTags) {
+        bool has = currentTags.count(tag) > 0;
+        options.push_back((has ? "[x] " : "[  ] ") + tag);
+        tagList.push_back(tag);
+    }
+    options.push_back("+ Add New Tag");
+    options.push_back("Done");
+
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Tags: " + source.name, options,
+        [this, sourceIdStr, tagList, source](int selected) {
+            if (selected < 0) return;
+
+            brls::sync([this, selected, sourceIdStr, tagList, source]() {
+                auto& settings = Application::getInstance().getSettings();
+
+                if (selected == static_cast<int>(tagList.size())) {
+                    // Add new tag - open IME
+                    brls::Application::getImeManager()->openForText([this, sourceIdStr, source](std::string text) {
+                        if (text.empty()) return;
+                        auto& s = Application::getInstance().getSettings();
+                        s.sourceTags[sourceIdStr].insert(text);
+                        Application::getInstance().saveSettings();
+                        brls::Application::notify("Tag '" + text + "' added");
+                        // Re-show the dialog with the new tag
+                        showTagManageDialog(source);
+                    }, "New Tag", "Enter tag name", 32, "");
+                } else if (selected == static_cast<int>(tagList.size()) + 1) {
+                    // Done - refresh source list
+                    showSources();
+                } else if (selected < static_cast<int>(tagList.size())) {
+                    // Toggle tag on this source
+                    const std::string& tag = tagList[selected];
+                    auto& sourceTags = settings.sourceTags[sourceIdStr];
+                    if (sourceTags.count(tag) > 0) {
+                        sourceTags.erase(tag);
+                        if (sourceTags.empty()) {
+                            settings.sourceTags.erase(sourceIdStr);
+                        }
+                    } else {
+                        sourceTags.insert(tag);
+                    }
+                    Application::getInstance().saveSettings();
+                    // Re-show the dialog with updated state
+                    showTagManageDialog(source);
+                }
+            });
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
 }
 
 void SearchTab::loadPopularManga(int64_t sourceId) {
@@ -1345,15 +2005,19 @@ void SearchTab::loadNextPage() {
     auto sourceId = m_currentSourceId;
     auto page = m_currentPage;
     auto query = m_searchQuery;
+    auto filtersActive = m_filtersActive;
+    auto filters = m_sourceFilters;
 
     asyncRun([this, firstNewItemIndex, gen, aliveWeak = std::weak_ptr<bool>(m_alive),
-              browseMode, sourceId, page, query]() {
+              browseMode, sourceId, page, query, filtersActive, filters]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<Manga> manga;
         bool hasNextPage = false;
 
         bool success = false;
-        if (browseMode == BrowseMode::POPULAR) {
+        if (filtersActive) {
+            success = client.searchMangaWithFilters(sourceId, "", page, filters, manga, hasNextPage);
+        } else if (browseMode == BrowseMode::POPULAR) {
             success = client.fetchPopularManga(sourceId, page, manga, hasNextPage);
         } else if (browseMode == BrowseMode::LATEST) {
             success = client.fetchLatestManga(sourceId, page, manga, hasNextPage);
@@ -1392,10 +2056,16 @@ void SearchTab::updateModeButtons() {
     if (m_browseMode == BrowseMode::SOURCES) {
         m_popularBtn->setVisibility(brls::Visibility::GONE);
         m_latestBtn->setVisibility(brls::Visibility::GONE);
+        m_filterBtn->setVisibility(brls::Visibility::GONE);
         m_backBtn->setVisibility(brls::Visibility::GONE);
     } else {
         m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
         m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+
+        // Show filter button if source has filters loaded
+        if (m_filtersLoaded && !m_sourceFilters.empty()) {
+            m_filterBtn->setVisibility(brls::Visibility::VISIBLE);
+        }
 
         // Show latest button if source supports it
         for (const auto& source : m_sources) {
@@ -1443,6 +2113,7 @@ void SearchTab::handleBackNavigation() {
                     // Update buttons for source browsing mode
                     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
                     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+                    m_filterBtn->setVisibility(m_filtersLoaded && !m_sourceFilters.empty() ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
                     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
 
                     // Restore search/history buttons
@@ -1480,6 +2151,9 @@ void SearchTab::handleBackNavigation() {
         }
     } else {
         // For POPULAR/LATEST modes: go back to sources list
+        m_sourceFilters.clear();
+        m_filtersLoaded = false;
+        m_filtersActive = false;
         showSources();
         m_isNavigatingBack = false;
     }

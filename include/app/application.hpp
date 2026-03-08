@@ -199,6 +199,10 @@ struct AppSettings {
     std::set<std::string> enabledSourceLanguages;  // Empty = all languages, otherwise filter by these (e.g. "en", "multi")
     bool showNsfwSources = false;
 
+    // Source Tags (user-assigned labels for filtering)
+    std::map<std::string, std::set<std::string>> sourceTags;  // sourceId -> set of tag names
+    std::set<std::string> selectedSourceTagFilters;            // Currently active tag filters (empty = show all)
+
     // Network Settings
     std::string localServerUrl;        // Local network URL (e.g., http://192.168.1.100:4567)
     std::string remoteServerUrl;       // Remote/external URL (e.g., https://myserver.com:4567)

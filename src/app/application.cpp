@@ -1424,6 +1424,77 @@ bool Application::loadSettings() {
     }
     brls::Logger::info("loadSettings: enabledSourceLanguages count = {}", m_settings.enabledSourceLanguages.size());
 
+    // Load source tags (sourceTags: { "sourceId": ["tag1", "tag2"], ... })
+    m_settings.sourceTags.clear();
+    size_t sourceTagsPos = content.find("\"sourceTags\"");
+    if (sourceTagsPos != std::string::npos) {
+        size_t objStart = content.find('{', sourceTagsPos + 12);
+        if (objStart != std::string::npos) {
+            // Find matching closing brace (handle nested arrays)
+            int depth = 1;
+            size_t objEnd = objStart + 1;
+            while (objEnd < content.size() && depth > 0) {
+                if (content[objEnd] == '{') depth++;
+                else if (content[objEnd] == '}') depth--;
+                objEnd++;
+            }
+            std::string tagsObj = content.substr(objStart + 1, objEnd - objStart - 2);
+
+            // Parse each "sourceId": ["tag1", "tag2"] entry
+            size_t searchPos = 0;
+            while (searchPos < tagsObj.size()) {
+                size_t keyStart = tagsObj.find('"', searchPos);
+                if (keyStart == std::string::npos) break;
+                size_t keyEnd = tagsObj.find('"', keyStart + 1);
+                if (keyEnd == std::string::npos) break;
+                std::string sourceId = tagsObj.substr(keyStart + 1, keyEnd - keyStart - 1);
+
+                size_t arrStart = tagsObj.find('[', keyEnd);
+                if (arrStart == std::string::npos) break;
+                size_t arrEnd = tagsObj.find(']', arrStart);
+                if (arrEnd == std::string::npos) break;
+
+                std::string arrStr = tagsObj.substr(arrStart + 1, arrEnd - arrStart - 1);
+                std::set<std::string> tags;
+                size_t tPos = 0;
+                while (tPos < arrStr.size()) {
+                    size_t tStart = arrStr.find('"', tPos);
+                    if (tStart == std::string::npos) break;
+                    size_t tEnd = arrStr.find('"', tStart + 1);
+                    if (tEnd == std::string::npos) break;
+                    std::string tag = arrStr.substr(tStart + 1, tEnd - tStart - 1);
+                    if (!tag.empty()) tags.insert(tag);
+                    tPos = tEnd + 1;
+                }
+                if (!tags.empty()) {
+                    m_settings.sourceTags[sourceId] = tags;
+                }
+                searchPos = arrEnd + 1;
+            }
+        }
+    }
+
+    // Load selected source tag filters
+    m_settings.selectedSourceTagFilters.clear();
+    size_t tagFilterPos = content.find("\"selectedSourceTagFilters\"");
+    if (tagFilterPos != std::string::npos) {
+        size_t arrStart = content.find('[', tagFilterPos);
+        size_t arrEnd = content.find(']', arrStart);
+        if (arrStart != std::string::npos && arrEnd != std::string::npos) {
+            std::string arrStr = content.substr(arrStart + 1, arrEnd - arrStart - 1);
+            size_t tPos = 0;
+            while (tPos < arrStr.size()) {
+                size_t tStart = arrStr.find('"', tPos);
+                if (tStart == std::string::npos) break;
+                size_t tEnd = arrStr.find('"', tStart + 1);
+                if (tEnd == std::string::npos) break;
+                std::string tag = arrStr.substr(tStart + 1, tEnd - tStart - 1);
+                if (!tag.empty()) m_settings.selectedSourceTagFilters.insert(tag);
+                tPos = tEnd + 1;
+            }
+        }
+    }
+
     // Load network settings
     m_settings.localServerUrl = extractString("localServerUrl");
     m_settings.remoteServerUrl = extractString("remoteServerUrl");
@@ -1813,6 +1884,38 @@ bool Application::saveSettings() {
             if (!first) json += ", ";
             first = false;
             json += "\"" + lang + "\"";
+        }
+    }
+    json += "],\n";
+
+    // Source tags
+    json += "  \"sourceTags\": {";
+    {
+        bool firstSource = true;
+        for (const auto& [sourceId, tags] : m_settings.sourceTags) {
+            if (tags.empty()) continue;
+            if (!firstSource) json += ", ";
+            firstSource = false;
+            json += "\"" + sourceId + "\": [";
+            bool firstTag = true;
+            for (const auto& tag : tags) {
+                if (!firstTag) json += ", ";
+                firstTag = false;
+                json += "\"" + tag + "\"";
+            }
+            json += "]";
+        }
+    }
+    json += "},\n";
+
+    // Selected source tag filters
+    json += "  \"selectedSourceTagFilters\": [";
+    {
+        bool first = true;
+        for (const auto& tag : m_settings.selectedSourceTagFilters) {
+            if (!first) json += ", ";
+            first = false;
+            json += "\"" + tag + "\"";
         }
     }
     json += "],\n";
