@@ -841,9 +841,10 @@ void SearchTab::showSourceBrowser(const Source& source) {
     }
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
-    // Set up navigation from header buttons down to mode buttons (source list is now hidden)
-    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
-    m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_backBtn);
+    // RIGHT on Back button wraps to header history button
+    m_backBtn->setCustomNavigationRoute(brls::FocusDirection::RIGHT, m_historyBtn);
+    // LEFT on History/Search buttons goes back to Back button
+    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::LEFT, m_backBtn);
 
     // Load popular manga by default
     m_browseMode = BrowseMode::POPULAR;
@@ -1109,8 +1110,20 @@ void SearchTab::performSourceSearch(int64_t sourceId, const std::string& query) 
     brls::Logger::debug("SearchTab: Searching '{}' in source {}", query, sourceId);
     m_resultsLabel->setText("Searching...");
     showLoadingIndicator("Searching");
+    // Remember which mode (Popular/Latest) the user was in before searching
+    m_previousBrowseMode = m_browseMode;
     m_browseMode = BrowseMode::SEARCH_RESULTS;
     m_currentPage = 1;
+
+    // Hide Popular/Latest buttons during source-specific search
+    m_popularBtn->setVisibility(brls::Visibility::GONE);
+    m_latestBtn->setVisibility(brls::Visibility::GONE);
+
+    // Hide search and search history buttons
+    m_buttonContainer->setVisibility(brls::Visibility::GONE);
+    m_historyBtn->setFocusable(false);
+    m_globalSearchBtn->setFocusable(false);
+
     int gen = ++m_loadGeneration;
 
     asyncRun([this, sourceId, query, gen, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
@@ -1419,11 +1432,11 @@ void SearchTab::handleBackNavigation() {
             showSources();
             m_isNavigatingBack = false;
         } else {
-            // Source-specific search: go back to source's main page (Popular)
+            // Source-specific search: go back to the mode the user was in before searching
             // Find the current source and show its browser again
             for (const auto& source : m_sources) {
                 if (source.id == m_currentSourceId) {
-                    m_browseMode = BrowseMode::POPULAR;
+                    m_browseMode = m_previousBrowseMode;
                     m_titleLabel->setText(source.name);
                     m_searchLabel->setVisibility(brls::Visibility::GONE);
 
@@ -1432,8 +1445,13 @@ void SearchTab::handleBackNavigation() {
                     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
                     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
 
+                    // Restore search/history buttons
+                    m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
+                    m_historyBtn->setFocusable(true);
+                    m_globalSearchBtn->setFocusable(true);
+
                     // CRITICAL: Move focus before clearing search result views
-                    brls::Application::giveFocus(m_popularBtn);
+                    brls::Application::giveFocus(m_browseMode == BrowseMode::LATEST ? m_latestBtn : m_popularBtn);
 
                     // Hide search results, show content grid
                     if (m_searchResultsScrollView) {
@@ -1445,8 +1463,13 @@ void SearchTab::handleBackNavigation() {
                     }
                     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
-                    // Load popular manga
-                    loadPopularManga(m_currentSourceId);
+                    // Reload the mode the user was previously browsing
+                    updateModeButtons();
+                    if (m_browseMode == BrowseMode::LATEST) {
+                        loadLatestManga(m_currentSourceId);
+                    } else {
+                        loadPopularManga(m_currentSourceId);
+                    }
                     m_isNavigatingBack = false;  // Allow back navigation again
                     return;
                 }
