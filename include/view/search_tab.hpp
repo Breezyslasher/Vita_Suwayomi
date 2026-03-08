@@ -77,6 +77,12 @@ private:
     void showSourceSearchDialog();
     void showFilterDialog();
     void showSearchHistoryDialog();
+    void showTagFilterDialog();
+    void showTagManageDialog(const Source& source);
+    void collectAllTags(std::set<std::string>& allTags);
+
+    // Tag filter button (source list view)
+    brls::Button* m_tagFilterBtn = nullptr;
     void addToSearchHistory(const std::string& query);
     void clearSearchHistory();
 

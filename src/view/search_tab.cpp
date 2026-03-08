@@ -42,6 +42,39 @@ SearchTab::SearchTab() {
     m_buttonContainer->setAxis(brls::Axis::ROW);
     m_buttonContainer->setAlignItems(brls::AlignItems::FLEX_END);
 
+    // Tag filter button (only shown on source list)
+    m_tagFilterBtn = new brls::Button();
+    m_tagFilterBtn->setWidth(44);
+    m_tagFilterBtn->setHeight(44);
+    m_tagFilterBtn->setCornerRadius(8);
+    m_tagFilterBtn->setMarginRight(10);
+    m_tagFilterBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    m_tagFilterBtn->setAlignItems(brls::AlignItems::CENTER);
+
+    auto* tagIcon = new brls::Image();
+    tagIcon->setWidth(24);
+    tagIcon->setHeight(24);
+    tagIcon->setScalingType(brls::ImageScalingType::FIT);
+    tagIcon->setImageFromFile("app0:resources/icons/tag.png");
+    m_tagFilterBtn->addView(tagIcon);
+
+    m_tagFilterBtn->registerClickAction([this](brls::View* view) {
+        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+            auto a = aliveWeak.lock(); if (!a || !*a) return;
+            showTagFilterDialog();
+        });
+        return true;
+    });
+    m_tagFilterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_tagFilterBtn));
+    m_tagFilterBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (m_browseMode != BrowseMode::SOURCES) {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
+            return true;
+        }
+        return false;
+    }, true);
+    m_buttonContainer->addView(m_tagFilterBtn);
+
     // Search history button with Select icon above
     auto* historyContainer = new brls::Box();
     historyContainer->setAxis(brls::Axis::COLUMN);
@@ -498,6 +531,27 @@ void SearchTab::filterSourcesByLanguage() {
             }
         }
 
+        // Filter by selected tags
+        if (!settings.selectedSourceTagFilters.empty()) {
+            std::string srcId = std::to_string(source.id);
+            auto tagIt = settings.sourceTags.find(srcId);
+            if (tagIt == settings.sourceTags.end() || tagIt->second.empty()) {
+                // Source has no tags, skip if tag filters are active
+                continue;
+            }
+            // Check if source has at least one of the selected filter tags
+            bool hasMatchingTag = false;
+            for (const auto& filterTag : settings.selectedSourceTagFilters) {
+                if (tagIt->second.count(filterTag) > 0) {
+                    hasMatchingTag = true;
+                    break;
+                }
+            }
+            if (!hasMatchingTag) {
+                continue;
+            }
+        }
+
         m_filteredSources.push_back(source);
     }
 
@@ -607,9 +661,18 @@ void SearchTab::showSources() {
     m_titleLabel->setText("Browse");
     m_searchLabel->setVisibility(brls::Visibility::GONE);
 
-    // Filter sources by language setting
+    // Filter sources by language and tags
     filterSourcesByLanguage();
-    m_resultsLabel->setText(std::to_string(m_filteredSources.size()) + " sources");
+    {
+        const auto& settings = Application::getInstance().getSettings();
+        std::string resultText = std::to_string(m_filteredSources.size()) + " sources";
+        if (!settings.selectedSourceTagFilters.empty()) {
+            resultText += " (filtered by " + std::to_string(settings.selectedSourceTagFilters.size()) + " tag";
+            if (settings.selectedSourceTagFilters.size() > 1) resultText += "s";
+            resultText += ")";
+        }
+        m_resultsLabel->setText(resultText);
+    }
 
     // Hide source-specific buttons
     m_popularBtn->setVisibility(brls::Visibility::GONE);
@@ -732,12 +795,35 @@ void SearchTab::showSources() {
             }
             sourceRow->addView(sourceIcon);
 
-            // Source name
+            // Source name and tags container
+            auto* nameTagBox = new brls::Box();
+            nameTagBox->setAxis(brls::Axis::COLUMN);
+            nameTagBox->setGrow(1.0f);
+
             auto* nameLabel = new brls::Label();
             nameLabel->setText(source.name);
             nameLabel->setFontSize(16);
-            nameLabel->setGrow(1.0f);
-            sourceRow->addView(nameLabel);
+            nameTagBox->addView(nameLabel);
+
+            // Show tags for this source
+            {
+                const auto& settings = Application::getInstance().getSettings();
+                std::string srcId = std::to_string(source.id);
+                auto tagIt = settings.sourceTags.find(srcId);
+                if (tagIt != settings.sourceTags.end() && !tagIt->second.empty()) {
+                    auto* tagLabel = new brls::Label();
+                    std::string tagStr;
+                    for (const auto& t : tagIt->second) {
+                        if (!tagStr.empty()) tagStr += ", ";
+                        tagStr += t;
+                    }
+                    tagLabel->setText(tagStr);
+                    tagLabel->setFontSize(12);
+                    tagLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
+                    nameTagBox->addView(tagLabel);
+                }
+            }
+            sourceRow->addView(nameTagBox);
 
             // Click to browse source
             Source sourceCopy = source;
@@ -746,6 +832,15 @@ void SearchTab::showSources() {
                 return true;
             });
             sourceRow->addGestureRecognizer(new brls::TapGestureRecognizer(sourceRow));
+
+            // Y button to manage tags on this source
+            sourceRow->registerAction("Tags", brls::ControllerButton::BUTTON_Y, [this, sourceCopy](brls::View*) {
+                brls::sync([this, sourceCopy, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                    auto a = aliveWeak.lock(); if (!a || !*a) return;
+                    showTagManageDialog(sourceCopy);
+                });
+                return true;
+            }, false);  // visible action
 
             // Register B button on source row to go back (exit tab in SOURCES mode)
             // This ensures B button works when focus is on source rows
@@ -776,10 +871,12 @@ void SearchTab::showSources() {
 
     // Set up navigation from header buttons down to first source row
     if (firstSourceRow) {
+        m_tagFilterBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
         m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
         m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstSourceRow);
     } else {
         // No source rows - clear navigation routes to prevent crash
+        m_tagFilterBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
         m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
         m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
     }
@@ -856,6 +953,135 @@ void SearchTab::showFilterDialog() {
     // Source filter dialog not yet implemented
     // Would show configurable filters like genres, status, etc.
     brls::Application::notify("Source filters coming soon");
+}
+
+void SearchTab::collectAllTags(std::set<std::string>& allTags) {
+    const auto& settings = Application::getInstance().getSettings();
+    for (const auto& [sourceId, tags] : settings.sourceTags) {
+        for (const auto& tag : tags) {
+            allTags.insert(tag);
+        }
+    }
+}
+
+void SearchTab::showTagFilterDialog() {
+    std::set<std::string> allTags;
+    collectAllTags(allTags);
+
+    if (allTags.empty()) {
+        brls::Application::notify("No tags yet - long press a source to add tags");
+        return;
+    }
+
+    auto& settings = Application::getInstance().getSettings();
+
+    // Build options: each tag with a check mark if active
+    std::vector<std::string> options;
+    std::vector<std::string> tagList;
+    for (const auto& tag : allTags) {
+        bool active = settings.selectedSourceTagFilters.count(tag) > 0;
+        options.push_back((active ? "[x] " : "[  ] ") + tag);
+        tagList.push_back(tag);
+    }
+    options.push_back("Clear All Filters");
+
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Filter by Tag", options,
+        [this, tagList](int selected) {
+            if (selected < 0) return;
+
+            brls::sync([this, selected, tagList]() {
+                auto& settings = Application::getInstance().getSettings();
+
+                if (selected == static_cast<int>(tagList.size())) {
+                    // Clear all filters
+                    settings.selectedSourceTagFilters.clear();
+                    Application::getInstance().saveSettings();
+                    showSources();
+                    brls::Application::notify("Tag filters cleared");
+                } else if (selected < static_cast<int>(tagList.size())) {
+                    // Toggle the selected tag filter
+                    const std::string& tag = tagList[selected];
+                    if (settings.selectedSourceTagFilters.count(tag) > 0) {
+                        settings.selectedSourceTagFilters.erase(tag);
+                    } else {
+                        settings.selectedSourceTagFilters.insert(tag);
+                    }
+                    Application::getInstance().saveSettings();
+                    showSources();
+                }
+            });
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
+}
+
+void SearchTab::showTagManageDialog(const Source& source) {
+    auto& settings = Application::getInstance().getSettings();
+    std::string sourceIdStr = std::to_string(source.id);
+
+    // Get current tags for this source
+    std::set<std::string> currentTags;
+    auto it = settings.sourceTags.find(sourceIdStr);
+    if (it != settings.sourceTags.end()) {
+        currentTags = it->second;
+    }
+
+    // Collect all existing tags across all sources
+    std::set<std::string> allTags;
+    collectAllTags(allTags);
+
+    // Build options: existing tags with check marks + "Add new tag" + "Done"
+    std::vector<std::string> options;
+    std::vector<std::string> tagList;
+    for (const auto& tag : allTags) {
+        bool has = currentTags.count(tag) > 0;
+        options.push_back((has ? "[x] " : "[  ] ") + tag);
+        tagList.push_back(tag);
+    }
+    options.push_back("+ Add New Tag");
+    options.push_back("Done");
+
+    brls::Dropdown* dropdown = new brls::Dropdown(
+        "Tags: " + source.name, options,
+        [this, sourceIdStr, tagList, source](int selected) {
+            if (selected < 0) return;
+
+            brls::sync([this, selected, sourceIdStr, tagList, source]() {
+                auto& settings = Application::getInstance().getSettings();
+
+                if (selected == static_cast<int>(tagList.size())) {
+                    // Add new tag - open IME
+                    brls::Application::getImeManager()->openForText([this, sourceIdStr, source](std::string text) {
+                        if (text.empty()) return;
+                        auto& s = Application::getInstance().getSettings();
+                        s.sourceTags[sourceIdStr].insert(text);
+                        Application::getInstance().saveSettings();
+                        brls::Application::notify("Tag '" + text + "' added");
+                        // Re-show the dialog with the new tag
+                        showTagManageDialog(source);
+                    }, "New Tag", "Enter tag name", 32, "");
+                } else if (selected == static_cast<int>(tagList.size()) + 1) {
+                    // Done - refresh source list
+                    showSources();
+                } else if (selected < static_cast<int>(tagList.size())) {
+                    // Toggle tag on this source
+                    const std::string& tag = tagList[selected];
+                    auto& sourceTags = settings.sourceTags[sourceIdStr];
+                    if (sourceTags.count(tag) > 0) {
+                        sourceTags.erase(tag);
+                        if (sourceTags.empty()) {
+                            settings.sourceTags.erase(sourceIdStr);
+                        }
+                    } else {
+                        sourceTags.insert(tag);
+                    }
+                    Application::getInstance().saveSettings();
+                    // Re-show the dialog with updated state
+                    showTagManageDialog(source);
+                }
+            });
+        }, 0);
+    brls::Application::pushActivity(new brls::Activity(dropdown));
 }
 
 void SearchTab::loadPopularManga(int64_t sourceId) {
