@@ -843,6 +843,9 @@ void SearchTab::showSourceBrowser(const Source& source) {
 
     // RIGHT on Back button wraps to header history button
     m_backBtn->setCustomNavigationRoute(brls::FocusDirection::RIGHT, m_historyBtn);
+    // LEFT on History/Search buttons goes back to Back button
+    m_historyBtn->setCustomNavigationRoute(brls::FocusDirection::LEFT, m_backBtn);
+    m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::LEFT, m_backBtn);
 
     // Load popular manga by default
     m_browseMode = BrowseMode::POPULAR;
