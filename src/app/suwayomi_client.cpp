@@ -2003,18 +2003,49 @@ bool SuwayomiClient::fetchMangaWithChaptersGraphQL(int mangaId, Manga& manga, st
         brls::Logger::debug("GraphQL combined: Fetched {} chapters for manga {}", chapters.size(), mangaId);
     }
 
-    // If 0 chapters returned, the server may not have fetched them from the source yet.
-    // Use fetchChapters mutation to tell the server to fetch chapter list from source,
-    // then re-query chapters.
-    if (chapters.empty() && manga.id > 0) {
-        brls::Logger::info("GraphQL combined: 0 chapters for manga {} - triggering fetchChapters mutation to fetch from source", mangaId);
-        // First ensure manga is initialized
+    // If manga is not initialized (missing genre/status/chapters), the server hasn't
+    // scraped the source yet. Trigger fetchManga + fetchChapters mutations to initialize,
+    // then re-query both manga details and chapters.
+    bool needsRefresh = (chapters.empty() || manga.genre.empty() || manga.status == MangaStatus::UNKNOWN)
+                        && manga.id > 0;
+    if (needsRefresh) {
+        brls::Logger::info("GraphQL combined: manga {} needs refresh (chapters={}, genres={}, status={})",
+                          mangaId, chapters.size(), manga.genre.size(), static_cast<int>(manga.status));
+        // First ensure manga is initialized (fetches metadata from source)
         refreshMangaGraphQL(mangaId);
-        // Then fetch chapters from source
-        if (refreshChaptersGraphQL(mangaId)) {
-            // Re-fetch chapters now that the server has scraped them
-            fetchChaptersGraphQL(mangaId, chapters);
-            brls::Logger::info("GraphQL combined: After fetchChapters mutation, got {} chapters", chapters.size());
+
+        // Re-fetch manga details now that the server has scraped them
+        Manga refreshedManga;
+        if (fetchMangaGraphQL(mangaId, refreshedManga) && refreshedManga.id > 0) {
+            // Update fields that were missing
+            if (!refreshedManga.genre.empty() && manga.genre.empty()) {
+                manga.genre = refreshedManga.genre;
+            }
+            if (refreshedManga.status != MangaStatus::UNKNOWN && manga.status == MangaStatus::UNKNOWN) {
+                manga.status = refreshedManga.status;
+            }
+            if (!refreshedManga.description.empty() && manga.description.empty()) {
+                manga.description = refreshedManga.description;
+            }
+            if (!refreshedManga.author.empty() && manga.author.empty()) {
+                manga.author = refreshedManga.author;
+            }
+            if (!refreshedManga.artist.empty() && manga.artist.empty()) {
+                manga.artist = refreshedManga.artist;
+            }
+            if (!refreshedManga.sourceName.empty() && manga.sourceName.empty()) {
+                manga.sourceName = refreshedManga.sourceName;
+            }
+            brls::Logger::info("GraphQL combined: Refreshed manga details - genres={}, status={}",
+                              manga.genre.size(), static_cast<int>(manga.status));
+        }
+
+        // Then fetch chapters from source if needed
+        if (chapters.empty()) {
+            if (refreshChaptersGraphQL(mangaId)) {
+                fetchChaptersGraphQL(mangaId, chapters);
+                brls::Logger::info("GraphQL combined: After fetchChapters mutation, got {} chapters", chapters.size());
+            }
         }
     }
 
