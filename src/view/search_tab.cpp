@@ -483,6 +483,37 @@ void SearchTab::onFocusGained() {
     }
 }
 
+bool SearchTab::isFocusInPanel(brls::View* view) const {
+    while (view) {
+        if (view == m_filterPanel)
+            return true;
+        view = view->getParent();
+    }
+    return false;
+}
+
+brls::View* SearchTab::getNextFocus(brls::FocusDirection direction, brls::View* currentView) {
+    // When the filter panel is visible, prevent d-pad focus from crossing
+    // between the main content and the panel.  Focus should only enter/leave
+    // the panel via explicit actions (Y to open, B to close).
+    if (m_filterPanelType != FilterPanelType::NONE &&
+        m_filterPanel && m_filterPanel->getVisibility() == brls::Visibility::VISIBLE) {
+
+        brls::View* focused = brls::Application::getCurrentFocus();
+        bool inPanel = isFocusInPanel(focused);
+
+        // Block RIGHT from main content into the panel
+        if (!inPanel && direction == brls::FocusDirection::RIGHT)
+            return focused;  // stay where we are
+
+        // Block LEFT from panel into main content
+        if (inPanel && direction == brls::FocusDirection::LEFT)
+            return focused;  // stay where we are
+    }
+
+    return brls::Box::getNextFocus(direction, currentView);
+}
+
 void SearchTab::loadSources() {
     brls::Logger::debug("SearchTab: Loading sources");
     m_browseMode = BrowseMode::SOURCES;
@@ -1122,10 +1153,12 @@ void SearchTab::applyFilters() {
 
 void SearchTab::hideFilterPanel() {
     if (m_filterPanel) {
+        // Clear highlighted row BEFORE clearViews to avoid use-after-free
+        // (focus events could fire during view deletion and access freed row)
+        m_lastHighlightedRow = nullptr;
+        m_filterPanelType = FilterPanelType::NONE;
         m_filterPanel->clearViews();
         m_filterPanel->setVisibility(brls::Visibility::GONE);
-        m_filterPanelType = FilterPanelType::NONE;
-        m_lastHighlightedRow = nullptr;
         // Restore focus to the view that was focused before the panel opened
         if (m_prePanelFocusView) {
             brls::Application::giveFocus(m_prePanelFocusView);
@@ -1299,7 +1332,7 @@ void SearchTab::buildFilterPanel() {
             childrenBox->setVisibility(collapsed ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 
             // Update toggle to use childrenBox directly
-            groupRow->registerClickAction([this, groupIdx, childrenBox, arrowLabel](brls::View*) {
+            groupRow->registerClickAction([this, groupIdx, childrenBox, arrowLabel, groupRow](brls::View*) {
                 if (m_collapsedGroups.count(groupIdx)) {
                     m_collapsedGroups.erase(groupIdx);
                     childrenBox->setVisibility(brls::Visibility::VISIBLE);
@@ -1308,6 +1341,18 @@ void SearchTab::buildFilterPanel() {
                     m_collapsedGroups.insert(groupIdx);
                     childrenBox->setVisibility(brls::Visibility::GONE);
                     arrowLabel->setText("\u25B6");
+                    // If focus was inside the collapsed group, move it to the group header
+                    brls::View* focused = brls::Application::getCurrentFocus();
+                    if (focused) {
+                        brls::View* check = focused;
+                        while (check) {
+                            if (check == childrenBox) {
+                                brls::Application::giveFocus(groupRow);
+                                break;
+                            }
+                            check = check->getParent();
+                        }
+                    }
                 }
                 return true;
             });
@@ -1387,7 +1432,7 @@ void SearchTab::buildFilterPanel() {
                         optLabel->setSingleLine(true);
                         optRow->addView(optLabel);
 
-                        optRow->registerClickAction([this, fi, ci, optIdx, childLabel, makeFilterLabel, childOptionsBox, childArrow](brls::View*) {
+                        optRow->registerClickAction([this, fi, ci, optIdx, childLabel, makeFilterLabel, childOptionsBox, childArrow, childRow](brls::View*) {
                             if (fi >= static_cast<int>(m_sourceFilters.size())) return true;
                             auto& parent = m_sourceFilters[fi];
                             if (ci >= static_cast<int>(parent.filters.size())) return true;
@@ -1407,6 +1452,8 @@ void SearchTab::buildFilterPanel() {
                             }
                             childOptionsBox->setVisibility(brls::Visibility::GONE);
                             if (childArrow) childArrow->setText("\u25B6");
+                            // Move focus back to parent row since options are now hidden
+                            brls::Application::giveFocus(childRow);
                             return true;
                         });
                         optRow->addGestureRecognizer(new brls::TapGestureRecognizer(optRow));
@@ -1548,7 +1595,7 @@ void SearchTab::buildFilterPanel() {
                     optRow->addView(optLabel);
 
                     int filterIdx2 = static_cast<int>(i);
-                    optRow->registerClickAction([this, filterIdx2, optIdx, rowLabel, makeFilterLabel, optionsBox, arrowLabel](brls::View*) {
+                    optRow->registerClickAction([this, filterIdx2, optIdx, rowLabel, makeFilterLabel, optionsBox, arrowLabel, row](brls::View*) {
                         if (filterIdx2 >= static_cast<int>(m_sourceFilters.size())) return true;
                         m_sourceFilters[filterIdx2].selectState = optIdx;
                         rowLabel->setText(makeFilterLabel(m_sourceFilters[filterIdx2]));
@@ -1567,6 +1614,8 @@ void SearchTab::buildFilterPanel() {
                         // Collapse after selection
                         optionsBox->setVisibility(brls::Visibility::GONE);
                         if (arrowLabel) arrowLabel->setText("\u25B6");
+                        // Move focus back to parent row since options are now hidden
+                        brls::Application::giveFocus(row);
                         return true;
                     });
                     optRow->addGestureRecognizer(new brls::TapGestureRecognizer(optRow));
@@ -1614,7 +1663,7 @@ void SearchTab::buildFilterPanel() {
                         optRow->addView(optLabel);
 
                         int filterIdx2 = static_cast<int>(i);
-                        optRow->registerClickAction([this, filterIdx2, sIdx, isAsc, rowLabel, makeFilterLabel, optionsBox, arrowLabel](brls::View*) {
+                        optRow->registerClickAction([this, filterIdx2, sIdx, isAsc, rowLabel, makeFilterLabel, optionsBox, arrowLabel, row](brls::View*) {
                             if (filterIdx2 >= static_cast<int>(m_sourceFilters.size())) return true;
                             m_sourceFilters[filterIdx2].sortState.index = sIdx;
                             m_sourceFilters[filterIdx2].sortState.ascending = isAsc;
@@ -1639,6 +1688,8 @@ void SearchTab::buildFilterPanel() {
                             // Collapse after selection
                             optionsBox->setVisibility(brls::Visibility::GONE);
                             if (arrowLabel) arrowLabel->setText("\u25B6");
+                            // Move focus back to parent row since options are now hidden
+                            brls::Application::giveFocus(row);
                             return true;
                         });
                         optRow->addGestureRecognizer(new brls::TapGestureRecognizer(optRow));
