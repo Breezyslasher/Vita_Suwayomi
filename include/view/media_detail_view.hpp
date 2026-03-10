@@ -204,6 +204,9 @@ private:
     // Update the read button text based on reading progress
     void updateReadButtonText();
 
+    // Update the library button appearance based on m_manga.inLibrary
+    void updateLibraryButton();
+
     // Apply pending reader result to m_chapters (progress from last reader session)
     void applyReaderResult();
 
