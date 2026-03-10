@@ -281,9 +281,15 @@ public:
     void setCurrentCategoryId(int id) { m_currentCategoryId = id; }
 
     // Track library additions for immediate UI update
-    void trackLibraryAddition(int mangaId) { m_recentLibraryAdditions.insert(mangaId); }
+    void trackLibraryAddition(int mangaId) { m_recentLibraryAdditions.insert(mangaId); m_recentLibraryRemovals.erase(mangaId); }
     bool isRecentlyAdded(int mangaId) const { return m_recentLibraryAdditions.count(mangaId) > 0; }
     void clearRecentAdditions() { m_recentLibraryAdditions.clear(); }
+
+    // Track library removals for immediate UI update
+    void trackLibraryRemoval(int mangaId) { m_recentLibraryRemovals.insert(mangaId); m_recentLibraryAdditions.erase(mangaId); }
+    bool isRecentlyRemoved(int mangaId) const { return m_recentLibraryRemovals.count(mangaId) > 0; }
+    const std::set<int>& getRecentRemovals() const { return m_recentLibraryRemovals; }
+    void clearRecentRemovals() { m_recentLibraryRemovals.clear(); }
 
     // Application settings access
     AppSettings& getSettings() { return m_settings; }
@@ -372,6 +378,7 @@ private:
     std::string m_authPassword;
     int m_currentCategoryId = 0;
     std::set<int> m_recentLibraryAdditions;  // Manga IDs added to library this session
+    std::set<int> m_recentLibraryRemovals;  // Manga IDs removed from library this session
     AppSettings m_settings;
     ReaderResult m_lastReaderResult;
     ReaderResultCallback m_readerResultCallback;

@@ -2207,7 +2207,7 @@ void MangaDetailView::onAddToLibrary() {
                                 }
                             });
                         });
-                    }, 0);
+                    }, -1);
                 brls::Application::pushActivity(new brls::Activity(dropdown));
             } else {
                 brls::Application::notify("Added to library");
@@ -2228,6 +2228,10 @@ void MangaDetailView::onRemoveFromLibrary() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
                 m_manga.inLibrary = false;
+
+                // Track removal for immediate library UI update
+                Application::getInstance().trackLibraryRemoval(m_manga.id);
+
                 if (m_libraryButton) {
                     m_libraryButton->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
                     m_libraryButton->setText("Add to Library");

@@ -558,6 +558,26 @@ void LibrarySectionTab::onFocusGained() {
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
     }
 
+    // Check for recent library removals and update grid immediately
+    const auto& recentRemovals = Application::getInstance().getRecentRemovals();
+    if (!recentRemovals.empty() && m_loaded) {
+        auto shouldRemove = [&recentRemovals](const Manga& m) {
+            return recentRemovals.count(m.id) > 0;
+        };
+        size_t oldSize = m_mangaList.size();
+        m_mangaList.erase(
+            std::remove_if(m_mangaList.begin(), m_mangaList.end(), shouldRemove),
+            m_mangaList.end());
+        m_fullMangaList.erase(
+            std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(), shouldRemove),
+            m_fullMangaList.end());
+        Application::getInstance().clearRecentRemovals();
+
+        if (m_mangaList.size() != oldSize && m_contentGrid) {
+            m_contentGrid->setDataSource(m_mangaList);
+        }
+    }
+
     if (!m_loaded && m_categoriesLoaded) {
         // Reload based on current group mode
         if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
