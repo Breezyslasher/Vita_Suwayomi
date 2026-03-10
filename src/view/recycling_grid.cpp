@@ -92,7 +92,7 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     // Cancel any ongoing incremental build before appending
     m_incrementalBuildActive = false;
 
-    int oldItemCount = static_cast<int>(m_items.size());
+    int oldCellCount = static_cast<int>(m_cells.size());
     int oldRowCount = static_cast<int>(m_rows.size());
 
     // Append to items
@@ -106,30 +106,43 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     m_totalRowsNeeded = newTotalRows;
 
     // If the last existing row was partial, remove and rebuild it with new items
+    // Use m_cells.size() (not m_items.size()) to compute the actual number of cells
+    // in the last row, since incremental build may not have created all rows yet.
     int startRow;
-    if (oldItemCount > 0 && oldItemCount % m_columns != 0 && oldRowCount > 0) {
-        int cellsInLastRow = oldItemCount - (oldRowCount - 1) * m_columns;
+    if (oldCellCount > 0 && oldRowCount > 0) {
+        int cellsInLastRow = oldCellCount - (oldRowCount - 1) * m_columns;
 
-        // Move focus away if it's on a cell in the partial row being removed
-        int partialStart = static_cast<int>(m_cells.size()) - cellsInLastRow;
-        for (int i = partialStart; i < static_cast<int>(m_cells.size()); i++) {
-            if (m_cells[i] && m_cells[i]->isFocused()) {
-                brls::Application::giveFocus(m_contentBox);
-                break;
+        // Sanity check: cellsInLastRow must be valid
+        if (cellsInLastRow <= 0 || cellsInLastRow > m_columns) {
+            // State is inconsistent - fall back to full rebuild from existing rows
+            startRow = oldRowCount;
+        } else if (cellsInLastRow < m_columns) {
+            // Partial last row - remove and rebuild it with new items
+
+            // Move focus away if it's on a cell in the partial row being removed
+            int partialStart = oldCellCount - cellsInLastRow;
+            for (int i = partialStart; i < oldCellCount; i++) {
+                if (m_cells[i] && m_cells[i]->isFocused()) {
+                    brls::Application::giveFocus(m_contentBox);
+                    break;
+                }
             }
+
+            // Remove cell pointers for the partial row (view memory freed by removeView)
+            for (int i = 0; i < cellsInLastRow; i++) {
+                m_cells.pop_back();
+            }
+
+            // Remove last row view (deletes the row box and its children)
+            brls::Box* lastRow = m_rows.back();
+            m_rows.pop_back();
+            m_contentBox->removeView(lastRow);
+
+            startRow = oldRowCount - 1;
+        } else {
+            // Last row is full, just append new rows
+            startRow = oldRowCount;
         }
-
-        // Remove cell pointers for the partial row (view memory freed by removeView)
-        for (int i = 0; i < cellsInLastRow; i++) {
-            m_cells.pop_back();
-        }
-
-        // Remove last row view (deletes the row box and its children)
-        brls::Box* lastRow = m_rows.back();
-        m_rows.pop_back();
-        m_contentBox->removeView(lastRow);
-
-        startRow = oldRowCount - 1;
     } else {
         startRow = oldRowCount;
     }
