@@ -3123,8 +3123,13 @@ bool SuwayomiClient::fetchSource(int64_t sourceId, Source& source) {
 }
 
 bool SuwayomiClient::fetchSourceFilters(int64_t sourceId, std::vector<SourceFilter>& filters) {
-    vitasuwayomi::HttpClient http = createHttpClient();
+    // Try GraphQL first
+    if (fetchSourceFiltersGraphQL(sourceId, filters)) {
+        return true;
+    }
 
+    // REST fallback - get filters from REST API
+    vitasuwayomi::HttpClient http = createHttpClient();
     std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/filters");
     vitasuwayomi::HttpResponse response = http.get(url);
 
@@ -3132,14 +3137,452 @@ bool SuwayomiClient::fetchSourceFilters(int64_t sourceId, std::vector<SourceFilt
         return false;
     }
 
-    // TODO: Parse filters (complex structure)
     filters.clear();
+    // REST returns a JSON array of filter objects
+    std::vector<std::string> items = splitJsonArray(response.body);
+    int pos = 0;
+    for (const auto& item : items) {
+        SourceFilter filter;
+        filter.position = pos++;
+        std::string typeName = extractJsonValue(item, "type");
+
+        if (typeName == "Header" || typeName == "HeaderFilter") {
+            filter.type = FilterType::HEADER;
+            filter.name = extractJsonValue(item, "name");
+        } else if (typeName == "Separator" || typeName == "SeparatorFilter") {
+            filter.type = FilterType::SEPARATOR;
+            filter.name = extractJsonValue(item, "name");
+        } else if (typeName == "Text" || typeName == "TextFilter") {
+            filter.type = FilterType::TEXT;
+            filter.name = extractJsonValue(item, "name");
+            filter.textDefault = extractJsonValue(item, "state");
+            filter.textState = filter.textDefault;
+        } else if (typeName == "CheckBox" || typeName == "CheckBoxFilter") {
+            filter.type = FilterType::CHECKBOX;
+            filter.name = extractJsonValue(item, "name");
+            filter.checkBoxDefault = extractJsonBool(item, "state");
+            filter.checkBoxState = filter.checkBoxDefault;
+        } else if (typeName == "TriState" || typeName == "TriStateFilter") {
+            filter.type = FilterType::TRISTATE;
+            filter.name = extractJsonValue(item, "name");
+            int st = extractJsonInt(item, "state");
+            filter.triState = static_cast<TriState>(st);
+        } else if (typeName == "Select" || typeName == "SelectFilter") {
+            filter.type = FilterType::SELECT;
+            filter.name = extractJsonValue(item, "name");
+            filter.selectOptions = extractJsonStringArray(item, "displayValues");
+            if (filter.selectOptions.empty()) {
+                filter.selectOptions = extractJsonStringArray(item, "values");
+            }
+            filter.selectDefault = extractJsonInt(item, "state");
+            filter.selectState = filter.selectDefault;
+        } else if (typeName == "Sort" || typeName == "SortFilter") {
+            filter.type = FilterType::SORT;
+            filter.name = extractJsonValue(item, "name");
+            filter.sortOptions = extractJsonStringArray(item, "displayValues");
+            if (filter.sortOptions.empty()) {
+                filter.sortOptions = extractJsonStringArray(item, "values");
+            }
+            // Parse sort state
+            std::string stateObj = extractJsonObject(item, "state");
+            if (!stateObj.empty()) {
+                filter.sortState.index = extractJsonInt(stateObj, "index");
+                filter.sortState.ascending = extractJsonBool(stateObj, "ascending");
+            }
+            filter.sortDefault = filter.sortState;
+        } else if (typeName == "Group" || typeName == "GroupFilter") {
+            filter.type = FilterType::GROUP;
+            filter.name = extractJsonValue(item, "name");
+            // Parse nested filters
+            std::string filtersJson = extractJsonArray(item, "state");
+            if (filtersJson.empty()) {
+                filtersJson = extractJsonArray(item, "filters");
+            }
+            std::vector<std::string> subItems = splitJsonArray(filtersJson);
+            int subPos = 0;
+            for (const auto& subItem : subItems) {
+                SourceFilter subFilter;
+                subFilter.position = subPos++;
+                std::string subType = extractJsonValue(subItem, "type");
+                subFilter.name = extractJsonValue(subItem, "name");
+
+                if (subType == "TriState" || subType == "TriStateFilter") {
+                    subFilter.type = FilterType::TRISTATE;
+                    int subSt = extractJsonInt(subItem, "state");
+                    subFilter.triState = static_cast<TriState>(subSt);
+                } else if (subType == "CheckBox" || subType == "CheckBoxFilter") {
+                    subFilter.type = FilterType::CHECKBOX;
+                    subFilter.checkBoxState = extractJsonBool(subItem, "state");
+                    subFilter.checkBoxDefault = subFilter.checkBoxState;
+                } else if (subType == "Text" || subType == "TextFilter") {
+                    subFilter.type = FilterType::TEXT;
+                    subFilter.textState = extractJsonValue(subItem, "state");
+                    subFilter.textDefault = subFilter.textState;
+                } else if (subType == "Select" || subType == "SelectFilter") {
+                    subFilter.type = FilterType::SELECT;
+                    subFilter.selectOptions = extractJsonStringArray(subItem, "displayValues");
+                    if (subFilter.selectOptions.empty()) {
+                        subFilter.selectOptions = extractJsonStringArray(subItem, "values");
+                    }
+                    subFilter.selectState = extractJsonInt(subItem, "state");
+                    subFilter.selectDefault = subFilter.selectState;
+                }
+                filter.filters.push_back(subFilter);
+            }
+        }
+
+        filters.push_back(filter);
+    }
+
+    brls::Logger::info("Fetched {} source filters via REST", filters.size());
+    return true;
+}
+
+bool SuwayomiClient::fetchSourceFiltersGraphQL(int64_t sourceId, std::vector<SourceFilter>& filters) {
+    const char* query = R"(
+        query GetSourceFilters($sourceId: LongString!) {
+            source(id: $sourceId) {
+                filters {
+                    ... on HeaderFilter { __typename name }
+                    ... on SeparatorFilter { __typename name }
+                    ... on TextFilter { __typename name default }
+                    ... on CheckBoxFilter { __typename name default }
+                    ... on TriStateFilter { __typename name default }
+                    ... on SelectFilter { __typename name default values displayValues }
+                    ... on SortFilter { __typename name default { index ascending } values }
+                    ... on GroupFilter {
+                        __typename name
+                        filters {
+                            ... on HeaderFilter { __typename name }
+                            ... on SeparatorFilter { __typename name }
+                            ... on TextFilter { __typename name default }
+                            ... on CheckBoxFilter { __typename name default }
+                            ... on TriStateFilter { __typename name default }
+                            ... on SelectFilter { __typename name default values displayValues }
+                            ... on SortFilter { __typename name default { index ascending } values }
+                        }
+                    }
+                }
+            }
+        }
+    )";
+
+    std::string variables = "{\"sourceId\":\"" + std::to_string(sourceId) + "\"}";
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string sourceObj = extractJsonObject(data, "source");
+    if (sourceObj.empty()) return false;
+
+    std::string filtersJson = extractJsonArray(sourceObj, "filters");
+    if (filtersJson.empty()) {
+        filters.clear();
+        return true;  // Source has no filters
+    }
+
+    filters.clear();
+    std::vector<std::string> items = splitJsonArray(filtersJson);
+    int pos = 0;
+
+    for (const auto& item : items) {
+        SourceFilter filter;
+        filter.position = pos++;
+        std::string typeName = extractJsonValue(item, "__typename");
+
+        if (typeName == "HeaderFilter") {
+            filter.type = FilterType::HEADER;
+            filter.name = extractJsonValue(item, "name");
+        } else if (typeName == "SeparatorFilter") {
+            filter.type = FilterType::SEPARATOR;
+            filter.name = extractJsonValue(item, "name");
+        } else if (typeName == "TextFilter") {
+            filter.type = FilterType::TEXT;
+            filter.name = extractJsonValue(item, "name");
+            filter.textDefault = extractJsonValue(item, "default");
+            filter.textState = filter.textDefault;
+        } else if (typeName == "CheckBoxFilter") {
+            filter.type = FilterType::CHECKBOX;
+            filter.name = extractJsonValue(item, "name");
+            filter.checkBoxDefault = extractJsonBool(item, "default");
+            filter.checkBoxState = filter.checkBoxDefault;
+        } else if (typeName == "TriStateFilter") {
+            filter.type = FilterType::TRISTATE;
+            filter.name = extractJsonValue(item, "name");
+            // Default is usually 0 (IGNORE)
+            int def = extractJsonInt(item, "default");
+            filter.triState = static_cast<TriState>(def);
+        } else if (typeName == "SelectFilter") {
+            filter.type = FilterType::SELECT;
+            filter.name = extractJsonValue(item, "name");
+            filter.selectOptions = extractJsonStringArray(item, "displayValues");
+            if (filter.selectOptions.empty()) {
+                filter.selectOptions = extractJsonStringArray(item, "values");
+            }
+            filter.selectDefault = extractJsonInt(item, "default");
+            filter.selectState = filter.selectDefault;
+        } else if (typeName == "SortFilter") {
+            filter.type = FilterType::SORT;
+            filter.name = extractJsonValue(item, "name");
+            filter.sortOptions = extractJsonStringArray(item, "values");
+            // Parse default sort selection
+            std::string defObj = extractJsonObject(item, "default");
+            if (!defObj.empty()) {
+                filter.sortDefault.index = extractJsonInt(defObj, "index");
+                filter.sortDefault.ascending = extractJsonBool(defObj, "ascending");
+            }
+            filter.sortState = filter.sortDefault;
+        } else if (typeName == "GroupFilter") {
+            filter.type = FilterType::GROUP;
+            filter.name = extractJsonValue(item, "name");
+            std::string subFiltersJson = extractJsonArray(item, "filters");
+            std::vector<std::string> subItems = splitJsonArray(subFiltersJson);
+            int subPos = 0;
+            for (const auto& subItem : subItems) {
+                SourceFilter subFilter;
+                subFilter.position = subPos++;
+                std::string subType = extractJsonValue(subItem, "__typename");
+                subFilter.name = extractJsonValue(subItem, "name");
+
+                if (subType == "TriStateFilter") {
+                    subFilter.type = FilterType::TRISTATE;
+                    int subDef = extractJsonInt(subItem, "default");
+                    subFilter.triState = static_cast<TriState>(subDef);
+                } else if (subType == "CheckBoxFilter") {
+                    subFilter.type = FilterType::CHECKBOX;
+                    subFilter.checkBoxDefault = extractJsonBool(subItem, "default");
+                    subFilter.checkBoxState = subFilter.checkBoxDefault;
+                } else if (subType == "TextFilter") {
+                    subFilter.type = FilterType::TEXT;
+                    subFilter.textDefault = extractJsonValue(subItem, "default");
+                    subFilter.textState = subFilter.textDefault;
+                } else if (subType == "SelectFilter") {
+                    subFilter.type = FilterType::SELECT;
+                    subFilter.selectOptions = extractJsonStringArray(subItem, "displayValues");
+                    if (subFilter.selectOptions.empty()) {
+                        subFilter.selectOptions = extractJsonStringArray(subItem, "values");
+                    }
+                    subFilter.selectDefault = extractJsonInt(subItem, "default");
+                    subFilter.selectState = subFilter.selectDefault;
+                } else if (subType == "HeaderFilter") {
+                    subFilter.type = FilterType::HEADER;
+                } else if (subType == "SeparatorFilter") {
+                    subFilter.type = FilterType::SEPARATOR;
+                }
+                filter.filters.push_back(subFilter);
+            }
+        }
+        filters.push_back(filter);
+    }
+
+    brls::Logger::info("GraphQL: Fetched {} source filters", filters.size());
+    return true;
+}
+
+std::string SuwayomiClient::buildFilterChangesJson(const std::vector<SourceFilter>& filters) {
+    // Build GraphQL literal array of FilterChange input objects (unquoted keys, unquoted enums)
+    // Used inline in GraphQL query strings, NOT as JSON variables
+    std::string gql = "[";
+    bool first = true;
+
+    for (const auto& filter : filters) {
+        switch (filter.type) {
+            case FilterType::HEADER:
+            case FilterType::SEPARATOR:
+                // No state to send for these
+                break;
+            case FilterType::TEXT:
+                if (filter.textState != filter.textDefault) {
+                    if (!first) gql += ", ";
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", textState: \"";
+                    // Escape the text
+                    for (char c : filter.textState) {
+                        if (c == '"') gql += "\\\"";
+                        else if (c == '\\') gql += "\\\\";
+                        else gql += c;
+                    }
+                    gql += "\"}";
+                    first = false;
+                }
+                break;
+            case FilterType::CHECKBOX:
+                if (filter.checkBoxState != filter.checkBoxDefault) {
+                    if (!first) gql += ", ";
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", checkBoxState: " + (filter.checkBoxState ? "true" : "false") + "}";
+                    first = false;
+                }
+                break;
+            case FilterType::TRISTATE:
+                if (filter.triState != TriState::IGNORE) {
+                    if (!first) gql += ", ";
+                    std::string triStr;
+                    switch (filter.triState) {
+                        case TriState::IGNORE: triStr = "IGNORE"; break;
+                        case TriState::INCLUDE: triStr = "INCLUDE"; break;
+                        case TriState::EXCLUDE: triStr = "EXCLUDE"; break;
+                    }
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", triState: " + triStr + "}";
+                    first = false;
+                }
+                break;
+            case FilterType::SELECT:
+                if (filter.selectState != filter.selectDefault) {
+                    if (!first) gql += ", ";
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", selectState: " + std::to_string(filter.selectState) + "}";
+                    first = false;
+                }
+                break;
+            case FilterType::SORT: {
+                if (filter.sortState.index != filter.sortDefault.index ||
+                    filter.sortState.ascending != filter.sortDefault.ascending) {
+                    if (!first) gql += ", ";
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", sortState: {index: " + std::to_string(filter.sortState.index) +
+                            ", ascending: " + (filter.sortState.ascending ? "true" : "false") + "}}";
+                    first = false;
+                }
+                break;
+            }
+            case FilterType::GROUP: {
+                // For groups, build nested filter changes for modified children
+                for (const auto& child : filter.filters) {
+                    bool childChanged = false;
+                    std::string childGql;
+
+                    switch (child.type) {
+                        case FilterType::TRISTATE:
+                            if (child.triState != TriState::IGNORE) {
+                                childChanged = true;
+                                std::string ts;
+                                switch (child.triState) {
+                                    case TriState::IGNORE: ts = "IGNORE"; break;
+                                    case TriState::INCLUDE: ts = "INCLUDE"; break;
+                                    case TriState::EXCLUDE: ts = "EXCLUDE"; break;
+                                }
+                                childGql = "{position: " + std::to_string(child.position) +
+                                            ", triState: " + ts + "}";
+                            }
+                            break;
+                        case FilterType::CHECKBOX:
+                            if (child.checkBoxState != child.checkBoxDefault) {
+                                childChanged = true;
+                                childGql = "{position: " + std::to_string(child.position) +
+                                            ", checkBoxState: " + (child.checkBoxState ? "true" : "false") + "}";
+                            }
+                            break;
+                        case FilterType::TEXT:
+                            if (child.textState != child.textDefault) {
+                                childChanged = true;
+                                childGql = "{position: " + std::to_string(child.position) +
+                                            ", textState: \"" + child.textState + "\"}";
+                            }
+                            break;
+                        case FilterType::SELECT:
+                            if (child.selectState != child.selectDefault) {
+                                childChanged = true;
+                                childGql = "{position: " + std::to_string(child.position) +
+                                            ", selectState: " + std::to_string(child.selectState) + "}";
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+
+                    if (childChanged) {
+                        if (!first) gql += ", ";
+                        gql += "{position: " + std::to_string(filter.position) +
+                                ", groupChange: " + childGql + "}";
+                        first = false;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    gql += "]";
+    return gql;
+}
+
+bool SuwayomiClient::searchMangaWithFilters(int64_t sourceId, const std::string& query, int page,
+                                             const std::vector<SourceFilter>& filters,
+                                             std::vector<Manga>& manga, bool& hasNextPage) {
+    return searchMangaWithFiltersGraphQL(sourceId, query, page, filters, manga, hasNextPage);
+}
+
+bool SuwayomiClient::searchMangaWithFiltersGraphQL(int64_t sourceId, const std::string& query, int page,
+                                                     const std::vector<SourceFilter>& filters,
+                                                     std::vector<Manga>& manga, bool& hasNextPage) {
+    // Build the filter changes JSON
+    std::string filterChangesJson = buildFilterChangesJson(filters);
+
+    // Build query dynamically since filters are inline
+    std::string gqlQuery = R"(
+        mutation SearchWithFilters($sourceId: LongString!, $page: Int!) {
+            fetchSourceManga(input: {
+                source: $sourceId,
+                type: SEARCH,
+                page: $page,
+                query: ")" + ([&]() {
+                    std::string escaped;
+                    for (char c : query) {
+                        if (c == '"') escaped += "\\\"";
+                        else if (c == '\\') escaped += "\\\\";
+                        else if (c == '\n') escaped += "\\n";
+                        else escaped += c;
+                    }
+                    return escaped;
+                })() + R"(",
+                filters: )" + filterChangesJson + R"(
+            }) {
+                mangas {
+                    id
+                    title
+                    thumbnailUrl
+                    author
+                    artist
+                    description
+                    inLibrary
+                }
+                hasNextPage
+            }
+        }
+    )";
+
+    std::string variables = "{\"sourceId\":\"" + std::to_string(sourceId) + "\",\"page\":" + std::to_string(page) + "}";
+
+    std::string response = executeGraphQL(gqlQuery, variables);
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string fetchResult = extractJsonObject(data, "fetchSourceManga");
+    if (fetchResult.empty()) return false;
+
+    hasNextPage = extractJsonBool(fetchResult, "hasNextPage");
+
+    std::string mangasJson = extractJsonArray(fetchResult, "mangas");
+    manga.clear();
+    std::vector<std::string> items = splitJsonArray(mangasJson);
+    for (const auto& item : items) {
+        manga.push_back(parseMangaFromGraphQL(item));
+    }
+
+    brls::Logger::debug("GraphQL: Fetched {} manga with filters (hasNext: {})", manga.size(), hasNextPage);
     return true;
 }
 
 bool SuwayomiClient::setSourceFilters(int64_t sourceId, const std::vector<SourceFilter>& filters) {
-    // TODO: Implement filter setting
-    return false;
+    // Filters are sent directly with fetchSourceManga, not set separately
+    // This method is kept for API compatibility
+    return true;
 }
 
 // ============================================================================

@@ -268,13 +268,48 @@ enum class FilterType {
     GROUP
 };
 
+// Tristate values (matches Suwayomi GraphQL TriState enum)
+enum class TriState {
+    IGNORE = 0,
+    INCLUDE = 1,
+    EXCLUDE = 2
+};
+
+// Sort selection for SortFilter
+struct SortSelection {
+    int index = 0;
+    bool ascending = true;
+};
+
 // Source filter for search
 struct SourceFilter {
     FilterType type = FilterType::TEXT;
     std::string name;
-    std::string state;
-    std::vector<std::string> options;      // For SELECT type
-    std::vector<SourceFilter> filters;     // For GROUP type
+    int position = 0;  // Position in the filter list (for FilterChange)
+
+    // TextFilter state
+    std::string textState;
+    std::string textDefault;
+
+    // CheckBoxFilter state
+    bool checkBoxState = false;
+    bool checkBoxDefault = false;
+
+    // TriStateFilter state (for genre AND/OR include/exclude)
+    TriState triState = TriState::IGNORE;
+
+    // SelectFilter state
+    std::vector<std::string> selectOptions;
+    int selectState = 0;
+    int selectDefault = 0;
+
+    // SortFilter state
+    std::vector<std::string> sortOptions;
+    SortSelection sortState;
+    SortSelection sortDefault;
+
+    // GroupFilter children
+    std::vector<SourceFilter> filters;
 };
 
 // Track search result (from tracker search)
@@ -442,6 +477,9 @@ public:
     bool fetchLatestManga(int64_t sourceId, int page, std::vector<Manga>& manga, bool& hasNextPage);
     bool searchManga(int64_t sourceId, const std::string& query, int page,
                      std::vector<Manga>& manga, bool& hasNextPage);
+    bool searchMangaWithFilters(int64_t sourceId, const std::string& query, int page,
+                                const std::vector<SourceFilter>& filters,
+                                std::vector<Manga>& manga, bool& hasNextPage);
     bool quickSearchManga(int64_t sourceId, const std::string& query, std::vector<Manga>& manga);
 
     // Manga Operations
@@ -603,6 +641,11 @@ private:
     bool fetchPopularMangaGraphQL(int64_t sourceId, int page, std::vector<Manga>& manga, bool& hasNextPage);
     bool fetchLatestMangaGraphQL(int64_t sourceId, int page, std::vector<Manga>& manga, bool& hasNextPage);
     bool searchMangaGraphQL(int64_t sourceId, const std::string& query, int page, std::vector<Manga>& manga, bool& hasNextPage);
+    bool searchMangaWithFiltersGraphQL(int64_t sourceId, const std::string& query, int page,
+                                        const std::vector<SourceFilter>& filters,
+                                        std::vector<Manga>& manga, bool& hasNextPage);
+    bool fetchSourceFiltersGraphQL(int64_t sourceId, std::vector<SourceFilter>& filters);
+    std::string buildFilterChangesJson(const std::vector<SourceFilter>& filters);
     bool fetchLibraryMangaGraphQL(std::vector<Manga>& manga);
     bool fetchCategoriesGraphQL(std::vector<Category>& categories);
     bool fetchChaptersGraphQL(int mangaId, std::vector<Chapter>& chapters);
