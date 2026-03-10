@@ -667,7 +667,7 @@ void SearchTab::showSources() {
     m_backBtn->setVisibility(brls::Visibility::GONE);
     // Restore tag icon on header button and reset background
     if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
-    m_tagFilterBtn->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
+    m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
     // Restore search/history buttons when returning to source list
     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
     m_historyBtn->setFocusable(true);
@@ -897,7 +897,7 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_filtersActive = false;
     // Switch header tag button to filter icon for source browsing
     if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
-    m_tagFilterBtn->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
+    m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
 
     // CRITICAL: Move focus away from source list BEFORE clearing views.
     // The currently focused view may be a source row that clearViews() will delete.
@@ -1210,7 +1210,7 @@ void SearchTab::showFilterDialog() {
                     } else {
                         // Reset
                         resetFilters();
-                        m_tagFilterBtn->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
+                        m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
                         brls::Application::notify("Filters reset");
                         // Reload popular manga
                         loadPopularManga(m_currentSourceId);
