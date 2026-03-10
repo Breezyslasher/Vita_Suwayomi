@@ -896,7 +896,7 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_filtersLoaded = false;
     m_filtersActive = false;
     // Switch header tag button to filter icon for source browsing
-    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
+    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
     m_tagFilterBtn->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
 
     // CRITICAL: Move focus away from source list BEFORE clearing views.
