@@ -326,6 +326,12 @@ SearchTab::SearchTab() {
 
     this->addView(m_modeBox);
 
+    // Inline filter panel (hidden by default, expands in-place when button pressed)
+    m_filterPanel = new brls::Box();
+    m_filterPanel->setAxis(brls::Axis::COLUMN);
+    m_filterPanel->setVisibility(brls::Visibility::GONE);
+    this->addView(m_filterPanel);
+
     // Results label
     m_resultsLabel = new brls::Label();
     m_resultsLabel->setText("");
@@ -664,6 +670,7 @@ void SearchTab::clearSearchHistory() {
 void SearchTab::showSources() {
     m_loadGeneration++;  // Invalidate any in-flight async callbacks
     hideLoadingIndicator();  // Cancel any visible loading text from prior browse/search
+    hideFilterPanel();  // Close any open inline filter panel
     m_browseMode = BrowseMode::SOURCES;
     m_titleLabel->setText("Browse");
     m_searchLabel->setVisibility(brls::Visibility::GONE);
@@ -1089,6 +1096,14 @@ void SearchTab::applyFilters() {
     });
 }
 
+void SearchTab::hideFilterPanel() {
+    if (m_filterPanel) {
+        m_filterPanel->clearViews();
+        m_filterPanel->setVisibility(brls::Visibility::GONE);
+        m_filterPanelType = FilterPanelType::NONE;
+    }
+}
+
 void SearchTab::showFilterDialog() {
     if (m_sourceFilters.empty()) {
         if (!m_filtersLoaded) {
@@ -1100,39 +1115,41 @@ void SearchTab::showFilterDialog() {
         return;
     }
 
+    // Toggle: if already showing source filters, hide and return
+    if (m_filterPanelType == FilterPanelType::SOURCE_FILTER) {
+        hideFilterPanel();
+        return;
+    }
+
+    buildFilterPanel();
+}
+
+void SearchTab::buildFilterPanel() {
     m_loadGeneration++;  // Invalidate in-flight loads
 
-    // Full-screen semi-transparent overlay so current page shows behind
-    auto* overlay = new brls::Box();
-    overlay->setWidth(960);
-    overlay->setHeight(544);
-    overlay->setAxis(brls::Axis::COLUMN);
-    overlay->setJustifyContent(brls::JustifyContent::CENTER);
-    overlay->setAlignItems(brls::AlignItems::CENTER);
-    overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 160));
+    // Clear and repopulate the inline panel
+    m_filterPanel->clearViews();
+    m_filterPanelType = FilterPanelType::SOURCE_FILTER;
 
-    // Create dialog box
-    auto* dialogBox = new brls::Box();
-    dialogBox->setAxis(brls::Axis::COLUMN);
-    dialogBox->setWidth(520);
-    dialogBox->setHeight(420);
-    dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
-    dialogBox->setCornerRadius(12);
+    m_filterPanel->setBackgroundColor(Application::getInstance().getDialogBackground());
+    m_filterPanel->setCornerRadius(12);
+    m_filterPanel->setPadding(12);
+    m_filterPanel->setMarginBottom(10);
+    m_filterPanel->setMaxHeight(350);
 
-    // Title
+    // Title row
+    auto* titleRow = new brls::Box();
+    titleRow->setAxis(brls::Axis::ROW);
+    titleRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    titleRow->setAlignItems(brls::AlignItems::CENTER);
+    titleRow->setMarginBottom(8);
+
     auto* titleLabel = new brls::Label();
     titleLabel->setText("Source Filters");
-    titleLabel->setFontSize(22);
-    titleLabel->setMarginBottom(10);
-    dialogBox->addView(titleLabel);
+    titleLabel->setFontSize(20);
+    titleRow->addView(titleLabel);
 
-    // Scrollable filter list
-    auto* scrollView = new brls::ScrollingFrame();
-    scrollView->setGrow(1.0f);
-
-    auto* filterListBox = new brls::Box();
-    filterListBox->setAxis(brls::Axis::COLUMN);
+    m_filterPanel->addView(titleRow);
 
     // Helper: create a label for a filter row showing its current state
     auto makeFilterLabel = [](const SourceFilter& f) -> std::string {
@@ -1172,6 +1189,13 @@ void SearchTab::showFilterDialog() {
         }
     };
 
+    // Main scrolling frame for the whole filter content
+    auto* mainScroll = new brls::ScrollingFrame();
+    mainScroll->setGrow(1.0f);
+
+    auto* filterListBox = new brls::Box();
+    filterListBox->setAxis(brls::Axis::COLUMN);
+
     // Build filter rows
     for (size_t i = 0; i < m_sourceFilters.size(); i++) {
         auto& filter = m_sourceFilters[i];
@@ -1205,9 +1229,9 @@ void SearchTab::showFilterDialog() {
             auto* groupRow = new brls::Box();
             groupRow->setAxis(brls::Axis::ROW);
             groupRow->setFocusable(true);
-            groupRow->setPadding(10, 12, 10, 12);
-            groupRow->setMarginTop(6);
-            groupRow->setMarginBottom(4);
+            groupRow->setPadding(8, 10, 8, 10);
+            groupRow->setMarginTop(4);
+            groupRow->setMarginBottom(2);
             groupRow->setCornerRadius(8);
             groupRow->setAlignItems(brls::AlignItems::CENTER);
             groupRow->setBackgroundColor(Application::getInstance().getHeaderTextColor());
@@ -1216,7 +1240,7 @@ void SearchTab::showFilterDialog() {
             arrowLabel->setFontSize(16);
             arrowLabel->setWidth(24);
             arrowLabel->setMarginRight(8);
-            arrowLabel->setText(collapsed ? "\u25B6" : "\u25BC");  // right arrow / down arrow
+            arrowLabel->setText(collapsed ? "\u25B6" : "\u25BC");
             groupRow->addView(arrowLabel);
 
             auto* groupNameLabel = new brls::Label();
@@ -1225,12 +1249,10 @@ void SearchTab::showFilterDialog() {
             groupNameLabel->setGrow(1.0f);
             groupRow->addView(groupNameLabel);
 
-            // Scrollable container for group children so large groups
-            // (like Genre) scroll within their section instead of
-            // pushing the whole dialog.
+            // Each group section gets its own scrolling frame
             auto* childrenScroll = new brls::ScrollingFrame();
-            childrenScroll->setMarginLeft(20);
-            childrenScroll->setMaxHeight(180);
+            childrenScroll->setMarginLeft(16);
+            childrenScroll->setMaxHeight(160);
             childrenScroll->setVisibility(collapsed ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 
             auto* childrenBox = new brls::Box();
@@ -1251,10 +1273,6 @@ void SearchTab::showFilterDialog() {
                 return true;
             });
             groupRow->addGestureRecognizer(new brls::TapGestureRecognizer(groupRow));
-            groupRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-                brls::Application::popActivity();
-                return true;
-            }, true);
 
             filterListBox->addView(groupRow);
 
@@ -1267,19 +1285,18 @@ void SearchTab::showFilterDialog() {
                 auto* childRow = new brls::Box();
                 childRow->setAxis(brls::Axis::ROW);
                 childRow->setFocusable(true);
-                childRow->setPadding(8, 12, 8, 12);
-                childRow->setMarginBottom(4);
+                childRow->setPadding(6, 10, 6, 10);
+                childRow->setMarginBottom(2);
                 childRow->setCornerRadius(6);
                 childRow->setAlignItems(brls::AlignItems::CENTER);
                 childRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
                 auto* childLabel = new brls::Label();
                 childLabel->setText(makeFilterLabel(child));
-                childLabel->setFontSize(15);
+                childLabel->setFontSize(14);
                 childLabel->setGrow(1.0f);
                 childRow->addView(childLabel);
 
-                // Click action based on child type
                 childRow->registerClickAction([this, fi, ci, childLabel, makeFilterLabel](brls::View*) {
                     if (fi >= static_cast<int>(m_sourceFilters.size())) return true;
                     auto& parent = m_sourceFilters[fi];
@@ -1329,10 +1346,6 @@ void SearchTab::showFilterDialog() {
                     return true;
                 });
                 childRow->addGestureRecognizer(new brls::TapGestureRecognizer(childRow));
-                childRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-                    brls::Application::popActivity();
-                    return true;
-                }, true);
 
                 childrenBox->addView(childRow);
             }
@@ -1346,15 +1359,15 @@ void SearchTab::showFilterDialog() {
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
         row->setFocusable(true);
-        row->setPadding(10, 12, 10, 12);
-        row->setMarginBottom(6);
+        row->setPadding(8, 10, 8, 10);
+        row->setMarginBottom(4);
         row->setCornerRadius(8);
         row->setAlignItems(brls::AlignItems::CENTER);
         row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
         auto* rowLabel = new brls::Label();
         rowLabel->setText(makeFilterLabel(filter));
-        rowLabel->setFontSize(16);
+        rowLabel->setFontSize(15);
         rowLabel->setGrow(1.0f);
         row->addView(rowLabel);
 
@@ -1425,43 +1438,33 @@ void SearchTab::showFilterDialog() {
             return true;
         });
         row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
-        row->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-            brls::Application::popActivity();
-            return true;
-        }, true);
 
         filterListBox->addView(row);
     }
 
-    scrollView->setContentView(filterListBox);
-    dialogBox->addView(scrollView);
+    mainScroll->setContentView(filterListBox);
+    m_filterPanel->addView(mainScroll);
 
     // Button row
     auto* buttonRow = new brls::Box();
     buttonRow->setAxis(brls::Axis::ROW);
     buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
-    buttonRow->setMarginTop(15);
+    buttonRow->setMarginTop(8);
 
-    // Apply button
     auto* applyBtn = new brls::Button();
     applyBtn->setText("Apply Filters");
     applyBtn->setMarginRight(10);
     applyBtn->registerClickAction([this](brls::View*) {
-        brls::Application::popActivity();
+        hideFilterPanel();
         applyFilters();
         return true;
     });
     applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
-    applyBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);
 
-    // Reset button
     auto* resetBtn = new brls::Button();
     resetBtn->setText("Reset");
     resetBtn->registerClickAction([this](brls::View*) {
-        brls::Application::popActivity();
+        hideFilterPanel();
         resetFilters();
         m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
         brls::Application::notify("Filters reset");
@@ -1469,54 +1472,15 @@ void SearchTab::showFilterDialog() {
         return true;
     });
     resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
-    resetBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);
 
     buttonRow->addView(applyBtn);
     buttonRow->addView(resetBtn);
-    dialogBox->addView(buttonRow);
+    m_filterPanel->addView(buttonRow);
 
-    // Dialog-level B button
-    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);
+    m_filterPanel->setVisibility(brls::Visibility::VISIBLE);
 
-    // Navigation: find first and last focusable in the list
-    auto& children = filterListBox->getChildren();
-    brls::View* firstFocusable = nullptr;
-    brls::View* lastFocusable = nullptr;
-    for (auto* child : children) {
-        if (child->isFocusable()) {
-            if (!firstFocusable) firstFocusable = child;
-            lastFocusable = child;
-        }
-        // Also check children of Box containers (for group children)
-        auto* box = dynamic_cast<brls::Box*>(child);
-        if (box) {
-            for (auto* sub : box->getChildren()) {
-                if (sub->isFocusable()) {
-                    if (!firstFocusable) firstFocusable = sub;
-                    lastFocusable = sub;
-                }
-            }
-        }
-    }
-    if (firstFocusable) {
-        firstFocusable->setCustomNavigationRoute(brls::FocusDirection::UP, firstFocusable);
-    }
-    if (lastFocusable) {
-        lastFocusable->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
-        applyBtn->setCustomNavigationRoute(brls::FocusDirection::UP, lastFocusable);
-        resetBtn->setCustomNavigationRoute(brls::FocusDirection::UP, lastFocusable);
-    }
-    applyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
-    resetBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, resetBtn);
-
-    overlay->addView(dialogBox);
-    brls::Application::pushActivity(new brls::Activity(overlay));
+    // Focus first focusable item
+    brls::Application::giveFocus(filterListBox);
 }
 
 void SearchTab::collectAllTags(std::set<std::string>& allTags) {
@@ -1537,33 +1501,33 @@ void SearchTab::showTagFilterDialog() {
         return;
     }
 
+    // Toggle: if already showing tag filter, hide and return
+    if (m_filterPanelType == FilterPanelType::TAG_FILTER) {
+        hideFilterPanel();
+        return;
+    }
+
+    buildTagFilterPanel();
+}
+
+void SearchTab::buildTagFilterPanel() {
+    m_filterPanel->clearViews();
+    m_filterPanelType = FilterPanelType::TAG_FILTER;
+
+    m_filterPanel->setBackgroundColor(Application::getInstance().getDialogBackground());
+    m_filterPanel->setCornerRadius(12);
+    m_filterPanel->setPadding(12);
+    m_filterPanel->setMarginBottom(10);
+    m_filterPanel->setMaxHeight(350);
+
     auto& settings = Application::getInstance().getSettings();
     int activeCount = static_cast<int>(settings.selectedSourceTagFilters.size());
-
-    // Build tag list
+    std::set<std::string> allTags;
+    collectAllTags(allTags);
     std::vector<std::string> tagList(allTags.begin(), allTags.end());
 
-    // Shared state for checkmarks (modified in-place by toggle callbacks)
     auto checkLabels = std::make_shared<std::vector<brls::Label*>>();
     auto rows = std::make_shared<std::vector<brls::Box*>>();
-
-    // Full-screen semi-transparent overlay so current page shows behind
-    auto* overlay = new brls::Box();
-    overlay->setWidth(960);
-    overlay->setHeight(544);
-    overlay->setAxis(brls::Axis::COLUMN);
-    overlay->setJustifyContent(brls::JustifyContent::CENTER);
-    overlay->setAlignItems(brls::AlignItems::CENTER);
-    overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 160));
-
-    // Create dialog box
-    auto* dialogBox = new brls::Box();
-    dialogBox->setAxis(brls::Axis::COLUMN);
-    dialogBox->setWidth(500);
-    dialogBox->setHeight(400);
-    dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
-    dialogBox->setCornerRadius(12);
 
     // Title
     auto* titleLabel = new brls::Label();
@@ -1572,9 +1536,9 @@ void SearchTab::showTagFilterDialog() {
         title += " (" + std::to_string(activeCount) + " active)";
     }
     titleLabel->setText(title);
-    titleLabel->setFontSize(22);
-    titleLabel->setMarginBottom(10);
-    dialogBox->addView(titleLabel);
+    titleLabel->setFontSize(20);
+    titleLabel->setMarginBottom(8);
+    m_filterPanel->addView(titleLabel);
 
     // Scrollable tag list
     auto* scrollView = new brls::ScrollingFrame();
@@ -1590,14 +1554,14 @@ void SearchTab::showTagFilterDialog() {
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
         row->setFocusable(true);
-        row->setPadding(10, 12, 10, 12);
-        row->setMarginBottom(6);
+        row->setPadding(8, 10, 8, 10);
+        row->setMarginBottom(4);
         row->setCornerRadius(8);
         row->setAlignItems(brls::AlignItems::CENTER);
         row->setBackgroundColor(active ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
 
         auto* checkLabel = new brls::Label();
-        checkLabel->setFontSize(16);
+        checkLabel->setFontSize(15);
         checkLabel->setWidth(24);
         checkLabel->setMarginRight(8);
         if (active) {
@@ -1611,13 +1575,12 @@ void SearchTab::showTagFilterDialog() {
 
         auto* nameLabel = new brls::Label();
         nameLabel->setText(tag);
-        nameLabel->setFontSize(16);
+        nameLabel->setFontSize(15);
         nameLabel->setGrow(1.0f);
         row->addView(nameLabel);
 
         rows->push_back(row);
 
-        // Toggle on click
         row->registerClickAction([this, tag, checkLabels, rows, i, titleLabel](brls::View*) {
             auto& s = Application::getInstance().getSettings();
             if (s.selectedSourceTagFilters.count(tag) > 0) {
@@ -1630,7 +1593,6 @@ void SearchTab::showTagFilterDialog() {
                 (*checkLabels)[i]->setTextColor(Application::getInstance().getCtaButtonColor());
                 (*rows)[i]->setBackgroundColor(Application::getInstance().getActiveRowBackground());
             }
-            // Update title with active count
             int count = static_cast<int>(s.selectedSourceTagFilters.size());
             std::string t = "Filter by Tag";
             if (count > 0) t += " (" + std::to_string(count) + " active)";
@@ -1639,40 +1601,29 @@ void SearchTab::showTagFilterDialog() {
         });
         row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
 
-        row->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-            brls::Application::popActivity();
-            return true;
-        }, true);
-
         tagListBox->addView(row);
     }
 
     scrollView->setContentView(tagListBox);
-    dialogBox->addView(scrollView);
+    m_filterPanel->addView(scrollView);
 
     // Button row
     auto* buttonRow = new brls::Box();
     buttonRow->setAxis(brls::Axis::ROW);
     buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
-    buttonRow->setMarginTop(15);
+    buttonRow->setMarginTop(8);
 
-    // Apply filter button
     auto* applyBtn = new brls::Button();
     applyBtn->setText("Apply Filter");
     applyBtn->setMarginRight(10);
     applyBtn->registerClickAction([this](brls::View*) {
         Application::getInstance().saveSettings();
-        brls::Application::popActivity();
+        hideFilterPanel();
         showSources();
         return true;
     });
     applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
-    applyBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);
 
-    // Clear all button
     auto* clearBtn = new brls::Button();
     clearBtn->setText("Clear All");
     clearBtn->registerClickAction([this, checkLabels, rows, titleLabel](brls::View*) {
@@ -1687,80 +1638,57 @@ void SearchTab::showTagFilterDialog() {
         return true;
     });
     clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn));
-    clearBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);
 
     buttonRow->addView(applyBtn);
     buttonRow->addView(clearBtn);
-    dialogBox->addView(buttonRow);
+    m_filterPanel->addView(buttonRow);
 
-    // Dialog-level B button
-    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);
-
-    // Navigation setup
-    auto& children = tagListBox->getChildren();
-    if (!children.empty()) {
-        children.front()->setCustomNavigationRoute(brls::FocusDirection::UP, children.front());
-        children.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
-        applyBtn->setCustomNavigationRoute(brls::FocusDirection::UP, children.back());
-        clearBtn->setCustomNavigationRoute(brls::FocusDirection::UP, children.back());
-    }
-    applyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
-    clearBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, clearBtn);
-
-    overlay->addView(dialogBox);
-    brls::Application::pushActivity(new brls::Activity(overlay));
+    m_filterPanel->setVisibility(brls::Visibility::VISIBLE);
+    brls::Application::giveFocus(tagListBox);
 }
 
 void SearchTab::showTagManageDialog(const Source& source) {
+    // Toggle: if already showing tag manage, hide and return
+    if (m_filterPanelType == FilterPanelType::TAG_MANAGE) {
+        hideFilterPanel();
+        return;
+    }
+
+    buildTagManagePanel(source);
+}
+
+void SearchTab::buildTagManagePanel(const Source& source) {
+    m_filterPanel->clearViews();
+    m_filterPanelType = FilterPanelType::TAG_MANAGE;
+
+    m_filterPanel->setBackgroundColor(Application::getInstance().getDialogBackground());
+    m_filterPanel->setCornerRadius(12);
+    m_filterPanel->setPadding(12);
+    m_filterPanel->setMarginBottom(10);
+    m_filterPanel->setMaxHeight(350);
+
     auto& settings = Application::getInstance().getSettings();
     std::string sourceIdStr = std::to_string(source.id);
 
-    // Get current tags for this source
     std::set<std::string> currentTags;
     auto it = settings.sourceTags.find(sourceIdStr);
     if (it != settings.sourceTags.end()) {
         currentTags = it->second;
     }
 
-    // Collect all existing tags across all sources
     std::set<std::string> allTags;
     collectAllTags(allTags);
-
     std::vector<std::string> tagList(allTags.begin(), allTags.end());
 
     auto checkLabels = std::make_shared<std::vector<brls::Label*>>();
     auto rowPtrs = std::make_shared<std::vector<brls::Box*>>();
 
-    // Full-screen semi-transparent overlay so current page shows behind
-    auto* overlay = new brls::Box();
-    overlay->setWidth(960);
-    overlay->setHeight(544);
-    overlay->setAxis(brls::Axis::COLUMN);
-    overlay->setJustifyContent(brls::JustifyContent::CENTER);
-    overlay->setAlignItems(brls::AlignItems::CENTER);
-    overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 160));
-
-    // Create dialog box
-    auto* dialogBox = new brls::Box();
-    dialogBox->setAxis(brls::Axis::COLUMN);
-    dialogBox->setWidth(500);
-    dialogBox->setHeight(400);
-    dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
-    dialogBox->setCornerRadius(12);
-
     // Title
     auto* titleLabel = new brls::Label();
     titleLabel->setText("Tags: " + source.name);
-    titleLabel->setFontSize(22);
-    titleLabel->setMarginBottom(10);
-    dialogBox->addView(titleLabel);
+    titleLabel->setFontSize(20);
+    titleLabel->setMarginBottom(8);
+    m_filterPanel->addView(titleLabel);
 
     // Scrollable tag list
     auto* scrollView = new brls::ScrollingFrame();
@@ -1776,14 +1704,14 @@ void SearchTab::showTagManageDialog(const Source& source) {
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
         row->setFocusable(true);
-        row->setPadding(10, 12, 10, 12);
-        row->setMarginBottom(6);
+        row->setPadding(8, 10, 8, 10);
+        row->setMarginBottom(4);
         row->setCornerRadius(8);
         row->setAlignItems(brls::AlignItems::CENTER);
         row->setBackgroundColor(has ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
 
         auto* checkLabel = new brls::Label();
-        checkLabel->setFontSize(16);
+        checkLabel->setFontSize(15);
         checkLabel->setWidth(24);
         checkLabel->setMarginRight(8);
         if (has) {
@@ -1797,13 +1725,12 @@ void SearchTab::showTagManageDialog(const Source& source) {
 
         auto* nameLabel = new brls::Label();
         nameLabel->setText(tag);
-        nameLabel->setFontSize(16);
+        nameLabel->setFontSize(15);
         nameLabel->setGrow(1.0f);
         row->addView(nameLabel);
 
         rowPtrs->push_back(row);
 
-        // Toggle on click
         row->registerClickAction([this, sourceIdStr, tag, checkLabels, rowPtrs, i](brls::View*) {
             auto& s = Application::getInstance().getSettings();
             auto& sourceTags = s.sourceTags[sourceIdStr];
@@ -1823,24 +1750,18 @@ void SearchTab::showTagManageDialog(const Source& source) {
         });
         row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
 
-        row->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-            brls::Application::popActivity();
-            return true;
-        }, true);
-
         tagListBox->addView(row);
     }
 
     scrollView->setContentView(tagListBox);
-    dialogBox->addView(scrollView);
+    m_filterPanel->addView(scrollView);
 
     // Button row
     auto* buttonRow = new brls::Box();
     buttonRow->setAxis(brls::Axis::ROW);
     buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
-    buttonRow->setMarginTop(15);
+    buttonRow->setMarginTop(8);
 
-    // Add New Tag button
     auto* addBtn = new brls::Button();
     addBtn->setText("+ Add Tag");
     addBtn->setMarginRight(10);
@@ -1851,55 +1772,28 @@ void SearchTab::showTagManageDialog(const Source& source) {
             s.sourceTags[sourceIdStr].insert(text);
             Application::getInstance().saveSettings();
             brls::Application::notify("Tag '" + text + "' added");
-            // Re-show dialog to include new tag
-            brls::Application::popActivity();
-            showTagManageDialog(source);
+            // Rebuild the panel to include new tag
+            buildTagManagePanel(source);
         }, "New Tag", "Enter tag name", 32, "");
         return true;
     });
     addBtn->addGestureRecognizer(new brls::TapGestureRecognizer(addBtn));
-    addBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);
 
-    // Done button
     auto* doneBtn = new brls::Button();
     doneBtn->setText("Done");
     doneBtn->registerClickAction([this](brls::View*) {
-        brls::Application::popActivity();
+        hideFilterPanel();
         showSources();
         return true;
     });
     doneBtn->addGestureRecognizer(new brls::TapGestureRecognizer(doneBtn));
-    doneBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);
 
     buttonRow->addView(addBtn);
     buttonRow->addView(doneBtn);
-    dialogBox->addView(buttonRow);
+    m_filterPanel->addView(buttonRow);
 
-    // Dialog-level B button
-    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);
-
-    // Navigation setup
-    auto& children = tagListBox->getChildren();
-    if (!children.empty()) {
-        children.front()->setCustomNavigationRoute(brls::FocusDirection::UP, children.front());
-        children.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, addBtn);
-        addBtn->setCustomNavigationRoute(brls::FocusDirection::UP, children.back());
-        doneBtn->setCustomNavigationRoute(brls::FocusDirection::UP, children.back());
-    }
-    addBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, addBtn);
-    doneBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, doneBtn);
-
-    overlay->addView(dialogBox);
-    brls::Application::pushActivity(new brls::Activity(overlay));
+    m_filterPanel->setVisibility(brls::Visibility::VISIBLE);
+    brls::Application::giveFocus(tagListBox);
 }
 
 void SearchTab::loadPopularManga(int64_t sourceId) {
@@ -2466,6 +2360,7 @@ void SearchTab::handleBackNavigation() {
     if (m_browseMode == BrowseMode::SOURCES) return;  // Already on sources, nothing to do
     m_isNavigatingBack = true;
     m_loadGeneration++;  // Invalidate any in-flight async callbacks
+    hideFilterPanel();  // Close any open inline filter panel
     hideLoadingIndicator();  // Hide any loading text left from cancelled async loads
     // Invalidate source icon alive flag before clearing to prevent stale
     // texture uploads to freed brls::Image pointers.
