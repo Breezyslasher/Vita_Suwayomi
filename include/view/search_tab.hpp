@@ -101,10 +101,26 @@ private:
     void populateSearchResultsBySource();
     brls::View* createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga);
 
+    // Content wrapper: ROW layout with main content (left) and filter panel (right)
+    brls::Box* m_contentWrapper = nullptr;
+    brls::Box* m_mainContent = nullptr;
+
+    // Inline filter panel (appears on right side instead of opening a dialog)
+    brls::Box* m_filterPanel = nullptr;
+    enum class FilterPanelType { NONE, SOURCE_FILTER, TAG_FILTER, TAG_MANAGE };
+    FilterPanelType m_filterPanelType = FilterPanelType::NONE;
+    brls::View* m_prePanelFocusView = nullptr;  // View that had focus before panel opened
+    brls::Box* m_lastHighlightedRow = nullptr;   // Currently highlighted row in filter panel
+    void hideFilterPanel();
+    void buildFilterPanel();       // Build source filter content into m_filterPanel
+    void buildTagFilterPanel();    // Build tag filter content into m_filterPanel
+    void buildTagManagePanel(const Source& source);  // Build tag manage content into m_filterPanel
+
     // Source filter state
     std::vector<SourceFilter> m_sourceFilters;
     bool m_filtersLoaded = false;
     bool m_filtersActive = false;  // True when user has applied filters
+    std::set<int> m_collapsedGroups;  // Indices of collapsed groups in filter dialog
 
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;
