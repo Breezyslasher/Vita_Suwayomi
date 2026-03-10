@@ -1327,6 +1327,17 @@ void SearchTab::buildFilterPanel() {
                 childRow->setAlignItems(brls::AlignItems::CENTER);
                 childRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
+                // Add expand arrow for SELECT children
+                brls::Label* childArrow = nullptr;
+                if (child.type == FilterType::SELECT) {
+                    childArrow = new brls::Label();
+                    childArrow->setFontSize(12);
+                    childArrow->setWidth(16);
+                    childArrow->setMarginRight(4);
+                    childArrow->setText("\u25B6");
+                    childRow->addView(childArrow);
+                }
+
                 auto* childLabel = new brls::Label();
                 childLabel->setText(makeFilterLabel(child));
                 childLabel->setFontSize(13);
@@ -1342,7 +1353,77 @@ void SearchTab::buildFilterPanel() {
                     m_lastHighlightedRow = childRow;
                 });
 
-                childRow->registerClickAction([this, fi, ci, childLabel, makeFilterLabel](brls::View*) {
+                // Create inline options container for SELECT children
+                brls::Box* childOptionsBox = nullptr;
+                if (child.type == FilterType::SELECT) {
+                    childOptionsBox = new brls::Box();
+                    childOptionsBox->setAxis(brls::Axis::COLUMN);
+                    childOptionsBox->setMarginLeft(20);
+                    childOptionsBox->setMarginBottom(1);
+                    childOptionsBox->setVisibility(brls::Visibility::GONE);
+
+                    for (int optIdx = 0; optIdx < static_cast<int>(child.selectOptions.size()); optIdx++) {
+                        auto* optRow = new brls::Box();
+                        optRow->setAxis(brls::Axis::ROW);
+                        optRow->setFocusable(true);
+                        optRow->setPadding(3, 8, 3, 8);
+                        optRow->setMarginBottom(1);
+                        optRow->setCornerRadius(4);
+                        optRow->setAlignItems(brls::AlignItems::CENTER);
+                        optRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+                        auto* checkMark = new brls::Label();
+                        checkMark->setFontSize(12);
+                        checkMark->setWidth(16);
+                        checkMark->setMarginRight(4);
+                        checkMark->setText(optIdx == child.selectState ? "\u2713" : " ");
+                        if (optIdx == child.selectState)
+                            checkMark->setTextColor(Application::getInstance().getCtaButtonColor());
+                        optRow->addView(checkMark);
+
+                        auto* optLabel = new brls::Label();
+                        optLabel->setText(child.selectOptions[optIdx]);
+                        optLabel->setFontSize(12);
+                        optLabel->setSingleLine(true);
+                        optRow->addView(optLabel);
+
+                        optRow->registerClickAction([this, fi, ci, optIdx, childLabel, makeFilterLabel, childOptionsBox, childArrow](brls::View*) {
+                            if (fi >= static_cast<int>(m_sourceFilters.size())) return true;
+                            auto& parent = m_sourceFilters[fi];
+                            if (ci >= static_cast<int>(parent.filters.size())) return true;
+                            parent.filters[ci].selectState = optIdx;
+                            childLabel->setText(makeFilterLabel(parent.filters[ci]));
+                            // Update checkmarks
+                            for (size_t k = 0; k < childOptionsBox->getChildren().size(); k++) {
+                                auto* oc = dynamic_cast<brls::Box*>(childOptionsBox->getChildren()[k]);
+                                if (oc && !oc->getChildren().empty()) {
+                                    auto* cm = dynamic_cast<brls::Label*>(oc->getChildren()[0]);
+                                    if (cm) {
+                                        cm->setText(static_cast<int>(k) == optIdx ? "\u2713" : " ");
+                                        if (static_cast<int>(k) == optIdx)
+                                            cm->setTextColor(Application::getInstance().getCtaButtonColor());
+                                    }
+                                }
+                            }
+                            childOptionsBox->setVisibility(brls::Visibility::GONE);
+                            if (childArrow) childArrow->setText("\u25B6");
+                            return true;
+                        });
+                        optRow->addGestureRecognizer(new brls::TapGestureRecognizer(optRow));
+
+                        optRow->getFocusEvent()->subscribe([this, optRow](brls::View*) {
+                            if (m_lastHighlightedRow && m_lastHighlightedRow != optRow) {
+                                m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                            }
+                            optRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+                            m_lastHighlightedRow = optRow;
+                        });
+
+                        childOptionsBox->addView(optRow);
+                    }
+                }
+
+                childRow->registerClickAction([this, fi, ci, childLabel, makeFilterLabel, childOptionsBox, childArrow](brls::View*) {
                     if (fi >= static_cast<int>(m_sourceFilters.size())) return true;
                     auto& parent = m_sourceFilters[fi];
                     if (ci >= static_cast<int>(parent.filters.size())) return true;
@@ -1371,21 +1452,14 @@ void SearchTab::buildFilterPanel() {
                                     }
                                 }, child.name, "", 256, child.textState);
                             break;
-                        case FilterType::SELECT: {
-                            brls::Dropdown* selectDrop = new brls::Dropdown(
-                                child.name, child.selectOptions,
-                                [this, fi, ci, childLabel, makeFilterLabel](int sel) {
-                                    if (sel >= 0 && fi < static_cast<int>(m_sourceFilters.size()) &&
-                                        ci < static_cast<int>(m_sourceFilters[fi].filters.size())) {
-                                        m_sourceFilters[fi].filters[ci].selectState = sel;
-                                        brls::sync([childLabel, makeFilterLabel, this, fi, ci]() {
-                                            childLabel->setText(makeFilterLabel(m_sourceFilters[fi].filters[ci]));
-                                        });
-                                    }
-                                }, child.selectState);
-                            brls::Application::pushActivity(new brls::Activity(selectDrop));
+                        case FilterType::SELECT:
+                            // Toggle inline options visibility
+                            if (childOptionsBox) {
+                                bool expanding = childOptionsBox->getVisibility() == brls::Visibility::GONE;
+                                childOptionsBox->setVisibility(expanding ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+                                if (childArrow) childArrow->setText(expanding ? "\u25BC" : "\u25B6");
+                            }
                             break;
-                        }
                         default: break;
                     }
                     return true;
@@ -1393,6 +1467,9 @@ void SearchTab::buildFilterPanel() {
                 childRow->addGestureRecognizer(new brls::TapGestureRecognizer(childRow));
 
                 childrenBox->addView(childRow);
+                if (childOptionsBox) {
+                    childrenBox->addView(childOptionsBox);
+                }
             }
 
             filterListBox->addView(childrenBox);
@@ -1409,6 +1486,17 @@ void SearchTab::buildFilterPanel() {
         row->setAlignItems(brls::AlignItems::CENTER);
         row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
+        // Add expand arrow for SELECT and SORT types
+        brls::Label* arrowLabel = nullptr;
+        if (filter.type == FilterType::SELECT || filter.type == FilterType::SORT) {
+            arrowLabel = new brls::Label();
+            arrowLabel->setFontSize(13);
+            arrowLabel->setWidth(18);
+            arrowLabel->setMarginRight(4);
+            arrowLabel->setText("\u25B6");
+            row->addView(arrowLabel);
+        }
+
         auto* rowLabel = new brls::Label();
         rowLabel->setText(makeFilterLabel(filter));
         rowLabel->setFontSize(13);
@@ -1424,8 +1512,154 @@ void SearchTab::buildFilterPanel() {
             m_lastHighlightedRow = row;
         });
 
+        // Create inline options container for SELECT and SORT types
+        brls::Box* optionsBox = nullptr;
+        if (filter.type == FilterType::SELECT || filter.type == FilterType::SORT) {
+            optionsBox = new brls::Box();
+            optionsBox->setAxis(brls::Axis::COLUMN);
+            optionsBox->setMarginLeft(16);
+            optionsBox->setMarginBottom(2);
+            optionsBox->setVisibility(brls::Visibility::GONE);
+
+            if (filter.type == FilterType::SELECT) {
+                for (int optIdx = 0; optIdx < static_cast<int>(filter.selectOptions.size()); optIdx++) {
+                    auto* optRow = new brls::Box();
+                    optRow->setAxis(brls::Axis::ROW);
+                    optRow->setFocusable(true);
+                    optRow->setPadding(4, 8, 4, 8);
+                    optRow->setMarginBottom(1);
+                    optRow->setCornerRadius(4);
+                    optRow->setAlignItems(brls::AlignItems::CENTER);
+                    optRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+                    auto* checkMark = new brls::Label();
+                    checkMark->setFontSize(12);
+                    checkMark->setWidth(18);
+                    checkMark->setMarginRight(4);
+                    checkMark->setText(optIdx == filter.selectState ? "\u2713" : " ");
+                    if (optIdx == filter.selectState)
+                        checkMark->setTextColor(Application::getInstance().getCtaButtonColor());
+                    optRow->addView(checkMark);
+
+                    auto* optLabel = new brls::Label();
+                    optLabel->setText(filter.selectOptions[optIdx]);
+                    optLabel->setFontSize(12);
+                    optLabel->setSingleLine(true);
+                    optRow->addView(optLabel);
+
+                    int filterIdx2 = static_cast<int>(i);
+                    optRow->registerClickAction([this, filterIdx2, optIdx, rowLabel, makeFilterLabel, optionsBox, arrowLabel](brls::View*) {
+                        if (filterIdx2 >= static_cast<int>(m_sourceFilters.size())) return true;
+                        m_sourceFilters[filterIdx2].selectState = optIdx;
+                        rowLabel->setText(makeFilterLabel(m_sourceFilters[filterIdx2]));
+                        // Update checkmarks on all option rows
+                        for (size_t k = 0; k < optionsBox->getChildren().size(); k++) {
+                            auto* optChild = dynamic_cast<brls::Box*>(optionsBox->getChildren()[k]);
+                            if (optChild && !optChild->getChildren().empty()) {
+                                auto* cm = dynamic_cast<brls::Label*>(optChild->getChildren()[0]);
+                                if (cm) {
+                                    cm->setText(static_cast<int>(k) == optIdx ? "\u2713" : " ");
+                                    if (static_cast<int>(k) == optIdx)
+                                        cm->setTextColor(Application::getInstance().getCtaButtonColor());
+                                }
+                            }
+                        }
+                        // Collapse after selection
+                        optionsBox->setVisibility(brls::Visibility::GONE);
+                        if (arrowLabel) arrowLabel->setText("\u25B6");
+                        return true;
+                    });
+                    optRow->addGestureRecognizer(new brls::TapGestureRecognizer(optRow));
+
+                    // Hover highlight
+                    optRow->getFocusEvent()->subscribe([this, optRow](brls::View*) {
+                        if (m_lastHighlightedRow && m_lastHighlightedRow != optRow) {
+                            m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                        }
+                        optRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+                        m_lastHighlightedRow = optRow;
+                    });
+
+                    optionsBox->addView(optRow);
+                }
+            } else if (filter.type == FilterType::SORT) {
+                for (int sIdx = 0; sIdx < static_cast<int>(filter.sortOptions.size()); sIdx++) {
+                    for (int dir = 0; dir < 2; dir++) {
+                        bool isAsc = (dir == 0);
+                        std::string optText = filter.sortOptions[sIdx] + (isAsc ? " (Ascending)" : " (Descending)");
+                        bool isCurrent = (filter.sortState.index == sIdx && filter.sortState.ascending == isAsc);
+
+                        auto* optRow = new brls::Box();
+                        optRow->setAxis(brls::Axis::ROW);
+                        optRow->setFocusable(true);
+                        optRow->setPadding(4, 8, 4, 8);
+                        optRow->setMarginBottom(1);
+                        optRow->setCornerRadius(4);
+                        optRow->setAlignItems(brls::AlignItems::CENTER);
+                        optRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+                        auto* checkMark = new brls::Label();
+                        checkMark->setFontSize(12);
+                        checkMark->setWidth(18);
+                        checkMark->setMarginRight(4);
+                        checkMark->setText(isCurrent ? "\u2713" : " ");
+                        if (isCurrent)
+                            checkMark->setTextColor(Application::getInstance().getCtaButtonColor());
+                        optRow->addView(checkMark);
+
+                        auto* optLabel = new brls::Label();
+                        optLabel->setText(optText);
+                        optLabel->setFontSize(12);
+                        optLabel->setSingleLine(true);
+                        optRow->addView(optLabel);
+
+                        int filterIdx2 = static_cast<int>(i);
+                        optRow->registerClickAction([this, filterIdx2, sIdx, isAsc, rowLabel, makeFilterLabel, optionsBox, arrowLabel](brls::View*) {
+                            if (filterIdx2 >= static_cast<int>(m_sourceFilters.size())) return true;
+                            m_sourceFilters[filterIdx2].sortState.index = sIdx;
+                            m_sourceFilters[filterIdx2].sortState.ascending = isAsc;
+                            rowLabel->setText(makeFilterLabel(m_sourceFilters[filterIdx2]));
+                            // Update checkmarks on all sort option rows
+                            int optionIdx = 0;
+                            for (size_t k = 0; k < optionsBox->getChildren().size(); k++) {
+                                auto* optChild = dynamic_cast<brls::Box*>(optionsBox->getChildren()[k]);
+                                if (optChild && !optChild->getChildren().empty()) {
+                                    auto* cm = dynamic_cast<brls::Label*>(optChild->getChildren()[0]);
+                                    if (cm) {
+                                        int si = optionIdx / 2;
+                                        bool ai = (optionIdx % 2 == 0);
+                                        bool selected = (si == sIdx && ai == isAsc);
+                                        cm->setText(selected ? "\u2713" : " ");
+                                        if (selected)
+                                            cm->setTextColor(Application::getInstance().getCtaButtonColor());
+                                    }
+                                }
+                                optionIdx++;
+                            }
+                            // Collapse after selection
+                            optionsBox->setVisibility(brls::Visibility::GONE);
+                            if (arrowLabel) arrowLabel->setText("\u25B6");
+                            return true;
+                        });
+                        optRow->addGestureRecognizer(new brls::TapGestureRecognizer(optRow));
+
+                        // Hover highlight
+                        optRow->getFocusEvent()->subscribe([this, optRow](brls::View*) {
+                            if (m_lastHighlightedRow && m_lastHighlightedRow != optRow) {
+                                m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                            }
+                            optRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+                            m_lastHighlightedRow = optRow;
+                        });
+
+                        optionsBox->addView(optRow);
+                    }
+                }
+            }
+        }
+
         int filterIdx = static_cast<int>(i);
-        row->registerClickAction([this, filterIdx, rowLabel, makeFilterLabel](brls::View*) {
+        row->registerClickAction([this, filterIdx, rowLabel, makeFilterLabel, optionsBox, arrowLabel](brls::View*) {
             if (filterIdx >= static_cast<int>(m_sourceFilters.size())) return true;
             auto& filter = m_sourceFilters[filterIdx];
 
@@ -1451,41 +1685,15 @@ void SearchTab::buildFilterPanel() {
                             }
                         }, filter.name, "", 256, filter.textState);
                     break;
-                case FilterType::SELECT: {
-                    brls::Dropdown* selectDrop = new brls::Dropdown(
-                        filter.name, filter.selectOptions,
-                        [this, filterIdx, rowLabel, makeFilterLabel](int sel) {
-                            if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size())) {
-                                m_sourceFilters[filterIdx].selectState = sel;
-                                brls::sync([rowLabel, makeFilterLabel, this, filterIdx]() {
-                                    rowLabel->setText(makeFilterLabel(m_sourceFilters[filterIdx]));
-                                });
-                            }
-                        }, filter.selectState);
-                    brls::Application::pushActivity(new brls::Activity(selectDrop));
-                    break;
-                }
-                case FilterType::SORT: {
-                    std::vector<std::string> sortOpts;
-                    for (const auto& opt : filter.sortOptions) {
-                        sortOpts.push_back(opt + " (Ascending)");
-                        sortOpts.push_back(opt + " (Descending)");
+                case FilterType::SELECT:
+                case FilterType::SORT:
+                    // Toggle inline options visibility
+                    if (optionsBox) {
+                        bool expanding = optionsBox->getVisibility() == brls::Visibility::GONE;
+                        optionsBox->setVisibility(expanding ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+                        if (arrowLabel) arrowLabel->setText(expanding ? "\u25BC" : "\u25B6");
                     }
-                    int currentSortIdx = filter.sortState.index * 2 + (filter.sortState.ascending ? 0 : 1);
-                    brls::Dropdown* sortDrop = new brls::Dropdown(
-                        filter.name, sortOpts,
-                        [this, filterIdx, rowLabel, makeFilterLabel](int sel) {
-                            if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size())) {
-                                m_sourceFilters[filterIdx].sortState.index = sel / 2;
-                                m_sourceFilters[filterIdx].sortState.ascending = (sel % 2 == 0);
-                                brls::sync([rowLabel, makeFilterLabel, this, filterIdx]() {
-                                    rowLabel->setText(makeFilterLabel(m_sourceFilters[filterIdx]));
-                                });
-                            }
-                        }, currentSortIdx);
-                    brls::Application::pushActivity(new brls::Activity(sortDrop));
                     break;
-                }
                 default: break;
             }
             return true;
@@ -1493,6 +1701,9 @@ void SearchTab::buildFilterPanel() {
         row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
 
         filterListBox->addView(row);
+        if (optionsBox) {
+            filterListBox->addView(optionsBox);
+        }
     }
 
     mainScroll->setContentView(filterListBox);
