@@ -101,7 +101,11 @@ private:
     void populateSearchResultsBySource();
     brls::View* createSourceRow(const std::string& sourceName, const std::vector<Manga>& manga);
 
-    // Inline filter panel (expands in-place instead of opening a dialog)
+    // Content wrapper: ROW layout with main content (left) and filter panel (right)
+    brls::Box* m_contentWrapper = nullptr;
+    brls::Box* m_mainContent = nullptr;
+
+    // Inline filter panel (appears on right side instead of opening a dialog)
     brls::Box* m_filterPanel = nullptr;
     enum class FilterPanelType { NONE, SOURCE_FILTER, TAG_FILTER, TAG_MANAGE };
     FilterPanelType m_filterPanelType = FilterPanelType::NONE;

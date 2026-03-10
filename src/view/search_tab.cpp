@@ -326,18 +326,24 @@ SearchTab::SearchTab() {
 
     this->addView(m_modeBox);
 
-    // Inline filter panel (hidden by default, expands in-place when button pressed)
-    m_filterPanel = new brls::Box();
-    m_filterPanel->setAxis(brls::Axis::COLUMN);
-    m_filterPanel->setVisibility(brls::Visibility::GONE);
-    this->addView(m_filterPanel);
+    // Content wrapper: ROW layout with main content (left) and filter panel (right)
+    m_contentWrapper = new brls::Box();
+    m_contentWrapper->setAxis(brls::Axis::ROW);
+    m_contentWrapper->setGrow(1.0f);
+    m_contentWrapper->setAlignItems(brls::AlignItems::STRETCH);
+
+    // Main content column (left side, takes remaining space)
+    m_mainContent = new brls::Box();
+    m_mainContent->setAxis(brls::Axis::COLUMN);
+    m_mainContent->setGrow(1.0f);
+    m_mainContent->setShrink(1.0f);
 
     // Results label
     m_resultsLabel = new brls::Label();
     m_resultsLabel->setText("");
     m_resultsLabel->setFontSize(18);
     m_resultsLabel->setMarginBottom(10);
-    this->addView(m_resultsLabel);
+    m_mainContent->addView(m_resultsLabel);
 
     // Loading indicator label (hidden by default)
     m_loadingLabel = new brls::Label();
@@ -346,7 +352,17 @@ SearchTab::SearchTab() {
     m_loadingLabel->setTextColor(Application::getInstance().getAccentColor());
     m_loadingLabel->setMarginBottom(10);
     m_loadingLabel->setVisibility(brls::Visibility::GONE);
-    this->addView(m_loadingLabel);
+    m_mainContent->addView(m_loadingLabel);
+
+    m_contentWrapper->addView(m_mainContent);
+
+    // Inline filter panel (hidden by default, appears on right side when button pressed)
+    m_filterPanel = new brls::Box();
+    m_filterPanel->setAxis(brls::Axis::COLUMN);
+    m_filterPanel->setVisibility(brls::Visibility::GONE);
+    m_contentWrapper->addView(m_filterPanel);
+
+    this->addView(m_contentWrapper);
 
     // Content grid
     m_contentGrid = new RecyclingGrid();
@@ -402,7 +418,7 @@ SearchTab::SearchTab() {
         }
     });
 
-    this->addView(m_contentGrid);
+    m_mainContent->addView(m_contentGrid);
 
     // Load sources initially
     loadSources();
@@ -886,7 +902,7 @@ void SearchTab::showSources() {
 
     // Add scroll view if not already added
     if (m_sourceScrollView->getParent() == nullptr) {
-        this->addView(m_sourceScrollView);
+        m_mainContent->addView(m_sourceScrollView);
     }
 
     // Set up navigation from header buttons down to first source row
@@ -1133,23 +1149,17 @@ void SearchTab::buildFilterPanel() {
 
     m_filterPanel->setBackgroundColor(Application::getInstance().getDialogBackground());
     m_filterPanel->setCornerRadius(12);
-    m_filterPanel->setPadding(12);
-    m_filterPanel->setMarginBottom(10);
-    m_filterPanel->setMaxHeight(350);
+    m_filterPanel->setPadding(10);
+    m_filterPanel->setMarginLeft(10);
+    m_filterPanel->setWidth(300);
 
-    // Title row
-    auto* titleRow = new brls::Box();
-    titleRow->setAxis(brls::Axis::ROW);
-    titleRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    titleRow->setAlignItems(brls::AlignItems::CENTER);
-    titleRow->setMarginBottom(8);
-
+    // Title
     auto* titleLabel = new brls::Label();
     titleLabel->setText("Source Filters");
-    titleLabel->setFontSize(20);
-    titleRow->addView(titleLabel);
-
-    m_filterPanel->addView(titleRow);
+    titleLabel->setFontSize(18);
+    titleLabel->setSingleLine(true);
+    titleLabel->setMarginBottom(6);
+    m_filterPanel->addView(titleLabel);
 
     // Helper: create a label for a filter row showing its current state
     auto makeFilterLabel = [](const SourceFilter& f) -> std::string {
@@ -1203,9 +1213,10 @@ void SearchTab::buildFilterPanel() {
         if (filter.type == FilterType::HEADER) {
             auto* headerLabel = new brls::Label();
             headerLabel->setText("--- " + filter.name + " ---");
-            headerLabel->setFontSize(16);
-            headerLabel->setMarginTop(8);
-            headerLabel->setMarginBottom(4);
+            headerLabel->setFontSize(14);
+            headerLabel->setSingleLine(true);
+            headerLabel->setMarginTop(6);
+            headerLabel->setMarginBottom(3);
             headerLabel->setTextColor(Application::getInstance().getHeaderTextColor());
             filterListBox->addView(headerLabel);
             continue;
@@ -1214,9 +1225,10 @@ void SearchTab::buildFilterPanel() {
         if (filter.type == FilterType::SEPARATOR) {
             auto* sepLabel = new brls::Label();
             sepLabel->setText("----------");
-            sepLabel->setFontSize(14);
-            sepLabel->setMarginTop(4);
-            sepLabel->setMarginBottom(4);
+            sepLabel->setFontSize(12);
+            sepLabel->setSingleLine(true);
+            sepLabel->setMarginTop(3);
+            sepLabel->setMarginBottom(3);
             sepLabel->setTextColor(Application::getInstance().getSubtitleColor());
             filterListBox->addView(sepLabel);
             continue;
@@ -1229,30 +1241,30 @@ void SearchTab::buildFilterPanel() {
             auto* groupRow = new brls::Box();
             groupRow->setAxis(brls::Axis::ROW);
             groupRow->setFocusable(true);
-            groupRow->setPadding(8, 10, 8, 10);
-            groupRow->setMarginTop(4);
+            groupRow->setPadding(5, 8, 5, 8);
+            groupRow->setMarginTop(3);
             groupRow->setMarginBottom(2);
-            groupRow->setCornerRadius(8);
+            groupRow->setCornerRadius(6);
             groupRow->setAlignItems(brls::AlignItems::CENTER);
             groupRow->setBackgroundColor(Application::getInstance().getHeaderTextColor());
 
             auto* arrowLabel = new brls::Label();
-            arrowLabel->setFontSize(16);
-            arrowLabel->setWidth(24);
-            arrowLabel->setMarginRight(8);
+            arrowLabel->setFontSize(14);
+            arrowLabel->setWidth(20);
+            arrowLabel->setMarginRight(6);
             arrowLabel->setText(collapsed ? "\u25B6" : "\u25BC");
             groupRow->addView(arrowLabel);
 
             auto* groupNameLabel = new brls::Label();
             groupNameLabel->setText(filter.name + " (" + std::to_string(filter.filters.size()) + ")");
-            groupNameLabel->setFontSize(16);
-            groupNameLabel->setGrow(1.0f);
+            groupNameLabel->setFontSize(14);
+            groupNameLabel->setSingleLine(true);
             groupRow->addView(groupNameLabel);
 
             // Each group section gets its own scrolling frame
             auto* childrenScroll = new brls::ScrollingFrame();
-            childrenScroll->setMarginLeft(16);
-            childrenScroll->setMaxHeight(160);
+            childrenScroll->setMarginLeft(12);
+            childrenScroll->setMaxHeight(140);
             childrenScroll->setVisibility(collapsed ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 
             auto* childrenBox = new brls::Box();
@@ -1285,16 +1297,16 @@ void SearchTab::buildFilterPanel() {
                 auto* childRow = new brls::Box();
                 childRow->setAxis(brls::Axis::ROW);
                 childRow->setFocusable(true);
-                childRow->setPadding(6, 10, 6, 10);
-                childRow->setMarginBottom(2);
-                childRow->setCornerRadius(6);
+                childRow->setPadding(4, 8, 4, 8);
+                childRow->setMarginBottom(1);
+                childRow->setCornerRadius(4);
                 childRow->setAlignItems(brls::AlignItems::CENTER);
                 childRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
                 auto* childLabel = new brls::Label();
                 childLabel->setText(makeFilterLabel(child));
-                childLabel->setFontSize(14);
-                childLabel->setGrow(1.0f);
+                childLabel->setFontSize(13);
+                childLabel->setSingleLine(true);
                 childRow->addView(childLabel);
 
                 childRow->registerClickAction([this, fi, ci, childLabel, makeFilterLabel](brls::View*) {
@@ -1359,16 +1371,16 @@ void SearchTab::buildFilterPanel() {
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
         row->setFocusable(true);
-        row->setPadding(8, 10, 8, 10);
-        row->setMarginBottom(4);
-        row->setCornerRadius(8);
+        row->setPadding(5, 8, 5, 8);
+        row->setMarginBottom(2);
+        row->setCornerRadius(6);
         row->setAlignItems(brls::AlignItems::CENTER);
         row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
         auto* rowLabel = new brls::Label();
         rowLabel->setText(makeFilterLabel(filter));
-        rowLabel->setFontSize(15);
-        rowLabel->setGrow(1.0f);
+        rowLabel->setFontSize(13);
+        rowLabel->setSingleLine(true);
         row->addView(rowLabel);
 
         int filterIdx = static_cast<int>(i);
@@ -1448,12 +1460,12 @@ void SearchTab::buildFilterPanel() {
     // Button row
     auto* buttonRow = new brls::Box();
     buttonRow->setAxis(brls::Axis::ROW);
-    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
-    buttonRow->setMarginTop(8);
+    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_START);
+    buttonRow->setMarginTop(6);
 
     auto* applyBtn = new brls::Button();
-    applyBtn->setText("Apply Filters");
-    applyBtn->setMarginRight(10);
+    applyBtn->setText("Apply");
+    applyBtn->setMarginRight(8);
     applyBtn->registerClickAction([this](brls::View*) {
         hideFilterPanel();
         applyFilters();
@@ -1516,9 +1528,9 @@ void SearchTab::buildTagFilterPanel() {
 
     m_filterPanel->setBackgroundColor(Application::getInstance().getDialogBackground());
     m_filterPanel->setCornerRadius(12);
-    m_filterPanel->setPadding(12);
-    m_filterPanel->setMarginBottom(10);
-    m_filterPanel->setMaxHeight(350);
+    m_filterPanel->setPadding(10);
+    m_filterPanel->setMarginLeft(10);
+    m_filterPanel->setWidth(300);
 
     auto& settings = Application::getInstance().getSettings();
     int activeCount = static_cast<int>(settings.selectedSourceTagFilters.size());
@@ -1536,8 +1548,9 @@ void SearchTab::buildTagFilterPanel() {
         title += " (" + std::to_string(activeCount) + " active)";
     }
     titleLabel->setText(title);
-    titleLabel->setFontSize(20);
-    titleLabel->setMarginBottom(8);
+    titleLabel->setFontSize(18);
+    titleLabel->setSingleLine(true);
+    titleLabel->setMarginBottom(6);
     m_filterPanel->addView(titleLabel);
 
     // Scrollable tag list
@@ -1554,16 +1567,16 @@ void SearchTab::buildTagFilterPanel() {
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
         row->setFocusable(true);
-        row->setPadding(8, 10, 8, 10);
-        row->setMarginBottom(4);
-        row->setCornerRadius(8);
+        row->setPadding(5, 8, 5, 8);
+        row->setMarginBottom(2);
+        row->setCornerRadius(6);
         row->setAlignItems(brls::AlignItems::CENTER);
         row->setBackgroundColor(active ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
 
         auto* checkLabel = new brls::Label();
-        checkLabel->setFontSize(15);
-        checkLabel->setWidth(24);
-        checkLabel->setMarginRight(8);
+        checkLabel->setFontSize(13);
+        checkLabel->setWidth(20);
+        checkLabel->setMarginRight(6);
         if (active) {
             checkLabel->setText("\u2713");
             checkLabel->setTextColor(Application::getInstance().getCtaButtonColor());
@@ -1575,8 +1588,8 @@ void SearchTab::buildTagFilterPanel() {
 
         auto* nameLabel = new brls::Label();
         nameLabel->setText(tag);
-        nameLabel->setFontSize(15);
-        nameLabel->setGrow(1.0f);
+        nameLabel->setFontSize(13);
+        nameLabel->setSingleLine(true);
         row->addView(nameLabel);
 
         rows->push_back(row);
@@ -1610,12 +1623,12 @@ void SearchTab::buildTagFilterPanel() {
     // Button row
     auto* buttonRow = new brls::Box();
     buttonRow->setAxis(brls::Axis::ROW);
-    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
-    buttonRow->setMarginTop(8);
+    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_START);
+    buttonRow->setMarginTop(6);
 
     auto* applyBtn = new brls::Button();
-    applyBtn->setText("Apply Filter");
-    applyBtn->setMarginRight(10);
+    applyBtn->setText("Apply");
+    applyBtn->setMarginRight(8);
     applyBtn->registerClickAction([this](brls::View*) {
         Application::getInstance().saveSettings();
         hideFilterPanel();
@@ -1625,7 +1638,7 @@ void SearchTab::buildTagFilterPanel() {
     applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
 
     auto* clearBtn = new brls::Button();
-    clearBtn->setText("Clear All");
+    clearBtn->setText("Clear");
     clearBtn->registerClickAction([this, checkLabels, rows, titleLabel](brls::View*) {
         auto& s = Application::getInstance().getSettings();
         s.selectedSourceTagFilters.clear();
@@ -1663,9 +1676,9 @@ void SearchTab::buildTagManagePanel(const Source& source) {
 
     m_filterPanel->setBackgroundColor(Application::getInstance().getDialogBackground());
     m_filterPanel->setCornerRadius(12);
-    m_filterPanel->setPadding(12);
-    m_filterPanel->setMarginBottom(10);
-    m_filterPanel->setMaxHeight(350);
+    m_filterPanel->setPadding(10);
+    m_filterPanel->setMarginLeft(10);
+    m_filterPanel->setWidth(300);
 
     auto& settings = Application::getInstance().getSettings();
     std::string sourceIdStr = std::to_string(source.id);
@@ -1686,8 +1699,9 @@ void SearchTab::buildTagManagePanel(const Source& source) {
     // Title
     auto* titleLabel = new brls::Label();
     titleLabel->setText("Tags: " + source.name);
-    titleLabel->setFontSize(20);
-    titleLabel->setMarginBottom(8);
+    titleLabel->setFontSize(18);
+    titleLabel->setSingleLine(true);
+    titleLabel->setMarginBottom(6);
     m_filterPanel->addView(titleLabel);
 
     // Scrollable tag list
@@ -1704,16 +1718,16 @@ void SearchTab::buildTagManagePanel(const Source& source) {
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
         row->setFocusable(true);
-        row->setPadding(8, 10, 8, 10);
-        row->setMarginBottom(4);
-        row->setCornerRadius(8);
+        row->setPadding(5, 8, 5, 8);
+        row->setMarginBottom(2);
+        row->setCornerRadius(6);
         row->setAlignItems(brls::AlignItems::CENTER);
         row->setBackgroundColor(has ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
 
         auto* checkLabel = new brls::Label();
-        checkLabel->setFontSize(15);
-        checkLabel->setWidth(24);
-        checkLabel->setMarginRight(8);
+        checkLabel->setFontSize(13);
+        checkLabel->setWidth(20);
+        checkLabel->setMarginRight(6);
         if (has) {
             checkLabel->setText("\u2713");
             checkLabel->setTextColor(Application::getInstance().getCtaButtonColor());
@@ -1725,8 +1739,8 @@ void SearchTab::buildTagManagePanel(const Source& source) {
 
         auto* nameLabel = new brls::Label();
         nameLabel->setText(tag);
-        nameLabel->setFontSize(15);
-        nameLabel->setGrow(1.0f);
+        nameLabel->setFontSize(13);
+        nameLabel->setSingleLine(true);
         row->addView(nameLabel);
 
         rowPtrs->push_back(row);
@@ -1759,12 +1773,12 @@ void SearchTab::buildTagManagePanel(const Source& source) {
     // Button row
     auto* buttonRow = new brls::Box();
     buttonRow->setAxis(brls::Axis::ROW);
-    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
-    buttonRow->setMarginTop(8);
+    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_START);
+    buttonRow->setMarginTop(6);
 
     auto* addBtn = new brls::Button();
-    addBtn->setText("+ Add Tag");
-    addBtn->setMarginRight(10);
+    addBtn->setText("+ Add");
+    addBtn->setMarginRight(8);
     addBtn->registerClickAction([this, sourceIdStr, source](brls::View*) {
         brls::Application::getImeManager()->openForText([this, sourceIdStr, source](std::string text) {
             if (text.empty()) return;
@@ -2172,7 +2186,7 @@ void SearchTab::populateSearchResultsBySource() {
 
     // Add scroll view if not already added
     if (m_searchResultsScrollView->getParent() == nullptr) {
-        this->addView(m_searchResultsScrollView);
+        m_mainContent->addView(m_searchResultsScrollView);
     }
 
     // Transfer focus to first manga cell in search results
