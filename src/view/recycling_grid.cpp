@@ -264,9 +264,13 @@ void RecyclingGrid::removeItems(const std::vector<int>& mangaIdsToRemove) {
 
     if (indicesToRemove.empty()) return;
 
+    // Save focused index before rebuild so we can restore focus to a valid cell.
+    // Without this, setupGrid() destroys all cells and borealis may try to
+    // restore focus to a freed cell pointer → vtable crash.
+    int savedFocus = m_focusedIndex;
+
     // For simplicity, if we're removing items, do a full rebuild
     // This ensures proper row layout recalculation
-    // In the future, we could optimize this to remove cells in place
     std::vector<Manga> filteredItems;
     for (size_t i = 0; i < m_items.size(); i++) {
         if (idsToRemove.find(m_items[i].id) == idsToRemove.end()) {
@@ -277,6 +281,14 @@ void RecyclingGrid::removeItems(const std::vector<int>& mangaIdsToRemove) {
     brls::Logger::debug("RecyclingGrid: removeItems - filtered from {} to {} items",
                        m_items.size(), filteredItems.size());
     setDataSource(filteredItems);
+
+    // Restore focus to a valid cell after rebuild. Clamp to last item if the
+    // previously-focused index is now out of range (e.g. last item was removed).
+    if (!filteredItems.empty()) {
+        int clampedIndex = std::min(savedFocus, static_cast<int>(filteredItems.size()) - 1);
+        if (clampedIndex < 0) clampedIndex = 0;
+        focusIndex(clampedIndex);
+    }
 }
 
 void RecyclingGrid::setOnItemSelected(std::function<void(const Manga&)> callback) {

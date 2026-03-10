@@ -586,6 +586,114 @@ void LibrarySectionTab::willDisappear(bool resetState) {
     m_thumbnailsInvalidated = true;
 }
 
+void LibrarySectionTab::draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) {
+    brls::Box::draw(vg, x, y, width, height, style, ctx);
+
+    // When returning from a detail Activity, borealis restores focus directly to the
+    // previously-focused cell in RecyclingGrid.  Neither willAppear() nor onFocusGained()
+    // fires on LibrarySectionTab in that case, so pending removal/addition tracking is
+    // never consumed.  Detect it here (O(1) set-empty check per frame) and schedule
+    // the actual processing via brls::sync so view-hierarchy mutations happen outside draw.
+    if (m_loaded && !m_pendingLibraryChangeScheduled) {
+        auto& app = Application::getInstance();
+        if (!app.getRecentRemovals().empty() || !app.getRecentAdditions().empty() ||
+            app.hasRecentCategoryChanges()) {
+            m_pendingLibraryChangeScheduled = true;
+            std::weak_ptr<bool> aliveWeak = m_alive;
+            brls::sync([this, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                m_pendingLibraryChangeScheduled = false;
+                processPendingLibraryChanges();
+            });
+        }
+    }
+}
+
+void LibrarySectionTab::processPendingLibraryChanges() {
+    auto& app = Application::getInstance();
+
+    // --- Category changes ---
+    if (app.hasRecentCategoryChanges() && m_loaded) {
+        std::set<int> changedIds = app.getRecentCategoryChanges();
+        app.clearRecentCategoryChanges();
+
+        if (m_groupMode == LibraryGroupMode::BY_CATEGORY) {
+            std::vector<int> removedIds(changedIds.begin(), changedIds.end());
+            size_t oldSize = m_mangaList.size();
+            m_mangaList.erase(
+                std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                    [&changedIds](const Manga& m) { return changedIds.count(m.id) > 0; }),
+                m_mangaList.end());
+            m_fullMangaList.erase(
+                std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(),
+                    [&changedIds](const Manga& m) { return changedIds.count(m.id) > 0; }),
+                m_fullMangaList.end());
+
+            if (m_mangaList.size() != oldSize) {
+                m_cachedMangaList.erase(
+                    std::remove_if(m_cachedMangaList.begin(), m_cachedMangaList.end(),
+                        [&changedIds](const CachedMangaItem& c) { return changedIds.count(c.id) > 0; }),
+                    m_cachedMangaList.end());
+                if (app.getSettings().cacheLibraryData) {
+                    LibraryCache::getInstance().saveCategoryManga(m_currentCategoryId, m_fullMangaList);
+                }
+                if (m_contentGrid) {
+                    m_contentGrid->removeItems(removedIds);
+                }
+            }
+            loadCategoryManga(m_currentCategoryId);
+        } else if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+            loadAllManga();
+        } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            loadBySource();
+        }
+    }
+
+    // --- Library removals ---
+    if (!app.getRecentRemovals().empty() && m_loaded) {
+        std::set<int> removedIdSet(app.getRecentRemovals().begin(),
+                                    app.getRecentRemovals().end());
+        std::vector<int> removedIds(removedIdSet.begin(), removedIdSet.end());
+        app.clearRecentRemovals();
+
+        size_t oldSize = m_mangaList.size();
+        m_mangaList.erase(
+            std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                [&removedIdSet](const Manga& m) { return removedIdSet.count(m.id) > 0; }),
+            m_mangaList.end());
+        m_fullMangaList.erase(
+            std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(),
+                [&removedIdSet](const Manga& m) { return removedIdSet.count(m.id) > 0; }),
+            m_fullMangaList.end());
+
+        if (m_mangaList.size() != oldSize) {
+            m_cachedMangaList.erase(
+                std::remove_if(m_cachedMangaList.begin(), m_cachedMangaList.end(),
+                    [&removedIdSet](const CachedMangaItem& c) { return removedIdSet.count(c.id) > 0; }),
+                m_cachedMangaList.end());
+            if (app.getSettings().cacheLibraryData) {
+                LibraryCache::getInstance().saveCategoryManga(m_currentCategoryId, m_fullMangaList);
+            }
+            if (m_contentGrid) {
+                m_contentGrid->removeItems(removedIds);
+            }
+        }
+    }
+
+    // --- Library additions ---
+    if (!app.getRecentAdditions().empty() && m_loaded) {
+        app.clearRecentAdditions();
+        if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+            loadAllManga();
+        } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            loadBySource();
+        } else {
+            loadCategoryManga(m_currentCategoryId);
+        }
+    }
+}
+
 void LibrarySectionTab::onFocusGained() {
     brls::Box::onFocusGained();
 

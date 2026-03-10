@@ -2197,11 +2197,11 @@ void MangaDetailView::onAddToLibrary() {
                                 if (client.setMangaCategories(mangaId, {categoryId})) {
                                     brls::sync([mangaId]() {
                                         Application::getInstance().trackCategoryChange(mangaId);
-                                        brls::Application::notify("Added to library");
+                                        // Notification removed per user request
                                     });
                                 } else {
                                     brls::sync([]() {
-                                        brls::Application::notify("Added to library (category failed)");
+                                        // Notification removed per user request
                                     });
                                 }
                             });
@@ -2209,7 +2209,7 @@ void MangaDetailView::onAddToLibrary() {
                     }, -1);
                 brls::Application::pushActivity(new brls::Activity(dropdown));
             } else {
-                brls::Application::notify("Added to library");
+                // Notification removed per user request
             }
         });
     });
@@ -2232,7 +2232,7 @@ void MangaDetailView::onRemoveFromLibrary() {
                 Application::getInstance().trackLibraryRemoval(m_manga.id);
 
                 updateLibraryButton();
-                brls::Application::notify("Removed from library");
+                // Notification removed per user request
             });
         } else {
             brls::sync([]() {
