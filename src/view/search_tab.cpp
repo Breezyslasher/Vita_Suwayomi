@@ -43,10 +43,11 @@ SearchTab::SearchTab() {
     m_buttonContainer->setAlignItems(brls::AlignItems::FLEX_END);
 
     // Source filter button with triangle hint above (only shown when browsing a source)
-    auto* filterContainer = new brls::Box();
-    filterContainer->setAxis(brls::Axis::COLUMN);
-    filterContainer->setAlignItems(brls::AlignItems::CENTER);
-    filterContainer->setMarginRight(10);
+    m_filterBtnContainer = new brls::Box();
+    m_filterBtnContainer->setAxis(brls::Axis::COLUMN);
+    m_filterBtnContainer->setAlignItems(brls::AlignItems::CENTER);
+    m_filterBtnContainer->setMarginRight(10);
+    m_filterBtnContainer->setVisibility(brls::Visibility::GONE);  // Hidden on sources page
 
     auto* triangleHintIcon = new brls::Image();
     triangleHintIcon->setWidth(16);
@@ -54,7 +55,7 @@ SearchTab::SearchTab() {
     triangleHintIcon->setScalingType(brls::ImageScalingType::FIT);
     triangleHintIcon->setImageFromFile("app0:resources/images/triangle_button.png");
     triangleHintIcon->setMarginBottom(2);
-    filterContainer->addView(triangleHintIcon);
+    m_filterBtnContainer->addView(triangleHintIcon);
 
     m_tagFilterBtn = new brls::Button();
     m_tagFilterBtn->setWidth(44);
@@ -87,8 +88,8 @@ SearchTab::SearchTab() {
         }
         return false;
     }, true);
-    filterContainer->addView(m_tagFilterBtn);
-    m_buttonContainer->addView(filterContainer);
+    m_filterBtnContainer->addView(m_tagFilterBtn);
+    m_buttonContainer->addView(m_filterBtnContainer);
 
     // Search history button with Select icon above
     auto* historyContainer = new brls::Box();
@@ -714,6 +715,8 @@ void SearchTab::showSources() {
     // Restore filter icon on header button
     if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
     m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
+    // Hide the filter button on the sources page (it does nothing here)
+    m_filterBtnContainer->setVisibility(brls::Visibility::GONE);
     // Restore search/history buttons when returning to source list
     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
     m_historyBtn->setFocusable(true);
@@ -911,6 +914,8 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_filtersActive = false;
     // Reset filter button color for source browsing
     m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
+    // Show the filter button when browsing a source
+    m_filterBtnContainer->setVisibility(brls::Visibility::VISIBLE);
 
     // CRITICAL: Move focus away from source list BEFORE clearing views.
     // The currently focused view may be a source row that clearViews() will delete.
@@ -1250,7 +1255,7 @@ void SearchTab::buildFilterPanel() {
             groupRow->setMarginBottom(2);
             groupRow->setCornerRadius(6);
             groupRow->setAlignItems(brls::AlignItems::CENTER);
-            groupRow->setBackgroundColor(Application::getInstance().getHeaderTextColor());
+            groupRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
             auto* arrowLabel = new brls::Label();
             arrowLabel->setFontSize(14);
@@ -1748,6 +1753,11 @@ void SearchTab::buildFilterPanel() {
     }
 
     mainScroll->setContentView(filterListBox);
+    // B button (circle) on any filter row closes the panel
+    filterListBox->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
     m_filterPanel->addView(mainScroll);
 
     // Button row
@@ -1932,6 +1942,11 @@ void SearchTab::buildTagFilterPanel() {
     }
 
     scrollView->setContentView(tagListBox);
+    // B button (circle) on any tag filter row closes the panel
+    tagListBox->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
     m_filterPanel->addView(scrollView);
 
     // Button row
@@ -2105,6 +2120,11 @@ void SearchTab::buildTagManagePanel(const Source& source) {
     }
 
     scrollView->setContentView(tagListBox);
+    // B button (circle) on any tag manage row closes the panel
+    tagListBox->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
     m_filterPanel->addView(scrollView);
 
     // Button row
@@ -2750,8 +2770,9 @@ void SearchTab::handleBackNavigation() {
                     // Restore filter icon on header button
                     if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
 
-                    // Restore search/history buttons
+                    // Restore search/history buttons and filter button for source browsing
                     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
+                    m_filterBtnContainer->setVisibility(brls::Visibility::VISIBLE);
                     m_historyBtn->setFocusable(true);
                     m_globalSearchBtn->setFocusable(true);
 

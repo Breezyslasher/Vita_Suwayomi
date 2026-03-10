@@ -85,6 +85,7 @@ private:
     void collectAllTags(std::set<std::string>& allTags);
 
     // Tag/filter button (header) - context-aware: tag filter on source list, source filter when browsing
+    brls::Box* m_filterBtnContainer = nullptr;  // Container for tag button + triangle hint (hidden on sources page)
     brls::Button* m_tagFilterBtn = nullptr;
     brls::Image* m_tagFilterIcon = nullptr;  // Icon swapped based on context
     void addToSearchHistory(const std::string& query);
