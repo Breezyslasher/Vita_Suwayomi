@@ -41,6 +41,7 @@ public:
     void onFocusGained() override;
     void willAppear(bool resetState) override;
     void willDisappear(bool resetState) override;
+    void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) override;
     void refresh();
 
 private:
@@ -163,10 +164,14 @@ private:
     // Helper to update manga cells incrementally without full rebuild
     void updateMangaCellsIncrementally(const std::vector<Manga>& newManga);
 
+    // Process any pending library removals/additions tracked via Application
+    void processPendingLibraryChanges();
+
     bool m_loaded = false;
     bool m_categoriesLoaded = false;
     bool m_focusGridAfterLoad = false;  // Focus first grid item after loading new category
     bool m_thumbnailsInvalidated = false;  // Set in willDisappear after cancelAll, cleared on reload
+    bool m_pendingLibraryChangeScheduled = false;  // Guard to prevent duplicate brls::sync scheduling
     int m_combinedQueryCategoryId = -1; // Category being fetched by combined query (skip redundant fetch)
 
     // Shared pointer to track if this object is still alive
