@@ -1102,6 +1102,15 @@ void SearchTab::showFilterDialog() {
 
     m_loadGeneration++;  // Invalidate in-flight loads
 
+    // Full-screen semi-transparent overlay so current page shows behind
+    auto* overlay = new brls::Box();
+    overlay->setWidth(960);
+    overlay->setHeight(544);
+    overlay->setAxis(brls::Axis::COLUMN);
+    overlay->setJustifyContent(brls::JustifyContent::CENTER);
+    overlay->setAlignItems(brls::AlignItems::CENTER);
+    overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 160));
+
     // Create dialog box
     auto* dialogBox = new brls::Box();
     dialogBox->setAxis(brls::Axis::COLUMN);
@@ -1500,7 +1509,8 @@ void SearchTab::showFilterDialog() {
     applyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
     resetBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, resetBtn);
 
-    brls::Application::pushActivity(new brls::Activity(dialogBox));
+    overlay->addView(dialogBox);
+    brls::Application::pushActivity(new brls::Activity(overlay));
 }
 
 void SearchTab::collectAllTags(std::set<std::string>& allTags) {
@@ -1530,6 +1540,15 @@ void SearchTab::showTagFilterDialog() {
     // Shared state for checkmarks (modified in-place by toggle callbacks)
     auto checkLabels = std::make_shared<std::vector<brls::Label*>>();
     auto rows = std::make_shared<std::vector<brls::Box*>>();
+
+    // Full-screen semi-transparent overlay so current page shows behind
+    auto* overlay = new brls::Box();
+    overlay->setWidth(960);
+    overlay->setHeight(544);
+    overlay->setAxis(brls::Axis::COLUMN);
+    overlay->setJustifyContent(brls::JustifyContent::CENTER);
+    overlay->setAlignItems(brls::AlignItems::CENTER);
+    overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 160));
 
     // Create dialog box
     auto* dialogBox = new brls::Box();
@@ -1688,7 +1707,8 @@ void SearchTab::showTagFilterDialog() {
     applyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
     clearBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, clearBtn);
 
-    brls::Application::pushActivity(new brls::Activity(dialogBox));
+    overlay->addView(dialogBox);
+    brls::Application::pushActivity(new brls::Activity(overlay));
 }
 
 void SearchTab::showTagManageDialog(const Source& source) {
@@ -1710,6 +1730,15 @@ void SearchTab::showTagManageDialog(const Source& source) {
 
     auto checkLabels = std::make_shared<std::vector<brls::Label*>>();
     auto rowPtrs = std::make_shared<std::vector<brls::Box*>>();
+
+    // Full-screen semi-transparent overlay so current page shows behind
+    auto* overlay = new brls::Box();
+    overlay->setWidth(960);
+    overlay->setHeight(544);
+    overlay->setAxis(brls::Axis::COLUMN);
+    overlay->setJustifyContent(brls::JustifyContent::CENTER);
+    overlay->setAlignItems(brls::AlignItems::CENTER);
+    overlay->setBackgroundColor(nvgRGBA(0, 0, 0, 160));
 
     // Create dialog box
     auto* dialogBox = new brls::Box();
@@ -1863,7 +1892,8 @@ void SearchTab::showTagManageDialog(const Source& source) {
     addBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, addBtn);
     doneBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, doneBtn);
 
-    brls::Application::pushActivity(new brls::Activity(dialogBox));
+    overlay->addView(dialogBox);
+    brls::Application::pushActivity(new brls::Activity(overlay));
 }
 
 void SearchTab::loadPopularManga(int64_t sourceId) {
