@@ -109,6 +109,8 @@ private:
     brls::Box* m_filterPanel = nullptr;
     enum class FilterPanelType { NONE, SOURCE_FILTER, TAG_FILTER, TAG_MANAGE };
     FilterPanelType m_filterPanelType = FilterPanelType::NONE;
+    brls::View* m_prePanelFocusView = nullptr;  // View that had focus before panel opened
+    brls::Box* m_lastHighlightedRow = nullptr;   // Currently highlighted row in filter panel
     void hideFilterPanel();
     void buildFilterPanel();       // Build source filter content into m_filterPanel
     void buildTagFilterPanel();    // Build tag filter content into m_filterPanel

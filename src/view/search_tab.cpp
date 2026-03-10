@@ -242,6 +242,14 @@ SearchTab::SearchTab() {
 
     // Register Circle button (B) to go back in search/browse modes
     this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
+        // If a filter panel is open, close it first
+        if (m_filterPanelType != FilterPanelType::NONE) {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
+                hideFilterPanel();
+            });
+            return true;
+        }
         // Only handle if we're not on the sources list
         if (m_browseMode != BrowseMode::SOURCES) {
             brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
@@ -1117,6 +1125,12 @@ void SearchTab::hideFilterPanel() {
         m_filterPanel->clearViews();
         m_filterPanel->setVisibility(brls::Visibility::GONE);
         m_filterPanelType = FilterPanelType::NONE;
+        m_lastHighlightedRow = nullptr;
+        // Restore focus to the view that was focused before the panel opened
+        if (m_prePanelFocusView) {
+            brls::Application::giveFocus(m_prePanelFocusView);
+            m_prePanelFocusView = nullptr;
+        }
     }
 }
 
@@ -1142,6 +1156,10 @@ void SearchTab::showFilterDialog() {
 
 void SearchTab::buildFilterPanel() {
     m_loadGeneration++;  // Invalidate in-flight loads
+
+    // Save current focus so we can restore it when closing
+    m_prePanelFocusView = brls::Application::getCurrentFocus();
+    m_lastHighlightedRow = nullptr;
 
     // Clear and repopulate the inline panel
     m_filterPanel->clearViews();
@@ -1261,32 +1279,38 @@ void SearchTab::buildFilterPanel() {
             groupNameLabel->setSingleLine(true);
             groupRow->addView(groupNameLabel);
 
-            // Each group section gets its own scrolling frame
-            auto* childrenScroll = new brls::ScrollingFrame();
-            childrenScroll->setMarginLeft(12);
-            childrenScroll->setMaxHeight(140);
-            childrenScroll->setVisibility(collapsed ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
-
-            auto* childrenBox = new brls::Box();
-            childrenBox->setAxis(brls::Axis::COLUMN);
-
-            // Toggle collapse on click
             int groupIdx = static_cast<int>(i);
-            groupRow->registerClickAction([this, groupIdx, childrenScroll, arrowLabel](brls::View*) {
-                if (m_collapsedGroups.count(groupIdx)) {
-                    m_collapsedGroups.erase(groupIdx);
-                    childrenScroll->setVisibility(brls::Visibility::VISIBLE);
-                    arrowLabel->setText("\u25BC");
-                } else {
-                    m_collapsedGroups.insert(groupIdx);
-                    childrenScroll->setVisibility(brls::Visibility::GONE);
-                    arrowLabel->setText("\u25B6");
+            // Hover highlight for group row
+            groupRow->getFocusEvent()->subscribe([this, groupRow](brls::View*) {
+                if (m_lastHighlightedRow && m_lastHighlightedRow != groupRow) {
+                    m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
                 }
-                return true;
+                groupRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+                m_lastHighlightedRow = groupRow;
             });
             groupRow->addGestureRecognizer(new brls::TapGestureRecognizer(groupRow));
 
             filterListBox->addView(groupRow);
+
+            // Container for child rows (plain Box, not ScrollingFrame to avoid nesting issues)
+            auto* childrenBox = new brls::Box();
+            childrenBox->setAxis(brls::Axis::COLUMN);
+            childrenBox->setMarginLeft(12);
+            childrenBox->setVisibility(collapsed ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+
+            // Update toggle to use childrenBox directly
+            groupRow->registerClickAction([this, groupIdx, childrenBox, arrowLabel](brls::View*) {
+                if (m_collapsedGroups.count(groupIdx)) {
+                    m_collapsedGroups.erase(groupIdx);
+                    childrenBox->setVisibility(brls::Visibility::VISIBLE);
+                    arrowLabel->setText("\u25BC");
+                } else {
+                    m_collapsedGroups.insert(groupIdx);
+                    childrenBox->setVisibility(brls::Visibility::GONE);
+                    arrowLabel->setText("\u25B6");
+                }
+                return true;
+            });
 
             // Build child rows
             for (size_t j = 0; j < filter.filters.size(); j++) {
@@ -1308,6 +1332,15 @@ void SearchTab::buildFilterPanel() {
                 childLabel->setFontSize(13);
                 childLabel->setSingleLine(true);
                 childRow->addView(childLabel);
+
+                // Hover highlight for child row
+                childRow->getFocusEvent()->subscribe([this, childRow](brls::View*) {
+                    if (m_lastHighlightedRow && m_lastHighlightedRow != childRow) {
+                        m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                    }
+                    childRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+                    m_lastHighlightedRow = childRow;
+                });
 
                 childRow->registerClickAction([this, fi, ci, childLabel, makeFilterLabel](brls::View*) {
                     if (fi >= static_cast<int>(m_sourceFilters.size())) return true;
@@ -1362,8 +1395,7 @@ void SearchTab::buildFilterPanel() {
                 childrenBox->addView(childRow);
             }
 
-            childrenScroll->setContentView(childrenBox);
-            filterListBox->addView(childrenScroll);
+            filterListBox->addView(childrenBox);
             continue;
         }
 
@@ -1382,6 +1414,15 @@ void SearchTab::buildFilterPanel() {
         rowLabel->setFontSize(13);
         rowLabel->setSingleLine(true);
         row->addView(rowLabel);
+
+        // Hover highlight for top-level row
+        row->getFocusEvent()->subscribe([this, row](brls::View*) {
+            if (m_lastHighlightedRow && m_lastHighlightedRow != row) {
+                m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            }
+            row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            m_lastHighlightedRow = row;
+        });
 
         int filterIdx = static_cast<int>(i);
         row->registerClickAction([this, filterIdx, rowLabel, makeFilterLabel](brls::View*) {
@@ -1489,6 +1530,16 @@ void SearchTab::buildFilterPanel() {
     buttonRow->addView(resetBtn);
     m_filterPanel->addView(buttonRow);
 
+    // B button on panel buttons to close panel
+    applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
+    resetBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
+
     m_filterPanel->setVisibility(brls::Visibility::VISIBLE);
 
     // Focus first focusable item
@@ -1523,6 +1574,10 @@ void SearchTab::showTagFilterDialog() {
 }
 
 void SearchTab::buildTagFilterPanel() {
+    // Save current focus so we can restore it when closing
+    m_prePanelFocusView = brls::Application::getCurrentFocus();
+    m_lastHighlightedRow = nullptr;
+
     m_filterPanel->clearViews();
     m_filterPanelType = FilterPanelType::TAG_FILTER;
 
@@ -1594,17 +1649,24 @@ void SearchTab::buildTagFilterPanel() {
 
         rows->push_back(row);
 
+        // Hover highlight for tag row
+        row->getFocusEvent()->subscribe([this, row](brls::View*) {
+            if (m_lastHighlightedRow && m_lastHighlightedRow != row) {
+                m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            }
+            row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            m_lastHighlightedRow = row;
+        });
+
         row->registerClickAction([this, tag, checkLabels, rows, i, titleLabel](brls::View*) {
             auto& s = Application::getInstance().getSettings();
             if (s.selectedSourceTagFilters.count(tag) > 0) {
                 s.selectedSourceTagFilters.erase(tag);
                 (*checkLabels)[i]->setText("");
-                (*rows)[i]->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             } else {
                 s.selectedSourceTagFilters.insert(tag);
                 (*checkLabels)[i]->setText("\u2713");
                 (*checkLabels)[i]->setTextColor(Application::getInstance().getCtaButtonColor());
-                (*rows)[i]->setBackgroundColor(Application::getInstance().getActiveRowBackground());
             }
             int count = static_cast<int>(s.selectedSourceTagFilters.size());
             std::string t = "Filter by Tag";
@@ -1652,6 +1714,16 @@ void SearchTab::buildTagFilterPanel() {
     });
     clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn));
 
+    // B button on panel buttons to close panel
+    applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
+    clearBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
+
     buttonRow->addView(applyBtn);
     buttonRow->addView(clearBtn);
     m_filterPanel->addView(buttonRow);
@@ -1671,6 +1743,12 @@ void SearchTab::showTagManageDialog(const Source& source) {
 }
 
 void SearchTab::buildTagManagePanel(const Source& source) {
+    // Save current focus so we can restore it when closing
+    if (m_filterPanelType == FilterPanelType::NONE) {
+        m_prePanelFocusView = brls::Application::getCurrentFocus();
+    }
+    m_lastHighlightedRow = nullptr;
+
     m_filterPanel->clearViews();
     m_filterPanelType = FilterPanelType::TAG_MANAGE;
 
@@ -1745,6 +1823,15 @@ void SearchTab::buildTagManagePanel(const Source& source) {
 
         rowPtrs->push_back(row);
 
+        // Hover highlight for tag manage row
+        row->getFocusEvent()->subscribe([this, row](brls::View*) {
+            if (m_lastHighlightedRow && m_lastHighlightedRow != row) {
+                m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            }
+            row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            m_lastHighlightedRow = row;
+        });
+
         row->registerClickAction([this, sourceIdStr, tag, checkLabels, rowPtrs, i](brls::View*) {
             auto& s = Application::getInstance().getSettings();
             auto& sourceTags = s.sourceTags[sourceIdStr];
@@ -1752,12 +1839,10 @@ void SearchTab::buildTagManagePanel(const Source& source) {
                 sourceTags.erase(tag);
                 if (sourceTags.empty()) s.sourceTags.erase(sourceIdStr);
                 (*checkLabels)[i]->setText("");
-                (*rowPtrs)[i]->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             } else {
                 sourceTags.insert(tag);
                 (*checkLabels)[i]->setText("\u2713");
                 (*checkLabels)[i]->setTextColor(Application::getInstance().getCtaButtonColor());
-                (*rowPtrs)[i]->setBackgroundColor(Application::getInstance().getActiveRowBackground());
             }
             Application::getInstance().saveSettings();
             return true;
@@ -1801,6 +1886,16 @@ void SearchTab::buildTagManagePanel(const Source& source) {
         return true;
     });
     doneBtn->addGestureRecognizer(new brls::TapGestureRecognizer(doneBtn));
+
+    // B button on panel buttons to close panel
+    addBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
+    doneBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
 
     buttonRow->addView(addBtn);
     buttonRow->addView(doneBtn);
