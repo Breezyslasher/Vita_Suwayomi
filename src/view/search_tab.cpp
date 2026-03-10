@@ -1148,55 +1148,13 @@ void SearchTab::buildFilterPanel() {
     m_filterPanel->setMarginLeft(10);
     m_filterPanel->setWidth(300);
 
-    // Title row with close button
-    auto* titleRow = new brls::Box();
-    titleRow->setAxis(brls::Axis::ROW);
-    titleRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-    titleRow->setAlignItems(brls::AlignItems::CENTER);
-    titleRow->setMarginBottom(6);
-
+    // Title
     auto* titleLabel = new brls::Label();
     titleLabel->setText("Source Filters");
     titleLabel->setFontSize(18);
     titleLabel->setSingleLine(true);
-    titleLabel->setGrow(1.0f);
-    titleRow->addView(titleLabel);
-
-    // Circle close button
-    auto* closeBtn = new brls::Box();
-    closeBtn->setWidth(28);
-    closeBtn->setHeight(28);
-    closeBtn->setCornerRadius(14);
-    closeBtn->setFocusable(true);
-    closeBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    closeBtn->setAlignItems(brls::AlignItems::CENTER);
-    closeBtn->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-
-    auto* closeLabel = new brls::Label();
-    closeLabel->setText("\u2715");  // X mark
-    closeLabel->setFontSize(14);
-    closeBtn->addView(closeLabel);
-
-    closeBtn->registerClickAction([this](brls::View*) {
-        hideFilterPanel();
-        return true;
-    });
-    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
-    closeBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        hideFilterPanel();
-        return true;
-    }, true);
-    // Hover highlight
-    closeBtn->getFocusEvent()->subscribe([this, closeBtn](brls::View*) {
-        if (m_lastHighlightedRow && m_lastHighlightedRow != closeBtn) {
-            m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-        }
-        closeBtn->setBackgroundColor(Application::getInstance().getActiveRowBackground());
-        m_lastHighlightedRow = closeBtn;
-    });
-    titleRow->addView(closeBtn);
-
-    m_filterPanel->addView(titleRow);
+    titleLabel->setMarginBottom(6);
+    m_filterPanel->addView(titleLabel);
 
     // Helper: create a label for a filter row showing its current state
     auto makeFilterLabel = [](const SourceFilter& f) -> std::string {
