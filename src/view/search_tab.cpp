@@ -42,11 +42,11 @@ SearchTab::SearchTab() {
     m_buttonContainer->setAxis(brls::Axis::ROW);
     m_buttonContainer->setAlignItems(brls::AlignItems::FLEX_END);
 
-    // Tag filter button with triangle hint above (only shown on source list)
-    auto* tagContainer = new brls::Box();
-    tagContainer->setAxis(brls::Axis::COLUMN);
-    tagContainer->setAlignItems(brls::AlignItems::CENTER);
-    tagContainer->setMarginRight(10);
+    // Source filter button with triangle hint above (only shown when browsing a source)
+    auto* filterContainer = new brls::Box();
+    filterContainer->setAxis(brls::Axis::COLUMN);
+    filterContainer->setAlignItems(brls::AlignItems::CENTER);
+    filterContainer->setMarginRight(10);
 
     auto* triangleHintIcon = new brls::Image();
     triangleHintIcon->setWidth(16);
@@ -54,7 +54,7 @@ SearchTab::SearchTab() {
     triangleHintIcon->setScalingType(brls::ImageScalingType::FIT);
     triangleHintIcon->setImageFromFile("app0:resources/images/triangle_button.png");
     triangleHintIcon->setMarginBottom(2);
-    tagContainer->addView(triangleHintIcon);
+    filterContainer->addView(triangleHintIcon);
 
     m_tagFilterBtn = new brls::Button();
     m_tagFilterBtn->setWidth(44);
@@ -75,8 +75,6 @@ SearchTab::SearchTab() {
             auto a = aliveWeak.lock(); if (!a || !*a) return;
             if (m_browseMode != BrowseMode::SOURCES && m_currentSourceId != 0) {
                 showFilterDialog();
-            } else {
-                showTagFilterDialog();
             }
         });
         return true;
@@ -89,8 +87,8 @@ SearchTab::SearchTab() {
         }
         return false;
     }, true);
-    tagContainer->addView(m_tagFilterBtn);
-    m_buttonContainer->addView(tagContainer);
+    filterContainer->addView(m_tagFilterBtn);
+    m_buttonContainer->addView(filterContainer);
 
     // Search history button with Select icon above
     auto* historyContainer = new brls::Box();
@@ -221,19 +219,12 @@ SearchTab::SearchTab() {
         return true;
     });
 
-    // Register Y button (triangle) to open tag filter on source list, or source filters when browsing
+    // Register Y button (triangle) to open source filters when browsing
     this->registerAction("Filter", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
         if (m_currentSourceId != 0 && (m_browseMode == BrowseMode::POPULAR || m_browseMode == BrowseMode::LATEST)) {
             brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
                 auto a = aliveWeak.lock(); if (!a || !*a) return;
                 showFilterDialog();
-            });
-            return true;
-        }
-        if (m_browseMode == BrowseMode::SOURCES) {
-            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-                auto a = aliveWeak.lock(); if (!a || !*a) return;
-                showTagFilterDialog();
             });
             return true;
         }
@@ -599,27 +590,6 @@ void SearchTab::filterSourcesByLanguage() {
             }
         }
 
-        // Filter by selected tags
-        if (!settings.selectedSourceTagFilters.empty()) {
-            std::string srcId = std::to_string(source.id);
-            auto tagIt = settings.sourceTags.find(srcId);
-            if (tagIt == settings.sourceTags.end() || tagIt->second.empty()) {
-                // Source has no tags, skip if tag filters are active
-                continue;
-            }
-            // Check if source has at least one of the selected filter tags
-            bool hasMatchingTag = false;
-            for (const auto& filterTag : settings.selectedSourceTagFilters) {
-                if (tagIt->second.count(filterTag) > 0) {
-                    hasMatchingTag = true;
-                    break;
-                }
-            }
-            if (!hasMatchingTag) {
-                continue;
-            }
-        }
-
         m_filteredSources.push_back(source);
     }
 
@@ -735,28 +705,15 @@ void SearchTab::showSources() {
 
     // Filter sources by language and tags
     filterSourcesByLanguage();
-    {
-        const auto& settings = Application::getInstance().getSettings();
-        std::string resultText = std::to_string(m_filteredSources.size()) + " sources";
-        if (!settings.selectedSourceTagFilters.empty()) {
-            resultText += " (filtered by " + std::to_string(settings.selectedSourceTagFilters.size()) + " tag";
-            if (settings.selectedSourceTagFilters.size() > 1) resultText += "s";
-            resultText += ")";
-        }
-        m_resultsLabel->setText(resultText);
-    }
+    m_resultsLabel->setText(std::to_string(m_filteredSources.size()) + " sources");
 
     // Hide source-specific buttons
     m_popularBtn->setVisibility(brls::Visibility::GONE);
     m_latestBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::GONE);
-    // Restore tag icon on header button; highlight if tag filters are active
+    // Restore filter icon on header button
     if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
-    if (!Application::getInstance().getSettings().selectedSourceTagFilters.empty()) {
-        m_tagFilterBtn->setBackgroundColor(Application::getInstance().getActiveRowBackground());
-    } else {
-        m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
-    }
+    m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
     // Restore search/history buttons when returning to source list
     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
     m_historyBtn->setFocusable(true);
@@ -873,35 +830,12 @@ void SearchTab::showSources() {
             }
             sourceRow->addView(sourceIcon);
 
-            // Source name and tags container
-            auto* nameTagBox = new brls::Box();
-            nameTagBox->setAxis(brls::Axis::COLUMN);
-            nameTagBox->setGrow(1.0f);
-
+            // Source name
             auto* nameLabel = new brls::Label();
             nameLabel->setText(source.name);
             nameLabel->setFontSize(16);
-            nameTagBox->addView(nameLabel);
-
-            // Show tags for this source
-            {
-                const auto& settings = Application::getInstance().getSettings();
-                std::string srcId = std::to_string(source.id);
-                auto tagIt = settings.sourceTags.find(srcId);
-                if (tagIt != settings.sourceTags.end() && !tagIt->second.empty()) {
-                    auto* tagLabel = new brls::Label();
-                    std::string tagStr;
-                    for (const auto& t : tagIt->second) {
-                        if (!tagStr.empty()) tagStr += ", ";
-                        tagStr += t;
-                    }
-                    tagLabel->setText(tagStr);
-                    tagLabel->setFontSize(12);
-                    tagLabel->setTextColor(nvgRGBA(150, 150, 150, 255));
-                    nameTagBox->addView(tagLabel);
-                }
-            }
-            sourceRow->addView(nameTagBox);
+            nameLabel->setGrow(1.0f);
+            sourceRow->addView(nameLabel);
 
             // Click to browse source
             Source sourceCopy = source;
@@ -910,15 +844,6 @@ void SearchTab::showSources() {
                 return true;
             });
             sourceRow->addGestureRecognizer(new brls::TapGestureRecognizer(sourceRow));
-
-            // Y button to manage tags on this source
-            sourceRow->registerAction("Tags", brls::ControllerButton::BUTTON_Y, [this, sourceCopy](brls::View*) {
-                brls::sync([this, sourceCopy, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-                    auto a = aliveWeak.lock(); if (!a || !*a) return;
-                    showTagManageDialog(sourceCopy);
-                });
-                return true;
-            }, false);  // visible action
 
             // Register B button on source row to go back (exit tab in SOURCES mode)
             // This ensures B button works when focus is on source rows
@@ -984,8 +909,7 @@ void SearchTab::showSourceBrowser(const Source& source) {
     m_sourceFilters.clear();
     m_filtersLoaded = false;
     m_filtersActive = false;
-    // Switch header tag button to filter icon for source browsing
-    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
+    // Reset filter button color for source browsing
     m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
 
     // CRITICAL: Move focus away from source list BEFORE clearing views.
@@ -1224,13 +1148,55 @@ void SearchTab::buildFilterPanel() {
     m_filterPanel->setMarginLeft(10);
     m_filterPanel->setWidth(300);
 
-    // Title
+    // Title row with close button
+    auto* titleRow = new brls::Box();
+    titleRow->setAxis(brls::Axis::ROW);
+    titleRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+    titleRow->setAlignItems(brls::AlignItems::CENTER);
+    titleRow->setMarginBottom(6);
+
     auto* titleLabel = new brls::Label();
     titleLabel->setText("Source Filters");
     titleLabel->setFontSize(18);
     titleLabel->setSingleLine(true);
-    titleLabel->setMarginBottom(6);
-    m_filterPanel->addView(titleLabel);
+    titleLabel->setGrow(1.0f);
+    titleRow->addView(titleLabel);
+
+    // Circle close button
+    auto* closeBtn = new brls::Box();
+    closeBtn->setWidth(28);
+    closeBtn->setHeight(28);
+    closeBtn->setCornerRadius(14);
+    closeBtn->setFocusable(true);
+    closeBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    closeBtn->setAlignItems(brls::AlignItems::CENTER);
+    closeBtn->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+    auto* closeLabel = new brls::Label();
+    closeLabel->setText("\u2715");  // X mark
+    closeLabel->setFontSize(14);
+    closeBtn->addView(closeLabel);
+
+    closeBtn->registerClickAction([this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    });
+    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
+    closeBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideFilterPanel();
+        return true;
+    }, true);
+    // Hover highlight
+    closeBtn->getFocusEvent()->subscribe([this, closeBtn](brls::View*) {
+        if (m_lastHighlightedRow && m_lastHighlightedRow != closeBtn) {
+            m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+        }
+        closeBtn->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+        m_lastHighlightedRow = closeBtn;
+    });
+    titleRow->addView(closeBtn);
+
+    m_filterPanel->addView(titleRow);
 
     // Helper: create a label for a filter row showing its current state
     auto makeFilterLabel = [](const SourceFilter& f) -> std::string {
@@ -1276,6 +1242,15 @@ void SearchTab::buildFilterPanel() {
 
     auto* filterListBox = new brls::Box();
     filterListBox->setAxis(brls::Axis::COLUMN);
+
+    // On first open, collapse all GROUP filters by default
+    if (m_collapsedGroups.empty()) {
+        for (size_t i = 0; i < m_sourceFilters.size(); i++) {
+            if (m_sourceFilters[i].type == FilterType::GROUP) {
+                m_collapsedGroups.insert(static_cast<int>(i));
+            }
+        }
+    }
 
     // Build filter rows
     for (size_t i = 0; i < m_sourceFilters.size(); i++) {
@@ -2815,7 +2790,7 @@ void SearchTab::handleBackNavigation() {
                     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
                     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
                     // Restore filter icon on header button
-                    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
+                    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
 
                     // Restore search/history buttons
                     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
