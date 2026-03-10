@@ -2197,7 +2197,8 @@ void MangaDetailView::onAddToLibrary() {
                             asyncRun([mangaId, categoryId]() {
                                 SuwayomiClient& client = SuwayomiClient::getInstance();
                                 if (client.setMangaCategories(mangaId, {categoryId})) {
-                                    brls::sync([]() {
+                                    brls::sync([mangaId]() {
+                                        Application::getInstance().trackCategoryChange(mangaId);
                                         brls::Application::notify("Added to library");
                                     });
                                 } else {
@@ -2808,7 +2809,8 @@ void MangaDetailView::showCategoryDialog() {
                         asyncRun([mangaId, categoryId]() {
                             SuwayomiClient& client = SuwayomiClient::getInstance();
                             if (client.setMangaCategories(mangaId, {categoryId})) {
-                                brls::sync([]() {
+                                brls::sync([mangaId]() {
+                                    Application::getInstance().trackCategoryChange(mangaId);
                                     brls::Application::notify("Category updated");
                                 });
                             } else {

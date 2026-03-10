@@ -179,6 +179,16 @@ SourceBrowseTab::~SourceBrowseTab() {
     if (m_alive) *m_alive = false;
 }
 
+void SourceBrowseTab::willAppear(bool resetState) {
+    brls::Box::willAppear(resetState);
+
+    // Refresh star badges on all cells to reflect library add/remove changes
+    // made while this tab was covered by another activity (e.g. detail view)
+    if (m_contentGrid) {
+        m_contentGrid->refreshLibraryBadges();
+    }
+}
+
 void SourceBrowseTab::willDisappear(bool resetState) {
     brls::Box::willDisappear(resetState);
 

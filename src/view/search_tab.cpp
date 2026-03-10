@@ -429,6 +429,30 @@ SearchTab::~SearchTab() {
     if (m_sourceIconsAlive) *m_sourceIconsAlive = false;
 }
 
+void SearchTab::willAppear(bool resetState) {
+    brls::Box::willAppear(resetState);
+
+    // Refresh star badges on all cells to reflect library add/remove changes
+    // made while this tab was covered by another activity (e.g. detail view)
+    if (m_contentGrid) {
+        m_contentGrid->refreshLibraryBadges();
+    }
+
+    // Also refresh star badges in search-results-by-source horizontal rows
+    if (m_searchResultsBox) {
+        for (auto* row : m_searchResultsBox->getChildren()) {
+            auto* rowBox = dynamic_cast<brls::Box*>(row);
+            if (!rowBox) continue;
+            for (auto* child : rowBox->getChildren()) {
+                auto* cell = dynamic_cast<MangaItemCell*>(child);
+                if (cell) {
+                    cell->refreshLibraryBadge();
+                }
+            }
+        }
+    }
+}
+
 void SearchTab::willDisappear(bool resetState) {
     brls::Box::willDisappear(resetState);
 

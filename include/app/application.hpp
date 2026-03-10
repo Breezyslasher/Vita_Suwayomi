@@ -292,6 +292,12 @@ public:
     const std::set<int>& getRecentRemovals() const { return m_recentLibraryRemovals; }
     void clearRecentRemovals() { m_recentLibraryRemovals.clear(); }
 
+    // Track category changes for immediate UI update (manga moved to different category)
+    void trackCategoryChange(int mangaId) { m_recentCategoryChanges.insert(mangaId); }
+    bool hasRecentCategoryChanges() const { return !m_recentCategoryChanges.empty(); }
+    const std::set<int>& getRecentCategoryChanges() const { return m_recentCategoryChanges; }
+    void clearRecentCategoryChanges() { m_recentCategoryChanges.clear(); }
+
     // Application settings access
     AppSettings& getSettings() { return m_settings; }
     const AppSettings& getSettings() const { return m_settings; }
@@ -380,6 +386,7 @@ private:
     int m_currentCategoryId = 0;
     std::set<int> m_recentLibraryAdditions;  // Manga IDs added to library this session
     std::set<int> m_recentLibraryRemovals;  // Manga IDs removed from library this session
+    std::set<int> m_recentCategoryChanges;  // Manga IDs whose category was changed
     AppSettings m_settings;
     ReaderResult m_lastReaderResult;
     ReaderResultCallback m_readerResultCallback;

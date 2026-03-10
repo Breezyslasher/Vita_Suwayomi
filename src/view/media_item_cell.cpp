@@ -391,6 +391,8 @@ brls::View* MangaItemCell::create() {
 void MangaItemCell::onFocusGained() {
     brls::Box::onFocusGained();
     updateFocusInfo(true);
+    // Refresh library badge to reflect add/remove changes from detail view
+    refreshLibraryBadge();
     // Show start button hint on focus (but not in browser/search tabs where library badge is shown)
     if (m_startHintIcon && !m_showLibraryBadge) {
         if (!m_startHintImageLoaded) {
