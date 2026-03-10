@@ -31,6 +31,7 @@ public:
     void setListRowSize(int rowSize);   // List row size: 0=small, 1=medium, 2=large, 3=auto
     void setGridColumns(int columns);   // Set grid column count (adapts title font/truncation)
     void setShowLibraryBadge(bool show);  // Show star badge for library items (browser/search only)
+    void refreshLibraryBadge();  // Re-evaluate star badge visibility from recent add/remove state
 
     void onFocusGained() override;
     void onFocusLost() override;

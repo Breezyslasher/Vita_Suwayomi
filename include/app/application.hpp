@@ -283,6 +283,7 @@ public:
     // Track library additions for immediate UI update
     void trackLibraryAddition(int mangaId) { m_recentLibraryAdditions.insert(mangaId); m_recentLibraryRemovals.erase(mangaId); }
     bool isRecentlyAdded(int mangaId) const { return m_recentLibraryAdditions.count(mangaId) > 0; }
+    const std::set<int>& getRecentAdditions() const { return m_recentLibraryAdditions; }
     void clearRecentAdditions() { m_recentLibraryAdditions.clear(); }
 
     // Track library removals for immediate UI update

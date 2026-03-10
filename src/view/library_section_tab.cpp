@@ -561,20 +561,50 @@ void LibrarySectionTab::onFocusGained() {
     // Check for recent library removals and update grid immediately
     const auto& recentRemovals = Application::getInstance().getRecentRemovals();
     if (!recentRemovals.empty() && m_loaded) {
-        auto shouldRemove = [&recentRemovals](const Manga& m) {
-            return recentRemovals.count(m.id) > 0;
-        };
-        size_t oldSize = m_mangaList.size();
-        m_mangaList.erase(
-            std::remove_if(m_mangaList.begin(), m_mangaList.end(), shouldRemove),
-            m_mangaList.end());
-        m_fullMangaList.erase(
-            std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(), shouldRemove),
-            m_fullMangaList.end());
+        // Copy IDs before clearing the tracking set
+        std::set<int> removedIdSet(recentRemovals.begin(), recentRemovals.end());
+        std::vector<int> removedIds(removedIdSet.begin(), removedIdSet.end());
         Application::getInstance().clearRecentRemovals();
 
-        if (m_mangaList.size() != oldSize && m_contentGrid) {
-            m_contentGrid->setDataSource(m_mangaList);
+        size_t oldSize = m_mangaList.size();
+        m_mangaList.erase(
+            std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                [&removedIdSet](const Manga& m) { return removedIdSet.count(m.id) > 0; }),
+            m_mangaList.end());
+        m_fullMangaList.erase(
+            std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(),
+                [&removedIdSet](const Manga& m) { return removedIdSet.count(m.id) > 0; }),
+            m_fullMangaList.end());
+
+        if (m_mangaList.size() != oldSize) {
+            // Update cached manga list
+            m_cachedMangaList.erase(
+                std::remove_if(m_cachedMangaList.begin(), m_cachedMangaList.end(),
+                    [&removedIdSet](const CachedMangaItem& c) { return removedIdSet.count(c.id) > 0; }),
+                m_cachedMangaList.end());
+
+            // Update on-disk cache
+            if (Application::getInstance().getSettings().cacheLibraryData) {
+                LibraryCache::getInstance().saveCategoryManga(m_currentCategoryId, m_fullMangaList);
+            }
+
+            if (m_contentGrid) {
+                m_contentGrid->removeItems(removedIds);
+            }
+        }
+    }
+
+    // Check for recent library additions and trigger a background refresh
+    // to pull the newly added manga into the current category view
+    if (!Application::getInstance().getRecentAdditions().empty() && m_loaded) {
+        Application::getInstance().clearRecentAdditions();
+        // Reload current view to pick up newly added manga
+        if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+            loadAllManga();
+        } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            loadBySource();
+        } else {
+            loadCategoryManga(m_currentCategoryId);
         }
     }
 

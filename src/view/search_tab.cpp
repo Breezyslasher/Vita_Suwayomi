@@ -473,6 +473,26 @@ void SearchTab::onFocusGained() {
     if (m_sources.empty()) {
         loadSources();
     }
+
+    // Refresh star badges on visible cells to reflect library add/remove changes
+    // made from the detail view (uses recent additions/removals tracking)
+    if (m_contentGrid) {
+        m_contentGrid->refreshLibraryBadges();
+    }
+
+    // Also refresh star badges in search-results-by-source horizontal rows
+    if (m_searchResultsBox) {
+        for (auto* row : m_searchResultsBox->getChildren()) {
+            auto* rowBox = dynamic_cast<brls::Box*>(row);
+            if (!rowBox) continue;
+            for (auto* child : rowBox->getChildren()) {
+                auto* cell = dynamic_cast<MangaItemCell*>(child);
+                if (cell) {
+                    cell->refreshLibraryBadge();
+                }
+            }
+        }
+    }
 }
 
 bool SearchTab::isFocusInPanel(brls::View* view) const {

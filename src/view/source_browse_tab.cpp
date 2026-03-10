@@ -191,6 +191,11 @@ void SourceBrowseTab::willDisappear(bool resetState) {
 
 void SourceBrowseTab::onFocusGained() {
     brls::Box::onFocusGained();
+
+    // Refresh star badges to reflect library add/remove changes from detail view
+    if (m_contentGrid) {
+        m_contentGrid->refreshLibraryBadges();
+    }
 }
 
 void SourceBrowseTab::loadPopular() {

@@ -599,6 +599,17 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
     }
 }
 
+void MangaItemCell::refreshLibraryBadge() {
+    if (!m_starBadge || !m_showLibraryBadge) return;
+    bool inLib = (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id))
+                 && !Application::getInstance().isRecentlyRemoved(m_manga.id);
+    if (inLib && !m_starImageLoaded) {
+        m_starBadge->setImageFromFile("app0:resources/icons/star.png");
+        m_starImageLoaded = true;
+    }
+    m_starBadge->setVisibility(inLib ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+}
+
 void MangaItemCell::setListRowSize(int rowSize) {
     // No-op: list mode always auto-adapts row height to title length
     (void)rowSize;
