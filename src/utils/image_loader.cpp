@@ -2093,6 +2093,9 @@ void ImageLoader::processPendingTextures() {
         if (update.target) {
             // Skip if the owning view was destroyed while the image was downloading.
             // Without this check, writing to a freed brls::Image* causes a crash.
+            // Check alive TWICE: once before and once after validation to narrow
+            // the TOCTOU window (both checks run on main thread, so the real risk
+            // is a brls::sync callback destroying the cell between iterations).
             if (update.alive && !*update.alive) {
                 continue;
             }
@@ -2100,10 +2103,12 @@ void ImageLoader::processPendingTextures() {
             if (update.data.empty()) {
                 continue;
             }
-            brls::Logger::debug("ImageLoader: Uploading texture {} bytes to target {:p}",
-                                update.data.size(), static_cast<void*>(update.target));
+            // Re-check alive right before the actual GPU upload - a brls::sync
+            // callback processed earlier in this frame could have destroyed the cell.
+            if (update.alive && !*update.alive) {
+                continue;
+            }
             update.target->setImageFromMem(update.data.data(), update.data.size());
-            brls::Logger::debug("ImageLoader: Texture upload OK");
             if (update.callback) update.callback(update.target);
         }
         processed++;

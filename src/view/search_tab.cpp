@@ -1162,9 +1162,26 @@ void SearchTab::hideFilterPanel() {
         m_filterPanelType = FilterPanelType::NONE;
         m_filterPanel->clearViews();
         m_filterPanel->setVisibility(brls::Visibility::GONE);
-        // Restore focus to the view that was focused before the panel opened
+        // Restore focus to the view that was focused before the panel opened.
+        // The saved view could have been destroyed if the grid was rebuilt
+        // while the panel was open (e.g. async callback calling setDataSource).
+        // Validate the pointer is still in our view hierarchy before using it.
         if (m_prePanelFocusView) {
-            brls::Application::giveFocus(m_prePanelFocusView);
+            // Check if the saved view is still a descendant of our content
+            brls::View* check = m_prePanelFocusView;
+            bool valid = false;
+            while (check) {
+                if (check == this) { valid = true; break; }
+                check = check->getParent();
+            }
+            if (valid) {
+                brls::Application::giveFocus(m_prePanelFocusView);
+            } else {
+                // Stale pointer - focus the content grid instead
+                if (m_contentGrid) {
+                    brls::Application::giveFocus(m_contentGrid);
+                }
+            }
             m_prePanelFocusView = nullptr;
         }
     }
