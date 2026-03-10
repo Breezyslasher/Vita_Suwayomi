@@ -26,6 +26,7 @@ public:
     ~SearchTab();
 
     void onFocusGained() override;
+    void willAppear(bool resetState) override;
     void willDisappear(bool resetState) override;
     brls::View* getNextFocus(brls::FocusDirection direction, brls::View* currentView) override;
 

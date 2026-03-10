@@ -280,7 +280,8 @@ void MangaItemCell::updateDisplay() {
     // Show star badge if manga is in library (browser/search tabs only)
     // Also check recent additions cache for immediate update
     if (m_starBadge) {
-        bool inLib = m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id);
+        bool inLib = (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id))
+                     && !Application::getInstance().isRecentlyRemoved(m_manga.id);
         bool showStar = m_showLibraryBadge && inLib;
         if (showStar && !m_starImageLoaded) {
             m_starBadge->setImageFromFile("app0:resources/icons/star.png");
@@ -390,6 +391,8 @@ brls::View* MangaItemCell::create() {
 void MangaItemCell::onFocusGained() {
     brls::Box::onFocusGained();
     updateFocusInfo(true);
+    // Refresh library badge to reflect add/remove changes from detail view
+    refreshLibraryBadge();
     // Show start button hint on focus (but not in browser/search tabs where library badge is shown)
     if (m_startHintIcon && !m_showLibraryBadge) {
         if (!m_startHintImageLoaded) {
@@ -584,7 +587,8 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
     m_showLibraryBadge = show;
     // Update star badge visibility (also check recent additions cache)
     if (m_starBadge) {
-        bool inLib = m_showLibraryBadge && (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id));
+        bool inLib = m_showLibraryBadge && (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id))
+                     && !Application::getInstance().isRecentlyRemoved(m_manga.id);
         if (inLib && !m_starImageLoaded) {
             m_starBadge->setImageFromFile("app0:resources/icons/star.png");
             m_starImageLoaded = true;
@@ -595,6 +599,17 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
     if (m_startHintIcon && m_showLibraryBadge) {
         m_startHintIcon->setVisibility(brls::Visibility::GONE);
     }
+}
+
+void MangaItemCell::refreshLibraryBadge() {
+    if (!m_starBadge || !m_showLibraryBadge) return;
+    bool inLib = (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id))
+                 && !Application::getInstance().isRecentlyRemoved(m_manga.id);
+    if (inLib && !m_starImageLoaded) {
+        m_starBadge->setImageFromFile("app0:resources/icons/star.png");
+        m_starImageLoaded = true;
+    }
+    m_starBadge->setVisibility(inLib ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 }
 
 void MangaItemCell::setListRowSize(int rowSize) {

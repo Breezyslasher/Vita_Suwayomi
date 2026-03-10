@@ -541,6 +541,8 @@ MangaDetailView::MangaDetailView(const Manga& manga)
             if (!cachedManga.artist.empty() && m_manga.artist.empty()) m_manga.artist = cachedManga.artist;
             if (cachedManga.genre.size() > m_manga.genre.size()) m_manga.genre = cachedManga.genre;
             if (!cachedManga.sourceName.empty() && m_manga.sourceName.empty()) m_manga.sourceName = cachedManga.sourceName;
+            // Restore library state from cache (search/browse results may not have it)
+            if (cachedManga.inLibrary && !m_manga.inLibrary) m_manga.inLibrary = true;
         }
     }
 
@@ -679,21 +681,11 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_libraryButton->setHeight(44);
     m_libraryButton->setMarginBottom(10);
     m_libraryButton->setCornerRadius(22);  // Pill-shaped
-    if (m_manga.inLibrary) {
-        m_libraryButton->setBackgroundColor(nvgRGBA(180, 60, 60, 255));  // Red for remove (semantic)
-        m_libraryButton->setText("Remove from Library");
-        m_libraryButton->registerClickAction([this](brls::View* view) {
-            onRemoveFromLibrary();
-            return true;
-        });
-    } else {
-        m_libraryButton->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-        m_libraryButton->setText("Add to Library");
-        m_libraryButton->registerClickAction([this](brls::View* view) {
-            onAddToLibrary();
-            return true;
-        });
+    // Check both server state and recently-added tracking for correct initial state
+    if (!m_manga.inLibrary && Application::getInstance().isRecentlyAdded(m_manga.id)) {
+        m_manga.inLibrary = true;
     }
+    updateLibraryButton();
     m_libraryButton->addGestureRecognizer(new brls::TapGestureRecognizer(m_libraryButton));
     // Hide add/remove library button when offline (server-only action)
     if (!Application::getInstance().isConnected()) {
@@ -1325,6 +1317,13 @@ void MangaDetailView::loadDetails() {
                         }
                         needsUpdate = true;
                     }
+                    // Sync library state from server response
+                    if (updatedManga.inLibrary != m_manga.inLibrary) {
+                        m_manga.inLibrary = updatedManga.inLibrary;
+                        updateLibraryButton();
+                        needsUpdate = true;
+                    }
+
                     if (needsUpdate) {
                         LibraryCache::getInstance().saveMangaDetails(m_manga);
                         brls::Logger::info("MangaDetailView: Updated and cached manga details from combined query");
@@ -1382,6 +1381,12 @@ void MangaDetailView::loadDetails() {
                                 }
                                 m_descriptionLabel->setText(truncatedDesc);
                             }
+                        }
+                        // Sync library state from server response
+                        if (fallbackManga.inLibrary != m_manga.inLibrary) {
+                            m_manga.inLibrary = fallbackManga.inLibrary;
+                            updateLibraryButton();
+                            needsUpdate = true;
                         }
                         if (needsUpdate) {
                             LibraryCache::getInstance().saveMangaDetails(m_manga);
@@ -2167,14 +2172,7 @@ void MangaDetailView::onAddToLibrary() {
             Application::getInstance().trackLibraryAddition(m_manga.id);
 
             // Switch button to "Remove from Library"
-            if (m_libraryButton) {
-                m_libraryButton->setBackgroundColor(nvgRGBA(180, 60, 60, 255));  // Red = semantic
-                m_libraryButton->setText("Remove from Library");
-                m_libraryButton->registerClickAction([this](brls::View* view) {
-                    onRemoveFromLibrary();
-                    return true;
-                });
-            }
+            updateLibraryButton();
 
             // If categories available, show selection dropdown
             if (categories.size() > 1) {
@@ -2197,7 +2195,8 @@ void MangaDetailView::onAddToLibrary() {
                             asyncRun([mangaId, categoryId]() {
                                 SuwayomiClient& client = SuwayomiClient::getInstance();
                                 if (client.setMangaCategories(mangaId, {categoryId})) {
-                                    brls::sync([]() {
+                                    brls::sync([mangaId]() {
+                                        Application::getInstance().trackCategoryChange(mangaId);
                                         brls::Application::notify("Added to library");
                                     });
                                 } else {
@@ -2207,7 +2206,7 @@ void MangaDetailView::onAddToLibrary() {
                                 }
                             });
                         });
-                    }, 0);
+                    }, -1);
                 brls::Application::pushActivity(new brls::Activity(dropdown));
             } else {
                 brls::Application::notify("Added to library");
@@ -2228,14 +2227,11 @@ void MangaDetailView::onRemoveFromLibrary() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
                 m_manga.inLibrary = false;
-                if (m_libraryButton) {
-                    m_libraryButton->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-                    m_libraryButton->setText("Add to Library");
-                    m_libraryButton->registerClickAction([this](brls::View* view) {
-                        onAddToLibrary();
-                        return true;
-                    });
-                }
+
+                // Track removal for immediate library UI update
+                Application::getInstance().trackLibraryRemoval(m_manga.id);
+
+                updateLibraryButton();
                 brls::Application::notify("Removed from library");
             });
         } else {
@@ -2804,7 +2800,8 @@ void MangaDetailView::showCategoryDialog() {
                         asyncRun([mangaId, categoryId]() {
                             SuwayomiClient& client = SuwayomiClient::getInstance();
                             if (client.setMangaCategories(mangaId, {categoryId})) {
-                                brls::sync([]() {
+                                brls::sync([mangaId]() {
+                                    Application::getInstance().trackCategoryChange(mangaId);
                                     brls::Application::notify("Category updated");
                                 });
                             } else {
@@ -3405,6 +3402,26 @@ void MangaDetailView::applyReaderResult() {
                 break;
             }
         }
+    }
+}
+
+void MangaDetailView::updateLibraryButton() {
+    if (!m_libraryButton) return;
+
+    if (m_manga.inLibrary) {
+        m_libraryButton->setBackgroundColor(nvgRGBA(180, 60, 60, 255));  // Red for remove
+        m_libraryButton->setText("Remove from Library");
+        m_libraryButton->registerClickAction([this](brls::View* view) {
+            onRemoveFromLibrary();
+            return true;
+        });
+    } else {
+        m_libraryButton->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+        m_libraryButton->setText("Add to Library");
+        m_libraryButton->registerClickAction([this](brls::View* view) {
+            onAddToLibrary();
+            return true;
+        });
     }
 }
 

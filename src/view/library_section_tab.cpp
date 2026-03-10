@@ -480,6 +480,96 @@ bool LibrarySectionTab::hasFocusWithin() const {
     return false;
 }
 
+void LibrarySectionTab::willAppear(bool resetState) {
+    brls::Box::willAppear(resetState);
+
+    // Check for recent category changes when the tab becomes visible
+    // (e.g., after returning from a detail view where category was changed)
+    if (Application::getInstance().hasRecentCategoryChanges() && m_loaded) {
+        std::set<int> changedIds = Application::getInstance().getRecentCategoryChanges();
+        Application::getInstance().clearRecentCategoryChanges();
+
+        if (m_groupMode == LibraryGroupMode::BY_CATEGORY) {
+            // Remove changed manga from current view and reload
+            std::vector<int> removedIds(changedIds.begin(), changedIds.end());
+            size_t oldSize = m_mangaList.size();
+            m_mangaList.erase(
+                std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                    [&changedIds](const Manga& m) { return changedIds.count(m.id) > 0; }),
+                m_mangaList.end());
+            m_fullMangaList.erase(
+                std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(),
+                    [&changedIds](const Manga& m) { return changedIds.count(m.id) > 0; }),
+                m_fullMangaList.end());
+
+            if (m_mangaList.size() != oldSize) {
+                m_cachedMangaList.erase(
+                    std::remove_if(m_cachedMangaList.begin(), m_cachedMangaList.end(),
+                        [&changedIds](const CachedMangaItem& c) { return changedIds.count(c.id) > 0; }),
+                    m_cachedMangaList.end());
+
+                if (Application::getInstance().getSettings().cacheLibraryData) {
+                    LibraryCache::getInstance().saveCategoryManga(m_currentCategoryId, m_fullMangaList);
+                }
+
+                if (m_contentGrid) {
+                    m_contentGrid->removeItems(removedIds);
+                }
+            }
+
+            loadCategoryManga(m_currentCategoryId);
+        } else if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+            loadAllManga();
+        } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            loadBySource();
+        }
+    }
+
+    // Check for recent library removals and additions
+    if (!Application::getInstance().getRecentRemovals().empty() && m_loaded) {
+        std::set<int> removedIdSet(Application::getInstance().getRecentRemovals().begin(),
+                                    Application::getInstance().getRecentRemovals().end());
+        std::vector<int> removedIds(removedIdSet.begin(), removedIdSet.end());
+        Application::getInstance().clearRecentRemovals();
+
+        size_t oldSize = m_mangaList.size();
+        m_mangaList.erase(
+            std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                [&removedIdSet](const Manga& m) { return removedIdSet.count(m.id) > 0; }),
+            m_mangaList.end());
+        m_fullMangaList.erase(
+            std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(),
+                [&removedIdSet](const Manga& m) { return removedIdSet.count(m.id) > 0; }),
+            m_fullMangaList.end());
+
+        if (m_mangaList.size() != oldSize) {
+            m_cachedMangaList.erase(
+                std::remove_if(m_cachedMangaList.begin(), m_cachedMangaList.end(),
+                    [&removedIdSet](const CachedMangaItem& c) { return removedIdSet.count(c.id) > 0; }),
+                m_cachedMangaList.end());
+
+            if (Application::getInstance().getSettings().cacheLibraryData) {
+                LibraryCache::getInstance().saveCategoryManga(m_currentCategoryId, m_fullMangaList);
+            }
+
+            if (m_contentGrid) {
+                m_contentGrid->removeItems(removedIds);
+            }
+        }
+    }
+
+    if (!Application::getInstance().getRecentAdditions().empty() && m_loaded) {
+        Application::getInstance().clearRecentAdditions();
+        if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+            loadAllManga();
+        } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            loadBySource();
+        } else {
+            loadCategoryManga(m_currentCategoryId);
+        }
+    }
+}
+
 void LibrarySectionTab::willDisappear(bool resetState) {
     brls::Box::willDisappear(resetState);
 
@@ -556,6 +646,102 @@ void LibrarySectionTab::onFocusGained() {
         if (m_rHintIcon) m_rHintIcon->setVisibility(brls::Visibility::VISIBLE);
         this->setActionAvailable(brls::ControllerButton::BUTTON_LB, true);
         this->setActionAvailable(brls::ControllerButton::BUTTON_RB, true);
+    }
+
+    // Check for recent library removals and update grid immediately
+    const auto& recentRemovals = Application::getInstance().getRecentRemovals();
+    if (!recentRemovals.empty() && m_loaded) {
+        // Copy IDs before clearing the tracking set
+        std::set<int> removedIdSet(recentRemovals.begin(), recentRemovals.end());
+        std::vector<int> removedIds(removedIdSet.begin(), removedIdSet.end());
+        Application::getInstance().clearRecentRemovals();
+
+        size_t oldSize = m_mangaList.size();
+        m_mangaList.erase(
+            std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                [&removedIdSet](const Manga& m) { return removedIdSet.count(m.id) > 0; }),
+            m_mangaList.end());
+        m_fullMangaList.erase(
+            std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(),
+                [&removedIdSet](const Manga& m) { return removedIdSet.count(m.id) > 0; }),
+            m_fullMangaList.end());
+
+        if (m_mangaList.size() != oldSize) {
+            // Update cached manga list
+            m_cachedMangaList.erase(
+                std::remove_if(m_cachedMangaList.begin(), m_cachedMangaList.end(),
+                    [&removedIdSet](const CachedMangaItem& c) { return removedIdSet.count(c.id) > 0; }),
+                m_cachedMangaList.end());
+
+            // Update on-disk cache
+            if (Application::getInstance().getSettings().cacheLibraryData) {
+                LibraryCache::getInstance().saveCategoryManga(m_currentCategoryId, m_fullMangaList);
+            }
+
+            if (m_contentGrid) {
+                m_contentGrid->removeItems(removedIds);
+            }
+        }
+    }
+
+    // Check for recent category changes and remove affected manga from current category
+    // (manga was moved to a different category from the detail view)
+    if (Application::getInstance().hasRecentCategoryChanges() && m_loaded &&
+        m_groupMode == LibraryGroupMode::BY_CATEGORY) {
+        std::set<int> changedIds = Application::getInstance().getRecentCategoryChanges();
+        Application::getInstance().clearRecentCategoryChanges();
+
+        // Remove changed manga from current category view and reload to get correct state
+        std::vector<int> removedIds(changedIds.begin(), changedIds.end());
+        size_t oldSize = m_mangaList.size();
+        m_mangaList.erase(
+            std::remove_if(m_mangaList.begin(), m_mangaList.end(),
+                [&changedIds](const Manga& m) { return changedIds.count(m.id) > 0; }),
+            m_mangaList.end());
+        m_fullMangaList.erase(
+            std::remove_if(m_fullMangaList.begin(), m_fullMangaList.end(),
+                [&changedIds](const Manga& m) { return changedIds.count(m.id) > 0; }),
+            m_fullMangaList.end());
+
+        if (m_mangaList.size() != oldSize) {
+            m_cachedMangaList.erase(
+                std::remove_if(m_cachedMangaList.begin(), m_cachedMangaList.end(),
+                    [&changedIds](const CachedMangaItem& c) { return changedIds.count(c.id) > 0; }),
+                m_cachedMangaList.end());
+
+            if (Application::getInstance().getSettings().cacheLibraryData) {
+                LibraryCache::getInstance().saveCategoryManga(m_currentCategoryId, m_fullMangaList);
+            }
+
+            if (m_contentGrid) {
+                m_contentGrid->removeItems(removedIds);
+            }
+        }
+
+        // Reload to pick up manga that may have been moved INTO this category
+        loadCategoryManga(m_currentCategoryId);
+    } else if (Application::getInstance().hasRecentCategoryChanges() && m_loaded) {
+        // Non-category grouping modes: just clear the flag and reload
+        Application::getInstance().clearRecentCategoryChanges();
+        if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+            loadAllManga();
+        } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            loadBySource();
+        }
+    }
+
+    // Check for recent library additions and trigger a background refresh
+    // to pull the newly added manga into the current category view
+    if (!Application::getInstance().getRecentAdditions().empty() && m_loaded) {
+        Application::getInstance().clearRecentAdditions();
+        // Reload current view to pick up newly added manga
+        if (m_groupMode == LibraryGroupMode::NO_GROUPING) {
+            loadAllManga();
+        } else if (m_groupMode == LibraryGroupMode::BY_SOURCE) {
+            loadBySource();
+        } else {
+            loadCategoryManga(m_currentCategoryId);
+        }
     }
 
     if (!m_loaded && m_categoriesLoaded) {

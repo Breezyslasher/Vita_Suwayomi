@@ -39,6 +39,7 @@ public:
     ~LibrarySectionTab() override;
 
     void onFocusGained() override;
+    void willAppear(bool resetState) override;
     void willDisappear(bool resetState) override;
     void refresh();
 

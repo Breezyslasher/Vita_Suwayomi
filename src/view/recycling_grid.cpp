@@ -887,6 +887,12 @@ void RecyclingGrid::setShowLibraryBadge(bool show) {
     }
 }
 
+void RecyclingGrid::refreshLibraryBadges() {
+    for (auto* cell : m_cells) {
+        cell->refreshLibraryBadge();
+    }
+}
+
 brls::View* RecyclingGrid::getFirstCell() const {
     if (m_cells.empty()) {
         return nullptr;

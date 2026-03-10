@@ -26,6 +26,7 @@ public:
     ~SourceBrowseTab();
 
     void onFocusGained() override;
+    void willAppear(bool resetState) override;
     void willDisappear(bool resetState) override;
 
 private:
