@@ -685,9 +685,13 @@ void SearchTab::showSources() {
     m_popularBtn->setVisibility(brls::Visibility::GONE);
     m_latestBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::GONE);
-    // Restore tag icon on header button and reset background
+    // Restore tag icon on header button; highlight if tag filters are active
     if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
-    m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
+    if (!Application::getInstance().getSettings().selectedSourceTagFilters.empty()) {
+        m_tagFilterBtn->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+    } else {
+        m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
+    }
     // Restore search/history buttons when returning to source list
     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
     m_historyBtn->setFocusable(true);
@@ -1387,6 +1391,7 @@ void SearchTab::showTagFilterDialog() {
     }
 
     auto& settings = Application::getInstance().getSettings();
+    int activeCount = static_cast<int>(settings.selectedSourceTagFilters.size());
 
     // Build options: each tag with a check mark if active
     std::vector<std::string> options;
@@ -1396,22 +1401,38 @@ void SearchTab::showTagFilterDialog() {
         options.push_back((active ? "[x] " : "[  ] ") + tag);
         tagList.push_back(tag);
     }
-    options.push_back("Clear All Filters");
+    if (activeCount > 0) {
+        options.push_back("Clear All Filters");
+    }
+    options.push_back("Done");
+
+    std::string title = "Filter by Tag";
+    if (activeCount > 0) {
+        title += " (" + std::to_string(activeCount) + " active)";
+    }
 
     brls::Dropdown* dropdown = new brls::Dropdown(
-        "Filter by Tag", options,
-        [this, tagList](int selected) {
+        title, options,
+        [this, tagList, activeCount](int selected) {
             if (selected < 0) return;
 
-            brls::sync([this, selected, tagList]() {
+            brls::sync([this, selected, tagList, activeCount]() {
                 auto& settings = Application::getInstance().getSettings();
 
-                if (selected == static_cast<int>(tagList.size())) {
+                int clearIdx = activeCount > 0 ? static_cast<int>(tagList.size()) : -1;
+                int doneIdx = activeCount > 0 ? static_cast<int>(tagList.size()) + 1 : static_cast<int>(tagList.size());
+
+                if (selected == doneIdx) {
+                    // Done - apply and close
+                    showSources();
+                    return;
+                } else if (selected == clearIdx) {
                     // Clear all filters
                     settings.selectedSourceTagFilters.clear();
                     Application::getInstance().saveSettings();
-                    showSources();
                     brls::Application::notify("Tag filters cleared");
+                    // Re-show dialog with updated state
+                    showTagFilterDialog();
                 } else if (selected < static_cast<int>(tagList.size())) {
                     // Toggle the selected tag filter
                     const std::string& tag = tagList[selected];
@@ -1421,7 +1442,8 @@ void SearchTab::showTagFilterDialog() {
                         settings.selectedSourceTagFilters.insert(tag);
                     }
                     Application::getInstance().saveSettings();
-                    showSources();
+                    // Re-show dialog with updated state instead of closing
+                    showTagFilterDialog();
                 }
             });
         }, 0);
