@@ -3382,9 +3382,9 @@ bool SuwayomiClient::fetchSourceFiltersGraphQL(int64_t sourceId, std::vector<Sou
 }
 
 std::string SuwayomiClient::buildFilterChangesJson(const std::vector<SourceFilter>& filters) {
-    // Build JSON array of FilterChange objects
-    // Each FilterChange has: position, and the relevant state field
-    std::string json = "[";
+    // Build GraphQL literal array of FilterChange input objects (unquoted keys, unquoted enums)
+    // Used inline in GraphQL query strings, NOT as JSON variables
+    std::string gql = "[";
     bool first = true;
 
     for (const auto& filter : filters) {
@@ -3395,56 +3395,56 @@ std::string SuwayomiClient::buildFilterChangesJson(const std::vector<SourceFilte
                 break;
             case FilterType::TEXT:
                 if (filter.textState != filter.textDefault) {
-                    if (!first) json += ",";
-                    json += "{\"position\":" + std::to_string(filter.position) +
-                            ",\"textState\":\"";
+                    if (!first) gql += ", ";
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", textState: \"";
                     // Escape the text
                     for (char c : filter.textState) {
-                        if (c == '"') json += "\\\"";
-                        else if (c == '\\') json += "\\\\";
-                        else json += c;
+                        if (c == '"') gql += "\\\"";
+                        else if (c == '\\') gql += "\\\\";
+                        else gql += c;
                     }
-                    json += "\"}";
+                    gql += "\"}";
                     first = false;
                 }
                 break;
             case FilterType::CHECKBOX:
                 if (filter.checkBoxState != filter.checkBoxDefault) {
-                    if (!first) json += ",";
-                    json += "{\"position\":" + std::to_string(filter.position) +
-                            ",\"checkBoxState\":" + (filter.checkBoxState ? "true" : "false") + "}";
+                    if (!first) gql += ", ";
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", checkBoxState: " + (filter.checkBoxState ? "true" : "false") + "}";
                     first = false;
                 }
                 break;
             case FilterType::TRISTATE:
                 if (filter.triState != TriState::IGNORE) {
-                    if (!first) json += ",";
+                    if (!first) gql += ", ";
                     std::string triStr;
                     switch (filter.triState) {
                         case TriState::IGNORE: triStr = "IGNORE"; break;
                         case TriState::INCLUDE: triStr = "INCLUDE"; break;
                         case TriState::EXCLUDE: triStr = "EXCLUDE"; break;
                     }
-                    json += "{\"position\":" + std::to_string(filter.position) +
-                            ",\"triState\":\"" + triStr + "\"}";
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", triState: " + triStr + "}";
                     first = false;
                 }
                 break;
             case FilterType::SELECT:
                 if (filter.selectState != filter.selectDefault) {
-                    if (!first) json += ",";
-                    json += "{\"position\":" + std::to_string(filter.position) +
-                            ",\"selectState\":" + std::to_string(filter.selectState) + "}";
+                    if (!first) gql += ", ";
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", selectState: " + std::to_string(filter.selectState) + "}";
                     first = false;
                 }
                 break;
             case FilterType::SORT: {
                 if (filter.sortState.index != filter.sortDefault.index ||
                     filter.sortState.ascending != filter.sortDefault.ascending) {
-                    if (!first) json += ",";
-                    json += "{\"position\":" + std::to_string(filter.position) +
-                            ",\"sortState\":{\"index\":" + std::to_string(filter.sortState.index) +
-                            ",\"ascending\":" + (filter.sortState.ascending ? "true" : "false") + "}}";
+                    if (!first) gql += ", ";
+                    gql += "{position: " + std::to_string(filter.position) +
+                            ", sortState: {index: " + std::to_string(filter.sortState.index) +
+                            ", ascending: " + (filter.sortState.ascending ? "true" : "false") + "}}";
                     first = false;
                 }
                 break;
@@ -3453,7 +3453,7 @@ std::string SuwayomiClient::buildFilterChangesJson(const std::vector<SourceFilte
                 // For groups, build nested filter changes for modified children
                 for (const auto& child : filter.filters) {
                     bool childChanged = false;
-                    std::string childJson;
+                    std::string childGql;
 
                     switch (child.type) {
                         case FilterType::TRISTATE:
@@ -3465,29 +3465,29 @@ std::string SuwayomiClient::buildFilterChangesJson(const std::vector<SourceFilte
                                     case TriState::INCLUDE: ts = "INCLUDE"; break;
                                     case TriState::EXCLUDE: ts = "EXCLUDE"; break;
                                 }
-                                childJson = "{\"position\":" + std::to_string(child.position) +
-                                            ",\"triState\":\"" + ts + "\"}";
+                                childGql = "{position: " + std::to_string(child.position) +
+                                            ", triState: " + ts + "}";
                             }
                             break;
                         case FilterType::CHECKBOX:
                             if (child.checkBoxState != child.checkBoxDefault) {
                                 childChanged = true;
-                                childJson = "{\"position\":" + std::to_string(child.position) +
-                                            ",\"checkBoxState\":" + (child.checkBoxState ? "true" : "false") + "}";
+                                childGql = "{position: " + std::to_string(child.position) +
+                                            ", checkBoxState: " + (child.checkBoxState ? "true" : "false") + "}";
                             }
                             break;
                         case FilterType::TEXT:
                             if (child.textState != child.textDefault) {
                                 childChanged = true;
-                                childJson = "{\"position\":" + std::to_string(child.position) +
-                                            ",\"textState\":\"" + child.textState + "\"}";
+                                childGql = "{position: " + std::to_string(child.position) +
+                                            ", textState: \"" + child.textState + "\"}";
                             }
                             break;
                         case FilterType::SELECT:
                             if (child.selectState != child.selectDefault) {
                                 childChanged = true;
-                                childJson = "{\"position\":" + std::to_string(child.position) +
-                                            ",\"selectState\":" + std::to_string(child.selectState) + "}";
+                                childGql = "{position: " + std::to_string(child.position) +
+                                            ", selectState: " + std::to_string(child.selectState) + "}";
                             }
                             break;
                         default:
@@ -3495,9 +3495,9 @@ std::string SuwayomiClient::buildFilterChangesJson(const std::vector<SourceFilte
                     }
 
                     if (childChanged) {
-                        if (!first) json += ",";
-                        json += "{\"position\":" + std::to_string(filter.position) +
-                                ",\"groupChange\":" + childJson + "}";
+                        if (!first) gql += ", ";
+                        gql += "{position: " + std::to_string(filter.position) +
+                                ", groupChange: " + childGql + "}";
                         first = false;
                     }
                 }
@@ -3506,8 +3506,8 @@ std::string SuwayomiClient::buildFilterChangesJson(const std::vector<SourceFilte
         }
     }
 
-    json += "]";
-    return json;
+    gql += "]";
+    return gql;
 }
 
 bool SuwayomiClient::searchMangaWithFilters(int64_t sourceId, const std::string& query, int page,

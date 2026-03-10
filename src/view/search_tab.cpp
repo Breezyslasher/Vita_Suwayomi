@@ -42,12 +42,24 @@ SearchTab::SearchTab() {
     m_buttonContainer->setAxis(brls::Axis::ROW);
     m_buttonContainer->setAlignItems(brls::AlignItems::FLEX_END);
 
-    // Tag filter button (only shown on source list)
+    // Tag filter button with triangle hint above (only shown on source list)
+    auto* tagContainer = new brls::Box();
+    tagContainer->setAxis(brls::Axis::COLUMN);
+    tagContainer->setAlignItems(brls::AlignItems::CENTER);
+    tagContainer->setMarginRight(10);
+
+    auto* triangleHintIcon = new brls::Image();
+    triangleHintIcon->setWidth(16);
+    triangleHintIcon->setHeight(16);
+    triangleHintIcon->setScalingType(brls::ImageScalingType::FIT);
+    triangleHintIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    triangleHintIcon->setMarginBottom(2);
+    tagContainer->addView(triangleHintIcon);
+
     m_tagFilterBtn = new brls::Button();
     m_tagFilterBtn->setWidth(44);
     m_tagFilterBtn->setHeight(44);
     m_tagFilterBtn->setCornerRadius(8);
-    m_tagFilterBtn->setMarginRight(10);
     m_tagFilterBtn->setJustifyContent(brls::JustifyContent::CENTER);
     m_tagFilterBtn->setAlignItems(brls::AlignItems::CENTER);
 
@@ -77,7 +89,8 @@ SearchTab::SearchTab() {
         }
         return false;
     }, true);
-    m_buttonContainer->addView(m_tagFilterBtn);
+    tagContainer->addView(m_tagFilterBtn);
+    m_buttonContainer->addView(tagContainer);
 
     // Search history button with Select icon above
     auto* historyContainer = new brls::Box();
@@ -208,7 +221,7 @@ SearchTab::SearchTab() {
         return true;
     });
 
-    // Register Y button to open source filters when browsing a source
+    // Register Y button (triangle) to open tag filter on source list, or source filters when browsing
     this->registerAction("Filter", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
         if (m_currentSourceId != 0 && (m_browseMode == BrowseMode::POPULAR || m_browseMode == BrowseMode::LATEST)) {
             brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
@@ -217,7 +230,14 @@ SearchTab::SearchTab() {
             });
             return true;
         }
-        return false;  // Let default handling occur (tag management on source list)
+        if (m_browseMode == BrowseMode::SOURCES) {
+            brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
+                auto a = aliveWeak.lock(); if (!a || !*a) return;
+                showTagFilterDialog();
+            });
+            return true;
+        }
+        return false;
     });
 
     // Register Circle button (B) to go back in search/browse modes
