@@ -63,7 +63,6 @@ private:
     brls::Box* m_modeBox = nullptr;
     brls::Button* m_popularBtn = nullptr;
     brls::Button* m_latestBtn = nullptr;
-    brls::Button* m_filterBtn = nullptr;
     brls::Button* m_backBtn = nullptr;
 
     // Source list (scrollable)
@@ -84,8 +83,9 @@ private:
     void showTagManageDialog(const Source& source);
     void collectAllTags(std::set<std::string>& allTags);
 
-    // Tag filter button (source list view)
+    // Tag/filter button (header) - context-aware: tag filter on source list, source filter when browsing
     brls::Button* m_tagFilterBtn = nullptr;
+    brls::Image* m_tagFilterIcon = nullptr;  // Icon swapped based on context
     void addToSearchHistory(const std::string& query);
     void clearSearchHistory();
 

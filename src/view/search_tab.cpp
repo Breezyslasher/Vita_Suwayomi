@@ -51,17 +51,21 @@ SearchTab::SearchTab() {
     m_tagFilterBtn->setJustifyContent(brls::JustifyContent::CENTER);
     m_tagFilterBtn->setAlignItems(brls::AlignItems::CENTER);
 
-    auto* tagIcon = new brls::Image();
-    tagIcon->setWidth(24);
-    tagIcon->setHeight(24);
-    tagIcon->setScalingType(brls::ImageScalingType::FIT);
-    tagIcon->setImageFromFile("app0:resources/icons/tag.png");
-    m_tagFilterBtn->addView(tagIcon);
+    m_tagFilterIcon = new brls::Image();
+    m_tagFilterIcon->setWidth(24);
+    m_tagFilterIcon->setHeight(24);
+    m_tagFilterIcon->setScalingType(brls::ImageScalingType::FIT);
+    m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
+    m_tagFilterBtn->addView(m_tagFilterIcon);
 
     m_tagFilterBtn->registerClickAction([this](brls::View* view) {
         brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
             auto a = aliveWeak.lock(); if (!a || !*a) return;
-            showTagFilterDialog();
+            if (m_browseMode != BrowseMode::SOURCES && m_currentSourceId != 0) {
+                showFilterDialog();
+            } else {
+                showTagFilterDialog();
+            }
         });
         return true;
     });
@@ -283,35 +287,6 @@ SearchTab::SearchTab() {
         return true;
     }, true);
     m_modeBox->addView(m_latestBtn);
-
-    // Filter button with tag icon
-    m_filterBtn = new brls::Button();
-    m_filterBtn->setWidth(44);
-    m_filterBtn->setHeight(40);
-    m_filterBtn->setCornerRadius(8);
-    m_filterBtn->setMarginRight(10);
-    m_filterBtn->setVisibility(brls::Visibility::GONE);
-    m_filterBtn->setJustifyContent(brls::JustifyContent::CENTER);
-    m_filterBtn->setAlignItems(brls::AlignItems::CENTER);
-
-    auto* filterIcon = new brls::Image();
-    filterIcon->setWidth(20);
-    filterIcon->setHeight(20);
-    filterIcon->setScalingType(brls::ImageScalingType::FIT);
-    filterIcon->setImageFromFile("app0:resources/icons/tag.png");
-    m_filterBtn->addView(filterIcon);
-
-    m_filterBtn->registerClickAction([this](brls::View* view) {
-        showFilterDialog();
-        return true;
-    });
-    m_filterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_filterBtn));
-    // B button on Filter goes back
-    m_filterBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; handleBackNavigation(); });
-        return true;
-    }, true);
-    m_modeBox->addView(m_filterBtn);
 
     // Back button
     m_backBtn = new brls::Button();
@@ -689,8 +664,10 @@ void SearchTab::showSources() {
     // Hide source-specific buttons
     m_popularBtn->setVisibility(brls::Visibility::GONE);
     m_latestBtn->setVisibility(brls::Visibility::GONE);
-    m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::GONE);
+    // Restore tag icon on header button and reset background
+    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
+    m_tagFilterBtn->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
     // Restore search/history buttons when returning to source list
     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
     m_historyBtn->setFocusable(true);
@@ -912,17 +889,15 @@ void SearchTab::showSourceBrowser(const Source& source) {
     // Show source-specific buttons
     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    // Show filter button - will be shown once filters are loaded
-    m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
 
     // Reset filter state for new source
     m_sourceFilters.clear();
     m_filtersLoaded = false;
     m_filtersActive = false;
-    if (m_filterBtn) {
-        m_filterBtn->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-    }
+    // Switch header tag button to filter icon for source browsing
+    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
+    m_tagFilterBtn->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
 
     // CRITICAL: Move focus away from source list BEFORE clearing views.
     // The currently focused view may be a source row that clearViews() will delete.
@@ -989,18 +964,6 @@ void SearchTab::loadSourceFilters() {
                 if (m_currentSourceId != sourceId) return;  // User navigated away
                 m_sourceFilters = filters;
                 m_filtersLoaded = true;
-
-                // Show the filter button if source has actionable filters
-                bool hasFilters = false;
-                for (const auto& f : filters) {
-                    if (f.type != FilterType::HEADER && f.type != FilterType::SEPARATOR) {
-                        hasFilters = true;
-                        break;
-                    }
-                }
-                if (hasFilters && m_filterBtn) {
-                    m_filterBtn->setVisibility(brls::Visibility::VISIBLE);
-                }
                 brls::Logger::info("Loaded {} filters for source", filters.size());
             });
         } else {
@@ -1063,10 +1026,8 @@ void SearchTab::applyFilters() {
     m_resultsLabel->setText("Searching with filters...");
     updateModeButtons();
 
-    // Update filter button to show it's active
-    if (m_filterBtn) {
-        m_filterBtn->setBackgroundColor(Application::getInstance().getActiveRowBackground());
-    }
+    // Update header tag/filter button to show filters are active
+    m_tagFilterBtn->setBackgroundColor(Application::getInstance().getActiveRowBackground());
 
     int gen = ++m_loadGeneration;
 
@@ -1098,7 +1059,7 @@ void SearchTab::applyFilters() {
                 if (gen != m_loadGeneration) return;
                 hideLoadingIndicator();
                 m_resultsLabel->setText("Filter search failed");
-                brls::Application::giveFocus(m_filterBtn);
+                brls::Application::giveFocus(m_tagFilterBtn);
             });
         }
     });
@@ -1249,9 +1210,7 @@ void SearchTab::showFilterDialog() {
                     } else {
                         // Reset
                         resetFilters();
-                        if (m_filterBtn) {
-                            m_filterBtn->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-                        }
+                        m_tagFilterBtn->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
                         brls::Application::notify("Filters reset");
                         // Reload popular manga
                         loadPopularManga(m_currentSourceId);
@@ -1636,7 +1595,6 @@ void SearchTab::performSearch(const std::string& query) {
     m_browseMode = BrowseMode::SEARCH_RESULTS;
     m_popularBtn->setVisibility(brls::Visibility::GONE);
     m_latestBtn->setVisibility(brls::Visibility::GONE);
-    m_filterBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
     // Hide search/history buttons during global search
     m_buttonContainer->setVisibility(brls::Visibility::GONE);
@@ -2056,16 +2014,10 @@ void SearchTab::updateModeButtons() {
     if (m_browseMode == BrowseMode::SOURCES) {
         m_popularBtn->setVisibility(brls::Visibility::GONE);
         m_latestBtn->setVisibility(brls::Visibility::GONE);
-        m_filterBtn->setVisibility(brls::Visibility::GONE);
         m_backBtn->setVisibility(brls::Visibility::GONE);
     } else {
         m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
         m_backBtn->setVisibility(brls::Visibility::VISIBLE);
-
-        // Show filter button if source has filters loaded
-        if (m_filtersLoaded && !m_sourceFilters.empty()) {
-            m_filterBtn->setVisibility(brls::Visibility::VISIBLE);
-        }
 
         // Show latest button if source supports it
         for (const auto& source : m_sources) {
@@ -2113,8 +2065,9 @@ void SearchTab::handleBackNavigation() {
                     // Update buttons for source browsing mode
                     m_popularBtn->setVisibility(brls::Visibility::VISIBLE);
                     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-                    m_filterBtn->setVisibility(m_filtersLoaded && !m_sourceFilters.empty() ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
                     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
+                    // Restore filter icon on header button
+                    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
 
                     // Restore search/history buttons
                     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);
