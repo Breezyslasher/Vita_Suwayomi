@@ -27,6 +27,7 @@ public:
 
     void onFocusGained() override;
     void willDisappear(bool resetState) override;
+    brls::View* getNextFocus(brls::FocusDirection direction, brls::View* currentView) override;
 
 private:
     void loadSources();
@@ -112,6 +113,7 @@ private:
     brls::View* m_prePanelFocusView = nullptr;  // View that had focus before panel opened
     brls::Box* m_lastHighlightedRow = nullptr;   // Currently highlighted row in filter panel
     void hideFilterPanel();
+    bool isFocusInPanel(brls::View* view) const;  // Check if view is inside m_filterPanel
     void buildFilterPanel();       // Build source filter content into m_filterPanel
     void buildTagFilterPanel();    // Build tag filter content into m_filterPanel
     void buildTagManagePanel(const Source& source);  // Build tag manage content into m_filterPanel
