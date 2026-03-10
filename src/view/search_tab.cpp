@@ -1102,274 +1102,405 @@ void SearchTab::showFilterDialog() {
 
     m_loadGeneration++;  // Invalidate in-flight loads
 
-    // Build the filter options list
-    std::vector<std::string> options;
-    // Track which filter index each option maps to
-    std::vector<std::pair<int, int>> filterIndices;  // (filter_index, sub_index) where sub_index=-1 for top-level
+    // Create dialog box
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(520);
+    dialogBox->setHeight(420);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
+    dialogBox->setCornerRadius(12);
 
-    for (size_t i = 0; i < m_sourceFilters.size(); i++) {
-        const auto& filter = m_sourceFilters[i];
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Source Filters");
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(10);
+    dialogBox->addView(titleLabel);
 
-        switch (filter.type) {
-            case FilterType::HEADER:
-                options.push_back("--- " + filter.name + " ---");
-                filterIndices.push_back({static_cast<int>(i), -1});
-                break;
+    // Scrollable filter list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
 
-            case FilterType::SEPARATOR:
-                options.push_back("----------");
-                filterIndices.push_back({static_cast<int>(i), -1});
-                break;
+    auto* filterListBox = new brls::Box();
+    filterListBox->setAxis(brls::Axis::COLUMN);
 
-            case FilterType::TEXT:
-                options.push_back(filter.name + ": " +
-                    (filter.textState.empty() ? "(empty)" : filter.textState));
-                filterIndices.push_back({static_cast<int>(i), -1});
-                break;
-
+    // Helper: create a label for a filter row showing its current state
+    auto makeFilterLabel = [](const SourceFilter& f) -> std::string {
+        switch (f.type) {
             case FilterType::CHECKBOX:
-                options.push_back((filter.checkBoxState ? "[x] " : "[  ] ") + filter.name);
-                filterIndices.push_back({static_cast<int>(i), -1});
-                break;
-
+                return (f.checkBoxState ? "\u2713 " : "   ") + f.name;
             case FilterType::TRISTATE: {
                 std::string prefix;
-                switch (filter.triState) {
-                    case TriState::IGNORE:  prefix = "[  ] "; break;
+                switch (f.triState) {
+                    case TriState::IGNORE:  prefix = "   "; break;
                     case TriState::INCLUDE: prefix = "[+] "; break;
                     case TriState::EXCLUDE: prefix = "[-] "; break;
                 }
-                options.push_back(prefix + filter.name);
-                filterIndices.push_back({static_cast<int>(i), -1});
-                break;
+                return prefix + f.name;
             }
-
+            case FilterType::TEXT:
+                return f.name + ": " + (f.textState.empty() ? "(empty)" : f.textState);
             case FilterType::SELECT:
-                if (!filter.selectOptions.empty() && filter.selectState >= 0 &&
-                    filter.selectState < static_cast<int>(filter.selectOptions.size())) {
-                    options.push_back(filter.name + ": " + filter.selectOptions[filter.selectState]);
-                } else {
-                    options.push_back(filter.name + ": (select)");
+                if (!f.selectOptions.empty() && f.selectState >= 0 &&
+                    f.selectState < static_cast<int>(f.selectOptions.size())) {
+                    return f.name + ": " + f.selectOptions[f.selectState];
                 }
-                filterIndices.push_back({static_cast<int>(i), -1});
-                break;
-
+                return f.name + ": (select)";
             case FilterType::SORT: {
-                std::string sortLabel = filter.name + ": ";
-                if (!filter.sortOptions.empty() && filter.sortState.index >= 0 &&
-                    filter.sortState.index < static_cast<int>(filter.sortOptions.size())) {
-                    sortLabel += filter.sortOptions[filter.sortState.index];
-                    sortLabel += (filter.sortState.ascending ? " (Asc)" : " (Desc)");
+                std::string label = f.name + ": ";
+                if (!f.sortOptions.empty() && f.sortState.index >= 0 &&
+                    f.sortState.index < static_cast<int>(f.sortOptions.size())) {
+                    label += f.sortOptions[f.sortState.index];
+                    label += (f.sortState.ascending ? " (Asc)" : " (Desc)");
                 } else {
-                    sortLabel += "(default)";
+                    label += "(default)";
                 }
-                options.push_back(sortLabel);
-                filterIndices.push_back({static_cast<int>(i), -1});
-                break;
+                return label;
             }
-
-            case FilterType::GROUP:
-                // Show group header
-                options.push_back("=== " + filter.name + " ===");
-                filterIndices.push_back({static_cast<int>(i), -1});
-
-                // Show group children
-                for (size_t j = 0; j < filter.filters.size(); j++) {
-                    const auto& child = filter.filters[j];
-                    switch (child.type) {
-                        case FilterType::TRISTATE: {
-                            std::string prefix;
-                            switch (child.triState) {
-                                case TriState::IGNORE:  prefix = "  [  ] "; break;
-                                case TriState::INCLUDE: prefix = "  [+] "; break;
-                                case TriState::EXCLUDE: prefix = "  [-] "; break;
-                            }
-                            options.push_back(prefix + child.name);
-                            break;
-                        }
-                        case FilterType::CHECKBOX:
-                            options.push_back(std::string("  ") + (child.checkBoxState ? "[x] " : "[  ] ") + child.name);
-                            break;
-                        case FilterType::TEXT:
-                            options.push_back("  " + child.name + ": " +
-                                (child.textState.empty() ? "(empty)" : child.textState));
-                            break;
-                        case FilterType::SELECT:
-                            if (!child.selectOptions.empty() && child.selectState >= 0 &&
-                                child.selectState < static_cast<int>(child.selectOptions.size())) {
-                                options.push_back("  " + child.name + ": " + child.selectOptions[child.selectState]);
-                            } else {
-                                options.push_back("  " + child.name);
-                            }
-                            break;
-                        default:
-                            options.push_back("  " + child.name);
-                            break;
-                    }
-                    filterIndices.push_back({static_cast<int>(i), static_cast<int>(j)});
-                }
-                break;
+            default:
+                return f.name;
         }
-    }
+    };
 
-    // Add action buttons at the bottom
-    options.push_back(">> Apply Filters <<");
-    filterIndices.push_back({-1, 0});  // Apply
-    options.push_back(">> Reset Filters <<");
-    filterIndices.push_back({-1, 1});  // Reset
+    // Build filter rows
+    for (size_t i = 0; i < m_sourceFilters.size(); i++) {
+        auto& filter = m_sourceFilters[i];
 
-    brls::Dropdown* dropdown = new brls::Dropdown(
-        "Source Filters", options,
-        [this, filterIndices](int selected) {
-            if (selected < 0 || selected >= static_cast<int>(filterIndices.size())) return;
+        if (filter.type == FilterType::HEADER) {
+            auto* headerLabel = new brls::Label();
+            headerLabel->setText("--- " + filter.name + " ---");
+            headerLabel->setFontSize(16);
+            headerLabel->setMarginTop(8);
+            headerLabel->setMarginBottom(4);
+            headerLabel->setTextColor(Application::getInstance().getHeaderTextColor());
+            filterListBox->addView(headerLabel);
+            continue;
+        }
 
-            brls::sync([this, selected, filterIndices]() {
-                auto [filterIdx, subIdx] = filterIndices[selected];
+        if (filter.type == FilterType::SEPARATOR) {
+            auto* sepLabel = new brls::Label();
+            sepLabel->setText("----------");
+            sepLabel->setFontSize(14);
+            sepLabel->setMarginTop(4);
+            sepLabel->setMarginBottom(4);
+            sepLabel->setTextColor(Application::getInstance().getSubtitleColor());
+            filterListBox->addView(sepLabel);
+            continue;
+        }
 
-                // Action buttons
-                if (filterIdx == -1) {
-                    if (subIdx == 0) {
-                        // Apply
-                        applyFilters();
-                    } else {
-                        // Reset
-                        resetFilters();
-                        m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
-                        brls::Application::notify("Filters reset");
-                        // Reload popular manga
-                        loadPopularManga(m_currentSourceId);
-                    }
-                    return;
+        if (filter.type == FilterType::GROUP) {
+            bool collapsed = m_collapsedGroups.count(static_cast<int>(i)) > 0;
+
+            // Group header (clickable to expand/collapse)
+            auto* groupRow = new brls::Box();
+            groupRow->setAxis(brls::Axis::ROW);
+            groupRow->setFocusable(true);
+            groupRow->setPadding(10, 12, 10, 12);
+            groupRow->setMarginTop(6);
+            groupRow->setMarginBottom(4);
+            groupRow->setCornerRadius(8);
+            groupRow->setAlignItems(brls::AlignItems::CENTER);
+            groupRow->setBackgroundColor(Application::getInstance().getHeaderTextColor());
+
+            auto* arrowLabel = new brls::Label();
+            arrowLabel->setFontSize(16);
+            arrowLabel->setWidth(24);
+            arrowLabel->setMarginRight(8);
+            arrowLabel->setText(collapsed ? "\u25B6" : "\u25BC");  // right arrow / down arrow
+            groupRow->addView(arrowLabel);
+
+            auto* groupNameLabel = new brls::Label();
+            groupNameLabel->setText(filter.name + " (" + std::to_string(filter.filters.size()) + ")");
+            groupNameLabel->setFontSize(16);
+            groupNameLabel->setGrow(1.0f);
+            groupRow->addView(groupNameLabel);
+
+            // Container for children (shown/hidden based on collapsed state)
+            auto* childrenBox = new brls::Box();
+            childrenBox->setAxis(brls::Axis::COLUMN);
+            childrenBox->setMarginLeft(20);
+            childrenBox->setVisibility(collapsed ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+
+            // Toggle collapse on click
+            int groupIdx = static_cast<int>(i);
+            groupRow->registerClickAction([this, groupIdx, childrenBox, arrowLabel](brls::View*) {
+                if (m_collapsedGroups.count(groupIdx)) {
+                    m_collapsedGroups.erase(groupIdx);
+                    childrenBox->setVisibility(brls::Visibility::VISIBLE);
+                    arrowLabel->setText("\u25BC");
+                } else {
+                    m_collapsedGroups.insert(groupIdx);
+                    childrenBox->setVisibility(brls::Visibility::GONE);
+                    arrowLabel->setText("\u25B6");
                 }
+                return true;
+            });
+            groupRow->addGestureRecognizer(new brls::TapGestureRecognizer(groupRow));
+            groupRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+                brls::Application::popActivity();
+                return true;
+            }, true);
 
-                if (filterIdx < 0 || filterIdx >= static_cast<int>(m_sourceFilters.size())) return;
-                auto& filter = m_sourceFilters[filterIdx];
+            filterListBox->addView(groupRow);
 
-                // Handle group child
-                if (subIdx >= 0 && filter.type == FilterType::GROUP) {
-                    if (subIdx >= static_cast<int>(filter.filters.size())) return;
-                    auto& child = filter.filters[subIdx];
+            // Build child rows
+            for (size_t j = 0; j < filter.filters.size(); j++) {
+                auto& child = filter.filters[j];
+                int fi = static_cast<int>(i);
+                int ci = static_cast<int>(j);
+
+                auto* childRow = new brls::Box();
+                childRow->setAxis(brls::Axis::ROW);
+                childRow->setFocusable(true);
+                childRow->setPadding(8, 12, 8, 12);
+                childRow->setMarginBottom(4);
+                childRow->setCornerRadius(6);
+                childRow->setAlignItems(brls::AlignItems::CENTER);
+                childRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+                auto* childLabel = new brls::Label();
+                childLabel->setText(makeFilterLabel(child));
+                childLabel->setFontSize(15);
+                childLabel->setGrow(1.0f);
+                childRow->addView(childLabel);
+
+                // Click action based on child type
+                childRow->registerClickAction([this, fi, ci, childLabel, makeFilterLabel](brls::View*) {
+                    if (fi >= static_cast<int>(m_sourceFilters.size())) return true;
+                    auto& parent = m_sourceFilters[fi];
+                    if (ci >= static_cast<int>(parent.filters.size())) return true;
+                    auto& child = parent.filters[ci];
 
                     switch (child.type) {
                         case FilterType::TRISTATE:
-                            // Cycle: IGNORE -> INCLUDE -> EXCLUDE -> IGNORE
                             switch (child.triState) {
                                 case TriState::IGNORE:  child.triState = TriState::INCLUDE; break;
                                 case TriState::INCLUDE: child.triState = TriState::EXCLUDE; break;
                                 case TriState::EXCLUDE: child.triState = TriState::IGNORE; break;
                             }
-                            // Re-show dialog to reflect change
-                            showFilterDialog();
+                            childLabel->setText(makeFilterLabel(child));
                             break;
                         case FilterType::CHECKBOX:
                             child.checkBoxState = !child.checkBoxState;
-                            showFilterDialog();
+                            childLabel->setText(makeFilterLabel(child));
                             break;
                         case FilterType::TEXT:
                             brls::Application::getImeManager()->openForText(
-                                [this, filterIdx, subIdx](std::string text) {
-                                    if (filterIdx < static_cast<int>(m_sourceFilters.size()) &&
-                                        subIdx < static_cast<int>(m_sourceFilters[filterIdx].filters.size())) {
-                                        m_sourceFilters[filterIdx].filters[subIdx].textState = text;
+                                [this, fi, ci, childLabel, makeFilterLabel](std::string text) {
+                                    if (fi < static_cast<int>(m_sourceFilters.size()) &&
+                                        ci < static_cast<int>(m_sourceFilters[fi].filters.size())) {
+                                        m_sourceFilters[fi].filters[ci].textState = text;
+                                        childLabel->setText(makeFilterLabel(m_sourceFilters[fi].filters[ci]));
                                     }
-                                    showFilterDialog();
                                 }, child.name, "", 256, child.textState);
                             break;
                         case FilterType::SELECT: {
-                            // Show sub-dropdown for select options
                             brls::Dropdown* selectDrop = new brls::Dropdown(
                                 child.name, child.selectOptions,
-                                [this, filterIdx, subIdx](int sel) {
-                                    if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size()) &&
-                                        subIdx < static_cast<int>(m_sourceFilters[filterIdx].filters.size())) {
-                                        m_sourceFilters[filterIdx].filters[subIdx].selectState = sel;
+                                [this, fi, ci, childLabel, makeFilterLabel](int sel) {
+                                    if (sel >= 0 && fi < static_cast<int>(m_sourceFilters.size()) &&
+                                        ci < static_cast<int>(m_sourceFilters[fi].filters.size())) {
+                                        m_sourceFilters[fi].filters[ci].selectState = sel;
+                                        brls::sync([childLabel, makeFilterLabel, this, fi, ci]() {
+                                            childLabel->setText(makeFilterLabel(m_sourceFilters[fi].filters[ci]));
+                                        });
                                     }
-                                    brls::sync([this]() { showFilterDialog(); });
                                 }, child.selectState);
                             brls::Application::pushActivity(new brls::Activity(selectDrop));
                             break;
                         }
                         default: break;
                     }
-                    return;
-                }
+                    return true;
+                });
+                childRow->addGestureRecognizer(new brls::TapGestureRecognizer(childRow));
+                childRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+                    brls::Application::popActivity();
+                    return true;
+                }, true);
 
-                // Handle top-level filters
-                switch (filter.type) {
-                    case FilterType::HEADER:
-                    case FilterType::SEPARATOR:
-                        // No action for headers/separators
-                        showFilterDialog();
-                        break;
+                childrenBox->addView(childRow);
+            }
 
-                    case FilterType::TEXT:
-                        brls::Application::getImeManager()->openForText(
-                            [this, filterIdx](std::string text) {
-                                if (filterIdx < static_cast<int>(m_sourceFilters.size())) {
-                                    m_sourceFilters[filterIdx].textState = text;
-                                }
-                                showFilterDialog();
-                            }, filter.name, "", 256, filter.textState);
-                        break;
+            filterListBox->addView(childrenBox);
+            continue;
+        }
 
-                    case FilterType::CHECKBOX:
-                        filter.checkBoxState = !filter.checkBoxState;
-                        showFilterDialog();
-                        break;
+        // Top-level non-group filter
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setFocusable(true);
+        row->setPadding(10, 12, 10, 12);
+        row->setMarginBottom(6);
+        row->setCornerRadius(8);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
-                    case FilterType::TRISTATE:
-                        // Cycle: IGNORE -> INCLUDE -> EXCLUDE -> IGNORE
-                        switch (filter.triState) {
-                            case TriState::IGNORE:  filter.triState = TriState::INCLUDE; break;
-                            case TriState::INCLUDE: filter.triState = TriState::EXCLUDE; break;
-                            case TriState::EXCLUDE: filter.triState = TriState::IGNORE; break;
-                        }
-                        showFilterDialog();
-                        break;
+        auto* rowLabel = new brls::Label();
+        rowLabel->setText(makeFilterLabel(filter));
+        rowLabel->setFontSize(16);
+        rowLabel->setGrow(1.0f);
+        row->addView(rowLabel);
 
-                    case FilterType::SELECT: {
-                        // Show sub-dropdown for select options
-                        brls::Dropdown* selectDrop = new brls::Dropdown(
-                            filter.name, filter.selectOptions,
-                            [this, filterIdx](int sel) {
-                                if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size())) {
-                                    m_sourceFilters[filterIdx].selectState = sel;
-                                }
-                                brls::sync([this]() { showFilterDialog(); });
-                            }, filter.selectState);
-                        brls::Application::pushActivity(new brls::Activity(selectDrop));
-                        break;
+        int filterIdx = static_cast<int>(i);
+        row->registerClickAction([this, filterIdx, rowLabel, makeFilterLabel](brls::View*) {
+            if (filterIdx >= static_cast<int>(m_sourceFilters.size())) return true;
+            auto& filter = m_sourceFilters[filterIdx];
+
+            switch (filter.type) {
+                case FilterType::CHECKBOX:
+                    filter.checkBoxState = !filter.checkBoxState;
+                    rowLabel->setText(makeFilterLabel(filter));
+                    break;
+                case FilterType::TRISTATE:
+                    switch (filter.triState) {
+                        case TriState::IGNORE:  filter.triState = TriState::INCLUDE; break;
+                        case TriState::INCLUDE: filter.triState = TriState::EXCLUDE; break;
+                        case TriState::EXCLUDE: filter.triState = TriState::IGNORE; break;
                     }
-
-                    case FilterType::SORT: {
-                        // Show sort options with ascending/descending
-                        std::vector<std::string> sortOpts;
-                        for (const auto& opt : filter.sortOptions) {
-                            sortOpts.push_back(opt + " (Ascending)");
-                            sortOpts.push_back(opt + " (Descending)");
-                        }
-                        int currentSortIdx = filter.sortState.index * 2 + (filter.sortState.ascending ? 0 : 1);
-                        brls::Dropdown* sortDrop = new brls::Dropdown(
-                            filter.name, sortOpts,
-                            [this, filterIdx](int sel) {
-                                if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size())) {
-                                    m_sourceFilters[filterIdx].sortState.index = sel / 2;
-                                    m_sourceFilters[filterIdx].sortState.ascending = (sel % 2 == 0);
-                                }
-                                brls::sync([this]() { showFilterDialog(); });
-                            }, currentSortIdx);
-                        brls::Application::pushActivity(new brls::Activity(sortDrop));
-                        break;
-                    }
-
-                    case FilterType::GROUP:
-                        // Group header - just re-show dialog
-                        showFilterDialog();
-                        break;
+                    rowLabel->setText(makeFilterLabel(filter));
+                    break;
+                case FilterType::TEXT:
+                    brls::Application::getImeManager()->openForText(
+                        [this, filterIdx, rowLabel, makeFilterLabel](std::string text) {
+                            if (filterIdx < static_cast<int>(m_sourceFilters.size())) {
+                                m_sourceFilters[filterIdx].textState = text;
+                                rowLabel->setText(makeFilterLabel(m_sourceFilters[filterIdx]));
+                            }
+                        }, filter.name, "", 256, filter.textState);
+                    break;
+                case FilterType::SELECT: {
+                    brls::Dropdown* selectDrop = new brls::Dropdown(
+                        filter.name, filter.selectOptions,
+                        [this, filterIdx, rowLabel, makeFilterLabel](int sel) {
+                            if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size())) {
+                                m_sourceFilters[filterIdx].selectState = sel;
+                                brls::sync([rowLabel, makeFilterLabel, this, filterIdx]() {
+                                    rowLabel->setText(makeFilterLabel(m_sourceFilters[filterIdx]));
+                                });
+                            }
+                        }, filter.selectState);
+                    brls::Application::pushActivity(new brls::Activity(selectDrop));
+                    break;
                 }
-            });
-        }, 0);
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+                case FilterType::SORT: {
+                    std::vector<std::string> sortOpts;
+                    for (const auto& opt : filter.sortOptions) {
+                        sortOpts.push_back(opt + " (Ascending)");
+                        sortOpts.push_back(opt + " (Descending)");
+                    }
+                    int currentSortIdx = filter.sortState.index * 2 + (filter.sortState.ascending ? 0 : 1);
+                    brls::Dropdown* sortDrop = new brls::Dropdown(
+                        filter.name, sortOpts,
+                        [this, filterIdx, rowLabel, makeFilterLabel](int sel) {
+                            if (sel >= 0 && filterIdx < static_cast<int>(m_sourceFilters.size())) {
+                                m_sourceFilters[filterIdx].sortState.index = sel / 2;
+                                m_sourceFilters[filterIdx].sortState.ascending = (sel % 2 == 0);
+                                brls::sync([rowLabel, makeFilterLabel, this, filterIdx]() {
+                                    rowLabel->setText(makeFilterLabel(m_sourceFilters[filterIdx]));
+                                });
+                            }
+                        }, currentSortIdx);
+                    brls::Application::pushActivity(new brls::Activity(sortDrop));
+                    break;
+                }
+                default: break;
+            }
+            return true;
+        });
+        row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
+        row->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+            brls::Application::popActivity();
+            return true;
+        }, true);
+
+        filterListBox->addView(row);
+    }
+
+    scrollView->setContentView(filterListBox);
+    dialogBox->addView(scrollView);
+
+    // Button row
+    auto* buttonRow = new brls::Box();
+    buttonRow->setAxis(brls::Axis::ROW);
+    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
+    buttonRow->setMarginTop(15);
+
+    // Apply button
+    auto* applyBtn = new brls::Button();
+    applyBtn->setText("Apply Filters");
+    applyBtn->setMarginRight(10);
+    applyBtn->registerClickAction([this](brls::View*) {
+        brls::Application::popActivity();
+        applyFilters();
+        return true;
+    });
+    applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
+    applyBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    // Reset button
+    auto* resetBtn = new brls::Button();
+    resetBtn->setText("Reset");
+    resetBtn->registerClickAction([this](brls::View*) {
+        brls::Application::popActivity();
+        resetFilters();
+        m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
+        brls::Application::notify("Filters reset");
+        loadPopularManga(m_currentSourceId);
+        return true;
+    });
+    resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
+    resetBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    buttonRow->addView(applyBtn);
+    buttonRow->addView(resetBtn);
+    dialogBox->addView(buttonRow);
+
+    // Dialog-level B button
+    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    // Navigation: find first and last focusable in the list
+    auto& children = filterListBox->getChildren();
+    brls::View* firstFocusable = nullptr;
+    brls::View* lastFocusable = nullptr;
+    for (auto* child : children) {
+        if (child->isFocusable()) {
+            if (!firstFocusable) firstFocusable = child;
+            lastFocusable = child;
+        }
+        // Also check children of Box containers (for group children)
+        auto* box = dynamic_cast<brls::Box*>(child);
+        if (box) {
+            for (auto* sub : box->getChildren()) {
+                if (sub->isFocusable()) {
+                    if (!firstFocusable) firstFocusable = sub;
+                    lastFocusable = sub;
+                }
+            }
+        }
+    }
+    if (firstFocusable) {
+        firstFocusable->setCustomNavigationRoute(brls::FocusDirection::UP, firstFocusable);
+    }
+    if (lastFocusable) {
+        lastFocusable->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
+        applyBtn->setCustomNavigationRoute(brls::FocusDirection::UP, lastFocusable);
+        resetBtn->setCustomNavigationRoute(brls::FocusDirection::UP, lastFocusable);
+    }
+    applyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
+    resetBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, resetBtn);
+
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
 
 void SearchTab::collectAllTags(std::set<std::string>& allTags) {
@@ -1393,61 +1524,171 @@ void SearchTab::showTagFilterDialog() {
     auto& settings = Application::getInstance().getSettings();
     int activeCount = static_cast<int>(settings.selectedSourceTagFilters.size());
 
-    // Build options: each tag with a check mark if active
-    std::vector<std::string> options;
-    std::vector<std::string> tagList;
-    for (const auto& tag : allTags) {
-        bool active = settings.selectedSourceTagFilters.count(tag) > 0;
-        options.push_back((active ? "[x] " : "[  ] ") + tag);
-        tagList.push_back(tag);
-    }
-    if (activeCount > 0) {
-        options.push_back("Clear All Filters");
-    }
-    options.push_back("Done");
+    // Build tag list
+    std::vector<std::string> tagList(allTags.begin(), allTags.end());
 
+    // Shared state for checkmarks (modified in-place by toggle callbacks)
+    auto checkLabels = std::make_shared<std::vector<brls::Label*>>();
+    auto rows = std::make_shared<std::vector<brls::Box*>>();
+
+    // Create dialog box
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(500);
+    dialogBox->setHeight(400);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
+    dialogBox->setCornerRadius(12);
+
+    // Title
+    auto* titleLabel = new brls::Label();
     std::string title = "Filter by Tag";
     if (activeCount > 0) {
         title += " (" + std::to_string(activeCount) + " active)";
     }
+    titleLabel->setText(title);
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(10);
+    dialogBox->addView(titleLabel);
 
-    brls::Dropdown* dropdown = new brls::Dropdown(
-        title, options,
-        [this, tagList, activeCount](int selected) {
-            if (selected < 0) return;
+    // Scrollable tag list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
 
-            brls::sync([this, selected, tagList, activeCount]() {
-                auto& settings = Application::getInstance().getSettings();
+    auto* tagListBox = new brls::Box();
+    tagListBox->setAxis(brls::Axis::COLUMN);
 
-                int clearIdx = activeCount > 0 ? static_cast<int>(tagList.size()) : -1;
-                int doneIdx = activeCount > 0 ? static_cast<int>(tagList.size()) + 1 : static_cast<int>(tagList.size());
+    for (size_t i = 0; i < tagList.size(); i++) {
+        const auto& tag = tagList[i];
+        bool active = settings.selectedSourceTagFilters.count(tag) > 0;
 
-                if (selected == doneIdx) {
-                    // Done - apply and close
-                    showSources();
-                    return;
-                } else if (selected == clearIdx) {
-                    // Clear all filters
-                    settings.selectedSourceTagFilters.clear();
-                    Application::getInstance().saveSettings();
-                    brls::Application::notify("Tag filters cleared");
-                    // Re-show dialog with updated state
-                    showTagFilterDialog();
-                } else if (selected < static_cast<int>(tagList.size())) {
-                    // Toggle the selected tag filter
-                    const std::string& tag = tagList[selected];
-                    if (settings.selectedSourceTagFilters.count(tag) > 0) {
-                        settings.selectedSourceTagFilters.erase(tag);
-                    } else {
-                        settings.selectedSourceTagFilters.insert(tag);
-                    }
-                    Application::getInstance().saveSettings();
-                    // Re-show dialog with updated state instead of closing
-                    showTagFilterDialog();
-                }
-            });
-        }, 0);
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setFocusable(true);
+        row->setPadding(10, 12, 10, 12);
+        row->setMarginBottom(6);
+        row->setCornerRadius(8);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setBackgroundColor(active ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
+
+        auto* checkLabel = new brls::Label();
+        checkLabel->setFontSize(16);
+        checkLabel->setWidth(24);
+        checkLabel->setMarginRight(8);
+        if (active) {
+            checkLabel->setText("\u2713");
+            checkLabel->setTextColor(Application::getInstance().getCtaButtonColor());
+        } else {
+            checkLabel->setText("");
+        }
+        row->addView(checkLabel);
+        checkLabels->push_back(checkLabel);
+
+        auto* nameLabel = new brls::Label();
+        nameLabel->setText(tag);
+        nameLabel->setFontSize(16);
+        nameLabel->setGrow(1.0f);
+        row->addView(nameLabel);
+
+        rows->push_back(row);
+
+        // Toggle on click
+        row->registerClickAction([this, tag, checkLabels, rows, i, titleLabel](brls::View*) {
+            auto& s = Application::getInstance().getSettings();
+            if (s.selectedSourceTagFilters.count(tag) > 0) {
+                s.selectedSourceTagFilters.erase(tag);
+                (*checkLabels)[i]->setText("");
+                (*rows)[i]->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            } else {
+                s.selectedSourceTagFilters.insert(tag);
+                (*checkLabels)[i]->setText("\u2713");
+                (*checkLabels)[i]->setTextColor(Application::getInstance().getCtaButtonColor());
+                (*rows)[i]->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            }
+            // Update title with active count
+            int count = static_cast<int>(s.selectedSourceTagFilters.size());
+            std::string t = "Filter by Tag";
+            if (count > 0) t += " (" + std::to_string(count) + " active)";
+            titleLabel->setText(t);
+            return true;
+        });
+        row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
+
+        row->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+            brls::Application::popActivity();
+            return true;
+        }, true);
+
+        tagListBox->addView(row);
+    }
+
+    scrollView->setContentView(tagListBox);
+    dialogBox->addView(scrollView);
+
+    // Button row
+    auto* buttonRow = new brls::Box();
+    buttonRow->setAxis(brls::Axis::ROW);
+    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
+    buttonRow->setMarginTop(15);
+
+    // Apply filter button
+    auto* applyBtn = new brls::Button();
+    applyBtn->setText("Apply Filter");
+    applyBtn->setMarginRight(10);
+    applyBtn->registerClickAction([this](brls::View*) {
+        Application::getInstance().saveSettings();
+        brls::Application::popActivity();
+        showSources();
+        return true;
+    });
+    applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
+    applyBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    // Clear all button
+    auto* clearBtn = new brls::Button();
+    clearBtn->setText("Clear All");
+    clearBtn->registerClickAction([this, checkLabels, rows, titleLabel](brls::View*) {
+        auto& s = Application::getInstance().getSettings();
+        s.selectedSourceTagFilters.clear();
+        for (size_t i = 0; i < checkLabels->size(); i++) {
+            (*checkLabels)[i]->setText("");
+            (*rows)[i]->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+        }
+        titleLabel->setText("Filter by Tag");
+        brls::Application::notify("Tag filters cleared");
+        return true;
+    });
+    clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn));
+    clearBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    buttonRow->addView(applyBtn);
+    buttonRow->addView(clearBtn);
+    dialogBox->addView(buttonRow);
+
+    // Dialog-level B button
+    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    // Navigation setup
+    auto& children = tagListBox->getChildren();
+    if (!children.empty()) {
+        children.front()->setCustomNavigationRoute(brls::FocusDirection::UP, children.front());
+        children.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
+        applyBtn->setCustomNavigationRoute(brls::FocusDirection::UP, children.back());
+        clearBtn->setCustomNavigationRoute(brls::FocusDirection::UP, children.back());
+    }
+    applyBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
+    clearBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, clearBtn);
+
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
 
 void SearchTab::showTagManageDialog(const Source& source) {
@@ -1465,58 +1706,164 @@ void SearchTab::showTagManageDialog(const Source& source) {
     std::set<std::string> allTags;
     collectAllTags(allTags);
 
-    // Build options: existing tags with check marks + "Add new tag" + "Done"
-    std::vector<std::string> options;
-    std::vector<std::string> tagList;
-    for (const auto& tag : allTags) {
+    std::vector<std::string> tagList(allTags.begin(), allTags.end());
+
+    auto checkLabels = std::make_shared<std::vector<brls::Label*>>();
+    auto rowPtrs = std::make_shared<std::vector<brls::Box*>>();
+
+    // Create dialog box
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(500);
+    dialogBox->setHeight(400);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
+    dialogBox->setCornerRadius(12);
+
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Tags: " + source.name);
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(10);
+    dialogBox->addView(titleLabel);
+
+    // Scrollable tag list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
+
+    auto* tagListBox = new brls::Box();
+    tagListBox->setAxis(brls::Axis::COLUMN);
+
+    for (size_t i = 0; i < tagList.size(); i++) {
+        const auto& tag = tagList[i];
         bool has = currentTags.count(tag) > 0;
-        options.push_back((has ? "[x] " : "[  ] ") + tag);
-        tagList.push_back(tag);
+
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setFocusable(true);
+        row->setPadding(10, 12, 10, 12);
+        row->setMarginBottom(6);
+        row->setCornerRadius(8);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setBackgroundColor(has ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
+
+        auto* checkLabel = new brls::Label();
+        checkLabel->setFontSize(16);
+        checkLabel->setWidth(24);
+        checkLabel->setMarginRight(8);
+        if (has) {
+            checkLabel->setText("\u2713");
+            checkLabel->setTextColor(Application::getInstance().getCtaButtonColor());
+        } else {
+            checkLabel->setText("");
+        }
+        row->addView(checkLabel);
+        checkLabels->push_back(checkLabel);
+
+        auto* nameLabel = new brls::Label();
+        nameLabel->setText(tag);
+        nameLabel->setFontSize(16);
+        nameLabel->setGrow(1.0f);
+        row->addView(nameLabel);
+
+        rowPtrs->push_back(row);
+
+        // Toggle on click
+        row->registerClickAction([this, sourceIdStr, tag, checkLabels, rowPtrs, i](brls::View*) {
+            auto& s = Application::getInstance().getSettings();
+            auto& sourceTags = s.sourceTags[sourceIdStr];
+            if (sourceTags.count(tag) > 0) {
+                sourceTags.erase(tag);
+                if (sourceTags.empty()) s.sourceTags.erase(sourceIdStr);
+                (*checkLabels)[i]->setText("");
+                (*rowPtrs)[i]->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            } else {
+                sourceTags.insert(tag);
+                (*checkLabels)[i]->setText("\u2713");
+                (*checkLabels)[i]->setTextColor(Application::getInstance().getCtaButtonColor());
+                (*rowPtrs)[i]->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            }
+            Application::getInstance().saveSettings();
+            return true;
+        });
+        row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
+
+        row->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+            brls::Application::popActivity();
+            return true;
+        }, true);
+
+        tagListBox->addView(row);
     }
-    options.push_back("+ Add New Tag");
-    options.push_back("Done");
 
-    brls::Dropdown* dropdown = new brls::Dropdown(
-        "Tags: " + source.name, options,
-        [this, sourceIdStr, tagList, source](int selected) {
-            if (selected < 0) return;
+    scrollView->setContentView(tagListBox);
+    dialogBox->addView(scrollView);
 
-            brls::sync([this, selected, sourceIdStr, tagList, source]() {
-                auto& settings = Application::getInstance().getSettings();
+    // Button row
+    auto* buttonRow = new brls::Box();
+    buttonRow->setAxis(brls::Axis::ROW);
+    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_END);
+    buttonRow->setMarginTop(15);
 
-                if (selected == static_cast<int>(tagList.size())) {
-                    // Add new tag - open IME
-                    brls::Application::getImeManager()->openForText([this, sourceIdStr, source](std::string text) {
-                        if (text.empty()) return;
-                        auto& s = Application::getInstance().getSettings();
-                        s.sourceTags[sourceIdStr].insert(text);
-                        Application::getInstance().saveSettings();
-                        brls::Application::notify("Tag '" + text + "' added");
-                        // Re-show the dialog with the new tag
-                        showTagManageDialog(source);
-                    }, "New Tag", "Enter tag name", 32, "");
-                } else if (selected == static_cast<int>(tagList.size()) + 1) {
-                    // Done - refresh source list
-                    showSources();
-                } else if (selected < static_cast<int>(tagList.size())) {
-                    // Toggle tag on this source
-                    const std::string& tag = tagList[selected];
-                    auto& sourceTags = settings.sourceTags[sourceIdStr];
-                    if (sourceTags.count(tag) > 0) {
-                        sourceTags.erase(tag);
-                        if (sourceTags.empty()) {
-                            settings.sourceTags.erase(sourceIdStr);
-                        }
-                    } else {
-                        sourceTags.insert(tag);
-                    }
-                    Application::getInstance().saveSettings();
-                    // Re-show the dialog with updated state
-                    showTagManageDialog(source);
-                }
-            });
-        }, 0);
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+    // Add New Tag button
+    auto* addBtn = new brls::Button();
+    addBtn->setText("+ Add Tag");
+    addBtn->setMarginRight(10);
+    addBtn->registerClickAction([this, sourceIdStr, source](brls::View*) {
+        brls::Application::getImeManager()->openForText([this, sourceIdStr, source](std::string text) {
+            if (text.empty()) return;
+            auto& s = Application::getInstance().getSettings();
+            s.sourceTags[sourceIdStr].insert(text);
+            Application::getInstance().saveSettings();
+            brls::Application::notify("Tag '" + text + "' added");
+            // Re-show dialog to include new tag
+            brls::Application::popActivity();
+            showTagManageDialog(source);
+        }, "New Tag", "Enter tag name", 32, "");
+        return true;
+    });
+    addBtn->addGestureRecognizer(new brls::TapGestureRecognizer(addBtn));
+    addBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    // Done button
+    auto* doneBtn = new brls::Button();
+    doneBtn->setText("Done");
+    doneBtn->registerClickAction([this](brls::View*) {
+        brls::Application::popActivity();
+        showSources();
+        return true;
+    });
+    doneBtn->addGestureRecognizer(new brls::TapGestureRecognizer(doneBtn));
+    doneBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    buttonRow->addView(addBtn);
+    buttonRow->addView(doneBtn);
+    dialogBox->addView(buttonRow);
+
+    // Dialog-level B button
+    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+
+    // Navigation setup
+    auto& children = tagListBox->getChildren();
+    if (!children.empty()) {
+        children.front()->setCustomNavigationRoute(brls::FocusDirection::UP, children.front());
+        children.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, addBtn);
+        addBtn->setCustomNavigationRoute(brls::FocusDirection::UP, children.back());
+        doneBtn->setCustomNavigationRoute(brls::FocusDirection::UP, children.back());
+    }
+    addBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, addBtn);
+    doneBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, doneBtn);
+
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
 
 void SearchTab::loadPopularManga(int64_t sourceId) {

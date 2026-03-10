@@ -105,6 +105,7 @@ private:
     std::vector<SourceFilter> m_sourceFilters;
     bool m_filtersLoaded = false;
     bool m_filtersActive = false;  // True when user has applied filters
+    std::set<int> m_collapsedGroups;  // Indices of collapsed groups in filter dialog
 
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;
