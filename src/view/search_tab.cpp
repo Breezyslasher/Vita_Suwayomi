@@ -631,6 +631,7 @@ void SearchTab::showGlobalSearchDialog() {
     brls::Application::getImeManager()->openForText([this](std::string text) {
         if (text.empty()) return;
 
+        hideFilterPanel();
         m_searchQuery = text;
         m_titleLabel->setText("Search: " + text);
         addToSearchHistory(text);
@@ -643,6 +644,7 @@ void SearchTab::showSourceSearchDialog() {
     brls::Application::getImeManager()->openForText([this](std::string text) {
         if (text.empty()) return;
 
+        hideFilterPanel();
         m_searchQuery = text;
         m_titleLabel->setText(m_currentSourceName + " - Search: " + text);
         addToSearchHistory(text);
@@ -681,6 +683,7 @@ void SearchTab::showSearchHistoryDialog() {
                     // Use selected search query
                     auto& history = Application::getInstance().getSettings().searchHistory;
                     if (selected < static_cast<int>(history.size())) {
+                        hideFilterPanel();
                         std::string query = history[selected];
                         m_searchQuery = query;
                         m_titleLabel->setText("Search: " + query);
@@ -1333,13 +1336,30 @@ void SearchTab::buildFilterPanel() {
 
             // Update toggle to use childrenBox directly
             groupRow->registerClickAction([this, groupIdx, childrenBox, arrowLabel, groupRow](brls::View*) {
+                auto setChildrenFocusable = [](brls::Box* box, bool focusable) {
+                    for (auto* child : box->getChildren()) {
+                        auto* childBox = dynamic_cast<brls::Box*>(child);
+                        if (childBox) {
+                            childBox->setFocusable(focusable);
+                            // Also handle nested option boxes (SELECT children)
+                            for (auto* nested : childBox->getChildren()) {
+                                auto* nestedBox = dynamic_cast<brls::Box*>(nested);
+                                if (nestedBox) {
+                                    nestedBox->setFocusable(focusable);
+                                }
+                            }
+                        }
+                    }
+                };
                 if (m_collapsedGroups.count(groupIdx)) {
                     m_collapsedGroups.erase(groupIdx);
                     childrenBox->setVisibility(brls::Visibility::VISIBLE);
+                    setChildrenFocusable(childrenBox, true);
                     arrowLabel->setText("\u25BC");
                 } else {
                     m_collapsedGroups.insert(groupIdx);
                     childrenBox->setVisibility(brls::Visibility::GONE);
+                    setChildrenFocusable(childrenBox, false);
                     arrowLabel->setText("\u25B6");
                     // If focus was inside the collapsed group, move it to the group header
                     brls::View* focused = brls::Application::getCurrentFocus();
@@ -1365,7 +1385,7 @@ void SearchTab::buildFilterPanel() {
 
                 auto* childRow = new brls::Box();
                 childRow->setAxis(brls::Axis::ROW);
-                childRow->setFocusable(true);
+                childRow->setFocusable(!collapsed);
                 childRow->setPadding(4, 8, 4, 8);
                 childRow->setMarginBottom(1);
                 childRow->setCornerRadius(4);
@@ -1410,7 +1430,7 @@ void SearchTab::buildFilterPanel() {
                     for (int optIdx = 0; optIdx < static_cast<int>(child.selectOptions.size()); optIdx++) {
                         auto* optRow = new brls::Box();
                         optRow->setAxis(brls::Axis::ROW);
-                        optRow->setFocusable(true);
+                        optRow->setFocusable(false);  // Hidden by default (GONE), set focusable when expanded
                         optRow->setPadding(3, 8, 3, 8);
                         optRow->setMarginBottom(1);
                         optRow->setCornerRadius(4);
@@ -1451,6 +1471,10 @@ void SearchTab::buildFilterPanel() {
                                 }
                             }
                             childOptionsBox->setVisibility(brls::Visibility::GONE);
+                            for (auto* opt : childOptionsBox->getChildren()) {
+                                auto* optBox = dynamic_cast<brls::Box*>(opt);
+                                if (optBox) optBox->setFocusable(false);
+                            }
                             if (childArrow) childArrow->setText("\u25B6");
                             // Move focus back to parent row since options are now hidden
                             brls::Application::giveFocus(childRow);
@@ -1500,10 +1524,14 @@ void SearchTab::buildFilterPanel() {
                                 }, child.name, "", 256, child.textState);
                             break;
                         case FilterType::SELECT:
-                            // Toggle inline options visibility
+                            // Toggle inline options visibility and focusability
                             if (childOptionsBox) {
                                 bool expanding = childOptionsBox->getVisibility() == brls::Visibility::GONE;
                                 childOptionsBox->setVisibility(expanding ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+                                for (auto* opt : childOptionsBox->getChildren()) {
+                                    auto* optBox = dynamic_cast<brls::Box*>(opt);
+                                    if (optBox) optBox->setFocusable(expanding);
+                                }
                                 if (childArrow) childArrow->setText(expanding ? "\u25BC" : "\u25B6");
                             }
                             break;
@@ -1572,7 +1600,7 @@ void SearchTab::buildFilterPanel() {
                 for (int optIdx = 0; optIdx < static_cast<int>(filter.selectOptions.size()); optIdx++) {
                     auto* optRow = new brls::Box();
                     optRow->setAxis(brls::Axis::ROW);
-                    optRow->setFocusable(true);
+                    optRow->setFocusable(false);  // Hidden by default (GONE), set focusable when expanded
                     optRow->setPadding(4, 8, 4, 8);
                     optRow->setMarginBottom(1);
                     optRow->setCornerRadius(4);
@@ -1613,6 +1641,10 @@ void SearchTab::buildFilterPanel() {
                         }
                         // Collapse after selection
                         optionsBox->setVisibility(brls::Visibility::GONE);
+                        for (auto* opt : optionsBox->getChildren()) {
+                            auto* ob = dynamic_cast<brls::Box*>(opt);
+                            if (ob) ob->setFocusable(false);
+                        }
                         if (arrowLabel) arrowLabel->setText("\u25B6");
                         // Move focus back to parent row since options are now hidden
                         brls::Application::giveFocus(row);
@@ -1640,7 +1672,7 @@ void SearchTab::buildFilterPanel() {
 
                         auto* optRow = new brls::Box();
                         optRow->setAxis(brls::Axis::ROW);
-                        optRow->setFocusable(true);
+                        optRow->setFocusable(false);  // Hidden by default (GONE), set focusable when expanded
                         optRow->setPadding(4, 8, 4, 8);
                         optRow->setMarginBottom(1);
                         optRow->setCornerRadius(4);
@@ -1687,6 +1719,10 @@ void SearchTab::buildFilterPanel() {
                             }
                             // Collapse after selection
                             optionsBox->setVisibility(brls::Visibility::GONE);
+                            for (auto* opt : optionsBox->getChildren()) {
+                                auto* ob = dynamic_cast<brls::Box*>(opt);
+                                if (ob) ob->setFocusable(false);
+                            }
                             if (arrowLabel) arrowLabel->setText("\u25B6");
                             // Move focus back to parent row since options are now hidden
                             brls::Application::giveFocus(row);
@@ -1738,10 +1774,14 @@ void SearchTab::buildFilterPanel() {
                     break;
                 case FilterType::SELECT:
                 case FilterType::SORT:
-                    // Toggle inline options visibility
+                    // Toggle inline options visibility and focusability
                     if (optionsBox) {
                         bool expanding = optionsBox->getVisibility() == brls::Visibility::GONE;
                         optionsBox->setVisibility(expanding ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+                        for (auto* opt : optionsBox->getChildren()) {
+                            auto* optBox = dynamic_cast<brls::Box*>(opt);
+                            if (optBox) optBox->setFocusable(expanding);
+                        }
                         if (arrowLabel) arrowLabel->setText(expanding ? "\u25BC" : "\u25B6");
                     }
                     break;
