@@ -1225,22 +1225,27 @@ void SearchTab::showFilterDialog() {
             groupNameLabel->setGrow(1.0f);
             groupRow->addView(groupNameLabel);
 
-            // Container for children (shown/hidden based on collapsed state)
+            // Scrollable container for group children so large groups
+            // (like Genre) scroll within their section instead of
+            // pushing the whole dialog.
+            auto* childrenScroll = new brls::ScrollingFrame();
+            childrenScroll->setMarginLeft(20);
+            childrenScroll->setMaxHeight(180);
+            childrenScroll->setVisibility(collapsed ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
+
             auto* childrenBox = new brls::Box();
             childrenBox->setAxis(brls::Axis::COLUMN);
-            childrenBox->setMarginLeft(20);
-            childrenBox->setVisibility(collapsed ? brls::Visibility::GONE : brls::Visibility::VISIBLE);
 
             // Toggle collapse on click
             int groupIdx = static_cast<int>(i);
-            groupRow->registerClickAction([this, groupIdx, childrenBox, arrowLabel](brls::View*) {
+            groupRow->registerClickAction([this, groupIdx, childrenScroll, arrowLabel](brls::View*) {
                 if (m_collapsedGroups.count(groupIdx)) {
                     m_collapsedGroups.erase(groupIdx);
-                    childrenBox->setVisibility(brls::Visibility::VISIBLE);
+                    childrenScroll->setVisibility(brls::Visibility::VISIBLE);
                     arrowLabel->setText("\u25BC");
                 } else {
                     m_collapsedGroups.insert(groupIdx);
-                    childrenBox->setVisibility(brls::Visibility::GONE);
+                    childrenScroll->setVisibility(brls::Visibility::GONE);
                     arrowLabel->setText("\u25B6");
                 }
                 return true;
@@ -1332,7 +1337,8 @@ void SearchTab::showFilterDialog() {
                 childrenBox->addView(childRow);
             }
 
-            filterListBox->addView(childrenBox);
+            childrenScroll->setContentView(childrenBox);
+            filterListBox->addView(childrenScroll);
             continue;
         }
 
