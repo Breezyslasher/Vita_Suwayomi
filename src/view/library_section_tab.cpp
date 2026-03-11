@@ -2745,7 +2745,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
 
     // Title
     auto* titleLabel = new brls::Label();
-    titleLabel->setText("Select Categories");
+    titleLabel->setText("Manga Actions");
     titleLabel->setFontSize(18);
     titleLabel->setSingleLine(true);
     titleLabel->setMarginBottom(6);
@@ -2758,64 +2758,356 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
     auto* catListBox = new brls::Box();
     catListBox->setAxis(brls::Axis::COLUMN);
 
+    // Helper: build label text with checkmark prefix
+    auto makeCatLabel = [](const std::string& name, bool checked) -> std::string {
+        return (checked ? "\u2713 " : "   ") + name;
+    };
+
+    // Track category rows so Reset can find them
+    auto catRowLabels = std::make_shared<std::vector<std::pair<int, brls::Label*>>>();
+
     // ========================================================================
-    // "Main" collapsible section (like GROUP in source filter panel)
-    // Contains context menu actions: Download, Mark as Read/Unread, Remove, etc.
+    // 1. "Categories" collapsible group
     // ========================================================================
     {
-        bool mainCollapsed = true;  // Start collapsed by default
+        auto* catGroupRow = new brls::Box();
+        catGroupRow->setAxis(brls::Axis::ROW);
+        catGroupRow->setFocusable(true);
+        catGroupRow->setPadding(5, 8, 5, 8);
+        catGroupRow->setMarginTop(3);
+        catGroupRow->setMarginBottom(2);
+        catGroupRow->setCornerRadius(6);
+        catGroupRow->setAlignItems(brls::AlignItems::CENTER);
+        catGroupRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
-        // Group header row (clickable to expand/collapse)
-        auto* mainGroupRow = new brls::Box();
-        mainGroupRow->setAxis(brls::Axis::ROW);
-        mainGroupRow->setFocusable(true);
-        mainGroupRow->setPadding(5, 8, 5, 8);
-        mainGroupRow->setMarginTop(3);
-        mainGroupRow->setMarginBottom(2);
-        mainGroupRow->setCornerRadius(6);
-        mainGroupRow->setAlignItems(brls::AlignItems::CENTER);
-        mainGroupRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+        auto* catArrow = new brls::Label();
+        catArrow->setFontSize(14);
+        catArrow->setWidth(20);
+        catArrow->setMarginRight(6);
+        catArrow->setText("\u25BC");  // Down arrow (expanded by default)
+        catGroupRow->addView(catArrow);
 
-        auto* mainArrow = new brls::Label();
-        mainArrow->setFontSize(14);
-        mainArrow->setWidth(20);
-        mainArrow->setMarginRight(6);
-        mainArrow->setText("\u25B6");  // Right arrow (collapsed)
-        mainGroupRow->addView(mainArrow);
-
-        auto* mainGroupLabel = new brls::Label();
-        mainGroupLabel->setText("Main");
-        mainGroupLabel->setFontSize(14);
-        mainGroupLabel->setSingleLine(true);
-        mainGroupRow->addView(mainGroupLabel);
+        auto* catGroupLabel = new brls::Label();
+        catGroupLabel->setText("Categories");
+        catGroupLabel->setFontSize(14);
+        catGroupLabel->setSingleLine(true);
+        catGroupRow->addView(catGroupLabel);
 
         // Hover highlight
-        mainGroupRow->getFocusEvent()->subscribe([this, mainGroupRow](brls::View*) {
-            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != mainGroupRow) {
+        catGroupRow->getFocusEvent()->subscribe([this, catGroupRow](brls::View*) {
+            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != catGroupRow) {
                 m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             }
-            mainGroupRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
-            m_lastHighlightedCatRow = mainGroupRow;
+            catGroupRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            m_lastHighlightedCatRow = catGroupRow;
         });
-        mainGroupRow->addGestureRecognizer(new brls::TapGestureRecognizer(mainGroupRow));
+        catGroupRow->addGestureRecognizer(new brls::TapGestureRecognizer(catGroupRow));
 
-        catListBox->addView(mainGroupRow);
+        catListBox->addView(catGroupRow);
 
-        // Children container (action rows, hidden by default)
-        auto* mainChildrenBox = new brls::Box();
-        mainChildrenBox->setAxis(brls::Axis::COLUMN);
-        mainChildrenBox->setMarginLeft(12);
-        mainChildrenBox->setVisibility(brls::Visibility::GONE);
+        // Children container (category checkboxes + Apply/Reset, visible by default)
+        auto* catChildrenBox = new brls::Box();
+        catChildrenBox->setAxis(brls::Axis::COLUMN);
+        catChildrenBox->setMarginLeft(12);
+        catChildrenBox->setVisibility(brls::Visibility::VISIBLE);
 
-        // Build action rows
+        // Category checkbox rows
+        for (size_t i = 0; i < visibleCategories->size(); i++) {
+            const auto& cat = (*visibleCategories)[i];
+            int catId = cat.id;
+            bool isChecked = selectedCats->count(catId) > 0;
+
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setFocusable(true);
+            row->setPadding(4, 8, 4, 8);
+            row->setMarginBottom(1);
+            row->setCornerRadius(4);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+            auto* rowLabel = new brls::Label();
+            rowLabel->setText(makeCatLabel(cat.name, isChecked));
+            rowLabel->setFontSize(13);
+            rowLabel->setSingleLine(true);
+            row->addView(rowLabel);
+
+            catRowLabels->push_back({catId, rowLabel});
+
+            // Hover highlight
+            row->getFocusEvent()->subscribe([this, row](brls::View*) {
+                if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != row) {
+                    m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                }
+                row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+                m_lastHighlightedCatRow = row;
+            });
+
+            // Click to toggle
+            row->registerClickAction([catId, selectedCats, rowLabel, makeCatLabel, cat](brls::View*) {
+                bool currentlySelected = (selectedCats->find(catId) != selectedCats->end());
+                if (currentlySelected) {
+                    selectedCats->erase(catId);
+                } else {
+                    selectedCats->insert(catId);
+                }
+                rowLabel->setText(makeCatLabel(cat.name, !currentlySelected));
+                return true;
+            });
+            row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
+
+            catChildrenBox->addView(row);
+        }
+
+        // Apply / Reset button row inside the Categories group
+        auto* buttonRow = new brls::Box();
+        buttonRow->setAxis(brls::Axis::ROW);
+        buttonRow->setJustifyContent(brls::JustifyContent::FLEX_START);
+        buttonRow->setMarginTop(4);
+        buttonRow->setMarginBottom(2);
+
+        auto* applyBtn = new brls::Button();
+        applyBtn->setText("Apply");
+        applyBtn->setMarginRight(8);
+        applyBtn->registerClickAction([applyCategories](brls::View*) {
+            applyCategories();
+            return true;
+        });
+        applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
+        applyBtn->getFocusEvent()->subscribe([this](brls::View*) {
+            if (m_lastHighlightedCatRow) {
+                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                m_lastHighlightedCatRow = nullptr;
+            }
+        });
+        applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            hideCategoryPanel();
+            return true;
+        }, true);
+
+        auto* resetBtn = new brls::Button();
+        resetBtn->setText("Reset");
+        resetBtn->registerClickAction([selectedCats, checkedCatIds, catRowLabels, makeCatLabel](brls::View*) {
+            *selectedCats = checkedCatIds;
+            for (auto& pair : *catRowLabels) {
+                bool checked = selectedCats->find(pair.first) != selectedCats->end();
+                // Extract name from current label text (skip checkmark prefix)
+                std::string currentText = pair.second->getFullText();
+                std::string name = currentText.length() > 3 ? currentText.substr(3) : currentText;
+                pair.second->setText(makeCatLabel(name, checked));
+            }
+            return true;
+        });
+        resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
+        resetBtn->getFocusEvent()->subscribe([this](brls::View*) {
+            if (m_lastHighlightedCatRow) {
+                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                m_lastHighlightedCatRow = nullptr;
+            }
+        });
+        resetBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            hideCategoryPanel();
+            return true;
+        }, true);
+
+        buttonRow->addView(applyBtn);
+        buttonRow->addView(resetBtn);
+        catChildrenBox->addView(buttonRow);
+
+        // Click on group header to expand/collapse
+        catGroupRow->registerClickAction([catChildrenBox, catArrow, catGroupRow](brls::View*) {
+            bool isVisible = (catChildrenBox->getVisibility() == brls::Visibility::VISIBLE);
+            if (isVisible) {
+                catChildrenBox->setVisibility(brls::Visibility::GONE);
+                for (auto* child : catChildrenBox->getChildren()) {
+                    auto* childBox = dynamic_cast<brls::Box*>(child);
+                    if (childBox) childBox->setFocusable(false);
+                }
+                catArrow->setText("\u25B6");
+                brls::View* focused = brls::Application::getCurrentFocus();
+                if (focused) {
+                    brls::View* check = focused;
+                    while (check) {
+                        if (check == catChildrenBox) {
+                            brls::Application::giveFocus(catGroupRow);
+                            break;
+                        }
+                        check = check->getParent();
+                    }
+                }
+            } else {
+                catChildrenBox->setVisibility(brls::Visibility::VISIBLE);
+                for (auto* child : catChildrenBox->getChildren()) {
+                    auto* childBox = dynamic_cast<brls::Box*>(child);
+                    if (childBox) childBox->setFocusable(true);
+                }
+                catArrow->setText("\u25BC");
+            }
+            return true;
+        });
+
+        catListBox->addView(catChildrenBox);
+    }
+
+    // ========================================================================
+    // 2. "Downloads" collapsible group
+    // ========================================================================
+    {
+        auto* dlGroupRow = new brls::Box();
+        dlGroupRow->setAxis(brls::Axis::ROW);
+        dlGroupRow->setFocusable(true);
+        dlGroupRow->setPadding(5, 8, 5, 8);
+        dlGroupRow->setMarginTop(3);
+        dlGroupRow->setMarginBottom(2);
+        dlGroupRow->setCornerRadius(6);
+        dlGroupRow->setAlignItems(brls::AlignItems::CENTER);
+        dlGroupRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+        auto* dlArrow = new brls::Label();
+        dlArrow->setFontSize(14);
+        dlArrow->setWidth(20);
+        dlArrow->setMarginRight(6);
+        dlArrow->setText("\u25B6");  // Right arrow (collapsed by default)
+        dlGroupRow->addView(dlArrow);
+
+        auto* dlGroupLabel = new brls::Label();
+        dlGroupLabel->setText("Downloads");
+        dlGroupLabel->setFontSize(14);
+        dlGroupLabel->setSingleLine(true);
+        dlGroupRow->addView(dlGroupLabel);
+
+        // Hover highlight
+        dlGroupRow->getFocusEvent()->subscribe([this, dlGroupRow](brls::View*) {
+            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != dlGroupRow) {
+                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            }
+            dlGroupRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            m_lastHighlightedCatRow = dlGroupRow;
+        });
+        dlGroupRow->addGestureRecognizer(new brls::TapGestureRecognizer(dlGroupRow));
+
+        catListBox->addView(dlGroupRow);
+
+        // Children container (download options, hidden by default)
+        auto* dlChildrenBox = new brls::Box();
+        dlChildrenBox->setAxis(brls::Axis::COLUMN);
+        dlChildrenBox->setMarginLeft(12);
+        dlChildrenBox->setVisibility(brls::Visibility::GONE);
+
+        struct DlOption {
+            std::string label;
+            std::string mode;
+        };
+        std::vector<DlOption> dlOptions = {
+            {"All Chapters", "all"},
+            {"Unread Chapters", "unread"},
+            {"Next Chapter", "next1"},
+            {"Next 5 Chapters", "next5"},
+            {"Next 10 Chapters", "next10"},
+            {"Next 25 Chapters", "next25"}
+        };
+
+        for (const auto& opt : dlOptions) {
+            auto* dlRow = new brls::Box();
+            dlRow->setAxis(brls::Axis::ROW);
+            dlRow->setFocusable(false);  // Hidden by default
+            dlRow->setPadding(4, 8, 4, 8);
+            dlRow->setMarginBottom(1);
+            dlRow->setCornerRadius(4);
+            dlRow->setAlignItems(brls::AlignItems::CENTER);
+            dlRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+            auto* dlLabel = new brls::Label();
+            dlLabel->setText(opt.label);
+            dlLabel->setFontSize(13);
+            dlLabel->setSingleLine(true);
+            dlRow->addView(dlLabel);
+
+            // Hover highlight
+            dlRow->getFocusEvent()->subscribe([this, dlRow](brls::View*) {
+                if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != dlRow) {
+                    m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                }
+                dlRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+                m_lastHighlightedCatRow = dlRow;
+            });
+
+            std::string mode = opt.mode;
+            dlRow->registerClickAction([this, mode, capturedList](brls::View*) {
+                hideCategoryPanel();
+                std::vector<Manga> asyncList = capturedList;
+                std::string capturedMode = mode;
+                brls::sync([this, asyncList, capturedMode]() {
+                    downloadChapters(asyncList, capturedMode);
+                    if (m_selectionMode) exitSelectionMode();
+                });
+                return true;
+            });
+            dlRow->addGestureRecognizer(new brls::TapGestureRecognizer(dlRow));
+
+            dlChildrenBox->addView(dlRow);
+        }
+
+        // Click on group header to expand/collapse
+        dlGroupRow->registerClickAction([dlChildrenBox, dlArrow, dlGroupRow](brls::View*) {
+            bool isVisible = (dlChildrenBox->getVisibility() == brls::Visibility::VISIBLE);
+            if (isVisible) {
+                dlChildrenBox->setVisibility(brls::Visibility::GONE);
+                for (auto* child : dlChildrenBox->getChildren()) {
+                    auto* childBox = dynamic_cast<brls::Box*>(child);
+                    if (childBox) childBox->setFocusable(false);
+                }
+                dlArrow->setText("\u25B6");
+                brls::View* focused = brls::Application::getCurrentFocus();
+                if (focused) {
+                    brls::View* check = focused;
+                    while (check) {
+                        if (check == dlChildrenBox) {
+                            brls::Application::giveFocus(dlGroupRow);
+                            break;
+                        }
+                        check = check->getParent();
+                    }
+                }
+            } else {
+                dlChildrenBox->setVisibility(brls::Visibility::VISIBLE);
+                for (auto* child : dlChildrenBox->getChildren()) {
+                    auto* childBox = dynamic_cast<brls::Box*>(child);
+                    if (childBox) childBox->setFocusable(true);
+                }
+                dlArrow->setText("\u25BC");
+            }
+            return true;
+        });
+
+        catListBox->addView(dlChildrenBox);
+    }
+
+    // ========================================================================
+    // 3. Separator
+    // ========================================================================
+    {
+        auto* sepLabel = new brls::Label();
+        sepLabel->setText("----------");
+        sepLabel->setFontSize(12);
+        sepLabel->setSingleLine(true);
+        sepLabel->setMarginTop(3);
+        sepLabel->setMarginBottom(3);
+        sepLabel->setTextColor(Application::getInstance().getSubtitleColor());
+        catListBox->addView(sepLabel);
+    }
+
+    // ========================================================================
+    // 4. Plain action buttons (not in any group)
+    // ========================================================================
+    {
         bool isSingleManga = (capturedList.size() == 1);
 
         struct ActionItem {
             std::string label;
-            int actionId;  // 0=Download, 1=Track, 2=Mark Read, 3=Mark Unread, 4=Remove, 5=Migrate
+            int actionId;  // 1=Track, 2=Mark Read, 3=Mark Unread, 4=Remove, 5=Migrate
         };
         std::vector<ActionItem> actions;
-        actions.push_back({"Download", 0});
         if (isSingleManga) {
             actions.push_back({"Track", 1});
         }
@@ -2829,10 +3121,10 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         for (const auto& action : actions) {
             auto* actionRow = new brls::Box();
             actionRow->setAxis(brls::Axis::ROW);
-            actionRow->setFocusable(false);  // Hidden by default, set focusable on expand
-            actionRow->setPadding(4, 8, 4, 8);
-            actionRow->setMarginBottom(1);
-            actionRow->setCornerRadius(4);
+            actionRow->setFocusable(true);
+            actionRow->setPadding(5, 8, 5, 8);
+            actionRow->setMarginBottom(2);
+            actionRow->setCornerRadius(6);
             actionRow->setAlignItems(brls::AlignItems::CENTER);
             actionRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
@@ -2854,13 +3146,9 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
             int actionId = action.actionId;
             actionRow->registerClickAction([this, actionId, capturedList](brls::View*) {
                 hideCategoryPanel();
-                // Defer action to next frame so panel fully closes first
                 std::vector<Manga> asyncList = capturedList;
                 brls::sync([this, actionId, asyncList]() {
                     switch (actionId) {
-                        case 0: // Download
-                            showDownloadSubmenu(asyncList);
-                            break;
                         case 1: // Track
                             if (!asyncList.empty()) openTracking(asyncList[0]);
                             break;
@@ -2883,109 +3171,8 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
             });
             actionRow->addGestureRecognizer(new brls::TapGestureRecognizer(actionRow));
 
-            mainChildrenBox->addView(actionRow);
+            catListBox->addView(actionRow);
         }
-
-        // Click on group header to expand/collapse
-        mainGroupRow->registerClickAction([mainChildrenBox, mainArrow, mainGroupRow](brls::View*) {
-            bool isVisible = (mainChildrenBox->getVisibility() == brls::Visibility::VISIBLE);
-            if (isVisible) {
-                // Collapse
-                mainChildrenBox->setVisibility(brls::Visibility::GONE);
-                for (auto* child : mainChildrenBox->getChildren()) {
-                    auto* childBox = dynamic_cast<brls::Box*>(child);
-                    if (childBox) childBox->setFocusable(false);
-                }
-                mainArrow->setText("\u25B6");
-                // Move focus back to group header if it was inside children
-                brls::View* focused = brls::Application::getCurrentFocus();
-                if (focused) {
-                    brls::View* check = focused;
-                    while (check) {
-                        if (check == mainChildrenBox) {
-                            brls::Application::giveFocus(mainGroupRow);
-                            break;
-                        }
-                        check = check->getParent();
-                    }
-                }
-            } else {
-                // Expand
-                mainChildrenBox->setVisibility(brls::Visibility::VISIBLE);
-                for (auto* child : mainChildrenBox->getChildren()) {
-                    auto* childBox = dynamic_cast<brls::Box*>(child);
-                    if (childBox) childBox->setFocusable(true);
-                }
-                mainArrow->setText("\u25BC");
-            }
-            return true;
-        });
-
-        catListBox->addView(mainChildrenBox);
-
-        // Separator after Main section
-        auto* sepLabel = new brls::Label();
-        sepLabel->setText("----------");
-        sepLabel->setFontSize(12);
-        sepLabel->setSingleLine(true);
-        sepLabel->setMarginTop(3);
-        sepLabel->setMarginBottom(3);
-        sepLabel->setTextColor(Application::getInstance().getSubtitleColor());
-        catListBox->addView(sepLabel);
-    }
-
-    // ========================================================================
-    // Category rows (existing behavior)
-    // ========================================================================
-
-    // Helper: build label text with checkmark prefix
-    auto makeCatLabel = [](const std::string& name, bool checked) -> std::string {
-        return (checked ? "\u2713 " : "   ") + name;
-    };
-
-    for (size_t i = 0; i < visibleCategories->size(); i++) {
-        const auto& cat = (*visibleCategories)[i];
-        int catId = cat.id;
-        bool isChecked = selectedCats->count(catId) > 0;
-
-        auto* row = new brls::Box();
-        row->setAxis(brls::Axis::ROW);
-        row->setFocusable(true);
-        row->setPadding(5, 8, 5, 8);
-        row->setMarginBottom(2);
-        row->setCornerRadius(6);
-        row->setAlignItems(brls::AlignItems::CENTER);
-        row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-
-        auto* rowLabel = new brls::Label();
-        rowLabel->setText(makeCatLabel(cat.name, isChecked));
-        rowLabel->setFontSize(13);
-        rowLabel->setSingleLine(true);
-        row->addView(rowLabel);
-
-        // Hover highlight (source filter style)
-        row->getFocusEvent()->subscribe([this, row](brls::View*) {
-            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != row) {
-                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-            }
-            row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
-            m_lastHighlightedCatRow = row;
-        });
-
-        // Click to toggle
-        row->registerClickAction([catId, selectedCats, rowLabel, makeCatLabel, cat](brls::View*) {
-            bool currentlySelected = (selectedCats->find(catId) != selectedCats->end());
-            if (currentlySelected) {
-                selectedCats->erase(catId);
-            } else {
-                selectedCats->insert(catId);
-            }
-            rowLabel->setText(makeCatLabel(cat.name, !currentlySelected));
-            return true;
-        });
-        row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
-
-        catListBox->addView(row);
     }
 
     mainScroll->setContentView(catListBox);
@@ -2998,77 +3185,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
 
     m_categoryPanel->addView(mainScroll);
 
-    // Button row (Apply / Reset style matching source filter)
-    auto* buttonRow = new brls::Box();
-    buttonRow->setAxis(brls::Axis::ROW);
-    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_START);
-    buttonRow->setMarginTop(6);
-
-    auto* applyBtn = new brls::Button();
-    applyBtn->setText("Apply");
-    applyBtn->setMarginRight(8);
-    applyBtn->registerClickAction([applyCategories](brls::View*) {
-        applyCategories();
-        return true;
-    });
-    applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
-    applyBtn->getFocusEvent()->subscribe([this](brls::View*) {
-        if (m_lastHighlightedCatRow) {
-            m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-            m_lastHighlightedCatRow = nullptr;
-        }
-    });
-
-    auto* resetBtn = new brls::Button();
-    resetBtn->setText("Reset");
-    resetBtn->registerClickAction([selectedCats, checkedCatIds, catListBox, makeCatLabel, visibleCategories](brls::View*) {
-        // Reset to original pre-selected state
-        *selectedCats = checkedCatIds;
-        // Update all row labels
-        auto& children = catListBox->getChildren();
-        for (size_t i = 0; i < children.size() && i < visibleCategories->size(); i++) {
-            auto* rowBox = dynamic_cast<brls::Box*>(children[i]);
-            if (rowBox && !rowBox->getChildren().empty()) {
-                auto* lbl = dynamic_cast<brls::Label*>(rowBox->getChildren()[0]);
-                if (lbl) {
-                    bool checked = selectedCats->find((*visibleCategories)[i].id) != selectedCats->end();
-                    lbl->setText(makeCatLabel((*visibleCategories)[i].name, checked));
-                }
-            }
-        }
-        return true;
-    });
-    resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
-    resetBtn->getFocusEvent()->subscribe([this](brls::View*) {
-        if (m_lastHighlightedCatRow) {
-            m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-            m_lastHighlightedCatRow = nullptr;
-        }
-    });
-
-    buttonRow->addView(applyBtn);
-    buttonRow->addView(resetBtn);
-    m_categoryPanel->addView(buttonRow);
-
-    // Custom navigation: link last category row <-> apply button
-    auto& catChildren = catListBox->getChildren();
-    if (!catChildren.empty()) {
-        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
-        applyBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
-        resetBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
-    }
-
-    // B button on panel buttons to close panel
-    applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        hideCategoryPanel();
-        return true;
-    }, true);
-    resetBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        hideCategoryPanel();
-        return true;
-    }, true);
-
-    // Show the overlay and give focus to first category row
+    // Show the overlay and give focus to first item in list
     m_categoryOverlay->setVisibility(brls::Visibility::VISIBLE);
     if (!catListBox->getChildren().empty()) {
         brls::Application::giveFocus(catListBox->getChildren()[0]);
