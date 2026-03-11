@@ -2601,6 +2601,20 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         return;
     }
 
+    // Filter out hidden categories for the dialog
+    const auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
+    auto visibleCategories = std::make_shared<std::vector<Category>>();
+    for (const auto& cat : m_categories) {
+        if (hiddenIds.find(cat.id) == hiddenIds.end()) {
+            visibleCategories->push_back(cat);
+        }
+    }
+
+    if (visibleCategories->empty()) {
+        brls::Application::notify("No visible categories available");
+        return;
+    }
+
     // Save current focus so we can restore it when closing
     m_preCategoryPanelFocus = brls::Application::getCurrentFocus();
     m_lastHighlightedCatRow = nullptr;
@@ -2749,8 +2763,8 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         return (checked ? "\u2713 " : "   ") + name;
     };
 
-    for (size_t i = 0; i < m_categories.size(); i++) {
-        const auto& cat = m_categories[i];
+    for (size_t i = 0; i < visibleCategories->size(); i++) {
+        const auto& cat = (*visibleCategories)[i];
         int catId = cat.id;
         bool isChecked = selectedCats->count(catId) > 0;
 
@@ -2827,18 +2841,18 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
 
     auto* resetBtn = new brls::Button();
     resetBtn->setText("Reset");
-    resetBtn->registerClickAction([selectedCats, checkedCatIds, catListBox, makeCatLabel, this](brls::View*) {
+    resetBtn->registerClickAction([selectedCats, checkedCatIds, catListBox, makeCatLabel, visibleCategories](brls::View*) {
         // Reset to original pre-selected state
         *selectedCats = checkedCatIds;
         // Update all row labels
         auto& children = catListBox->getChildren();
-        for (size_t i = 0; i < children.size() && i < m_categories.size(); i++) {
+        for (size_t i = 0; i < children.size() && i < visibleCategories->size(); i++) {
             auto* rowBox = dynamic_cast<brls::Box*>(children[i]);
             if (rowBox && !rowBox->getChildren().empty()) {
                 auto* lbl = dynamic_cast<brls::Label*>(rowBox->getChildren()[0]);
                 if (lbl) {
-                    bool checked = selectedCats->find(m_categories[i].id) != selectedCats->end();
-                    lbl->setText(makeCatLabel(m_categories[i].name, checked));
+                    bool checked = selectedCats->find((*visibleCategories)[i].id) != selectedCats->end();
+                    lbl->setText(makeCatLabel((*visibleCategories)[i].name, checked));
                 }
             }
         }
