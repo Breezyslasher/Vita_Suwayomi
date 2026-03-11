@@ -2584,29 +2584,8 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
     auto selectedCats = std::make_shared<std::set<int>>(checkedCatIds);
     std::vector<Manga> capturedList = mangaList;
 
-    // Create dialog box (matching source filter / category visibility style)
-    auto* dialogBox = new brls::Box();
-    dialogBox->setAxis(brls::Axis::COLUMN);
-    dialogBox->setWidth(550);
-    dialogBox->setHeight(450);
-    dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
-    dialogBox->setCornerRadius(12);
-
-    // Title
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText("Select Categories");
-    titleLabel->setFontSize(22);
-    titleLabel->setMarginBottom(10);
-    dialogBox->addView(titleLabel);
-
-    // Info label
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Tap to toggle categories for this manga");
-    infoLabel->setFontSize(14);
-    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
-    infoLabel->setMarginBottom(15);
-    dialogBox->addView(infoLabel);
+    // Track last highlighted row for hover effect (source filter style)
+    auto lastHighlighted = std::make_shared<brls::Box*>(nullptr);
 
     // Apply categories helper lambda
     auto applyCategories = [this, capturedList, selectedCats]() {
@@ -2716,124 +2695,138 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         if (m_selectionMode) exitSelectionMode();
     };
 
-    // Done button
-    auto* doneBtn = new brls::Button();
-    doneBtn->setText("Done");
-    doneBtn->setMarginTop(15);
-    doneBtn->registerClickAction([applyCategories](brls::View*) {
-        applyCategories();
-        return true;
-    });
-    doneBtn->addGestureRecognizer(new brls::TapGestureRecognizer(doneBtn));
+    // Create dialog box (matching source filter menu exactly)
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(300);
+    dialogBox->setPadding(10);
+    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
+    dialogBox->setCornerRadius(12);
 
-    // B button on Done button applies and closes
-    doneBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [applyCategories](brls::View*) {
-        applyCategories();
-        return true;
-    }, true);
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Select Categories");
+    titleLabel->setFontSize(18);
+    titleLabel->setSingleLine(true);
+    titleLabel->setMarginBottom(6);
+    dialogBox->addView(titleLabel);
 
-    // Scrollable category list
-    auto* scrollView = new brls::ScrollingFrame();
-    scrollView->setGrow(1.0f);
+    // Main scrolling frame
+    auto* mainScroll = new brls::ScrollingFrame();
+    mainScroll->setGrow(1.0f);
 
-    auto* catList = new brls::Box();
-    catList->setAxis(brls::Axis::COLUMN);
+    auto* catListBox = new brls::Box();
+    catListBox->setAxis(brls::Axis::COLUMN);
+
+    // Helper: build label text with checkmark prefix
+    auto makeCatLabel = [](const std::string& name, bool checked) -> std::string {
+        return (checked ? "\u2713 " : "   ") + name;
+    };
 
     for (size_t i = 0; i < m_categories.size(); i++) {
         const auto& cat = m_categories[i];
         int catId = cat.id;
+        bool isChecked = selectedCats->count(catId) > 0;
 
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
-        row->setAlignItems(brls::AlignItems::CENTER);
-        row->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
         row->setFocusable(true);
-        row->setPadding(10, 12, 10, 12);
-        row->setMarginBottom(6);
-        row->setCornerRadius(8);
+        row->setPadding(5, 8, 5, 8);
+        row->setMarginBottom(2);
+        row->setCornerRadius(6);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
 
-        bool isChecked = selectedCats->count(catId) > 0;
-        row->setBackgroundColor(isChecked ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
+        auto* rowLabel = new brls::Label();
+        rowLabel->setText(makeCatLabel(cat.name, isChecked));
+        rowLabel->setFontSize(13);
+        rowLabel->setSingleLine(true);
+        row->addView(rowLabel);
 
-        // Category info box (name + manga count)
-        auto* infoBox = new brls::Box();
-        infoBox->setAxis(brls::Axis::COLUMN);
-        infoBox->setGrow(1.0f);
+        // Hover highlight (source filter style)
+        row->getFocusEvent()->subscribe([lastHighlighted, row](brls::View*) {
+            if (*lastHighlighted && *lastHighlighted != row) {
+                (*lastHighlighted)->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            }
+            row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            *lastHighlighted = row;
+        });
 
-        auto* nameLabel = new brls::Label();
-        std::string displayName = cat.name;
-        if (displayName.length() > 20) {
-            displayName = displayName.substr(0, 18) + "..";
-        }
-        nameLabel->setText(displayName);
-        nameLabel->setFontSize(16);
-        infoBox->addView(nameLabel);
-
-        if (cat.mangaCount > 0) {
-            auto* countLabel = new brls::Label();
-            countLabel->setText(std::to_string(cat.mangaCount) + " manga");
-            countLabel->setFontSize(12);
-            countLabel->setTextColor(Application::getInstance().getDimTextColor());
-            infoBox->addView(countLabel);
-        }
-
-        row->addView(infoBox);
-
-        // Status indicator (checkmark on right side)
-        auto* statusLabel = new brls::Label();
-        statusLabel->setText(isChecked ? "\u2713" : "");
-        statusLabel->setFontSize(16);
-        statusLabel->setTextColor(Application::getInstance().getSuccessTextColor());
-        statusLabel->setMarginRight(10);
-        row->addView(statusLabel);
-
-        // Toggle on click
-        row->registerClickAction([catId, selectedCats, statusLabel, row](brls::View*) {
-            if (selectedCats->count(catId)) {
+        // Click to toggle
+        row->registerClickAction([catId, selectedCats, rowLabel, makeCatLabel, cat](brls::View*) {
+            bool currentlySelected = (selectedCats->find(catId) != selectedCats->end());
+            if (currentlySelected) {
                 selectedCats->erase(catId);
-                statusLabel->setText("");
-                row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             } else {
                 selectedCats->insert(catId);
-                statusLabel->setText("\u2713");
-                statusLabel->setTextColor(Application::getInstance().getSuccessTextColor());
-                row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
             }
+            rowLabel->setText(makeCatLabel(cat.name, !currentlySelected));
             return true;
         });
         row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
 
-        // B button on each row applies and closes
-        row->registerAction("Back", brls::ControllerButton::BUTTON_B, [applyCategories](brls::View*) {
-            applyCategories();
-            return true;
-        }, true);
-
-        catList->addView(row);
+        catListBox->addView(row);
     }
 
-    scrollView->setContentView(catList);
-    dialogBox->addView(scrollView);
-    dialogBox->addView(doneBtn);
+    mainScroll->setContentView(catListBox);
 
-    // B button on dialog applies and closes
-    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [applyCategories](brls::View*) {
-        applyCategories();
+    // B button on scroll list closes dialog
+    catListBox->registerAction("Close", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
         return true;
     }, true);
 
-    // Circle button applies and closes
-    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [applyCategories](brls::View*) {
+    dialogBox->addView(mainScroll);
+
+    // Button row (Apply / Reset style matching source filter)
+    auto* buttonRow = new brls::Box();
+    buttonRow->setAxis(brls::Axis::ROW);
+    buttonRow->setJustifyContent(brls::JustifyContent::FLEX_START);
+    buttonRow->setMarginTop(6);
+
+    auto* applyBtn = new brls::Button();
+    applyBtn->setText("Apply");
+    applyBtn->setMarginRight(8);
+    applyBtn->registerClickAction([applyCategories](brls::View*) {
         applyCategories();
         return true;
-    }, true);
+    });
+    applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
 
-    // Set up navigation
-    auto& catChildren = catList->getChildren();
-    if (!catChildren.empty()) {
-        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, doneBtn);
-        doneBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
-    }
+    auto* resetBtn = new brls::Button();
+    resetBtn->setText("Reset");
+    resetBtn->registerClickAction([selectedCats, checkedCatIds, catListBox, makeCatLabel, this](brls::View*) {
+        // Reset to original pre-selected state
+        *selectedCats = checkedCatIds;
+        // Update all row labels
+        auto& children = catListBox->getChildren();
+        for (size_t i = 0; i < children.size() && i < m_categories.size(); i++) {
+            auto* rowBox = dynamic_cast<brls::Box*>(children[i]);
+            if (rowBox && !rowBox->getChildren().empty()) {
+                auto* lbl = dynamic_cast<brls::Label*>(rowBox->getChildren()[0]);
+                if (lbl) {
+                    bool checked = selectedCats->find(m_categories[i].id) != selectedCats->end();
+                    lbl->setText(makeCatLabel(m_categories[i].name, checked));
+                }
+            }
+        }
+        return true;
+    });
+    resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
+
+    buttonRow->addView(applyBtn);
+    buttonRow->addView(resetBtn);
+    dialogBox->addView(buttonRow);
+
+    // B button on buttons closes dialog
+    applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
+    resetBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [](brls::View*) {
+        brls::Application::popActivity();
+        return true;
+    }, true);
 
     // Push as new activity
     brls::Application::pushActivity(new brls::Activity(dialogBox));
