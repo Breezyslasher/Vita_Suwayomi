@@ -2456,194 +2456,17 @@ void LibrarySectionTab::scrollToCategoryIndex(int index) {
 void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
     brls::Logger::debug("LibrarySectionTab: Context menu for '{}' (id={})", manga.title, manga.id);
 
-    // Toggle: if already showing, hide and return
-    if (m_categoryPanelVisible) {
-        hideCategoryPanel();
-        return;
-    }
-
-    // Save current focus so we can restore it when closing
-    m_preCategoryPanelFocus = brls::Application::getCurrentFocus();
-    m_lastHighlightedCatRow = nullptr;
-
-    // Clear and repopulate the inline panel
-    m_categoryPanel->clearViews();
-    m_categoryPanelVisible = true;
-
-    // Title
-    std::string title = m_selectionMode
-        ? "Actions (" + std::to_string(m_contentGrid->getSelectionCount()) + " selected)"
-        : manga.title;
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText(title);
-    titleLabel->setFontSize(16);
-    titleLabel->setSingleLine(true);
-    titleLabel->setMarginBottom(8);
-    m_categoryPanel->addView(titleLabel);
-
-    // Build menu options
-    struct MenuOption { std::string label; int actionId; };
-    std::vector<MenuOption> menuOptions;
-
-    // Always check current selection state for the focused book
-    bool isSelected = m_contentGrid && m_contentGrid->isIndexSelected(index);
-    std::string selectLabel = isSelected ? "Deselect" : "Select";
-
+    // Build the manga list for actions
+    std::vector<Manga> mangaList;
     if (m_selectionMode) {
-        menuOptions = {{selectLabel, 0}, {"Download", 1}, {"Mark as Read", 2}, {"Mark as Unread", 3},
-                       {"Change Categories", 4}, {"Remove from Library", 5}, {"Cancel Selection", 6}};
+        mangaList = m_contentGrid ? m_contentGrid->getSelectedManga() : std::vector<Manga>();
+        if (mangaList.empty()) mangaList.push_back(manga);
     } else {
-        menuOptions = {{selectLabel, 0}, {"Download", 1}, {"Track", 2}, {"Mark as Read", 3}, {"Mark as Unread", 4},
-                       {"Change Categories", 5}, {"Remove from Library", 6}, {"Migrate Source", 7}};
+        mangaList.push_back(manga);
     }
 
-    // Scrollable list of options
-    auto* catListBox = new brls::Box();
-    catListBox->setAxis(brls::Axis::COLUMN);
-    catListBox->setGrow(1.0f);
-
-    brls::View* firstRow = nullptr;
-
-    for (const auto& opt : menuOptions) {
-        auto* row = new brls::Box();
-        row->setAxis(brls::Axis::ROW);
-        row->setFocusable(true);
-        row->setPadding(5, 8, 5, 8);
-        row->setMarginBottom(2);
-        row->setCornerRadius(6);
-        row->setAlignItems(brls::AlignItems::CENTER);
-        row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-
-        auto* rowLabel = new brls::Label();
-        rowLabel->setText(opt.label);
-        rowLabel->setFontSize(14);
-        rowLabel->setSingleLine(true);
-        row->addView(rowLabel);
-
-        if (!firstRow) firstRow = row;
-
-        // Hover highlight
-        row->getFocusEvent()->subscribe([this, row](brls::View*) {
-            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != row) {
-                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-            }
-            row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
-            m_lastHighlightedCatRow = row;
-        });
-
-        // B button to close
-        row->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-            hideCategoryPanel();
-            return true;
-        }, true);
-
-        int actionId = opt.actionId;
-        bool isSelectionMode = m_selectionMode;
-        Manga capturedManga = manga;
-        int capturedIndex = index;
-
-        row->registerClickAction([this, actionId, isSelectionMode, capturedManga, capturedIndex](brls::View*) {
-            hideCategoryPanel();
-            brls::sync([this, actionId, isSelectionMode, capturedManga, capturedIndex]() {
-                if (isSelectionMode) {
-                    switch (actionId) {
-                        case 0: // Select / Deselect
-                            m_contentGrid->toggleSelection(capturedIndex);
-                            break;
-                        case 1: { // Download
-                            auto selectedManga = m_contentGrid->getSelectedManga();
-                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
-                            showDownloadSubmenu(selectedManga);
-                            break;
-                        }
-                        case 2: { // Mark as Read
-                            auto selectedManga = m_contentGrid->getSelectedManga();
-                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
-                            markMangaRead(selectedManga);
-                            exitSelectionMode();
-                            break;
-                        }
-                        case 3: { // Mark as Unread
-                            auto selectedManga = m_contentGrid->getSelectedManga();
-                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
-                            markMangaUnread(selectedManga);
-                            exitSelectionMode();
-                            break;
-                        }
-                        case 4: { // Change Categories
-                            auto selectedManga = m_contentGrid->getSelectedManga();
-                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
-                            showChangeCategoryDialog(selectedManga);
-                            break;
-                        }
-                        case 5: { // Remove from Library
-                            auto selectedManga = m_contentGrid->getSelectedManga();
-                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
-                            removeFromLibrary(selectedManga);
-                            exitSelectionMode();
-                            break;
-                        }
-                        case 6: // Cancel Selection
-                            exitSelectionMode();
-                            break;
-                    }
-                } else {
-                    switch (actionId) {
-                        case 0: // Select
-                            enterSelectionMode(capturedIndex);
-                            break;
-                        case 1: { // Download
-                            std::vector<Manga> list = {capturedManga};
-                            showDownloadSubmenu(list);
-                            break;
-                        }
-                        case 2: // Track
-                            openTracking(capturedManga);
-                            break;
-                        case 3: { // Mark as Read
-                            std::vector<Manga> list = {capturedManga};
-                            markMangaRead(list);
-                            break;
-                        }
-                        case 4: { // Mark as Unread
-                            std::vector<Manga> list = {capturedManga};
-                            markMangaUnread(list);
-                            break;
-                        }
-                        case 5: { // Change Categories
-                            std::vector<Manga> list = {capturedManga};
-                            showChangeCategoryDialog(list);
-                            break;
-                        }
-                        case 6: { // Remove from Library
-                            std::vector<Manga> list = {capturedManga};
-                            removeFromLibrary(list);
-                            break;
-                        }
-                        case 7: // Migrate Source
-                            showMigrateSourceMenu(capturedManga);
-                            break;
-                    }
-                }
-            });
-            return true;
-        });
-        row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
-
-        catListBox->addView(row);
-    }
-
-    auto* mainScroll = new brls::ScrollingFrame();
-    mainScroll->setGrow(1.0f);
-    mainScroll->setContentView(catListBox);
-    m_categoryPanel->addView(mainScroll);
-
-    m_categoryOverlay->setVisibility(brls::Visibility::VISIBLE);
-
-    // Give focus to the first menu row
-    if (firstRow) {
-        brls::Application::giveFocus(firstRow);
-    }
+    // Delegate to the unified panel which has Select at top + Categories + Downloads + actions
+    showChangeCategoryDialog(mangaList, index);
 }
 
 void LibrarySectionTab::showDownloadSubmenu(const std::vector<Manga>& mangaList) {
@@ -2745,7 +2568,7 @@ void LibrarySectionTab::showDownloadSubmenu(const std::vector<Manga>& mangaList)
     }
 }
 
-void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& mangaList) {
+void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& mangaList, int focusedIndex) {
     if (m_categories.empty()) {
         brls::Application::notify("No categories available");
         return;
@@ -2899,9 +2722,15 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         if (m_selectionMode) exitSelectionMode();
     };
 
-    // Title
+    // Title - show manga name or selection count
     auto* titleLabel = new brls::Label();
-    titleLabel->setText("Manga Actions");
+    if (m_selectionMode) {
+        titleLabel->setText("Actions (" + std::to_string(m_contentGrid ? m_contentGrid->getSelectionCount() : 0) + " selected)");
+    } else if (mangaList.size() == 1) {
+        titleLabel->setText(mangaList[0].title);
+    } else {
+        titleLabel->setText("Manga Actions");
+    }
     titleLabel->setFontSize(18);
     titleLabel->setSingleLine(true);
     titleLabel->setMarginBottom(6);
@@ -2913,6 +2742,58 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
 
     auto* catListBox = new brls::Box();
     catListBox->setAxis(brls::Axis::COLUMN);
+
+    // ========================================================================
+    // 0. Select / Deselect row at top
+    // ========================================================================
+    if (focusedIndex >= 0) {
+        bool isSelected = m_contentGrid && m_contentGrid->isIndexSelected(focusedIndex);
+        std::string selectLabel = isSelected ? "Deselect" : "Select";
+
+        auto* selectRow = new brls::Box();
+        selectRow->setAxis(brls::Axis::ROW);
+        selectRow->setFocusable(true);
+        selectRow->setPadding(5, 8, 5, 8);
+        selectRow->setMarginBottom(2);
+        selectRow->setCornerRadius(6);
+        selectRow->setAlignItems(brls::AlignItems::CENTER);
+        selectRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+        auto* selectRowLabel = new brls::Label();
+        selectRowLabel->setText(selectLabel);
+        selectRowLabel->setFontSize(13);
+        selectRowLabel->setSingleLine(true);
+        selectRow->addView(selectRowLabel);
+
+        selectRow->getFocusEvent()->subscribe([this, selectRow](brls::View*) {
+            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != selectRow) {
+                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            }
+            selectRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            m_lastHighlightedCatRow = selectRow;
+        });
+
+        int capturedIndex = focusedIndex;
+        bool wasInSelectionMode = m_selectionMode;
+        selectRow->registerClickAction([this, capturedIndex, wasInSelectionMode, isSelected](brls::View*) {
+            hideCategoryPanel();
+            brls::sync([this, capturedIndex, wasInSelectionMode, isSelected]() {
+                if (wasInSelectionMode) {
+                    m_contentGrid->toggleSelection(capturedIndex);
+                } else {
+                    if (isSelected) {
+                        m_contentGrid->toggleSelection(capturedIndex);
+                    } else {
+                        enterSelectionMode(capturedIndex);
+                    }
+                }
+            });
+            return true;
+        });
+        selectRow->addGestureRecognizer(new brls::TapGestureRecognizer(selectRow));
+
+        catListBox->addView(selectRow);
+    }
 
     // Helper: build label text with checkmark prefix
     auto makeCatLabel = [](const std::string& name, bool checked) -> std::string {
@@ -3320,6 +3201,45 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
 
             catListBox->addView(actionRow);
         }
+    }
+
+    // ========================================================================
+    // 5. Cancel Selection row (only in selection mode)
+    // ========================================================================
+    if (m_selectionMode) {
+        auto* cancelRow = new brls::Box();
+        cancelRow->setAxis(brls::Axis::ROW);
+        cancelRow->setFocusable(true);
+        cancelRow->setPadding(5, 8, 5, 8);
+        cancelRow->setMarginTop(4);
+        cancelRow->setCornerRadius(6);
+        cancelRow->setAlignItems(brls::AlignItems::CENTER);
+        cancelRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+        auto* cancelLabel = new brls::Label();
+        cancelLabel->setText("Cancel Selection");
+        cancelLabel->setFontSize(13);
+        cancelLabel->setSingleLine(true);
+        cancelRow->addView(cancelLabel);
+
+        cancelRow->getFocusEvent()->subscribe([this, cancelRow](brls::View*) {
+            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != cancelRow) {
+                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            }
+            cancelRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            m_lastHighlightedCatRow = cancelRow;
+        });
+
+        cancelRow->registerClickAction([this](brls::View*) {
+            hideCategoryPanel();
+            brls::sync([this]() {
+                exitSelectionMode();
+            });
+            return true;
+        });
+        cancelRow->addGestureRecognizer(new brls::TapGestureRecognizer(cancelRow));
+
+        catListBox->addView(cancelRow);
     }
 
     mainScroll->setContentView(catListBox);
