@@ -2485,13 +2485,15 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
     struct MenuOption { std::string label; int actionId; };
     std::vector<MenuOption> menuOptions;
 
+    // Always check current selection state for the focused book
+    bool isSelected = m_contentGrid && m_contentGrid->isIndexSelected(index);
+    std::string selectLabel = isSelected ? "Deselect" : "Select";
+
     if (m_selectionMode) {
-        bool isSelected = m_contentGrid && m_contentGrid->isIndexSelected(index);
-        std::string selectLabel = isSelected ? "Deselect" : "Select";
         menuOptions = {{selectLabel, 0}, {"Download", 1}, {"Mark as Read", 2}, {"Mark as Unread", 3},
                        {"Change Categories", 4}, {"Remove from Library", 5}, {"Cancel Selection", 6}};
     } else {
-        menuOptions = {{"Select", 0}, {"Download", 1}, {"Track", 2}, {"Mark as Read", 3}, {"Mark as Unread", 4},
+        menuOptions = {{selectLabel, 0}, {"Download", 1}, {"Track", 2}, {"Mark as Read", 3}, {"Mark as Unread", 4},
                        {"Change Categories", 5}, {"Remove from Library", 6}, {"Migrate Source", 7}};
     }
 
