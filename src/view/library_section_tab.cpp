@@ -2818,6 +2818,12 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         return true;
     });
     applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
+    applyBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedCatRow) {
+            m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedCatRow = nullptr;
+        }
+    });
 
     auto* resetBtn = new brls::Button();
     resetBtn->setText("Reset");
@@ -2839,6 +2845,12 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         return true;
     });
     resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
+    resetBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedCatRow) {
+            m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedCatRow = nullptr;
+        }
+    });
 
     buttonRow->addView(applyBtn);
     buttonRow->addView(resetBtn);

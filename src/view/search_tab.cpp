@@ -1819,6 +1819,12 @@ void SearchTab::buildFilterPanel() {
         return true;
     });
     applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
+    applyBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedRow) {
+            m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedRow = nullptr;
+        }
+    });
 
     auto* resetBtn = new brls::Button();
     resetBtn->setText("Reset");
@@ -1831,6 +1837,12 @@ void SearchTab::buildFilterPanel() {
         return true;
     });
     resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
+    resetBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedRow) {
+            m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedRow = nullptr;
+        }
+    });
 
     buttonRow->addView(applyBtn);
     buttonRow->addView(resetBtn);
@@ -2009,6 +2021,12 @@ void SearchTab::buildTagFilterPanel() {
         return true;
     });
     applyBtn->addGestureRecognizer(new brls::TapGestureRecognizer(applyBtn));
+    applyBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedRow) {
+            m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedRow = nullptr;
+        }
+    });
 
     auto* clearBtn = new brls::Button();
     clearBtn->setText("Clear");
@@ -2024,6 +2042,12 @@ void SearchTab::buildTagFilterPanel() {
         return true;
     });
     clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn));
+    clearBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedRow) {
+            m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedRow = nullptr;
+        }
+    });
 
     // B button on panel buttons to close panel
     applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
@@ -2193,6 +2217,12 @@ void SearchTab::buildTagManagePanel(const Source& source) {
         return true;
     });
     addBtn->addGestureRecognizer(new brls::TapGestureRecognizer(addBtn));
+    addBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedRow) {
+            m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedRow = nullptr;
+        }
+    });
 
     auto* doneBtn = new brls::Button();
     doneBtn->setText("Done");
@@ -2202,6 +2232,12 @@ void SearchTab::buildTagManagePanel(const Source& source) {
         return true;
     });
     doneBtn->addGestureRecognizer(new brls::TapGestureRecognizer(doneBtn));
+    doneBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedRow) {
+            m_lastHighlightedRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedRow = nullptr;
+        }
+    });
 
     // B button on panel buttons to close panel
     addBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
