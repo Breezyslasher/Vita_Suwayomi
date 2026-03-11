@@ -2695,10 +2695,18 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         if (m_selectionMode) exitSelectionMode();
     };
 
+    // Centering container (so dialog doesn't fill the whole screen)
+    auto* container = new brls::Box();
+    container->setAxis(brls::Axis::COLUMN);
+    container->setJustifyContent(brls::JustifyContent::CENTER);
+    container->setAlignItems(brls::AlignItems::CENTER);
+    container->setGrow(1.0f);
+
     // Create dialog box (matching source filter menu exactly)
     auto* dialogBox = new brls::Box();
     dialogBox->setAxis(brls::Axis::COLUMN);
     dialogBox->setWidth(300);
+    dialogBox->setHeight(350);
     dialogBox->setPadding(10);
     dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
     dialogBox->setCornerRadius(12);
@@ -2829,7 +2837,8 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
     }, true);
 
     // Push as new activity
-    brls::Application::pushActivity(new brls::Activity(dialogBox));
+    container->addView(dialogBox);
+    brls::Application::pushActivity(new brls::Activity(container));
 }
 
 void LibrarySectionTab::showMigrateSourceMenu(const Manga& manga) {

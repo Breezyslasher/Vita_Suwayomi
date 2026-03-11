@@ -2757,10 +2757,18 @@ void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<in
     // Track last highlighted row for hover effect (source filter style)
     auto lastHighlighted = std::make_shared<brls::Box*>(nullptr);
 
+    // Centering container (so dialog doesn't fill the whole screen)
+    auto* container = new brls::Box();
+    container->setAxis(brls::Axis::COLUMN);
+    container->setJustifyContent(brls::JustifyContent::CENTER);
+    container->setAlignItems(brls::AlignItems::CENTER);
+    container->setGrow(1.0f);
+
     // Create dialog box (matching source filter menu exactly)
     auto* dialogBox = new brls::Box();
     dialogBox->setAxis(brls::Axis::COLUMN);
     dialogBox->setWidth(300);
+    dialogBox->setHeight(350);
     dialogBox->setPadding(10);
     dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
     dialogBox->setCornerRadius(12);
@@ -2911,7 +2919,8 @@ void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<in
         return true;
     }, true);
 
-    brls::Application::pushActivity(new brls::Activity(dialogBox));
+    container->addView(dialogBox);
+    brls::Application::pushActivity(new brls::Activity(container));
 }
 
 void MangaDetailView::showTrackingDialog() {
