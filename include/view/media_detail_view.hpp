@@ -93,6 +93,9 @@ private:
     void onDeleteDownloads();
     void showDownloadOptions();
     void showCategoryDialog();
+    void showCategorySelectionDialog(int mangaId, const std::set<int>& preselected, std::weak_ptr<bool> aliveWeak);
+    void hideCategoryPanel();
+    bool isFocusInCategoryPanel(brls::View* view) const;
     void showMangaMenu();
 
     // Chapter actions
@@ -226,6 +229,13 @@ private:
 
     // Lightweight: update only download icons on visible cells (no reloadData, no focus loss)
     void refreshVisibleDownloadIcons();
+
+    // Inline category panel (centered overlay, shown/hidden on same page)
+    brls::Box* m_categoryOverlay = nullptr;
+    brls::Box* m_categoryPanel = nullptr;
+    brls::Box* m_lastHighlightedCatRow = nullptr;
+    brls::View* m_preCategoryPanelFocus = nullptr;
+    bool m_categoryPanelVisible = false;
 
     // Friend for data source access
     friend class ChaptersDataSource;

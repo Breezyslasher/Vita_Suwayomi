@@ -74,6 +74,8 @@ private:
     void showMangaContextMenu(const Manga& manga, int index);
     void showDownloadSubmenu(const std::vector<Manga>& mangaList);
     void showChangeCategoryDialog(const std::vector<Manga>& mangaList);
+    void hideCategoryPanel();
+    bool isFocusInCategoryPanel(brls::View* view) const;
     void showMigrateSourceMenu(const Manga& manga);
 
     // Selection mode
@@ -173,6 +175,13 @@ private:
     bool m_thumbnailsInvalidated = false;  // Set in willDisappear after cancelAll, cleared on reload
     bool m_pendingLibraryChangeScheduled = false;  // Guard to prevent duplicate brls::sync scheduling
     int m_combinedQueryCategoryId = -1; // Category being fetched by combined query (skip redundant fetch)
+
+    // Inline category panel (centered overlay, shown/hidden on same page)
+    brls::Box* m_categoryOverlay = nullptr;
+    brls::Box* m_categoryPanel = nullptr;
+    brls::Box* m_lastHighlightedCatRow = nullptr;
+    brls::View* m_preCategoryPanelFocus = nullptr;
+    bool m_categoryPanelVisible = false;
 
     // Shared pointer to track if this object is still alive
     std::shared_ptr<bool> m_alive;
