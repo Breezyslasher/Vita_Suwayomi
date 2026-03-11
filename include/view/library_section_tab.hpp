@@ -73,7 +73,7 @@ private:
     // Context menu (Start button / long-press)
     void showMangaContextMenu(const Manga& manga, int index);
     void showDownloadSubmenu(const std::vector<Manga>& mangaList);
-    void showChangeCategoryDialog(const std::vector<Manga>& mangaList);
+    void showChangeCategoryDialog(const std::vector<Manga>& mangaList, int focusedIndex = -1);
     void hideCategoryPanel();
     bool isFocusInCategoryPanel(brls::View* view) const;
     void showMigrateSourceMenu(const Manga& manga);
