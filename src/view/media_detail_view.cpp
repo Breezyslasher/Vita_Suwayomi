@@ -1015,6 +1015,29 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     this->addView(rightPanel);
 
+    // Inline category panel overlay (centered, hidden by default)
+    m_categoryOverlay = new brls::Box();
+    m_categoryOverlay->setAxis(brls::Axis::COLUMN);
+    m_categoryOverlay->setJustifyContent(brls::JustifyContent::CENTER);
+    m_categoryOverlay->setAlignItems(brls::AlignItems::CENTER);
+    m_categoryOverlay->setWidth(960);
+    m_categoryOverlay->setHeight(544);
+    m_categoryOverlay->setPositionType(brls::PositionType::ABSOLUTE);
+    m_categoryOverlay->setPositionTop(0);
+    m_categoryOverlay->setPositionLeft(0);
+    m_categoryOverlay->setVisibility(brls::Visibility::GONE);
+
+    m_categoryPanel = new brls::Box();
+    m_categoryPanel->setAxis(brls::Axis::COLUMN);
+    m_categoryPanel->setWidth(300);
+    m_categoryPanel->setHeight(350);
+    m_categoryPanel->setPadding(10);
+    m_categoryPanel->setBackgroundColor(Application::getInstance().getDialogBackground());
+    m_categoryPanel->setCornerRadius(12);
+    m_categoryOverlay->addView(m_categoryPanel);
+
+    this->addView(m_categoryOverlay);
+
     // Load button icons immediately (avoids blank→loaded flash)
     selectIcon->setImageFromFile("app0:resources/images/select_button.png");
     rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
@@ -2751,27 +2774,22 @@ void MangaDetailView::showCategoryDialog() {
 }
 
 void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<int>& preselected, std::weak_ptr<bool> aliveWeak) {
+    // Toggle: if already showing, hide and return
+    if (m_categoryPanelVisible) {
+        hideCategoryPanel();
+        return;
+    }
+
+    // Save current focus so we can restore it when closing
+    m_preCategoryPanelFocus = brls::Application::getCurrentFocus();
+    m_lastHighlightedCatRow = nullptr;
+
+    // Clear and repopulate the inline panel
+    m_categoryPanel->clearViews();
+    m_categoryPanelVisible = true;
+
     // Shared set of selected category IDs
     auto selectedIds = std::make_shared<std::set<int>>(preselected);
-
-    // Track last highlighted row for hover effect (source filter style)
-    auto lastHighlighted = std::make_shared<brls::Box*>(nullptr);
-
-    // Centering container (so dialog doesn't fill the whole screen)
-    auto* container = new brls::Box();
-    container->setAxis(brls::Axis::COLUMN);
-    container->setJustifyContent(brls::JustifyContent::CENTER);
-    container->setAlignItems(brls::AlignItems::CENTER);
-    container->setGrow(1.0f);
-
-    // Create dialog box (matching source filter menu exactly)
-    auto* dialogBox = new brls::Box();
-    dialogBox->setAxis(brls::Axis::COLUMN);
-    dialogBox->setWidth(300);
-    dialogBox->setHeight(350);
-    dialogBox->setPadding(10);
-    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
-    dialogBox->setCornerRadius(12);
 
     // Title
     auto* titleLabel = new brls::Label();
@@ -2779,7 +2797,7 @@ void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<in
     titleLabel->setFontSize(18);
     titleLabel->setSingleLine(true);
     titleLabel->setMarginBottom(6);
-    dialogBox->addView(titleLabel);
+    m_categoryPanel->addView(titleLabel);
 
     // Main scrolling frame
     auto* mainScroll = new brls::ScrollingFrame();
@@ -2814,12 +2832,12 @@ void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<in
         row->addView(rowLabel);
 
         // Hover highlight (source filter style)
-        row->getFocusEvent()->subscribe([lastHighlighted, row](brls::View*) {
-            if (*lastHighlighted && *lastHighlighted != row) {
-                (*lastHighlighted)->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+        row->getFocusEvent()->subscribe([this, row](brls::View*) {
+            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != row) {
+                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             }
             row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
-            *lastHighlighted = row;
+            m_lastHighlightedCatRow = row;
         });
 
         // Click to toggle
@@ -2848,13 +2866,13 @@ void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<in
 
     mainScroll->setContentView(catListBox);
 
-    // B button on scroll list closes dialog
-    catListBox->registerAction("Close", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
+    // B button on scroll list closes panel
+    catListBox->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideCategoryPanel();
         return true;
     }, true);
 
-    dialogBox->addView(mainScroll);
+    m_categoryPanel->addView(mainScroll);
 
     // Button row (Apply / Reset style matching source filter)
     auto* buttonRow = new brls::Box();
@@ -2865,8 +2883,8 @@ void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<in
     auto* applyBtn = new brls::Button();
     applyBtn->setText("Apply");
     applyBtn->setMarginRight(8);
-    applyBtn->registerClickAction([mangaId, selectedIds, aliveWeak](brls::View*) {
-        brls::Application::popActivity();
+    applyBtn->registerClickAction([this, mangaId, selectedIds, aliveWeak](brls::View*) {
+        hideCategoryPanel();
         std::vector<int> catIds(selectedIds->begin(), selectedIds->end());
         brls::sync([mangaId, catIds, aliveWeak]() {
             auto alive = aliveWeak.lock();
@@ -2907,20 +2925,54 @@ void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<in
 
     buttonRow->addView(applyBtn);
     buttonRow->addView(resetBtn);
-    dialogBox->addView(buttonRow);
+    m_categoryPanel->addView(buttonRow);
 
-    // B button on buttons closes dialog
-    applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
+    // B button on panel buttons to close panel
+    applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideCategoryPanel();
         return true;
     }, true);
-    resetBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
+    resetBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        hideCategoryPanel();
         return true;
     }, true);
 
-    container->addView(dialogBox);
-    brls::Application::pushActivity(new brls::Activity(container));
+    // Show the overlay and give focus to first category row
+    m_categoryOverlay->setVisibility(brls::Visibility::VISIBLE);
+    if (!catListBox->getChildren().empty()) {
+        brls::Application::giveFocus(catListBox->getChildren()[0]);
+    }
+}
+
+void MangaDetailView::hideCategoryPanel() {
+    if (!m_categoryPanelVisible) return;
+    m_lastHighlightedCatRow = nullptr;
+    m_categoryPanelVisible = false;
+    m_categoryPanel->clearViews();
+    m_categoryOverlay->setVisibility(brls::Visibility::GONE);
+
+    // Restore focus
+    if (m_preCategoryPanelFocus) {
+        brls::View* check = m_preCategoryPanelFocus;
+        bool valid = false;
+        while (check) {
+            if (check == this) { valid = true; break; }
+            check = check->getParent();
+        }
+        if (valid) {
+            brls::Application::giveFocus(m_preCategoryPanelFocus);
+        }
+        m_preCategoryPanelFocus = nullptr;
+    }
+}
+
+bool MangaDetailView::isFocusInCategoryPanel(brls::View* view) const {
+    while (view) {
+        if (view == m_categoryOverlay)
+            return true;
+        view = view->getParent();
+    }
+    return false;
 }
 
 void MangaDetailView::showTrackingDialog() {
