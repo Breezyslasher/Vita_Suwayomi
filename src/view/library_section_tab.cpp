@@ -25,6 +25,18 @@
 
 namespace vitasuwayomi {
 
+// Recursively enable/disable focusability on all child views in a container
+static void setChildrenFocusableRecursive(brls::Box* container, bool focusable) {
+    if (!container) return;
+    for (auto* child : container->getChildren()) {
+        auto* childBox = dynamic_cast<brls::Box*>(child);
+        if (childBox) {
+            childBox->setFocusable(focusable);
+            setChildrenFocusableRecursive(childBox, focusable);
+        }
+    }
+}
+
 LibrarySectionTab::LibrarySectionTab() {
     // Create alive flag for async callback safety
     m_alive = std::make_shared<bool>(true);
@@ -2444,149 +2456,291 @@ void LibrarySectionTab::scrollToCategoryIndex(int index) {
 void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
     brls::Logger::debug("LibrarySectionTab: Context menu for '{}' (id={})", manga.title, manga.id);
 
-    std::vector<std::string> options;
+    // Toggle: if already showing, hide and return
+    if (m_categoryPanelVisible) {
+        hideCategoryPanel();
+        return;
+    }
+
+    // Save current focus so we can restore it when closing
+    m_preCategoryPanelFocus = brls::Application::getCurrentFocus();
+    m_lastHighlightedCatRow = nullptr;
+
+    // Clear and repopulate the inline panel
+    m_categoryPanel->clearViews();
+    m_categoryPanelVisible = true;
+
+    // Title
+    std::string title = m_selectionMode
+        ? "Actions (" + std::to_string(m_contentGrid->getSelectionCount()) + " selected)"
+        : manga.title;
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText(title);
+    titleLabel->setFontSize(16);
+    titleLabel->setSingleLine(true);
+    titleLabel->setMarginBottom(8);
+    m_categoryPanel->addView(titleLabel);
+
+    // Build menu options
+    struct MenuOption { std::string label; int actionId; };
+    std::vector<MenuOption> menuOptions;
+
     if (m_selectionMode) {
         bool isSelected = m_contentGrid && m_contentGrid->isIndexSelected(index);
         std::string selectLabel = isSelected ? "Deselect" : "Select";
-        options = {selectLabel, "Download", "Mark as Read", "Mark as Unread",
-                   "Change Categories", "Remove from Library", "Cancel Selection"};
+        menuOptions = {{selectLabel, 0}, {"Download", 1}, {"Mark as Read", 2}, {"Mark as Unread", 3},
+                       {"Change Categories", 4}, {"Remove from Library", 5}, {"Cancel Selection", 6}};
     } else {
-        options = {"Select", "Download", "Track", "Mark as Read", "Mark as Unread",
-                   "Change Categories", "Remove from Library", "Migrate Source"};
+        menuOptions = {{"Select", 0}, {"Download", 1}, {"Track", 2}, {"Mark as Read", 3}, {"Mark as Unread", 4},
+                       {"Change Categories", 5}, {"Remove from Library", 6}, {"Migrate Source", 7}};
     }
 
-    auto* dropdown = new brls::Dropdown(
-        m_selectionMode ? "Actions (" + std::to_string(m_contentGrid->getSelectionCount()) + " selected)" : manga.title,
-        options,
-        [this, manga, index](int selected) {
-            if (selected < 0) return; // Cancelled
-            // Defer all actions to next frame so the dropdown fully pops first.
-            // Without this, pushing a new activity (submenu) gets immediately
-            // popped by the dropdown's own popActivity call, and UI mutations
-            // while the dropdown is still tearing down can crash.
-            brls::sync([this, manga, index, selected]() {
-            if (m_selectionMode) {
-                // Selection mode menu
-                switch (selected) {
-                    case 0: // Select / Deselect
-                        m_contentGrid->toggleSelection(index);
-                        // Selection callback handles title update and auto-exit if count is 0
-                        break;
-                    case 1: { // Download
-                        auto selectedManga = m_contentGrid->getSelectedManga();
-                        if (selectedManga.empty()) selectedManga.push_back(manga);
-                        showDownloadSubmenu(selectedManga);
-                        break;
-                    }
-                    case 2: { // Mark as Read
-                        auto selectedManga = m_contentGrid->getSelectedManga();
-                        if (selectedManga.empty()) selectedManga.push_back(manga);
-                        markMangaRead(selectedManga);
-                        exitSelectionMode();
-                        break;
-                    }
-                    case 3: { // Mark as Unread
-                        auto selectedManga = m_contentGrid->getSelectedManga();
-                        if (selectedManga.empty()) selectedManga.push_back(manga);
-                        markMangaUnread(selectedManga);
-                        exitSelectionMode();
-                        break;
-                    }
-                    case 4: { // Change Categories
-                        auto selectedManga = m_contentGrid->getSelectedManga();
-                        if (selectedManga.empty()) selectedManga.push_back(manga);
-                        showChangeCategoryDialog(selectedManga);
-                        break;
-                    }
-                    case 5: { // Remove from Library
-                        auto selectedManga = m_contentGrid->getSelectedManga();
-                        if (selectedManga.empty()) selectedManga.push_back(manga);
-                        removeFromLibrary(selectedManga);
-                        exitSelectionMode();
-                        break;
-                    }
-                    case 6: // Cancel Selection
-                        exitSelectionMode();
-                        break;
-                }
-            } else {
-                // Normal mode menu
-                switch (selected) {
-                    case 0: // Select
-                        enterSelectionMode(index);
-                        break;
-                    case 1: { // Download
-                        std::vector<Manga> list = {manga};
-                        showDownloadSubmenu(list);
-                        break;
-                    }
-                    case 2: // Track
-                        openTracking(manga);
-                        break;
-                    case 3: { // Mark as Read
-                        std::vector<Manga> list = {manga};
-                        markMangaRead(list);
-                        break;
-                    }
-                    case 4: { // Mark as Unread
-                        std::vector<Manga> list = {manga};
-                        markMangaUnread(list);
-                        break;
-                    }
-                    case 5: { // Change Categories
-                        std::vector<Manga> list = {manga};
-                        showChangeCategoryDialog(list);
-                        break;
-                    }
-                    case 6: { // Remove from Library
-                        std::vector<Manga> list = {manga};
-                        removeFromLibrary(list);
-                        break;
-                    }
-                    case 7: // Migrate Source
-                        showMigrateSourceMenu(manga);
-                        break;
-                }
+    // Scrollable list of options
+    auto* catListBox = new brls::Box();
+    catListBox->setAxis(brls::Axis::COLUMN);
+    catListBox->setGrow(1.0f);
+
+    brls::View* firstRow = nullptr;
+
+    for (const auto& opt : menuOptions) {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setFocusable(true);
+        row->setPadding(5, 8, 5, 8);
+        row->setMarginBottom(2);
+        row->setCornerRadius(6);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+        auto* rowLabel = new brls::Label();
+        rowLabel->setText(opt.label);
+        rowLabel->setFontSize(14);
+        rowLabel->setSingleLine(true);
+        row->addView(rowLabel);
+
+        if (!firstRow) firstRow = row;
+
+        // Hover highlight
+        row->getFocusEvent()->subscribe([this, row](brls::View*) {
+            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != row) {
+                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             }
-            }); // end brls::sync
-        },
-        -1
-    );
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+            row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            m_lastHighlightedCatRow = row;
+        });
+
+        // B button to close
+        row->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            hideCategoryPanel();
+            return true;
+        }, true);
+
+        int actionId = opt.actionId;
+        bool isSelectionMode = m_selectionMode;
+        Manga capturedManga = manga;
+        int capturedIndex = index;
+
+        row->registerClickAction([this, actionId, isSelectionMode, capturedManga, capturedIndex](brls::View*) {
+            hideCategoryPanel();
+            brls::sync([this, actionId, isSelectionMode, capturedManga, capturedIndex]() {
+                if (isSelectionMode) {
+                    switch (actionId) {
+                        case 0: // Select / Deselect
+                            m_contentGrid->toggleSelection(capturedIndex);
+                            break;
+                        case 1: { // Download
+                            auto selectedManga = m_contentGrid->getSelectedManga();
+                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
+                            showDownloadSubmenu(selectedManga);
+                            break;
+                        }
+                        case 2: { // Mark as Read
+                            auto selectedManga = m_contentGrid->getSelectedManga();
+                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
+                            markMangaRead(selectedManga);
+                            exitSelectionMode();
+                            break;
+                        }
+                        case 3: { // Mark as Unread
+                            auto selectedManga = m_contentGrid->getSelectedManga();
+                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
+                            markMangaUnread(selectedManga);
+                            exitSelectionMode();
+                            break;
+                        }
+                        case 4: { // Change Categories
+                            auto selectedManga = m_contentGrid->getSelectedManga();
+                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
+                            showChangeCategoryDialog(selectedManga);
+                            break;
+                        }
+                        case 5: { // Remove from Library
+                            auto selectedManga = m_contentGrid->getSelectedManga();
+                            if (selectedManga.empty()) selectedManga.push_back(capturedManga);
+                            removeFromLibrary(selectedManga);
+                            exitSelectionMode();
+                            break;
+                        }
+                        case 6: // Cancel Selection
+                            exitSelectionMode();
+                            break;
+                    }
+                } else {
+                    switch (actionId) {
+                        case 0: // Select
+                            enterSelectionMode(capturedIndex);
+                            break;
+                        case 1: { // Download
+                            std::vector<Manga> list = {capturedManga};
+                            showDownloadSubmenu(list);
+                            break;
+                        }
+                        case 2: // Track
+                            openTracking(capturedManga);
+                            break;
+                        case 3: { // Mark as Read
+                            std::vector<Manga> list = {capturedManga};
+                            markMangaRead(list);
+                            break;
+                        }
+                        case 4: { // Mark as Unread
+                            std::vector<Manga> list = {capturedManga};
+                            markMangaUnread(list);
+                            break;
+                        }
+                        case 5: { // Change Categories
+                            std::vector<Manga> list = {capturedManga};
+                            showChangeCategoryDialog(list);
+                            break;
+                        }
+                        case 6: { // Remove from Library
+                            std::vector<Manga> list = {capturedManga};
+                            removeFromLibrary(list);
+                            break;
+                        }
+                        case 7: // Migrate Source
+                            showMigrateSourceMenu(capturedManga);
+                            break;
+                    }
+                }
+            });
+            return true;
+        });
+        row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
+
+        catListBox->addView(row);
+    }
+
+    auto* mainScroll = new brls::ScrollingFrame();
+    mainScroll->setGrow(1.0f);
+    mainScroll->setContentView(catListBox);
+    m_categoryPanel->addView(mainScroll);
+
+    m_categoryOverlay->setVisibility(brls::Visibility::VISIBLE);
+
+    // Give focus to the first menu row
+    if (firstRow) {
+        brls::Application::giveFocus(firstRow);
+    }
 }
 
 void LibrarySectionTab::showDownloadSubmenu(const std::vector<Manga>& mangaList) {
-    std::vector<std::string> options = {
-        "All Chapters", "Unread Chapters", "Next Chapter",
-        "Next 5 Chapters", "Next 10 Chapters", "Next 25 Chapters"
+    // Toggle: if already showing, hide and return
+    if (m_categoryPanelVisible) {
+        hideCategoryPanel();
+        return;
+    }
+
+    // Save current focus so we can restore it when closing
+    m_preCategoryPanelFocus = brls::Application::getCurrentFocus();
+    m_lastHighlightedCatRow = nullptr;
+
+    // Clear and repopulate the inline panel
+    m_categoryPanel->clearViews();
+    m_categoryPanelVisible = true;
+
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Download");
+    titleLabel->setFontSize(16);
+    titleLabel->setSingleLine(true);
+    titleLabel->setMarginBottom(8);
+    m_categoryPanel->addView(titleLabel);
+
+    struct DlOption { std::string label; std::string mode; };
+    std::vector<DlOption> dlOptions = {
+        {"All Chapters", "all"}, {"Unread Chapters", "unread"}, {"Next Chapter", "next1"},
+        {"Next 5 Chapters", "next5"}, {"Next 10 Chapters", "next10"}, {"Next 25 Chapters", "next25"}
     };
 
-    // Capture by value for async safety
     std::vector<Manga> capturedList = mangaList;
 
-    auto* dropdown = new brls::Dropdown(
-        "Download",
-        options,
-        [this, capturedList](int selected) {
-            if (selected < 0 || selected > 5) return;
-            // Defer to next frame so dropdown fully closes first
-            brls::sync([this, capturedList, selected]() {
-                std::string mode;
-                switch (selected) {
-                    case 0: mode = "all"; break;
-                    case 1: mode = "unread"; break;
-                    case 2: mode = "next1"; break;
-                    case 3: mode = "next5"; break;
-                    case 4: mode = "next10"; break;
-                    case 5: mode = "next25"; break;
-                    default: return;
-                }
-                downloadChapters(capturedList, mode);
+    auto* catListBox = new brls::Box();
+    catListBox->setAxis(brls::Axis::COLUMN);
+    catListBox->setGrow(1.0f);
+
+    brls::View* firstRow = nullptr;
+
+    for (const auto& opt : dlOptions) {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setFocusable(true);
+        row->setPadding(5, 8, 5, 8);
+        row->setMarginBottom(2);
+        row->setCornerRadius(6);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+
+        auto* rowLabel = new brls::Label();
+        rowLabel->setText(opt.label);
+        rowLabel->setFontSize(14);
+        rowLabel->setSingleLine(true);
+        row->addView(rowLabel);
+
+        if (!firstRow) firstRow = row;
+
+        // Hover highlight
+        row->getFocusEvent()->subscribe([this, row](brls::View*) {
+            if (m_lastHighlightedCatRow && m_lastHighlightedCatRow != row) {
+                m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            }
+            row->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+            m_lastHighlightedCatRow = row;
+        });
+
+        // B button to close
+        row->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            hideCategoryPanel();
+            return true;
+        }, true);
+
+        std::string mode = opt.mode;
+        row->registerClickAction([this, mode, capturedList](brls::View*) {
+            hideCategoryPanel();
+            std::string capturedMode = mode;
+            std::vector<Manga> asyncList = capturedList;
+            brls::sync([this, asyncList, capturedMode]() {
+                downloadChapters(asyncList, capturedMode);
                 if (m_selectionMode) exitSelectionMode();
             });
-        }
-    );
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+            return true;
+        });
+        row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
+
+        catListBox->addView(row);
+    }
+
+    auto* mainScroll = new brls::ScrollingFrame();
+    mainScroll->setGrow(1.0f);
+    mainScroll->setContentView(catListBox);
+    m_categoryPanel->addView(mainScroll);
+
+    m_categoryOverlay->setVisibility(brls::Visibility::VISIBLE);
+
+    // Give focus to the first menu row
+    if (firstRow) {
+        brls::Application::giveFocus(firstRow);
+    }
 }
 
 void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& mangaList) {
@@ -2784,7 +2938,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         catArrow->setFontSize(14);
         catArrow->setWidth(20);
         catArrow->setMarginRight(6);
-        catArrow->setText("\u25BC");  // Down arrow (expanded by default)
+        catArrow->setText("\u25B6");  // Right arrow (collapsed by default)
         catGroupRow->addView(catArrow);
 
         auto* catGroupLabel = new brls::Label();
@@ -2805,11 +2959,11 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
 
         catListBox->addView(catGroupRow);
 
-        // Children container (category checkboxes + Apply/Reset, visible by default)
+        // Children container (category checkboxes + Apply/Reset, collapsed by default)
         auto* catChildrenBox = new brls::Box();
         catChildrenBox->setAxis(brls::Axis::COLUMN);
         catChildrenBox->setMarginLeft(12);
-        catChildrenBox->setVisibility(brls::Visibility::VISIBLE);
+        catChildrenBox->setVisibility(brls::Visibility::GONE);
 
         // Category checkbox rows
         for (size_t i = 0; i < visibleCategories->size(); i++) {
@@ -2914,15 +3068,15 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
         buttonRow->addView(resetBtn);
         catChildrenBox->addView(buttonRow);
 
+        // Children start collapsed - disable focusability on all children recursively
+        setChildrenFocusableRecursive(catChildrenBox, false);
+
         // Click on group header to expand/collapse
         catGroupRow->registerClickAction([catChildrenBox, catArrow, catGroupRow](brls::View*) {
             bool isVisible = (catChildrenBox->getVisibility() == brls::Visibility::VISIBLE);
             if (isVisible) {
                 catChildrenBox->setVisibility(brls::Visibility::GONE);
-                for (auto* child : catChildrenBox->getChildren()) {
-                    auto* childBox = dynamic_cast<brls::Box*>(child);
-                    if (childBox) childBox->setFocusable(false);
-                }
+                setChildrenFocusableRecursive(catChildrenBox, false);
                 catArrow->setText("\u25B6");
                 brls::View* focused = brls::Application::getCurrentFocus();
                 if (focused) {
@@ -2937,10 +3091,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
                 }
             } else {
                 catChildrenBox->setVisibility(brls::Visibility::VISIBLE);
-                for (auto* child : catChildrenBox->getChildren()) {
-                    auto* childBox = dynamic_cast<brls::Box*>(child);
-                    if (childBox) childBox->setFocusable(true);
-                }
+                setChildrenFocusableRecursive(catChildrenBox, true);
                 catArrow->setText("\u25BC");
             }
             return true;
@@ -3053,10 +3204,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
             bool isVisible = (dlChildrenBox->getVisibility() == brls::Visibility::VISIBLE);
             if (isVisible) {
                 dlChildrenBox->setVisibility(brls::Visibility::GONE);
-                for (auto* child : dlChildrenBox->getChildren()) {
-                    auto* childBox = dynamic_cast<brls::Box*>(child);
-                    if (childBox) childBox->setFocusable(false);
-                }
+                setChildrenFocusableRecursive(dlChildrenBox, false);
                 dlArrow->setText("\u25B6");
                 brls::View* focused = brls::Application::getCurrentFocus();
                 if (focused) {
@@ -3071,10 +3219,7 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
                 }
             } else {
                 dlChildrenBox->setVisibility(brls::Visibility::VISIBLE);
-                for (auto* child : dlChildrenBox->getChildren()) {
-                    auto* childBox = dynamic_cast<brls::Box*>(child);
-                    if (childBox) childBox->setFocusable(true);
-                }
+                setChildrenFocusableRecursive(dlChildrenBox, true);
                 dlArrow->setText("\u25BC");
             }
             return true;
