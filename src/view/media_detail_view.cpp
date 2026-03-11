@@ -2182,8 +2182,17 @@ void MangaDetailView::onAddToLibrary() {
         }
 
         // Fetch categories for selection
+        std::vector<Category> allCategories;
+        client.fetchCategories(allCategories);
+
+        // Filter out hidden categories
+        const auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
         std::vector<Category> categories;
-        client.fetchCategories(categories);
+        for (const auto& cat : allCategories) {
+            if (hiddenIds.find(cat.id) == hiddenIds.end()) {
+                categories.push_back(cat);
+            }
+        }
 
         brls::sync([this, categories, aliveWeak]() {
             auto alive = aliveWeak.lock();
@@ -2751,8 +2760,17 @@ void MangaDetailView::deleteChapterDownload(const Chapter& chapter) {
 void MangaDetailView::showCategoryDialog() {
     asyncRun([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Category> allCategories;
+        client.fetchCategories(allCategories);
+
+        // Filter out hidden categories
+        const auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
         std::vector<Category> categories;
-        client.fetchCategories(categories);
+        for (const auto& cat : allCategories) {
+            if (hiddenIds.find(cat.id) == hiddenIds.end()) {
+                categories.push_back(cat);
+            }
+        }
 
         brls::sync([this, categories, aliveWeak]() {
             auto alive = aliveWeak.lock();

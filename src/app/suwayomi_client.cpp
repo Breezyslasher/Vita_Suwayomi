@@ -1716,6 +1716,11 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
                     latestUploadedChapter {
                         uploadDate
                     }
+                    categories {
+                        nodes {
+                            id
+                        }
+                    }
                 }
             }
         }
@@ -1796,6 +1801,11 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
                         latestUploadedChapter {
                             uploadDate
                         }
+                        categories {
+                            nodes {
+                                id
+                            }
+                        }
                     }
                 }
             }
@@ -1874,6 +1884,11 @@ bool SuwayomiClient::fetchCategoriesWithMangaGraphQL(std::vector<Category>& cate
                     }
                     latestUploadedChapter {
                         uploadDate
+                    }
+                    categories {
+                        nodes {
+                            id
+                        }
                     }
                 }
             }
