@@ -93,6 +93,7 @@ private:
     void onDeleteDownloads();
     void showDownloadOptions();
     void showCategoryDialog();
+    void showCategorySelectionDialog(int mangaId, const std::set<int>& preselected, std::weak_ptr<bool> aliveWeak);
     void showMangaMenu();
 
     // Chapter actions

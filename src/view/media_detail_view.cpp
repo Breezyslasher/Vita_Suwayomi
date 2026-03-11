@@ -2174,40 +2174,11 @@ void MangaDetailView::onAddToLibrary() {
             // Switch button to "Remove from Library"
             updateLibraryButton();
 
-            // If categories available, show selection dropdown
+            // If categories available, show multi-select dialog
             if (categories.size() > 1) {
                 m_categories = categories;
-                std::vector<std::string> options;
-                for (const auto& cat : categories) {
-                    options.push_back(cat.name);
-                }
-
                 int mangaId = m_manga.id;
-                brls::Dropdown* dropdown = new brls::Dropdown(
-                    "Select Category", options,
-                    [this, mangaId, aliveWeak](int selected) {
-                        if (selected < 0 || selected >= static_cast<int>(m_categories.size())) return;
-
-                        int categoryId = m_categories[selected].id;
-                        brls::sync([mangaId, categoryId, aliveWeak]() {
-                            auto alive = aliveWeak.lock();
-                            if (!alive || !*alive) return;
-                            asyncRun([mangaId, categoryId]() {
-                                SuwayomiClient& client = SuwayomiClient::getInstance();
-                                if (client.setMangaCategories(mangaId, {categoryId})) {
-                                    brls::sync([mangaId]() {
-                                        Application::getInstance().trackCategoryChange(mangaId);
-                                        // Notification removed per user request
-                                    });
-                                } else {
-                                    brls::sync([]() {
-                                        // Notification removed per user request
-                                    });
-                                }
-                            });
-                        });
-                    }, -1);
-                brls::Application::pushActivity(new brls::Activity(dropdown));
+                showCategorySelectionDialog(mangaId, {}, aliveWeak);
             } else {
                 // Notification removed per user request
             }
@@ -2770,51 +2741,221 @@ void MangaDetailView::showCategoryDialog() {
             }
 
             m_categories = categories;
-            std::vector<std::string> options;
-            for (const auto& cat : categories) {
-                options.push_back(cat.name);
-            }
-
             int mangaId = m_manga.id;
 
-            // Find current category index so we don't falsely pre-select the first one
-            int currentIdx = -1;
-            if (!m_manga.categoryIds.empty()) {
-                for (int i = 0; i < static_cast<int>(categories.size()); i++) {
-                    if (categories[i].id == m_manga.categoryIds[0]) {
-                        currentIdx = i;
-                        break;
-                    }
-                }
-            }
-
-            brls::Dropdown* dropdown = new brls::Dropdown(
-                "Move to Category", options,
-                [this, mangaId, aliveWeak](int selected) {
-                    if (selected < 0 || selected >= static_cast<int>(m_categories.size())) return;
-
-                    int categoryId = m_categories[selected].id;
-                    brls::sync([mangaId, categoryId, aliveWeak]() {
-                        auto alive = aliveWeak.lock();
-                        if (!alive || !*alive) return;
-                        asyncRun([mangaId, categoryId]() {
-                            SuwayomiClient& client = SuwayomiClient::getInstance();
-                            if (client.setMangaCategories(mangaId, {categoryId})) {
-                                brls::sync([mangaId]() {
-                                    Application::getInstance().trackCategoryChange(mangaId);
-                                    brls::Application::notify("Category updated");
-                                });
-                            } else {
-                                brls::sync([]() {
-                                    brls::Application::notify("Failed to update category");
-                                });
-                            }
-                        });
-                    });
-                }, currentIdx);
-            brls::Application::pushActivity(new brls::Activity(dropdown));
+            // Build set of current category IDs for pre-selection
+            std::set<int> currentCatIds(m_manga.categoryIds.begin(), m_manga.categoryIds.end());
+            showCategorySelectionDialog(mangaId, currentCatIds, aliveWeak);
         });
     });
+}
+
+void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<int>& preselected, std::weak_ptr<bool> aliveWeak) {
+    // Shared set of selected category IDs
+    auto selectedIds = std::make_shared<std::set<int>>(preselected);
+
+    // Create dialog box (matching source filter / category visibility style)
+    auto* dialogBox = new brls::Box();
+    dialogBox->setAxis(brls::Axis::COLUMN);
+    dialogBox->setWidth(550);
+    dialogBox->setHeight(450);
+    dialogBox->setPadding(20);
+    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
+    dialogBox->setCornerRadius(12);
+
+    // Title
+    auto* titleLabel = new brls::Label();
+    titleLabel->setText("Select Categories");
+    titleLabel->setFontSize(22);
+    titleLabel->setMarginBottom(10);
+    dialogBox->addView(titleLabel);
+
+    // Info label
+    auto* infoLabel = new brls::Label();
+    infoLabel->setText("Tap to toggle categories for this manga");
+    infoLabel->setFontSize(14);
+    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
+    infoLabel->setMarginBottom(15);
+    dialogBox->addView(infoLabel);
+
+    // Create Done button early so it can be captured in lambdas
+    auto* doneBtn = new brls::Button();
+    doneBtn->setText("Done");
+    doneBtn->setMarginTop(15);
+    doneBtn->registerClickAction([this, mangaId, selectedIds, aliveWeak](brls::View*) {
+        brls::Application::popActivity();
+        // Apply selected categories
+        std::vector<int> catIds(selectedIds->begin(), selectedIds->end());
+        brls::sync([mangaId, catIds, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            asyncRun([mangaId, catIds]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                if (client.setMangaCategories(mangaId, catIds)) {
+                    brls::sync([mangaId]() {
+                        Application::getInstance().trackCategoryChange(mangaId);
+                    });
+                }
+            });
+        });
+        return true;
+    });
+    doneBtn->addGestureRecognizer(new brls::TapGestureRecognizer(doneBtn));
+
+    // B button on Done button closes dialog and applies
+    doneBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this, mangaId, selectedIds, aliveWeak](brls::View*) {
+        brls::Application::popActivity();
+        std::vector<int> catIds(selectedIds->begin(), selectedIds->end());
+        brls::sync([mangaId, catIds, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            asyncRun([mangaId, catIds]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                if (client.setMangaCategories(mangaId, catIds)) {
+                    brls::sync([mangaId]() {
+                        Application::getInstance().trackCategoryChange(mangaId);
+                    });
+                }
+            });
+        });
+        return true;
+    }, true);
+
+    // Scrollable category list
+    auto* scrollView = new brls::ScrollingFrame();
+    scrollView->setGrow(1.0f);
+
+    auto* catList = new brls::Box();
+    catList->setAxis(brls::Axis::COLUMN);
+
+    for (size_t i = 0; i < m_categories.size(); i++) {
+        const auto& cat = m_categories[i];
+
+        auto* catRow = new brls::Box();
+        catRow->setAxis(brls::Axis::ROW);
+        catRow->setAlignItems(brls::AlignItems::CENTER);
+        catRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
+        catRow->setPadding(10, 12, 10, 12);
+        catRow->setMarginBottom(6);
+        catRow->setCornerRadius(8);
+        catRow->setFocusable(true);
+
+        bool isSelected = (selectedIds->find(cat.id) != selectedIds->end());
+        catRow->setBackgroundColor(isSelected ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
+
+        // Category info box
+        auto* infoBox = new brls::Box();
+        infoBox->setAxis(brls::Axis::COLUMN);
+        infoBox->setGrow(1.0f);
+
+        auto* nameLabel = new brls::Label();
+        std::string displayName = cat.name;
+        if (displayName.length() > 20) {
+            displayName = displayName.substr(0, 18) + "..";
+        }
+        nameLabel->setText(displayName);
+        nameLabel->setFontSize(16);
+        infoBox->addView(nameLabel);
+
+        if (cat.mangaCount > 0) {
+            auto* countLabel = new brls::Label();
+            countLabel->setText(std::to_string(cat.mangaCount) + " manga");
+            countLabel->setFontSize(12);
+            countLabel->setTextColor(Application::getInstance().getDimTextColor());
+            infoBox->addView(countLabel);
+        }
+
+        catRow->addView(infoBox);
+
+        // Status indicator (checkmark)
+        auto* statusLabel = new brls::Label();
+        statusLabel->setText(isSelected ? "\u2713" : "");
+        statusLabel->setFontSize(16);
+        statusLabel->setTextColor(Application::getInstance().getSuccessTextColor());
+        statusLabel->setMarginRight(10);
+        catRow->addView(statusLabel);
+
+        int catId = cat.id;
+
+        // Click to toggle category selection
+        catRow->registerClickAction([catRow, catId, statusLabel, selectedIds](brls::View*) {
+            bool currentlySelected = (selectedIds->find(catId) != selectedIds->end());
+
+            if (currentlySelected) {
+                selectedIds->erase(catId);
+                catRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+                statusLabel->setText("");
+            } else {
+                selectedIds->insert(catId);
+                catRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
+                statusLabel->setText("\u2713");
+                statusLabel->setTextColor(Application::getInstance().getSuccessTextColor());
+            }
+            return true;
+        });
+        catRow->addGestureRecognizer(new brls::TapGestureRecognizer(catRow));
+
+        // B button on rows closes dialog and applies
+        catRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [this, mangaId, selectedIds, aliveWeak](brls::View*) {
+            brls::Application::popActivity();
+            std::vector<int> catIds(selectedIds->begin(), selectedIds->end());
+            brls::sync([mangaId, catIds, aliveWeak]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                asyncRun([mangaId, catIds]() {
+                    SuwayomiClient& client = SuwayomiClient::getInstance();
+                    if (client.setMangaCategories(mangaId, catIds)) {
+                        brls::sync([mangaId]() {
+                            Application::getInstance().trackCategoryChange(mangaId);
+                        });
+                    }
+                });
+            });
+            return true;
+        }, true);
+
+        catList->addView(catRow);
+    }
+
+    if (m_categories.empty()) {
+        auto* label = new brls::Label();
+        label->setText("No categories found");
+        label->setFontSize(16);
+        label->setMarginTop(20);
+        catList->addView(label);
+    }
+
+    scrollView->setContentView(catList);
+    dialogBox->addView(scrollView);
+    dialogBox->addView(doneBtn);
+
+    // Circle button closes dialog and applies
+    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [this, mangaId, selectedIds, aliveWeak](brls::View*) {
+        brls::Application::popActivity();
+        std::vector<int> catIds(selectedIds->begin(), selectedIds->end());
+        brls::sync([mangaId, catIds, aliveWeak]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            asyncRun([mangaId, catIds]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                if (client.setMangaCategories(mangaId, catIds)) {
+                    brls::sync([mangaId]() {
+                        Application::getInstance().trackCategoryChange(mangaId);
+                    });
+                }
+            });
+        });
+        return true;
+    }, true);
+
+    // Navigation: last row -> down goes to doneBtn, doneBtn -> up goes to last row
+    auto& catChildren = catList->getChildren();
+    if (!catChildren.empty()) {
+        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, doneBtn);
+        doneBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+    }
+
+    brls::Application::pushActivity(new brls::Activity(dialogBox));
 }
 
 void MangaDetailView::showTrackingDialog() {
