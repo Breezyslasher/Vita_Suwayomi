@@ -2923,9 +2923,30 @@ void MangaDetailView::showCategorySelectionDialog(int mangaId, const std::set<in
     });
     resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
 
+    applyBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedCatRow) {
+            m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedCatRow = nullptr;
+        }
+    });
+    resetBtn->getFocusEvent()->subscribe([this](brls::View*) {
+        if (m_lastHighlightedCatRow) {
+            m_lastHighlightedCatRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
+            m_lastHighlightedCatRow = nullptr;
+        }
+    });
+
     buttonRow->addView(applyBtn);
     buttonRow->addView(resetBtn);
     m_categoryPanel->addView(buttonRow);
+
+    // Custom navigation: link last category row <-> apply button
+    auto& catChildren = catListBox->getChildren();
+    if (!catChildren.empty()) {
+        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
+        applyBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+        resetBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+    }
 
     // B button on panel buttons to close panel
     applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {

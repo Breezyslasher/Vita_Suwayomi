@@ -2856,6 +2856,14 @@ void LibrarySectionTab::showChangeCategoryDialog(const std::vector<Manga>& manga
     buttonRow->addView(resetBtn);
     m_categoryPanel->addView(buttonRow);
 
+    // Custom navigation: link last category row <-> apply button
+    auto& catChildren = catListBox->getChildren();
+    if (!catChildren.empty()) {
+        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, applyBtn);
+        applyBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+        resetBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
+    }
+
     // B button on panel buttons to close panel
     applyBtn->registerAction("Close", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
         hideCategoryPanel();
