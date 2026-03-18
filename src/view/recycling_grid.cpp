@@ -6,6 +6,8 @@
 #include "view/recycling_grid.hpp"
 #include "view/media_item_cell.hpp"
 #include "view/long_press_gesture.hpp"
+#include "utils/perf_overlay.hpp"
+#include "app/application.hpp"
 #include <cmath>
 
 namespace vitasuwayomi {
@@ -668,8 +670,14 @@ void RecyclingGrid::resetThumbnailLoadStates() {
 }
 
 void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) {
+    auto& perf = PerfOverlay::getInstance();
+    perf.endFrame();   // End previous frame timing
+    perf.beginFrame(); // Start this frame timing
+
+    PERF_BEGIN("grid_draw");
     // Call parent draw first
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
+    PERF_END("grid_draw");
 
     // Check scroll position for thumbnail loading during touch scrolling.
     // The focus-based loading (loadThumbnailsNearIndex) handles D-pad navigation,
@@ -691,6 +699,11 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             loadThumbnailsForScrollPosition();
         }
     }
+
+    // Draw performance overlay on top (uses screen coordinates, ignores scroll)
+    // Reset scissor so overlay draws over everything
+    nvgResetScissor(vg);
+    perf.draw(vg, 960.0f, 544.0f);
 }
 
 void RecyclingGrid::loadThumbnailsForScrollPosition() {

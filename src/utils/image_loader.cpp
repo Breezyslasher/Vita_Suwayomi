@@ -5,6 +5,7 @@
  */
 
 #include "utils/image_loader.hpp"
+#include "utils/perf_overlay.hpp"
 #include "utils/http_client.hpp"
 #include "utils/library_cache.hpp"
 #include "app/suwayomi_client.hpp"
@@ -2119,6 +2120,13 @@ void ImageLoader::processPendingTextures() {
             if (update.callback) update.callback(update.target);
         }
         processed++;
+    }
+
+    // Report stats to perf overlay
+    PerfOverlay::getInstance().recordTextureUploads(processed);
+    {
+        std::lock_guard<std::mutex> lock(s_pendingMutex);
+        PerfOverlay::getInstance().recordPendingTextures(static_cast<int>(s_pendingTextures.size()));
     }
 
     // If more pending, schedule another batch for the next frame
