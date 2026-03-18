@@ -181,7 +181,7 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
 
     // Update each cell with the new manga data at its position
     // This preserves the grid structure and just updates the displayed content
-    int maxInitialRows = 6;
+    int maxInitialRows = 3;  // Reduced from 6 to prevent FPS drops
     int cellsInInitialRows = maxInitialRows * m_columns;
 
     for (size_t i = 0; i < m_cells.size() && i < items.size(); i++) {
@@ -200,7 +200,7 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
     }
 
     // Only load thumbnails for a buffer beyond visible rows (not all remaining)
-    int bufferRows = 3;
+    int bufferRows = 2;  // Reduced from 3
     int preloadUpToCell = std::min((maxInitialRows + bufferRows) * m_columns, static_cast<int>(m_cells.size()));
 
     if (static_cast<int>(m_cells.size()) > cellsInInitialRows) {
@@ -387,8 +387,8 @@ void RecyclingGrid::setupGrid() {
         });
     } else {
         // Small library - all rows built, trigger buffer preload
-        int maxInitialRows = 6;
-        int bufferRows = 3;
+        int maxInitialRows = 3;
+        int bufferRows = 2;  // Reduced from 3 to prevent queue flooding
         int preloadUpToRow = std::min(maxInitialRows + bufferRows, m_totalRowsNeeded);
         int startCell = std::min(maxInitialRows * m_columns, (int)m_cells.size());
         int endCell = std::min(preloadUpToRow * m_columns, (int)m_cells.size());
@@ -399,7 +399,7 @@ void RecyclingGrid::setupGrid() {
 }
 
 void RecyclingGrid::createRowRange(int startRow, int endRow) {
-    int maxInitialRows = 6;
+    int maxInitialRows = 3;  // Reduced from 6 - fewer immediate thumbnail loads to prevent FPS drops
 
     for (int row = startRow; row < endRow; row++) {
         auto* rowBox = new brls::Box();
@@ -581,8 +581,8 @@ void RecyclingGrid::buildNextRowBatch() {
     } else {
         // All rows built - trigger thumbnail preloading for buffer rows
         m_incrementalBuildActive = false;
-        int maxInitialRows = 6;
-        int bufferRows = 3;
+        int maxInitialRows = 3;
+        int bufferRows = 2;  // Reduced from 3 to prevent queue flooding
         int preloadUpToRow = std::min(maxInitialRows + bufferRows, m_totalRowsNeeded);
         int startCell = std::min(maxInitialRows * m_columns, (int)m_cells.size());
         int endCell = std::min(preloadUpToRow * m_columns, (int)m_cells.size());
@@ -600,9 +600,10 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     int focusedRow = index / m_columns;
     int totalRows = (static_cast<int>(m_cells.size()) + m_columns - 1) / m_columns;
 
-    // Load thumbnails for rows around the focused cell: 2 rows above, 6 rows below
-    int loadFromRow = std::max(0, focusedRow - 2);
-    int loadToRow = std::min(totalRows, focusedRow + 7);  // 6 rows below (visible area + buffer)
+    // Load thumbnails for rows around the focused cell: 1 row above, 3 rows below
+    // Reduced from 2+6 to 1+3 to prevent queue flooding that causes FPS drops
+    int loadFromRow = std::max(0, focusedRow - 1);
+    int loadToRow = std::min(totalRows, focusedRow + 4);
 
     int startCell = loadFromRow * m_columns;
     int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
@@ -620,7 +621,7 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     // On PS Vita with 128MB RAM, keeping 100+ cover textures loaded wastes VRAM.
     // Unload cells more than 12 rows away from focus - they'll reload from
     // ImageLoader's LRU memory cache when scrolled back (fast, no network hit).
-    static constexpr int UNLOAD_DISTANCE_ROWS = 12;
+    static constexpr int UNLOAD_DISTANCE_ROWS = 8;  // Reduced from 12 to free GPU memory faster
     int unloadAboveRow = focusedRow - UNLOAD_DISTANCE_ROWS;
     int unloadBelowRow = focusedRow + UNLOAD_DISTANCE_ROWS;
 
@@ -670,18 +671,23 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     // Call parent draw first
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
 
-    // Check scroll position for thumbnail loading during touch scrolling
+    // Check scroll position for thumbnail loading during touch scrolling.
     // The focus-based loading (loadThumbnailsNearIndex) handles D-pad navigation,
     // but during touch scrolling the focus index doesn't change.
-    // Check every ~half row height of scroll movement to avoid excessive work.
-    if (!m_cells.empty() && m_columns > 0) {
+    // Throttled: require full row of scroll AND 10-frame cooldown to prevent
+    // queue flooding that causes FPS drops to <10 on PS Vita.
+    if (m_scrollLoadCooldown > 0) {
+        m_scrollLoadCooldown--;
+    }
+    if (!m_cells.empty() && m_columns > 0 && m_scrollLoadCooldown == 0) {
         float scrollY = this->getContentOffsetY();
         float scrollDelta = std::abs(scrollY - m_lastScrollLoadY);
         float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
 
-        // Trigger when scrolled more than half a row since last load
-        if (scrollDelta > rowHeight * 0.5f) {
+        // Trigger when scrolled more than a full row since last load (was 0.5 row)
+        if (scrollDelta > rowHeight * 1.5f) {
             m_lastScrollLoadY = scrollY;
+            m_scrollLoadCooldown = 10;  // Wait 10 frames before next load trigger
             loadThumbnailsForScrollPosition();
         }
     }
@@ -699,9 +705,10 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
     int firstVisibleRow = std::max(0, static_cast<int>(scrollY / rowHeight));
     int lastVisibleRow = std::min(totalRows, static_cast<int>((scrollY + viewHeight) / rowHeight) + 1);
 
-    // Load 2 rows above and 3 rows below the visible area as buffer
-    int loadFromRow = std::max(0, firstVisibleRow - 2);
-    int loadToRow = std::min(totalRows, lastVisibleRow + 3);
+    // Load 1 row above and 2 rows below the visible area as buffer
+    // Reduced from 2+3 to 1+2 to prevent queue flooding during fast scrolling
+    int loadFromRow = std::max(0, firstVisibleRow - 1);
+    int loadToRow = std::min(totalRows, lastVisibleRow + 2);
 
     int startCell = loadFromRow * m_columns;
     int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
@@ -713,7 +720,7 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
     }
 
     // Also apply texture recycling for scroll-based movement (same as focus-based)
-    static constexpr int SCROLL_UNLOAD_DISTANCE_ROWS = 12;
+    static constexpr int SCROLL_UNLOAD_DISTANCE_ROWS = 8;  // Reduced from 12
     int centerRow = (firstVisibleRow + lastVisibleRow) / 2;
     int unloadAboveRow = centerRow - SCROLL_UNLOAD_DISTANCE_ROWS;
     int unloadBelowRow = centerRow + SCROLL_UNLOAD_DISTANCE_ROWS;

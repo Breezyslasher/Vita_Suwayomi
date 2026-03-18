@@ -2079,9 +2079,21 @@ void ImageLoader::queueTextureUpdate(const std::vector<uint8_t>& data, brls::Ima
 void ImageLoader::processPendingTextures() {
     s_pendingScheduled = false;
 
-    // Process up to MAX_TEXTURES_PER_FRAME textures this frame
+    // Process up to MAX_TEXTURES_PER_FRAME textures this frame, with a time budget.
+    // Each GPU texture upload (setImageFromMem) can take 15-20ms on PS Vita,
+    // so we also enforce a 8ms time limit to avoid blowing the 16.7ms frame budget.
+    auto frameStart = std::chrono::steady_clock::now();
+    static constexpr int64_t MAX_UPLOAD_TIME_US = 8000;  // 8ms time budget
+
     int processed = 0;
     while (processed < MAX_TEXTURES_PER_FRAME) {
+        // Check time budget before processing next texture
+        if (processed > 0) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - frameStart).count();
+            if (elapsed >= MAX_UPLOAD_TIME_US) break;
+        }
+
         PendingTextureUpdate update;
         {
             std::lock_guard<std::mutex> lock(s_pendingMutex);
@@ -2092,10 +2104,6 @@ void ImageLoader::processPendingTextures() {
 
         if (update.target) {
             // Skip if the owning view was destroyed while the image was downloading.
-            // Without this check, writing to a freed brls::Image* causes a crash.
-            // Check alive TWICE: once before and once after validation to narrow
-            // the TOCTOU window (both checks run on main thread, so the real risk
-            // is a brls::sync callback destroying the cell between iterations).
             if (update.alive && !*update.alive) {
                 continue;
             }
@@ -2103,8 +2111,7 @@ void ImageLoader::processPendingTextures() {
             if (update.data.empty()) {
                 continue;
             }
-            // Re-check alive right before the actual GPU upload - a brls::sync
-            // callback processed earlier in this frame could have destroyed the cell.
+            // Re-check alive right before the actual GPU upload
             if (update.alive && !*update.alive) {
                 continue;
             }
