@@ -79,6 +79,29 @@ RecyclingGrid::~RecyclingGrid() {
         *m_alive = false;
     }
     m_incrementalBuildActive = false;
+
+    // If virtual scroll is active, some rows are detached from m_contentBox
+    // and won't be cleaned up by its destructor. We need to delete them manually.
+    if (m_virtualScrollEnabled) {
+        // First detach everything from m_contentBox (without deleting)
+        auto& children = m_contentBox->getChildren();
+        while (!children.empty()) {
+            m_contentBox->removeView(children.back(), false);
+        }
+        // Now delete ALL rows manually (both windowed and detached)
+        for (auto* row : m_rows) {
+            delete row;
+        }
+        m_rows.clear();
+        m_cells.clear();  // Cells were children of rows, already deleted
+        m_virtualScrollEnabled = false;
+    }
+    // Delete spacers - they may or may not be attached to contentBox
+    // We already detached everything above if virtual scroll was active
+    delete m_topSpacer;
+    m_topSpacer = nullptr;
+    delete m_bottomSpacer;
+    m_bottomSpacer = nullptr;
 }
 
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
@@ -94,6 +117,22 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     // Cancel any ongoing incremental build before appending
     m_incrementalBuildActive = false;
 
+    // Temporarily disable virtual scroll so rows can be manipulated directly
+    bool wasVirtual = m_virtualScrollEnabled;
+    if (wasVirtual) {
+        // Detach spacers and windowed rows, then re-add all rows to m_contentBox
+        auto& children = m_contentBox->getChildren();
+        while (!children.empty()) {
+            m_contentBox->removeView(children.back(), false);
+        }
+        for (auto* row : m_rows) {
+            m_contentBox->addView(row);
+        }
+        m_virtualScrollEnabled = false;
+        m_windowFirstRow = -1;
+        m_windowLastRow = -1;
+    }
+
     int oldCellCount = static_cast<int>(m_cells.size());
     int oldRowCount = static_cast<int>(m_rows.size());
 
@@ -108,20 +147,13 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     m_totalRowsNeeded = newTotalRows;
 
     // If the last existing row was partial, remove and rebuild it with new items
-    // Use m_cells.size() (not m_items.size()) to compute the actual number of cells
-    // in the last row, since incremental build may not have created all rows yet.
     int startRow;
     if (oldCellCount > 0 && oldRowCount > 0) {
         int cellsInLastRow = oldCellCount - (oldRowCount - 1) * m_columns;
 
-        // Sanity check: cellsInLastRow must be valid
         if (cellsInLastRow <= 0 || cellsInLastRow > m_columns) {
-            // State is inconsistent - fall back to full rebuild from existing rows
             startRow = oldRowCount;
         } else if (cellsInLastRow < m_columns) {
-            // Partial last row - remove and rebuild it with new items
-
-            // Move focus away if it's on a cell in the partial row being removed
             int partialStart = oldCellCount - cellsInLastRow;
             for (int i = partialStart; i < oldCellCount; i++) {
                 if (m_cells[i] && m_cells[i]->isFocused()) {
@@ -130,19 +162,16 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
                 }
             }
 
-            // Remove cell pointers for the partial row (view memory freed by removeView)
             for (int i = 0; i < cellsInLastRow; i++) {
                 m_cells.pop_back();
             }
 
-            // Remove last row view (deletes the row box and its children)
             brls::Box* lastRow = m_rows.back();
             m_rows.pop_back();
             m_contentBox->removeView(lastRow);
 
             startRow = oldRowCount - 1;
         } else {
-            // Last row is full, just append new rows
             startRow = oldRowCount;
         }
     } else {
@@ -151,6 +180,9 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
 
     // Create only the new rows
     createRowRange(startRow, newTotalRows);
+
+    // Re-enable virtual scroll if it was active (or if grid is now large enough)
+    enableVirtualScroll();
 
     brls::Logger::info("RecyclingGrid: appendItems - added {} items, now {} total ({} rows)",
                         newItems.size(), m_items.size(), newTotalRows);
@@ -320,6 +352,9 @@ void RecyclingGrid::setOnSelectionChanged(std::function<void(int count)> callbac
 void RecyclingGrid::clearViews() {
     m_incrementalBuildActive = false;  // Cancel any pending incremental build
 
+    // Disable virtual scroll - re-adds all rows to m_contentBox and deletes spacers
+    disableVirtualScroll();
+
     // Move focus away from cells before deleting them (same reason as setupGrid)
     for (auto* cell : m_cells) {
         if (cell && cell->isFocused()) {
@@ -345,6 +380,13 @@ void RecyclingGrid::setupGrid() {
 
     // Reset scroll-based loading state
     m_lastScrollLoadY = 0.0f;
+
+    // Disable virtual scroll before clearing - detaches rows without deleting
+    disableVirtualScroll();
+
+    // Reset cached visible range
+    m_cachedFirstVisible = -1;
+    m_cachedLastVisible = -1;
 
     // CRITICAL: Move focus away from cells before deleting them.
     // clearViews() will destroy all cells, but brls may still hold
@@ -594,7 +636,141 @@ void RecyclingGrid::buildNextRowBatch() {
         }
         brls::Logger::info("RecyclingGrid: Incremental build complete - {} cells in {} rows",
                             m_cells.size(), m_totalRowsNeeded);
+
+        // Enable virtual scroll windowing for large grids
+        // This reduces m_contentBox children from 76+ to ~12, cutting draw overhead
+        enableVirtualScroll();
     }
+}
+
+void RecyclingGrid::enableVirtualScroll() {
+    if (m_virtualScrollEnabled) return;
+    if (m_rows.size() <= 7) return;  // Not worth it for small grids (<=42 cells at 6 cols)
+    if (m_cellHeight <= 0) return;    // Can't compute row positions with variable heights (list mode)
+
+    m_virtualScrollEnabled = true;
+    m_windowFirstRow = -1;
+    m_windowLastRow = -1;
+
+    // Create spacers if needed - these take up vertical space to maintain scroll height
+    if (!m_topSpacer) {
+        m_topSpacer = new brls::Box();
+        m_topSpacer->setGrow(0);
+        m_topSpacer->setShrink(0);
+    }
+    if (!m_bottomSpacer) {
+        m_bottomSpacer = new brls::Box();
+        m_bottomSpacer->setGrow(0);
+        m_bottomSpacer->setShrink(0);
+    }
+
+    // Detach all rows from m_contentBox (without deleting them)
+    // Remove in reverse order to avoid index shifting
+    auto& children = m_contentBox->getChildren();
+    while (!children.empty()) {
+        m_contentBox->removeView(children.back(), false);
+    }
+
+    // Add spacers + initial visible rows
+    // Default to showing first rows
+    float scrollY = this->getContentOffsetY();
+    float viewH = this->getHeight();
+    float rowH = static_cast<float>(m_cellHeight > 0 ? m_cellHeight + m_rowMargin : 200);
+    int firstVisible = std::max(0, static_cast<int>(scrollY / rowH) - 1);
+    int lastVisible = std::min(static_cast<int>(m_rows.size()),
+                                static_cast<int>((scrollY + viewH) / rowH) + 2);
+
+    // Set up initial window
+    float topHeight = firstVisible * rowH;
+    m_topSpacer->setHeight(topHeight > 0 ? topHeight : 0);
+    m_contentBox->addView(m_topSpacer);
+
+    for (int i = firstVisible; i < lastVisible; i++) {
+        m_contentBox->addView(m_rows[i]);
+    }
+
+    int remainingRows = static_cast<int>(m_rows.size()) - lastVisible;
+    m_bottomSpacer->setHeight(remainingRows > 0 ? remainingRows * rowH : 0);
+    m_contentBox->addView(m_bottomSpacer);
+
+    m_windowFirstRow = firstVisible;
+    m_windowLastRow = lastVisible;
+
+    brls::Logger::info("RecyclingGrid: Virtual scroll enabled - {} total rows, window [{}, {})",
+                       m_rows.size(), firstVisible, lastVisible);
+}
+
+void RecyclingGrid::disableVirtualScroll() {
+    if (!m_virtualScrollEnabled) return;
+    m_virtualScrollEnabled = false;
+
+    // Detach spacers and windowed rows without deleting
+    auto& children = m_contentBox->getChildren();
+    while (!children.empty()) {
+        m_contentBox->removeView(children.back(), false);
+    }
+
+    // Re-add ALL rows to m_contentBox so clearViews() can properly delete them
+    for (auto* row : m_rows) {
+        m_contentBox->addView(row);
+    }
+
+    // Delete spacers since they're no longer needed
+    delete m_topSpacer;
+    m_topSpacer = nullptr;
+    delete m_bottomSpacer;
+    m_bottomSpacer = nullptr;
+
+    m_windowFirstRow = -1;
+    m_windowLastRow = -1;
+}
+
+void RecyclingGrid::updateRowWindow(int firstVisible, int lastVisible) {
+    if (!m_virtualScrollEnabled) return;
+
+    // Add tight buffer around visible range to minimize attached cells.
+    // On PS Vita, each cell costs ~0.33-0.46ms to draw (texture + nvg overlay),
+    // so reducing from 12 rows (72 cells, ~33ms) to 6 rows (36 cells, ~15ms)
+    // is critical for maintaining 30+ FPS with large libraries.
+    int windowFirst = std::max(0, firstVisible - 1);
+    int windowLast = std::min(static_cast<int>(m_rows.size()), lastVisible + 2);
+
+    if (windowFirst == m_windowFirstRow && windowLast == m_windowLastRow) return;
+
+    // Hysteresis: only update if visible rows are near the window edge
+    // This prevents rebuilding the content box on every single row of scrolling
+    if (m_windowFirstRow >= 0) {
+        bool needsUpdate = (firstVisible <= m_windowFirstRow + 1) ||
+                           (lastVisible >= m_windowLastRow - 1);
+        if (!needsUpdate) return;
+    }
+
+    float rowH = static_cast<float>(m_cellHeight + m_rowMargin);
+
+    // Rebuild the content box with new window
+    // Detach all current children without deleting
+    auto& children = m_contentBox->getChildren();
+    while (!children.empty()) {
+        m_contentBox->removeView(children.back(), false);
+    }
+
+    // Top spacer
+    float topHeight = windowFirst * rowH;
+    m_topSpacer->setHeight(topHeight > 0 ? topHeight : 0);
+    m_contentBox->addView(m_topSpacer);
+
+    // Visible rows
+    for (int i = windowFirst; i < windowLast; i++) {
+        m_contentBox->addView(m_rows[i]);
+    }
+
+    // Bottom spacer
+    int remainingRows = static_cast<int>(m_rows.size()) - windowLast;
+    m_bottomSpacer->setHeight(remainingRows > 0 ? remainingRows * rowH : 0);
+    m_contentBox->addView(m_bottomSpacer);
+
+    m_windowFirstRow = windowFirst;
+    m_windowLastRow = windowLast;
 }
 
 void RecyclingGrid::loadThumbnailsNearIndex(int index) {
@@ -675,11 +851,9 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     perf.endFrame();   // End previous frame timing
     perf.beginFrame(); // Start this frame timing
 
-    // Visibility culling: hide off-screen rows so ScrollingFrame::draw() skips them.
-    // Without this, ALL rows (including off-screen) get full NanoVG draw calls issued,
-    // wasting ~80% of CPU frame time on path generation for invisible content.
-    // INVISIBLE preserves layout space (scroll height stays correct) but skips draw.
-    // Optimization: only update rows at the boundaries of the visible range, not all rows.
+    // Virtual row windowing: only keep ~12 rows attached to m_contentBox.
+    // This eliminates the O(totalRows) child iteration in borealis draw loop
+    // that was causing 10-15ms overhead with 76+ rows (453 items).
     if (!m_rows.empty() && m_cellHeight > 0) {
         float scrollY = this->getContentOffsetY();
         float viewH = this->getHeight();
@@ -688,40 +862,35 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         int lastVisible = std::min(static_cast<int>(m_rows.size()),
                                     static_cast<int>((scrollY + viewH) / rowH) + 2);
 
-        // Only update rows if visible range changed (avoid O(rows) iteration every frame)
-        if (firstVisible != m_cachedFirstVisible || lastVisible != m_cachedLastVisible) {
-            // Hide rows that are now invisible
-            if (m_cachedFirstVisible >= 0) {
-                // Hide rows above the new range
-                for (int i = m_cachedFirstVisible; i < firstVisible; i++) {
-                    if (i >= 0 && i < static_cast<int>(m_rows.size())) {
-                        m_rows[i]->setVisibility(brls::Visibility::INVISIBLE);
+        if (m_virtualScrollEnabled) {
+            // Update the row window (only detach/attach rows when range changes)
+            updateRowWindow(firstVisible, lastVisible);
+        } else {
+            // Fallback: visibility-based culling for small grids or during incremental build
+            if (firstVisible != m_cachedFirstVisible || lastVisible != m_cachedLastVisible) {
+                if (m_cachedFirstVisible >= 0) {
+                    for (int i = m_cachedFirstVisible; i < firstVisible; i++) {
+                        if (i >= 0 && i < static_cast<int>(m_rows.size()))
+                            m_rows[i]->setVisibility(brls::Visibility::INVISIBLE);
+                    }
+                    for (int i = lastVisible; i < m_cachedLastVisible; i++) {
+                        if (i >= 0 && i < static_cast<int>(m_rows.size()))
+                            m_rows[i]->setVisibility(brls::Visibility::INVISIBLE);
+                    }
+                } else {
+                    for (int i = 0; i < static_cast<int>(m_rows.size()); i++) {
+                        brls::Visibility desired = (i >= firstVisible && i < lastVisible)
+                            ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE;
+                        m_rows[i]->setVisibility(desired);
                     }
                 }
-                // Hide rows below the new range
-                for (int i = lastVisible; i < m_cachedLastVisible; i++) {
-                    if (i >= 0 && i < static_cast<int>(m_rows.size())) {
-                        m_rows[i]->setVisibility(brls::Visibility::INVISIBLE);
-                    }
+                for (int i = firstVisible; i < lastVisible; i++) {
+                    if (i >= 0 && i < static_cast<int>(m_rows.size()))
+                        m_rows[i]->setVisibility(brls::Visibility::VISIBLE);
                 }
-            } else {
-                // First call: set all visibility in one pass
-                for (int i = 0; i < static_cast<int>(m_rows.size()); i++) {
-                    brls::Visibility desired = (i >= firstVisible && i < lastVisible)
-                        ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE;
-                    m_rows[i]->setVisibility(desired);
-                }
+                m_cachedFirstVisible = firstVisible;
+                m_cachedLastVisible = lastVisible;
             }
-
-            // Show rows that are now visible
-            for (int i = firstVisible; i < lastVisible; i++) {
-                if (i >= 0 && i < static_cast<int>(m_rows.size())) {
-                    m_rows[i]->setVisibility(brls::Visibility::VISIBLE);
-                }
-            }
-
-            m_cachedFirstVisible = firstVisible;
-            m_cachedLastVisible = lastVisible;
         }
     }
 
@@ -989,6 +1158,19 @@ brls::View* RecyclingGrid::getFirstCell() const {
 
 void RecyclingGrid::focusIndex(int index) {
     if (index >= 0 && index < static_cast<int>(m_cells.size())) {
+        // Ensure the target cell's row is in the window before focusing
+        if (m_virtualScrollEnabled && m_columns > 0) {
+            int targetRow = index / m_columns;
+            if (targetRow < m_windowFirstRow || targetRow >= m_windowLastRow) {
+                // Force window update to include the target row
+                float rowH = static_cast<float>(m_cellHeight + m_rowMargin);
+                int first = std::max(0, targetRow - 1);
+                int last = std::min(static_cast<int>(m_rows.size()), targetRow + 3);
+                // Temporarily widen check by setting m_windowFirstRow to force update
+                m_windowFirstRow = -1;
+                updateRowWindow(first, last);
+            }
+        }
         brls::Application::giveFocus(m_cells[index]);
         m_focusedIndex = index;
         m_pendingFocusIndex = -1;
