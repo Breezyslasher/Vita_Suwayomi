@@ -104,6 +104,16 @@ private:
     int m_unreadMarginTop = 6;
     int m_unreadMarginLeft = 6;
 
+    // --- Cached text measurements (avoids per-frame nvgTextBox wrapping + measurement) ---
+    bool m_overlayDirty = true;       // Recompute cached text on next draw
+    float m_cachedCellWidth = 0;      // Cell width when cache was computed
+    std::string m_cachedLine1;        // Pre-split title line 1
+    std::string m_cachedLine2;        // Pre-split title line 2
+    float m_cachedLineHeight = 0;     // Font line height for multi-line spacing
+    float m_cachedTitleBlockH = 0;    // Total height of rendered title text
+    float m_cachedBadgeTextW = 0;     // Badge text width
+    float m_cachedBadgeTextH = 0;     // Badge text height
+
     // Shared flag for async callback safety - set to false in destructor
     // so pending ImageLoader callbacks skip writing to our destroyed m_thumbnailImage
     std::shared_ptr<bool> m_alive;
