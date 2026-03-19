@@ -168,8 +168,8 @@ private:
 
     // Batched texture upload queue for RotatableImage (webtoon/manga reader pages).
     // Same concept as PendingTextureUpdate but for full-size reader images.
-    // Limits GPU uploads to MAX_ROTATABLE_TEXTURES_PER_FRAME per frame to keep consistent
-    // frame rate while processing preloaded pages. Higher rate reduces upload queue buildup.
+    // Limits GPU uploads to MAX_ROTATABLE_TEXTURES_PER_FRAME per frame to prevent
+    // the "group loading" appearance where multiple images pop in simultaneously.
     struct PendingRotatableTextureUpdate {
         // Single-texture path
         std::vector<uint8_t> data;
@@ -186,7 +186,7 @@ private:
     static std::queue<PendingRotatableTextureUpdate> s_pendingRotatableTextures;
     static std::mutex s_pendingRotatableMutex;
     static std::atomic<bool> s_pendingRotatableScheduled;
-    static constexpr int MAX_ROTATABLE_TEXTURES_PER_FRAME = 2;  // 2 per frame: spreads 8 pending loads over 4 frames, balances throughput vs frame time
+    static constexpr int MAX_ROTATABLE_TEXTURES_PER_FRAME = 1;  // 1 per frame to avoid stutter during scroll
 
     // Queue a RotatableImage texture for batched upload (single-texture path)
     static void queueRotatableTextureUpdate(const std::vector<uint8_t>& data, RotatableImage* target,
