@@ -98,6 +98,7 @@ set(APP_SOURCES
     src/utils/http_client.cpp
     src/utils/image_loader.cpp
     src/utils/library_cache.cpp
+    src/utils/perf_overlay.cpp
     src/utils/vita_stubs.c
 )
 
