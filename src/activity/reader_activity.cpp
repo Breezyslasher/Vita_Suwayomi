@@ -1644,11 +1644,11 @@ void ReaderActivity::loadPage(int index) {
 }
 
 void ReaderActivity::preloadAdjacentPages() {
-    // Preload 2 pages ahead and 2 pages behind for smoother swiping in
-    // both directions. This prevents blank frames when swiping backward
-    // through previously-read pages. The Vita's 20MB LRU cache evicts
-    // the oldest entries, so this won't exceed memory limits.
-    for (int i = 1; i <= 2; i++) {
+    // Preload 1 page ahead and 1 page behind for smooth swiping without excessive
+    // queue buildup. Adjacent previews handle the next swipe direction, so this
+    // keeps the queue manageable while maintaining responsive feel.
+    // The Vita's 20MB LRU cache evicts oldest entries, so this won't exceed memory limits.
+    for (int i = 1; i <= 1; i++) {
         int nextIdx = m_currentPage + i;
         if (nextIdx < static_cast<int>(m_pages.size()) && !isTransitionPage(nextIdx)) {
             ImageLoader::preloadFullSize(m_pages[nextIdx].imageUrl);
@@ -3848,9 +3848,10 @@ void ReaderActivity::preloadNextChapter() {
             m_nextChapterLoaded = true;
             brls::Logger::info("Next chapter preloaded: {} pages", m_nextChapterPages.size());
 
-            // Preload first few images of next chapter (full size for manga reader)
-            for (size_t i = 0; i < std::min(size_t(2), m_nextChapterPages.size()); i++) {
-                ImageLoader::preloadFullSize(m_nextChapterPages[i].imageUrl);
+            // Preload first image of next chapter (full size for manga reader)
+            // Reduces queue buildup; adjacent page preload handles next sequential pages
+            if (!m_nextChapterPages.empty()) {
+                ImageLoader::preloadFullSize(m_nextChapterPages[0].imageUrl);
             }
         }
     });
