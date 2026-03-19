@@ -582,9 +582,10 @@ void RecyclingGrid::buildNextRowBatch() {
         });
     } else {
         // All rows built - trigger thumbnail preloading for buffer rows
+        // Load visible rows (0-2) + 1 buffer row = 18 cells max, prevents queue buildup
         m_incrementalBuildActive = false;
         int maxInitialRows = 3;
-        int bufferRows = 2;  // Reduced from 3 to prevent queue flooding
+        int bufferRows = 1;  // Reduced from 2: only preload next row to avoid queue flooding
         int preloadUpToRow = std::min(maxInitialRows + bufferRows, m_totalRowsNeeded);
         int startCell = std::min(maxInitialRows * m_columns, (int)m_cells.size());
         int endCell = std::min(preloadUpToRow * m_columns, (int)m_cells.size());
@@ -602,10 +603,10 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     int focusedRow = index / m_columns;
     int totalRows = (static_cast<int>(m_cells.size()) + m_columns - 1) / m_columns;
 
-    // Load thumbnails for rows around the focused cell: 1 row above, 3 rows below
-    // Reduced from 2+6 to 1+3 to prevent queue flooding that causes FPS drops
+    // Load thumbnails for rows around the focused cell: 1 row above, 2 rows below
+    // Reduced from 1+3 to 1+2 to prevent queue flooding: ~18 cells instead of 30
     int loadFromRow = std::max(0, focusedRow - 1);
-    int loadToRow = std::min(totalRows, focusedRow + 4);
+    int loadToRow = std::min(totalRows, focusedRow + 3);
 
     int startCell = loadFromRow * m_columns;
     int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
