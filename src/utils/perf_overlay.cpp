@@ -9,9 +9,47 @@
 
 namespace vitasuwayomi {
 
+static const char* PERF_LOG_PATH = "ux0:data/VitaSuwayomi/perf.log";
+
 PerfOverlay& PerfOverlay::getInstance() {
     static PerfOverlay instance;
     return instance;
+}
+
+PerfOverlay::~PerfOverlay() {
+    closeLog();
+}
+
+void PerfOverlay::closeLog() {
+    if (m_logFile) {
+        fclose(m_logFile);
+        m_logFile = nullptr;
+    }
+}
+
+void PerfOverlay::openLogIfNeeded() {
+    if (m_logFile) return;
+    m_logFile = fopen(PERF_LOG_PATH, "w");
+    if (m_logFile) {
+        fprintf(m_logFile, "=== VitaSuwayomi Perf Log ===\n");
+        fprintf(m_logFile, "FPS | Frame(ms) | Max(ms) | TexUp | Pending | Sections...\n");
+        fprintf(m_logFile, "-----------------------------------------------------------\n");
+        fflush(m_logFile);
+    }
+}
+
+void PerfOverlay::writeLogEntry() {
+    if (!m_logFile) return;
+
+    fprintf(m_logFile, "FPS:%.0f Frame:%.1fms Max:%.1fms TexUp:%d Pend:%d",
+            m_fps, m_frameTimeMs, m_maxFrameTimeMs,
+            m_textureUploadsThisFrame, m_pendingTextures);
+
+    for (int i = 0; i < m_sectionCount; i++) {
+        fprintf(m_logFile, " | %s:%.1fms", m_sections[i].name, m_sections[i].lastMs);
+    }
+    fprintf(m_logFile, "\n");
+    fflush(m_logFile);
 }
 
 void PerfOverlay::beginFrame() {
@@ -44,6 +82,14 @@ void PerfOverlay::endFrame() {
         m_frameCount = 0;
         m_lastFpsUpdate = now;
         m_maxFrameTimeMs = 0.0f;  // Reset worst frame tracking each second
+    }
+
+    // Write to log file periodically (every m_logInterval frames)
+    m_logCounter++;
+    if (m_logCounter >= m_logInterval) {
+        m_logCounter = 0;
+        openLogIfNeeded();
+        writeLogEntry();
     }
 }
 

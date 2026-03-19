@@ -4,6 +4,7 @@
  */
 
 #include "view/rotatable_image.hpp"
+#include "utils/perf_overlay.hpp"
 #include <cmath>
 
 #ifndef NVG_PI
@@ -191,6 +192,13 @@ void RotatableImage::calculateImageBounds(float viewX, float viewY, float viewW,
 
 void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float height,
                           brls::Style style, brls::FrameContext* ctx) {
+    if (m_perfPrimary) {
+        auto& perf = PerfOverlay::getInstance();
+        perf.endFrame();
+        perf.beginFrame();
+    }
+    PERF_BEGIN("reader_draw");
+
     nvgSave(vg);
 
     bool hasSlide = (m_slideX != 0.0f || m_slideY != 0.0f);
@@ -355,6 +363,14 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
 
     // Restore state (removes scissor, slide offset, rotation transforms)
     nvgRestore(vg);
+
+    PERF_END("reader_draw");
+
+    // Draw perf overlay on top if this is the primary reader image
+    if (m_perfPrimary) {
+        nvgResetScissor(vg);
+        PerfOverlay::getInstance().draw(vg, 960.0f, 544.0f);
+    }
 }
 
 void RotatableImage::setRotation(float degrees) {

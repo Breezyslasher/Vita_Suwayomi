@@ -10,6 +10,7 @@
 #include <borealis.hpp>
 #include <chrono>
 #include <string>
+#include <cstdio>
 
 namespace vitasuwayomi {
 
@@ -40,10 +41,21 @@ public:
     void setEnabled(bool enabled) { m_enabled = enabled; }
     bool isEnabled() const { return m_enabled; }
 
+    // Flush and close log file
+    void closeLog();
+
 private:
     PerfOverlay() = default;
+    ~PerfOverlay();
 
     bool m_enabled = false;
+
+    // Log file
+    FILE* m_logFile = nullptr;
+    int m_logInterval = 60;   // Write to log every N frames (once per second at 60fps)
+    int m_logCounter = 0;
+    void openLogIfNeeded();
+    void writeLogEntry();
 
     // Frame timing
     using Clock = std::chrono::steady_clock;
