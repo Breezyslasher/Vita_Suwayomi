@@ -674,8 +674,29 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     perf.endFrame();   // End previous frame timing
     perf.beginFrame(); // Start this frame timing
 
+    // Visibility culling: hide off-screen rows so ScrollingFrame::draw() skips them.
+    // Without this, ALL rows (including off-screen) get full NanoVG draw calls issued,
+    // wasting ~80% of CPU frame time on path generation for invisible content.
+    // INVISIBLE preserves layout space (scroll height stays correct) but skips draw.
+    if (!m_rows.empty() && m_cellHeight > 0) {
+        float scrollY = this->getContentOffsetY();
+        float viewH = this->getHeight();
+        float rowH = static_cast<float>(m_cellHeight + m_rowMargin);
+        int firstVisible = std::max(0, static_cast<int>(scrollY / rowH) - 1);
+        int lastVisible = std::min(static_cast<int>(m_rows.size()),
+                                    static_cast<int>((scrollY + viewH) / rowH) + 2);
+
+        for (int i = 0; i < static_cast<int>(m_rows.size()); i++) {
+            brls::Visibility desired = (i >= firstVisible && i < lastVisible)
+                ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE;
+            if (m_rows[i]->getVisibility() != desired) {
+                m_rows[i]->setVisibility(desired);
+            }
+        }
+    }
+
     PERF_BEGIN("grid_draw");
-    // Call parent draw first
+    // Call parent draw - now only visible rows are rendered
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     PERF_END("grid_draw");
 

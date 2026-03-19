@@ -55,6 +55,13 @@ private:
     void updateSelectionVisual();
     void applyDisplayMode();
 
+    // Lazy creation helpers - these views are only created when first needed
+    brls::Label* ensureNewBadge();
+    brls::Image* ensureStarBadge();
+    brls::Image* ensureStartHintIcon();
+    brls::Box* ensureListInfoBox();  // Also creates m_listTitleLabel
+    brls::Label* ensureDescriptionLabel();
+
     bool m_selected = false;
     bool m_pressed = false;  // Touch press-down state for visual feedback
     bool m_compactMode = false;

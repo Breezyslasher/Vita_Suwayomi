@@ -109,24 +109,7 @@ MangaItemCell::MangaItemCell() {
 
     this->addView(m_titleOverlay);
 
-    // List mode info box (horizontal layout - initially hidden)
-    m_listInfoBox = new brls::Box();
-    m_listInfoBox->setAxis(brls::Axis::COLUMN);
-    m_listInfoBox->setJustifyContent(brls::JustifyContent::CENTER);
-    m_listInfoBox->setAlignItems(brls::AlignItems::FLEX_START);
-    m_listInfoBox->setPadding(8, 16, 8, 16);
-    m_listInfoBox->setGrow(1.0f);
-    m_listInfoBox->setVisibility(brls::Visibility::GONE);
-
-    // List mode title label (persistent, not dynamically created)
-    m_listTitleLabel = new brls::Label();
-    m_listTitleLabel->setFontSize(14);
-    m_listTitleLabel->setTextColor(nvgRGB(255, 255, 255));
-    m_listInfoBox->addView(m_listTitleLabel);
-
-    this->addView(m_listInfoBox);
-
-    // Unread badge - top left corner
+    // Unread badge - top left corner (created eagerly since it's commonly visible)
     m_unreadBadge = new brls::Label();
     m_unreadBadge->setFontSize(10);
     m_unreadBadge->setTextColor(nvgRGB(255, 255, 255));
@@ -138,47 +121,10 @@ MangaItemCell::MangaItemCell() {
     m_unreadBadge->setVisibility(brls::Visibility::GONE);
     this->addView(m_unreadBadge);
 
-    // NEW badge - top left, below unread badge (shows if recently updated)
-    m_newBadge = new brls::Label();
-    m_newBadge->setFontSize(8);
-    m_newBadge->setText("NEW");
-    m_newBadge->setTextColor(nvgRGB(255, 255, 255));
-    m_newBadge->setBackgroundColor(nvgRGBA(231, 76, 60, 255)); // Red badge
-    m_newBadge->setPositionType(brls::PositionType::ABSOLUTE);
-    m_newBadge->setPositionTop(26);  // Below unread badge
-    m_newBadge->setPositionLeft(0);
-    m_newBadge->setVisibility(brls::Visibility::GONE);
-    this->addView(m_newBadge);
-
-    // Star badge - top right corner (shows if manga is in library, browser/search only)
-    // Image loaded lazily on first visibility to avoid 98+ useless GPU texture creations
-    m_starBadge = new brls::Image();
-    m_starBadge->setWidth(16);
-    m_starBadge->setHeight(16);
-    m_starBadge->setScalingType(brls::ImageScalingType::FIT);
-    m_starBadge->setPositionType(brls::PositionType::ABSOLUTE);
-    m_starBadge->setPositionTop(6);
-    m_starBadge->setPositionRight(6);
-    m_starBadge->setVisibility(brls::Visibility::GONE);
-    this->addView(m_starBadge);
-
-    // Description label (hidden, for focus state)
-    m_descriptionLabel = new brls::Label();
-    m_descriptionLabel->setFontSize(9);
-    m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    m_descriptionLabel->setVisibility(brls::Visibility::GONE);
-
-    // Start button hint icon - shown on focus (top-right) to indicate menu action
-    // Image loaded lazily on first focus to avoid 98+ useless GPU texture creations
-    m_startHintIcon = new brls::Image();
-    m_startHintIcon->setWidth(64);
-    m_startHintIcon->setHeight(16);
-    m_startHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_startHintIcon->setPositionType(brls::PositionType::ABSOLUTE);
-    m_startHintIcon->setPositionTop(6);
-    m_startHintIcon->setPositionRight(6);
-    m_startHintIcon->setVisibility(brls::Visibility::GONE);
-    this->addView(m_startHintIcon);
+    // Remaining sub-views (listInfoBox, listTitleLabel, newBadge, starBadge,
+    // startHintIcon, descriptionLabel) are lazy-created via ensure*() methods
+    // when first needed. This saves ~5 Yoga node insertions per cell during
+    // initial grid build (98 cells × 5 = 490 fewer allocations).
 }
 
 MangaItemCell::~MangaItemCell() {
@@ -222,10 +168,11 @@ void MangaItemCell::updateDisplay() {
         m_titleLabel->setText(title);
     }
 
-    // Update list mode title - show full title (row auto-adapts to fit)
+    // Update list mode title - only if already created (lazy)
     if (m_listTitleLabel) {
         m_listTitleLabel->setText(m_manga.title);
     }
+    // If in list mode and listTitleLabel not created yet, ensureListInfoBox will handle it
 
     // Set subtitle (author or chapter count)
     if (m_subtitleLabel) {
@@ -263,31 +210,36 @@ void MangaItemCell::updateDisplay() {
     }
 
     // Show NEW badge if manga was added to library recently (within 7 days)
-    if (m_newBadge) {
+    {
         bool showNew = false;
-
-        // If manga has unread chapters and was recently added to library
         if (m_manga.unreadCount > 0 && m_manga.inLibraryAt > 0) {
-            // Check if added within the last 7 days
-            int64_t now = std::time(nullptr) * 1000;  // Current time in ms
-            int64_t sevenDaysMs = 7 * 24 * 60 * 60 * 1000LL;  // 7 days in ms
+            int64_t now = std::time(nullptr) * 1000;
+            int64_t sevenDaysMs = 7 * 24 * 60 * 60 * 1000LL;
             showNew = (now - m_manga.inLibraryAt) < sevenDaysMs;
         }
-
-        m_newBadge->setVisibility(showNew ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+        // Only create the badge view if we actually need to show it
+        if (showNew) {
+            ensureNewBadge()->setVisibility(brls::Visibility::VISIBLE);
+        } else if (m_newBadge) {
+            m_newBadge->setVisibility(brls::Visibility::GONE);
+        }
     }
 
     // Show star badge if manga is in library (browser/search tabs only)
-    // Also check recent additions cache for immediate update
-    if (m_starBadge) {
+    {
         bool inLib = (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id))
                      && !Application::getInstance().isRecentlyRemoved(m_manga.id);
         bool showStar = m_showLibraryBadge && inLib;
-        if (showStar && !m_starImageLoaded) {
-            m_starBadge->setImageFromFile("app0:resources/icons/star.png");
-            m_starImageLoaded = true;
+        if (showStar) {
+            auto* star = ensureStarBadge();
+            if (!m_starImageLoaded) {
+                star->setImageFromFile("app0:resources/icons/star.png");
+                m_starImageLoaded = true;
+            }
+            star->setVisibility(brls::Visibility::VISIBLE);
+        } else if (m_starBadge) {
+            m_starBadge->setVisibility(brls::Visibility::GONE);
         }
-        m_starBadge->setVisibility(showStar ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
     }
 }
 
@@ -394,12 +346,13 @@ void MangaItemCell::onFocusGained() {
     // Refresh library badge to reflect add/remove changes from detail view
     refreshLibraryBadge();
     // Show start button hint on focus (but not in browser/search tabs where library badge is shown)
-    if (m_startHintIcon && !m_showLibraryBadge) {
+    if (!m_showLibraryBadge) {
+        auto* hint = ensureStartHintIcon();
         if (!m_startHintImageLoaded) {
-            m_startHintIcon->setImageFromFile("app0:resources/images/start_button.png");
+            hint->setImageFromFile("app0:resources/images/start_button.png");
             m_startHintImageLoaded = true;
         }
-        m_startHintIcon->setVisibility(brls::Visibility::VISIBLE);
+        hint->setVisibility(brls::Visibility::VISIBLE);
     }
 }
 
@@ -446,7 +399,7 @@ void MangaItemCell::updateSelectionVisual() {
 }
 
 void MangaItemCell::updateFocusInfo(bool focused) {
-    if (!m_titleLabel || !m_descriptionLabel) return;
+    if (!m_titleLabel) return;
 
     if (focused) {
         // Show full title
@@ -467,13 +420,16 @@ void MangaItemCell::updateFocusInfo(bool focused) {
             info += statusStr;
         }
         if (!info.empty()) {
-            m_descriptionLabel->setText(info);
-            m_descriptionLabel->setVisibility(brls::Visibility::VISIBLE);
+            auto* desc = ensureDescriptionLabel();
+            desc->setText(info);
+            desc->setVisibility(brls::Visibility::VISIBLE);
         }
     } else {
         // Restore truncated title
         m_titleLabel->setText(m_originalTitle);
-        m_descriptionLabel->setVisibility(brls::Visibility::GONE);
+        if (m_descriptionLabel) {
+            m_descriptionLabel->setVisibility(brls::Visibility::GONE);
+        }
     }
 }
 
@@ -533,36 +489,19 @@ void MangaItemCell::setGridColumns(int columns) {
         m_unreadBadge->setMargins(badgeMargin, 0, 0, badgeMargin);
     }
 
-    // Scale NEW badge font size and position with grid size
+    // Scale NEW badge font size and position with grid size (only if already created)
     if (m_newBadge) {
-        int newFontSize = 8;
-        int newTopPos = 26;
-        if (columns <= 4) {
-            newFontSize = 10;
-            newTopPos = 34;
-        } else if (columns <= 6) {
-            newFontSize = 8;
-            newTopPos = 26;
-        } else {
-            newFontSize = 7;
-            newTopPos = 20;
-        }
+        int newFontSize = (columns <= 4) ? 10 : (columns >= 8) ? 7 : 8;
+        int newTopPos = (columns <= 4) ? 34 : (columns >= 8) ? 20 : 26;
         m_newBadge->setFontSize(newFontSize);
         if (!m_listMode) {
             m_newBadge->setPositionTop(newTopPos);
         }
     }
 
-    // Scale star badge size with grid size
+    // Scale star badge size with grid size (only if already created)
     if (m_starBadge) {
-        int starSize = 16;
-        if (columns <= 4) {
-            starSize = 20;
-        } else if (columns <= 6) {
-            starSize = 16;
-        } else {
-            starSize = 12;
-        }
+        int starSize = (columns <= 4) ? 20 : (columns >= 8) ? 12 : 16;
         m_starBadge->setWidth(starSize);
         m_starBadge->setHeight(starSize);
     }
@@ -586,14 +525,17 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
     if (m_showLibraryBadge == show) return;
     m_showLibraryBadge = show;
     // Update star badge visibility (also check recent additions cache)
-    if (m_starBadge) {
-        bool inLib = m_showLibraryBadge && (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id))
-                     && !Application::getInstance().isRecentlyRemoved(m_manga.id);
-        if (inLib && !m_starImageLoaded) {
-            m_starBadge->setImageFromFile("app0:resources/icons/star.png");
+    bool inLib = m_showLibraryBadge && (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id))
+                 && !Application::getInstance().isRecentlyRemoved(m_manga.id);
+    if (inLib) {
+        auto* star = ensureStarBadge();
+        if (!m_starImageLoaded) {
+            star->setImageFromFile("app0:resources/icons/star.png");
             m_starImageLoaded = true;
         }
-        m_starBadge->setVisibility(inLib ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+        star->setVisibility(brls::Visibility::VISIBLE);
+    } else if (m_starBadge) {
+        m_starBadge->setVisibility(brls::Visibility::GONE);
     }
     // Hide start hint icon when in browser/search mode
     if (m_startHintIcon && m_showLibraryBadge) {
@@ -602,19 +544,104 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
 }
 
 void MangaItemCell::refreshLibraryBadge() {
-    if (!m_starBadge || !m_showLibraryBadge) return;
+    if (!m_showLibraryBadge) return;
     bool inLib = (m_manga.inLibrary || Application::getInstance().isRecentlyAdded(m_manga.id))
                  && !Application::getInstance().isRecentlyRemoved(m_manga.id);
-    if (inLib && !m_starImageLoaded) {
-        m_starBadge->setImageFromFile("app0:resources/icons/star.png");
-        m_starImageLoaded = true;
+    if (inLib) {
+        auto* star = ensureStarBadge();
+        if (!m_starImageLoaded) {
+            star->setImageFromFile("app0:resources/icons/star.png");
+            m_starImageLoaded = true;
+        }
+        star->setVisibility(brls::Visibility::VISIBLE);
+    } else if (m_starBadge) {
+        m_starBadge->setVisibility(brls::Visibility::GONE);
     }
-    m_starBadge->setVisibility(inLib ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
 }
 
 void MangaItemCell::setListRowSize(int rowSize) {
     // No-op: list mode always auto-adapts row height to title length
     (void)rowSize;
+}
+
+// --- Lazy creation helpers ---
+// These views are only created when first needed, saving ~5 Yoga node insertions
+// per cell during initial grid build on PS Vita's 444MHz CPU.
+
+brls::Label* MangaItemCell::ensureNewBadge() {
+    if (!m_newBadge) {
+        m_newBadge = new brls::Label();
+        m_newBadge->setFontSize(8);
+        m_newBadge->setText("NEW");
+        m_newBadge->setTextColor(nvgRGB(255, 255, 255));
+        m_newBadge->setBackgroundColor(nvgRGBA(231, 76, 60, 255));
+        m_newBadge->setPositionType(brls::PositionType::ABSOLUTE);
+        m_newBadge->setPositionTop(26);
+        m_newBadge->setPositionLeft(0);
+        m_newBadge->setVisibility(brls::Visibility::GONE);
+        this->addView(m_newBadge);
+    }
+    return m_newBadge;
+}
+
+brls::Image* MangaItemCell::ensureStarBadge() {
+    if (!m_starBadge) {
+        m_starBadge = new brls::Image();
+        m_starBadge->setWidth(16);
+        m_starBadge->setHeight(16);
+        m_starBadge->setScalingType(brls::ImageScalingType::FIT);
+        m_starBadge->setPositionType(brls::PositionType::ABSOLUTE);
+        m_starBadge->setPositionTop(6);
+        m_starBadge->setPositionRight(6);
+        m_starBadge->setVisibility(brls::Visibility::GONE);
+        this->addView(m_starBadge);
+    }
+    return m_starBadge;
+}
+
+brls::Image* MangaItemCell::ensureStartHintIcon() {
+    if (!m_startHintIcon) {
+        m_startHintIcon = new brls::Image();
+        m_startHintIcon->setWidth(64);
+        m_startHintIcon->setHeight(16);
+        m_startHintIcon->setScalingType(brls::ImageScalingType::FIT);
+        m_startHintIcon->setPositionType(brls::PositionType::ABSOLUTE);
+        m_startHintIcon->setPositionTop(6);
+        m_startHintIcon->setPositionRight(6);
+        m_startHintIcon->setVisibility(brls::Visibility::GONE);
+        this->addView(m_startHintIcon);
+    }
+    return m_startHintIcon;
+}
+
+brls::Box* MangaItemCell::ensureListInfoBox() {
+    if (!m_listInfoBox) {
+        m_listInfoBox = new brls::Box();
+        m_listInfoBox->setAxis(brls::Axis::COLUMN);
+        m_listInfoBox->setJustifyContent(brls::JustifyContent::CENTER);
+        m_listInfoBox->setAlignItems(brls::AlignItems::FLEX_START);
+        m_listInfoBox->setPadding(8, 16, 8, 16);
+        m_listInfoBox->setGrow(1.0f);
+        m_listInfoBox->setVisibility(brls::Visibility::GONE);
+
+        m_listTitleLabel = new brls::Label();
+        m_listTitleLabel->setFontSize(14);
+        m_listTitleLabel->setTextColor(nvgRGB(255, 255, 255));
+        m_listInfoBox->addView(m_listTitleLabel);
+
+        this->addView(m_listInfoBox);
+    }
+    return m_listInfoBox;
+}
+
+brls::Label* MangaItemCell::ensureDescriptionLabel() {
+    if (!m_descriptionLabel) {
+        m_descriptionLabel = new brls::Label();
+        m_descriptionLabel->setFontSize(9);
+        m_descriptionLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        m_descriptionLabel->setVisibility(brls::Visibility::GONE);
+    }
+    return m_descriptionLabel;
 }
 
 void MangaItemCell::applyDisplayMode() {
@@ -634,14 +661,11 @@ void MangaItemCell::applyDisplayMode() {
             m_titleOverlay->setVisibility(brls::Visibility::GONE);
         }
 
-        // Show list info box (title label is already added and updated by updateDisplay)
-        if (m_listInfoBox) {
-            m_listInfoBox->setVisibility(brls::Visibility::VISIBLE);
-        }
-
-        // Font size for list mode
+        // Show list info box (lazy-created on first list mode activation)
+        ensureListInfoBox()->setVisibility(brls::Visibility::VISIBLE);
         if (m_listTitleLabel) {
             m_listTitleLabel->setFontSize(14);
+            m_listTitleLabel->setText(m_manga.title);
         }
 
         // Position badges for list mode (left side)
