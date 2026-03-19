@@ -678,6 +678,7 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     // Without this, ALL rows (including off-screen) get full NanoVG draw calls issued,
     // wasting ~80% of CPU frame time on path generation for invisible content.
     // INVISIBLE preserves layout space (scroll height stays correct) but skips draw.
+    // Optimization: only update rows at the boundaries of the visible range, not all rows.
     if (!m_rows.empty() && m_cellHeight > 0) {
         float scrollY = this->getContentOffsetY();
         float viewH = this->getHeight();
@@ -686,12 +687,40 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         int lastVisible = std::min(static_cast<int>(m_rows.size()),
                                     static_cast<int>((scrollY + viewH) / rowH) + 2);
 
-        for (int i = 0; i < static_cast<int>(m_rows.size()); i++) {
-            brls::Visibility desired = (i >= firstVisible && i < lastVisible)
-                ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE;
-            if (m_rows[i]->getVisibility() != desired) {
-                m_rows[i]->setVisibility(desired);
+        // Only update rows if visible range changed (avoid O(rows) iteration every frame)
+        if (firstVisible != m_cachedFirstVisible || lastVisible != m_cachedLastVisible) {
+            // Hide rows that are now invisible
+            if (m_cachedFirstVisible >= 0) {
+                // Hide rows above the new range
+                for (int i = m_cachedFirstVisible; i < firstVisible; i++) {
+                    if (i >= 0 && i < static_cast<int>(m_rows.size())) {
+                        m_rows[i]->setVisibility(brls::Visibility::INVISIBLE);
+                    }
+                }
+                // Hide rows below the new range
+                for (int i = lastVisible; i < m_cachedLastVisible; i++) {
+                    if (i >= 0 && i < static_cast<int>(m_rows.size())) {
+                        m_rows[i]->setVisibility(brls::Visibility::INVISIBLE);
+                    }
+                }
+            } else {
+                // First call: set all visibility in one pass
+                for (int i = 0; i < static_cast<int>(m_rows.size()); i++) {
+                    brls::Visibility desired = (i >= firstVisible && i < lastVisible)
+                        ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE;
+                    m_rows[i]->setVisibility(desired);
+                }
             }
+
+            // Show rows that are now visible
+            for (int i = firstVisible; i < lastVisible; i++) {
+                if (i >= 0 && i < static_cast<int>(m_rows.size())) {
+                    m_rows[i]->setVisibility(brls::Visibility::VISIBLE);
+                }
+            }
+
+            m_cachedFirstVisible = firstVisible;
+            m_cachedLastVisible = lastVisible;
         }
     }
 
@@ -754,12 +783,14 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
     }
 
     // Also apply texture recycling for scroll-based movement (same as focus-based)
+    // Only iterate through actual unload ranges, not all cells
     static constexpr int SCROLL_UNLOAD_DISTANCE_ROWS = 8;  // Reduced from 12
     int centerRow = (firstVisibleRow + lastVisibleRow) / 2;
     int unloadAboveRow = centerRow - SCROLL_UNLOAD_DISTANCE_ROWS;
     int unloadBelowRow = centerRow + SCROLL_UNLOAD_DISTANCE_ROWS;
 
     if (unloadAboveRow > 0) {
+        // Only iterate cells in the range [0, unloadAboveRow)
         int unloadEnd = std::min(unloadAboveRow * m_columns, static_cast<int>(m_cells.size()));
         for (int i = 0; i < unloadEnd; i++) {
             if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
@@ -768,8 +799,10 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
         }
     }
     if (unloadBelowRow < totalRows) {
+        // Only iterate cells in the range [unloadBelowRow, end)
         int unloadStart = std::max(0, unloadBelowRow * m_columns);
-        for (int i = unloadStart; i < static_cast<int>(m_cells.size()); i++) {
+        int unloadEnd = static_cast<int>(m_cells.size());
+        for (int i = unloadStart; i < unloadEnd; i++) {
             if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
                 m_cells[i]->unloadThumbnail();
             }

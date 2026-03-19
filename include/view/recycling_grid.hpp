@@ -127,6 +127,10 @@ private:
     float m_lastScrollLoadY = 0.0f;  // Last scroll Y where we triggered thumbnail loading
     int m_scrollLoadCooldown = 0;   // Frame cooldown to throttle scroll-based loading
 
+    // Cached visible row range to avoid full iteration every frame
+    int m_cachedFirstVisible = -1;
+    int m_cachedLastVisible = -1;
+
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;
 
