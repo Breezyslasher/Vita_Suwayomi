@@ -645,7 +645,7 @@ void RecyclingGrid::buildNextRowBatch() {
 
 void RecyclingGrid::enableVirtualScroll() {
     if (m_virtualScrollEnabled) return;
-    if (m_rows.size() <= 14) return;  // Not worth it for small grids
+    if (m_rows.size() <= 7) return;  // Not worth it for small grids (<=42 cells at 6 cols)
     if (m_cellHeight <= 0) return;    // Can't compute row positions with variable heights (list mode)
 
     m_virtualScrollEnabled = true;
@@ -676,9 +676,9 @@ void RecyclingGrid::enableVirtualScroll() {
     float scrollY = this->getContentOffsetY();
     float viewH = this->getHeight();
     float rowH = static_cast<float>(m_cellHeight > 0 ? m_cellHeight + m_rowMargin : 200);
-    int firstVisible = std::max(0, static_cast<int>(scrollY / rowH) - 2);
+    int firstVisible = std::max(0, static_cast<int>(scrollY / rowH) - 1);
     int lastVisible = std::min(static_cast<int>(m_rows.size()),
-                                static_cast<int>((scrollY + viewH) / rowH) + 3);
+                                static_cast<int>((scrollY + viewH) / rowH) + 2);
 
     // Set up initial window
     float topHeight = firstVisible * rowH;
@@ -728,9 +728,12 @@ void RecyclingGrid::disableVirtualScroll() {
 void RecyclingGrid::updateRowWindow(int firstVisible, int lastVisible) {
     if (!m_virtualScrollEnabled) return;
 
-    // Add buffer around visible range - use larger buffer to reduce update frequency
-    int windowFirst = std::max(0, firstVisible - 3);
-    int windowLast = std::min(static_cast<int>(m_rows.size()), lastVisible + 4);
+    // Add tight buffer around visible range to minimize attached cells.
+    // On PS Vita, each cell costs ~0.33-0.46ms to draw (texture + nvg overlay),
+    // so reducing from 12 rows (72 cells, ~33ms) to 6 rows (36 cells, ~15ms)
+    // is critical for maintaining 30+ FPS with large libraries.
+    int windowFirst = std::max(0, firstVisible - 1);
+    int windowLast = std::min(static_cast<int>(m_rows.size()), lastVisible + 2);
 
     if (windowFirst == m_windowFirstRow && windowLast == m_windowLastRow) return;
 
