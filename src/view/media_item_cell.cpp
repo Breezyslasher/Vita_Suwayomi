@@ -12,6 +12,7 @@
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/image_loader.hpp"
+#include <cmath>
 #include <ctime>
 #include <fstream>
 
@@ -323,7 +324,10 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
         float textW = width - m_overlayPadSide * 2.0f;
 
         // Recompute cached text layout when text/font/width changes (not every frame)
-        if (m_overlayDirty || m_cachedCellWidth != width) {
+        // Avoid re-layout on tiny float jitter from layout/animation.
+        // On Vita this check previously retriggered expensive nvgTextBounds work
+        // almost every frame in GRID_NORMAL mode, causing major FPS drops.
+        if (m_overlayDirty || std::fabs(m_cachedCellWidth - width) > 0.5f) {
             m_cachedCellWidth = width;
 
             nvgFontFace(vg, "regular");
@@ -392,10 +396,6 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
         float overlayH = m_overlayMaxHeight;
         float overlayY = y + height - overlayH;
 
-        // Clip to overlay area
-        nvgSave(vg);
-        nvgIntersectScissor(vg, x, overlayY, width, overlayH);
-
         // Semi-transparent background
         nvgBeginPath(vg);
         nvgRect(vg, x, overlayY, width, overlayH);
@@ -426,7 +426,6 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
             nvgText(vg, textX, titleBottom + 1.0f, m_subtitleText.c_str(), nullptr);
         }
 
-        nvgRestore(vg);
     }
 
     // --- Flat-rendered unread badge (uses cached dimensions) ---
