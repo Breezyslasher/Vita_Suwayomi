@@ -131,18 +131,6 @@ private:
     int m_cachedFirstVisible = -1;
     int m_cachedLastVisible = -1;
 
-    // Virtual row windowing: only keep a small window of rows attached to m_contentBox
-    // to avoid O(totalRows) child iteration in borealis draw loop.
-    // Rows outside the window are detached (not deleted) and spacers maintain scroll height.
-    brls::Box* m_topSpacer = nullptr;
-    brls::Box* m_bottomSpacer = nullptr;
-    int m_windowFirstRow = -1;  // First row currently attached to m_contentBox
-    int m_windowLastRow = -1;   // One past last row attached
-    bool m_virtualScrollEnabled = false;
-    void updateRowWindow(int firstVisible, int lastVisible);
-    void enableVirtualScroll();   // Called after incremental build completes
-    void disableVirtualScroll();  // Called before grid rebuild
-
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;
 
