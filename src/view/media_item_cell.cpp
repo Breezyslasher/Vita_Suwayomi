@@ -334,8 +334,9 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
             nvgFontSize(vg, static_cast<float>(m_titleFontSize));
             nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
 
-            // Measure line height from font metrics
+            // Measure line heights from font metrics
             nvgTextMetrics(vg, nullptr, nullptr, &m_cachedLineHeight);
+            m_cachedSubtitleLineH = 0.0f;
 
             // Pre-split title into lines by measuring word-by-word
             m_cachedLine1.clear();
@@ -390,10 +391,20 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
                 m_cachedBadgeTextH = bb[3] - bb[1];
             }
 
+            // Cache subtitle line height for dynamic overlay background height
+            if (!m_subtitleText.empty()) {
+                nvgFontSize(vg, static_cast<float>(m_subtitleFontSize));
+                nvgTextMetrics(vg, nullptr, nullptr, &m_cachedSubtitleLineH);
+            }
+
             m_overlayDirty = false;
         }
 
-        float overlayH = m_overlayMaxHeight;
+        float overlayContentH = m_overlayPadTop + m_cachedTitleBlockH + m_overlayPadBottom;
+        if (!m_subtitleText.empty() && m_cachedSubtitleLineH > 0.0f) {
+            overlayContentH += 1.0f + m_cachedSubtitleLineH;
+        }
+        float overlayH = std::min(m_overlayMaxHeight, overlayContentH);
         float overlayY = y + height - overlayH;
 
         // Semi-transparent background
