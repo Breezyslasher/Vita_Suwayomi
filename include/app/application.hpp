@@ -138,6 +138,7 @@ struct AppSettings {
     AppTheme theme = AppTheme::DARK;
     bool showClock = true;
     bool debugLogging = false;
+    bool showPerfOverlay = false;  // Show FPS/frame time/GPU debug overlay
 
     // Reader Settings
     ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;

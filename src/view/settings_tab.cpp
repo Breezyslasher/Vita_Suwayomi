@@ -10,6 +10,7 @@
 #include "utils/library_cache.hpp"
 #include "utils/async.hpp"
 #include "utils/http_client.hpp"
+#include "utils/perf_overlay.hpp"
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -573,6 +574,16 @@ void SettingsTab::createUISection() {
         brls::Application::notify(value ? "Debug logging enabled" : "Debug logging disabled");
     });
     m_contentBox->addView(m_debugLogToggle);
+
+    // Performance overlay toggle - shows FPS, frame time, texture upload stats
+    auto* perfToggle = new brls::BooleanCell();
+    perfToggle->init("Performance Overlay", settings.showPerfOverlay, [](bool value) {
+        Application::getInstance().getSettings().showPerfOverlay = value;
+        PerfOverlay::getInstance().setEnabled(value);
+        Application::getInstance().saveSettings();
+        brls::Application::notify(value ? "Perf overlay enabled" : "Perf overlay disabled");
+    });
+    m_contentBox->addView(perfToggle);
 }
 
 void SettingsTab::createLibrarySection() {

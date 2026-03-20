@@ -84,6 +84,9 @@ brls::View* ReaderActivity::createContentView() {
 void ReaderActivity::onContentAvailable() {
     brls::Logger::info("ReaderActivity: content available for manga {}", m_mangaId);
 
+    // Enable perf overlay on the main page image so it drives frame timing in reader
+    this->pageImage->setPerfPrimary(true);
+
     // Load settings - priority order:
     // 1. Server meta (per-manga settings synced to server)
     // 2. Local per-manga settings cache

@@ -55,6 +55,13 @@ private:
     void updateSelectionVisual();
     void applyDisplayMode();
 
+    // Lazy creation helpers - these views are only created when first needed
+    brls::Label* ensureNewBadge();
+    brls::Image* ensureStarBadge();
+    brls::Image* ensureStartHintIcon();
+    brls::Box* ensureListInfoBox();  // Also creates m_listTitleLabel
+    brls::Label* ensureDescriptionLabel();
+
     bool m_selected = false;
     bool m_pressed = false;  // Touch press-down state for visual feedback
     bool m_compactMode = false;
@@ -70,17 +77,43 @@ private:
     bool m_startHintImageLoaded = false;  // Lazy: load start_button.png only when first shown
 
     brls::Image* m_thumbnailImage = nullptr;
-    brls::Box* m_titleOverlay = nullptr;  // Title overlay container (grid mode)
     brls::Box* m_listInfoBox = nullptr;   // Info container (list mode)
     brls::Label* m_listTitleLabel = nullptr;  // Title label for list mode
-    brls::Label* m_titleLabel = nullptr;
-    brls::Label* m_subtitleLabel = nullptr;
     brls::Label* m_descriptionLabel = nullptr;
     brls::Rectangle* m_progressBar = nullptr;
-    brls::Label* m_unreadBadge = nullptr;
     brls::Label* m_newBadge = nullptr;  // NEW indicator for recently updated
     brls::Image* m_startHintIcon = nullptr;  // Start button hint shown on focus
     brls::Image* m_starBadge = nullptr;  // Star icon for manga in library
+
+    // --- Flat-rendered overlay state (no borealis sub-views, drawn directly via NanoVG) ---
+    // Eliminates 4 frame() calls per cell per frame vs view hierarchy approach.
+    std::string m_titleText;
+    std::string m_subtitleText;
+    std::string m_unreadText;
+    int m_titleFontSize = 11;
+    int m_subtitleFontSize = 9;
+    int m_unreadFontSize = 10;
+    float m_overlayMaxHeight = 50.0f;
+    float m_overlayPadTop = 6.0f;
+    float m_overlayPadSide = 6.0f;
+    float m_overlayPadBottom = 4.0f;
+    bool m_showOverlay = true;   // false in compact/list mode
+    bool m_showUnread = false;
+    NVGcolor m_subtitleColor;
+    NVGcolor m_unreadBgColor;
+    int m_unreadMarginTop = 6;
+    int m_unreadMarginLeft = 6;
+
+    // --- Cached text measurements (avoids per-frame nvgTextBox wrapping + measurement) ---
+    bool m_overlayDirty = true;       // Recompute cached text on next draw
+    float m_cachedCellWidth = 0;      // Cell width when cache was computed
+    std::string m_cachedLine1;        // Pre-split title line 1
+    std::string m_cachedLine2;        // Pre-split title line 2
+    float m_cachedLineHeight = 0;     // Font line height for multi-line spacing
+    float m_cachedTitleBlockH = 0;    // Total height of rendered title text
+    float m_cachedSubtitleLineH = 0;  // Subtitle line height
+    float m_cachedBadgeTextW = 0;     // Badge text width
+    float m_cachedBadgeTextH = 0;     // Badge text height
 
     // Shared flag for async callback safety - set to false in destructor
     // so pending ImageLoader callbacks skip writing to our destroyed m_thumbnailImage
