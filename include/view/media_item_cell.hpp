@@ -111,6 +111,7 @@ private:
     std::string m_cachedLine2;        // Pre-split title line 2
     float m_cachedLineHeight = 0;     // Font line height for multi-line spacing
     float m_cachedTitleBlockH = 0;    // Total height of rendered title text
+    float m_cachedSubtitleLineH = 0;  // Subtitle line height
     float m_cachedBadgeTextW = 0;     // Badge text width
     float m_cachedBadgeTextH = 0;     // Badge text height
 

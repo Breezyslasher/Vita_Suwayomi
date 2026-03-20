@@ -614,9 +614,11 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     // loadThumbnailIfNeeded() checks m_thumbnailLoaded internally,
     // so calling it on already-loaded cells is a no-op (just a bool check).
     // This avoids gaps when the user jumps to a distant row.
-    for (int i = startCell; i < endCell; i++) {
+    int loadBudget = 18;
+    for (int i = startCell; i < endCell && loadBudget > 0; i++) {
         if (m_cells[i]) {
             m_cells[i]->loadThumbnailIfNeeded();
+            loadBudget--;
         }
     }
 
@@ -629,11 +631,16 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     int unloadBelowRow = focusedRow + UNLOAD_DISTANCE_ROWS;
 
     // Unload cells far above
+    constexpr int UNLOAD_BUDGET_PER_CALL = 24;
+    int unloadBudgetAbove = UNLOAD_BUDGET_PER_CALL / 2;
+    int unloadBudgetBelow = UNLOAD_BUDGET_PER_CALL - unloadBudgetAbove;
+
     if (unloadAboveRow > 0) {
         int unloadEnd = std::min(unloadAboveRow * m_columns, static_cast<int>(m_cells.size()));
-        for (int i = 0; i < unloadEnd; i++) {
+        for (int i = 0; i < unloadEnd && unloadBudgetAbove > 0; i++) {
             if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
                 m_cells[i]->unloadThumbnail();
+                unloadBudgetAbove--;
             }
         }
     }
@@ -641,9 +648,10 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     // Unload cells far below
     if (unloadBelowRow < totalRows) {
         int unloadStart = std::max(0, unloadBelowRow * m_columns);
-        for (int i = unloadStart; i < static_cast<int>(m_cells.size()); i++) {
+        for (int i = unloadStart; i < static_cast<int>(m_cells.size()) && unloadBudgetBelow > 0; i++) {
             if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
                 m_cells[i]->unloadThumbnail();
+                unloadBudgetBelow--;
             }
         }
     }
@@ -777,9 +785,11 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
     int startCell = loadFromRow * m_columns;
     int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
 
-    for (int i = startCell; i < endCell; i++) {
+    int loadBudget = 18;
+    for (int i = startCell; i < endCell && loadBudget > 0; i++) {
         if (m_cells[i]) {
             m_cells[i]->loadThumbnailIfNeeded();
+            loadBudget--;
         }
     }
 
@@ -790,12 +800,17 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
     int unloadAboveRow = centerRow - SCROLL_UNLOAD_DISTANCE_ROWS;
     int unloadBelowRow = centerRow + SCROLL_UNLOAD_DISTANCE_ROWS;
 
+    constexpr int UNLOAD_BUDGET_PER_CALL = 24;
+    int unloadBudgetAbove = UNLOAD_BUDGET_PER_CALL / 2;
+    int unloadBudgetBelow = UNLOAD_BUDGET_PER_CALL - unloadBudgetAbove;
+
     if (unloadAboveRow > 0) {
         // Only iterate cells in the range [0, unloadAboveRow)
         int unloadEnd = std::min(unloadAboveRow * m_columns, static_cast<int>(m_cells.size()));
-        for (int i = 0; i < unloadEnd; i++) {
+        for (int i = 0; i < unloadEnd && unloadBudgetAbove > 0; i++) {
             if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
                 m_cells[i]->unloadThumbnail();
+                unloadBudgetAbove--;
             }
         }
     }
@@ -803,9 +818,10 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
         // Only iterate cells in the range [unloadBelowRow, end)
         int unloadStart = std::max(0, unloadBelowRow * m_columns);
         int unloadEnd = static_cast<int>(m_cells.size());
-        for (int i = unloadStart; i < unloadEnd; i++) {
+        for (int i = unloadStart; i < unloadEnd && unloadBudgetBelow > 0; i++) {
             if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
                 m_cells[i]->unloadThumbnail();
+                unloadBudgetBelow--;
             }
         }
     }
