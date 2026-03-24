@@ -163,7 +163,6 @@ target_link_libraries(${PROJECT_NAME}
     swscale
     avutil
     -Wl,--end-group
-    mp3lame
     zstd
     ass
     freetype
@@ -175,6 +174,10 @@ target_link_libraries(${PROJECT_NAME}
     z
     c
 )
+
+if(NOT PLATFORM_SWITCH)
+    target_link_libraries(${PROJECT_NAME} mp3lame)
+endif()
 
 if(PLATFORM_PSV)
     target_link_libraries(${PROJECT_NAME}
