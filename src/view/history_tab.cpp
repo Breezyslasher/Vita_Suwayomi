@@ -46,7 +46,7 @@ HistoryTab::HistoryTab() {
     triangleIcon->setWidth(16);
     triangleIcon->setHeight(16);
     triangleIcon->setScalingType(brls::ImageScalingType::FIT);
-    triangleIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    triangleIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
     triangleIcon->setMarginBottom(2);
     refreshContainer->addView(triangleIcon);
 
@@ -61,7 +61,7 @@ HistoryTab::HistoryTab() {
     refreshIcon->setWidth(24);
     refreshIcon->setHeight(24);
     refreshIcon->setScalingType(brls::ImageScalingType::FIT);
-    refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
+    refreshIcon->setImageFromFile(RESOURCE_PREFIX "icons/refresh.png");
     m_refreshBtn->addView(refreshIcon);
 
     m_refreshBtn->registerClickAction([this](brls::View* view) {
