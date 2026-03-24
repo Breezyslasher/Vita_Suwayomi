@@ -144,6 +144,14 @@ endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_INCLUDES})
 
+if(PLATFORM_PSV)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
+elseif(PLATFORM_SWITCH)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"romfs:/\")
+else()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"resources/\")
+endif()
+
 # ---------------------------------------------------------------------------
 # Link libraries
 # ---------------------------------------------------------------------------
@@ -163,7 +171,6 @@ target_link_libraries(${PROJECT_NAME}
     swscale
     avutil
     -Wl,--end-group
-    mp3lame
     zstd
     ass
     freetype
@@ -175,6 +182,10 @@ target_link_libraries(${PROJECT_NAME}
     z
     c
 )
+
+if(NOT PLATFORM_SWITCH)
+    target_link_libraries(${PROJECT_NAME} mp3lame)
+endif()
 
 if(PLATFORM_PSV)
     target_link_libraries(${PROJECT_NAME}
@@ -196,7 +207,7 @@ if(PLATFORM_PSV)
         SceVshBridge_stub
     )
 elseif(PLATFORM_SWITCH)
-    target_link_libraries(${PROJECT_NAME} nx)
+    target_link_libraries(${PROJECT_NAME} nx dav1d)
 elseif(PLATFORM_DESKTOP)
     find_package(Threads REQUIRED)
     target_link_libraries(${PROJECT_NAME} Threads::Threads)
