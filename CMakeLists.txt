@@ -236,6 +236,10 @@ if(PLATFORM_PSV)
     )
 elseif(PLATFORM_SWITCH)
     target_link_libraries(${PROJECT_NAME} nx dav1d)
+elseif(PLATFORM_PS4)
+    target_link_libraries(${PROJECT_NAME}
+        SceNet
+    )
 elseif(PLATFORM_DESKTOP)
     find_package(Threads REQUIRED)
     target_link_libraries(${PROJECT_NAME} Threads::Threads)
