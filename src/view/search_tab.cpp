@@ -53,7 +53,7 @@ SearchTab::SearchTab() {
     triangleHintIcon->setWidth(16);
     triangleHintIcon->setHeight(16);
     triangleHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    triangleHintIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    triangleHintIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
     triangleHintIcon->setMarginBottom(2);
     m_filterBtnContainer->addView(triangleHintIcon);
 
@@ -68,7 +68,7 @@ SearchTab::SearchTab() {
     m_tagFilterIcon->setWidth(24);
     m_tagFilterIcon->setHeight(24);
     m_tagFilterIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
+    m_tagFilterIcon->setImageFromFile(RESOURCE_PREFIX "icons/tag.png");
     m_tagFilterBtn->addView(m_tagFilterIcon);
 
     m_tagFilterBtn->registerClickAction([this](brls::View* view) {
@@ -101,7 +101,7 @@ SearchTab::SearchTab() {
     selectButtonIcon->setWidth(48);
     selectButtonIcon->setHeight(16);
     selectButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    selectButtonIcon->setImageFromFile("app0:resources/images/select_button.png");
+    selectButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
     selectButtonIcon->setMarginBottom(2);
     historyContainer->addView(selectButtonIcon);
 
@@ -116,7 +116,7 @@ SearchTab::SearchTab() {
     historyIcon->setWidth(24);
     historyIcon->setHeight(24);
     historyIcon->setScalingType(brls::ImageScalingType::FIT);
-    historyIcon->setImageFromFile("app0:resources/icons/history.png");
+    historyIcon->setImageFromFile(RESOURCE_PREFIX "icons/history.png");
     m_historyBtn->addView(historyIcon);
 
     m_historyBtn->registerClickAction([this](brls::View* view) {
@@ -148,7 +148,7 @@ SearchTab::SearchTab() {
     startButtonIcon->setWidth(64);
     startButtonIcon->setHeight(16);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
+    startButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
     startButtonIcon->setMarginBottom(2);
     searchContainer->addView(startButtonIcon);
 
@@ -163,7 +163,7 @@ SearchTab::SearchTab() {
     searchIcon->setWidth(24);
     searchIcon->setHeight(24);
     searchIcon->setScalingType(brls::ImageScalingType::FIT);
-    searchIcon->setImageFromFile("app0:resources/icons/search.png");
+    searchIcon->setImageFromFile(RESOURCE_PREFIX "icons/search.png");
     m_globalSearchBtn->addView(searchIcon);
 
     m_globalSearchBtn->registerClickAction([this](brls::View* view) {
@@ -757,7 +757,7 @@ void SearchTab::showSources() {
     m_latestBtn->setVisibility(brls::Visibility::GONE);
     m_backBtn->setVisibility(brls::Visibility::GONE);
     // Restore filter icon on header button
-    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
+    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile(RESOURCE_PREFIX "icons/tag.png");
     m_tagFilterBtn->setBackgroundColor(Application::getInstance().getButtonColor());
     // Hide the filter button on the sources page (it does nothing here)
     m_filterBtnContainer->setVisibility(brls::Visibility::GONE);
@@ -2848,7 +2848,7 @@ void SearchTab::handleBackNavigation() {
                     m_latestBtn->setVisibility(source.supportsLatest ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
                     m_backBtn->setVisibility(brls::Visibility::VISIBLE);
                     // Restore filter icon on header button
-                    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile("app0:resources/icons/tag.png");
+                    if (m_tagFilterIcon) m_tagFilterIcon->setImageFromFile(RESOURCE_PREFIX "icons/tag.png");
 
                     // Restore search/history buttons and filter button for source browsing
                     m_buttonContainer->setVisibility(brls::Visibility::VISIBLE);

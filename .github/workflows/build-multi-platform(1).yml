@@ -155,6 +155,8 @@ jobs:
       - name: Build
         run: |
           export HOMEBREW_PREFIX="$(brew --prefix)"
+          export CPATH="${HOMEBREW_PREFIX}/include:${CPATH}"
+          export LIBRARY_PATH="${HOMEBREW_PREFIX}/lib:${LIBRARY_PATH}"
           export CPPFLAGS="-I${HOMEBREW_PREFIX}/include"
           export LDFLAGS="-L${HOMEBREW_PREFIX}/lib"
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON

@@ -144,6 +144,14 @@ endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_INCLUDES})
 
+if(PLATFORM_PSV)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
+elseif(PLATFORM_SWITCH)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"romfs:/\")
+else()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"resources/\")
+endif()
+
 # ---------------------------------------------------------------------------
 # Link libraries
 # ---------------------------------------------------------------------------
