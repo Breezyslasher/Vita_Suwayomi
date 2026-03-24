@@ -18,6 +18,8 @@ class MangaItemCell;
 
 class RecyclingGrid : public brls::ScrollingFrame {
 public:
+    using brls::ScrollingFrame::clearViews;
+
     RecyclingGrid();
     ~RecyclingGrid();
 
