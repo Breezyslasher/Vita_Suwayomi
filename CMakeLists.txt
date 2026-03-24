@@ -386,6 +386,12 @@ elseif(PLATFORM_DESKTOP)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/resources
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/sce_sys/icon0.png
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/images/logo.png
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/sce_sys/icon0.png
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/images/logo-small.png
         COMMENT "Copying resources for desktop build"
     )
 endif()
