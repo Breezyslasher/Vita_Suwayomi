@@ -1257,7 +1257,7 @@ void DownloadsManager::saveStateUnlocked() {
 
     std::string json = ss.str();
 
-    SceUID fd = sceIoOpen(STATE_FILE_PATH, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
+    SceUID fd = sceIoOpen(STATE_FILE_PATH.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
     if (fd >= 0) {
         sceIoWrite(fd, json.c_str(), json.length());
         sceIoClose(fd);
@@ -1358,7 +1358,7 @@ static size_t findMatchingBracket(const std::string& json, size_t start, char op
 
 void DownloadsManager::loadState() {
 #ifdef __vita__
-    SceUID fd = sceIoOpen(STATE_FILE_PATH, SCE_O_RDONLY, 0);
+    SceUID fd = sceIoOpen(STATE_FILE_PATH.c_str(), SCE_O_RDONLY, 0);
     if (fd < 0) {
         brls::Logger::debug("DownloadsManager: No saved state found");
         return;

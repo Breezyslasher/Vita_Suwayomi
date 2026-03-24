@@ -71,19 +71,24 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install switchfin portlibs package
+        run: |
+          curl -fsSL -o /tmp/switch-libmpv.pkg.tar.zst \
+            https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs/switch-libmpv-0.41.0-5-any.pkg.tar.zst
+          dkp-pacman -U --noconfirm /tmp/switch-libmpv.pkg.tar.zst
+
       - name: Install Switch dependencies
         run: |
           dkp-pacman -Sy --noconfirm \
             switch-curl \
             switch-mbedtls \
             switch-ffmpeg \
-            switch-mpv \
+            switch-libmpv \
             switch-libass \
             switch-freetype \
             switch-harfbuzz \
             switch-libpng \
-            switch-libwebp \
-            switch-zstd
+            switch-libwebp
 
       - name: Build
         run: |
@@ -125,7 +130,9 @@ jobs:
             libgl1-mesa-dev \
             libx11-dev \
             libxrandr-dev \
-            libxi-dev
+            libxi-dev \
+            libwayland-dev \
+            libxkbcommon-dev
 
       - name: Checkout
         uses: actions/checkout@v4
