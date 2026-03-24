@@ -71,19 +71,24 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install switchfin portlibs package
+        run: |
+          curl -fsSL -o /tmp/switch-libmpv.pkg.tar.zst \
+            https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs/switch-libmpv-0.41.0-5-any.pkg.tar.zst
+          dkp-pacman -U --noconfirm /tmp/switch-libmpv.pkg.tar.zst
+
       - name: Install Switch dependencies
         run: |
           dkp-pacman -Sy --noconfirm \
             switch-curl \
             switch-mbedtls \
             switch-ffmpeg \
-            switch-mpv \
+            switch-libmpv \
             switch-libass \
             switch-freetype \
             switch-harfbuzz \
             switch-libpng \
-            switch-libwebp \
-            switch-zstd
+            switch-libwebp
 
       - name: Build
         run: |
@@ -114,7 +119,15 @@ jobs:
             libcurl4-openssl-dev \
             libmbedtls-dev \
             libmpv-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavfilter-dev \
+            libswresample-dev \
+            libswscale-dev \
+            libavutil-dev \
+            libmp3lame-dev \
             libass-dev \
+            libdbus-1-dev \
             libfreetype-dev \
             libharfbuzz-dev \
             libfribidi-dev \
@@ -125,7 +138,11 @@ jobs:
             libgl1-mesa-dev \
             libx11-dev \
             libxrandr-dev \
-            libxi-dev
+            libxi-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libwayland-dev \
+            libxkbcommon-dev
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -200,13 +217,16 @@ jobs:
       - name: Install Windows deps via vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: '2024.06.15'
+          vcpkgGitCommitId: 'f7423ee180c4b7f40d43402c2feb3859161ef625'
 
       - name: Build
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET=x64-mingw-static \
+            -DCMAKE_DISABLE_FIND_PACKAGE_DBus=ON \
+            -DGLFW_BUILD_WAYLAND=OFF \
+            -DGLFW_BUILD_X11=OFF \
             -DPLATFORM_DESKTOP=ON
           cmake --build build
 
