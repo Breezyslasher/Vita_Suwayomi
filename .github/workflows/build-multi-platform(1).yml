@@ -377,6 +377,7 @@ jobs:
       - name: Install switchfin portlibs
         run: |
           BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs"
+          dkp-pacman --noconfirm -Rdd switch-libmpv switch-libmpv-deko3d || true
           dkp-pacman --noconfirm -U \
             $BASE_URL/hacBrewPack-3.05-1-x86_64.pkg.tar.zst \
             $BASE_URL/libuam-master-1-any.pkg.tar.zst \
