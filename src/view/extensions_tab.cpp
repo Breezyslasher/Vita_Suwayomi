@@ -1467,7 +1467,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                 auto* valueLabel = new brls::Label();
                 valueLabel->setFontSize(13);
 
-                if (pref.type == SourcePreferenceType::CHECKBOX || pref.type == SourcePreferenceType::SWITCH) {
+                if (pref.type == SourcePreferenceType::CHECKBOX || pref.type == SourcePreferenceType::SWITCH_TOGGLE) {
                     valueLabel->setText(pref.currentValue ? "Enabled" : "Disabled");
 
                     // Toggle on click
@@ -1475,7 +1475,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                         bool newValue = !pref.currentValue;
                         SourcePreferenceChange change;
                         change.position = prefIdx;
-                        if (pref.type == SourcePreferenceType::SWITCH) {
+                        if (pref.type == SourcePreferenceType::SWITCH_TOGGLE) {
                             change.switchState = newValue;
                         } else {
                             change.checkBoxState = newValue;

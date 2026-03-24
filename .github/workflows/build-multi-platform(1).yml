@@ -225,7 +225,6 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET=x64-mingw-static \
-            -DCMAKE_DISABLE_FIND_PACKAGE_DBus=ON \
             -DGLFW_BUILD_WAYLAND=OFF \
             -DGLFW_BUILD_X11=OFF \
             -DPLATFORM_DESKTOP=ON
