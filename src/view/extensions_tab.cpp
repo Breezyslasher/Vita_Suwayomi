@@ -77,7 +77,7 @@ ExtensionCell::ExtensionCell() {
 
     auto* settingsIcon = new brls::Image();
     settingsIcon->setSize(brls::Size(20, 20));
-    settingsIcon->setImageFromFile("app0:resources/icons/options.png");
+    settingsIcon->setImageFromFile(RESOURCE_PREFIX "icons/options.png");
     settingsBtn->addView(settingsIcon);
     settingsBtn->addGestureRecognizer(new brls::TapGestureRecognizer(settingsBtn));
 
@@ -694,7 +694,7 @@ ExtensionsTab::ExtensionsTab() {
     selectButtonIcon->setWidth(64);
     selectButtonIcon->setHeight(16);
     selectButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    selectButtonIcon->setImageFromFile("app0:resources/images/select_button.png");
+    selectButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
     selectButtonIcon->setMarginBottom(2);
     repoContainer->addView(selectButtonIcon);
 
@@ -705,7 +705,7 @@ ExtensionsTab::ExtensionsTab() {
     repoBox->setBackgroundColor(Application::getInstance().getCardBackground());
     auto* repoIcon = new brls::Image();
     repoIcon->setSize(brls::Size(24, 24));
-    repoIcon->setImageFromFile("app0:resources/icons/import.png");
+    repoIcon->setImageFromFile(RESOURCE_PREFIX "icons/import.png");
     repoBox->addView(repoIcon);
     repoBox->registerClickAction([this](brls::View*) {
         brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showAddRepoDialog(); });
@@ -725,7 +725,7 @@ ExtensionsTab::ExtensionsTab() {
     startButtonIcon->setWidth(64);
     startButtonIcon->setHeight(16);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
+    startButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
     startButtonIcon->setMarginBottom(2);
     searchContainer->addView(startButtonIcon);
 
@@ -736,7 +736,7 @@ ExtensionsTab::ExtensionsTab() {
     searchBox->setBackgroundColor(Application::getInstance().getCardBackground());
     m_searchIcon = new brls::Image();
     m_searchIcon->setSize(brls::Size(24, 24));
-    m_searchIcon->setImageFromFile("app0:resources/icons/search.png");
+    m_searchIcon->setImageFromFile(RESOURCE_PREFIX "icons/search.png");
     searchBox->addView(m_searchIcon);
     searchBox->registerClickAction([this](brls::View*) {
         brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; showSearchDialog(); });
@@ -755,7 +755,7 @@ ExtensionsTab::ExtensionsTab() {
     triangleButtonIcon->setWidth(16);
     triangleButtonIcon->setHeight(16);
     triangleButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    triangleButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    triangleButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
     triangleButtonIcon->setMarginBottom(2);
     refreshContainer->addView(triangleButtonIcon);
 
@@ -766,7 +766,7 @@ ExtensionsTab::ExtensionsTab() {
     m_refreshBox->setBackgroundColor(Application::getInstance().getCardBackground());
     m_refreshIcon = new brls::Image();
     m_refreshIcon->setSize(brls::Size(24, 24));
-    m_refreshIcon->setImageFromFile("app0:resources/icons/refresh.png");
+    m_refreshIcon->setImageFromFile(RESOURCE_PREFIX "icons/refresh.png");
     m_refreshBox->addView(m_refreshIcon);
     m_refreshBox->registerClickAction([this](brls::View*) {
         brls::sync([this, aliveWeak = std::weak_ptr<bool>(m_alive)]() { auto a = aliveWeak.lock(); if (!a || !*a) return; refreshExtensions(); });
@@ -1467,7 +1467,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                 auto* valueLabel = new brls::Label();
                 valueLabel->setFontSize(13);
 
-                if (pref.type == SourcePreferenceType::CHECKBOX || pref.type == SourcePreferenceType::SWITCH) {
+                if (pref.type == SourcePreferenceType::CHECKBOX || pref.type == SourcePreferenceType::SWITCH_TOGGLE) {
                     valueLabel->setText(pref.currentValue ? "Enabled" : "Disabled");
 
                     // Toggle on click
@@ -1475,7 +1475,7 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
                         bool newValue = !pref.currentValue;
                         SourcePreferenceChange change;
                         change.position = prefIdx;
-                        if (pref.type == SourcePreferenceType::SWITCH) {
+                        if (pref.type == SourcePreferenceType::SWITCH_TOGGLE) {
                             change.switchState = newValue;
                         } else {
                             change.checkBoxState = newValue;

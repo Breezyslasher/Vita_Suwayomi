@@ -83,7 +83,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_lHintIcon->setWidth(24);
     m_lHintIcon->setHeight(24);
     m_lHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_lHintIcon->setImageFromFile("app0:resources/images/l_button.png");
+    m_lHintIcon->setImageFromFile(RESOURCE_PREFIX "images/l_button.png");
     m_lHintIcon->setMarginRight(6);
     topRow->addView(m_lHintIcon);
 
@@ -136,7 +136,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_rHintIcon->setWidth(24);
     m_rHintIcon->setHeight(24);
     m_rHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_rHintIcon->setImageFromFile("app0:resources/images/r_button.png");
+    m_rHintIcon->setImageFromFile(RESOURCE_PREFIX "images/r_button.png");
     m_rHintIcon->setMarginRight(10);
     topRow->addView(m_rHintIcon);
 
@@ -156,7 +156,7 @@ LibrarySectionTab::LibrarySectionTab() {
     sortHintIcon->setWidth(16);
     sortHintIcon->setHeight(16);
     sortHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    sortHintIcon->setImageFromFile("app0:resources/images/triangle_button.png");
+    sortHintIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
     sortHintIcon->setMarginBottom(2);
     sortContainer->addView(sortHintIcon);
 
@@ -200,7 +200,7 @@ LibrarySectionTab::LibrarySectionTab() {
     auto* updateHintIcon = new brls::Image();
     updateHintIcon->setHeight(16);
     updateHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    updateHintIcon->setImageFromFile("app0:resources/images/select_button.png");
+    updateHintIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
     updateHintIcon->setMarginBottom(2);
     m_updateContainer->addView(updateHintIcon);
 
@@ -215,7 +215,7 @@ LibrarySectionTab::LibrarySectionTab() {
     updateIcon->setWidth(24);
     updateIcon->setHeight(24);
     updateIcon->setScalingType(brls::ImageScalingType::FIT);
-    updateIcon->setImageFromFile("app0:resources/icons/refresh.png");
+    updateIcon->setImageFromFile(RESOURCE_PREFIX "icons/refresh.png");
     m_updateBtn->addView(updateIcon);
 
     m_updateBtn->registerClickAction([this](brls::View* view) {
@@ -241,7 +241,7 @@ LibrarySectionTab::LibrarySectionTab() {
     groupHintIcon->setWidth(16);
     groupHintIcon->setHeight(16);
     groupHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    groupHintIcon->setImageFromFile("app0:resources/images/square_button.png");
+    groupHintIcon->setImageFromFile(RESOURCE_PREFIX "images/square_button.png");
     groupHintIcon->setMarginBottom(2);
     groupContainer->addView(groupHintIcon);
 
@@ -256,7 +256,7 @@ LibrarySectionTab::LibrarySectionTab() {
     groupIcon->setWidth(24);
     groupIcon->setHeight(24);
     groupIcon->setScalingType(brls::ImageScalingType::FIT);
-    groupIcon->setImageFromFile("app0:resources/icons/format-list-group.png");
+    groupIcon->setImageFromFile(RESOURCE_PREFIX "icons/format-list-group.png");
     groupBtn->addView(groupIcon);
 
     groupBtn->registerClickAction([this](brls::View* view) {
@@ -2303,37 +2303,37 @@ void LibrarySectionTab::updateSortButtonText() {
     switch (effectiveMode) {
         case LibrarySortMode::TITLE_ASC:
         default:
-            iconPath = "app0:resources/icons/az.png";  // A-Z
+            iconPath = RESOURCE_PREFIX "icons/az.png";  // A-Z
             break;
         case LibrarySortMode::TITLE_DESC:
-            iconPath = "app0:resources/icons/za.png";  // Z-A
+            iconPath = RESOURCE_PREFIX "icons/za.png";  // Z-A
             break;
         case LibrarySortMode::UNREAD_DESC:
-            iconPath = "app0:resources/icons/sort-9-1.png";  // Most unread first
+            iconPath = RESOURCE_PREFIX "icons/sort-9-1.png";  // Most unread first
             break;
         case LibrarySortMode::UNREAD_ASC:
-            iconPath = "app0:resources/icons/sort-1-9.png";  // Least unread first
+            iconPath = RESOURCE_PREFIX "icons/sort-1-9.png";  // Least unread first
             break;
         case LibrarySortMode::RECENTLY_ADDED_DESC:
-            iconPath = "app0:resources/icons/sort-clock-descending.png";  // Recently added (newest)
+            iconPath = RESOURCE_PREFIX "icons/sort-clock-descending.png";  // Recently added (newest)
             break;
         case LibrarySortMode::RECENTLY_ADDED_ASC:
-            iconPath = "app0:resources/icons/sort-clock-ascending.png";  // Recently added (oldest)
+            iconPath = RESOURCE_PREFIX "icons/sort-clock-ascending.png";  // Recently added (oldest)
             break;
         case LibrarySortMode::LAST_READ:
-            iconPath = "app0:resources/icons/book-open-page-variant.png";  // Last read
+            iconPath = RESOURCE_PREFIX "icons/book-open-page-variant.png";  // Last read
             break;
         case LibrarySortMode::DATE_UPDATED_DESC:
-            iconPath = "app0:resources/icons/sort-calendar-descending.png";  // Date updated (newest)
+            iconPath = RESOURCE_PREFIX "icons/sort-calendar-descending.png";  // Date updated (newest)
             break;
         case LibrarySortMode::DATE_UPDATED_ASC:
-            iconPath = "app0:resources/icons/sort-calendar-ascending.png";  // Date updated (oldest)
+            iconPath = RESOURCE_PREFIX "icons/sort-calendar-ascending.png";  // Date updated (oldest)
             break;
         case LibrarySortMode::TOTAL_CHAPTERS:
-            iconPath = "app0:resources/icons/book-multiple.png";  // Total chapters
+            iconPath = RESOURCE_PREFIX "icons/book-multiple.png";  // Total chapters
             break;
         case LibrarySortMode::DOWNLOADED_ONLY:
-            iconPath = "app0:resources/icons/book-arrow-down.png";  // Downloaded only
+            iconPath = RESOURCE_PREFIX "icons/book-arrow-down.png";  // Downloaded only
             break;
     }
     m_sortIcon->setImageFromFile(iconPath);

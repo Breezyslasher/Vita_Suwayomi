@@ -9,12 +9,13 @@ cmake_minimum_required(VERSION 3.16)
 
 option(PLATFORM_PSV     "Build for PlayStation Vita"                   OFF)
 option(PLATFORM_SWITCH  "Build for Nintendo Switch"                    OFF)
+option(PLATFORM_PS4     "Build for PlayStation 4"                      OFF)
 option(PLATFORM_DESKTOP "Build for Desktop (Linux/macOS/Windows)"      OFF)
 option(PLATFORM_ANDROID "Build for Android"                            OFF)
 
 # Default to desktop when nothing is specified
 set(_PLATFORM_COUNT 0)
-foreach(_P PSV SWITCH DESKTOP ANDROID)
+foreach(_P PSV SWITCH PS4 DESKTOP ANDROID)
     if(PLATFORM_${_P})
         math(EXPR _PLATFORM_COUNT "${_PLATFORM_COUNT} + 1")
     endif()
@@ -36,7 +37,7 @@ set(BOREALIS_LIBRARY ${BOREALIS_DIR}/library)
 set(PLATFORM_DESKTOP ${PLATFORM_DESKTOP} CACHE BOOL "" FORCE)
 set(PLATFORM_SWITCH  ${PLATFORM_SWITCH}  CACHE BOOL "" FORCE)
 set(PLATFORM_PSV     ${PLATFORM_PSV}     CACHE BOOL "" FORCE)
-set(PLATFORM_PS4     OFF                 CACHE BOOL "" FORCE)
+set(PLATFORM_PS4     ${PLATFORM_PS4}     CACHE BOOL "" FORCE)
 set(PLATFORM_IOS     OFF                 CACHE BOOL "" FORCE)
 set(PLATFORM_ANDROID ${PLATFORM_ANDROID} CACHE BOOL "" FORCE)
 
@@ -143,18 +144,29 @@ else()
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_INCLUDES})
+if(PLATFORM_DESKTOP AND APPLE)
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        /opt/homebrew/include
+        /usr/local/include
+    )
+    target_link_directories(${PROJECT_NAME} PRIVATE
+        /opt/homebrew/lib
+        /usr/local/lib
+    )
+endif()
+
+if(PLATFORM_PSV)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
+elseif(PLATFORM_SWITCH)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"romfs:/\")
+else()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"resources/\")
+endif()
 
 # ---------------------------------------------------------------------------
 # Link libraries
 # ---------------------------------------------------------------------------
-target_link_libraries(${PROJECT_NAME}
-    borealis
-    ${APP_PLATFORM_LIB}
-    curl
-    mbedtls
-    mbedx509
-    mbedcrypto
-    -Wl,--start-group
+set(APP_FFMPEG_LIBS
     mpv
     avfilter
     avformat
@@ -162,8 +174,22 @@ target_link_libraries(${PROJECT_NAME}
     swresample
     swscale
     avutil
-    -Wl,--end-group
-    mp3lame
+)
+
+if(APPLE)
+    set(APP_FFMPEG_LINK_BLOCK ${APP_FFMPEG_LIBS})
+else()
+    set(APP_FFMPEG_LINK_BLOCK -Wl,--start-group ${APP_FFMPEG_LIBS} -Wl,--end-group)
+endif()
+
+target_link_libraries(${PROJECT_NAME}
+    borealis
+    ${APP_PLATFORM_LIB}
+    curl
+    mbedtls
+    mbedx509
+    mbedcrypto
+    ${APP_FFMPEG_LINK_BLOCK}
     zstd
     ass
     freetype
@@ -175,6 +201,10 @@ target_link_libraries(${PROJECT_NAME}
     z
     c
 )
+
+if(NOT PLATFORM_SWITCH)
+    target_link_libraries(${PROJECT_NAME} mp3lame)
+endif()
 
 if(PLATFORM_PSV)
     target_link_libraries(${PROJECT_NAME}
@@ -196,10 +226,13 @@ if(PLATFORM_PSV)
         SceVshBridge_stub
     )
 elseif(PLATFORM_SWITCH)
-    target_link_libraries(${PROJECT_NAME} nx)
+    target_link_libraries(${PROJECT_NAME} nx dav1d)
 elseif(PLATFORM_DESKTOP)
     find_package(Threads REQUIRED)
     target_link_libraries(${PROJECT_NAME} Threads::Threads)
+    if(APPLE)
+        target_link_libraries(${PROJECT_NAME} "-framework CoreWLAN")
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------

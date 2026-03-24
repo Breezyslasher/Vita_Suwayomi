@@ -71,19 +71,27 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install switchfin portlibs package
+        run: |
+          curl -fsSL -o /tmp/switch-libmpv.pkg.tar.zst \
+            https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs/switch-libmpv-0.41.0-5-any.pkg.tar.zst
+          curl -fsSL -o /tmp/switch-dav1d.pkg.tar.zst \
+            https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs/switch-dav1d-1.5.3-1-any.pkg.tar.zst
+          dkp-pacman -U --noconfirm /tmp/switch-libmpv.pkg.tar.zst
+          dkp-pacman -U --noconfirm /tmp/switch-dav1d.pkg.tar.zst
+
       - name: Install Switch dependencies
         run: |
           dkp-pacman -Sy --noconfirm \
             switch-curl \
             switch-mbedtls \
             switch-ffmpeg \
-            switch-mpv \
+            switch-libmpv \
             switch-libass \
             switch-freetype \
             switch-harfbuzz \
             switch-libpng \
-            switch-libwebp \
-            switch-zstd
+            switch-libwebp
 
       - name: Build
         run: |
@@ -114,7 +122,15 @@ jobs:
             libcurl4-openssl-dev \
             libmbedtls-dev \
             libmpv-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavfilter-dev \
+            libswresample-dev \
+            libswscale-dev \
+            libavutil-dev \
+            libmp3lame-dev \
             libass-dev \
+            libdbus-1-dev \
             libfreetype-dev \
             libharfbuzz-dev \
             libfribidi-dev \
@@ -125,7 +141,11 @@ jobs:
             libgl1-mesa-dev \
             libx11-dev \
             libxrandr-dev \
-            libxi-dev
+            libxi-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libwayland-dev \
+            libxkbcommon-dev
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -134,6 +154,11 @@ jobs:
 
       - name: Build
         run: |
+          export HOMEBREW_PREFIX="$(brew --prefix)"
+          export CPATH="${HOMEBREW_PREFIX}/include:${CPATH}"
+          export LIBRARY_PATH="${HOMEBREW_PREFIX}/lib:${LIBRARY_PATH}"
+          export CPPFLAGS="-I${HOMEBREW_PREFIX}/include"
+          export LDFLAGS="-L${HOMEBREW_PREFIX}/lib"
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
           cmake --build build
 
@@ -190,7 +215,24 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y \
             cmake ninja-build git pkg-config \
-            mingw-w64
+            mingw-w64 \
+            libdbus-1-dev \
+            libwebp-dev \
+            libcurl4-openssl-dev \
+            libmbedtls-dev \
+            libmpv-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavfilter-dev \
+            libswresample-dev \
+            libswscale-dev \
+            libavutil-dev \
+            libmp3lame-dev \
+            libass-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
+            libfreetype-dev \
+            libpng-dev
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -200,13 +242,15 @@ jobs:
       - name: Install Windows deps via vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: '2024.06.15'
+          vcpkgGitCommitId: 'f7423ee180c4b7f40d43402c2feb3859161ef625'
 
       - name: Build
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET=x64-mingw-static \
+            -DGLFW_BUILD_WAYLAND=OFF \
+            -DGLFW_BUILD_X11=OFF \
             -DPLATFORM_DESKTOP=ON
           cmake --build build
 
@@ -217,3 +261,421 @@ jobs:
           path: |
             build/VitaSuwayomi.exe
             build/resources/
+
+  # ───────────────────────────────────────────────
+  # Android — arm64-v8a
+  # ───────────────────────────────────────────────
+  build-android:
+    name: Android (arm64-v8a)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Install build requirements
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y cmake ninja-build git pkg-config
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27d
+          link-to-sdk: true
+
+      - name: Install Android dependency toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config meson nasm make
+
+      - name: Cache Android deps (switchfin-style)
+        if: ${{ hashFiles('scripts/android/Makefile') != '' }}
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: jniLibs
+          key: jniLibs-${{ hashFiles('scripts/android/Makefile') }}
+
+      - name: Build Android packages (switchfin-style)
+        if: ${{ hashFiles('scripts/android/Makefile') != '' && steps.cache-deps.outputs.cache-hit != 'true' }}
+        run: |
+          make -C scripts/android TMPDIR=${{ runner.temp }} download
+          make -C scripts/android TMPDIR=${{ runner.temp }} ABI=armeabi-v7a \
+            ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
+          make -C scripts/android TMPDIR=${{ runner.temp }} ABI=arm64-v8a \
+            ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
+
+      - name: Bump Android version (switchfin-style)
+        if: ${{ hashFiles('app/platform/android/app/build.gradle') != '' }}
+        uses: chkfung/android-version-actions@v1.2.2
+        with:
+          gradlePath: app/platform/android/app/build.gradle
+          versionCode: ${{ github.run_number }}
+
+      - name: Build Android APK (switchfin-style)
+        if: ${{ hashFiles('app/platform/android/gradlew') != '' }}
+        run: |
+          if [ -f lib/borealis/build_libromfs_generator.sh ]; then
+            (cd lib/borealis && bash build_libromfs_generator.sh)
+          elif [ -f library/borealis/build_libromfs_generator.sh ]; then
+            (cd library/borealis && bash build_libromfs_generator.sh)
+          fi
+          cd app/platform/android && ./gradlew assembleRelease
+
+      - name: Prepare libromfs-generator (fallback CMake)
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        run: |
+          if [ -f lib/borealis/build_libromfs_generator.sh ]; then
+            (cd lib/borealis && bash build_libromfs_generator.sh)
+          elif [ -f library/borealis/build_libromfs_generator.sh ]; then
+            (cd library/borealis && bash build_libromfs_generator.sh)
+          else
+            echo "Could not find build_libromfs_generator.sh"
+            exit 1
+          fi
+
+      - name: Build Android shared library (fallback CMake)
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          cmake -B build-android -G Ninja \
+            -DPLATFORM_ANDROID=ON \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-24 \
+            -DANDROID_STL=c++_shared
+          cmake --build build-android
+
+      - name: Upload Android APK
+        if: ${{ hashFiles('app/platform/android/gradlew') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-android-apk-${{ github.run_number }}
+          path: app/platform/android/app/build/outputs/apk/release/*.apk
+
+      - name: Upload Android shared library
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-android-${{ github.run_number }}
+          path: |
+            build-android/libVitaSuwayomi.so
+
+  # ───────────────────────────────────────────────
+  # Desktop — macOS Matrix (Silicon + Intel)
+  # ───────────────────────────────────────────────
+  build-desktop-macos-matrix:
+    name: Desktop (macOS ${{ matrix.tag }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - { tag: Silicon, arch: arm64, target: "11.0", runner: macos-14 }
+        - { tag: Intel, arch: x86_64, target: "10.15", runner: macos-13 }
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install deps
+        run: |
+          brew install cmake ninja pkg-config curl mbedtls mpv libass freetype harfbuzz fribidi libpng webp zstd glfw
+
+      - name: Build
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DPLATFORM_DESKTOP=ON \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }}
+          cmake --build build
+
+      - name: Upload macOS binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-macos-${{ matrix.tag }}-${{ github.run_number }}
+          path: |
+            build/VitaSuwayomi
+            build/resources/
+
+  # ───────────────────────────────────────────────
+  # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
+  # ───────────────────────────────────────────────
+  build-desktop-windows-matrix:
+    name: Desktop (Windows ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - { arch: x64, sys: mingw64, env: x86_64, runner: windows-latest }
+        - { arch: x86, sys: mingw32, env: i686, runner: windows-latest }
+        - { arch: arm64, sys: clangarm64, env: clang-aarch64, runner: windows-11-arm }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.sys }}
+          path-type: inherit
+          cache: false
+          release: ${{ contains(matrix.sys, 'arm64') }}
+          install: >-
+            mingw-w64-${{ matrix.env }}-ninja
+            mingw-w64-${{ matrix.env }}-cc
+            mingw-w64-${{ matrix.env }}-cmake
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install dependency
+        run: |
+          for pkg in glfw-3.5.0-1 curl-8.16.0-1 mpv-0.41.0-1 libwebp-1.6.0-1; do
+            curl -sLO https://github.com/dragonflylee/switchfin/releases/download/mingw-packages/${MINGW_PACKAGE_PREFIX}-${pkg}-any.pkg.tar.zst
+          done
+          pacman -U --noconfirm *.pkg.tar.zst
+      - name: Build
+        run: |
+          cmake -B build -G Ninja \
+            -DPLATFORM_DESKTOP=ON \
+            -DWIN32_TERMINAL=OFF \
+            -DZLIB_USE_STATIC_LIBS=ON \
+            -DUSE_SYSTEM_GLFW=ON
+          cmake --build build
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-windows-${{ matrix.arch }}-${{ github.run_number }}
+          path: |
+            build/VitaSuwayomi.exe
+            build/resources/
+
+  # ───────────────────────────────────────────────
+  # Flatpak — Linux Matrix (x86_64 + aarch64, OpenGL)
+  # ───────────────────────────────────────────────
+  build-flatpak:
+    name: Flatpak (${{ matrix.arch }}-${{ matrix.driver }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - { arch: x86_64, runner: ubuntu-24.04, driver: gl, gles2: "OFF" }
+        - { arch: aarch64, runner: ubuntu-24.04-arm, driver: gl, gles2: "OFF" }
+        - { arch: aarch64, runner: ubuntu-24.04-arm, driver: gles2, gles2: "ON" }
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set workspace permissions
+        run: git config --system --add safe.directory $GITHUB_WORKSPACE
+      - name: Install dependencies
+        run: |
+          flatpak install -y --noninteractive flathub org.freedesktop.Sdk//25.08 org.freedesktop.Platform//25.08 || true
+      - name: Build desktop target in flatpak container
+        run: |
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_GLES2=${{ matrix.gles2 }}
+          cmake --build build
+          tar -czf VitaSuwayomi-Linux-${{ matrix.arch }}-${{ matrix.driver }}-${{ github.run_number }}.tar.gz -C build VitaSuwayomi resources
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-Flatpak-${{ matrix.arch }}-${{ matrix.driver }}-${{ github.run_number }}
+          path: VitaSuwayomi-Linux-${{ matrix.arch }}-${{ matrix.driver }}-${{ github.run_number }}.tar.gz
+
+  # ───────────────────────────────────────────────
+  # Nintendo Switch — Matrix (opengl + deko3d)
+  # ───────────────────────────────────────────────
+  build-nx:
+    name: NX (${{ matrix.driver }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - { driver: opengl, mpv_pkg: switch-libmpv-0.41.0-5-any.pkg.tar.zst, cmake_extra: "" }
+        - { driver: deko3d, mpv_pkg: switch-libmpv-deko3d-0.41.0-5-any.pkg.tar.zst, cmake_extra: "-DUSE_DEKO3D=ON" }
+    container:
+      image: devkitpro/devkita64:20260219
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install switchfin portlibs
+        run: |
+          BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs"
+          dkp-pacman --noconfirm -U $BASE_URL/hacBrewPack-3.05-1-x86_64.pkg.tar.zst
+          dkp-pacman --noconfirm -U $BASE_URL/switch-dav1d-1.5.3-1-any.pkg.tar.zst
+          dkp-pacman --noconfirm -U $BASE_URL/${{ matrix.mpv_pkg }}
+      - name: Build
+        run: |
+          cmake -B build -G Ninja \
+            -DPLATFORM_SWITCH=ON \
+            ${{ matrix.cmake_extra }}
+          cmake --build build
+      - name: Upload NRO
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-nx-${{ matrix.driver }}-${{ github.run_number }}
+          path: build/VitaSuwayomi.nro
+
+  # ───────────────────────────────────────────────
+  # PS4
+  # ───────────────────────────────────────────────
+  build-ps4:
+    name: PS4
+    runs-on: ubuntu-latest
+    container:
+      image: xfangfang/pacbrew:250221
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build
+        env:
+          OPENORBIS: /opt/pacbrew/ps4/openorbis
+        run: |
+          cmake -B build -DPLATFORM_PS4=ON
+          cmake --build build
+      - name: Upload PS4 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-ps4-${{ github.run_number }}
+          path: |
+            build/*.pkg
+            build/*.oelf
+
+  # ───────────────────────────────────────────────
+  # macOS matrix (explicit job name parity)
+  # ───────────────────────────────────────────────
+  build-macos:
+    name: macOS (${{ matrix.tag }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - { tag: Silicon, arch: arm64, target: "11.0", runner: macos-14 }
+        - { tag: Intel, arch: x86_64, target: "10.15", runner: macos-13 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install deps
+        run: brew install cmake ninja pkg-config curl mbedtls mpv libass freetype harfbuzz fribidi libpng webp zstd glfw
+      - name: Build
+        run: |
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }}
+          cmake --build build
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-macos-${{ matrix.tag }}-${{ github.run_number }}
+          path: |
+            build/VitaSuwayomi
+            build/resources/
+
+  # ───────────────────────────────────────────────
+  # MinGW matrix (x64/x86/arm64)
+  # ───────────────────────────────────────────────
+  build-mingw:
+    name: MinGW (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - { arch: x64, sys: mingw64, env: x86_64, runner: windows-latest }
+        - { arch: x86, sys: mingw32, env: i686, runner: windows-latest }
+        - { arch: arm64, sys: clangarm64, env: clang-aarch64, runner: windows-11-arm }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.sys }}
+          path-type: inherit
+          cache: false
+          release: ${{ contains(matrix.sys, 'arm64') }}
+          install: >-
+            mingw-w64-${{ matrix.env }}-ninja
+            mingw-w64-${{ matrix.env }}-cc
+            mingw-w64-${{ matrix.env }}-cmake
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build
+        run: |
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON
+          cmake --build build
+      - name: Upload mingw artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-mingw-${{ matrix.arch }}-${{ github.run_number }}
+          path: |
+            build/VitaSuwayomi.exe
+            build/resources/
+
+  # ───────────────────────────────────────────────
+  # Debian package-like build
+  # ───────────────────────────────────────────────
+  build-deb:
+    name: Deb build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build build-essential git pkg-config wayland-protocols libwayland-bin libwayland-dev libxkbcommon-dev
+      - name: Build
+        run: |
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
+          cmake --build build
+          tar -czf VitaSuwayomi-deb-${{ github.run_number }}.tar.gz -C build VitaSuwayomi resources
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-deb-${{ github.run_number }}
+          path: VitaSuwayomi-deb-${{ github.run_number }}.tar.gz
+
+  # ───────────────────────────────────────────────
+  # AUR-like build
+  # ───────────────────────────────────────────────
+  build-aur:
+    name: AUR build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build build-essential git pkg-config zstd wayland-protocols libwayland-bin libwayland-dev libxkbcommon-dev
+      - name: Build
+        run: |
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
+          cmake --build build
+          tar --zstd -cf VitaSuwayomi-aur-${{ github.run_number }}.pkg.tar.zst -C build VitaSuwayomi resources
+      - name: Upload aur artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-aur-${{ github.run_number }}
+          path: VitaSuwayomi-aur-${{ github.run_number }}.pkg.tar.zst
