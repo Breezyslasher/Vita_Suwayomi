@@ -546,7 +546,14 @@ jobs:
         run: git config --system --add safe.directory $GITHUB_WORKSPACE
       - name: Install dependencies
         run: |
-          flatpak install -y --noninteractive flathub org.freedesktop.Sdk//25.08 org.freedesktop.Platform//25.08 || true
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config \
+            libcurl4-openssl-dev libmbedtls-dev libmpv-dev \
+            libavcodec-dev libavformat-dev libavfilter-dev libswresample-dev libswscale-dev libavutil-dev \
+            libmp3lame-dev libass-dev libfreetype-dev libharfbuzz-dev libfribidi-dev \
+            libpng-dev libwebp-dev libzstd-dev libdbus-1-dev \
+            libwayland-dev libxkbcommon-dev xorg-dev
       - name: Build desktop target in flatpak container
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_GLES2=${{ matrix.gles2 }}
