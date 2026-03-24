@@ -209,7 +209,8 @@ jobs:
             cmake ninja-build git pkg-config \
             mingw-w64 \
             libdbus-1-dev \
-            libwebp-dev
+            libwebp-dev \
+            libcurl4-openssl-dev
 
       - name: Checkout
         uses: actions/checkout@v4
