@@ -119,6 +119,12 @@ jobs:
             libcurl4-openssl-dev \
             libmbedtls-dev \
             libmpv-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavfilter-dev \
+            libswresample-dev \
+            libswscale-dev \
+            libavutil-dev \
             libass-dev \
             libdbus-1-dev \
             libfreetype-dev \
@@ -217,6 +223,7 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET=x64-mingw-static \
+            -DCMAKE_DISABLE_FIND_PACKAGE_DBus=ON \
             -DGLFW_BUILD_WAYLAND=OFF \
             -DGLFW_BUILD_X11=OFF \
             -DPLATFORM_DESKTOP=ON
