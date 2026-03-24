@@ -229,6 +229,9 @@ elseif(PLATFORM_SWITCH)
 elseif(PLATFORM_DESKTOP)
     find_package(Threads REQUIRED)
     target_link_libraries(${PROJECT_NAME} Threads::Threads)
+    if(APPLE)
+        target_link_libraries(${PROJECT_NAME} "-framework CoreWLAN")
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
