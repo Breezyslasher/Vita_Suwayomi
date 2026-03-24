@@ -161,14 +161,7 @@ endif()
 # ---------------------------------------------------------------------------
 # Link libraries
 # ---------------------------------------------------------------------------
-target_link_libraries(${PROJECT_NAME}
-    borealis
-    ${APP_PLATFORM_LIB}
-    curl
-    mbedtls
-    mbedx509
-    mbedcrypto
-    -Wl,--start-group
+set(APP_FFMPEG_LIBS
     mpv
     avfilter
     avformat
@@ -176,7 +169,22 @@ target_link_libraries(${PROJECT_NAME}
     swresample
     swscale
     avutil
-    -Wl,--end-group
+)
+
+if(APPLE)
+    set(APP_FFMPEG_LINK_BLOCK ${APP_FFMPEG_LIBS})
+else()
+    set(APP_FFMPEG_LINK_BLOCK -Wl,--start-group ${APP_FFMPEG_LIBS} -Wl,--end-group)
+endif()
+
+target_link_libraries(${PROJECT_NAME}
+    borealis
+    ${APP_PLATFORM_LIB}
+    curl
+    mbedtls
+    mbedx509
+    mbedcrypto
+    ${APP_FFMPEG_LINK_BLOCK}
     zstd
     ass
     freetype
