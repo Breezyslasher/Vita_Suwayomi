@@ -287,24 +287,47 @@ jobs:
           ndk-version: r27d
           link-to-sdk: true
 
-      - name: Build libromfs-generator
+      - name: Install Android dependency toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config meson nasm make
+
+      - name: Cache Android deps (switchfin-style)
+        if: ${{ hashFiles('scripts/android/Makefile') != '' }}
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: jniLibs
+          key: jniLibs-${{ hashFiles('scripts/android/Makefile') }}
+
+      - name: Build Android packages (switchfin-style)
+        if: ${{ hashFiles('scripts/android/Makefile') != '' && steps.cache-deps.outputs.cache-hit != 'true' }}
+        run: |
+          make -C scripts/android TMPDIR=${{ runner.temp }} download
+          make -C scripts/android TMPDIR=${{ runner.temp }} ABI=armeabi-v7a \
+            ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
+          make -C scripts/android TMPDIR=${{ runner.temp }} ABI=arm64-v8a \
+            ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
+
+      - name: Bump Android version (switchfin-style)
+        if: ${{ hashFiles('app/platform/android/app/build.gradle') != '' }}
+        uses: chkfung/android-version-actions@v1.2.2
+        with:
+          gradlePath: app/platform/android/app/build.gradle
+          versionCode: ${{ github.run_number }}
+
+      - name: Build Android APK (switchfin-style)
+        if: ${{ hashFiles('app/platform/android/gradlew') != '' }}
         run: |
           if [ -f lib/borealis/build_libromfs_generator.sh ]; then
-            (
-              cd lib/borealis
-              bash build_libromfs_generator.sh
-            )
+            (cd lib/borealis && bash build_libromfs_generator.sh)
           elif [ -f library/borealis/build_libromfs_generator.sh ]; then
-            (
-              cd library/borealis
-              bash build_libromfs_generator.sh
-            )
-          else
-            echo "Could not find build_libromfs_generator.sh"
-            exit 1
+            (cd library/borealis && bash build_libromfs_generator.sh)
           fi
+          cd app/platform/android && ./gradlew assembleRelease
 
-      - name: Build
+      - name: Build Android shared library (fallback CMake)
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
@@ -316,7 +339,15 @@ jobs:
             -DANDROID_STL=c++_shared
           cmake --build build-android
 
-      - name: Upload Android artifact
+      - name: Upload Android APK
+        if: ${{ hashFiles('app/platform/android/gradlew') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-android-apk-${{ github.run_number }}
+          path: app/platform/android/app/build/outputs/apk/release/*.apk
+
+      - name: Upload Android shared library
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-android-${{ github.run_number }}
