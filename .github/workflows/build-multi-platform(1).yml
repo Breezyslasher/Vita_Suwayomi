@@ -132,6 +132,7 @@ jobs:
             libxrandr-dev \
             libxi-dev \
             libxinerama-dev \
+            libxcursor-dev \
             libwayland-dev \
             libxkbcommon-dev
 
