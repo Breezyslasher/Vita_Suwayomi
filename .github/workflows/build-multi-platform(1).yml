@@ -219,46 +219,6 @@ jobs:
             build-android/libVitaSuwayomi.so
 
   # ───────────────────────────────────────────────
-  # Desktop — macOS Matrix (Silicon + Intel)
-  # ───────────────────────────────────────────────
-  build-desktop-macos-matrix:
-    name: Desktop (macOS ${{ matrix.tag }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-        - { tag: Silicon, arch: arm64, target: "11.0", runner: macos-14 }
-        - { tag: Intel, arch: x86_64, target: "10.15", runner: macos-13 }
-    runs-on: ${{ matrix.runner }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install deps
-        run: |
-          brew install cmake ninja pkg-config curl mbedtls mpv libass freetype harfbuzz fribidi libpng webp zstd glfw
-
-      - name: Build
-        run: |
-          cmake -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DPLATFORM_DESKTOP=ON \
-            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }}
-          cmake --build build
-
-      - name: Upload macOS binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: VitaSuwayomi-macos-${{ matrix.tag }}-${{ github.run_number }}
-          path: |
-            build/VitaSuwayomi
-            build/resources/
-
-  # ───────────────────────────────────────────────
   # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
   # ───────────────────────────────────────────────
   build-desktop-windows-matrix:
