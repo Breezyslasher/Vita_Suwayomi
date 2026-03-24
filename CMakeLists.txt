@@ -162,6 +162,14 @@ else()
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"resources/\")
 endif()
 
+if(PLATFORM_PSV)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
+elseif(PLATFORM_SWITCH)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"romfs:/\")
+else()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"resources/\")
+endif()
+
 # ---------------------------------------------------------------------------
 # Link libraries
 # ---------------------------------------------------------------------------
@@ -189,6 +197,7 @@ target_link_libraries(${PROJECT_NAME}
     mbedx509
     mbedcrypto
     ${APP_FFMPEG_LINK_BLOCK}
+    -Wl,--end-group
     zstd
     ass
     freetype
