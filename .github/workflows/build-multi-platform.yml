@@ -1,0 +1,205 @@
+name: Build
+
+on:
+push:
+branches: ['**']
+pull_request:
+branches: [main]
+workflow_dispatch:
+
+jobs:
+
+build-vita:
+name: PS Vita
+runs-on: ubuntu-latest
+container:
+image: vitasdk/vitasdk:latest
+
+```
+steps:
+  - name: Install build requirements
+    run: apk update && apk add cmake ninja git zstd tar pkgconf
+
+  - uses: actions/checkout@v4
+    with:
+      submodules: recursive
+
+  - name: Install Vita dependencies
+    env:
+      BASE_URL: https://github.com/dragonflylee/switchfin/releases/download/vita-packages
+    run: |
+      for pkg in mbedtls-3.6.5-1 curl-8.16.0-2 ffmpeg-n6.0-3 mpv-0.36.0-3; do
+        wget "$BASE_URL/${pkg}-arm.tar.xz"
+      done
+      vdpm libass harfbuzz fribidi freetype libpng libwebp $PWD/*-arm.tar.xz
+
+  - name: Build
+    run: |
+      cmake -B build -G Ninja -DPLATFORM_PSV=ON
+      cmake --build build
+
+  - uses: actions/upload-artifact@v4
+    with:
+      name: VitaSuwayomi-vita-${{ github.run_number }}
+      path: build/VitaSuwayomi.vpk
+```
+
+build-switch:
+name: Nintendo Switch
+runs-on: ubuntu-latest
+container:
+image: devkitpro/devkita64:latest
+
+```
+steps:
+  - name: Install build tools
+    run: |
+      apt-get update -y
+      apt-get install -y cmake ninja-build git pkg-config
+
+  - uses: actions/checkout@v4
+    with:
+      submodules: recursive
+
+  - name: Fix pacman + install deps
+    run: |
+      dkp-pacman -Sy --noconfirm devkitpro-keyring
+      dkp-pacman -Syu --noconfirm
+      dkp-pacman -S --noconfirm \
+        switch-curl \
+        switch-mbedtls \
+        switch-ffmpeg \
+        switch-libass \
+        switch-freetype \
+        switch-harfbuzz \
+        switch-libpng \
+        switch-libwebp
+
+  - name: Build
+    run: |
+      cmake -B build -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE=$DEVKITPRO/cmake/Switch.cmake \
+        -DPLATFORM_SWITCH=ON
+      cmake --build build
+
+  - uses: actions/upload-artifact@v4
+    with:
+      name: VitaSuwayomi-switch-${{ github.run_number }}
+      path: build/VitaSuwayomi.nro
+```
+
+build-desktop-linux:
+name: Desktop (Linux)
+runs-on: ubuntu-22.04
+
+```
+steps:
+  - name: Install dependencies
+    run: |
+      sudo apt-get update -y
+      sudo apt-get install -y \
+        cmake ninja-build git pkg-config \
+        libcurl4-openssl-dev \
+        libmbedtls-dev \
+        libmpv-dev \
+        libass-dev \
+        libfreetype-dev \
+        libharfbuzz-dev \
+        libfribidi-dev \
+        libpng-dev \
+        libwebp-dev \
+        libzstd-dev \
+        libglfw3-dev \
+        libgl1-mesa-dev \
+        libx11-dev \
+        libxrandr-dev \
+        libxi-dev \
+        libxinerama-dev \
+        libxkbcommon-dev \
+        libwayland-dev \
+        wayland-protocols
+
+  - uses: actions/checkout@v4
+    with:
+      submodules: recursive
+
+  - name: Build
+    run: |
+      cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
+      cmake --build build
+
+  - uses: actions/upload-artifact@v4
+    with:
+      name: VitaSuwayomi-linux-${{ github.run_number }}
+      path: |
+        build/VitaSuwayomi
+        build/resources/
+```
+
+build-desktop-macos:
+name: Desktop (macOS)
+runs-on: macos-14
+
+```
+steps:
+  - name: Install dependencies
+    run: |
+      brew install cmake ninja pkg-config \
+        curl mbedtls mpv libass freetype harfbuzz \
+        fribidi libpng webp zstd glfw
+
+  - uses: actions/checkout@v4
+    with:
+      submodules: recursive
+
+  - name: Build
+    run: |
+      cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
+      cmake --build build
+
+  - uses: actions/upload-artifact@v4
+    with:
+      name: VitaSuwayomi-macos-${{ github.run_number }}
+      path: |
+        build/VitaSuwayomi
+        build/resources/
+```
+
+build-desktop-windows:
+name: Desktop (Windows)
+runs-on: ubuntu-22.04
+
+```
+steps:
+  - name: Install tools
+    run: |
+      sudo apt-get update -y
+      sudo apt-get install -y \
+        cmake ninja-build git pkg-config \
+        mingw-w64
+
+  - uses: actions/checkout@v4
+    with:
+      submodules: recursive
+
+  - name: Setup vcpkg (no manifest)
+    uses: lukka/run-vcpkg@v11
+    with:
+      runVcpkgInstall: false
+
+  - name: Build
+    run: |
+      cmake -B build -G Ninja \
+        -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+        -DVCPKG_TARGET_TRIPLET=x64-mingw-static \
+        -DPLATFORM_DESKTOP=ON
+      cmake --build build
+
+  - uses: actions/upload-artifact@v4
+    with:
+      name: VitaSuwayomi-windows-${{ github.run_number }}
+      path: |
+        build/VitaSuwayomi.exe
+        build/resources/
+```
+
