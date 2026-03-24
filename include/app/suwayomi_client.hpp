@@ -357,7 +357,7 @@ struct Tracker {
 
 // Source preference types (matches Suwayomi preference types)
 enum class SourcePreferenceType {
-    SWITCH,
+    SWITCH_TOGGLE,
     CHECKBOX,
     EDIT_TEXT,
     LIST,
@@ -366,7 +366,7 @@ enum class SourcePreferenceType {
 
 // Source preference (for source settings/configuration)
 struct SourcePreference {
-    SourcePreferenceType type = SourcePreferenceType::SWITCH;
+    SourcePreferenceType type = SourcePreferenceType::SWITCH_TOGGLE;
     std::string key;
     std::string title;
     std::string summary;

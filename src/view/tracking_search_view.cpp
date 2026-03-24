@@ -155,12 +155,12 @@ void TrackingSearchResultCell::loadCoverImage() {
 
     if (m_result.coverUrl.empty()) {
         // Set placeholder image for missing covers
-        m_coverImage->setImageFromFile("app0:resources/icons/book-open-page-variant.png");
+        m_coverImage->setImageFromFile(RESOURCE_PREFIX "icons/book-open-page-variant.png");
         return;
     }
 
     // Set loading placeholder while image loads
-    m_coverImage->setImageFromFile("app0:resources/icons/book-open-page-variant.png");
+    m_coverImage->setImageFromFile(RESOURCE_PREFIX "icons/book-open-page-variant.png");
 
     // Tracker cover URLs are external URLs (MAL, AniList CDN, etc.)
     // Proxy them through the Suwayomi server to avoid HTTPS/CORS issues on Vita

@@ -7,6 +7,8 @@
 #include <fstream>
 #include <sstream>
 #include <cstring>
+#include <cstdlib>
+#include <filesystem>
 
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
@@ -15,6 +17,9 @@
 #else
 #include <sys/stat.h>
 #include <dirent.h>
+#ifdef _WIN32
+#include <direct.h>
+#endif
 #endif
 
 namespace vitasuwayomi {
@@ -64,6 +69,10 @@ std::string LibraryCache::getCacheDir() {
 #ifdef __vita__
     return "ux0:data/VitaSuwayomi/cache";
 #else
+    const char* homeDir = std::getenv("HOME");
+    if (homeDir && *homeDir) {
+        return std::string(homeDir) + "/.local/share/VitaSuwayomi/cache";
+    }
     return "./cache";
 #endif
 }
@@ -107,11 +116,12 @@ bool LibraryCache::ensureDirectoryExists(const std::string& path) {
     }
     return true;
 #else
-    struct stat st;
-    if (stat(path.c_str(), &st) != 0) {
-        return mkdir(path.c_str(), 0755) == 0;
+    std::error_code ec;
+    if (std::filesystem::exists(path, ec)) {
+        return !ec;
     }
-    return true;
+    std::filesystem::create_directories(path, ec);
+    return !ec;
 #endif
 }
 
