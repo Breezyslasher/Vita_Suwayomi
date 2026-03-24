@@ -313,8 +313,7 @@ jobs:
               libpng-devel libwebp-devel libzstd-devel dbus-devel \
               wayland-devel libxkbcommon-devel libX11-devel libXrandr-devel libXi-devel libXinerama-devel libXcursor-devel
           else
-            echo "No supported package manager found (expected apt-get or dnf)"
-            exit 1
+            echo "No supported package manager found; assuming container image already has required build dependencies"
           fi
       - name: Build desktop target in flatpak container
         run: |
