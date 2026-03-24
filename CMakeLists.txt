@@ -148,6 +148,10 @@ if(PLATFORM_DESKTOP AND APPLE)
         /opt/homebrew/include
         /usr/local/include
     )
+    target_link_directories(${PROJECT_NAME} PRIVATE
+        /opt/homebrew/lib
+        /usr/local/lib
+    )
 endif()
 
 if(PLATFORM_PSV)
