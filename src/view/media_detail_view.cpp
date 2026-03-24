@@ -222,7 +222,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
             prev->setVisibility(brls::Visibility::INVISIBLE);
         }
         if (xIcon->getVisibility() != brls::Visibility::VISIBLE) {
-            xIcon->setImageFromFile("app0:resources/images/square_button.png");
+            xIcon->setImageFromFile(RESOURCE_PREFIX "images/square_button.png");
         }
         xIcon->setVisibility(brls::Visibility::VISIBLE);
         view->setCurrentFocusedIcon(xIcon);
@@ -450,24 +450,24 @@ void ChaptersDataSource::applyDownloadState(ChapterCell* cell, int dlState, int 
         cell->dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
     } else if (isLocallyDownloaded) {
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-        cell->dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
+        cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/checkbox_checked.png");
         cell->dlLabel->setVisibility(brls::Visibility::GONE);
         cell->dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));
     } else if (isLocallyQueued) {
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-        cell->dlIcon->setImageFromFile("app0:resources/icons/refresh.png");
+        cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/refresh.png");
         cell->dlLabel->setVisibility(brls::Visibility::GONE);
         cell->dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));
     } else if (isLocallyFailed) {
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-        cell->dlIcon->setImageFromFile("app0:resources/icons/cross.png");
+        cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/cross.png");
         cell->dlLabel->setVisibility(brls::Visibility::GONE);
         cell->dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));
     } else {
         // Default "not downloaded" state - show download arrow icon.
         // With RecyclerFrame only ~8 cells exist, so loading icons is cheap.
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-        cell->dlIcon->setImageFromFile("app0:resources/icons/download.png");
+        cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/download.png");
         cell->dlLabel->setVisibility(brls::Visibility::GONE);
         cell->dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
     }
@@ -1039,13 +1039,13 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     this->addView(m_categoryOverlay);
 
     // Load button icons immediately (avoids blank→loaded flash)
-    selectIcon->setImageFromFile("app0:resources/images/select_button.png");
-    rButtonIcon->setImageFromFile("app0:resources/images/r_button.png");
+    selectIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
+    rButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/r_button.png");
     updateSortIcon();
-    yButtonIcon->setImageFromFile("app0:resources/images/triangle_button.png");
-    filterIcon->setImageFromFile("app0:resources/icons/filter-menu-outline.png");
-    startButtonIcon->setImageFromFile("app0:resources/images/start_button.png");
-    menuIcon->setImageFromFile("app0:resources/icons/menu.png");
+    yButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
+    filterIcon->setImageFromFile(RESOURCE_PREFIX "icons/filter-menu-outline.png");
+    startButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
+    menuIcon->setImageFromFile(RESOURCE_PREFIX "icons/menu.png");
 
     // Load full details
     loadDetails();
@@ -1692,22 +1692,22 @@ void MangaDetailView::refreshVisibleDownloadIcons() {
                 cell->dlBtn->invalidate();
             } else if (isDownloaded) {
                 cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-                cell->dlIcon->setImageFromFile("app0:resources/icons/checkbox_checked.png");
+                cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/checkbox_checked.png");
                 cell->dlLabel->setVisibility(brls::Visibility::GONE);
                 cell->dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));
             } else if (isQueued) {
                 cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-                cell->dlIcon->setImageFromFile("app0:resources/icons/refresh.png");
+                cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/refresh.png");
                 cell->dlLabel->setVisibility(brls::Visibility::GONE);
                 cell->dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));
             } else if (isFailed) {
                 cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-                cell->dlIcon->setImageFromFile("app0:resources/icons/cross.png");
+                cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/cross.png");
                 cell->dlLabel->setVisibility(brls::Visibility::GONE);
                 cell->dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));
             } else {
                 cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-                cell->dlIcon->setImageFromFile("app0:resources/icons/download.png");
+                cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/download.png");
                 cell->dlLabel->setVisibility(brls::Visibility::GONE);
                 cell->dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
             }
@@ -3566,8 +3566,8 @@ void MangaDetailView::updateSortIcon() {
     if (!m_sortIcon) return;
 
     std::string iconPath = m_sortDescending
-        ? "app0:resources/icons/sort-9-1.png"
-        : "app0:resources/icons/sort-1-9.png";
+        ? RESOURCE_PREFIX "icons/sort-9-1.png"
+        : RESOURCE_PREFIX "icons/sort-1-9.png";
 
     m_sortIcon->setImageFromFile(iconPath);
 }
