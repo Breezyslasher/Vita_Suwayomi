@@ -296,20 +296,12 @@ jobs:
 
       - name: Build libromfs-generator
         run: |
-          if [ -f lib/borealis/build_libromfs_generator.sh ]; then
-            (
-              cd lib/borealis
-              bash build_libromfs_generator.sh
-            )
-          elif [ -f lib/borealis/library/build_libromfs_generator.sh ]; then
-            (
-              cd lib/borealis/library
-              bash build_libromfs_generator.sh
-            )
-          else
-            echo "Could not find build_libromfs_generator.sh"
-            exit 1
-          fi
+          cmake -S lib/borealis/library/lib/extern/libromfs/generator \
+                -B /tmp/libromfs-generator \
+                -G Ninja
+          cmake --build /tmp/libromfs-generator
+          sudo install -m 0755 /tmp/libromfs-generator/libromfs-generator /usr/local/bin/libromfs-generator
+          libromfs-generator --help >/dev/null || true
 
       - name: Build
         env:
