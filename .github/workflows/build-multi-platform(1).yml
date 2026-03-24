@@ -210,7 +210,14 @@ jobs:
             mingw-w64 \
             libdbus-1-dev \
             libwebp-dev \
-            libcurl4-openssl-dev
+            libcurl4-openssl-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavfilter-dev \
+            libswresample-dev \
+            libswscale-dev \
+            libavutil-dev \
+            libmp3lame-dev
 
       - name: Checkout
         uses: actions/checkout@v4
