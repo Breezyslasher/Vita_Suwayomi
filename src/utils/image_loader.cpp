@@ -50,12 +50,21 @@
 #include "nanosvgrast.h"
 
 // FFmpeg for AVIF/HEIF decoding (libraries already linked)
+#if !defined(_WIN32) && defined(__has_include)
+#if __has_include(<libavcodec/avcodec.h>) && __has_include(<libavformat/avformat.h>) && __has_include(<libavutil/imgutils.h>) && __has_include(<libswscale/swscale.h>)
+#define VITASUWAYOMI_HAS_FFMPEG 1
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 }
+#else
+#define VITASUWAYOMI_HAS_FFMPEG 0
+#endif
+#else
+#define VITASUWAYOMI_HAS_FFMPEG 0
+#endif
 
 namespace vitasuwayomi {
 
@@ -1637,6 +1646,7 @@ static bool isHEIFData(const uint8_t* data, size_t size) {
     return false;
 }
 
+#if VITASUWAYOMI_HAS_FFMPEG
 // Custom AVIOContext read callback for FFmpeg memory-based I/O
 struct FFmpegMemoryBuffer {
     const uint8_t* data;
@@ -1883,6 +1893,12 @@ static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* data, size_t 
     brls::Logger::info("ImageLoader: {} decoded {}x{} -> {}x{}", formatName, srcW, srcH, dstW, dstH);
     return tga;
 }
+#else
+static std::vector<uint8_t> convertFFmpegImageToTGA(const uint8_t* /*data*/, size_t /*dataSize*/, int /*maxSize*/, const char* formatName) {
+    brls::Logger::error("ImageLoader: FFmpeg headers not available; {} decode support disabled on this build", formatName ? formatName : "image");
+    return {};
+}
+#endif
 
 void ImageLoader::setAuthCredentials(const std::string& username, const std::string& password) {
     std::lock_guard<std::mutex> lock(s_authMutex);
