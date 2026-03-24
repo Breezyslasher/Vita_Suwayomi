@@ -510,12 +510,27 @@ jobs:
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
           cmake --build build
-          tar -czf VitaSuwayomi-deb-${{ github.run_number }}.tar.gz -C build VitaSuwayomi resources
+          PKGROOT="pkgroot"
+          rm -rf "$PKGROOT"
+          mkdir -p "$PKGROOT/DEBIAN" "$PKGROOT/usr/bin" "$PKGROOT/usr/share/VitaSuwayomi"
+          install -m 755 build/VitaSuwayomi "$PKGROOT/usr/bin/VitaSuwayomi"
+          cp -r build/resources "$PKGROOT/usr/share/VitaSuwayomi/resources"
+          ARCH="$(dpkg --print-architecture)"
+          {
+            echo "Package: vitasuwayomi"
+            echo "Version: 0.1.${{ github.run_number }}"
+            echo "Section: utils"
+            echo "Priority: optional"
+            echo "Architecture: ${ARCH}"
+            echo "Maintainer: VitaSuwayomi CI <ci@vitasuwayomi.local>"
+            echo "Description: VitaSuwayomi desktop build artifact"
+          } > "$PKGROOT/DEBIAN/control"
+          dpkg-deb --build "$PKGROOT" "VitaSuwayomi-${{ github.run_number }}_${ARCH}.deb"
       - name: Upload deb artifact
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-deb-${{ github.run_number }}
-          path: VitaSuwayomi-deb-${{ github.run_number }}.tar.gz
+          path: VitaSuwayomi-${{ github.run_number }}_*.deb
 
   # ───────────────────────────────────────────────
   # AUR-like build
@@ -542,9 +557,9 @@ jobs:
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
           cmake --build build
-          tar --zstd -cf VitaSuwayomi-aur-${{ github.run_number }}.pkg.tar.zst -C build VitaSuwayomi resources
+          tar --zstd -cf VitaSuwayomi-${{ github.run_number }}.pkg.tar.zst -C build VitaSuwayomi resources
       - name: Upload aur artifact
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-aur-${{ github.run_number }}
-          path: VitaSuwayomi-aur-${{ github.run_number }}.pkg.tar.zst
+          path: VitaSuwayomi-${{ github.run_number }}.pkg.tar.zst
