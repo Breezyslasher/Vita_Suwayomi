@@ -75,7 +75,10 @@ jobs:
         run: |
           curl -fsSL -o /tmp/switch-libmpv.pkg.tar.zst \
             https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs/switch-libmpv-0.41.0-5-any.pkg.tar.zst
+          curl -fsSL -o /tmp/switch-dav1d.pkg.tar.zst \
+            https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs/switch-dav1d-1.5.3-1-any.pkg.tar.zst
           dkp-pacman -U --noconfirm /tmp/switch-libmpv.pkg.tar.zst
+          dkp-pacman -U --noconfirm /tmp/switch-dav1d.pkg.tar.zst
 
       - name: Install Switch dependencies
         run: |
@@ -151,6 +154,11 @@ jobs:
 
       - name: Build
         run: |
+          export HOMEBREW_PREFIX="$(brew --prefix)"
+          export CPATH="${HOMEBREW_PREFIX}/include:${CPATH}"
+          export LIBRARY_PATH="${HOMEBREW_PREFIX}/lib:${LIBRARY_PATH}"
+          export CPPFLAGS="-I${HOMEBREW_PREFIX}/include"
+          export LDFLAGS="-L${HOMEBREW_PREFIX}/lib"
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
           cmake --build build
 
@@ -207,7 +215,24 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y \
             cmake ninja-build git pkg-config \
-            mingw-w64
+            mingw-w64 \
+            libdbus-1-dev \
+            libwebp-dev \
+            libcurl4-openssl-dev \
+            libmbedtls-dev \
+            libmpv-dev \
+            libavcodec-dev \
+            libavformat-dev \
+            libavfilter-dev \
+            libswresample-dev \
+            libswscale-dev \
+            libavutil-dev \
+            libmp3lame-dev \
+            libass-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
+            libfreetype-dev \
+            libpng-dev
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -224,7 +249,6 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET=x64-mingw-static \
-            -DCMAKE_DISABLE_FIND_PACKAGE_DBus=ON \
             -DGLFW_BUILD_WAYLAND=OFF \
             -DGLFW_BUILD_X11=OFF \
             -DPLATFORM_DESKTOP=ON
