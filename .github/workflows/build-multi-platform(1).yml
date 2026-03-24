@@ -160,9 +160,12 @@ jobs:
           fi
           cmake -S "$GEN_SRC" -B /tmp/libromfs-generator -G Ninja
           cmake --build /tmp/libromfs-generator
-          sudo install -m 0755 /tmp/libromfs-generator/libromfs-generator /usr/local/bin/libromfs-generator
-          [ -d lib/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator lib/borealis/libromfs-generator || true
-          [ -d library/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator library/borealis/libromfs-generator || true
+          GEN_BIN="/tmp/libromfs-generator/libromfs-generator"
+          sudo install -m 0755 "$GEN_BIN" /usr/local/bin/libromfs-generator
+          # borealis toolchain.cmake checks ${CMAKE_SOURCE_DIR}/libromfs-generator (repo root)
+          install -m 0755 "$GEN_BIN" ./libromfs-generator
+          [ -d lib/borealis ] && install -m 0755 "$GEN_BIN" lib/borealis/libromfs-generator || true
+          [ -d library/borealis ] && install -m 0755 "$GEN_BIN" library/borealis/libromfs-generator || true
 
       - name: Bump Android version (switchfin-style)
         if: ${{ hashFiles('app/platform/android/app/build.gradle') != '' }}
@@ -379,7 +382,7 @@ jobs:
         env:
           OPENORBIS: /opt/pacbrew/ps4/openorbis
         run: |
-          cmake -B build -G Ninja -DPLATFORM_PS4=ON
+          cmake -B build -DPLATFORM_PS4=ON
           cmake --build build
       - name: Upload PS4 artifacts
         uses: actions/upload-artifact@v4
