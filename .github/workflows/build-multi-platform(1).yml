@@ -148,6 +148,22 @@ jobs:
           make -C scripts/android TMPDIR=${{ runner.temp }} ABI=arm64-v8a \
             ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
 
+      - name: Build libromfs-generator (host)
+        run: |
+          if [ -d lib/borealis/library/lib/extern/libromfs/generator ]; then
+            GEN_SRC="lib/borealis/library/lib/extern/libromfs/generator"
+          elif [ -d library/borealis/library/lib/extern/libromfs/generator ]; then
+            GEN_SRC="library/borealis/library/lib/extern/libromfs/generator"
+          else
+            echo "Could not find libromfs generator source directory"
+            exit 1
+          fi
+          cmake -S "$GEN_SRC" -B /tmp/libromfs-generator -G Ninja
+          cmake --build /tmp/libromfs-generator
+          sudo install -m 0755 /tmp/libromfs-generator/libromfs-generator /usr/local/bin/libromfs-generator
+          [ -d lib/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator lib/borealis/libromfs-generator || true
+          [ -d library/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator library/borealis/libromfs-generator || true
+
       - name: Bump Android version (switchfin-style)
         if: ${{ hashFiles('app/platform/android/app/build.gradle') != '' }}
         uses: chkfung/android-version-actions@v1.2.2
@@ -158,37 +174,7 @@ jobs:
       - name: Build Android APK (switchfin-style)
         if: ${{ hashFiles('app/platform/android/gradlew') != '' }}
         run: |
-          if [ -d lib/borealis/library/lib/extern/libromfs/generator ]; then
-            GEN_SRC="lib/borealis/library/lib/extern/libromfs/generator"
-          elif [ -d library/borealis/library/lib/extern/libromfs/generator ]; then
-            GEN_SRC="library/borealis/library/lib/extern/libromfs/generator"
-          else
-            echo "Could not find libromfs generator source directory"
-            exit 1
-          fi
-          cmake -S "$GEN_SRC" -B /tmp/libromfs-generator -G Ninja
-          cmake --build /tmp/libromfs-generator
-          sudo install -m 0755 /tmp/libromfs-generator/libromfs-generator /usr/local/bin/libromfs-generator
-          [ -d lib/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator lib/borealis/libromfs-generator || true
-          [ -d library/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator library/borealis/libromfs-generator || true
           cd app/platform/android && ./gradlew assembleRelease
-
-      - name: Prepare libromfs-generator (fallback CMake)
-        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
-        run: |
-          if [ -d lib/borealis/library/lib/extern/libromfs/generator ]; then
-            GEN_SRC="lib/borealis/library/lib/extern/libromfs/generator"
-          elif [ -d library/borealis/library/lib/extern/libromfs/generator ]; then
-            GEN_SRC="library/borealis/library/lib/extern/libromfs/generator"
-          else
-            echo "Could not find libromfs generator source directory"
-            exit 1
-          fi
-          cmake -S "$GEN_SRC" -B /tmp/libromfs-generator -G Ninja
-          cmake --build /tmp/libromfs-generator
-          sudo install -m 0755 /tmp/libromfs-generator/libromfs-generator /usr/local/bin/libromfs-generator
-          [ -d lib/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator lib/borealis/libromfs-generator || true
-          [ -d library/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator library/borealis/libromfs-generator || true
 
       - name: Build Android shared library (fallback CMake)
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
@@ -393,15 +379,16 @@ jobs:
         env:
           OPENORBIS: /opt/pacbrew/ps4/openorbis
         run: |
-          cmake -B build -DPLATFORM_PS4=ON
+          cmake -B build -G Ninja -DPLATFORM_PS4=ON
           cmake --build build
       - name: Upload PS4 artifacts
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-ps4-${{ github.run_number }}
+          if-no-files-found: warn
           path: |
-            build/*.pkg
-            build/*.oelf
+            build/**/*.pkg
+            build/**/*.oelf
 
   # ───────────────────────────────────────────────
   # macOS matrix (explicit job name parity)
