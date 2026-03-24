@@ -14,7 +14,12 @@
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
 #include <psp2/io/dirent.h>
+#else
+#include <sys/stat.h>
+#include <dirent.h>
 #endif
+
+#include "platform/paths.hpp"
 
 namespace vitasuwayomi {
 
@@ -186,6 +191,35 @@ void StorageView::loadStorageInfo() {
                     }
                 }
                 sceIoDclose(dir);
+            }
+#else
+            std::string mangaPath = dm.getDownloadsPath() + "/" + std::to_string(download.mangaId);
+            DIR* dir = opendir(mangaPath.c_str());
+            if (dir) {
+                struct dirent* entry;
+                while ((entry = readdir(dir)) != nullptr) {
+                    if (entry->d_name[0] == '.') continue;
+                    std::string entryPath = mangaPath + "/" + entry->d_name;
+                    struct stat st;
+                    if (stat(entryPath.c_str(), &st) != 0) continue;
+                    if (S_ISDIR(st.st_mode)) {
+                        DIR* chapterDir = opendir(entryPath.c_str());
+                        if (chapterDir) {
+                            struct dirent* fileEntry;
+                            while ((fileEntry = readdir(chapterDir)) != nullptr) {
+                                if (fileEntry->d_name[0] == '.') continue;
+                                std::string filePath = entryPath + "/" + fileEntry->d_name;
+                                struct stat fst;
+                                if (stat(filePath.c_str(), &fst) == 0 && S_ISREG(fst.st_mode))
+                                    item.sizeBytes += fst.st_size;
+                            }
+                            closedir(chapterDir);
+                        }
+                    } else if (S_ISREG(st.st_mode)) {
+                        item.sizeBytes += st.st_size;
+                    }
+                }
+                closedir(dir);
             }
 #endif
             totalSize += item.sizeBytes;
