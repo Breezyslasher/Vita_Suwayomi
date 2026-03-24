@@ -3763,7 +3763,7 @@ void LibrarySectionTab::openTracking(const Manga& manga) {
                         [capturedManga, selectedTracker, selectedRecord, aliveWeak](int action) {
                             if (action == 0) {
                                 // View details - show tracking info
-                                std::string info = "Status: " + selectedRecord.status;
+                                std::string info = "Status: " + std::to_string(selectedRecord.status);
                                 if (selectedRecord.lastChapterRead > 0) {
                                     info += "\nProgress: Ch. " + std::to_string(selectedRecord.lastChapterRead);
                                 }
