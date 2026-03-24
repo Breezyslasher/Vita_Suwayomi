@@ -512,7 +512,7 @@ jobs:
           cmake --build build
           PKGROOT="pkgroot"
           rm -rf "$PKGROOT"
-          mkdir -p "$PKGROOT/DEBIAN" "$PKGROOT/usr/bin" "$PKGROOT/usr/lib/VitaSuwayomi" "$PKGROOT/usr/share/VitaSuwayomi"
+          mkdir -p "$PKGROOT/DEBIAN" "$PKGROOT/usr/bin" "$PKGROOT/usr/lib/VitaSuwayomi" "$PKGROOT/usr/share/VitaSuwayomi" "$PKGROOT/usr/share/applications" "$PKGROOT/usr/share/pixmaps"
           install -m 755 build/VitaSuwayomi "$PKGROOT/usr/lib/VitaSuwayomi/VitaSuwayomi"
           {
             echo '#!/usr/bin/env sh'
@@ -521,6 +521,17 @@ jobs:
           } > "$PKGROOT/usr/bin/VitaSuwayomi"
           chmod 755 "$PKGROOT/usr/bin/VitaSuwayomi"
           cp -r build/resources "$PKGROOT/usr/share/VitaSuwayomi/resources"
+          install -m 644 build/resources/images/logo-small.png "$PKGROOT/usr/share/pixmaps/vitasuwayomi.png"
+          {
+            echo '[Desktop Entry]'
+            echo 'Type=Application'
+            echo 'Name=VitaSuwayomi'
+            echo 'Comment=Suwayomi desktop client'
+            echo 'Exec=VitaSuwayomi'
+            echo 'Icon=vitasuwayomi'
+            echo 'Terminal=false'
+            echo 'Categories=Network;Utility;'
+          } > "$PKGROOT/usr/share/applications/vitasuwayomi.desktop"
           ARCH="$(dpkg --print-architecture)"
           {
             echo "Package: vitasuwayomi"

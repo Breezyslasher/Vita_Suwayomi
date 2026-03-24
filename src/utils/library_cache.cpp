@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 #include <cstring>
+#include <cstdlib>
 
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
@@ -67,6 +68,10 @@ std::string LibraryCache::getCacheDir() {
 #ifdef __vita__
     return "ux0:data/VitaSuwayomi/cache";
 #else
+    const char* homeDir = std::getenv("HOME");
+    if (homeDir && *homeDir) {
+        return std::string(homeDir) + "/.local/share/VitaSuwayomi/cache";
+    }
     return "./cache";
 #endif
 }
