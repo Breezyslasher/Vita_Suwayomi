@@ -125,6 +125,7 @@ jobs:
             libswresample-dev \
             libswscale-dev \
             libavutil-dev \
+            libmp3lame-dev \
             libass-dev \
             libdbus-1-dev \
             libfreetype-dev \
