@@ -12,6 +12,8 @@ namespace vitasuwayomi {
 
 class RotatableLabel : public brls::Box {
 public:
+    using brls::Box::setPadding;
+
     RotatableLabel();
     ~RotatableLabel() = default;
 
