@@ -120,6 +120,7 @@ jobs:
             libmbedtls-dev \
             libmpv-dev \
             libass-dev \
+            libdbus-1-dev \
             libfreetype-dev \
             libharfbuzz-dev \
             libfribidi-dev \
