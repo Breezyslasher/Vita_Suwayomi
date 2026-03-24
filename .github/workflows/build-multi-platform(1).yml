@@ -211,6 +211,8 @@ jobs:
             libdbus-1-dev \
             libwebp-dev \
             libcurl4-openssl-dev \
+            libmbedtls-dev \
+            libmpv-dev \
             libavcodec-dev \
             libavformat-dev \
             libavfilter-dev \
