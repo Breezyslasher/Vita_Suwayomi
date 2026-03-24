@@ -143,6 +143,12 @@ else()
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_INCLUDES})
+if(PLATFORM_DESKTOP AND APPLE)
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        /opt/homebrew/include
+        /usr/local/include
+    )
+endif()
 
 if(PLATFORM_PSV)
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
