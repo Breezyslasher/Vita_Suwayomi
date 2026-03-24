@@ -394,7 +394,7 @@ jobs:
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
           cmake --build build
-make -B build -G Ninja \
+          make -B build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
             -DVCPKG_TARGET_TRIPLET=x64-mingw-static \
             -DPLATFORM_DESKTOP=ON
