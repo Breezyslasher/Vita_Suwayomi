@@ -214,7 +214,7 @@ DownloadsTab::DownloadsTab() {
     m_clearIcon->setWidth(16);
     m_clearIcon->setHeight(16);
     m_clearIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_clearIcon->setImageFromFile("app0:resources/icons/delete.png");
+    m_clearIcon->setImageFromFile(RESOURCE_PREFIX "icons/delete.png");
     m_clearIcon->setMarginRight(4);
     m_clearBtn->addView(m_clearIcon);
 
@@ -1123,7 +1123,7 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     xButtonIcon->setWidth(24);
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
+    xButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/square_button.png");
     xButtonIcon->setMarginLeft(8);
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     outXButtonIcon = xButtonIcon;
@@ -1530,7 +1530,7 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     xButtonIcon->setWidth(24);
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    xButtonIcon->setImageFromFile("app0:resources/images/square_button.png");
+    xButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/square_button.png");
     xButtonIcon->setMarginLeft(8);
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     outXButtonIcon = xButtonIcon;

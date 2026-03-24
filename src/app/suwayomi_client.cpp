@@ -6294,7 +6294,7 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
 
     bool knownType = true;
     if (typeName == "SwitchPreference") {
-        pref.type = SourcePreferenceType::SWITCH;
+        pref.type = SourcePreferenceType::SWITCH_TOGGLE;
     } else if (typeName == "CheckBoxPreference") {
         pref.type = SourcePreferenceType::CHECKBOX;
     } else if (typeName == "EditTextPreference") {
@@ -6338,7 +6338,7 @@ SourcePreference SuwayomiClient::parseSourcePreferenceFromGraphQL(const std::str
     // else: keep default enabled = true
 
     // Type-specific fields (using aliased field names from GraphQL query)
-    if (pref.type == SourcePreferenceType::SWITCH || pref.type == SourcePreferenceType::CHECKBOX) {
+    if (pref.type == SourcePreferenceType::SWITCH_TOGGLE || pref.type == SourcePreferenceType::CHECKBOX) {
         pref.currentValue = extractJsonBool(json, "boolValue");
         pref.defaultValue = extractJsonBool(json, "boolDefault");
     } else if (pref.type == SourcePreferenceType::EDIT_TEXT) {

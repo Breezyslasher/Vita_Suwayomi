@@ -193,7 +193,7 @@ void MangaItemCell::updateDisplay() {
         if (showStar) {
             auto* star = ensureStarBadge();
             if (!m_starImageLoaded) {
-                star->setImageFromFile("app0:resources/icons/star.png");
+                star->setImageFromFile(RESOURCE_PREFIX "icons/star.png");
                 m_starImageLoaded = true;
             }
             star->setVisibility(brls::Visibility::VISIBLE);
@@ -292,7 +292,7 @@ void MangaItemCell::onFocusGained() {
     if (!m_showLibraryBadge) {
         auto* hint = ensureStartHintIcon();
         if (!m_startHintImageLoaded) {
-            hint->setImageFromFile("app0:resources/images/start_button.png");
+            hint->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
             m_startHintImageLoaded = true;
         }
         hint->setVisibility(brls::Visibility::VISIBLE);
@@ -617,7 +617,7 @@ void MangaItemCell::setShowLibraryBadge(bool show) {
     if (inLib) {
         auto* star = ensureStarBadge();
         if (!m_starImageLoaded) {
-            star->setImageFromFile("app0:resources/icons/star.png");
+            star->setImageFromFile(RESOURCE_PREFIX "icons/star.png");
             m_starImageLoaded = true;
         }
         star->setVisibility(brls::Visibility::VISIBLE);
@@ -636,7 +636,7 @@ void MangaItemCell::refreshLibraryBadge() {
     if (inLib) {
         auto* star = ensureStarBadge();
         if (!m_starImageLoaded) {
-            star->setImageFromFile("app0:resources/icons/star.png");
+            star->setImageFromFile(RESOURCE_PREFIX "icons/star.png");
             m_starImageLoaded = true;
         }
         star->setVisibility(brls::Visibility::VISIBLE);
