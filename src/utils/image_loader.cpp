@@ -50,7 +50,7 @@
 #include "nanosvgrast.h"
 
 // FFmpeg for AVIF/HEIF decoding (libraries already linked)
-#if defined(__has_include)
+#if !defined(_WIN32) && defined(__has_include)
 #if __has_include(<libavcodec/avcodec.h>) && __has_include(<libavformat/avformat.h>) && __has_include(<libavutil/imgutils.h>) && __has_include(<libswscale/swscale.h>)
 #define VITASUWAYOMI_HAS_FFMPEG 1
 extern "C" {
