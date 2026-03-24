@@ -166,15 +166,21 @@ endif()
 # ---------------------------------------------------------------------------
 # Link libraries
 # ---------------------------------------------------------------------------
-set(APP_FFMPEG_LIBS
-    mpv
-    avfilter
-    avformat
-    avcodec
-    swresample
-    swscale
-    avutil
-)
+if(WIN32)
+    set(APP_FFMPEG_LIBS
+        mpv
+    )
+else()
+    set(APP_FFMPEG_LIBS
+        mpv
+        avfilter
+        avformat
+        avcodec
+        swresample
+        swscale
+        avutil
+    )
+endif()
 
 if(APPLE OR PLATFORM_PS4)
     set(APP_FFMPEG_LINK_BLOCK ${APP_FFMPEG_LIBS})
@@ -182,36 +188,53 @@ else()
     set(APP_FFMPEG_LINK_BLOCK -Wl,--start-group ${APP_FFMPEG_LIBS} -Wl,--end-group)
 endif()
 
-set(APP_RENDER_LIBS
-    ass
-    freetype
-    fribidi
-    png
-    bz2
-    webp
-    z
-    c
-)
+if(WIN32)
+    set(APP_RENDER_LIBS
+        bz2
+        webp
+        z
+    )
+else()
+    set(APP_RENDER_LIBS
+        ass
+        freetype
+        fribidi
+        png
+        bz2
+        webp
+        z
+        c
+    )
+endif()
 
-if(NOT PLATFORM_PS4)
+if(NOT PLATFORM_PS4 AND NOT WIN32)
     list(APPEND APP_RENDER_LIBS
         zstd
         harfbuzz
     )
 endif()
 
+set(APP_NETWORK_LIBS
+    curl
+)
+
+if(NOT WIN32)
+    list(APPEND APP_NETWORK_LIBS
+        mbedtls
+        mbedx509
+        mbedcrypto
+    )
+endif()
+
 target_link_libraries(${PROJECT_NAME}
     borealis
     ${APP_PLATFORM_LIB}
-    curl
-    mbedtls
-    mbedx509
-    mbedcrypto
+    ${APP_NETWORK_LIBS}
     ${APP_FFMPEG_LINK_BLOCK}
     ${APP_RENDER_LIBS}
 )
 
-if(NOT PLATFORM_SWITCH AND NOT PLATFORM_PS4)
+if(NOT PLATFORM_SWITCH AND NOT PLATFORM_PS4 AND NOT WIN32)
     target_link_libraries(${PROJECT_NAME} mp3lame)
 endif()
 
