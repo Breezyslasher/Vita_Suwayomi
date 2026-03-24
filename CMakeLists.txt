@@ -199,7 +199,7 @@ if(PLATFORM_PSV)
         SceVshBridge_stub
     )
 elseif(PLATFORM_SWITCH)
-    target_link_libraries(${PROJECT_NAME} nx)
+    target_link_libraries(${PROJECT_NAME} nx dav1d)
 elseif(PLATFORM_DESKTOP)
     find_package(Threads REQUIRED)
     target_link_libraries(${PROJECT_NAME} Threads::Threads)

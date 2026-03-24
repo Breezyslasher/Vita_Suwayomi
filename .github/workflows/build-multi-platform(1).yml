@@ -75,7 +75,10 @@ jobs:
         run: |
           curl -fsSL -o /tmp/switch-libmpv.pkg.tar.zst \
             https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs/switch-libmpv-0.41.0-5-any.pkg.tar.zst
+          curl -fsSL -o /tmp/switch-dav1d.pkg.tar.zst \
+            https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs/switch-dav1d-1.5.3-1-any.pkg.tar.zst
           dkp-pacman -U --noconfirm /tmp/switch-libmpv.pkg.tar.zst
+          dkp-pacman -U --noconfirm /tmp/switch-dav1d.pkg.tar.zst
 
       - name: Install Switch dependencies
         run: |
@@ -151,6 +154,9 @@ jobs:
 
       - name: Build
         run: |
+          export HOMEBREW_PREFIX="$(brew --prefix)"
+          export CPPFLAGS="-I${HOMEBREW_PREFIX}/include"
+          export LDFLAGS="-L${HOMEBREW_PREFIX}/lib"
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
           cmake --build build
 
