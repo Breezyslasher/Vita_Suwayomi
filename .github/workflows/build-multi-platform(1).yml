@@ -227,7 +227,12 @@ jobs:
             libswresample-dev \
             libswscale-dev \
             libavutil-dev \
-            libmp3lame-dev
+            libmp3lame-dev \
+            libass-dev \
+            libharfbuzz-dev \
+            libfribidi-dev \
+            libfreetype-dev \
+            libpng-dev
 
       - name: Checkout
         uses: actions/checkout@v4
