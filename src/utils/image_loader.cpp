@@ -27,6 +27,8 @@
 #include <psp2/io/stat.h>
 #endif
 
+#include "platform/paths.hpp"
+
 // stb_image for JPEG/PNG decoding
 // Note: stb_image.h should be available from borealis/extern or nanovg
 // If not found, you may need to add it to the project
@@ -2718,9 +2720,8 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     std::string imageBody;
     bool loadSuccess = false;
 
-    // Check if this is a local file path (Vita paths start with ux0: or similar)
-    bool isLocalFile = (url.find("ux0:") == 0 || url.find("ur0:") == 0 ||
-                        url.find("uma0:") == 0 || url.find("/") == 0);
+    // Check if this is a local file path
+    bool isLocalFile = isPlatformLocalPath(url);
 
     if (isLocalFile) {
         // Load from local file
@@ -3401,8 +3402,7 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
     bool loadSuccess = false;
 
     // Check if this is a local file path
-    bool isLocalFile = (url.find("ux0:") == 0 || url.find("ur0:") == 0 ||
-                        url.find("uma0:") == 0 || url.find("/") == 0);
+    bool isLocalFile = isPlatformLocalPath(url);
 
     if (isLocalFile) {
 #ifdef __vita__
