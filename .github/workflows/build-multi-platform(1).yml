@@ -319,24 +319,37 @@ jobs:
       - name: Build Android APK (switchfin-style)
         if: ${{ hashFiles('app/platform/android/gradlew') != '' }}
         run: |
-          if [ -f lib/borealis/build_libromfs_generator.sh ]; then
-            (cd lib/borealis && bash build_libromfs_generator.sh)
-          elif [ -f library/borealis/build_libromfs_generator.sh ]; then
-            (cd library/borealis && bash build_libromfs_generator.sh)
+          if [ -d lib/borealis/library/lib/extern/libromfs/generator ]; then
+            GEN_SRC="lib/borealis/library/lib/extern/libromfs/generator"
+          elif [ -d library/borealis/library/lib/extern/libromfs/generator ]; then
+            GEN_SRC="library/borealis/library/lib/extern/libromfs/generator"
+          else
+            echo "Could not find libromfs generator source directory"
+            exit 1
           fi
+          cmake -S "$GEN_SRC" -B /tmp/libromfs-generator -G Ninja
+          cmake --build /tmp/libromfs-generator
+          sudo install -m 0755 /tmp/libromfs-generator/libromfs-generator /usr/local/bin/libromfs-generator
+          [ -d lib/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator lib/borealis/libromfs-generator || true
+          [ -d library/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator library/borealis/libromfs-generator || true
           cd app/platform/android && ./gradlew assembleRelease
 
       - name: Prepare libromfs-generator (fallback CMake)
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         run: |
-          if [ -f lib/borealis/build_libromfs_generator.sh ]; then
-            (cd lib/borealis && bash build_libromfs_generator.sh)
-          elif [ -f library/borealis/build_libromfs_generator.sh ]; then
-            (cd library/borealis && bash build_libromfs_generator.sh)
+          if [ -d lib/borealis/library/lib/extern/libromfs/generator ]; then
+            GEN_SRC="lib/borealis/library/lib/extern/libromfs/generator"
+          elif [ -d library/borealis/library/lib/extern/libromfs/generator ]; then
+            GEN_SRC="library/borealis/library/lib/extern/libromfs/generator"
           else
-            echo "Could not find build_libromfs_generator.sh"
+            echo "Could not find libromfs generator source directory"
             exit 1
           fi
+          cmake -S "$GEN_SRC" -B /tmp/libromfs-generator -G Ninja
+          cmake --build /tmp/libromfs-generator
+          sudo install -m 0755 /tmp/libromfs-generator/libromfs-generator /usr/local/bin/libromfs-generator
+          [ -d lib/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator lib/borealis/libromfs-generator || true
+          [ -d library/borealis ] && install -m 0755 /tmp/libromfs-generator/libromfs-generator library/borealis/libromfs-generator || true
 
       - name: Build Android shared library (fallback CMake)
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
