@@ -31,7 +31,11 @@
 #include <psp2/io/stat.h>
 #include <psp2/io/dirent.h>
 #else
+#if defined(_WIN32)
+#include <direct.h>
+#else
 #include <unistd.h>
+#endif
 #include <sys/stat.h>
 #include <dirent.h>
 #include <cerrno>
@@ -50,7 +54,11 @@ static bool createDirectory(const std::string& path) {
     int ret = sceIoMkdir(path.c_str(), 0777);
     return ret >= 0 || ret == 0x80010011;  // Success or already exists
 #else
+#if defined(_WIN32)
+    int ret = _mkdir(path.c_str());
+#else
     int ret = mkdir(path.c_str(), 0755);
+#endif
     return ret == 0 || errno == EEXIST;
 #endif
 }
