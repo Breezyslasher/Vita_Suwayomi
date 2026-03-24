@@ -290,7 +290,7 @@ jobs:
         with:
           submodules: recursive
       - name: Set workspace permissions
-        run: git config --system --add safe.directory $GITHUB_WORKSPACE
+        run: git config --global --add safe.directory $GITHUB_WORKSPACE
       - name: Install dependencies
         run: |
           if command -v apt-get >/dev/null 2>&1; then
