@@ -284,9 +284,6 @@ jobs:
         - { arch: x86_64, runner: ubuntu-24.04, driver: gl, gles2: "OFF" }
         - { arch: aarch64, runner: ubuntu-24.04-arm, driver: gl, gles2: "OFF" }
         - { arch: aarch64, runner: ubuntu-24.04-arm, driver: gles2, gles2: "ON" }
-    container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
-      options: --privileged
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -417,7 +414,6 @@ jobs:
       matrix:
         include:
         - { tag: Silicon, arch: arm64, target: "11.0", runner: macos-14 }
-        - { tag: Intel, arch: x86_64, target: "10.15", runner: macos-13 }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
