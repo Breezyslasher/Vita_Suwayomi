@@ -7,9 +7,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Build matrix
-# ─────────────────────────────────────────────────────────────────────────────
 jobs:
 
   # ───────────────────────────────────────────────
@@ -71,9 +68,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Fix pacman keys and update
+        run: |
+          dkp-pacman -Sy --noconfirm devkitpro-keyring
+          dkp-pacman -Syu --noconfirm
+
       - name: Install Switch dependencies
         run: |
-          dkp-pacman -Sy --noconfirm \
+          dkp-pacman -S --noconfirm \
             switch-curl \
             switch-mbedtls \
             switch-ffmpeg \
@@ -125,7 +127,10 @@ jobs:
             libgl1-mesa-dev \
             libx11-dev \
             libxrandr-dev \
-            libxi-dev
+            libxi-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
+            wayland-protocols
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -146,11 +151,11 @@ jobs:
             build/resources/
 
   # ───────────────────────────────────────────────
-  # Desktop — macOS (arm64 + x86_64)
+  # Desktop — macOS
   # ───────────────────────────────────────────────
   build-desktop-macos:
     name: Desktop (macOS)
-    runs-on: macos-14   # arm64 runner; change to macos-13 for x86_64
+    runs-on: macos-14
 
     steps:
       - name: Install build requirements
@@ -178,7 +183,7 @@ jobs:
             build/resources/
 
   # ───────────────────────────────────────────────
-  # Desktop — Windows (MinGW cross-compile)
+  # Desktop — Windows (MinGW)
   # ───────────────────────────────────────────────
   build-desktop-windows:
     name: Desktop (Windows)
@@ -199,8 +204,6 @@ jobs:
 
       - name: Install Windows deps via vcpkg
         uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: '2024.06.15'
 
       - name: Build
         run: |
