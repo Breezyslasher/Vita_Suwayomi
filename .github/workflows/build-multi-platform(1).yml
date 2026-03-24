@@ -296,7 +296,14 @@ jobs:
 
       - name: Build libromfs-generator
         run: |
-          bash lib/borealis/library/build_libromfs_generator.sh
+          if [ -f lib/borealis/build_libromfs_generator.sh ]; then
+            bash lib/borealis/build_libromfs_generator.sh
+          elif [ -f lib/borealis/library/build_libromfs_generator.sh ]; then
+            bash lib/borealis/library/build_libromfs_generator.sh
+          else
+            echo "Could not find build_libromfs_generator.sh"
+            exit 1
+          fi
 
       - name: Build
         env:
