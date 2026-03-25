@@ -17,8 +17,6 @@
 #include <sstream>
 #include <cstring>
 #include <cmath>
-#include <cstdlib>
-#include <filesystem>
 
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
@@ -31,19 +29,7 @@ namespace vitasuwayomi {
 static const char* SETTINGS_PATH = "ux0:data/VitaSuwayomi/settings.json";
 static const char* SETTINGS_DIR = "ux0:data/VitaSuwayomi";
 #else
-static std::string getSettingsPath() {
-    const char* xdgConfigHome = std::getenv("XDG_CONFIG_HOME");
-    if (xdgConfigHome && *xdgConfigHome) {
-        return std::string(xdgConfigHome) + "/VitaSuwayomi/settings.json";
-    }
-
-    const char* homeDir = std::getenv("HOME");
-    if (homeDir && *homeDir) {
-        return std::string(homeDir) + "/.config/VitaSuwayomi/settings.json";
-    }
-
-    return "./VitaSuwayomi_settings.json";
-}
+static const char* SETTINGS_PATH = "./VitaSuwayomi_settings.json";
 #endif
 
 // Obfuscation helpers for storing sensitive fields (password, tokens) on disk.
@@ -1261,13 +1247,7 @@ std::string Application::getDownloadQualityString(DownloadQuality quality) {
 }
 
 bool Application::loadSettings() {
-    const std::string settingsPath =
-#ifdef __vita__
-        SETTINGS_PATH;
-#else
-        getSettingsPath();
-#endif
-    brls::Logger::debug("loadSettings: Opening {}", settingsPath);
+    brls::Logger::debug("loadSettings: Opening {}", SETTINGS_PATH);
 
     std::string content;
 
@@ -1295,7 +1275,7 @@ bool Application::loadSettings() {
     sceIoClose(fd);
 #else
     // Non-Vita: use standard C++ file I/O
-    std::ifstream file(settingsPath);
+    std::ifstream file(SETTINGS_PATH);
     if (!file.is_open()) {
         brls::Logger::debug("No settings file found");
         return false;
@@ -1834,13 +1814,7 @@ bool Application::loadSettings() {
 }
 
 bool Application::saveSettings() {
-    const std::string settingsPath =
-#ifdef __vita__
-        SETTINGS_PATH;
-#else
-        getSettingsPath();
-#endif
-    brls::Logger::info("saveSettings: Saving to {}", settingsPath);
+    brls::Logger::info("saveSettings: Saving to {}", SETTINGS_PATH);
     brls::Logger::debug("saveSettings: serverUrl={}",
                         m_serverUrl.empty() ? "(empty)" : m_serverUrl);
 
@@ -2050,17 +2024,7 @@ bool Application::saveSettings() {
     }
 #else
     // Non-Vita: use standard C++ file I/O
-    std::error_code mkdirEc;
-    std::filesystem::path settingsFilePath(settingsPath);
-    if (settingsFilePath.has_parent_path()) {
-        std::filesystem::create_directories(settingsFilePath.parent_path(), mkdirEc);
-        if (mkdirEc) {
-            brls::Logger::error("Failed to create settings directory {}: {}", settingsFilePath.parent_path().string(), mkdirEc.message());
-            return false;
-        }
-    }
-
-    std::ofstream file(settingsPath);
+    std::ofstream file(SETTINGS_PATH);
     if (!file.is_open()) {
         brls::Logger::error("Failed to open settings file for writing");
         return false;
