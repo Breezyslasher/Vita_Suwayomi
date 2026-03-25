@@ -112,7 +112,7 @@ jobs:
       - name: Install build requirements
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y cmake ninja-build git pkg-config             autoconf automake libtool nasm make meson
+          sudo apt-get install -y cmake ninja-build git pkg-config             autoconf automake libtool nasm make meson zstd
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -258,16 +258,13 @@ jobs:
             make install
           )
 
-          # ── zstd ──────────────────────────────────────────────────────
-          curl -fsSL --retry 3 --retry-delay 5 \
-           "https://downloads.sourceforge.net/project/libzstd/libzstd/v1.5.6/zstd-1.5.6.tar.gz" \
-           -o zstd.tar.gz
-          file zstd.tar.gz && tar -xzf zstd.tar.gz
-          cmake -S zstd-1.5.6/build/cmake -B build-zstd "${CMAKE_COMMON[@]}" \
+          # ── zstd (use system zstd for host tools) ─────────────────────
+          cmake -S . -B build-zstd-host -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+            -DCMAKE_BUILD_TYPE=Release \
             -DZSTD_BUILD_PROGRAMS=OFF \
             -DZSTD_BUILD_TESTS=OFF \
             -DZSTD_BUILD_SHARED=OFF
-          cmake --build build-zstd -j$NCPU && cmake --install build-zstd
+          cmake --build build-zstd-host -j$NCPU && cmake --install build-zstd-host
 
       - name: Build libromfs-generator (host)
         run: |
