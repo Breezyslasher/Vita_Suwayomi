@@ -166,6 +166,22 @@ void android_main(struct android_app* app) {
 }
 #endif
 
+#ifdef __ANDROID__
+static void setupAndroidBrlsLogBridge() {
+    brls::Logger::getLogEvent()->subscribe([](brls::Logger::TimePoint, brls::LogLevel level, std::string log) {
+        int androidLevel = ANDROID_LOG_INFO;
+        switch (level) {
+            case brls::LogLevel::LOG_ERROR:   androidLevel = ANDROID_LOG_ERROR; break;
+            case brls::LogLevel::LOG_WARNING: androidLevel = ANDROID_LOG_WARN; break;
+            case brls::LogLevel::LOG_INFO:    androidLevel = ANDROID_LOG_INFO; break;
+            case brls::LogLevel::LOG_DEBUG:   androidLevel = ANDROID_LOG_DEBUG; break;
+            case brls::LogLevel::LOG_VERBOSE: androidLevel = ANDROID_LOG_VERBOSE; break;
+        }
+        __android_log_print(androidLevel, "VitaSuwayomi", "%s", log.c_str());
+    });
+}
+#endif
+
 /**
  * Register custom views
  */
@@ -220,6 +236,12 @@ int main(int argc, char* argv[]) {
 #endif
         return 1;
     }
+
+#ifdef __ANDROID__
+    // Forward Borealis logs to logcat so startup fatals include a readable
+    // reason (not only a backtrace).
+    setupAndroidBrlsLogBridge();
+#endif
 
 #ifdef __vita__
     // Subscribe to log events to write to file (since setLogOutput doesn't work on Vita)

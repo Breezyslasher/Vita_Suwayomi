@@ -403,21 +403,43 @@ elseif(PLATFORM_SWITCH)
     )
 
 elseif(PLATFORM_ANDROID)
-    # Keep a copy of resources in the build tree so fallback APK packaging can
-    # include them under assets/ (see .github/workflows/build-multi-platform(1).yml).
+    # Keep a merged copy of resources in the build tree so fallback APK
+    # packaging can include them under assets/ (see
+    # .github/workflows/build-multi-platform(1).yml).
+    #
+    # Borealis needs its own resources at runtime (e.g. gamecontroller DB used
+    # by SDLInputManager). If only app resources are copied, Android startup can
+    # crash inside window/input initialization.
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/resources
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${BOREALIS_DIR}/resources
+            ${CMAKE_BINARY_DIR}/resources
+        COMMENT "Copying Borealis resources for Android packaging"
+    )
+
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/resources
             ${CMAKE_BINARY_DIR}/resources
-        COMMENT "Copying resources for Android packaging"
+        COMMENT "Copying app resources for Android packaging"
     )
 
 elseif(PLATFORM_DESKTOP)
-    # Copy resources directory next to the binary so relative paths resolve
+    # Copy both Borealis + app resources next to the binary so relative paths
+    # resolve for framework assets and app assets.
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${BOREALIS_DIR}/resources
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+        COMMENT "Copying Borealis resources for desktop build"
+    )
+
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/resources
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-        COMMENT "Copying resources for desktop build"
+        COMMENT "Copying app resources for desktop build"
     )
 endif()
