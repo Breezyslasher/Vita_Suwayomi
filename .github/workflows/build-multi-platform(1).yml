@@ -508,6 +508,7 @@ jobs:
             mingw-w64-${{ matrix.env }}-cc
             mingw-w64-${{ matrix.env }}-cmake
             mingw-w64-${{ matrix.env }}-glfw
+            mingw-w64-${{ matrix.env }}-mesa
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -533,6 +534,12 @@ jobs:
             | while read -r dll; do
                 cp -f "$dll" build/
               done
+
+          # Provide software OpenGL fallback (Mesa llvmpipe) for systems where
+          # the installed graphics driver does not expose OpenGL properly.
+          if [ -f "${MINGW_PREFIX}/bin/opengl32.dll" ]; then
+            cp -f "${MINGW_PREFIX}/bin/opengl32.dll" build/
+          fi
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
@@ -736,6 +743,7 @@ jobs:
             mingw-w64-${{ matrix.env }}-cc
             mingw-w64-${{ matrix.env }}-cmake
             mingw-w64-${{ matrix.env }}-glfw
+            mingw-w64-${{ matrix.env }}-mesa
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -749,12 +757,26 @@ jobs:
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON
           cmake --build build
+
+          # Bundle DLLs for portable artifact behavior matching release jobs.
+          ldd build/VitaSuwayomi.exe \
+            | awk '/=> \// { print $3 }' \
+            | grep -Ei '\.dll$' \
+            | grep -Ev '^/c/Windows/' \
+            | while read -r dll; do
+                cp -f "$dll" build/
+              done
+
+          if [ -f "${MINGW_PREFIX}/bin/opengl32.dll" ]; then
+            cp -f "${MINGW_PREFIX}/bin/opengl32.dll" build/
+          fi
       - name: Upload mingw artifact
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-mingw-${{ matrix.arch }}-${{ github.run_number }}
           path: |
             build/VitaSuwayomi.exe
+            build/*.dll
             build/resources/
 
   # ───────────────────────────────────────────────
