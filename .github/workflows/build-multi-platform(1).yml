@@ -176,24 +176,7 @@ jobs:
 
           # ── libwebp (stub header) ────────────────────────────────────
           mkdir -p "$PREFIX/include/webp" "$PREFIX/lib"
-          cat > "$PREFIX/include/webp/decode.h" << 'ENDOFHEADER'
-#ifndef WEBP_DECODE_H_
-#define WEBP_DECODE_H_
-#include <stdint.h>
-#include <stdlib.h>
-#ifdef __cplusplus
-extern "C" {
-#endif
-typedef struct WebPDecoderConfig WebPDecoderConfig;
-int WebPGetDecoderVersion(void);
-uint8_t* WebPDecodeRGB(const uint8_t* data, size_t data_size, int* width, int* height);
-uint8_t* WebPDecodeRGBA(const uint8_t* data, size_t data_size, int* width, int* height);
-void WebPFree(void* ptr);
-#ifdef __cplusplus
-}
-#endif
-#endif
-ENDOFHEADER
+          printf '#ifndef WEBP_DECODE_H_\n#define WEBP_DECODE_H_\n#include <stdint.h>\n#include <stdlib.h>\ntypedef struct WebPDecoderConfig WebPDecoderConfig;\nint WebPGetDecoderVersion(void);\nuint8_t* WebPDecodeRGB(const uint8_t* data, size_t data_size, int* width, int* height);\nuint8_t* WebPDecodeRGBA(const uint8_t* data, size_t data_size, int* width, int* height);\nvoid WebPFree(void* ptr);\n#endif\n' > "$PREFIX/include/webp/decode.h"
           touch "$PREFIX/lib/libwebp.a"
 
       - name: Cache Android deps (switchfin-style)
