@@ -408,7 +408,7 @@ jobs:
           name: VitaSuwayomi-android-apk-${{ github.run_number }}
           path: VitaSuwayomi-android-${{ github.run_number }}.apk
       
-        # ───────────────────────────────────────────────
+  # ───────────────────────────────────────────────
   # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
   # ───────────────────────────────────────────────
   build-desktop-windows-matrix:
