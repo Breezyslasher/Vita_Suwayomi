@@ -292,13 +292,76 @@ jobs:
           name: VitaSuwayomi-android-apk-${{ github.run_number }}
           path: app/platform/android/app/build/outputs/apk/release/*.apk
 
-      - name: Upload Android shared library
+      - name: Setup Android SDK
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        uses: android-actions/setup-android@v2
+
+      - name: Create APK with native lib
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        run: |
+          ABI=arm64-v8a
+          VERSION=${{ github.run_number }}
+          ANDROID_JAR=$(find $ANDROID_HOME/platforms -name "android.jar" | head -1)
+          AAPT=$(find $ANDROID_HOME/build-tools -name "aapt2" | head -1)
+          ZIPALIGN=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -1)
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | head -1)
+
+          mkdir -p apkdir/lib/$ABI
+          cp build-android/libVitaSuwayomi.so apkdir/lib/$ABI/
+          mkdir -p apkdir/assets
+          cp -r build-android/resources/* apkdir/assets/ 2>/dev/null || true
+
+          cat > apkdir/AndroidManifest.xml << 'MANIFEST'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.vitasuwayomi.app"
+              android:versionCode="1"
+              android:versionName="1.0"
+              android:sharedUserId="com.vitasuwayomi">
+              <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+              <application
+                  android:label="VitaSuwayomi"
+                  android:hasCode="false"
+                  android:extractNativeLibs="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:configChanges="orientation|screenSize|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          MANIFEST
+
+          mkdir -p apkdir/res/drawable
+          cat > apkdir/res/drawable/icon.xml << 'ICON'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="48dp" android:height="48dp"
+              android:viewportWidth="48" android:viewportHeight="48">
+              <path android:fillColor="#6200EE" android:pathData="M0,0h48v48H0z"/>
+              <path android:fillColor="#FFFFFF" android:pathData="M24,12 L32,36 L16,36 Z"/>
+          </vector>
+          ICON
+
+          $AAPT package -f -M apkdir/AndroidManifest.xml -S apkdir/res -I "$ANDROID_JAR" -F unsigned-$ABI.apk apkdir
+          $ZIPALIGN -p 4 unsigned-$ABI.apk VitaSuwayomi-android-$VERSION-$ABI.apk
+          $APKSIGNER sign --ks /dev/null --ks-pass pass: --out VitaSuwayomi-android-$VERSION.apk VitaSuwayomi-android-$VERSION-$ABI.apk
+          rm -f unsigned-$ABI.apk
+
+      - name: Upload Android APK
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: VitaSuwayomi-android-${{ github.run_number }}
-          path: |
-            build-android/libVitaSuwayomi.so
+          name: VitaSuwayomi-android-apk-${{ github.run_number }}
+          path: VitaSuwayomi-android-${{ github.run_number }}.apk
 
   # ───────────────────────────────────────────────
   # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
