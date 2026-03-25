@@ -292,14 +292,126 @@ jobs:
           name: VitaSuwayomi-android-apk-${{ github.run_number }}
           path: app/platform/android/app/build/outputs/apk/release/*.apk
 
-      - name: Upload Android shared library
+      - name: Setup Android SDK
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        uses: android-actions/setup-android@v2
+
+      - name: Create APK with native lib
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        run: |
+          set -e
+      
+          ABI=arm64-v8a
+          VERSION=${{ github.run_number }}
+      
+          ANDROID_JAR=$(find $ANDROID_HOME/platforms -name "android.jar" | head -1)
+          AAPT2=$(find $ANDROID_HOME/build-tools -name "aapt2" | head -1)
+          ZIPALIGN=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -1)
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | head -1)
+      
+          mkdir -p apkdir/lib/$ABI
+          mkdir -p apkdir/res/drawable
+          mkdir -p apkdir/assets
+      
+          # Copy native lib
+          cp build-android/libVitaSuwayomi.so apkdir/lib/$ABI/
+      
+          # Copy resources if they exist
+          cp -r build-android/resources/* apkdir/assets/ 2>/dev/null || true
+      
+          # Icon
+          if [ -f sce_sys/icon0.png ]; then
+            cp sce_sys/icon0.png apkdir/res/drawable/icon.png
+          else
+            echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=" | base64 -d > apkdir/res/drawable/icon.png
+          fi
+      
+          # ✅ NativeActivity manifest (NO heredoc issues)
+
+          cat > apkdir/AndroidManifest.xml <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.vitasuwayomi.app"
+              android:versionCode="$VERSION"
+              android:versionName="1.0">
+          
+              <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
+              <uses-permission android:name="android.permission.INTERNET"/>
+          
+              <application
+                  android:label="VitaSuwayomi"
+                  android:hasCode="false"
+                  android:extractNativeLibs="true">
+          
+                  <activity
+                      android:name="android.app.NativeActivity"
+                      android:exported="true"
+                      android:label="VitaSuwayomi"
+                      android:configChanges="orientation|keyboardHidden|screenSize">
+          
+                      <meta-data
+                          android:name="android.app.lib_name"
+                          android:value="VitaSuwayomi" />
+          
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+          
+                  </activity>
+          
+              </application>
+          </manifest>
+          EOF
+     
+      
+          # Compile resources
+          $AAPT2 compile --dir apkdir/res -o compiled_res.zip
+      
+          # Link APK
+          $AAPT2 link \
+            -o unsigned.apk \
+            -I "$ANDROID_JAR" \
+            --manifest apkdir/AndroidManifest.xml \
+            compiled_res.zip \
+            --auto-add-overlay
+      
+          # Add native libs + assets
+          cd apkdir
+          zip -r ../unsigned.apk lib assets >/dev/null
+          cd ..
+      
+          # Align
+          $ZIPALIGN -p 4 unsigned.apk aligned.apk
+      
+          # Debug keystore
+          keytool -genkeypair \
+            -keystore debug.keystore \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
+      
+          # Sign
+          $APKSIGNER sign \
+            --ks debug.keystore \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out VitaSuwayomi-android-$VERSION.apk \
+            aligned.apk
+      
+          rm -f unsigned.apk aligned.apk compiled_res.zip debug.keystore
+
+      - name: Upload Android APK
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: VitaSuwayomi-android-${{ github.run_number }}
-          path: |
-            build-android/libVitaSuwayomi.so
-
+          name: VitaSuwayomi-android-apk-${{ github.run_number }}
+          path: VitaSuwayomi-android-${{ github.run_number }}.apk
+      
   # ───────────────────────────────────────────────
   # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
   # ───────────────────────────────────────────────
