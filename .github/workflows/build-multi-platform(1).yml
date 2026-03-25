@@ -296,7 +296,7 @@ jobs:
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         uses: android-actions/setup-android@v2
 
-      - name: Create APK with native lib
+            - name: Create APK with native lib
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         run: |
           set -e
@@ -319,29 +319,47 @@ jobs:
           # Copy resources if they exist
           cp -r build-android/resources/* apkdir/assets/ 2>/dev/null || true
       
-          # Use repo icon if exists, otherwise fallback
+          # Icon
           if [ -f sce_sys/icon0.png ]; then
             cp sce_sys/icon0.png apkdir/res/drawable/icon.png
           else
             echo "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAAktJREFUaIHtmM9KxDAQx/+z2Y2x0IMHePAgHkHwIIK38Qoe..." | base64 -d > apkdir/res/drawable/icon.png
           fi
       
-          # Create manifest
-          cat > apkdir/AndroidManifest.xml <<EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.vitasuwayomi.app"
-              android:versionCode="$VERSION"
-              android:versionName="1.0">
-              <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
-              <uses-permission android:name="android.permission.INTERNET"/>
-              <application
-                  android:label="VitaSuwayomi"
-                  android:hasCode="false"
-                  android:extractNativeLibs="true">
-              </application>
-          </manifest>
-          EOF
+          # ✅ NativeActivity manifest (NO heredoc issues)
+          echo '<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.vitasuwayomi.app"
+    android:versionCode="'$VERSION'"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <application
+        android:label="VitaSuwayomi"
+        android:hasCode="false"
+        android:extractNativeLibs="true">
+
+        <activity
+            android:name="android.app.NativeActivity"
+            android:exported="true"
+            android:label="VitaSuwayomi"
+            android:configChanges="orientation|keyboardHidden|screenSize">
+
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="VitaSuwayomi" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+        </activity>
+
+    </application>
+</manifest>' > apkdir/AndroidManifest.xml
       
           # Compile resources
           $AAPT2 compile --dir apkdir/res -o compiled_res.zip
@@ -362,7 +380,7 @@ jobs:
           # Align
           $ZIPALIGN -p 4 unsigned.apk aligned.apk
       
-          # Create debug keystore
+          # Debug keystore
           keytool -genkeypair \
             -keystore debug.keystore \
             -storepass android \
@@ -373,7 +391,7 @@ jobs:
             -keysize 2048 \
             -validity 10000
       
-          # Sign APK
+          # Sign
           $APKSIGNER sign \
             --ks debug.keystore \
             --ks-pass pass:android \
@@ -381,7 +399,7 @@ jobs:
             --out VitaSuwayomi-android-$VERSION.apk \
             aligned.apk
       
-            rm -f unsigned.apk aligned.apk compiled_res.zip debug.keystore
+          rm -f unsigned.apk aligned.apk compiled_res.zip debug.keystore
 
       - name: Upload Android APK
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
