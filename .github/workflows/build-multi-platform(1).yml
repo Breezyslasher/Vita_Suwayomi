@@ -311,6 +311,74 @@ jobs:
           mkdir -p apkdir/assets
           cp -r build-android/resources/* apkdir/assets/ 2>/dev/null || true
 
+          cp sce_sys/icon0.png apkdir/res/drawable/icon.png 2>/dev/null || true
+          if [ ! -f apkdir/res/drawable/icon.png ]; then
+            mkdir -p apkdir/res/drawable
+            cat > apkdir/res/drawable/icon.png << 'ICON'
+            iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
+            AAALEwAACxMBAJqcGAAAAktJREFUaIHtmM9KxDAQx/+z2Y2x0IMHePAgHkHwIIK38Qoe
+            wRsQRBB8hEcPHkHwIIKxR7AQxMJgZ2Kz2WQn+0HChC6z2Wz2b5TJZjI/yWQSj8fjuuM4
+            Dn/f9+M4jt+d5/kPYOy67rqN4zj+cRzHP87zfAaYAs+AJaAGnADvZVm+BXABvAIOgVvg
+            CbAFnAGvwBVwBjwAJ8AVcAocA+fAGXAGnAH3wBFwBtwBR8AdcAicAXfAEXAH3AGHwB1w
+            CNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjc
+            AYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGH
+            wB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8Ad
+            cAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI
+            3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwB
+            h8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfA
+            HXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1w
+            CNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjc
+            AYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGH
+            wB1wCNwBh8AdcAgM7w7XAQzgH8A/cAfsAzvAoOs8H8C3AOOu83wAvwGM4zj+cRznfzRN
+            +QVgmqZ5aJrmC8dxfuK67meapnkNx3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67mea
+            pnkNx3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeQ3HcX7i
+            uu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67meapnkd
+            x3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5n
+            mqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+
+            4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5
+            DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rru
+            Z5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5Dcdx
+            fuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qm
+            eR3HcX7iuu5nmqZ5DcdxfuK67meapnktx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK6
+            7meapnkNx3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeQ3H
+            cX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67mea
+            pnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7i
+            uu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkN
+            x3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5n
+            mqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+
+            4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5
+            DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rru
+            Z5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5Dcdx
+            fuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5q
+            meR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK6
+            7meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3H
+            cX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67mea
+            pnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7i
+            uu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkN
+            x3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5n
+            mqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+
+            4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5
+            DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rru
+            Z5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5Dcdx
+            fuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qm
+            eR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK6
+            7meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3H
+            cX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67mea
+            pnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7i
+            uu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkN
+            x3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5n
+            mqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+
+            4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5
+            DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rru
+            Z5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5Dcdx
+            fuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qm
+            eR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK6
+            7meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3H
+            cX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meap
+            kk4AAAAASUVORK5CYII=
+            ICON
+          fi
+
           cat > apkdir/AndroidManifest.xml << 'MANIFEST'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -341,17 +409,10 @@ jobs:
           MANIFEST
 
           mkdir -p apkdir/res/drawable
-          cat > apkdir/res/drawable/icon.xml << 'ICON'
-          <?xml version="1.0" encoding="utf-8"?>
-          <vector xmlns:android="http://schemas.android.com/apk/res/android"
-              android:width="48dp" android:height="48dp"
-              android:viewportWidth="48" android:viewportHeight="48">
-              <path android:fillColor="#6200EE" android:pathData="M0,0h48v48H0z"/>
-              <path android:fillColor="#FFFFFF" android:pathData="M24,12 L32,36 L16,36 Z"/>
-          </vector>
-          ICON
+          cp sce_sys/icon0.png apkdir/res/drawable/icon.png 2>/dev/null || true
 
-          $AAPT package -f -M apkdir/AndroidManifest.xml -S apkdir/res -I "$ANDROID_JAR" -F unsigned-$ABI.apk apkdir
+          $AAPT2 link -o unsigned-$ABI.apk -M apkdir/AndroidManifest.xml -I "$ANDROID_JAR" apkdir/lib/ apkdir/res/ 2>/dev/null || \
+          $AAPT2 link -o unsigned-$ABI.apk -M apkdir/AndroidManifest.xml -I "$ANDROID_JAR" apkdir/
           $ZIPALIGN -p 4 unsigned-$ABI.apk VitaSuwayomi-android-$VERSION-$ABI.apk
           $APKSIGNER sign --ks /dev/null --ks-pass pass: --out VitaSuwayomi-android-$VERSION.apk VitaSuwayomi-android-$VERSION-$ABI.apk
           rm -f unsigned-$ABI.apk
