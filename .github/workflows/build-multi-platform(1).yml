@@ -327,39 +327,7 @@ jobs:
           fi
       
           # ✅ NativeActivity manifest (NO heredoc issues)
-          echo '<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.vitasuwayomi.app"
-    android:versionCode="'$VERSION'"
-    android:versionName="1.0">
-
-    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
-    <uses-permission android:name="android.permission.INTERNET"/>
-
-    <application
-        android:label="VitaSuwayomi"
-        android:hasCode="false"
-        android:extractNativeLibs="true">
-
-        <activity
-            android:name="android.app.NativeActivity"
-            android:exported="true"
-            android:label="VitaSuwayomi"
-            android:configChanges="orientation|keyboardHidden|screenSize">
-
-            <meta-data
-                android:name="android.app.lib_name"
-                android:value="VitaSuwayomi" />
-
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-
-        </activity>
-
-    </application>
-</manifest>' > apkdir/AndroidManifest.xml
+     
       
           # Compile resources
           $AAPT2 compile --dir apkdir/res -o compiled_res.zip
