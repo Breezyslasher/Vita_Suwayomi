@@ -307,16 +307,20 @@ jobs:
 
       - name: Create APK with native lib
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           set -e
       
           ABI=arm64-v8a
           VERSION=${{ github.run_number }}
+          TARGET_TRIPLE=aarch64-linux-android
       
           ANDROID_JAR=$(find $ANDROID_HOME/platforms -name "android.jar" | head -1)
           AAPT2=$(find $ANDROID_HOME/build-tools -name "aapt2" | head -1)
           ZIPALIGN=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -1)
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | head -1)
+          READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
       
           mkdir -p apkdir/lib/$ABI
           mkdir -p apkdir/res/drawable
@@ -332,6 +336,37 @@ jobs:
             base="$(basename "$so")"
             [ "$base" = "libVitaSuwayomi.so" ] && continue
             cp -f "$so" "apkdir/lib/$ABI/$base"
+          done
+
+          # Copy all transitive native dependencies (including libc++_shared)
+          # by reading DT_NEEDED entries and resolving them from known paths.
+          SEARCH_DIRS=(
+            "apkdir/lib/$ABI"
+            "build-android"
+            "android-deps/lib"
+            "jniLibs/$ABI"
+            "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TARGET_TRIPLE"
+            "$ANDROID_NDK_HOME/sources/cxx-stl/llvm-libc++/libs/$ABI"
+          )
+          CHANGED=1
+          while [ "$CHANGED" -eq 1 ]; do
+            CHANGED=0
+            for sofile in apkdir/lib/$ABI/*.so; do
+              [ -f "$sofile" ] || continue
+              while IFS= read -r needed; do
+                [ -n "$needed" ] || continue
+                if [ -f "apkdir/lib/$ABI/$needed" ]; then
+                  continue
+                fi
+                for d in "${SEARCH_DIRS[@]}"; do
+                  if [ -f "$d/$needed" ]; then
+                    cp -f "$d/$needed" "apkdir/lib/$ABI/$needed"
+                    CHANGED=1
+                    break
+                  fi
+                done
+              done < <("$READELF" -d "$sofile" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\].*/\1/p')
+            done
           done
       
           # Copy resources if they exist
@@ -400,6 +435,11 @@ jobs:
           # Add native libs + assets
           if [ ! -f "apkdir/lib/$ABI/libSDL2.so" ]; then
             echo "ERROR: libSDL2.so is missing from APK native libs"
+            ls -la apkdir/lib/$ABI || true
+            exit 1
+          fi
+          if [ ! -f "apkdir/lib/$ABI/libc++_shared.so" ]; then
+            echo "ERROR: libc++_shared.so is missing from APK native libs"
             ls -la apkdir/lib/$ABI || true
             exit 1
           fi
