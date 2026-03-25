@@ -508,7 +508,6 @@ jobs:
             mingw-w64-${{ matrix.env }}-cc
             mingw-w64-${{ matrix.env }}-cmake
             mingw-w64-${{ matrix.env }}-glfw
-            mingw-w64-${{ matrix.env }}-mesa
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -545,14 +544,7 @@ jobs:
 
           copy_with_deps build/VitaSuwayomi.exe
 
-          # Provide software OpenGL fallback (Mesa llvmpipe) for systems where
-          # the installed graphics driver does not expose OpenGL properly.
-          if [ -f "${MINGW_PREFIX}/bin/opengl32.dll" ]; then
-            copy_with_deps "${MINGW_PREFIX}/bin/opengl32.dll"
-          fi
-
-          # Resolve transitive DLL dependencies for anything already bundled
-          # (Mesa opengl32.dll needs additional side DLLs at runtime).
+          # Resolve transitive DLL dependencies for anything already bundled.
           changed=1
           while [ "$changed" -eq 1 ]; do
             changed=0
@@ -775,7 +767,6 @@ jobs:
             mingw-w64-${{ matrix.env }}-cc
             mingw-w64-${{ matrix.env }}-cmake
             mingw-w64-${{ matrix.env }}-glfw
-            mingw-w64-${{ matrix.env }}-mesa
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -808,10 +799,6 @@ jobs:
           }
 
           copy_with_deps build/VitaSuwayomi.exe
-
-          if [ -f "${MINGW_PREFIX}/bin/opengl32.dll" ]; then
-            copy_with_deps "${MINGW_PREFIX}/bin/opengl32.dll"
-          fi
 
           changed=1
           while [ "$changed" -eq 1 ]; do
