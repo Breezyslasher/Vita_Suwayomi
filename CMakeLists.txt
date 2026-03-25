@@ -32,6 +32,7 @@ endif()
 # ---------------------------------------------------------------------------
 set(BOREALIS_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/lib/borealis)
 set(BOREALIS_LIBRARY ${BOREALIS_DIR}/library)
+set(COPY_DIR_BEST_EFFORT_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyDirBestEffort.cmake)
 if(EXISTS ${BOREALIS_LIBRARY}/resources)
     set(BOREALIS_RESOURCES_DIR ${BOREALIS_LIBRARY}/resources)
 else()
@@ -418,10 +419,10 @@ elseif(PLATFORM_ANDROID)
     # crash inside window/input initialization.
     if(EXISTS ${BOREALIS_RESOURCES_DIR})
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/resources
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                ${BOREALIS_RESOURCES_DIR}
-                ${CMAKE_BINARY_DIR}/resources
+            COMMAND ${CMAKE_COMMAND}
+                -DSRC_DIR=${BOREALIS_RESOURCES_DIR}
+                -DDST_DIR=${CMAKE_BINARY_DIR}/resources
+                -P ${COPY_DIR_BEST_EFFORT_SCRIPT}
             COMMENT "Copying Borealis resources for Android packaging"
         )
     else()
@@ -429,9 +430,10 @@ elseif(PLATFORM_ANDROID)
     endif()
 
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources
-            ${CMAKE_BINARY_DIR}/resources
+        COMMAND ${CMAKE_COMMAND}
+            -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/resources
+            -DDST_DIR=${CMAKE_BINARY_DIR}/resources
+            -P ${COPY_DIR_BEST_EFFORT_SCRIPT}
         COMMENT "Copying app resources for Android packaging"
     )
 
@@ -440,10 +442,10 @@ elseif(PLATFORM_DESKTOP)
     # resolve for framework assets and app assets.
     if(EXISTS ${BOREALIS_RESOURCES_DIR})
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                ${BOREALIS_RESOURCES_DIR}
-                $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+            COMMAND ${CMAKE_COMMAND}
+                -DSRC_DIR=${BOREALIS_RESOURCES_DIR}
+                -DDST_DIR=$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+                -P ${COPY_DIR_BEST_EFFORT_SCRIPT}
             COMMENT "Copying Borealis resources for desktop build"
         )
     else()
@@ -451,9 +453,10 @@ elseif(PLATFORM_DESKTOP)
     endif()
 
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+        COMMAND ${CMAKE_COMMAND}
+            -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/resources
+            -DDST_DIR=$<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+            -P ${COPY_DIR_BEST_EFFORT_SCRIPT}
         COMMENT "Copying app resources for desktop build"
     )
 endif()
