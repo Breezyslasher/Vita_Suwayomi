@@ -19,6 +19,9 @@
 #ifdef __ANDROID__
 #include <android/log.h>
 #include <android_native_app_glue.h>
+#ifndef SDL_MAIN_HANDLED
+#define SDL_MAIN_HANDLED
+#endif
 #if __has_include(<SDL.h>)
 #include <SDL.h>
 #else
