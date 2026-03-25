@@ -157,6 +157,9 @@ endif()
 
 if(PLATFORM_PSV)
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
+elseif(PLATFORM_ANDROID)
+    # Android resources are packaged into APK assets/ root.
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"\")
 elseif(PLATFORM_SWITCH)
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"romfs:/\")
 else()
@@ -381,6 +384,16 @@ elseif(PLATFORM_SWITCH)
         NAME   "VitaSuwayomi"
         AUTHOR "Breezyslasher"
         ICON   ${CMAKE_CURRENT_SOURCE_DIR}/sce_sys/icon0.png
+    )
+
+elseif(PLATFORM_ANDROID)
+    # Keep a copy of resources in the build tree so fallback APK packaging can
+    # include them under assets/ (see .github/workflows/build-multi-platform(1).yml).
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources
+            ${CMAKE_BINARY_DIR}/resources
+        COMMENT "Copying resources for Android packaging"
     )
 
 elseif(PLATFORM_DESKTOP)

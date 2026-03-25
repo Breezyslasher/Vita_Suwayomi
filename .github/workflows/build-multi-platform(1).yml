@@ -457,12 +457,23 @@ jobs:
             -DZLIB_USE_STATIC_LIBS=ON \
             -DUSE_SYSTEM_GLFW=ON
           cmake --build build
+
+          # Bundle dependent DLLs next to the executable so released artifacts
+          # are runnable on clean Windows systems.
+          ldd build/VitaSuwayomi.exe \
+            | awk '/=> \// { print $3 }' \
+            | grep -Ei '\.dll$' \
+            | grep -Ev '^/c/Windows/' \
+            | while read -r dll; do
+                cp -f "$dll" build/
+              done
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-windows-${{ matrix.arch }}-${{ github.run_number }}
           path: |
             build/VitaSuwayomi.exe
+            build/*.dll
             build/resources/
 
   # ───────────────────────────────────────────────
