@@ -112,7 +112,7 @@ jobs:
       - name: Install build requirements
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y cmake ninja-build git pkg-config autoconf automake libtool nasm
+          sudo apt-get install -y cmake ninja-build git pkg-config
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -161,109 +161,100 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          set -e
-          NDK=$ANDROID_NDK_HOME
-          TC=$NDK/build/cmake/android.toolchain.cmake
+          NDK_TOOLCHAIN=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake
           PREFIX=${{ github.workspace }}/android-deps
-          HOST_TAG=linux-x86_64
-          TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/$HOST_TAG
-          TARGET=aarch64-linux-android24
-          export AR=$TOOLCHAIN/bin/llvm-ar
-          export CC=$TOOLCHAIN/bin/$TARGET-clang
-          export CXX=$TOOLCHAIN/bin/$TARGET-clang++
-          export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
-          export STRIP=$TOOLCHAIN/bin/llvm-strip
-          export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig"
           mkdir -p "$PREFIX"
-          NCPU=$(nproc)
-
-          CMAKE_COMMON=(
+          COMMON_CMAKE_ARGS=(
             -G Ninja
-            -DCMAKE_TOOLCHAIN_FILE="$TC"
+            -DCMAKE_TOOLCHAIN_FILE="$NDK_TOOLCHAIN"
             -DANDROID_ABI=arm64-v8a
             -DANDROID_PLATFORM=android-24
             -DCMAKE_INSTALL_PREFIX="$PREFIX"
             -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_PREFIX_PATH="$PREFIX"
-            -DCMAKE_FIND_ROOT_PATH="$PREFIX"
           )
 
-          # ── zlib ──────────────────────────────────────────────────────
-          curl -sL https://zlib.net/zlib-1.3.1.tar.gz | tar -xz
-          cmake -S zlib-1.3.1 -B build-zlib "${CMAKE_COMMON[@]}"
-          cmake --build build-zlib -j$NCPU && cmake --install build-zlib
-
-          # ── libpng ────────────────────────────────────────────────────
-          curl -sL https://download.sourceforge.net/libpng/libpng-1.6.43.tar.gz | tar -xz
-          cmake -S libpng-1.6.43 -B build-png "${CMAKE_COMMON[@]}" \
-            -DPNG_SHARED=OFF -DPNG_TESTS=OFF
-          cmake --build build-png -j$NCPU && cmake --install build-png
-
-          # ── libwebp ───────────────────────────────────────────────────
+          # libwebp
           curl -sL https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.4.0.tar.gz | tar -xz
-          cmake -S libwebp-1.4.0 -B build-webp "${CMAKE_COMMON[@]}" \
+          cmake -S libwebp-1.4.0 -B build-webp "${COMMON_CMAKE_ARGS[@]}" \
             -DWEBP_BUILD_ANIM_UTILS=OFF -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
             -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF -DWEBP_BUILD_VWEBP=OFF \
             -DWEBP_BUILD_WEBPINFO=OFF -DWEBP_BUILD_WEBPMUX=OFF -DWEBP_BUILD_EXTRAS=OFF
-          cmake --build build-webp -j$NCPU && cmake --install build-webp
+          cmake --build build-webp && cmake --install build-webp
 
-          # ── mbedtls ───────────────────────────────────────────────────
+          # mbedtls
           curl -sL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.3/mbedtls-3.6.3.tar.bz2 | tar -xj
-          cmake -S mbedtls-3.6.3 -B build-mbedtls "${CMAKE_COMMON[@]}" \
+          cmake -S mbedtls-3.6.3 -B build-mbedtls "${COMMON_CMAKE_ARGS[@]}" \
             -DENABLE_TESTING=OFF -DENABLE_PROGRAMS=OFF
-          cmake --build build-mbedtls -j$NCPU && cmake --install build-mbedtls
+          cmake --build build-mbedtls && cmake --install build-mbedtls
 
-          # ── curl ──────────────────────────────────────────────────────
+          # curl (depends on mbedtls)
           curl -sL https://curl.se/download/curl-8.11.1.tar.gz | tar -xz
-          cmake -S curl-8.11.1 -B build-curl "${CMAKE_COMMON[@]}" \
-            -DBUILD_SHARED_LIBS=OFF -DBUILD_CURL_EXE=OFF -DBUILD_TESTING=OFF \
-            -DCURL_USE_MBEDTLS=ON -DCURL_USE_OPENSSL=OFF -DCURL_DISABLE_LDAP=ON
-          cmake --build build-curl -j$NCPU && cmake --install build-curl
+          cmake -S curl-8.11.1 -B build-curl "${COMMON_CMAKE_ARGS[@]}" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCURL_USE_MBEDTLS=ON \
+            -DCURL_USE_OPENSSL=OFF \
+            -DCMAKE_PREFIX_PATH="$PREFIX" \
+            -DBUILD_CURL_EXE=OFF \
+            -DBUILD_TESTING=OFF \
+            -DCURL_DISABLE_LDAP=ON
+          cmake --build build-curl && cmake --install build-curl
 
-          # ── freetype ──────────────────────────────────────────────────
+          # zstd
+          curl -sL https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz | tar -xz
+          cmake -S zstd-1.5.6/build/cmake -B build-zstd "${COMMON_CMAKE_ARGS[@]}" \
+            -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_TESTS=OFF -DZSTD_BUILD_SHARED=OFF
+          cmake --build build-zstd && cmake --install build-zstd
+
+          # libpng
+          curl -sL https://downloads.sourceforge.net/project/libpng/libpng16/1.6.47/libpng-1.6.47.tar.gz | tar -xz
+          cmake -S libpng-1.6.47 -B build-png "${COMMON_CMAKE_ARGS[@]}" \
+            -DPNG_TESTS=OFF -DPNG_SHARED=OFF
+          cmake --build build-png && cmake --install build-png
+
+          # freetype (depends on libpng)
           curl -sL https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.gz | tar -xz
-          cmake -S freetype-2.13.3 -B build-freetype "${CMAKE_COMMON[@]}" \
-            -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BROTLI=ON
-          cmake --build build-freetype -j$NCPU && cmake --install build-freetype
+          cmake -S freetype-2.13.3 -B build-freetype "${COMMON_CMAKE_ARGS[@]}" \
+            -DCMAKE_PREFIX_PATH="$PREFIX" \
+            -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BZIP2=ON -DFT_DISABLE_BROTLI=ON
+          cmake --build build-freetype && cmake --install build-freetype
 
-          # ── fribidi (autotools — no CMakeLists.txt) ───────────────────
+          # fribidi
           curl -sL https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz | tar -xJ
-          cd fribidi-1.0.16
-          ./configure --host=aarch64-linux-android \
-            --prefix="$PREFIX" \
-            --enable-static --disable-shared \
-            --disable-docs \
-            CC="$CC" AR="$AR" RANLIB="$RANLIB"
-          make -j$NCPU && make install
-          cd ..
+          cmake -S fribidi-1.0.16 -B build-fribidi "${COMMON_CMAKE_ARGS[@]}" \
+            -DFRIBIDI_GENTAB=OFF
+          cmake --build build-fribidi && cmake --install build-fribidi
 
-          # ── harfbuzz (depends on freetype) ────────────────────────────
-          curl -sL https://github.com/harfbuzz/harfbuzz/releases/download/10.2.0/harfbuzz-10.2.0.tar.xz | tar -xJ
-          cmake -S harfbuzz-10.2.0 -B build-harfbuzz "${CMAKE_COMMON[@]}" \
-            -DHB_BUILD_TESTS=OFF -DHB_BUILD_UTILS=OFF -DHB_BUILD_SUBSET=OFF \
-            -DHB_HAVE_FREETYPE=ON
-          cmake --build build-harfbuzz -j$NCPU && cmake --install build-harfbuzz
+          # harfbuzz (depends on freetype)
+          curl -sL https://github.com/harfbuzz/harfbuzz/releases/download/10.4.0/harfbuzz-10.4.0.tar.xz | tar -xJ
+          cmake -S harfbuzz-10.4.0 -B build-harfbuzz "${COMMON_CMAKE_ARGS[@]}" \
+            -DCMAKE_PREFIX_PATH="$PREFIX" \
+            -DHB_HAVE_FREETYPE=ON -DHB_BUILD_TESTS=OFF -DHB_BUILD_UTILS=OFF
+          cmake --build build-harfbuzz && cmake --install build-harfbuzz
 
-          # ── libass (depends on freetype, fribidi, harfbuzz) ───────────
+          # libass (depends on freetype, harfbuzz, fribidi)
           curl -sL https://github.com/libass/libass/releases/download/0.17.3/libass-0.17.3.tar.gz | tar -xz
           cd libass-0.17.3
-          ./configure --host=aarch64-linux-android \
-            --prefix="$PREFIX" \
-            --enable-static --disable-shared \
-            --disable-fontconfig --disable-coretext \
-            CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
-            PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
-            CFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib"
-          make -j$NCPU && make install
+          PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig" \
+          CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang \
+          CXX=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang++ \
+          CFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib" \
+            ./configure --host=aarch64-linux-android \
+              --prefix="$PREFIX" \
+              --disable-shared --enable-static \
+              --disable-asm --disable-require-system-fonts
+          make -j$(nproc) && make install
           cd ..
 
-          # ── zstd ──────────────────────────────────────────────────────
-          curl -sL https://github.com/facebook/zstd/archive/refs/tags/v1.5.6.tar.gz | tar -xz
-          cmake -S zstd-1.5.6/build/cmake -B build-zstd "${CMAKE_COMMON[@]}" \
-            -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_TESTS=OFF -DZSTD_BUILD_SHARED=OFF
-          cmake --build build-zstd -j$NCPU && cmake --install build-zstd
-
-
+          # mp3lame
+          curl -sL https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz | tar -xz
+          cd lame-3.100
+          CC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang \
+            ./configure --host=aarch64-linux-android \
+              --prefix="$PREFIX" \
+              --disable-shared --enable-static \
+              --disable-frontend --disable-decoder
+          make -j$(nproc) && make install
+          cd ..
 
       - name: Build libromfs-generator (host)
         run: |
