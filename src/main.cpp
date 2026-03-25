@@ -165,6 +165,23 @@ void android_main(struct android_app* app) {
     (void)app;
 
     __android_log_print(ANDROID_LOG_INFO, "VitaSuwayomi", "android_main started");
+    // Wait until NativeActivity provides a window before initializing SDL/
+    // Borealis windowing. Creating the window too early causes SDL video
+    // initialization to fail on Android.
+    while (app->window == nullptr) {
+        int events = 0;
+        android_poll_source* source = nullptr;
+        if (ALooper_pollOnce(-1, nullptr, &events, reinterpret_cast<void**>(&source)) >= 0) {
+            if (source) {
+                source->process(app, source);
+            }
+            if (app->destroyRequested) {
+                __android_log_print(ANDROID_LOG_WARN, "VitaSuwayomi", "android_main aborted before window init");
+                return;
+            }
+        }
+    }
+
     // We run through NativeActivity/android_main (not SDLActivity). Tell SDL
     // runtime that main/bootstrap is ready before Borealis calls SDL_Init.
     SDL_SetMainReady();
