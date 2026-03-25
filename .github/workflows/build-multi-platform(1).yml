@@ -526,20 +526,49 @@ jobs:
           cmake --build build
 
           # Bundle dependent DLLs next to the executable so released artifacts
-          # are runnable on clean Windows systems.
-          ldd build/VitaSuwayomi.exe \
-            | awk '/=> \// { print $3 }' \
-            | grep -Ei '\.dll$' \
-            | grep -Ev '^/c/Windows/' \
-            | while read -r dll; do
-                cp -f "$dll" build/
-              done
+          # are runnable on clean Windows systems (including transitive deps).
+          copy_with_deps() {
+            local target="$1"
+            [ -f "$target" ] || return 0
+            cp -f "$target" build/
+            ldd "$target" \
+              | awk '/=> \// { print $3 }' \
+              | grep -Ei '\.dll$' \
+              | grep -Ev '^/c/Windows/' \
+              | while read -r dep; do
+                  [ -f "build/$(basename "$dep")" ] || cp -f "$dep" build/
+                done
+          }
+
+          copy_with_deps build/VitaSuwayomi.exe
 
           # Provide software OpenGL fallback (Mesa llvmpipe) for systems where
           # the installed graphics driver does not expose OpenGL properly.
           if [ -f "${MINGW_PREFIX}/bin/opengl32.dll" ]; then
-            cp -f "${MINGW_PREFIX}/bin/opengl32.dll" build/
+            copy_with_deps "${MINGW_PREFIX}/bin/opengl32.dll"
           fi
+
+          # Resolve transitive DLL dependencies for anything already bundled
+          # (Mesa opengl32.dll needs additional side DLLs at runtime).
+          changed=1
+          while [ "$changed" -eq 1 ]; do
+            changed=0
+            for dll in build/*.dll; do
+              [ -f "$dll" ] || continue
+              while read -r dep; do
+                base="$(basename "$dep")"
+                if [ ! -f "build/$base" ]; then
+                  cp -f "$dep" "build/$base"
+                  changed=1
+                fi
+              done < <(
+                ldd "$dll" \
+                  | awk '/=> \// { print $3 }' \
+                  | grep -Ei '\.dll$' \
+                  | grep -Ev '^/c/Windows/'
+              )
+            done
+          done
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
@@ -759,17 +788,44 @@ jobs:
           cmake --build build
 
           # Bundle DLLs for portable artifact behavior matching release jobs.
-          ldd build/VitaSuwayomi.exe \
-            | awk '/=> \// { print $3 }' \
-            | grep -Ei '\.dll$' \
-            | grep -Ev '^/c/Windows/' \
-            | while read -r dll; do
-                cp -f "$dll" build/
-              done
+          copy_with_deps() {
+            local target="$1"
+            [ -f "$target" ] || return 0
+            cp -f "$target" build/
+            ldd "$target" \
+              | awk '/=> \// { print $3 }' \
+              | grep -Ei '\.dll$' \
+              | grep -Ev '^/c/Windows/' \
+              | while read -r dep; do
+                  [ -f "build/$(basename "$dep")" ] || cp -f "$dep" build/
+                done
+          }
+
+          copy_with_deps build/VitaSuwayomi.exe
 
           if [ -f "${MINGW_PREFIX}/bin/opengl32.dll" ]; then
-            cp -f "${MINGW_PREFIX}/bin/opengl32.dll" build/
+            copy_with_deps "${MINGW_PREFIX}/bin/opengl32.dll"
           fi
+
+          changed=1
+          while [ "$changed" -eq 1 ]; do
+            changed=0
+            for dll in build/*.dll; do
+              [ -f "$dll" ] || continue
+              while read -r dep; do
+                base="$(basename "$dep")"
+                if [ ! -f "build/$base" ]; then
+                  cp -f "$dep" "build/$base"
+                  changed=1
+                fi
+              done < <(
+                ldd "$dll" \
+                  | awk '/=> \// { print $3 }' \
+                  | grep -Ei '\.dll$' \
+                  | grep -Ev '^/c/Windows/'
+              )
+            done
+          done
       - name: Upload mingw artifact
         uses: actions/upload-artifact@v4
         with:
