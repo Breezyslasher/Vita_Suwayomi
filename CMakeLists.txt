@@ -436,24 +436,30 @@ elseif(PLATFORM_ANDROID)
     )
 
 elseif(PLATFORM_DESKTOP)
-    # Copy both Borealis + app resources next to the binary so relative paths
-    # resolve for framework assets and app assets.
-    if(EXISTS ${BOREALIS_RESOURCES_DIR})
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                ${BOREALIS_RESOURCES_DIR}
-                $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-            COMMENT "Copying Borealis resources for desktop build"
-        )
+    # Windows runners package/copy resources in CI after build; avoid failing
+    # the link step on MinGW/MSYS2 due post-build copy issues.
+    if(WIN32)
+        message(STATUS "Skipping desktop POST_BUILD resource copy on WIN32 (handled by packaging workflow)")
     else()
-        message(WARNING "Borealis resources directory not found at ${BOREALIS_RESOURCES_DIR}; skipping Borealis resource copy.")
-    endif()
+        # Copy both Borealis + app resources next to the binary so relative
+        # paths resolve for framework assets and app assets.
+        if(EXISTS ${BOREALIS_RESOURCES_DIR})
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    ${BOREALIS_RESOURCES_DIR}
+                    $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+                COMMENT "Copying Borealis resources for desktop build"
+            )
+        else()
+            message(WARNING "Borealis resources directory not found at ${BOREALIS_RESOURCES_DIR}; skipping Borealis resource copy.")
+        endif()
 
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-        COMMENT "Copying app resources for desktop build"
-    )
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/resources
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+            COMMENT "Copying app resources for desktop build"
+        )
+    endif()
 endif()
