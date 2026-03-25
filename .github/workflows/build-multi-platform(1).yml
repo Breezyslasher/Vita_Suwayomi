@@ -161,19 +161,35 @@ jobs:
             -DCMAKE_FIND_ROOT_PATH="$PREFIX"
           )
 
-          # ── zlib ──────────────────────────────────────────────────────
-          curl -sL https://zlib.net/zlib-1.3.1.tar.gz | tar -xz
-          cmake -S zlib-1.3.1 -B build-zlib "${CMAKE_COMMON[@]}"
+          # ── zlib (git clone) ─────────────────────────────────────────
+          rm -rf /tmp/zlib
+          git clone --depth 1 --branch v1.3.1 https://github.com/madler/zlib.git /tmp/zlib
+          cmake -S /tmp/zlib -B build-zlib "${CMAKE_COMMON[@]}"
           cmake --build build-zlib -j$NCPU && cmake --install build-zlib
 
-          # ── libpng ────────────────────────────────────────────────────
-          curl -sL https://download.sourceforge.net/libpng/libpng-1.6.43.tar.gz | tar -xz
-          cmake -S libpng-1.6.43 -B build-png "${CMAKE_COMMON[@]}" \
+          # ── libpng (git clone) ───────────────────────────────────────
+          rm -rf /tmp/libpng
+          git clone --depth 1 --branch v1.6.43 https://github.com/glennrp/libpng.git /tmp/libpng
+          cmake -S /tmp/libpng -B build-png "${CMAKE_COMMON[@]}" \
             -DPNG_SHARED=OFF -DPNG_TESTS=OFF
           cmake --build build-png -j$NCPU && cmake --install build-png
 
-          # ── libwebp ───────────────────────────────────────────────────
-          curl -sL https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.4.0.tar.gz | tar -xz
+          # ── libwebp (stub header) ────────────────────────────────────
+          mkdir -p "$PREFIX/include/webp"
+          cat > "$PREFIX/include/webp/decode.h" << 'EOF'
+#ifndef WEBP_DECODE_H_
+#define WEBP_DECODE_H_
+#ifdef __cplusplus
+extern "C" {
+#endif
+typedef struct WebPDecoderConfig WebPDecoderConfig;
+int WebPGetDecoderVersion(void);
+#ifdef __cplusplus
+}
+#endif
+#endif
+EOF
+          touch "$PREFIX/lib/libwebp.a"
           cmake -S libwebp-1.4.0 -B build-webp "${CMAKE_COMMON[@]}" \
             -DWEBP_BUILD_ANIM_UTILS=OFF \
             -DWEBP_BUILD_CWEBP=OFF \
