@@ -323,7 +323,7 @@ jobs:
           if [ -f sce_sys/icon0.png ]; then
             cp sce_sys/icon0.png apkdir/res/drawable/icon.png
           else
-            echo "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAAktJREFUaIHtmM9KxDAQx/+z2Y2x0IMHePAgHkHwIIK38Qoe..." | base64 -d > apkdir/res/drawable/icon.png
+            echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=" | base64 -d > apkdir/res/drawable/icon.png
           fi
       
           # ✅ NativeActivity manifest (NO heredoc issues)
