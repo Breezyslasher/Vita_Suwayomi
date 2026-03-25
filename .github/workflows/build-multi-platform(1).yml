@@ -112,7 +112,7 @@ jobs:
       - name: Install build requirements
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y cmake ninja-build git pkg-config             autoconf automake libtool nasm make meson zstd
+          sudo apt-get install -y cmake ninja-build git pkg-config
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -123,148 +123,30 @@ jobs:
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
-          ndk-version: r25c
+          ndk-version: r27d
           link-to-sdk: true
 
-      - name: Cache Android native deps
-        id: cache-android-native-deps
+      - name: Install Android dependency toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config meson nasm make
+
+      - name: Cache Android deps (switchfin-style)
+        if: ${{ hashFiles('scripts/android/Makefile') != '' }}
+        id: cache-deps
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/android-deps
-          key: android-native-deps-arm64-v8a-api24-v3
+          path: jniLibs
+          key: jniLibs-${{ hashFiles('scripts/android/Makefile') }}
 
-      - name: Build Android native dependencies
-        if: steps.cache-android-native-deps.outputs.cache-hit != 'true'
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Build Android packages (switchfin-style)
+        if: ${{ hashFiles('scripts/android/Makefile') != '' && steps.cache-deps.outputs.cache-hit != 'true' }}
         run: |
-          set -e
-          NDK=$ANDROID_NDK_HOME
-          TC=$NDK/build/cmake/android.toolchain.cmake
-          PREFIX=${{ github.workspace }}/android-deps
-          TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
-          TARGET=aarch64-linux-android24
-          export AR=$TOOLCHAIN/bin/llvm-ar
-          export CC=$TOOLCHAIN/bin/$TARGET-clang
-          export CXX=$TOOLCHAIN/bin/$TARGET-clang++
-          export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
-          export STRIP=$TOOLCHAIN/bin/llvm-strip
-          export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig"
-          mkdir -p "$PREFIX"
-          NCPU=$(nproc)
-
-          CMAKE_COMMON=(
-            -G Ninja
-            -DCMAKE_TOOLCHAIN_FILE="$TC"
-            -DANDROID_ABI=arm64-v8a
-            -DANDROID_PLATFORM=android-24
-            -DCMAKE_INSTALL_PREFIX="$PREFIX"
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_PREFIX_PATH="$PREFIX"
-            -DCMAKE_FIND_ROOT_PATH="$PREFIX"
-          )
-
-          # ── zlib ──────────────────────────────────────────────────────
-          curl -sL https://zlib.net/zlib-1.3.1.tar.gz | tar -xz
-          cmake -S zlib-1.3.1 -B build-zlib "${CMAKE_COMMON[@]}"
-          cmake --build build-zlib -j$NCPU && cmake --install build-zlib
-
-          # ── libpng ────────────────────────────────────────────────────
-          curl -sL https://download.sourceforge.net/libpng/libpng-1.6.43.tar.gz | tar -xz
-          cmake -S libpng-1.6.43 -B build-png "${CMAKE_COMMON[@]}" \
-            -DPNG_SHARED=OFF -DPNG_TESTS=OFF
-          cmake --build build-png -j$NCPU && cmake --install build-png
-
-          # ── libwebp ───────────────────────────────────────────────────
-          curl -sL https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.4.0.tar.gz | tar -xz
-          cmake -S libwebp-1.4.0 -B build-webp "${CMAKE_COMMON[@]}" \
-            -DWEBP_BUILD_ANIM_UTILS=OFF \
-            -DWEBP_BUILD_CWEBP=OFF \
-            -DWEBP_BUILD_DWEBP=OFF \
-            -DWEBP_BUILD_GIF2WEBP=OFF \
-            -DWEBP_BUILD_IMG2WEBP=OFF \
-            -DWEBP_BUILD_VWEBP=OFF \
-            -DWEBP_BUILD_WEBPINFO=OFF \
-            -DWEBP_BUILD_WEBPMUX=OFF \
-            -DWEBP_BUILD_EXTRAS=OFF
-          cmake --build build-webp -j$NCPU && cmake --install build-webp
-
-          # ── mbedtls ───────────────────────────────────────────────────
-          curl -sL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.3/mbedtls-3.6.3.tar.bz2 | tar -xj
-          cmake -S mbedtls-3.6.3 -B build-mbedtls "${CMAKE_COMMON[@]}" \
-            -DENABLE_TESTING=OFF \
-            -DENABLE_PROGRAMS=OFF
-          cmake --build build-mbedtls -j$NCPU && cmake --install build-mbedtls
-
-          # ── curl ──────────────────────────────────────────────────────
-          curl -sL https://curl.se/download/curl-8.11.1.tar.gz | tar -xz
-          cmake -S curl-8.11.1 -B build-curl "${CMAKE_COMMON[@]}" \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DBUILD_CURL_EXE=OFF \
-            -DBUILD_TESTING=OFF \
-            -DCURL_USE_MBEDTLS=ON \
-            -DCURL_USE_OPENSSL=OFF \
-            -DCURL_DISABLE_LDAP=ON
-          cmake --build build-curl -j$NCPU && cmake --install build-curl
-
-          # ── freetype ──────────────────────────────────────────────────
-          curl -sL https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.gz | tar -xz
-          cmake -S freetype-2.13.3 -B build-freetype "${CMAKE_COMMON[@]}" \
-            -DFT_DISABLE_BZIP2=ON \
-            -DFT_DISABLE_HARFBUZZ=ON \
-            -DFT_DISABLE_BROTLI=ON
-          cmake --build build-freetype -j$NCPU && cmake --install build-freetype
-
-          # ── fribidi (autotools — no CMakeLists.txt) ───────────────────
-          curl -sL https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz | tar -xJ
-          (
-            cd fribidi-1.0.16
-            CC="$CC" AR="$AR" RANLIB="$RANLIB" \
-            ./configure \
-              --host=aarch64-linux-android \
-              --prefix="$PREFIX" \
-              --enable-static \
-              --disable-shared \
-              --disable-docs
-            make -j$NCPU
-            make install
-          )
-
-          # ── harfbuzz (depends on freetype) ────────────────────────────
-          curl -sL https://github.com/harfbuzz/harfbuzz/archive/refs/tags/10.2.0.tar.gz | tar -xz
-          cmake -S harfbuzz-10.2.0 -B build-harfbuzz "${CMAKE_COMMON[@]}" \
-            -DHB_BUILD_TESTS=OFF \
-            -DHB_BUILD_UTILS=OFF \
-            -DHB_BUILD_SUBSET=OFF \
-            -DHB_HAVE_FREETYPE=ON
-          cmake --build build-harfbuzz -j$NCPU && cmake --install build-harfbuzz
-
-          # ── libass (depends on freetype, fribidi, harfbuzz) ───────────
-          curl -sL https://github.com/libass/libass/releases/download/0.17.3/libass-0.17.3.tar.gz | tar -xz
-          (
-            cd libass-0.17.3
-            CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
-            PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig" \
-            CFLAGS="-I$PREFIX/include" \
-            LDFLAGS="-L$PREFIX/lib" \
-            ./configure \
-              --host=aarch64-linux-android \
-              --prefix="$PREFIX" \
-              --enable-static \
-              --disable-shared \
-              --disable-fontconfig \
-              --disable-coretext
-            make -j$NCPU
-            make install
-          )
-
-          # ── zstd (autotools build) ─────────────────────────────────────
-          git clone --depth 1 --branch v1.5.6 --recursive https://github.com/facebook/zstd.git /tmp/zstd
-          cd /tmp/zstd
-          CC="$CC" AR="$AR" RANLIB="$RANLIB" CFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib" \
-            ./configure --prefix="$PREFIX" --static --disable Programs --disable Tests
-          make -j$NCPU
-          make install
+          make -C scripts/android TMPDIR=${{ runner.temp }} download
+          make -C scripts/android TMPDIR=${{ runner.temp }} ABI=armeabi-v7a \
+            ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
+          make -C scripts/android TMPDIR=${{ runner.temp }} ABI=arm64-v8a \
+            ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
 
       - name: Build libromfs-generator (host)
         run: |
@@ -280,7 +162,7 @@ jobs:
           cmake --build /tmp/libromfs-generator
           GEN_BIN="/tmp/libromfs-generator/libromfs-generator"
           sudo install -m 0755 "$GEN_BIN" /usr/local/bin/libromfs-generator
-          # borealis toolchain.cmake checks ${CMAKE_SOURCE_DIR}/libromfs-generator
+          # borealis toolchain.cmake checks ${CMAKE_SOURCE_DIR}/libromfs-generator (repo root)
           install -m 0755 "$GEN_BIN" ./libromfs-generator
           [ -d lib/borealis ] && install -m 0755 "$GEN_BIN" lib/borealis/libromfs-generator || true
           [ -d library/borealis ] && install -m 0755 "$GEN_BIN" library/borealis/libromfs-generator || true
@@ -302,7 +184,6 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          DEPS=${{ github.workspace }}/android-deps
           cmake -B build-android -G Ninja \
             -DPLATFORM_ANDROID=ON \
             -DLIBROMFS_PROJECT_NAME=VitaSuwayomi \
@@ -310,16 +191,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-24 \
-            -DANDROID_STL=c++_shared \
-            -DCMAKE_PREFIX_PATH="$DEPS" \
-            -DCMAKE_FIND_ROOT_PATH="$DEPS" \
-            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
-            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
-            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
-            -DCMAKE_C_FLAGS="-I$DEPS/include" \
-            -DCMAKE_CXX_FLAGS="-I$DEPS/include" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-L$DEPS/lib" \
-            -DCMAKE_EXE_LINKER_FLAGS="-L$DEPS/lib"
+            -DANDROID_STL=c++_shared
           cmake --build build-android
 
       - name: Upload Android APK
@@ -334,7 +206,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-android-${{ github.run_number }}
-          path: build-android/libVitaSuwayomi.so
+          path: |
+            build-android/libVitaSuwayomi.so
 
   # ───────────────────────────────────────────────
   # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
