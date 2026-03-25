@@ -527,6 +527,20 @@ jobs:
             -DUSE_SYSTEM_GLFW=ON
           cmake --build build
 
+          # Ensure runtime resources are present in artifact output even when
+          # target POST_BUILD copy fails on some Windows runners.
+          mkdir -p build/resources
+          if [ -d "lib/borealis/library/resources" ]; then
+            cp -rf lib/borealis/library/resources/* build/resources/
+          elif [ -d "lib/borealis/resources" ]; then
+            cp -rf lib/borealis/resources/* build/resources/
+          fi
+          cp -rf resources/* build/resources/
+
+          # Borealis SDL input expects this DB at runtime; missing resources can
+          # lead to startup/login-screen crashes in packaged Windows artifacts.
+          test -f build/resources/gamepad/gamecontrollerdb.txt
+
           # Bundle dependent DLLs next to the executable so released artifacts
           # are runnable on clean Windows systems (including transitive deps).
           copy_with_deps() {
@@ -792,6 +806,15 @@ jobs:
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON
           cmake --build build
+
+          mkdir -p build/resources
+          if [ -d "lib/borealis/library/resources" ]; then
+            cp -rf lib/borealis/library/resources/* build/resources/
+          elif [ -d "lib/borealis/resources" ]; then
+            cp -rf lib/borealis/resources/* build/resources/
+          fi
+          cp -rf resources/* build/resources/
+          test -f build/resources/gamepad/gamecontrollerdb.txt
 
           # Bundle DLLs for portable artifact behavior matching release jobs.
           copy_with_deps() {
