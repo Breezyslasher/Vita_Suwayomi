@@ -138,26 +138,9 @@ set(APP_INCLUDES
 # Target
 # ---------------------------------------------------------------------------
 if(PLATFORM_ANDROID)
-    # NativeActivity + system libs
-    target_link_libraries(${PROJECT_NAME}
-        android
-        log
-        EGL
-        GLESv2
-    )
-
-    # Native app glue
-    add_library(android-glue STATIC
-        ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c
-    )
-
-    target_include_directories(${PROJECT_NAME} PRIVATE
-        ${ANDROID_NDK}/sources/android/native_app_glue
-    )
-
-    target_link_libraries(${PROJECT_NAME}
-        android-glue
-    )
+    add_library(${PROJECT_NAME} SHARED ${APP_SOURCES})
+else()
+    add_executable(${PROJECT_NAME} ${APP_SOURCES})
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_INCLUDES})
