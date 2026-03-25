@@ -381,13 +381,14 @@ jobs:
             --out VitaSuwayomi-android-$VERSION.apk \
             aligned.apk
       
-          rm -f unsigned.apk aligned.apk compiled_res.zip debug.keystore
-            - name: Upload Android APK
-              if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
-              uses: actions/upload-artifact@v4
-              with:
-                name: VitaSuwayomi-android-apk-${{ github.run_number }}
-                path: VitaSuwayomi-android-${{ github.run_number }}.apk
+            rm -f unsigned.apk aligned.apk compiled_res.zip debug.keystore
+
+      - name: Upload Android APK
+        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-android-apk-${{ github.run_number }}
+          path: VitaSuwayomi-android-${{ github.run_number }}.apk
       
         # ───────────────────────────────────────────────
   # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
