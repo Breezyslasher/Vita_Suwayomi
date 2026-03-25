@@ -175,32 +175,9 @@ jobs:
           cmake --build build-png -j$NCPU && cmake --install build-png
 
           # ── libwebp (stub header) ────────────────────────────────────
-          mkdir -p "$PREFIX/include/webp"
-          cat > "$PREFIX/include/webp/decode.h" << 'EOF'
-#ifndef WEBP_DECODE_H_
-#define WEBP_DECODE_H_
-#ifdef __cplusplus
-extern "C" {
-#endif
-typedef struct WebPDecoderConfig WebPDecoderConfig;
-int WebPGetDecoderVersion(void);
-#ifdef __cplusplus
-}
-#endif
-#endif
-EOF
+          mkdir -p "$PREFIX/include/webp" "$PREFIX/lib"
+          printf '%s\n' '#ifndef WEBP_DECODE_H_' '#define WEBP_DECODE_H_' '#ifdef __cplusplus' 'extern "C" {' '#endif' 'typedef struct WebPDecoderConfig WebPDecoderConfig;' 'int WebPGetDecoderVersion(void);' '#ifdef __cplusplus' '}' '#endif' '#endif' > "$PREFIX/include/webp/decode.h"
           touch "$PREFIX/lib/libwebp.a"
-          cmake -S libwebp-1.4.0 -B build-webp "${CMAKE_COMMON[@]}" \
-            -DWEBP_BUILD_ANIM_UTILS=OFF \
-            -DWEBP_BUILD_CWEBP=OFF \
-            -DWEBP_BUILD_DWEBP=OFF \
-            -DWEBP_BUILD_GIF2WEBP=OFF \
-            -DWEBP_BUILD_IMG2WEBP=OFF \
-            -DWEBP_BUILD_VWEBP=OFF \
-            -DWEBP_BUILD_WEBPINFO=OFF \
-            -DWEBP_BUILD_WEBPMUX=OFF \
-            -DWEBP_BUILD_EXTRAS=OFF
-          cmake --build build-webp -j$NCPU && cmake --install build-webp
 
       - name: Cache Android deps (switchfin-style)
         if: ${{ hashFiles('scripts/android/Makefile') != '' }}
