@@ -176,7 +176,50 @@ jobs:
 
           # ── libwebp (stub header) ────────────────────────────────────
           mkdir -p "$PREFIX/include/webp" "$PREFIX/lib"
-          printf '%s\n' '#ifndef WEBP_DECODE_H_' '#define WEBP_DECODE_H_' '#ifdef __cplusplus' 'extern "C" {' '#endif' 'typedef struct WebPDecoderConfig WebPDecoderConfig;' 'int WebPGetDecoderVersion(void);' '#ifdef __cplusplus' '}' '#endif' '#endif' > "$PREFIX/include/webp/decode.h"
+          cat > "$PREFIX/include/webp/decode.h" << 'WEBPEOF'
+#ifndef WEBP_DECODE_H_
+#define WEBP_DECODE_H_
+#include <stdint.h>
+#include <stdlib.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+typedef struct WebPDecoderConfig WebPDecoderConfig;
+typedef struct WebPBitstreamFeatures {
+  int width;
+  int height;
+  int has_alpha;
+  int has_animation;
+  int format;
+  int blend_method;
+  int disposal_method;
+} WebPBitstreamFeatures;
+typedef struct WebPDecBuffer {
+  uint8_t* RGBA;
+  int RGBA_size;
+  int width;
+  int height;
+  int stride;
+  uint32_t colorspace;
+} WebPDecBuffer;
+typedef struct WebPIDecoder WebPIDecoder;
+int WebPGetDecoderVersion(void);
+uint8_t* WebPDecodeRGB(const uint8_t* data, size_t data_size, int* width, int* height);
+uint8_t* WebPDecodeRGBA(const uint8_t* data, size_t data_size, int* width, int* height);
+uint8_t* WebPDecodeARGB(const uint8_t* data, size_t data_size, int* width, int* height);
+uint8_t* WebPDecodeBGR(const uint8_t* data, size_t data_size, int* width, int* height);
+uint8_t* WebPDecodeBGRA(const uint8_t* data, size_t data_size, int* width, int* height);
+void WebPFree(void* ptr);
+WebPIDecoder* WebPIDecode(const uint8_t* data, size_t data_size, WebPDecoderConfig* config);
+int WebPIDecodedArea(WebPIDecoder* idec, int* left, int* top, int* width, int* height);
+uint8_t* WebPIDecGetRGB(WebPIDecoder* idec);
+uint8_t* WebPIDecGetAlpha(WebPIDecoder* idec);
+void WebPIDelete(WebPIDecoder* idec);
+#ifdef __cplusplus
+}
+#endif
+#endif
+WEBPEOF
           touch "$PREFIX/lib/libwebp.a"
 
       - name: Cache Android deps (switchfin-style)
