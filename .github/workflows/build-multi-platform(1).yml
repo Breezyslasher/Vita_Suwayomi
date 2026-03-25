@@ -296,7 +296,7 @@ jobs:
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         uses: android-actions/setup-android@v2
 
-            - name: Create APK with native lib
+      - name: Create APK with native lib
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         run: |
           set -e
