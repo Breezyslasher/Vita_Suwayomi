@@ -337,10 +337,13 @@ jobs:
           
               <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
               <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
           
               <application
                   android:label="VitaSuwayomi"
                   android:hasCode="false"
+                  android:requestLegacyExternalStorage="true"
                   android:extractNativeLibs="true">
           
                   <activity
@@ -453,7 +456,6 @@ jobs:
         run: |
           cmake -B build -G Ninja \
             -DPLATFORM_DESKTOP=ON \
-            -DZLIB_USE_STATIC_LIBS=ON \
             -DUSE_SYSTEM_GLFW=ON
           cmake --build build
 

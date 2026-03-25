@@ -19,6 +19,9 @@
     static constexpr const char* PLATFORM_DATA_DIR = "ux0:data/VitaSuwayomi";
 #elif defined(__SWITCH__)
     static constexpr const char* PLATFORM_DATA_DIR = "sdmc:/VitaSuwayomi";
+#elif defined(__ANDROID__)
+    // App-private internal storage; does not require runtime storage permission.
+    static constexpr const char* PLATFORM_DATA_DIR = "/data/data/com.vitasuwayomi.app/files/VitaSuwayomi";
 #else
     static constexpr const char* PLATFORM_DATA_DIR = "./VitaSuwayomi";
 #endif

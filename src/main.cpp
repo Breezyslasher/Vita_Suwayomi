@@ -17,6 +17,7 @@
 #include "utils/http_client.hpp"
 
 #ifdef __ANDROID__
+#include <android/log.h>
 #include <android_native_app_glue.h>
 #endif
 
@@ -158,8 +159,10 @@ void android_main(struct android_app* app) {
     app_dummy();
     (void)app;
 
+    __android_log_print(ANDROID_LOG_INFO, "VitaSuwayomi", "android_main started");
     char* argv[] = { const_cast<char*>("VitaSuwayomi"), nullptr };
-    main(1, argv);
+    int rc = main(1, argv);
+    __android_log_print(ANDROID_LOG_INFO, "VitaSuwayomi", "android_main exited with code %d", rc);
 }
 #endif
 
@@ -207,6 +210,9 @@ int main(int argc, char* argv[]) {
 
     if (!brls::Application::init()) {
         brls::Logger::error("Failed to initialize Borealis");
+#ifdef __ANDROID__
+        __android_log_print(ANDROID_LOG_ERROR, "VitaSuwayomi", "Failed to initialize Borealis");
+#endif
 #ifdef __vita__
         if (logFile) fclose(logFile);
         cleanupVitaNetwork();

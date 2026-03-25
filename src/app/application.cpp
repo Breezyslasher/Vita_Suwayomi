@@ -10,9 +10,11 @@
 #include "activity/login_activity.hpp"
 #include "activity/main_activity.hpp"
 #include "activity/reader_activity.hpp"
+#include "platform/paths.hpp"
 #include "utils/perf_overlay.hpp"
 
 #include <borealis.hpp>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <cstring>
@@ -29,7 +31,7 @@ namespace vitasuwayomi {
 static const char* SETTINGS_PATH = "ux0:data/VitaSuwayomi/settings.json";
 static const char* SETTINGS_DIR = "ux0:data/VitaSuwayomi";
 #else
-static const char* SETTINGS_PATH = "./VitaSuwayomi_settings.json";
+static const std::string SETTINGS_PATH = platformPath("settings.json");
 #endif
 
 // Obfuscation helpers for storing sensitive fields (password, tokens) on disk.
@@ -127,6 +129,12 @@ bool Application::init() {
     // Create data directory
     int ret = sceIoMkdir("ux0:data/VitaSuwayomi", 0777);
     brls::Logger::debug("sceIoMkdir result: {:#x}", ret);
+#else
+    std::error_code ec;
+    std::filesystem::create_directories(PLATFORM_DATA_DIR, ec);
+    if (ec) {
+        brls::Logger::warning("Failed to create data dir {}: {}", PLATFORM_DATA_DIR, ec.message());
+    }
 #endif
 
     // Load saved settings
