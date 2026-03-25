@@ -32,6 +32,12 @@ endif()
 # ---------------------------------------------------------------------------
 set(BOREALIS_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/lib/borealis)
 set(BOREALIS_LIBRARY ${BOREALIS_DIR}/library)
+if(EXISTS ${BOREALIS_LIBRARY}/resources)
+    set(BOREALIS_RESOURCES_DIR ${BOREALIS_LIBRARY}/resources)
+else()
+    # Fallback for older layouts.
+    set(BOREALIS_RESOURCES_DIR ${BOREALIS_DIR}/resources)
+endif()
 
 # Forward into borealis-internal cache variables
 set(PLATFORM_DESKTOP ${PLATFORM_DESKTOP} CACHE BOOL "" FORCE)
@@ -413,7 +419,7 @@ elseif(PLATFORM_ANDROID)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/resources
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${BOREALIS_DIR}/resources
+            ${BOREALIS_RESOURCES_DIR}
             ${CMAKE_BINARY_DIR}/resources
         COMMENT "Copying Borealis resources for Android packaging"
     )
@@ -431,7 +437,7 @@ elseif(PLATFORM_DESKTOP)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${BOREALIS_DIR}/resources
+            ${BOREALIS_RESOURCES_DIR}
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
         COMMENT "Copying Borealis resources for desktop build"
     )
