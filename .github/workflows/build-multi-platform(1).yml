@@ -129,7 +129,55 @@ jobs:
       - name: Install Android dependency toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config meson nasm make
+          sudo apt-get install -y ninja-build pkg-config meson nasm make zstd
+
+      - name: Build Android native dependencies
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          set -e
+          NDK=$ANDROID_NDK_HOME
+          TC=$NDK/build/cmake/android.toolchain.cmake
+          PREFIX=${{ github.workspace }}/android-deps
+          TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+          TARGET=aarch64-linux-android24
+          export AR=$TOOLCHAIN/bin/llvm-ar
+          export CC=$TOOLCHAIN/bin/$TARGET-clang
+          export CXX=$TOOLCHAIN/bin/$TARGET-clang++
+          export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+          export STRIP=$TOOLCHAIN/bin/llvm-strip
+          export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig"
+          mkdir -p "$PREFIX"
+          NCPU=$(nproc)
+
+          CMAKE_COMMON=(
+            -G Ninja
+            -DCMAKE_TOOLCHAIN_FILE="$TC"
+            -DANDROID_ABI=arm64-v8a
+            -DANDROID_PLATFORM=android-24
+            -DCMAKE_INSTALL_PREFIX="$PREFIX"
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_PREFIX_PATH="$PREFIX"
+            -DCMAKE_FIND_ROOT_PATH="$PREFIX"
+          )
+
+          # ── zlib (git clone) ─────────────────────────────────────────
+          rm -rf /tmp/zlib
+          git clone --depth 1 --branch v1.3.1 https://github.com/madler/zlib.git /tmp/zlib
+          cmake -S /tmp/zlib -B build-zlib "${CMAKE_COMMON[@]}"
+          cmake --build build-zlib -j$NCPU && cmake --install build-zlib
+
+          # ── libpng (git clone) ───────────────────────────────────────
+          rm -rf /tmp/libpng
+          git clone --depth 1 --branch v1.6.43 https://github.com/glennrp/libpng.git /tmp/libpng
+          cmake -S /tmp/libpng -B build-png "${CMAKE_COMMON[@]}" \
+            -DPNG_SHARED=OFF -DPNG_TESTS=OFF
+          cmake --build build-png -j$NCPU && cmake --install build-png
+
+          # ── libwebp (stub header) ────────────────────────────────────
+          mkdir -p "$PREFIX/include/webp" "$PREFIX/lib"
+          printf '#ifndef WEBP_DECODE_H_\n#define WEBP_DECODE_H_\n#include <stdint.h>\n#include <stdlib.h>\ntypedef struct WebPDecoderConfig WebPDecoderConfig;\nint WebPGetDecoderVersion(void);\nuint8_t* WebPDecodeRGB(const uint8_t* data, size_t data_size, int* width, int* height);\nuint8_t* WebPDecodeRGBA(const uint8_t* data, size_t data_size, int* width, int* height);\nvoid WebPFree(void* ptr);\n#endif\n' > "$PREFIX/include/webp/decode.h"
+          touch "$PREFIX/lib/libwebp.a"
 
       - name: Cache Android deps (switchfin-style)
         if: ${{ hashFiles('scripts/android/Makefile') != '' }}
@@ -183,6 +231,7 @@ jobs:
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          DEPS: ${{ github.workspace }}/android-deps
         run: |
           cmake -B build-android -G Ninja \
             -DPLATFORM_ANDROID=ON \
@@ -191,7 +240,16 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-24 \
-            -DANDROID_STL=c++_shared
+            -DANDROID_STL=c++_shared \
+            -DCMAKE_PREFIX_PATH="$DEPS" \
+            -DCMAKE_FIND_ROOT_PATH="$DEPS" \
+            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
+            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
+            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
+            -DCMAKE_C_FLAGS="-I$DEPS/include" \
+            -DCMAKE_CXX_FLAGS="-I$DEPS/include" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-L$DEPS/lib" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L$DEPS/lib"
           cmake --build build-android
 
       - name: Upload Android APK
