@@ -299,132 +299,97 @@ jobs:
       - name: Create APK with native lib
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
         run: |
+          set -e
+      
           ABI=arm64-v8a
           VERSION=${{ github.run_number }}
+      
           ANDROID_JAR=$(find $ANDROID_HOME/platforms -name "android.jar" | head -1)
-          AAPT=$(find $ANDROID_HOME/build-tools -name "aapt2" | head -1)
+          AAPT2=$(find $ANDROID_HOME/build-tools -name "aapt2" | head -1)
           ZIPALIGN=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -1)
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | head -1)
-
+      
           mkdir -p apkdir/lib/$ABI
-          cp build-android/libVitaSuwayomi.so apkdir/lib/$ABI/
+          mkdir -p apkdir/res/drawable
           mkdir -p apkdir/assets
+      
+          # Copy native lib
+          cp build-android/libVitaSuwayomi.so apkdir/lib/$ABI/
+      
+          # Copy resources if they exist
           cp -r build-android/resources/* apkdir/assets/ 2>/dev/null || true
-
-          cp sce_sys/icon0.png apkdir/res/drawable/icon.png 2>/dev/null || true
-          if [ ! -f apkdir/res/drawable/icon.png ]; then
-            mkdir -p apkdir/res/drawable
-            cat > apkdir/res/drawable/icon.png << 'ICON'
-            iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
-            AAALEwAACxMBAJqcGAAAAktJREFUaIHtmM9KxDAQx/+z2Y2x0IMHePAgHkHwIIK38Qoe
-            wRsQRBB8hEcPHkHwIIKxR7AQxMJgZ2Kz2WQn+0HChC6z2Wz2b5TJZjI/yWQSj8fjuuM4
-            Dn/f9+M4jt+d5/kPYOy67rqN4zj+cRzHP87zfAaYAs+AJaAGnADvZVm+BXABvAIOgVvg
-            CbAFnAGvwBVwBjwAJ8AVcAocA+fAGXAGnAH3wBFwBtwBR8AdcAicAXfAEXAH3AGHwB1w
-            CNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjc
-            AYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGH
-            wB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8Ad
-            cAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI
-            3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwB
-            h8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfA
-            HXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1w
-            CNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjc
-            AYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGHwB1wCNwBh8AdcAjcAYfAHXAI3AGH
-            wB1wCNwBh8AdcAgM7w7XAQzgH8A/cAfsAzvAoOs8H8C3AOOu83wAvwGM4zj+cRznfzRN
-            +QVgmqZ5aJrmC8dxfuK67meapnkNx3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67mea
-            pnkNx3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeQ3HcX7i
-            uu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67meapnkd
-            x3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5n
-            mqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+
-            4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5
-            DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rru
-            Z5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5Dcdx
-            fuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qm
-            eR3HcX7iuu5nmqZ5DcdxfuK67meapnktx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK6
-            7meapnkNx3F+4rruZ5qmeQ3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeQ3H
-            cX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67mea
-            pnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7i
-            uu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkN
-            x3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5n
-            mqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+
-            4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5
-            DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rru
-            Z5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5Dcdx
-            fuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5q
-            meR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK6
-            7meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3H
-            cX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67mea
-            pnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7i
-            uu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkN
-            x3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5n
-            mqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+
-            4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5
-            DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rru
-            Z5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5Dcdx
-            fuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qm
-            eR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK6
-            7meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3H
-            cX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67mea
-            pnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7i
-            uu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkN
-            x3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5n
-            mqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+
-            4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5
-            DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rru
-            Z5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5Dcdx
-            fuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qm
-            eR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK6
-            7meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3H
-            cX7iuu5nmqZ5DcdxfuK67meapnkNx3F+4rruZ5qmeR3HcX7iuu5nmqZ5DcdxfuK67meap
-            kk4AAAAASUVORK5CYII=
-            ICON
+      
+          # Use repo icon if exists, otherwise fallback
+          if [ -f sce_sys/icon0.png ]; then
+            cp sce_sys/icon0.png apkdir/res/drawable/icon.png
+          else
+            echo "iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAALEwAACxMBAJqcGAAAAktJREFUaIHtmM9KxDAQx/+z2Y2x0IMHePAgHkHwIIK38Qoe..." | base64 -d > apkdir/res/drawable/icon.png
           fi
-
-          cat > apkdir/AndroidManifest.xml << 'MANIFEST'
+      
+          # Create manifest
+          cat > apkdir/AndroidManifest.xml <<EOF
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.vitasuwayomi.app"
-              android:versionCode="1"
-              android:versionName="1.0"
-              android:sharedUserId="com.vitasuwayomi">
+              android:versionCode="$VERSION"
+              android:versionName="1.0">
               <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
               <uses-permission android:name="android.permission.INTERNET"/>
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
               <application
                   android:label="VitaSuwayomi"
                   android:hasCode="false"
                   android:extractNativeLibs="true">
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true"
-                      android:configChanges="orientation|screenSize|keyboardHidden">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-                  </activity>
               </application>
           </manifest>
-          MANIFEST
-
-          mkdir -p apkdir/res/drawable
-          cp sce_sys/icon0.png apkdir/res/drawable/icon.png 2>/dev/null || true
-
-          $AAPT2 link -o unsigned-$ABI.apk -M apkdir/AndroidManifest.xml -I "$ANDROID_JAR" apkdir/lib/ apkdir/res/ 2>/dev/null || \
-          $AAPT2 link -o unsigned-$ABI.apk -M apkdir/AndroidManifest.xml -I "$ANDROID_JAR" apkdir/
-          $ZIPALIGN -p 4 unsigned-$ABI.apk VitaSuwayomi-android-$VERSION-$ABI.apk
-          $APKSIGNER sign --ks /dev/null --ks-pass pass: --out VitaSuwayomi-android-$VERSION.apk VitaSuwayomi-android-$VERSION-$ABI.apk
-          rm -f unsigned-$ABI.apk
-
-      - name: Upload Android APK
-        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: VitaSuwayomi-android-apk-${{ github.run_number }}
-          path: VitaSuwayomi-android-${{ github.run_number }}.apk
-
-  # ───────────────────────────────────────────────
+          EOF
+      
+          # Compile resources
+          $AAPT2 compile --dir apkdir/res -o compiled_res.zip
+      
+          # Link APK
+          $AAPT2 link \
+            -o unsigned.apk \
+            -I "$ANDROID_JAR" \
+            --manifest apkdir/AndroidManifest.xml \
+            compiled_res.zip \
+            --auto-add-overlay
+      
+          # Add native libs + assets
+          cd apkdir
+          zip -r ../unsigned.apk lib assets >/dev/null
+          cd ..
+      
+          # Align
+          $ZIPALIGN -p 4 unsigned.apk aligned.apk
+      
+          # Create debug keystore
+          keytool -genkeypair \
+            -keystore debug.keystore \
+            -storepass android \
+            -keypass android \
+            -alias androiddebugkey \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
+      
+          # Sign APK
+          $APKSIGNER sign \
+            --ks debug.keystore \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out VitaSuwayomi-android-$VERSION.apk \
+            aligned.apk
+      
+          rm -f unsigned.apk aligned.apk compiled_res.zip debug.keystore
+            - name: Upload Android APK
+              if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+              uses: actions/upload-artifact@v4
+              with:
+                name: VitaSuwayomi-android-apk-${{ github.run_number }}
+                path: VitaSuwayomi-android-${{ github.run_number }}.apk
+      
+        # ───────────────────────────────────────────────
   # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
   # ───────────────────────────────────────────────
   build-desktop-windows-matrix:
