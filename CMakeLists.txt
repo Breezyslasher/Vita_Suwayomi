@@ -128,6 +128,12 @@ if(PLATFORM_PSV)
     list(APPEND APP_SOURCES src/utils/vita_stubs.c)
 endif()
 
+if(PLATFORM_ANDROID)
+    list(APPEND APP_SOURCES
+        ${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c
+    )
+endif()
+
 set(APP_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${BOREALIS_LIBRARY}/include
@@ -144,6 +150,11 @@ else()
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_INCLUDES})
+if(PLATFORM_ANDROID)
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CMAKE_ANDROID_NDK}/sources/android/native_app_glue
+    )
+endif()
 if(PLATFORM_DESKTOP AND APPLE)
     target_include_directories(${PROJECT_NAME} PRIVATE
         /opt/homebrew/include

@@ -17,8 +17,7 @@
 #include "utils/http_client.hpp"
 
 #ifdef __ANDROID__
-#include <android/native_activity.h>
-#include <pthread.h>
+#include <android_native_app_glue.h>
 #endif
 
 #ifdef __vita__
@@ -154,26 +153,13 @@ static void cleanupVitaNetwork() {
 #ifdef __ANDROID__
 int main(int argc, char* argv[]);
 
-static void* androidMainThread(void*) {
+void android_main(struct android_app* app) {
+    // Prevent android_native_app_glue from being optimized out.
+    app_dummy();
+    (void)app;
+
     char* argv[] = { const_cast<char*>("VitaSuwayomi"), nullptr };
     main(1, argv);
-    return nullptr;
-}
-
-extern "C" void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_t savedStateSize) {
-    (void)activity;
-    (void)savedState;
-    (void)savedStateSize;
-
-    static bool started = false;
-    if (started)
-        return;
-    started = true;
-
-    pthread_t thread;
-    if (pthread_create(&thread, nullptr, androidMainThread, nullptr) == 0) {
-        pthread_detach(thread);
-    }
 }
 #endif
 
