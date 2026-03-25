@@ -269,6 +269,11 @@ elseif(PLATFORM_PS4)
     target_link_libraries(${PROJECT_NAME}
         SceNet
     )
+elseif(PLATFORM_ANDROID)
+    target_link_libraries(${PROJECT_NAME}
+        android
+        log
+    )
 elseif(PLATFORM_DESKTOP)
     find_package(Threads REQUIRED)
     target_link_libraries(${PROJECT_NAME} Threads::Threads)

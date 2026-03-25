@@ -16,6 +16,11 @@
 #include "app/downloads_manager.hpp"
 #include "utils/http_client.hpp"
 
+#ifdef __ANDROID__
+#include <android/native_activity.h>
+#include <pthread.h>
+#endif
+
 #ifdef __vita__
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/modulemgr.h>
@@ -145,6 +150,32 @@ static void cleanupVitaNetwork() {
     sceNetTerm();
 }
 #endif // __vita__
+
+#ifdef __ANDROID__
+int main(int argc, char* argv[]);
+
+static void* androidMainThread(void*) {
+    char* argv[] = { const_cast<char*>("VitaSuwayomi"), nullptr };
+    main(1, argv);
+    return nullptr;
+}
+
+extern "C" void ANativeActivity_onCreate(ANativeActivity* activity, void* savedState, size_t savedStateSize) {
+    (void)activity;
+    (void)savedState;
+    (void)savedStateSize;
+
+    static bool started = false;
+    if (started)
+        return;
+    started = true;
+
+    pthread_t thread;
+    if (pthread_create(&thread, nullptr, androidMainThread, nullptr) == 0) {
+        pthread_detach(thread);
+    }
+}
+#endif
 
 /**
  * Register custom views
