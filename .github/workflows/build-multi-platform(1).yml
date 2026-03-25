@@ -313,8 +313,17 @@ jobs:
           mkdir -p apkdir/res/drawable
           mkdir -p apkdir/assets
       
-          # Copy native lib
+          # Copy app native lib
           cp build-android/libVitaSuwayomi.so apkdir/lib/$ABI/
+
+          # Copy dependent shared libs (e.g. SDL2) so NativeActivity can load
+          # libVitaSuwayomi.so without dlopen failures.
+          for so in build-android/lib*.so android-deps/lib/lib*.so jniLibs/$ABI/*.so; do
+            [ -f "$so" ] || continue
+            base="$(basename "$so")"
+            [ "$base" = "libVitaSuwayomi.so" ] && continue
+            cp -f "$so" "apkdir/lib/$ABI/$base"
+          done
       
           # Copy resources if they exist
           cp -r build-android/resources/* apkdir/assets/ 2>/dev/null || true
@@ -380,6 +389,8 @@ jobs:
             --auto-add-overlay
       
           # Add native libs + assets
+          echo "Packaged native libs:"
+          ls -1 apkdir/lib/$ABI || true
           cd apkdir
           zip -r ../unsigned.apk lib assets >/dev/null
           cd ..
