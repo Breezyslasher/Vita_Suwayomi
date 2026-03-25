@@ -19,6 +19,11 @@
 #ifdef __ANDROID__
 #include <android/log.h>
 #include <android_native_app_glue.h>
+#if __has_include(<SDL.h>)
+#include <SDL.h>
+#else
+#include <SDL2/SDL.h>
+#endif
 #endif
 
 #ifdef __vita__
@@ -160,6 +165,9 @@ void android_main(struct android_app* app) {
     (void)app;
 
     __android_log_print(ANDROID_LOG_INFO, "VitaSuwayomi", "android_main started");
+    // We run through NativeActivity/android_main (not SDLActivity). Tell SDL
+    // runtime that main/bootstrap is ready before Borealis calls SDL_Init.
+    SDL_SetMainReady();
     char* argv[] = { const_cast<char*>("VitaSuwayomi"), nullptr };
     int rc = main(1, argv);
     __android_log_print(ANDROID_LOG_INFO, "VitaSuwayomi", "android_main exited with code %d", rc);
