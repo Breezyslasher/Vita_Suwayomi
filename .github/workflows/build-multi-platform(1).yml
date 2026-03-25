@@ -258,7 +258,7 @@ jobs:
           cd ..
 
           # ── zstd ──────────────────────────────────────────────────────
-          curl -sL https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz | tar -xz
+          curl -sL https://github.com/facebook/zstd/archive/refs/tags/v1.5.6.tar.gz | tar -xz
           cmake -S zstd-1.5.6/build/cmake -B build-zstd "${CMAKE_COMMON[@]}" \
             -DZSTD_BUILD_PROGRAMS=OFF -DZSTD_BUILD_TESTS=OFF -DZSTD_BUILD_SHARED=OFF
           cmake --build build-zstd -j$NCPU && cmake --install build-zstd
