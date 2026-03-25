@@ -161,6 +161,15 @@ jobs:
             -DCMAKE_FIND_ROOT_PATH="$PREFIX"
           )
 
+          # ── SDL2 (git clone) ───────────────────────────────────────────
+          rm -rf /tmp/SDL build-sdl2
+          git clone --depth 1 --branch release-2.30.10 https://github.com/libsdl-org/SDL.git /tmp/SDL
+          cmake -S /tmp/SDL -B build-sdl2 "${CMAKE_COMMON[@]}" \
+            -DSDL_SHARED=ON \
+            -DSDL_STATIC=OFF \
+            -DSDL_TEST=OFF
+          cmake --build build-sdl2 -j$NCPU && cmake --install build-sdl2
+
           # ── zlib (git clone) ─────────────────────────────────────────
           rm -rf /tmp/zlib
           git clone --depth 1 --branch v1.3.1 https://github.com/madler/zlib.git /tmp/zlib
@@ -389,6 +398,11 @@ jobs:
             --auto-add-overlay
       
           # Add native libs + assets
+          if [ ! -f "apkdir/lib/$ABI/libSDL2.so" ]; then
+            echo "ERROR: libSDL2.so is missing from APK native libs"
+            ls -la apkdir/lib/$ABI || true
+            exit 1
+          fi
           echo "Packaged native libs:"
           ls -1 apkdir/lib/$ABI || true
           cd apkdir
