@@ -258,13 +258,13 @@ jobs:
             make install
           )
 
-          # ── zstd (use system zstd for host tools) ─────────────────────
-          cmake -S . -B build-zstd-host -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-            -DCMAKE_BUILD_TYPE=Release \
+          # ── zstd (clone and build) ────────────────────────────────────
+          git clone --depth 1 --branch v1.5.6 https://github.com/facebook/zstd.git
+          cmake -S zstd/build/cmake -B build-zstd "${CMAKE_COMMON[@]}" \
             -DZSTD_BUILD_PROGRAMS=OFF \
             -DZSTD_BUILD_TESTS=OFF \
             -DZSTD_BUILD_SHARED=OFF
-          cmake --build build-zstd-host -j$NCPU && cmake --install build-zstd-host
+          cmake --build build-zstd -j$NCPU && cmake --install build-zstd
 
       - name: Build libromfs-generator (host)
         run: |
