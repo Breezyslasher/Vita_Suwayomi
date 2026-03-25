@@ -209,6 +209,9 @@ jobs:
             -DCURL_DISABLE_LDAP=ON
           cmake --build build-curl -j$NCPU && cmake --install build-curl
 
+          # ── stub libraries for missing deps ───────────────────────────
+          touch "$PREFIX/lib/libass.a" "$PREFIX/lib/libfreetype.a" "$PREFIX/lib/libfribidi.a" "$PREFIX/lib/libbz2.a" "$PREFIX/lib/libzstd.a" "$PREFIX/lib/libharfbuzz.a"
+
       - name: Cache Android deps (switchfin-style)
         if: ${{ hashFiles('scripts/android/Makefile') != '' }}
         id: cache-deps
