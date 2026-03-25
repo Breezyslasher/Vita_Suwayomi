@@ -258,13 +258,13 @@ jobs:
             make install
           )
 
-          # ── zstd (clone and build) ────────────────────────────────────
-          git clone --depth 1 --branch v1.5.6 https://github.com/facebook/zstd.git
-          cmake -S zstd/build/cmake -B build-zstd "${CMAKE_COMMON[@]}" \
-            -DZSTD_BUILD_PROGRAMS=OFF \
-            -DZSTD_BUILD_TESTS=OFF \
-            -DZSTD_BUILD_SHARED=OFF
-          cmake --build build-zstd -j$NCPU && cmake --install build-zstd
+          # ── zstd (autotools build) ─────────────────────────────────────
+          git clone --depth 1 --branch v1.5.6 --recursive https://github.com/facebook/zstd.git /tmp/zstd
+          cd /tmp/zstd
+          CC="$CC" AR="$AR" RANLIB="$RANLIB" CFLAGS="-I$PREFIX/include" LDFLAGS="-L$PREFIX/lib" \
+            ./configure --prefix="$PREFIX" --static --disable Programs --disable Tests
+          make -j$NCPU
+          make install
 
       - name: Build libromfs-generator (host)
         run: |
