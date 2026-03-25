@@ -361,6 +361,8 @@ if(PLATFORM_PSV)
         FILE resources/images/dpad.png            resources/images/dpad.png
         FILE resources/images/gradient.png        resources/images/gradient.png
         FILE resources/images/l_button.png        resources/images/l_button.png
+        FILE resources/images/logo-small.png      resources/images/logo-small.png
+        FILE resources/images/logo.png            resources/images/logo.png
         FILE resources/images/r_button.png        resources/images/r_button.png
         FILE resources/images/select_button.png   resources/images/select_button.png
         FILE resources/images/square_button.png   resources/images/square_button.png
