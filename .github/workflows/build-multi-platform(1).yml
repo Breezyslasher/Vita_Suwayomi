@@ -176,14 +176,13 @@ jobs:
 
           # ── libwebp (stub header) ────────────────────────────────────
           mkdir -p "$PREFIX/include/webp" "$PREFIX/lib"
-          python3 -c "
-import os
-content = '''#ifndef WEBP_DECODE_H_
+          cat > "$PREFIX/include/webp/decode.h" << 'ENDOFHEADER'
+#ifndef WEBP_DECODE_H_
 #define WEBP_DECODE_H_
 #include <stdint.h>
 #include <stdlib.h>
 #ifdef __cplusplus
-extern \"C\" {
+extern "C" {
 #endif
 typedef struct WebPDecoderConfig WebPDecoderConfig;
 int WebPGetDecoderVersion(void);
@@ -194,11 +193,7 @@ void WebPFree(void* ptr);
 }
 #endif
 #endif
-'''
-os.makedirs('$PREFIX/include/webp', exist_ok=True)
-with open('$PREFIX/include/webp/decode.h', 'w') as f:
-    f.write(content)
-"
+ENDOFHEADER
           touch "$PREFIX/lib/libwebp.a"
 
       - name: Cache Android deps (switchfin-style)
