@@ -166,10 +166,14 @@ endif()
 # ---------------------------------------------------------------------------
 # Link libraries
 # ---------------------------------------------------------------------------
-if(WIN32)
-    set(APP_FFMPEG_LIBS
-        mpv
-    )
+if(PLATFORM_ANDROID)
+    # Android: manga reader only — libwebp handles animated WebP natively,
+    # no video playback needed so skip mpv/ffmpeg entirely.
+    set(APP_FFMPEG_LIBS)
+    set(APP_FFMPEG_LINK_BLOCK)
+elseif(WIN32)
+    set(APP_FFMPEG_LIBS mpv)
+    set(APP_FFMPEG_LINK_BLOCK ${APP_FFMPEG_LIBS})
 else()
     set(APP_FFMPEG_LIBS
         mpv
@@ -180,12 +184,11 @@ else()
         swscale
         avutil
     )
-endif()
-
-if(APPLE OR PLATFORM_PS4)
-    set(APP_FFMPEG_LINK_BLOCK ${APP_FFMPEG_LIBS})
-else()
-    set(APP_FFMPEG_LINK_BLOCK -Wl,--start-group ${APP_FFMPEG_LIBS} -Wl,--end-group)
+    if(APPLE OR PLATFORM_PS4)
+        set(APP_FFMPEG_LINK_BLOCK ${APP_FFMPEG_LIBS})
+    else()
+        set(APP_FFMPEG_LINK_BLOCK -Wl,--start-group ${APP_FFMPEG_LIBS} -Wl,--end-group)
+    endif()
 endif()
 
 if(WIN32)
@@ -234,7 +237,7 @@ target_link_libraries(${PROJECT_NAME}
     ${APP_RENDER_LIBS}
 )
 
-if(NOT PLATFORM_SWITCH AND NOT PLATFORM_PS4 AND NOT WIN32)
+if(NOT PLATFORM_SWITCH AND NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
     target_link_libraries(${PROJECT_NAME} mp3lame)
 endif()
 
