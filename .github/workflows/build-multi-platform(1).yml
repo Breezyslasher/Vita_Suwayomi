@@ -489,9 +489,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - { arch: x64, sys: mingw64, env: x86_64, runner: windows-latest }
-        - { arch: x86, sys: mingw32, env: i686, runner: windows-latest }
-        - { arch: arm64, sys: clangarm64, env: clang-aarch64, runner: windows-11-arm }
+        - { arch: x64, sys: mingw64, env: x86_64, runner: windows-latest, mesa_pkg: mingw-w64-x86_64-mesa }
+        - { arch: x86, sys: mingw32, env: i686, runner: windows-latest, mesa_pkg: '' }
+        - { arch: arm64, sys: clangarm64, env: clang-aarch64, runner: windows-11-arm, mesa_pkg: '' }
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -517,6 +517,9 @@ jobs:
             curl -sLO https://github.com/dragonflylee/switchfin/releases/download/mingw-packages/${MINGW_PACKAGE_PREFIX}-${pkg}-any.pkg.tar.zst
           done
           pacman -U --noconfirm *.pkg.tar.zst
+      - name: Install Mesa software OpenGL fallback
+        if: ${{ matrix.mesa_pkg != '' }}
+        run: pacman --noconfirm -S --needed ${{ matrix.mesa_pkg }}
       - name: Build
         run: |
           cmake -B build -G Ninja \
@@ -543,6 +546,12 @@ jobs:
           }
 
           copy_with_deps build/VitaSuwayomi.exe
+
+          # Optional software OpenGL fallback (Mesa llvmpipe) for systems where
+          # the installed graphics driver does not expose OpenGL properly.
+          if [ -f "${MINGW_PREFIX}/bin/opengl32.dll" ]; then
+            copy_with_deps "${MINGW_PREFIX}/bin/opengl32.dll"
+          fi
 
           # Resolve transitive DLL dependencies for anything already bundled.
           changed=1
@@ -748,9 +757,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - { arch: x64, sys: mingw64, env: x86_64, runner: windows-latest }
-        - { arch: x86, sys: mingw32, env: i686, runner: windows-latest }
-        - { arch: arm64, sys: clangarm64, env: clang-aarch64, runner: windows-11-arm }
+        - { arch: x64, sys: mingw64, env: x86_64, runner: windows-latest, mesa_pkg: mingw-w64-x86_64-mesa }
+        - { arch: x86, sys: mingw32, env: i686, runner: windows-latest, mesa_pkg: '' }
+        - { arch: arm64, sys: clangarm64, env: clang-aarch64, runner: windows-11-arm, mesa_pkg: '' }
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -776,6 +785,9 @@ jobs:
             curl -sLO https://github.com/dragonflylee/switchfin/releases/download/mingw-packages/${MINGW_PACKAGE_PREFIX}-${pkg}-any.pkg.tar.zst
           done
           pacman -U --noconfirm *.pkg.tar.zst
+      - name: Install Mesa software OpenGL fallback
+        if: ${{ matrix.mesa_pkg != '' }}
+        run: pacman --noconfirm -S --needed ${{ matrix.mesa_pkg }}
       - name: Build
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON
@@ -799,6 +811,10 @@ jobs:
           }
 
           copy_with_deps build/VitaSuwayomi.exe
+
+          if [ -f "${MINGW_PREFIX}/bin/opengl32.dll" ]; then
+            copy_with_deps "${MINGW_PREFIX}/bin/opengl32.dll"
+          fi
 
           changed=1
           while [ "$changed" -eq 1 ]; do

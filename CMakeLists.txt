@@ -416,13 +416,17 @@ elseif(PLATFORM_ANDROID)
     # Borealis needs its own resources at runtime (e.g. gamecontroller DB used
     # by SDLInputManager). If only app resources are copied, Android startup can
     # crash inside window/input initialization.
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/resources
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${BOREALIS_RESOURCES_DIR}
-            ${CMAKE_BINARY_DIR}/resources
-        COMMENT "Copying Borealis resources for Android packaging"
-    )
+    if(EXISTS ${BOREALIS_RESOURCES_DIR})
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/resources
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${BOREALIS_RESOURCES_DIR}
+                ${CMAKE_BINARY_DIR}/resources
+            COMMENT "Copying Borealis resources for Android packaging"
+        )
+    else()
+        message(WARNING "Borealis resources directory not found at ${BOREALIS_RESOURCES_DIR}; skipping Borealis resource copy.")
+    endif()
 
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -434,13 +438,17 @@ elseif(PLATFORM_ANDROID)
 elseif(PLATFORM_DESKTOP)
     # Copy both Borealis + app resources next to the binary so relative paths
     # resolve for framework assets and app assets.
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${BOREALIS_RESOURCES_DIR}
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-        COMMENT "Copying Borealis resources for desktop build"
-    )
+    if(EXISTS ${BOREALIS_RESOURCES_DIR})
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${BOREALIS_RESOURCES_DIR}
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+            COMMENT "Copying Borealis resources for desktop build"
+        )
+    else()
+        message(WARNING "Borealis resources directory not found at ${BOREALIS_RESOURCES_DIR}; skipping Borealis resource copy.")
+    endif()
 
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
