@@ -189,6 +189,14 @@ jobs:
             -DWEBP_BUILD_EXTRAS=OFF
           cmake --build build-webp -j$NCPU && cmake --install build-webp
 
+          # ── mbedtls (git clone) ────────────────────────────────────────
+          rm -rf /tmp/mbedtls
+          git clone --depth 1 --branch mbedtls-3.6.3 https://github.com/Mbed-TLS/mbedtls.git /tmp/mbedtls
+          cmake -S /tmp/mbedtls -B build-mbedtls "${CMAKE_COMMON[@]}" \
+            -DENABLE_TESTING=OFF \
+            -DENABLE_PROGRAMS=OFF
+          cmake --build build-mbedtls -j$NCPU && cmake --install build-mbedtls
+
           # ── curl (git clone) ─────────────────────────────────────────
           rm -rf /tmp/curl build-curl
           git clone --depth 1 --branch curl-8_11_1 https://github.com/curl/curl.git /tmp/curl
