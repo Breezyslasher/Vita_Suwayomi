@@ -453,7 +453,6 @@ jobs:
         run: |
           cmake -B build -G Ninja \
             -DPLATFORM_DESKTOP=ON \
-            -DWIN32_TERMINAL=OFF \
             -DZLIB_USE_STATIC_LIBS=ON \
             -DUSE_SYSTEM_GLFW=ON
           cmake --build build
