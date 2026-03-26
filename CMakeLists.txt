@@ -396,10 +396,10 @@ elseif(PLATFORM_DESKTOP)
     # This makes local runs and CI artifacts self-contained.
     if(WIN32)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_RUNTIME_DLLS:${PROJECT_NAME}>
-                $<TARGET_FILE_DIR:${PROJECT_NAME}>
-            COMMAND_EXPAND_LISTS
+            COMMAND ${CMAKE_COMMAND}
+                -Ddlls="$<TARGET_RUNTIME_DLLS:${PROJECT_NAME}>"
+                -Ddest="$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/copy_runtime_dlls.cmake"
             COMMENT "Copying runtime DLL dependencies for Windows build"
         )
     endif()
