@@ -397,8 +397,7 @@ jobs:
 
           SDL_JAVA_DIR="/tmp/SDL/android-project/app/src/main/java"
           mkdir -p apkdir/classes
-          javac -source 8 -target 8 \
-            -bootclasspath "$ANDROID_JAR" \
+          javac --release 8 \
             -classpath "$ANDROID_JAR" \
             -d apkdir/classes \
             $(find "$SDL_JAVA_DIR" -name '*.java') \
