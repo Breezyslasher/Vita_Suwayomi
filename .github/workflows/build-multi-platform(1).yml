@@ -538,13 +538,29 @@ jobs:
             exit 1
           fi
 
-          mapfile -t dlls < <(objdump -p "$EXE" | awk '/DLL Name:/{print $3}' | sort -u)
-          for dll in "${dlls[@]}"; do
-            candidate="$DLL_DIR/$dll"
-            if [ -f "$candidate" ]; then
-              cp -f "$candidate" build/
-              echo "Bundled $dll"
-            fi
+          queue=("$EXE")
+          declare -A scanned
+          declare -A bundled
+          while [ ${#queue[@]} -gt 0 ]; do
+            current="${queue[0]}"
+            queue=("${queue[@]:1}")
+            scanned["$current"]=1
+
+            mapfile -t dlls < <(objdump -p "$current" | awk '/DLL Name:/{print $3}' | sort -u)
+            for dll in "${dlls[@]}"; do
+              candidate="$DLL_DIR/$dll"
+              target="build/$dll"
+              if [ -f "$candidate" ]; then
+                if [ -z "${bundled[$dll]+x}" ]; then
+                  cp -f "$candidate" "$target"
+                  bundled["$dll"]=1
+                  echo "Bundled $dll (from $(basename "$current"))"
+                fi
+                if [ -z "${scanned[$target]+x}" ]; then
+                  queue+=("$target")
+                fi
+              fi
+            done
           done
 
           echo "DLLs bundled into build/:"
@@ -778,13 +794,29 @@ jobs:
             exit 1
           fi
 
-          mapfile -t dlls < <(objdump -p "$EXE" | awk '/DLL Name:/{print $3}' | sort -u)
-          for dll in "${dlls[@]}"; do
-            candidate="$DLL_DIR/$dll"
-            if [ -f "$candidate" ]; then
-              cp -f "$candidate" build/
-              echo "Bundled $dll"
-            fi
+          queue=("$EXE")
+          declare -A scanned
+          declare -A bundled
+          while [ ${#queue[@]} -gt 0 ]; do
+            current="${queue[0]}"
+            queue=("${queue[@]:1}")
+            scanned["$current"]=1
+
+            mapfile -t dlls < <(objdump -p "$current" | awk '/DLL Name:/{print $3}' | sort -u)
+            for dll in "${dlls[@]}"; do
+              candidate="$DLL_DIR/$dll"
+              target="build/$dll"
+              if [ -f "$candidate" ]; then
+                if [ -z "${bundled[$dll]+x}" ]; then
+                  cp -f "$candidate" "$target"
+                  bundled["$dll"]=1
+                  echo "Bundled $dll (from $(basename "$current"))"
+                fi
+                if [ -z "${scanned[$target]+x}" ]; then
+                  queue+=("$target")
+                fi
+              fi
+            done
           done
 
           echo "DLLs bundled into build/:"
