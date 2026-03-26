@@ -158,7 +158,7 @@ static void registerCustomViews() {
 /**
  * Main entry point
  */
-int main(int argc, char* argv[]) {
+static int vitasuwayomi_main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
 
@@ -267,4 +267,14 @@ int main(int argc, char* argv[]) {
 #endif
 
     return 0;
+}
+
+#if defined(__ANDROID__)
+extern "C" int SDL_main(int argc, char* argv[]) {
+    return vitasuwayomi_main(argc, argv);
+}
+#endif
+
+int main(int argc, char* argv[]) {
+    return vitasuwayomi_main(argc, argv);
 }

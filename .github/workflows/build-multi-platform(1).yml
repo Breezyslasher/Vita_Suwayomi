@@ -320,6 +320,7 @@ jobs:
           AAPT2=$(find $ANDROID_HOME/build-tools -name "aapt2" | head -1)
           ZIPALIGN=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -1)
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | head -1)
+          D8=$(find $ANDROID_HOME/build-tools -name "d8" | head -1)
           READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
       
           mkdir -p apkdir/lib/$ABI
@@ -379,7 +380,32 @@ jobs:
             echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=" | base64 -d > apkdir/res/drawable/icon.png
           fi
       
-          # ✅ NativeActivity manifest (NO heredoc issues)
+          # Generate SDL Java bootstrap activity + classes.dex
+          mkdir -p apkdir/src/com/vitasuwayomi/app
+          cat > apkdir/src/com/vitasuwayomi/app/MainActivity.java <<'EOF'
+          package com.vitasuwayomi.app;
+
+          import org.libsdl.app.SDLActivity;
+
+          public class MainActivity extends SDLActivity {
+              @Override
+              protected String[] getLibraries() {
+                  return new String[] { "SDL2", "VitaSuwayomi" };
+              }
+          }
+          EOF
+
+          SDL_JAVA_DIR="/tmp/SDL/android-project/app/src/main/java"
+          mkdir -p apkdir/classes
+          javac -source 8 -target 8 \
+            -bootclasspath "$ANDROID_JAR" \
+            -classpath "$ANDROID_JAR" \
+            -d apkdir/classes \
+            $(find "$SDL_JAVA_DIR" -name '*.java') \
+            apkdir/src/com/vitasuwayomi/app/MainActivity.java
+          "$D8" --lib "$ANDROID_JAR" --output apkdir apkdir/classes
+
+          # SDLActivity manifest
 
           cat > apkdir/AndroidManifest.xml <<EOF
           <?xml version="1.0" encoding="utf-8"?>
@@ -395,19 +421,15 @@ jobs:
           
               <application
                   android:label="VitaSuwayomi"
-                  android:hasCode="false"
+                  android:hasCode="true"
                   android:requestLegacyExternalStorage="true"
                   android:extractNativeLibs="true">
           
                   <activity
-                      android:name="android.app.NativeActivity"
+                      android:name="com.vitasuwayomi.app.MainActivity"
                       android:exported="true"
                       android:label="VitaSuwayomi"
-                      android:configChanges="orientation|keyboardHidden|screenSize">
-          
-                      <meta-data
-                          android:name="android.app.lib_name"
-                          android:value="VitaSuwayomi" />
+                      android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode">
           
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
@@ -523,8 +545,49 @@ jobs:
             -DPLATFORM_DESKTOP=ON \
             -DWIN32_TERMINAL=OFF \
             -DZLIB_USE_STATIC_LIBS=ON \
-            -DUSE_SYSTEM_GLFW=ON
+            -DUSE_SYSTEM_GLFW=ON \
+            -DUSE_D3D11=ON
           cmake --build build
+      - name: Bundle runtime DLLs
+        run: |
+          EXE="build/VitaSuwayomi.exe"
+          DLL_DIR="${MINGW_PREFIX}/bin"
+          if [ ! -f "$EXE" ]; then
+            echo "Expected binary not found: $EXE"
+            exit 1
+          fi
+          if [ ! -d "$DLL_DIR" ]; then
+            echo "Expected DLL directory not found: $DLL_DIR"
+            exit 1
+          fi
+
+          queue=("$EXE")
+          declare -A scanned
+          declare -A bundled
+          while [ ${#queue[@]} -gt 0 ]; do
+            current="${queue[0]}"
+            queue=("${queue[@]:1}")
+            scanned["$current"]=1
+
+            mapfile -t dlls < <(objdump -p "$current" | awk '/DLL Name:/{print $3}' | sort -u)
+            for dll in "${dlls[@]}"; do
+              candidate="$DLL_DIR/$dll"
+              target="build/$dll"
+              if [ -f "$candidate" ]; then
+                if [ -z "${bundled[$dll]+x}" ]; then
+                  cp -f "$candidate" "$target"
+                  bundled["$dll"]=1
+                  echo "Bundled $dll (from $(basename "$current"))"
+                fi
+                if [ -z "${scanned[$target]+x}" ]; then
+                  queue+=("$target")
+                fi
+              fi
+            done
+          done
+
+          echo "DLLs bundled into build/:"
+          ls -1 build/*.dll
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
@@ -739,8 +802,48 @@ jobs:
           pacman -U --noconfirm *.pkg.tar.zst
       - name: Build
         run: |
-          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON -DUSE_D3D11=ON
           cmake --build build
+      - name: Bundle runtime DLLs
+        run: |
+          EXE="build/VitaSuwayomi.exe"
+          DLL_DIR="${MINGW_PREFIX}/bin"
+          if [ ! -f "$EXE" ]; then
+            echo "Expected binary not found: $EXE"
+            exit 1
+          fi
+          if [ ! -d "$DLL_DIR" ]; then
+            echo "Expected DLL directory not found: $DLL_DIR"
+            exit 1
+          fi
+
+          queue=("$EXE")
+          declare -A scanned
+          declare -A bundled
+          while [ ${#queue[@]} -gt 0 ]; do
+            current="${queue[0]}"
+            queue=("${queue[@]:1}")
+            scanned["$current"]=1
+
+            mapfile -t dlls < <(objdump -p "$current" | awk '/DLL Name:/{print $3}' | sort -u)
+            for dll in "${dlls[@]}"; do
+              candidate="$DLL_DIR/$dll"
+              target="build/$dll"
+              if [ -f "$candidate" ]; then
+                if [ -z "${bundled[$dll]+x}" ]; then
+                  cp -f "$candidate" "$target"
+                  bundled["$dll"]=1
+                  echo "Bundled $dll (from $(basename "$current"))"
+                fi
+                if [ -z "${scanned[$target]+x}" ]; then
+                  queue+=("$target")
+                fi
+              fi
+            done
+          done
+
+          echo "DLLs bundled into build/:"
+          ls -1 build/*.dll
       - name: Upload mingw artifact
         uses: actions/upload-artifact@v4
         with:

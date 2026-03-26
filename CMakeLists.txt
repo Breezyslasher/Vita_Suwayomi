@@ -84,6 +84,20 @@ if(PLATFORM_PSV)
     endif()
 endif()
 
+if(PLATFORM_ANDROID)
+    set(ANDROID_SDL_INPUT_TARGET ${BOREALIS_LIBRARY}/lib/platforms/sdl/sdl_input.cpp)
+    if(EXISTS ${ANDROID_SDL_INPUT_TARGET})
+        file(READ ${ANDROID_SDL_INPUT_TARGET} ANDROID_SDL_INPUT_SRC)
+        string(REPLACE
+"    if (SDL_Init(flags) < 0)\n    {\n        brls::fatal(\"Couldn't initialize joystick: \" + std::string(SDL_GetError()));\n    }\n\n    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, \"0\");\n\n    int controllersCount = SDL_NumJoysticks();\n    brls::Logger::info(\"joystick num: {}\", controllersCount);\n\n    for (int i = 0; i < controllersCount; i++)\n    {\n        SDL_JoystickID jid = SDL_JoystickGetDeviceInstanceID(i);\n        Logger::info(\"sdl: joystick {}: \\\"{}\\\"\", jid, SDL_JoystickNameForIndex(i));\n        controllers.push_back({ jid, SDL_GameControllerOpen(i) });\n    }\n"
+"    if (SDL_Init(flags) < 0)\n    {\n        brls::Logger::warning(\"Couldn't initialize joystick subsystem: {}\", SDL_GetError());\n        SDL_ClearError();\n    }\n    else\n    {\n        int controllersCount = SDL_NumJoysticks();\n        brls::Logger::info(\"joystick num: {}\", controllersCount);\n\n        for (int i = 0; i < controllersCount; i++)\n        {\n            SDL_JoystickID jid = SDL_JoystickGetDeviceInstanceID(i);\n            Logger::info(\"sdl: joystick {}: \\\"{}\\\"\", jid, SDL_JoystickNameForIndex(i));\n            controllers.push_back({ jid, SDL_GameControllerOpen(i) });\n        }\n    }\n\n    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, \"0\");\n"
+            ANDROID_SDL_INPUT_SRC
+            "${ANDROID_SDL_INPUT_SRC}"
+        )
+        file(WRITE ${ANDROID_SDL_INPUT_TARGET} "${ANDROID_SDL_INPUT_SRC}")
+    endif()
+endif()
+
 add_subdirectory(${BOREALIS_LIBRARY})
 
 # ---------------------------------------------------------------------------
@@ -126,6 +140,10 @@ set(APP_SOURCES
 # vita_stubs.c only needed on Vita (no-op stdio locks, SDL_OpenURL stub)
 if(PLATFORM_PSV)
     list(APPEND APP_SOURCES src/utils/vita_stubs.c)
+endif()
+
+if(PLATFORM_ANDROID)
+    list(APPEND APP_SOURCES src/android/native_activity_entry.cpp)
 endif()
 
 set(APP_INCLUDES
