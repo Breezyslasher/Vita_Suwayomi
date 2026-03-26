@@ -320,6 +320,7 @@ jobs:
           AAPT2=$(find $ANDROID_HOME/build-tools -name "aapt2" | head -1)
           ZIPALIGN=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -1)
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | head -1)
+          D8=$(find $ANDROID_HOME/build-tools -name "d8" | head -1)
           READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
       
           mkdir -p apkdir/lib/$ABI
@@ -379,7 +380,32 @@ jobs:
             echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=" | base64 -d > apkdir/res/drawable/icon.png
           fi
       
-          # ✅ NativeActivity manifest (NO heredoc issues)
+          # Generate SDL Java bootstrap activity + classes.dex
+          mkdir -p apkdir/src/com/vitasuwayomi/app
+          cat > apkdir/src/com/vitasuwayomi/app/MainActivity.java <<'EOF'
+          package com.vitasuwayomi.app;
+
+          import org.libsdl.app.SDLActivity;
+
+          public class MainActivity extends SDLActivity {
+              @Override
+              protected String[] getLibraries() {
+                  return new String[] { "SDL2", "VitaSuwayomi" };
+              }
+          }
+          EOF
+
+          SDL_JAVA_DIR="/tmp/SDL/android-project/app/src/main/java"
+          mkdir -p apkdir/classes
+          javac -source 8 -target 8 \
+            -bootclasspath "$ANDROID_JAR" \
+            -classpath "$ANDROID_JAR" \
+            -d apkdir/classes \
+            $(find "$SDL_JAVA_DIR" -name '*.java') \
+            apkdir/src/com/vitasuwayomi/app/MainActivity.java
+          "$D8" --lib "$ANDROID_JAR" --output apkdir apkdir/classes
+
+          # SDLActivity manifest
 
           cat > apkdir/AndroidManifest.xml <<EOF
           <?xml version="1.0" encoding="utf-8"?>
@@ -395,19 +421,15 @@ jobs:
           
               <application
                   android:label="VitaSuwayomi"
-                  android:hasCode="false"
+                  android:hasCode="true"
                   android:requestLegacyExternalStorage="true"
                   android:extractNativeLibs="true">
           
                   <activity
-                      android:name="android.app.NativeActivity"
+                      android:name="com.vitasuwayomi.app.MainActivity"
                       android:exported="true"
                       android:label="VitaSuwayomi"
-                      android:configChanges="orientation|keyboardHidden|screenSize">
-          
-                      <meta-data
-                          android:name="android.app.lib_name"
-                          android:value="VitaSuwayomi" />
+                      android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode">
           
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
