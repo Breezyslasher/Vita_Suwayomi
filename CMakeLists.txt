@@ -397,7 +397,7 @@ elseif(PLATFORM_DESKTOP)
     if(WIN32)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND}
-                -Ddlls="$<TARGET_RUNTIME_DLLS:${PROJECT_NAME}>"
+                -Dexe="$<TARGET_FILE:${PROJECT_NAME}>"
                 -Ddest="$<TARGET_FILE_DIR:${PROJECT_NAME}>"
                 -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/copy_runtime_dlls.cmake"
             COMMENT "Copying runtime DLL dependencies for Windows build"

@@ -740,6 +740,15 @@ jobs:
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON
           cmake --build build
+      - name: Collect runtime DLLs
+        run: |
+          ldd build/VitaSuwayomi.exe | awk '/=>/ {print $3}' | while read -r dep; do
+            [ -f "$dep" ] || continue
+            case "$dep" in
+              /c/Windows/*) continue ;;
+            esac
+            cp -n "$dep" build/
+          done
       - name: Upload mingw artifact
         uses: actions/upload-artifact@v4
         with:
