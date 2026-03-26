@@ -525,6 +525,30 @@ jobs:
             -DZLIB_USE_STATIC_LIBS=ON \
             -DUSE_SYSTEM_GLFW=ON
           cmake --build build
+      - name: Bundle runtime DLLs
+        run: |
+          EXE="build/VitaSuwayomi.exe"
+          DLL_DIR="${MINGW_PREFIX}/bin"
+          if [ ! -f "$EXE" ]; then
+            echo "Expected binary not found: $EXE"
+            exit 1
+          fi
+          if [ ! -d "$DLL_DIR" ]; then
+            echo "Expected DLL directory not found: $DLL_DIR"
+            exit 1
+          fi
+
+          mapfile -t dlls < <(objdump -p "$EXE" | awk '/DLL Name:/{print $3}' | sort -u)
+          for dll in "${dlls[@]}"; do
+            candidate="$DLL_DIR/$dll"
+            if [ -f "$candidate" ]; then
+              cp -f "$candidate" build/
+              echo "Bundled $dll"
+            fi
+          done
+
+          echo "DLLs bundled into build/:"
+          ls -1 build/*.dll
       - name: Upload Windows binary
         uses: actions/upload-artifact@v4
         with:
@@ -741,6 +765,30 @@ jobs:
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON
           cmake --build build
+      - name: Bundle runtime DLLs
+        run: |
+          EXE="build/VitaSuwayomi.exe"
+          DLL_DIR="${MINGW_PREFIX}/bin"
+          if [ ! -f "$EXE" ]; then
+            echo "Expected binary not found: $EXE"
+            exit 1
+          fi
+          if [ ! -d "$DLL_DIR" ]; then
+            echo "Expected DLL directory not found: $DLL_DIR"
+            exit 1
+          fi
+
+          mapfile -t dlls < <(objdump -p "$EXE" | awk '/DLL Name:/{print $3}' | sort -u)
+          for dll in "${dlls[@]}"; do
+            candidate="$DLL_DIR/$dll"
+            if [ -f "$candidate" ]; then
+              cp -f "$candidate" build/
+              echo "Bundled $dll"
+            fi
+          done
+
+          echo "DLLs bundled into build/:"
+          ls -1 build/*.dll
       - name: Upload mingw artifact
         uses: actions/upload-artifact@v4
         with:
