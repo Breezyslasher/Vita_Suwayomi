@@ -468,7 +468,7 @@ jobs:
           echo "Packaged native libs:"
           ls -1 apkdir/lib/$ABI || true
           cd apkdir
-          zip -r ../unsigned.apk lib assets >/dev/null
+          zip -r ../unsigned.apk lib assets classes.dex >/dev/null
           cd ..
       
           # Align
@@ -492,6 +492,8 @@ jobs:
             --key-pass pass:android \
             --out VitaSuwayomi-android-$VERSION.apk \
             aligned.apk
+
+          $APKSIGNER verify --verbose VitaSuwayomi-android-$VERSION.apk
       
           rm -f unsigned.apk aligned.apk compiled_res.zip debug.keystore
 
