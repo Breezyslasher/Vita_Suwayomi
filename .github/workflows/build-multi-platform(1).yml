@@ -161,6 +161,15 @@ jobs:
             -DCMAKE_FIND_ROOT_PATH="$PREFIX"
           )
 
+          # ── SDL2 (git clone) ───────────────────────────────────────────
+          rm -rf /tmp/SDL build-sdl2
+          git clone --depth 1 --branch release-2.30.10 https://github.com/libsdl-org/SDL.git /tmp/SDL
+          cmake -S /tmp/SDL -B build-sdl2 "${CMAKE_COMMON[@]}" \
+            -DSDL_SHARED=ON \
+            -DSDL_STATIC=OFF \
+            -DSDL_TEST=OFF
+          cmake --build build-sdl2 -j$NCPU && cmake --install build-sdl2
+
           # ── zlib (git clone) ─────────────────────────────────────────
           rm -rf /tmp/zlib
           git clone --depth 1 --branch v1.3.1 https://github.com/madler/zlib.git /tmp/zlib
@@ -298,23 +307,67 @@ jobs:
 
       - name: Create APK with native lib
         if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           set -e
       
           ABI=arm64-v8a
           VERSION=${{ github.run_number }}
+          TARGET_TRIPLE=aarch64-linux-android
       
           ANDROID_JAR=$(find $ANDROID_HOME/platforms -name "android.jar" | head -1)
           AAPT2=$(find $ANDROID_HOME/build-tools -name "aapt2" | head -1)
           ZIPALIGN=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -1)
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | head -1)
+          READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
       
           mkdir -p apkdir/lib/$ABI
           mkdir -p apkdir/res/drawable
           mkdir -p apkdir/assets
       
-          # Copy native lib
+          # Copy app native lib
           cp build-android/libVitaSuwayomi.so apkdir/lib/$ABI/
+
+          # Copy dependent shared libs (e.g. SDL2) so NativeActivity can load
+          # libVitaSuwayomi.so without dlopen failures.
+          for so in build-android/lib*.so android-deps/lib/lib*.so jniLibs/$ABI/*.so; do
+            [ -f "$so" ] || continue
+            base="$(basename "$so")"
+            [ "$base" = "libVitaSuwayomi.so" ] && continue
+            cp -f "$so" "apkdir/lib/$ABI/$base"
+          done
+
+          # Copy all transitive native dependencies (including libc++_shared)
+          # by reading DT_NEEDED entries and resolving them from known paths.
+          SEARCH_DIRS=(
+            "apkdir/lib/$ABI"
+            "build-android"
+            "android-deps/lib"
+            "jniLibs/$ABI"
+            "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TARGET_TRIPLE"
+            "$ANDROID_NDK_HOME/sources/cxx-stl/llvm-libc++/libs/$ABI"
+          )
+          CHANGED=1
+          while [ "$CHANGED" -eq 1 ]; do
+            CHANGED=0
+            for sofile in apkdir/lib/$ABI/*.so; do
+              [ -f "$sofile" ] || continue
+              while IFS= read -r needed; do
+                [ -n "$needed" ] || continue
+                if [ -f "apkdir/lib/$ABI/$needed" ]; then
+                  continue
+                fi
+                for d in "${SEARCH_DIRS[@]}"; do
+                  if [ -f "$d/$needed" ]; then
+                    cp -f "$d/$needed" "apkdir/lib/$ABI/$needed"
+                    CHANGED=1
+                    break
+                  fi
+                done
+              done < <("$READELF" -d "$sofile" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\].*/\1/p')
+            done
+          done
       
           # Copy resources if they exist
           cp -r build-android/resources/* apkdir/assets/ 2>/dev/null || true
@@ -337,10 +390,13 @@ jobs:
           
               <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
               <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
           
               <application
                   android:label="VitaSuwayomi"
                   android:hasCode="false"
+                  android:requestLegacyExternalStorage="true"
                   android:extractNativeLibs="true">
           
                   <activity
@@ -377,6 +433,18 @@ jobs:
             --auto-add-overlay
       
           # Add native libs + assets
+          if [ ! -f "apkdir/lib/$ABI/libSDL2.so" ]; then
+            echo "ERROR: libSDL2.so is missing from APK native libs"
+            ls -la apkdir/lib/$ABI || true
+            exit 1
+          fi
+          if [ ! -f "apkdir/lib/$ABI/libc++_shared.so" ]; then
+            echo "ERROR: libc++_shared.so is missing from APK native libs"
+            ls -la apkdir/lib/$ABI || true
+            exit 1
+          fi
+          echo "Packaged native libs:"
+          ls -1 apkdir/lib/$ABI || true
           cd apkdir
           zip -r ../unsigned.apk lib assets >/dev/null
           cd ..
