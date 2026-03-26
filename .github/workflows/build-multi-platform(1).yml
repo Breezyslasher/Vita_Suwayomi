@@ -742,12 +742,31 @@ jobs:
           cmake --build build
       - name: Collect runtime DLLs
         run: |
-          ldd build/VitaSuwayomi.exe | awk '/=>/ {print $3}' | while read -r dep; do
-            [ -f "$dep" ] || continue
-            case "$dep" in
-              /c/Windows/*) continue ;;
+          objdump -p build/VitaSuwayomi.exe | awk '/DLL Name:/{print $3}' | sort -u | while read -r dll; do
+            [ -n "$dll" ] || continue
+            case "$dll" in
+              api-ms-win-*|ext-ms-*|KERNEL32.dll|USER32.dll|GDI32.dll|WINMM.dll|IMM32.dll|OLE32.dll|OLEAUT32.dll|VERSION.dll|SHELL32.dll|ADVAPI32.dll|WS2_32.dll|bcrypt.dll|ntdll.dll)
+                continue
+                ;;
             esac
-            cp -n "$dep" build/
+
+            found=""
+            IFS=':' read -ra path_entries <<< "$PATH"
+            for dir in "${path_entries[@]}"; do
+              candidate="$dir/$dll"
+              if [ -f "$candidate" ]; then
+                case "$candidate" in
+                  /c/Windows/*) break ;;
+                esac
+                cp -n "$candidate" build/
+                found=1
+                break
+              fi
+            done
+
+            if [ -z "$found" ]; then
+              echo "warning: could not locate $dll in PATH"
+            fi
           done
       - name: Upload mingw artifact
         uses: actions/upload-artifact@v4
@@ -756,6 +775,7 @@ jobs:
           path: |
             build/VitaSuwayomi.exe
             build/*.dll
+            build/**/*.dll
             build/resources/
 
   # ───────────────────────────────────────────────
