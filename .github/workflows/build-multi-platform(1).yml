@@ -523,7 +523,8 @@ jobs:
             -DPLATFORM_DESKTOP=ON \
             -DWIN32_TERMINAL=OFF \
             -DZLIB_USE_STATIC_LIBS=ON \
-            -DUSE_SYSTEM_GLFW=ON
+            -DUSE_SYSTEM_GLFW=ON \
+            -DUSE_D3D11=ON
           cmake --build build
       - name: Bundle runtime DLLs
         run: |
@@ -779,7 +780,7 @@ jobs:
           pacman -U --noconfirm *.pkg.tar.zst
       - name: Build
         run: |
-          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON -DUSE_D3D11=ON
           cmake --build build
       - name: Bundle runtime DLLs
         run: |
