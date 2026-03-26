@@ -222,7 +222,7 @@ jobs:
           touch "$PREFIX/lib/libass.a" "$PREFIX/lib/libfreetype.a" "$PREFIX/lib/libfribidi.a" "$PREFIX/lib/libbz2.a" "$PREFIX/lib/libzstd.a" "$PREFIX/lib/libharfbuzz.a"
 
       - name: Cache Android deps (switchfin-style)
-        if: ${{ hashFiles('scripts/android/Makefile') != '' }}
+      
         id: cache-deps
         uses: actions/cache@v4
         with:
@@ -258,19 +258,19 @@ jobs:
           [ -d library/borealis ] && install -m 0755 "$GEN_BIN" library/borealis/libromfs-generator || true
 
       - name: Bump Android version (switchfin-style)
-        if: ${{ hashFiles('app/platform/android/app/build.gradle') != '' }}
+        
         uses: chkfung/android-version-actions@v1.2.2
         with:
           gradlePath: app/platform/android/app/build.gradle
           versionCode: ${{ github.run_number }}
 
       - name: Build Android APK (switchfin-style)
-        if: ${{ hashFiles('app/platform/android/gradlew') != '' }}
+      
         run: |
           cd app/platform/android && ./gradlew assembleRelease
 
       - name: Build Android shared library (fallback CMake)
-        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
+  
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           DEPS: ${{ github.workspace }}/android-deps
