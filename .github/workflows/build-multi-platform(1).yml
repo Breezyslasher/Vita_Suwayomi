@@ -746,6 +746,7 @@ jobs:
           name: VitaSuwayomi-mingw-${{ matrix.arch }}-${{ github.run_number }}
           path: |
             build/VitaSuwayomi.exe
+            build/*.dll
             build/resources/
 
   # ───────────────────────────────────────────────
