@@ -32,6 +32,12 @@ endif()
 # ---------------------------------------------------------------------------
 set(BOREALIS_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/lib/borealis)
 set(BOREALIS_LIBRARY ${BOREALIS_DIR}/library)
+if(EXISTS ${BOREALIS_LIBRARY}/resources)
+    set(BOREALIS_RESOURCES_DIR ${BOREALIS_LIBRARY}/resources)
+else()
+    # Fallback for older layouts.
+    set(BOREALIS_RESOURCES_DIR ${BOREALIS_DIR}/resources)
+endif()
 
 # Forward into borealis-internal cache variables
 set(PLATFORM_DESKTOP ${PLATFORM_DESKTOP} CACHE BOOL "" FORCE)
@@ -40,6 +46,10 @@ set(PLATFORM_PSV     ${PLATFORM_PSV}     CACHE BOOL "" FORCE)
 set(PLATFORM_PS4     ${PLATFORM_PS4}     CACHE BOOL "" FORCE)
 set(PLATFORM_IOS     OFF                 CACHE BOOL "" FORCE)
 set(PLATFORM_ANDROID ${PLATFORM_ANDROID} CACHE BOOL "" FORCE)
+if(PLATFORM_ANDROID)
+    # Borealis/SDL on Android must use GLES context creation.
+    set(USE_GLES2 ON CACHE BOOL "" FORCE)
+endif()
 
 if(PLATFORM_PSV)
     set(BOREALIS_USE_GXM ON  CACHE BOOL "Use GXM renderer for PS Vita" FORCE)
@@ -128,6 +138,12 @@ if(PLATFORM_PSV)
     list(APPEND APP_SOURCES src/utils/vita_stubs.c)
 endif()
 
+if(PLATFORM_ANDROID)
+    list(APPEND APP_SOURCES
+        ${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c
+    )
+endif()
+
 set(APP_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${BOREALIS_LIBRARY}/include
@@ -144,6 +160,11 @@ else()
 endif()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_INCLUDES})
+if(PLATFORM_ANDROID)
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CMAKE_ANDROID_NDK}/sources/android/native_app_glue
+    )
+endif()
 if(PLATFORM_DESKTOP AND APPLE)
     target_include_directories(${PROJECT_NAME} PRIVATE
         /opt/homebrew/include
@@ -157,6 +178,9 @@ endif()
 
 if(PLATFORM_PSV)
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
+elseif(PLATFORM_ANDROID)
+    # Android resources are packaged into APK assets/ root.
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"\")
 elseif(PLATFORM_SWITCH)
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"romfs:/\")
 else()
@@ -265,6 +289,11 @@ elseif(PLATFORM_SWITCH)
 elseif(PLATFORM_PS4)
     target_link_libraries(${PROJECT_NAME}
         SceNet
+    )
+elseif(PLATFORM_ANDROID)
+    target_link_libraries(${PROJECT_NAME}
+        android
+        log
     )
 elseif(PLATFORM_DESKTOP)
     find_package(Threads REQUIRED)
@@ -383,12 +412,58 @@ elseif(PLATFORM_SWITCH)
         ICON   ${CMAKE_CURRENT_SOURCE_DIR}/sce_sys/icon0.png
     )
 
-elseif(PLATFORM_DESKTOP)
-    # Copy resources directory next to the binary so relative paths resolve
+elseif(PLATFORM_ANDROID)
+    # Keep a merged copy of resources in the build tree so fallback APK
+    # packaging can include them under assets/ (see
+    # .github/workflows/build-multi-platform(1).yml).
+    #
+    # Borealis needs its own resources at runtime (e.g. gamecontroller DB used
+    # by SDLInputManager). If only app resources are copied, Android startup can
+    # crash inside window/input initialization.
+    if(EXISTS ${BOREALIS_RESOURCES_DIR})
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/resources
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${BOREALIS_RESOURCES_DIR}
+                ${CMAKE_BINARY_DIR}/resources
+            COMMENT "Copying Borealis resources for Android packaging"
+        )
+    else()
+        message(WARNING "Borealis resources directory not found at ${BOREALIS_RESOURCES_DIR}; skipping Borealis resource copy.")
+    endif()
+
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/resources
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-        COMMENT "Copying resources for desktop build"
+            ${CMAKE_BINARY_DIR}/resources
+        COMMENT "Copying app resources for Android packaging"
     )
+
+elseif(PLATFORM_DESKTOP)
+    # Windows runners package/copy resources in CI after build; avoid failing
+    # the link step on MinGW/MSYS2 due post-build copy issues.
+    if(WIN32)
+        message(STATUS "Skipping desktop POST_BUILD resource copy on WIN32 (handled by packaging workflow)")
+    else()
+        # Copy both Borealis + app resources next to the binary so relative
+        # paths resolve for framework assets and app assets.
+        if(EXISTS ${BOREALIS_RESOURCES_DIR})
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    ${BOREALIS_RESOURCES_DIR}
+                    $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+                COMMENT "Copying Borealis resources for desktop build"
+            )
+        else()
+            message(WARNING "Borealis resources directory not found at ${BOREALIS_RESOURCES_DIR}; skipping Borealis resource copy.")
+        endif()
+
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/resources
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+            COMMENT "Copying app resources for desktop build"
+        )
+    endif()
 endif()

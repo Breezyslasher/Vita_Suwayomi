@@ -16,6 +16,19 @@
 #include "app/downloads_manager.hpp"
 #include "utils/http_client.hpp"
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#include <android_native_app_glue.h>
+#ifndef SDL_MAIN_HANDLED
+#define SDL_MAIN_HANDLED
+#endif
+#if __has_include(<SDL.h>)
+#include <SDL.h>
+#else
+#include <SDL2/SDL.h>
+#endif
+#endif
+
 #ifdef __vita__
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/modulemgr.h>
@@ -146,6 +159,57 @@ static void cleanupVitaNetwork() {
 }
 #endif // __vita__
 
+#ifdef __ANDROID__
+int main(int argc, char* argv[]);
+
+void android_main(struct android_app* app) {
+    // Prevent android_native_app_glue from being optimized out.
+    app_dummy();
+    (void)app;
+
+    __android_log_print(ANDROID_LOG_INFO, "VitaSuwayomi", "android_main started");
+    // Wait until NativeActivity provides a window before initializing SDL/
+    // Borealis windowing. Creating the window too early causes SDL video
+    // initialization to fail on Android.
+    while (app->window == nullptr) {
+        int events = 0;
+        android_poll_source* source = nullptr;
+        if (ALooper_pollOnce(-1, nullptr, &events, reinterpret_cast<void**>(&source)) >= 0) {
+            if (source) {
+                source->process(app, source);
+            }
+            if (app->destroyRequested) {
+                __android_log_print(ANDROID_LOG_WARN, "VitaSuwayomi", "android_main aborted before window init");
+                return;
+            }
+        }
+    }
+
+    // We run through NativeActivity/android_main (not SDLActivity). Tell SDL
+    // runtime that main/bootstrap is ready before Borealis calls SDL_Init.
+    SDL_SetMainReady();
+    char* argv[] = { const_cast<char*>("VitaSuwayomi"), nullptr };
+    int rc = main(1, argv);
+    __android_log_print(ANDROID_LOG_INFO, "VitaSuwayomi", "android_main exited with code %d", rc);
+}
+#endif
+
+#ifdef __ANDROID__
+static void setupAndroidBrlsLogBridge() {
+    brls::Logger::getLogEvent()->subscribe([](brls::Logger::TimePoint, brls::LogLevel level, std::string log) {
+        int androidLevel = ANDROID_LOG_INFO;
+        switch (level) {
+            case brls::LogLevel::LOG_ERROR:   androidLevel = ANDROID_LOG_ERROR; break;
+            case brls::LogLevel::LOG_WARNING: androidLevel = ANDROID_LOG_WARN; break;
+            case brls::LogLevel::LOG_INFO:    androidLevel = ANDROID_LOG_INFO; break;
+            case brls::LogLevel::LOG_DEBUG:   androidLevel = ANDROID_LOG_DEBUG; break;
+            case brls::LogLevel::LOG_VERBOSE: androidLevel = ANDROID_LOG_VERBOSE; break;
+        }
+        __android_log_print(androidLevel, "VitaSuwayomi", "%s", log.c_str());
+    });
+}
+#endif
+
 /**
  * Register custom views
  */
@@ -190,6 +254,9 @@ int main(int argc, char* argv[]) {
 
     if (!brls::Application::init()) {
         brls::Logger::error("Failed to initialize Borealis");
+#ifdef __ANDROID__
+        __android_log_print(ANDROID_LOG_ERROR, "VitaSuwayomi", "Failed to initialize Borealis");
+#endif
 #ifdef __vita__
         if (logFile) fclose(logFile);
         cleanupVitaNetwork();
@@ -197,6 +264,12 @@ int main(int argc, char* argv[]) {
 #endif
         return 1;
     }
+
+#ifdef __ANDROID__
+    // Forward Borealis logs to logcat so startup fatals include a readable
+    // reason (not only a backtrace).
+    setupAndroidBrlsLogBridge();
+#endif
 
 #ifdef __vita__
     // Subscribe to log events to write to file (since setLogOutput doesn't work on Vita)
@@ -232,7 +305,19 @@ int main(int argc, char* argv[]) {
     style.addMetric("brls/sidebar/padding_right", 20.0f);
 
     // Create window
-    brls::Application::createWindow("VitaSuwayomi");
+    try {
+        brls::Application::createWindow("VitaSuwayomi");
+    } catch (const std::exception& e) {
+        brls::Logger::error("Failed to create window: {}", e.what());
+#ifdef __ANDROID__
+        __android_log_print(ANDROID_LOG_ERROR, "VitaSuwayomi", "Failed to create window: %s", e.what());
+#endif
+#ifdef __vita__
+        cleanupVitaNetwork();
+        sceKernelExitProcess(1);
+#endif
+        return 1;
+    }
 
     // Set theme colors
     brls::Application::getPlatform()->getThemeVariant();
