@@ -402,7 +402,8 @@ jobs:
             -d apkdir/classes \
             $(find "$SDL_JAVA_DIR" -name '*.java') \
             apkdir/src/com/vitasuwayomi/app/MainActivity.java
-          "$D8" --lib "$ANDROID_JAR" --output apkdir apkdir/classes
+          jar --create --file apkdir/classes.jar -C apkdir/classes .
+          "$D8" --lib "$ANDROID_JAR" --output apkdir apkdir/classes.jar
 
           # SDLActivity manifest
 
