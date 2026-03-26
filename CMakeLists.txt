@@ -128,6 +128,10 @@ if(PLATFORM_PSV)
     list(APPEND APP_SOURCES src/utils/vita_stubs.c)
 endif()
 
+if(PLATFORM_ANDROID)
+    list(APPEND APP_SOURCES src/android/native_activity_entry.cpp)
+endif()
+
 set(APP_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${BOREALIS_LIBRARY}/include
