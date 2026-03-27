@@ -8,6 +8,8 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
 
+#include <cstdio>
+#include <vector>
 #include <memory>
 
 namespace vitasuwayomi {
@@ -17,11 +19,21 @@ LoginActivity::LoginActivity() {
 }
 
 brls::View* LoginActivity::createContentView() {
+    brls::Logger::info("LoginActivity: loading login UI from XML");
     return brls::View::createFromXMLResource("activity/login.xml");
 }
 
 void LoginActivity::onContentAvailable() {
     brls::Logger::debug("LoginActivity content available");
+
+    // Get views by ID from the inflated XML
+    titleLabel    = getView<brls::Label>("login/title");
+    serverLabel   = getView<brls::Label>("login/server_label");
+    usernameLabel = getView<brls::Label>("login/username_label");
+    passwordLabel = getView<brls::Label>("login/password_label");
+    loginButton   = getView<brls::Button>("login/login_button");
+    offlineButton = getView<brls::Button>("login/offline_button");
+    statusLabel   = getView<brls::Label>("login/status");
 
     // Pre-fill saved connection details from settings
     const AppSettings& settings = Application::getInstance().getSettings();
@@ -90,21 +102,22 @@ void LoginActivity::onContentAvailable() {
 
     // Connect button
     if (loginButton) {
-        loginButton->setText("Connect");
         loginButton->registerClickAction([this](brls::View* view) {
             onConnectPressed();
             return true;
         });
+        loginButton->addGestureRecognizer(new brls::TapGestureRecognizer(loginButton));
     }
 
     // Offline mode button
     if (offlineButton) {
-        offlineButton->setText("Offline");
         offlineButton->registerClickAction([this](brls::View* view) {
             onOfflinePressed();
             return true;
         });
+        offlineButton->addGestureRecognizer(new brls::TapGestureRecognizer(offlineButton));
     }
+
 }
 
 void LoginActivity::onConnectPressed() {
