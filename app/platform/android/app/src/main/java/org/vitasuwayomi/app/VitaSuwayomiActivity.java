@@ -22,9 +22,10 @@ public class VitaSuwayomiActivity extends SDLActivity
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Force landscape before SDL creates its surfaces so foldables do not
-        // launch through a portrait-compatible size and leave stale buffers.
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        // Keep Android in one fixed landscape orientation. Samsung foldables
+        // were relaunching the task through alternate landscape sensor states,
+        // which produced letterboxed bounds and SDL buffer-size mismatches.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         super.onCreate(savedInstanceState);
         mSurface.getHolder().setFormat(PixelFormat.RGBA_8888);
         // Keep the main SDL surface in the normal window stack. Forcing it on
