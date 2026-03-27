@@ -21,6 +21,7 @@ mkdir -p build && cd build
 cmake ..
 make
 
+cd /home/breezy/Downloads/Vita_Suwayomi
   git status
   git add .
   git commit -m "Fix Android login crash"
