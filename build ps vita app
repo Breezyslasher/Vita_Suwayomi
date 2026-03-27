@@ -21,6 +21,10 @@ mkdir -p build && cd build
 cmake ..
 make
 
+  git status
+  git add .
+  git commit -m "Fix Android login crash"
+  git push origin codex/fix-crash-in-android-version
 
 
 
