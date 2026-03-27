@@ -13,6 +13,9 @@ import org.libsdl.app.BorealisHandler;
 import org.libsdl.app.PlatformUtils;
 import org.libsdl.app.SDLActivity;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 public class VitaSuwayomiActivity extends SDLActivity
 {
     protected static SurfaceView mpvSurface;
@@ -25,8 +28,6 @@ public class VitaSuwayomiActivity extends SDLActivity
         super.onCreate(savedInstanceState);
         mSurface.getHolder().setFormat(PixelFormat.RGBA_8888);
         mSurface.setZOrderOnTop(true);
-        mpvSurface = new SurfaceView(this);
-        mLayout.addView(mpvSurface, 0);
 
         PlatformUtils.borealisHandler = new BorealisHandler();
         _setAppScreenBrightness(_getSystemScreenBrightness());
@@ -52,6 +53,25 @@ public class VitaSuwayomiActivity extends SDLActivity
     };
 
     public static Surface getMpvSurface() {
+        if (mpvSurface == null && mSingleton instanceof VitaSuwayomiActivity) {
+            VitaSuwayomiActivity activity = (VitaSuwayomiActivity) mSingleton;
+            CountDownLatch latch = new CountDownLatch(1);
+
+            activity.runOnUiThread(() -> {
+                if (mpvSurface == null) {
+                    mpvSurface = new SurfaceView(activity);
+                    activity.mLayout.addView(mpvSurface, 0);
+                }
+                latch.countDown();
+            });
+
+            try {
+                latch.await(2, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
         if (mpvSurface == null) {
             return null;
         }
