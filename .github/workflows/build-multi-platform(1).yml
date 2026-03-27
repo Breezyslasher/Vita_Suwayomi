@@ -123,7 +123,7 @@ jobs:
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
-          ndk-version: r26d
+          ndk-version: r27d
           link-to-sdk: true
 
       - name: Install Android dependency toolchain
@@ -292,6 +292,9 @@ jobs:
             -DCMAKE_CXX_FLAGS="-I$DEPS/include" \
             -DCMAKE_SHARED_LINKER_FLAGS="-L$DEPS/lib" \
             -DCMAKE_EXE_LINKER_FLAGS="-L$DEPS/lib"
+          if [ -f build-android/_deps/sdl2-src/src/sensor/android/SDL_androidsensor.c ]; then
+            sed -i 's/ALooper_pollAll(/ALooper_pollOnce(/g' build-android/_deps/sdl2-src/src/sensor/android/SDL_androidsensor.c
+          fi
           cmake --build build-android
 
       - name: Upload Android APK
