@@ -156,9 +156,9 @@ static void registerCustomViews() {
 }
 
 /**
- * Main entry point
+ * Main entry point implementation
  */
-int main(int argc, char* argv[]) {
+static int appMain(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
 
@@ -268,3 +268,17 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+
+
+/**
+ * Main entry point
+ */
+int main(int argc, char* argv[]) {
+    return appMain(argc, argv);
+}
+
+#if defined(__ANDROID__)
+extern "C" int SDL_main(int argc, char* argv[]) {
+    return appMain(argc, argv);
+}
+#endif
