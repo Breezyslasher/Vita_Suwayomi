@@ -140,9 +140,15 @@ jobs:
         gradlePath: app/platform/android/app/build.gradle
         versionCode: ${{ github.run_number }}
         versionName: ${{ github.ref_name }}
+    - name: Prepare Android sources and native dependencies
+      run: |
+        ln -sfn "${{ github.workspace }}" app/platform/android/app/jni/src
+        rm -rf app/platform/android/app/libs
+        mkdir -p app/platform/android/app/libs
+        cp -a jniLibs/. app/platform/android/app/libs/
     - name: Build APK
       run: |
-        ${{ github.workspace }}/library/borealis/build_libromfs_generator.sh
+        ${{ github.workspace }}/lib/borealis/build_libromfs_generator.sh
         cd app/platform/android && ./gradlew assembleRelease
     - name: Upload dist
       uses: actions/upload-artifact@v4

@@ -6,7 +6,7 @@ project(jni)
 # include(AndroidNdkModules)
 # android_ndk_import_module_cpufeatures()
 
-set(MPV_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/src/jniLibs/${ANDROID_ABI}")
+set(MPV_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/../libs/${ANDROID_ABI}")
 set(ENV{PKG_CONFIG_SYSROOT_DIR} ${MPV_PREFIX})
 set(ENV{PKG_CONFIG_LIBDIR} ${MPV_PREFIX}/lib/pkgconfig)
 set(CMAKE_PREFIX_PATH ${MPV_PREFIX})
@@ -23,7 +23,7 @@ set(APP_PLATFORM_LIB
     ${MPV_PREFIX}/lib/libavutil.so
 )
 
-set(LIBROMFS_PREBUILT_GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/src/library/borealis/libromfs-generator" CACHE STRING "")
+set(LIBROMFS_PREBUILT_GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/borealis/libromfs-generator" CACHE STRING "")
 if (NOT EXISTS "${LIBROMFS_PREBUILT_GENERATOR}")
     message(FATAL_ERROR "libromfs-generator has not been built, please refer to borealis/build_libromfs_generator.sh for more information")
 endif()
