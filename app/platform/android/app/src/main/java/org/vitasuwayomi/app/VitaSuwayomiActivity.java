@@ -1,5 +1,6 @@
 package org.vitasuwayomi.app;
 
+import android.content.pm.ActivityInfo;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
 import android.os.Bundle;
@@ -18,6 +19,9 @@ public class VitaSuwayomiActivity extends SDLActivity
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Force landscape before SDL creates its surfaces so foldables do not
+        // launch through a portrait-compatible size and leave stale buffers.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         super.onCreate(savedInstanceState);
         mSurface.getHolder().setFormat(PixelFormat.RGBA_8888);
         mSurface.setZOrderOnTop(true);
