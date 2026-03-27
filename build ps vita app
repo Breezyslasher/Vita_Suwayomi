@@ -24,7 +24,7 @@ make
   git status
   git add .
   git commit -m "Fix Android login crash"
-  git push origin codex/fix-crash-in-android-version
+  git push origin codex/fix-setpadding-error-in-login_activity.cpp
 
 
 
