@@ -14,6 +14,19 @@
 
 namespace vitasuwayomi {
 
+namespace {
+
+template <typename T>
+T* findView(brls::View* root, const std::string& id) {
+    if (!root) {
+        return nullptr;
+    }
+
+    return dynamic_cast<T*>(root->getView(id));
+}
+
+}
+
 LoginActivity::LoginActivity() {
     brls::Logger::debug("LoginActivity created");
 }
@@ -33,18 +46,29 @@ brls::View* LoginActivity::createContentView() {
         if (FILE* f = std::fopen(path.c_str(), "rb")) {
             std::fclose(f);
             brls::Logger::info("LoginActivity: loading XML from '{}'", path);
-            return brls::View::createFromXMLFile(path);
+            m_contentView = brls::View::createFromXMLFile(path);
+            return m_contentView;
         }
     }
 
     brls::Logger::error("LoginActivity: login.xml not found in any known location");
     auto* fallback = new brls::Label();
     fallback->setText("Login UI missing (resources not packaged).");
+    m_contentView = fallback;
     return fallback;
 }
 
 void LoginActivity::onContentAvailable() {
     brls::Logger::debug("LoginActivity content available");
+
+    titleLabel = findView<brls::Label>(m_contentView, "login/title");
+    inputContainer = findView<brls::Box>(m_contentView, "login/input_container");
+    serverLabel = findView<brls::Label>(m_contentView, "login/server_label");
+    usernameLabel = findView<brls::Label>(m_contentView, "login/username_label");
+    passwordLabel = findView<brls::Label>(m_contentView, "login/password_label");
+    loginButton = findView<brls::Button>(m_contentView, "login/login_button");
+    offlineButton = findView<brls::Button>(m_contentView, "login/offline_button");
+    statusLabel = findView<brls::Label>(m_contentView, "login/status");
 
     // Pre-fill saved connection details from settings
     const AppSettings& settings = Application::getInstance().getSettings();
