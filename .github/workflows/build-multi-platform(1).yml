@@ -101,388 +101,54 @@ jobs:
           path: build/VitaSuwayomi.vpk
 
   # ───────────────────────────────────────────────
-  # Android — arm64-v8a
+  # Android — switchfin-style APK build
   # ───────────────────────────────────────────────
   build-android:
-    name: Android (arm64-v8a)
+    if: ${{ inputs.platform == 'android' || startsWith(github.ref, 'refs/tags/') }}
+    name: Android
     runs-on: ubuntu-latest
-    if: ${{ inputs.platform == 'android' || startsWith(github.ref, 'refs/tags/') || github.event_name != 'workflow_dispatch' }}
-
     steps:
-      - name: Install build requirements
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y cmake ninja-build git pkg-config
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    - uses: nttld/setup-ndk@v1
+      id: setup-ndk
+      with:
+        ndk-version: r27d
+        link-to-sdk: true
+    - name: Install dependency
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ninja-build pkg-config meson nasm make zstd
+    - name: Cache depends
+      id: cache-deps
+      uses: actions/cache@v4
+      with:
+        path: jniLibs
+        key: jniLibs-${{ hashFiles('scripts/android/Makefile') }}
+    - name: Build packages
+      if: steps.cache-deps.outputs.cache-hit != 'true'
+      run: |
+        make -C scripts/android TMPDIR=${{ runner.temp }} download
+        make -C scripts/android TMPDIR=${{ runner.temp }} ABI=armeabi-v7a \
+          ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
+        make -C scripts/android TMPDIR=${{ runner.temp }} ABI=arm64-v8a \
+          ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
+    - name: Bump version
+      uses: chkfung/android-version-actions@v1.2.2
+      with:
+        gradlePath: app/platform/android/app/build.gradle
+        versionCode: ${{ github.run_number }}
+    - name: Build APK
+      run: |
+        ${{ github.workspace }}/library/borealis/build_libromfs_generator.sh
+        cd app/platform/android && ./gradlew assembleRelease
+    - name: Upload dist
+      uses: actions/upload-artifact@v4
+      with:
+        name: VitaSuwayomi-android-${{ github.run_number }}
+        path: app/platform/android/app/build/outputs/apk/release/*.apk
 
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r27d
-          link-to-sdk: true
-
-      - name: Install Android dependency toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config meson nasm make zstd
-
-      - name: Build Android native dependencies
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: |
-          set -e
-          NDK=$ANDROID_NDK_HOME
-          TC=$NDK/build/cmake/android.toolchain.cmake
-          PREFIX=${{ github.workspace }}/android-deps
-          TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
-          TARGET=aarch64-linux-android24
-          export AR=$TOOLCHAIN/bin/llvm-ar
-          export CC=$TOOLCHAIN/bin/$TARGET-clang
-          export CXX=$TOOLCHAIN/bin/$TARGET-clang++
-          export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
-          export STRIP=$TOOLCHAIN/bin/llvm-strip
-          export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig"
-          mkdir -p "$PREFIX"
-          NCPU=$(nproc)
-
-          CMAKE_COMMON=(
-            -G Ninja
-            -DCMAKE_TOOLCHAIN_FILE="$TC"
-            -DANDROID_ABI=arm64-v8a
-            -DANDROID_PLATFORM=android-24
-            -DCMAKE_INSTALL_PREFIX="$PREFIX"
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_PREFIX_PATH="$PREFIX"
-            -DCMAKE_FIND_ROOT_PATH="$PREFIX"
-          )
-
-          # ── SDL2 (git clone) ───────────────────────────────────────────
-          rm -rf /tmp/SDL build-sdl2
-          git clone --depth 1 --branch release-2.30.10 https://github.com/libsdl-org/SDL.git /tmp/SDL
-          cmake -S /tmp/SDL -B build-sdl2 "${CMAKE_COMMON[@]}" \
-            -DSDL_SHARED=ON \
-            -DSDL_STATIC=OFF \
-            -DSDL_TEST=OFF
-          cmake --build build-sdl2 -j$NCPU && cmake --install build-sdl2
-
-          # ── zlib (git clone) ─────────────────────────────────────────
-          rm -rf /tmp/zlib
-          git clone --depth 1 --branch v1.3.1 https://github.com/madler/zlib.git /tmp/zlib
-          cmake -S /tmp/zlib -B build-zlib "${CMAKE_COMMON[@]}"
-          cmake --build build-zlib -j$NCPU && cmake --install build-zlib
-
-          # ── libpng (git clone) ───────────────────────────────────────
-          rm -rf /tmp/libpng
-          git clone --depth 1 --branch v1.6.43 https://github.com/glennrp/libpng.git /tmp/libpng
-          cmake -S /tmp/libpng -B build-png "${CMAKE_COMMON[@]}" \
-            -DPNG_SHARED=OFF -DPNG_TESTS=OFF
-          cmake --build build-png -j$NCPU && cmake --install build-png
-
-          # ── libwebp (git clone) ─────────────────────────────────────
-          rm -rf /tmp/libwebp build-webp
-          git clone --depth 1 --branch v1.4.0 https://github.com/webmproject/libwebp.git /tmp/libwebp
-          cmake -S /tmp/libwebp -B build-webp "${CMAKE_COMMON[@]}" \
-            -DWEBP_BUILD_ANIM_UTILS=OFF \
-            -DWEBP_BUILD_CWEBP=OFF \
-            -DWEBP_BUILD_DWEBP=OFF \
-            -DWEBP_BUILD_GIF2WEBP=OFF \
-            -DWEBP_BUILD_IMG2WEBP=OFF \
-            -DWEBP_BUILD_VWEBP=OFF \
-            -DWEBP_BUILD_WEBPINFO=OFF \
-            -DWEBP_BUILD_WEBPMUX=OFF \
-            -DWEBP_BUILD_EXTRAS=OFF
-          cmake --build build-webp -j$NCPU && cmake --install build-webp
-
-          # ── mbedtls (git clone) ────────────────────────────────────────
-          rm -rf /tmp/mbedtls
-          git clone --depth 1 --branch mbedtls-3.6.3 https://github.com/Mbed-TLS/mbedtls.git /tmp/mbedtls
-          cmake -S /tmp/mbedtls -B build-mbedtls "${CMAKE_COMMON[@]}" \
-            -DENABLE_TESTING=OFF \
-            -DENABLE_PROGRAMS=OFF
-          cmake --build build-mbedtls -j$NCPU && cmake --install build-mbedtls
-
-          # ── curl (git clone) ─────────────────────────────────────────
-          rm -rf /tmp/curl build-curl
-          git clone --depth 1 --branch curl-8_11_1 https://github.com/curl/curl.git /tmp/curl
-          cmake -S /tmp/curl -B build-curl "${CMAKE_COMMON[@]}" \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DBUILD_CURL_EXE=OFF \
-            -DBUILD_TESTING=OFF \
-            -DCURL_USE_MBEDTLS=ON \
-            -DCURL_USE_OPENSSL=OFF \
-            -DCURL_DISABLE_LDAP=ON
-          cmake --build build-curl -j$NCPU && cmake --install build-curl
-
-          # ── stub libraries for missing deps ───────────────────────────
-          touch "$PREFIX/lib/libass.a" "$PREFIX/lib/libfreetype.a" "$PREFIX/lib/libfribidi.a" "$PREFIX/lib/libbz2.a" "$PREFIX/lib/libzstd.a" "$PREFIX/lib/libharfbuzz.a"
-
-      - name: Cache Android deps (switchfin-style)
-        if: ${{ hashFiles('scripts/android/Makefile') != '' }}
-        id: cache-deps
-        uses: actions/cache@v4
-        with:
-          path: jniLibs
-          key: jniLibs-${{ hashFiles('scripts/android/Makefile') }}
-
-      - name: Build Android packages (switchfin-style)
-        if: ${{ hashFiles('scripts/android/Makefile') != '' && steps.cache-deps.outputs.cache-hit != 'true' }}
-        run: |
-          make -C scripts/android TMPDIR=${{ runner.temp }} download
-          make -C scripts/android TMPDIR=${{ runner.temp }} ABI=armeabi-v7a \
-            ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
-          make -C scripts/android TMPDIR=${{ runner.temp }} ABI=arm64-v8a \
-            ANDROID_NDK=${{ steps.setup-ndk.outputs.ndk-path }} build
-
-      - name: Build libromfs-generator (host)
-        run: |
-          if [ -d lib/borealis/library/lib/extern/libromfs/generator ]; then
-            GEN_SRC="lib/borealis/library/lib/extern/libromfs/generator"
-          elif [ -d library/borealis/library/lib/extern/libromfs/generator ]; then
-            GEN_SRC="library/borealis/library/lib/extern/libromfs/generator"
-          else
-            echo "Could not find libromfs generator source directory"
-            exit 1
-          fi
-          cmake -S "$GEN_SRC" -B /tmp/libromfs-generator -G Ninja
-          cmake --build /tmp/libromfs-generator
-          GEN_BIN="/tmp/libromfs-generator/libromfs-generator"
-          sudo install -m 0755 "$GEN_BIN" /usr/local/bin/libromfs-generator
-          # borealis toolchain.cmake checks ${CMAKE_SOURCE_DIR}/libromfs-generator (repo root)
-          install -m 0755 "$GEN_BIN" ./libromfs-generator
-          [ -d lib/borealis ] && install -m 0755 "$GEN_BIN" lib/borealis/libromfs-generator || true
-          [ -d library/borealis ] && install -m 0755 "$GEN_BIN" library/borealis/libromfs-generator || true
-
-      - name: Bump Android version (switchfin-style)
-        if: ${{ hashFiles('app/platform/android/app/build.gradle') != '' }}
-        uses: chkfung/android-version-actions@v1.2.2
-        with:
-          gradlePath: app/platform/android/app/build.gradle
-          versionCode: ${{ github.run_number }}
-
-      - name: Build Android APK (switchfin-style)
-        if: ${{ hashFiles('app/platform/android/gradlew') != '' }}
-        run: |
-          cd app/platform/android && ./gradlew assembleRelease
-
-      - name: Build Android shared library (fallback CMake)
-        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          DEPS: ${{ github.workspace }}/android-deps
-        run: |
-          cmake -B build-android -G Ninja \
-            -DPLATFORM_ANDROID=ON \
-            -DLIBROMFS_PROJECT_NAME=VitaSuwayomi \
-            -DLIBROMFS_RESOURCE_LOCATION=${{ github.workspace }}/resources \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-24 \
-            -DANDROID_STL=c++_shared \
-            -DCMAKE_PREFIX_PATH="$DEPS" \
-            -DCMAKE_FIND_ROOT_PATH="$DEPS" \
-            -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
-            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=BOTH \
-            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=BOTH \
-            -DCMAKE_C_FLAGS="-I$DEPS/include" \
-            -DCMAKE_CXX_FLAGS="-I$DEPS/include" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-L$DEPS/lib" \
-            -DCMAKE_EXE_LINKER_FLAGS="-L$DEPS/lib"
-          if [ -f build-android/_deps/sdl2-src/src/sensor/android/SDL_androidsensor.c ]; then
-            sed -i 's/ALooper_pollAll(/ALooper_pollOnce(/g' build-android/_deps/sdl2-src/src/sensor/android/SDL_androidsensor.c
-          fi
-          cmake --build build-android
-
-      - name: Upload Android APK
-        if: ${{ hashFiles('app/platform/android/gradlew') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: VitaSuwayomi-android-apk-${{ github.run_number }}
-          path: app/platform/android/app/build/outputs/apk/release/*.apk
-
-      - name: Setup Android SDK
-        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
-        uses: android-actions/setup-android@v2
-
-      - name: Create APK with native lib
-        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: |
-          set -e
-      
-          ABI=arm64-v8a
-          VERSION=${{ github.run_number }}
-          TARGET_TRIPLE=aarch64-linux-android
-      
-          ANDROID_JAR=$(find $ANDROID_HOME/platforms -name "android.jar" | head -1)
-          AAPT2=$(find $ANDROID_HOME/build-tools -name "aapt2" | head -1)
-          ZIPALIGN=$(find $ANDROID_HOME/build-tools -name "zipalign" | head -1)
-          APKSIGNER=$(find $ANDROID_HOME/build-tools -name "apksigner" | head -1)
-          READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
-      
-          mkdir -p apkdir/lib/$ABI
-          mkdir -p apkdir/res/drawable
-          mkdir -p apkdir/assets
-      
-          # Copy app native lib
-          cp build-android/libVitaSuwayomi.so apkdir/lib/$ABI/
-
-          # Copy dependent shared libs (e.g. SDL2) so NativeActivity can load
-          # libVitaSuwayomi.so without dlopen failures.
-          for so in build-android/lib*.so android-deps/lib/lib*.so jniLibs/$ABI/*.so; do
-            [ -f "$so" ] || continue
-            base="$(basename "$so")"
-            [ "$base" = "libVitaSuwayomi.so" ] && continue
-            cp -f "$so" "apkdir/lib/$ABI/$base"
-          done
-
-          # Copy all transitive native dependencies (including libc++_shared)
-          # by reading DT_NEEDED entries and resolving them from known paths.
-          SEARCH_DIRS=(
-            "apkdir/lib/$ABI"
-            "build-android"
-            "android-deps/lib"
-            "jniLibs/$ABI"
-            "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$TARGET_TRIPLE"
-            "$ANDROID_NDK_HOME/sources/cxx-stl/llvm-libc++/libs/$ABI"
-          )
-          CHANGED=1
-          while [ "$CHANGED" -eq 1 ]; do
-            CHANGED=0
-            for sofile in apkdir/lib/$ABI/*.so; do
-              [ -f "$sofile" ] || continue
-              while IFS= read -r needed; do
-                [ -n "$needed" ] || continue
-                if [ -f "apkdir/lib/$ABI/$needed" ]; then
-                  continue
-                fi
-                for d in "${SEARCH_DIRS[@]}"; do
-                  if [ -f "$d/$needed" ]; then
-                    cp -f "$d/$needed" "apkdir/lib/$ABI/$needed"
-                    CHANGED=1
-                    break
-                  fi
-                done
-              done < <("$READELF" -d "$sofile" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\].*/\1/p')
-            done
-          done
-      
-          # Copy resources if they exist
-          cp -r build-android/resources/* apkdir/assets/ 2>/dev/null || true
-      
-          # Icon
-          if [ -f sce_sys/icon0.png ]; then
-            cp sce_sys/icon0.png apkdir/res/drawable/icon.png
-          else
-            echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=" | base64 -d > apkdir/res/drawable/icon.png
-          fi
-      
-          # ✅ NativeActivity manifest (NO heredoc issues)
-
-          cat > apkdir/AndroidManifest.xml <<EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.vitasuwayomi.app"
-              android:versionCode="$VERSION"
-              android:versionName="1.0">
-          
-              <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
-              <uses-permission android:name="android.permission.INTERNET"/>
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
-              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
-          
-              <application
-                  android:label="VitaSuwayomi"
-                  android:hasCode="false"
-                  android:requestLegacyExternalStorage="true"
-                  android:extractNativeLibs="true">
-          
-                  <activity
-                      android:name="android.app.NativeActivity"
-                      android:exported="true"
-                      android:label="VitaSuwayomi"
-                      android:configChanges="orientation|keyboardHidden|screenSize">
-          
-                      <meta-data
-                          android:name="android.app.lib_name"
-                          android:value="VitaSuwayomi" />
-          
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-          
-                  </activity>
-          
-              </application>
-          </manifest>
-          EOF
-     
-      
-          # Compile resources
-          $AAPT2 compile --dir apkdir/res -o compiled_res.zip
-      
-          # Link APK
-          $AAPT2 link \
-            -o unsigned.apk \
-            -I "$ANDROID_JAR" \
-            --manifest apkdir/AndroidManifest.xml \
-            compiled_res.zip \
-            --auto-add-overlay
-      
-          # Add native libs + assets
-          if [ ! -f "apkdir/lib/$ABI/libSDL2.so" ]; then
-            echo "ERROR: libSDL2.so is missing from APK native libs"
-            ls -la apkdir/lib/$ABI || true
-            exit 1
-          fi
-          if [ ! -f "apkdir/lib/$ABI/libc++_shared.so" ]; then
-            echo "ERROR: libc++_shared.so is missing from APK native libs"
-            ls -la apkdir/lib/$ABI || true
-            exit 1
-          fi
-          echo "Packaged native libs:"
-          ls -1 apkdir/lib/$ABI || true
-          cd apkdir
-          zip -r ../unsigned.apk lib assets >/dev/null
-          cd ..
-      
-          # Align
-          $ZIPALIGN -p 4 unsigned.apk aligned.apk
-      
-          # Debug keystore
-          keytool -genkeypair \
-            -keystore debug.keystore \
-            -storepass android \
-            -keypass android \
-            -alias androiddebugkey \
-            -dname "CN=Android Debug,O=Android,C=US" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000
-      
-          # Sign
-          $APKSIGNER sign \
-            --ks debug.keystore \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            --out VitaSuwayomi-android-$VERSION.apk \
-            aligned.apk
-      
-          rm -f unsigned.apk aligned.apk compiled_res.zip debug.keystore
-
-      - name: Upload Android APK
-        if: ${{ hashFiles('app/platform/android/gradlew') == '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: VitaSuwayomi-android-apk-${{ github.run_number }}
-          path: VitaSuwayomi-android-${{ github.run_number }}.apk
-      
   # ───────────────────────────────────────────────
   # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
   # ───────────────────────────────────────────────
