@@ -123,7 +123,7 @@ jobs:
         uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
-          ndk-version: r27d
+          ndk-version: r26d
           link-to-sdk: true
 
       - name: Install Android dependency toolchain
