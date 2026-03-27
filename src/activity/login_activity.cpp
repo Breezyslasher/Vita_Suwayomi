@@ -27,13 +27,13 @@ void LoginActivity::onContentAvailable() {
     brls::Logger::debug("LoginActivity content available");
 
     // Get views by ID from the inflated XML
-    titleLabel    = getView<brls::Label>("login/title");
-    serverLabel   = getView<brls::Label>("login/server_label");
-    usernameLabel = getView<brls::Label>("login/username_label");
-    passwordLabel = getView<brls::Label>("login/password_label");
-    loginButton   = getView<brls::Button>("login/login_button");
-    offlineButton = getView<brls::Button>("login/offline_button");
-    statusLabel   = getView<brls::Label>("login/status");
+    titleLabel    = static_cast<brls::Label*>(getView("login/title"));
+    serverLabel   = static_cast<brls::Label*>(getView("login/server_label"));
+    usernameLabel = static_cast<brls::Label*>(getView("login/username_label"));
+    passwordLabel = static_cast<brls::Label*>(getView("login/password_label"));
+    loginButton   = static_cast<brls::Button*>(getView("login/login_button"));
+    offlineButton = static_cast<brls::Button*>(getView("login/offline_button"));
+    statusLabel   = static_cast<brls::Label*>(getView("login/status"));
 
     // Pre-fill saved connection details from settings
     const AppSettings& settings = Application::getInstance().getSettings();
