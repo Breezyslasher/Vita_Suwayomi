@@ -15,6 +15,7 @@
 #include "view/rotatable_image.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/http_client.hpp"
+#include <clocale>
 
 #ifdef __vita__
 #include <psp2/kernel/processmgr.h>
@@ -161,6 +162,10 @@ static void registerCustomViews() {
 static int appMain(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
+
+    // Match Switchfin's startup locale so Borealis/font shaping uses a UTF-8
+    // locale on Android instead of falling back to the "C" locale.
+    std::setlocale(LC_ALL, "C.UTF-8");
 
 #ifdef __vita__
     // Initialize Vita-specific systems
