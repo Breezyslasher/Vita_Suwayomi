@@ -23,7 +23,6 @@ brls::Label* makeInteractiveLabel(const std::string& text) {
     label->setMarginBottom(15);
     label->setBackgroundColor(nvgRGBA(255, 255, 255, 18));
     label->setCornerRadius(6);
-    label->setPadding(12, 10, 12, 10);
     return label;
 }
 
