@@ -23,15 +23,14 @@ private:
     void onConnectPressed();
     void onOfflinePressed();
 
-    brls::View* m_contentView = nullptr;
-    brls::Label* titleLabel = nullptr;
-    brls::Box* inputContainer = nullptr;
-    brls::Label* serverLabel = nullptr;
-    brls::Label* usernameLabel = nullptr;
-    brls::Label* passwordLabel = nullptr;
-    brls::Button* loginButton = nullptr;
-    brls::Button* offlineButton = nullptr;
-    brls::Label* statusLabel = nullptr;
+    BRLS_BIND(brls::Label, titleLabel, "login/title");
+    BRLS_BIND(brls::Box, inputContainer, "login/input_container");
+    BRLS_BIND(brls::Label, serverLabel, "login/server_label");
+    BRLS_BIND(brls::Label, usernameLabel, "login/username_label");
+    BRLS_BIND(brls::Label, passwordLabel, "login/password_label");
+    BRLS_BIND(brls::Button, loginButton, "login/login_button");
+    BRLS_BIND(brls::Button, offlineButton, "login/offline_button");
+    BRLS_BIND(brls::Label, statusLabel, "login/status");
 
     std::string m_serverUrl;
     std::string m_username;
