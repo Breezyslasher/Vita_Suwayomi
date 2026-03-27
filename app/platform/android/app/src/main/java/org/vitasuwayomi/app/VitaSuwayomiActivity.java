@@ -27,6 +27,11 @@ public class VitaSuwayomiActivity extends SDLActivity
         // which produced letterboxed bounds and SDL buffer-size mismatches.
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         super.onCreate(savedInstanceState);
+        // SDLActivity starts non-fullscreen and only later switches to
+        // immersive mode, which creates an initial 2160x1651 surface on this
+        // device before resizing it to 2160x1856. Force fullscreen now so the
+        // first surface size matches the final window bounds.
+        SDLActivity.setWindowStyle(true);
         mSurface.getHolder().setFormat(PixelFormat.RGBA_8888);
         // Keep the main SDL surface in the normal window stack. Forcing it on
         // top can leave Android showing a blank fullscreen SurfaceView over the
