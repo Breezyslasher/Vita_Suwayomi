@@ -187,11 +187,6 @@ void LoginActivity::onContentAvailable() {
         offlineButton->addGestureRecognizer(new brls::TapGestureRecognizer(offlineButton));
     }
 
-    if (serverLabel) {
-        serverLabel->requestFocus();
-    } else if (loginButton) {
-        loginButton->requestFocus();
-    }
 }
 
 void LoginActivity::onConnectPressed() {
