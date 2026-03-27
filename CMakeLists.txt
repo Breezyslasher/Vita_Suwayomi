@@ -191,7 +191,20 @@ else()
     endif()
 endif()
 
-if(WIN32)
+if(PLATFORM_ANDROID)
+    # Android dependency bundle intentionally omits libpng/libbz2/libzstd.
+    # Keeping these out of the explicit link list avoids CI link failures when
+    # those optional transitives are not packaged in jniLibs.
+    set(APP_RENDER_LIBS
+        ass
+        freetype
+        fribidi
+        webp
+        z
+        c
+        harfbuzz
+    )
+elseif(WIN32)
     set(APP_RENDER_LIBS
         bz2
         webp
@@ -210,7 +223,7 @@ else()
     )
 endif()
 
-if(NOT PLATFORM_PS4 AND NOT WIN32)
+if(NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
     list(APPEND APP_RENDER_LIBS
         zstd
         harfbuzz

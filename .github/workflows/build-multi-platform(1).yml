@@ -140,9 +140,32 @@ jobs:
         gradlePath: app/platform/android/app/build.gradle
         versionCode: ${{ github.run_number }}
         versionName: ${{ github.ref_name }}
+    - name: Prepare Android sources and native dependencies
+      run: |
+        rm -rf app/platform/android/app/libs
+        mkdir -p app/platform/android/app/libs
+        for abi in armeabi-v7a arm64-v8a x86_64; do
+          src_libdir="jniLibs/${abi}/lib"
+          [ -d "${src_libdir}" ] || continue
+
+          # Normalize optional linker names for CMake (-lpng/-lbz2/-lzstd).
+          for missing in png bz2 zstd; do
+            [ -e "${src_libdir}/lib${missing}.so" ] && continue
+            [ -e "${src_libdir}/lib${missing}.a" ] && continue
+            candidate="$(find "${src_libdir}" -maxdepth 1 -type f \( -name "lib${missing}*.so*" -o -name "lib${missing}*.a" \) | head -n1)"
+            [ -n "${candidate}" ] || continue
+            ln -sfn "$(basename "${candidate}")" "${src_libdir}/lib${missing}.so"
+            echo "Aliased ${src_libdir}/lib${missing}.so -> $(basename "${candidate}")"
+          done
+
+          # Only stage runtime .so files for packaging to keep Gradle memory low.
+          dst_libdir="app/platform/android/app/libs/${abi}"
+          mkdir -p "${dst_libdir}"
+          find "${src_libdir}" -maxdepth 1 \( -name "*.so" -o -name "*.so.*" \) -exec cp -a {} "${dst_libdir}/" \;
+        done
     - name: Build APK
       run: |
-        ${{ github.workspace }}/library/borealis/build_libromfs_generator.sh
+        ${{ github.workspace }}/lib/borealis/build_libromfs_generator.sh
         cd app/platform/android && ./gradlew assembleRelease
     - name: Upload dist
       uses: actions/upload-artifact@v4
