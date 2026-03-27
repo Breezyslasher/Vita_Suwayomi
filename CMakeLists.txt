@@ -46,7 +46,7 @@ if(PLATFORM_PSV)
     set(USE_VITA_SHARK  OFF  CACHE BOOL "Use VitaShark for shader compilation" FORCE)
 endif()
 
-set(USE_LIBROMFS OFF CACHE BOOL "Use libromfs" FORCE)
+set(USE_LIBROMFS OFF CACHE BOOL "Use libromfs")
 
 include(${BOREALIS_LIBRARY}/cmake/commonOption.cmake)
 include(${BOREALIS_LIBRARY}/cmake/toolchain.cmake)
@@ -157,7 +157,7 @@ endif()
 
 if(PLATFORM_PSV)
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
-elseif(PLATFORM_SWITCH)
+elseif(PLATFORM_SWITCH OR (PLATFORM_ANDROID AND USE_LIBROMFS))
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"romfs:/\")
 else()
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"resources/\")

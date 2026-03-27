@@ -8,6 +8,8 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
 
+#include <cstdio>
+#include <vector>
 #include <memory>
 
 namespace vitasuwayomi {
@@ -17,7 +19,28 @@ LoginActivity::LoginActivity() {
 }
 
 brls::View* LoginActivity::createContentView() {
-    return brls::View::createFromXMLResource("activity/login.xml");
+    const std::vector<std::string> candidates = {
+        std::string(RESOURCE_PREFIX) + "xml/activity/login.xml",
+        std::string(RESOURCE_PREFIX) + "activity/login.xml",
+        "romfs:/xml/activity/login.xml",
+        "romfs:/activity/login.xml",
+        "resources/xml/activity/login.xml",
+        "resources/activity/login.xml",
+        "activity/login.xml",
+    };
+
+    for (const auto& path : candidates) {
+        if (FILE* f = std::fopen(path.c_str(), "rb")) {
+            std::fclose(f);
+            brls::Logger::info("LoginActivity: loading XML from '{}'", path);
+            return brls::View::createFromXMLFile(path);
+        }
+    }
+
+    brls::Logger::error("LoginActivity: login.xml not found in any known location");
+    auto* fallback = new brls::Label();
+    fallback->setText("Login UI missing (resources not packaged).");
+    return fallback;
 }
 
 void LoginActivity::onContentAvailable() {
