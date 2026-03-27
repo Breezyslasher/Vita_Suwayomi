@@ -27,7 +27,10 @@ public class VitaSuwayomiActivity extends SDLActivity
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         super.onCreate(savedInstanceState);
         mSurface.getHolder().setFormat(PixelFormat.RGBA_8888);
-        mSurface.setZOrderOnTop(true);
+        // Keep the main SDL surface in the normal window stack. Forcing it on
+        // top can leave Android showing a blank fullscreen SurfaceView over the
+        // Borealis login UI after launch/resizing.
+        mSurface.setZOrderOnTop(false);
 
         PlatformUtils.borealisHandler = new BorealisHandler();
         _setAppScreenBrightness(_getSystemScreenBrightness());
