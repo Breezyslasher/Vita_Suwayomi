@@ -35,10 +35,20 @@ set(APP_PLATFORM_LIB
     ${MPV_PREFIX}/lib/libavutil.so
 )
 
-set(LIBROMFS_PREBUILT_GENERATOR "${APP_SOURCE_ROOT}/lib/borealis/libromfs-generator" CACHE STRING "" FORCE)
-if (NOT EXISTS "${LIBROMFS_PREBUILT_GENERATOR}")
-    message(FATAL_ERROR "libromfs-generator has not been built, please refer to borealis/build_libromfs_generator.sh for more information")
-endif()
+# FIX: Do NOT use libromfs for Android.
+#
+# Previously USE_LIBROMFS=ON was set here, which embedded resources into the .so
+# via a romfs blob. This caused two problems:
+#   1. The libromfs generator had to be built and available before CMake configure.
+#   2. The borealis system resources (i18n/hints.json, img/sys/) were not in the
+#      romfs bundle, causing brls::fatal() in createFromXMLFile because borealis
+#      resources were missing.
+#
+# Switchfin (the upstream this app is based on) does NOT use libromfs for Android.
+# Instead it uses RESOURCE_PREFIX="resources/" and SDL2's AAssetManager bridge:
+# SDL_RWFromFile("resources/foo") on Android reads from the APK's assets/ folder.
+# Resources are packaged into assets/ by Gradle (see build.gradle assets.srcDirs).
+# This approach is simpler, more reliable, and matches the upstream exactly.
 
 # app option
 set(PLATFORM_ANDROID ON CACHE BOOL "")
@@ -46,13 +56,8 @@ set(USE_SYSTEM_CURL ON CACHE BOOL "")
 set(USE_SYSTEM_SDL2 ON CACHE BOOL "")
 set(USE_GLES3 ON CACHE BOOL "")
 set(SIMPLE_HIGHLIGHT ON CACHE BOOL "")
-set(USE_LIBROMFS ON CACHE BOOL "" FORCE)
-set(LIBROMFS_PROJECT_NAME "VitaSuwayomi" CACHE STRING "" FORCE)
-set(LIBROMFS_RESOURCE_LOCATION "${APP_SOURCE_ROOT}/resources" CACHE PATH "" FORCE)
-
-if (NOT EXISTS "${LIBROMFS_RESOURCE_LOCATION}")
-    message(FATAL_ERROR "LIBROMFS_RESOURCE_LOCATION does not exist: ${LIBROMFS_RESOURCE_LOCATION}")
-endif()
+# USE_LIBROMFS intentionally NOT set — defaults to OFF, giving RESOURCE_PREFIX="resources/"
+# which SDL2 resolves via AAssetManager from the APK assets/ folder.
 
 # https://github.com/curl/curl/issues/12086
 # if (ANDROID_ABI STREQUAL armeabi-v7a)
