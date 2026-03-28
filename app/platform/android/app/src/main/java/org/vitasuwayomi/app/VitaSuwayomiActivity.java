@@ -46,6 +46,15 @@ public class VitaSuwayomiActivity extends SDLActivity
                 brightnessObserver);
     }
 
+
+    @Override
+    public void setOrientationBis(int w, int h, boolean resizable, String hint) {
+        // SDL defaults to SENSOR_LANDSCAPE when both landscape directions are
+        // allowed. On some Android devices this causes repeated 90/270
+        // orientation churn and surface relayout loops. Keep this activity in a
+        // single fixed landscape orientation.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+    }
     private void _setAppScreenBrightness(float value) {
         PlatformUtils.setAppScreenBrightness(this, value);
     }
