@@ -33,9 +33,10 @@ public class VitaSuwayomiActivity extends SDLActivity
         // first surface size matches the final window bounds.
         SDLActivity.setWindowStyle(true);
         mSurface.getHolder().setFormat(PixelFormat.RGBA_8888);
-        // Keep the SDL render surface on top so Borealis text/widgets are
-        // actually visible on devices that otherwise present a blank frame.
-        mSurface.setZOrderOnTop(true);
+        // Keep the main SDL surface in the normal window stack. Forcing it on
+        // top can leave Android showing a blank fullscreen SurfaceView over the
+        // Borealis login UI after launch/resizing.
+        mSurface.setZOrderOnTop(false);
 
         PlatformUtils.borealisHandler = new BorealisHandler();
         _setAppScreenBrightness(_getSystemScreenBrightness());
