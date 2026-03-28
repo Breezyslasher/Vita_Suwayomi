@@ -93,14 +93,9 @@ public class VitaSuwayomiActivity extends SDLActivity
 
         getContentResolver().unregisterContentObserver(brightnessObserver);
 
-        // Android does not recommend using exit(0) directly,
-        // but borealis heavily uses static variables,
-        // which can cause some problems when reloading the program.
-
-        // In SDL3, we can use SDL_HINT_ANDROID_ALLOW_RECREATE_ACTIVITY to control the behavior
-
-        // In SDL2, Force exit of the app.
-        System.exit(0);
+        // Do not force-exit the process here. Android may destroy/recreate the
+        // activity during normal lifecycle events, and killing the process can
+        // interrupt Borealis navigation and look like a frozen transition.
     }
 
     @Override
