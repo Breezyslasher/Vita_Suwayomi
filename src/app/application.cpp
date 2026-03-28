@@ -23,11 +23,38 @@
 #include <psp2/io/stat.h>
 #endif
 
+#if defined(__ANDROID__)
+#include <sys/stat.h>
+#include "platform/paths.hpp"
+#endif
+
 namespace vitasuwayomi {
 
+// FIX: Settings path is now platform-aware.
+// Android uses SDL internal storage (writable, no permission needed).
+// Old code used "./VitaSuwayomi_settings.json" for all non-Vita platforms,
+// which is not writable on Android and caused silent settings failures.
 #ifdef __vita__
 static const char* SETTINGS_PATH = "ux0:data/VitaSuwayomi/settings.json";
-static const char* SETTINGS_DIR = "ux0:data/VitaSuwayomi";
+static const char* SETTINGS_DIR  = "ux0:data/VitaSuwayomi";
+#elif defined(__ANDROID__)
+// On Android the data dir is resolved at runtime via SDL; build the path lazily.
+static std::string s_settingsPath;
+static std::string s_settingsDir;
+static const char* getSettingsPath() {
+    if (s_settingsPath.empty()) {
+        s_settingsDir  = getAndroidDataDir();   // e.g. /data/user/0/.../files/VitaSuwayomi
+        s_settingsPath = s_settingsDir + "/settings.json";
+    }
+    return s_settingsPath.c_str();
+}
+static const char* getSettingsDir() {
+    getSettingsPath(); // ensure initialised
+    return s_settingsDir.c_str();
+}
+// Macros so the rest of the file can still use SETTINGS_PATH / SETTINGS_DIR.
+#define SETTINGS_PATH (getSettingsPath())
+#define SETTINGS_DIR  (getSettingsDir())
 #else
 static const char* SETTINGS_PATH = "./VitaSuwayomi_settings.json";
 #endif
@@ -124,9 +151,19 @@ bool Application::init() {
     brls::Logger::info("VitaSuwayomi {} initializing...", VITA_SUWAYOMI_VERSION);
 
 #ifdef __vita__
-    // Create data directory
+    // Create data directory on Vita
     int ret = sceIoMkdir("ux0:data/VitaSuwayomi", 0777);
     brls::Logger::debug("sceIoMkdir result: {:#x}", ret);
+#elif defined(__ANDROID__)
+    // FIX: Create data directory on Android using POSIX mkdir.
+    // SDL_AndroidGetInternalStoragePath() already exists, but our subdir
+    // VitaSuwayomi/ does not — create it so settings/downloads can be saved.
+    const char* dir = SETTINGS_DIR;
+    if (mkdir(dir, 0755) == 0) {
+        brls::Logger::info("Created data directory: {}", dir);
+    } else if (errno != EEXIST) {
+        brls::Logger::warning("Could not create data directory {}: errno={}", dir, errno);
+    }
 #endif
 
     // Load saved settings

@@ -10,6 +10,7 @@
  * Supported platforms:
  *   PS Vita  – ux0:data/VitaSuwayomi
  *   Switch   – sdmc:/VitaSuwayomi
+ *   Android  – <SDL internal storage>/VitaSuwayomi  (resolved at runtime)
  *   Desktop  – ./VitaSuwayomi   (next to the executable)
  */
 
@@ -19,20 +20,61 @@
     static constexpr const char* PLATFORM_DATA_DIR = "ux0:data/VitaSuwayomi";
 #elif defined(__SWITCH__)
     static constexpr const char* PLATFORM_DATA_DIR = "sdmc:/VitaSuwayomi";
+#elif defined(__ANDROID__)
+    // On Android the writable path is determined at runtime via SDL.
+    // PLATFORM_DATA_DIR is left empty here — use getAndroidDataDir() instead
+    // of PLATFORM_DATA_DIR directly. platformPath() calls getAndroidDataDir()
+    // automatically on Android.
+    static constexpr const char* PLATFORM_DATA_DIR = "";
 #else
     static constexpr const char* PLATFORM_DATA_DIR = "./VitaSuwayomi";
+#endif
+
+#if defined(__ANDROID__)
+#include <SDL2/SDL.h>
+#include <string>
+
+/**
+ * Returns the Android-specific writable data directory (internal storage).
+ * Result is cached after first call. Thread-safe after SDL init.
+ * Example: /data/user/0/org.vitasuwayomi.app/files/VitaSuwayomi
+ */
+inline const std::string& getAndroidDataDir() {
+    static std::string s_dataDir;
+    if (s_dataDir.empty()) {
+        const char* internalPath = SDL_AndroidGetInternalStoragePath();
+        if (internalPath && internalPath[0] != '\0') {
+            s_dataDir = std::string(internalPath) + "/VitaSuwayomi";
+        } else {
+            // Absolute fallback — should never happen in practice
+            s_dataDir = "/sdcard/VitaSuwayomi";
+        }
+    }
+    return s_dataDir;
+}
 #endif
 
 /**
  * Build a full path rooted at the platform data directory.
  * Example: platformPath("downloads") -> "ux0:data/VitaSuwayomi/downloads"
+ *
+ * On Android the base directory is resolved via SDL_AndroidGetInternalStoragePath()
+ * so that the path is always writable without requiring external storage permission.
  */
 inline std::string platformPath(const char* relative) {
+#if defined(__ANDROID__)
+    return getAndroidDataDir() + "/" + relative;
+#else
     return std::string(PLATFORM_DATA_DIR) + "/" + relative;
+#endif
 }
 
 inline std::string platformPath(const std::string& relative) {
+#if defined(__ANDROID__)
+    return getAndroidDataDir() + "/" + relative;
+#else
     return std::string(PLATFORM_DATA_DIR) + "/" + relative;
+#endif
 }
 
 /**
@@ -41,6 +83,7 @@ inline std::string platformPath(const std::string& relative) {
  *
  * Vita  : paths start with ux0:, ur0:, uma0:, imc0:, or absolute /
  * Switch: paths start with sdmc:/ or absolute /
+ * Android: absolute paths (always /)
  * Desktop: absolute paths (/) or paths under the data dir
  */
 inline bool isPlatformLocalPath(const std::string& url) {
@@ -53,6 +96,8 @@ inline bool isPlatformLocalPath(const std::string& url) {
            url[0] == '/';
 #elif defined(__SWITCH__)
     return url.find("sdmc:/") == 0 || url[0] == '/';
+#elif defined(__ANDROID__)
+    return url[0] == '/';
 #else
     // Desktop: absolute path or anything under our data dir
     return url[0] == '/' ||

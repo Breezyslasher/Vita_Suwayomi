@@ -94,7 +94,7 @@ static bool initVitaSystem() {
 }
 
 /**
- * Initialize networking
+ * Initialize networking (Vita-specific: also inits net/ssl/http system modules)
  */
 static bool initVitaNetwork() {
     brls::Logger::info("Initializing networking...");
@@ -128,7 +128,7 @@ static bool initVitaNetwork() {
         return false;
     }
 
-    // Initialize curl
+    // Initialize curl (Vita path)
     vitasuwayomi::HttpClient::globalInit();
 
     brls::Logger::info("Networking initialized");
@@ -175,6 +175,7 @@ static int appMain(int argc, char* argv[]) {
     }
 
     if (!initVitaNetwork()) {
+        // curl globalInit is called inside initVitaNetwork() on Vita
         sceKernelExitProcess(1);
         return 1;
     }
@@ -185,8 +186,15 @@ static int appMain(int argc, char* argv[]) {
     if (logFile) {
         // Use line buffering so logs are written immediately
         setvbuf(logFile, NULL, _IOLBF, 0);
-        // Note: brls::Logger::setLogOutput doesn't work on Vita (uses sceClibPrintf)
-        // We'll subscribe to log events after Borealis init
+    }
+#else
+    // FIX: On Android and Desktop, curl_global_init must still be called.
+    // Previously this only happened inside initVitaNetwork() which was
+    // behind #ifdef __vita__, so Android builds never initialized curl —
+    // causing a freeze/deadlock the moment any network call was made.
+    if (!vitasuwayomi::HttpClient::globalInit()) {
+        brls::Logger::error("Failed to initialize curl");
+        return 1;
     }
 #endif
 
@@ -199,6 +207,8 @@ static int appMain(int argc, char* argv[]) {
         if (logFile) fclose(logFile);
         cleanupVitaNetwork();
         sceKernelExitProcess(1);
+#else
+        vitasuwayomi::HttpClient::globalCleanup();
 #endif
         return 1;
     }
@@ -256,6 +266,8 @@ static int appMain(int argc, char* argv[]) {
 #ifdef __vita__
         cleanupVitaNetwork();
         sceKernelExitProcess(1);
+#else
+        vitasuwayomi::HttpClient::globalCleanup();
 #endif
         return 1;
     }
@@ -269,6 +281,8 @@ static int appMain(int argc, char* argv[]) {
 #ifdef __vita__
     cleanupVitaNetwork();
     sceKernelExitProcess(0);
+#else
+    vitasuwayomi::HttpClient::globalCleanup();
 #endif
 
     return 0;

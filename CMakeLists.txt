@@ -397,11 +397,51 @@ elseif(PLATFORM_SWITCH)
     )
 
 elseif(PLATFORM_DESKTOP)
-    # Copy resources directory next to the binary so relative paths resolve
+    # Copy app resources next to the binary so relative paths resolve.
+    # Also copy borealis system resources (i18n/hints.json, img/sys/) which
+    # are not checked in to resources/ but are required by borealis at runtime.
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/resources
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-        COMMENT "Copying resources for desktop build"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${BOREALIS_DIR}/resources/i18n
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/i18n
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${BOREALIS_DIR}/resources/img
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/img
+        COMMENT "Copying resources (app + borealis) for desktop build"
+    )
+endif()
+
+# ---------------------------------------------------------------------------
+# Android: merge borealis system resources into resources/ before libromfs
+# bundles them.
+#
+# Problem: LIBROMFS_RESOURCE_LOCATION points to resources/ which only has
+# the app's own assets. Borealis also needs its own resources at runtime:
+#   - resources/i18n/en-US/hints.json   (button-hint localisation)
+#   - resources/img/sys/*.png           (wifi/battery/ethernet status icons)
+#
+# These live in lib/borealis/resources/ but are NOT committed to resources/
+# in this repo (unlike Switchfin which pre-merges them). Without them the
+# libromfs bundle is incomplete, borealis fails to load i18n/theme data,
+# and the result is a blank screen with no text rendered.
+#
+# Fix: add a PRE_BUILD step that copies the missing borealis resources into
+# resources/ so the libromfs generator picks them up automatically.
+# The copy is cheap and idempotent.
+# ---------------------------------------------------------------------------
+if(PLATFORM_ANDROID)
+    add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${BOREALIS_DIR}/resources/i18n/en-US/hints.json
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/i18n/en-US/hints.json
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/img/sys
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${BOREALIS_DIR}/resources/img/sys
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/img/sys
+        COMMENT "Merging borealis system resources into resources/ for libromfs"
     )
 endif()
