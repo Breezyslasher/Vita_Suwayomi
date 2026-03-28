@@ -26,9 +26,9 @@ private:
     brls::View* m_contentView = nullptr;
     brls::Label* titleLabel = nullptr;
     brls::Box* inputContainer = nullptr;
-    brls::Label* serverLabel = nullptr;
-    brls::Label* usernameLabel = nullptr;
-    brls::Label* passwordLabel = nullptr;
+    brls::InputCell* serverInput = nullptr;
+    brls::InputCell* usernameInput = nullptr;
+    brls::InputCell* passwordInput = nullptr;
     brls::Button* loginButton = nullptr;
     brls::Button* offlineButton = nullptr;
     brls::Label* statusLabel = nullptr;
