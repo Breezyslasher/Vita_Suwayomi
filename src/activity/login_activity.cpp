@@ -399,6 +399,7 @@ void LoginActivity::onConnectPressed() {
                 if (statusLabel) statusLabel->setText("Connected! (" + modeName + ")");
 
                 Application::getInstance().pushMainActivity();
+                brls::Logger::info("LoginActivity: MainActivity push requested");
             } else {
                 if (statusLabel) statusLabel->setText("Connection failed");
             }
@@ -419,7 +420,6 @@ void LoginActivity::onOfflinePressed() {
         if (settings.localServerUrl.empty()) {
             settings.localServerUrl = m_serverUrl;
         }
-        Application::getInstance().saveSettings();
     }
 
     // Mark as disconnected (offline)
@@ -427,11 +427,15 @@ void LoginActivity::onOfflinePressed() {
 
     if (statusLabel) statusLabel->setText("Entering offline mode...");
 
-    // Dispatch activity navigation through Borealis sync to ensure this runs on
-    // the Borealis/UI loop thread across all platforms (including Android).
-    brls::sync([]() {
-        Application::getInstance().pushMainActivity();
+    // Persist settings in the background to avoid blocking UI navigation on
+    // slower Android storage.
+    asyncRun([]() {
+        Application::getInstance().saveSettings();
     });
+
+    // Navigate immediately from the button callback thread to avoid Android
+    // stalls observed when dispatching this transition through brls::sync.
+    Application::getInstance().pushMainActivity();
 }
 
 std::string LoginActivity::getAuthModeName(AuthMode mode) {
