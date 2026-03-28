@@ -15,6 +15,35 @@
 namespace vitasuwayomi {
 
 namespace {
+std::string trimCopy(std::string value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+std::string normalizeServerUrl(std::string url) {
+    url = trimCopy(url);
+    if (url.empty()) {
+        return url;
+    }
+
+    // Android IME input often omits the scheme, which leads to libcurl
+    // connect failures/timeouts for host:port input.
+    if (url.find("://") == std::string::npos) {
+        url = "http://" + url;
+    }
+
+    while (!url.empty() && url.back() == '/') {
+        url.pop_back();
+    }
+
+    return url;
+}
+
 brls::Label* makeInteractiveLabel(const std::string& text) {
     auto* label = new brls::Label();
     label->setText(text);
@@ -138,8 +167,8 @@ void LoginActivity::onContentAvailable() {
         serverLabel->setText(std::string("Server: ") + (m_serverUrl.empty() ? "Not set" : m_serverUrl));
         serverLabel->registerClickAction([this](brls::View* view) {
             brls::Application::getImeManager()->openForText([this](std::string text) {
-                m_serverUrl = text;
-                serverLabel->setText(std::string("Server: ") + text);
+                m_serverUrl = normalizeServerUrl(text);
+                serverLabel->setText(std::string("Server: ") + (m_serverUrl.empty() ? "Not set" : m_serverUrl));
             }, "Enter Server URL", "http://your-server:4567", 256, m_serverUrl);
             return true;
         });
@@ -195,6 +224,11 @@ void LoginActivity::onContentAvailable() {
 }
 
 void LoginActivity::onConnectPressed() {
+    m_serverUrl = normalizeServerUrl(m_serverUrl);
+    if (serverLabel) {
+        serverLabel->setText(std::string("Server: ") + (m_serverUrl.empty() ? "Not set" : m_serverUrl));
+    }
+
     if (m_serverUrl.empty()) {
         if (statusLabel) statusLabel->setText("Please enter server URL");
         return;
