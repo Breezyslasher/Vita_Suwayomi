@@ -14,26 +14,98 @@
 
 namespace vitasuwayomi {
 
+namespace {
+brls::Label* makeInteractiveLabel(const std::string& text) {
+    auto* label = new brls::Label();
+    label->setText(text);
+    label->setFontSize(18);
+    label->setFocusable(true);
+    label->setMarginBottom(15);
+    label->setBackgroundColor(nvgRGBA(255, 255, 255, 18));
+    label->setTextColor(Application::getInstance().getTextColor());
+    label->setCornerRadius(6);
+    return label;
+}
+
+}
+
 LoginActivity::LoginActivity() {
     brls::Logger::debug("LoginActivity created");
 }
 
 brls::View* LoginActivity::createContentView() {
-    brls::Logger::info("LoginActivity: loading login UI from XML");
-    return brls::View::createFromXMLResource("activity/login.xml");
+    brls::Logger::info("LoginActivity: building login UI programmatically");
+
+    auto* root = new brls::Box();
+    root->setAxis(brls::Axis::COLUMN);
+    root->setJustifyContent(brls::JustifyContent::CENTER);
+    root->setAlignItems(brls::AlignItems::CENTER);
+    root->setPaddingTop(50);
+    root->setPaddingRight(50);
+    root->setPaddingBottom(50);
+    root->setPaddingLeft(50);
+    root->setGrow(1.0f);
+    root->setBackgroundColor(Application::getInstance().getDeepBackground());
+
+    titleLabel = new brls::Label();
+    titleLabel->setText("VitaSuwayomi");
+    titleLabel->setFontSize(36);
+    titleLabel->setTextColor(Application::getInstance().getTextColor());
+    titleLabel->setMarginBottom(40);
+    root->addView(titleLabel);
+
+    inputContainer = new brls::Box();
+    inputContainer->setAxis(brls::Axis::COLUMN);
+    inputContainer->setAlignItems(brls::AlignItems::STRETCH);
+    inputContainer->setWidth(700);
+    inputContainer->setMarginBottom(30);
+
+    serverLabel = makeInteractiveLabel("Server: Not set");
+    usernameLabel = makeInteractiveLabel("Username: (optional)");
+    passwordLabel = makeInteractiveLabel("Password: (optional)");
+    passwordLabel->setMarginBottom(0);
+
+    inputContainer->addView(serverLabel);
+    inputContainer->addView(usernameLabel);
+    inputContainer->addView(passwordLabel);
+    root->addView(inputContainer);
+
+    auto* buttonRow = new brls::Box();
+    buttonRow->setAxis(brls::Axis::ROW);
+    buttonRow->setJustifyContent(brls::JustifyContent::CENTER);
+    buttonRow->setAlignItems(brls::AlignItems::CENTER);
+    buttonRow->setMarginBottom(20);
+
+    loginButton = new brls::Button();
+    loginButton->setText("Connect");
+    loginButton->setTextColor(nvgRGB(255, 255, 255));
+    loginButton->setWidth(180);
+    loginButton->setHeight(44);
+    loginButton->setMarginRight(15);
+    buttonRow->addView(loginButton);
+
+    offlineButton = new brls::Button();
+    offlineButton->setText("Offline");
+    offlineButton->setTextColor(nvgRGB(255, 255, 255));
+    offlineButton->setWidth(150);
+    offlineButton->setHeight(44);
+    buttonRow->addView(offlineButton);
+
+    root->addView(buttonRow);
+
+    statusLabel = new brls::Label();
+    statusLabel->setText("");
+    statusLabel->setFontSize(16);
+    statusLabel->setTextColor(Application::getInstance().getSubtitleColor());
+    statusLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+    root->addView(statusLabel);
+
+    m_contentView = root;
+    return root;
 }
 
 void LoginActivity::onContentAvailable() {
     brls::Logger::debug("LoginActivity content available");
-
-    // Get views by ID from the inflated XML
-    titleLabel    = static_cast<brls::Label*>(getView("login/title"));
-    serverLabel   = static_cast<brls::Label*>(getView("login/server_label"));
-    usernameLabel = static_cast<brls::Label*>(getView("login/username_label"));
-    passwordLabel = static_cast<brls::Label*>(getView("login/password_label"));
-    loginButton   = static_cast<brls::Button*>(getView("login/login_button"));
-    offlineButton = static_cast<brls::Button*>(getView("login/offline_button"));
-    statusLabel   = static_cast<brls::Label*>(getView("login/status"));
 
     // Pre-fill saved connection details from settings
     const AppSettings& settings = Application::getInstance().getSettings();
@@ -102,6 +174,8 @@ void LoginActivity::onContentAvailable() {
 
     // Connect button
     if (loginButton) {
+        loginButton->setText("Connect");
+        loginButton->setTextColor(nvgRGB(255, 255, 255));
         loginButton->registerClickAction([this](brls::View* view) {
             onConnectPressed();
             return true;
@@ -111,6 +185,8 @@ void LoginActivity::onContentAvailable() {
 
     // Offline mode button
     if (offlineButton) {
+        offlineButton->setText("Offline");
+        offlineButton->setTextColor(nvgRGB(255, 255, 255));
         offlineButton->registerClickAction([this](brls::View* view) {
             onOfflinePressed();
             return true;
