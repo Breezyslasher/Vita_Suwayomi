@@ -21,8 +21,6 @@ brls::Label* makeInteractiveLabel(const std::string& text) {
     label->setFontSize(18);
     label->setFocusable(true);
     label->setMarginBottom(15);
-    label->setBackgroundColor(nvgRGBA(255, 255, 255, 18));
-    label->setTextColor(Application::getInstance().getTextColor());
     label->setCornerRadius(6);
     label->setHeight(40);
     return label;
@@ -46,12 +44,10 @@ brls::View* LoginActivity::createContentView() {
     root->setPaddingBottom(50);
     root->setPaddingLeft(50);
     root->setGrow(1.0f);
-    root->setBackgroundColor(Application::getInstance().getDeepBackground());
 
     titleLabel = new brls::Label();
     titleLabel->setText("VitaSuwayomi");
     titleLabel->setFontSize(36);
-    titleLabel->setTextColor(Application::getInstance().getTextColor());
     titleLabel->setHeight(50);
     titleLabel->setMarginBottom(40);
     root->addView(titleLabel);
@@ -96,7 +92,6 @@ brls::View* LoginActivity::createContentView() {
     statusLabel = new brls::Label();
     statusLabel->setText("");
     statusLabel->setFontSize(16);
-    statusLabel->setTextColor(Application::getInstance().getSubtitleColor());
     statusLabel->setHorizontalAlign(brls::HorizontalAlign::CENTER);
     root->addView(statusLabel);
 
