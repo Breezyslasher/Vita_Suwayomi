@@ -163,6 +163,16 @@ jobs:
           mkdir -p "${dst_libdir}"
           find "${src_libdir}" -maxdepth 1 \( -name "*.so" -o -name "*.so.*" \) -exec cp -a {} "${dst_libdir}/" \;
         done
+    - name: Merge borealis system resources into resources/
+      # FIX: The libromfs bundle for Android is built from resources/ in this repo,
+      # but borealis also needs its own system resources at runtime (i18n hints,
+      # img/sys status icons). Without them the app renders a blank screen with no
+      # text. Switchfin pre-commits these files; we copy them here instead so the
+      # source tree stays clean.
+      run: |
+        mkdir -p resources/i18n/en-US resources/img/sys
+        cp lib/borealis/resources/i18n/en-US/hints.json resources/i18n/en-US/hints.json
+        cp -r lib/borealis/resources/img/sys/. resources/img/sys/
     - name: Build APK
       run: |
         ${{ github.workspace }}/lib/borealis/build_libromfs_generator.sh
