@@ -1,6 +1,5 @@
 package org.vitasuwayomi.app;
 
-import android.content.pm.ActivityInfo;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
 import android.os.Bundle;
@@ -22,21 +21,11 @@ public class VitaSuwayomiActivity extends SDLActivity
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Keep Android in one fixed landscape orientation. Samsung foldables
-        // were relaunching the task through alternate landscape sensor states,
-        // which produced letterboxed bounds and SDL buffer-size mismatches.
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         super.onCreate(savedInstanceState);
-        // SDLActivity starts non-fullscreen and only later switches to
-        // immersive mode, which creates an initial 2160x1651 surface on this
-        // device before resizing it to 2160x1856. Force fullscreen now so the
-        // first surface size matches the final window bounds.
-        SDLActivity.setWindowStyle(true);
         mSurface.getHolder().setFormat(PixelFormat.RGBA_8888);
-        // Keep the main SDL surface in the normal window stack. Forcing it on
-        // top can leave Android showing a blank fullscreen SurfaceView over the
-        // Borealis login UI after launch/resizing.
-        mSurface.setZOrderOnTop(false);
+        mSurface.setZOrderOnTop(true);
+        mpvSurface = new SurfaceView(this);
+        mLayout.addView(mpvSurface, 0);
 
         PlatformUtils.borealisHandler = new BorealisHandler();
         _setAppScreenBrightness(_getSystemScreenBrightness());
@@ -93,14 +82,9 @@ public class VitaSuwayomiActivity extends SDLActivity
 
         getContentResolver().unregisterContentObserver(brightnessObserver);
 
-        // Android does not recommend using exit(0) directly,
-        // but borealis heavily uses static variables,
-        // which can cause some problems when reloading the program.
-
-        // In SDL3, we can use SDL_HINT_ANDROID_ALLOW_RECREATE_ACTIVITY to control the behavior
-
-        // In SDL2, Force exit of the app.
-        System.exit(0);
+        // Do not force-exit the process here. Android may destroy/recreate the
+        // activity during normal lifecycle events, and killing the process can
+        // interrupt Borealis navigation and look like a frozen transition.
     }
 
     @Override
