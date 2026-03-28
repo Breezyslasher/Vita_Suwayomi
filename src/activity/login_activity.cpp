@@ -224,6 +224,8 @@ void LoginActivity::onContentAvailable() {
 }
 
 void LoginActivity::onConnectPressed() {
+    brls::Logger::info("LoginActivity: Connect pressed");
+
     m_serverUrl = normalizeServerUrl(m_serverUrl);
     if (serverLabel) {
         serverLabel->setText(std::string("Server: ") + (m_serverUrl.empty() ? "Not set" : m_serverUrl));
@@ -425,9 +427,9 @@ void LoginActivity::onOfflinePressed() {
 
     if (statusLabel) statusLabel->setText("Entering offline mode...");
 
-    brls::sync([]() {
-        Application::getInstance().pushMainActivity();
-    });
+    // We are already on the UI thread from the button callback, so jumping
+    // through brls::sync here can stall navigation on some platforms.
+    Application::getInstance().pushMainActivity();
 }
 
 std::string LoginActivity::getAuthModeName(AuthMode mode) {
