@@ -15,6 +15,35 @@
 namespace vitasuwayomi {
 
 namespace {
+std::string trimCopy(std::string value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+std::string normalizeServerUrl(std::string url) {
+    url = trimCopy(url);
+    if (url.empty()) {
+        return url;
+    }
+
+    // Android IME input often omits the scheme, which leads to libcurl
+    // connect failures/timeouts for host:port input.
+    if (url.find("://") == std::string::npos) {
+        url = "http://" + url;
+    }
+
+    while (!url.empty() && url.back() == '/') {
+        url.pop_back();
+    }
+
+    return url;
+}
+
 brls::Label* makeInteractiveLabel(const std::string& text) {
     auto* label = new brls::Label();
     label->setText(text);
@@ -138,8 +167,8 @@ void LoginActivity::onContentAvailable() {
         serverLabel->setText(std::string("Server: ") + (m_serverUrl.empty() ? "Not set" : m_serverUrl));
         serverLabel->registerClickAction([this](brls::View* view) {
             brls::Application::getImeManager()->openForText([this](std::string text) {
-                m_serverUrl = text;
-                serverLabel->setText(std::string("Server: ") + text);
+                m_serverUrl = normalizeServerUrl(text);
+                serverLabel->setText(std::string("Server: ") + (m_serverUrl.empty() ? "Not set" : m_serverUrl));
             }, "Enter Server URL", "http://your-server:4567", 256, m_serverUrl);
             return true;
         });
@@ -195,6 +224,13 @@ void LoginActivity::onContentAvailable() {
 }
 
 void LoginActivity::onConnectPressed() {
+    brls::Logger::info("LoginActivity: Connect pressed");
+
+    m_serverUrl = normalizeServerUrl(m_serverUrl);
+    if (serverLabel) {
+        serverLabel->setText(std::string("Server: ") + (m_serverUrl.empty() ? "Not set" : m_serverUrl));
+    }
+
     if (m_serverUrl.empty()) {
         if (statusLabel) statusLabel->setText("Please enter server URL");
         return;
@@ -363,6 +399,7 @@ void LoginActivity::onConnectPressed() {
                 if (statusLabel) statusLabel->setText("Connected! (" + modeName + ")");
 
                 Application::getInstance().pushMainActivity();
+                brls::Logger::info("LoginActivity: MainActivity push requested");
             } else {
                 if (statusLabel) statusLabel->setText("Connection failed");
             }
@@ -383,7 +420,6 @@ void LoginActivity::onOfflinePressed() {
         if (settings.localServerUrl.empty()) {
             settings.localServerUrl = m_serverUrl;
         }
-        Application::getInstance().saveSettings();
     }
 
     // Mark as disconnected (offline)
@@ -391,9 +427,15 @@ void LoginActivity::onOfflinePressed() {
 
     if (statusLabel) statusLabel->setText("Entering offline mode...");
 
-    brls::sync([]() {
-        Application::getInstance().pushMainActivity();
+    // Persist settings in the background to avoid blocking UI navigation on
+    // slower Android storage.
+    asyncRun([]() {
+        Application::getInstance().saveSettings();
     });
+
+    // Navigate immediately from the button callback thread to avoid Android
+    // stalls observed when dispatching this transition through brls::sync.
+    Application::getInstance().pushMainActivity();
 }
 
 std::string LoginActivity::getAuthModeName(AuthMode mode) {
