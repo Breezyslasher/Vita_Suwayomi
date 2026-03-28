@@ -24,6 +24,7 @@ brls::Label* makeInteractiveLabel(const std::string& text) {
     label->setBackgroundColor(nvgRGBA(255, 255, 255, 18));
     label->setTextColor(Application::getInstance().getTextColor());
     label->setCornerRadius(6);
+    label->setHeight(40);
     return label;
 }
 
@@ -51,6 +52,7 @@ brls::View* LoginActivity::createContentView() {
     titleLabel->setText("VitaSuwayomi");
     titleLabel->setFontSize(36);
     titleLabel->setTextColor(Application::getInstance().getTextColor());
+    titleLabel->setHeight(50);
     titleLabel->setMarginBottom(40);
     root->addView(titleLabel);
 
@@ -78,7 +80,6 @@ brls::View* LoginActivity::createContentView() {
 
     loginButton = new brls::Button();
     loginButton->setText("Connect");
-    loginButton->setTextColor(nvgRGB(255, 255, 255));
     loginButton->setWidth(180);
     loginButton->setHeight(44);
     loginButton->setMarginRight(15);
@@ -86,7 +87,6 @@ brls::View* LoginActivity::createContentView() {
 
     offlineButton = new brls::Button();
     offlineButton->setText("Offline");
-    offlineButton->setTextColor(nvgRGB(255, 255, 255));
     offlineButton->setWidth(150);
     offlineButton->setHeight(44);
     buttonRow->addView(offlineButton);
@@ -175,7 +175,6 @@ void LoginActivity::onContentAvailable() {
     // Connect button
     if (loginButton) {
         loginButton->setText("Connect");
-        loginButton->setTextColor(nvgRGB(255, 255, 255));
         loginButton->registerClickAction([this](brls::View* view) {
             onConnectPressed();
             return true;
@@ -186,7 +185,6 @@ void LoginActivity::onContentAvailable() {
     // Offline mode button
     if (offlineButton) {
         offlineButton->setText("Offline");
-        offlineButton->setTextColor(nvgRGB(255, 255, 255));
         offlineButton->registerClickAction([this](brls::View* view) {
             onOfflinePressed();
             return true;
