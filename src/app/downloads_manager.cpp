@@ -45,8 +45,28 @@
 
 namespace vitasuwayomi {
 
-static const std::string DOWNLOADS_BASE_PATH = platformPath("downloads");
-static const std::string STATE_FILE_PATH     = platformPath("downloads_state.json");
+// FIX: These MUST NOT be static initializers on Android.
+//
+// Static variables with non-trivial constructors are evaluated when the .so
+// is loaded by the dynamic linker (inside __dl_soinfo::call_constructors),
+// which happens BEFORE SDL_main() runs and before SDL has registered the
+// JVM/Activity context. platformPath() calls SDL_AndroidGetInternalStoragePath()
+// which needs a live Activity — calling it at load time triggers a JNI abort
+// and the library load fails immediately (seen as a crash in VitaSuwayomiActivity.onCreate).
+//
+// Fix: use lazy getter functions so platformPath() is only called the first
+// time the value is actually needed (well after SDL init).
+static const std::string& getDownloadsBasePath() {
+    static const std::string s = platformPath("downloads");
+    return s;
+}
+static const std::string& getStateFilePath() {
+    static const std::string s = platformPath("downloads_state.json");
+    return s;
+}
+// Keep the old names as macros so no other code needs to change.
+#define DOWNLOADS_BASE_PATH (getDownloadsBasePath())
+#define STATE_FILE_PATH     (getStateFilePath())
 
 // Helper to create directory (cross-platform)
 static bool createDirectory(const std::string& path) {
