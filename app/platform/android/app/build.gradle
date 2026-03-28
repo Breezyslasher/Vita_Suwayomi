@@ -51,13 +51,24 @@ android {
             signingConfig signingConfigs.release
         }
     }
-    applicationVariants.all { variant ->
-        tasks["merge${variant.name.capitalize()}Assets"]
-                .dependsOn("externalNativeBuild${variant.name.capitalize()}")
-    }
     if (!project.hasProperty('EXCLUDE_NATIVE_LIBS')) {
         sourceSets.main {
             jniLibs.srcDir 'libs'
+
+            // FIX: Package app resources as APK assets so SDL2's AAssetManager
+            // bridge can read them via SDL_RWFromFile("resources/...").
+            //
+            // With USE_LIBROMFS=OFF (see jni/CMakeLists.txt), borealis uses
+            // RESOURCE_PREFIX="resources/" and reads all assets through SDL.
+            // SDL2 on Android intercepts fopen("resources/foo") and reads from
+            // the APK assets folder: assets/resources/foo.
+            //
+            // The staging dir (src/main/assets) is populated by the
+            // syncBorealisResources Gradle task below, which copies:
+            //   - app resources/  ->  assets/resources/
+            //   - borealis i18n and img/sys/ into assets/resources/ (merged)
+            // This runs before the mergeAssets step so everything is packaged.
+            assets.srcDirs = [file("src/main/assets")]
         }
         externalNativeBuild {
             cmake {
@@ -66,9 +77,73 @@ android {
             }
         }
     }
+    applicationVariants.all { variant ->
+        // Make sure assets are synced before they get merged into the APK,
+        // and after the native build so EXCLUDE_NATIVE_LIBS logic is settled.
+        def syncTask = tasks.named("syncBorealisResources").get()
+        tasks["merge${variant.name.capitalize()}Assets"].dependsOn(syncTask)
+    }
     lint {
         abortOnError = false
     }
+}
+
+// ---------------------------------------------------------------------------
+// syncBorealisResources
+//
+// Copies app resources + borealis system resources into the Android assets
+// staging directory so they are packaged into the APK.
+//
+// Output layout inside assets/:
+//   resources/xml/...          <- app XML layouts
+//   resources/font/...         <- fonts
+//   resources/icons/...        <- app icons
+//   resources/images/...       <- app images
+//   resources/i18n/en-US/main.json         <- app i18n
+//   resources/i18n/en-US/hints.json        <- borealis i18n (merged)
+//   resources/img/sys/*.png                <- borealis status-bar icons (merged)
+//   resources/material/...     <- material icons
+//
+// Why borealis resources must be merged:
+//   borealis needs i18n/en-US/hints.json (button hint labels) and img/sys/
+//   (wifi/battery status icons) at runtime. These live in lib/borealis/resources/
+//   but are not committed to the app's resources/ folder. Merging them here
+//   is the same approach Switchfin uses (they pre-commit the files; we merge
+//   at build time to keep the source tree clean).
+// ---------------------------------------------------------------------------
+task syncBorealisResources(type: Copy) {
+    def repoRoot    = file("../../../../..")
+    def appRes      = file("${repoRoot}/resources")
+    def brls        = file("${repoRoot}/lib/borealis/resources")
+    def assetsDir   = file("src/main/assets/resources")
+
+    // Wipe staging dir for a clean copy every build
+    doFirst {
+        delete assetsDir
+        assetsDir.mkdirs()
+    }
+
+    // 1. Copy all app resources
+    from(appRes) {
+        into ""
+    }
+
+    // 2. Merge borealis i18n (hints.json) — do NOT overwrite app's main.json
+    from("${brls}/i18n") {
+        into "i18n"
+        include "en-US/hints.json"
+    }
+
+    // 3. Merge borealis status-bar icons (img/sys/)
+    from("${brls}/img") {
+        into "img"
+        include "sys/**"
+    }
+
+    into assetsDir
+
+    // Always re-run so resources stay in sync with source changes
+    outputs.upToDateWhen { false }
 }
 
 dependencies {
