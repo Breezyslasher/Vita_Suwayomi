@@ -312,9 +312,3 @@ static int appMain(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     return appMain(argc, argv);
 }
-
-#if defined(__ANDROID__)
-extern "C" int SDL_main(int argc, char* argv[]) {
-    return appMain(argc, argv);
-}
-#endif

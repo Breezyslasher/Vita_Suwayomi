@@ -448,7 +448,7 @@ elseif(PLATFORM_SWITCH)
     nx_create_nro(${PROJECT_NAME}
         NAME   "VitaSuwayomi"
         AUTHOR "Breezyslasher"
-        ICON   ${CMAKE_CURRENT_SOURCE_DIR}/app/platform/psv/sce_sys/icon0.png
+        ICON   ${CMAKE_CURRENT_SOURCE_DIR}/app/platform/icon_switch.png
     )
 
 elseif(PLATFORM_DESKTOP)

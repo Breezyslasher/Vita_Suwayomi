@@ -565,7 +565,7 @@ jobs:
           } > "$PKGROOT/usr/bin/VitaSuwayomi"
           chmod 755 "$PKGROOT/usr/bin/VitaSuwayomi"
           cp -r build/resources "$PKGROOT/usr/share/VitaSuwayomi/resources"
-          install -m 644 app/platform/psv/sce_sys/icon0.png "$PKGROOT/usr/share/pixmaps/vitasuwayomi.png"
+          install -m 644 app/platform/icon_desktop.png "$PKGROOT/usr/share/pixmaps/vitasuwayomi.png"
           {
             echo '[Desktop Entry]'
             echo 'Type=Application'
