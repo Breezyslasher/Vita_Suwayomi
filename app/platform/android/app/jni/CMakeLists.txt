@@ -47,16 +47,17 @@ set(APP_PLATFORM_LIB
 # Resources are packaged into assets/ by Gradle (see build.gradle assets.srcDirs).
 # This approach is simpler and matches the upstream exactly.
 #
-# HOWEVER: borealis's toolchain.cmake unconditionally calls check_libromfs_generator()
-# when PLATFORM_ANDROID is set, and fatals if the generator binary is missing —
-# even when USE_LIBROMFS=OFF. So we still need to:
-#   1. Build the generator in CI (build_libromfs_generator.sh in the workflow)
-#   2. Tell borealis where the binary is via LIBROMFS_PREBUILT_GENERATOR
-# The generator binary is built but never actually invoked to embed anything.
-set(LIBROMFS_PREBUILT_GENERATOR "${APP_SOURCE_ROOT}/lib/borealis/libromfs-generator" CACHE STRING "" FORCE)
-if (NOT EXISTS "${LIBROMFS_PREBUILT_GENERATOR}")
-    message(FATAL_ERROR "libromfs-generator has not been built, please refer to lib/borealis/build_libromfs_generator.sh for more information")
+# We keep libromfs disabled on Android and load resources from APK assets
+# via SDL2/AAssetManager instead.
+set(USE_LIBROMFS OFF CACHE BOOL "" FORCE)
+
+# Only provide a prebuilt generator path if it exists. This avoids hard-failing
+# Android CI jobs that do not build libromfs-generator when USE_LIBROMFS=OFF.
+set(_LIBROMFS_GENERATOR "${APP_SOURCE_ROOT}/lib/borealis/libromfs-generator")
+if (EXISTS "${_LIBROMFS_GENERATOR}")
+    set(LIBROMFS_PREBUILT_GENERATOR "${_LIBROMFS_GENERATOR}" CACHE STRING "" FORCE)
 endif()
+unset(_LIBROMFS_GENERATOR)
 
 # app option
 set(PLATFORM_ANDROID ON CACHE BOOL "")
@@ -64,7 +65,7 @@ set(USE_SYSTEM_CURL ON CACHE BOOL "")
 set(USE_SYSTEM_SDL2 ON CACHE BOOL "")
 set(USE_GLES3 ON CACHE BOOL "")
 set(SIMPLE_HIGHLIGHT ON CACHE BOOL "")
-# USE_LIBROMFS intentionally NOT set — defaults to OFF, giving RESOURCE_PREFIX="resources/"
+# USE_LIBROMFS is forced OFF above, giving RESOURCE_PREFIX="resources/"
 # which SDL2 resolves via AAssetManager from the APK assets/ folder.
 
 # https://github.com/curl/curl/issues/12086
