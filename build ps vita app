@@ -14,13 +14,18 @@ make
 cd /home/breezy/Downloads
 rm -rf Vita_Suwayomi
 git clone --recursive \
-  -b claude/suwayomi-client-conversion-AjqSQ \
+  -b codex/fix-setpadding-error-in-login_activity.cpp \
   https://github.com/Breezyslasher/Vita_Suwayomi.git Vita_Suwayomi
 cd Vita_Suwayomi
 mkdir -p build && cd build
 cmake ..
 make
 
+cd /home/breezy/Downloads/Vita_Suwayomi
+  git status
+  git add .
+  git commit -m "Fix Android login crash"
+  git push origin codex/fix-setpadding-error-in-login_activity.cpp
 
 
 
