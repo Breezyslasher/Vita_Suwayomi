@@ -87,9 +87,10 @@ android {
         // Gradle 8 task validation: lint vital tasks read from src/main/assets
         // (populated by syncBorealisResources). Wire explicit dependencies only
         // for variant-specific lint vital tasks to keep task graph narrow.
-        ["lintVitalAnalyze${capName}", "lintVitalReport${capName}"].each { taskName ->
-            if (tasks.findByName(taskName) != null) {
-                tasks.named(taskName).configure { dependsOn(syncTask) }
+        def lintVitalTaskNames = ["lintVitalAnalyze${capName}", "lintVitalReport${capName}"] as Set
+        tasks.configureEach { t ->
+            if (lintVitalTaskNames.contains(t.name)) {
+                t.dependsOn(syncTask)
             }
         }
     }
