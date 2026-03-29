@@ -47,16 +47,13 @@ set(APP_PLATFORM_LIB
 # Resources are packaged into assets/ by Gradle (see build.gradle assets.srcDirs).
 # This approach is simpler and matches the upstream exactly.
 #
-# HOWEVER: borealis's toolchain.cmake unconditionally calls check_libromfs_generator()
-# when PLATFORM_ANDROID is set, and fatals if the generator binary is missing —
-# even when USE_LIBROMFS=OFF. So we still need to:
-#   1. Build the generator in CI (build_libromfs_generator.sh in the workflow)
-#   2. Tell borealis where the binary is via LIBROMFS_PREBUILT_GENERATOR
-# The generator binary is built but never actually invoked to embed anything.
+# borealis's toolchain.cmake unconditionally calls check_libromfs_generator() when
+# PLATFORM_ANDROID is set and fatals if the binary is missing — even when USE_LIBROMFS=OFF.
+# We set LIBROMFS_PREBUILT_GENERATOR so borealis finds the binary that was built by
+# build_libromfs_generator.sh in the CI workflow step before gradlew runs.
+# We do NOT add our own existence check here — borealis's toolchain.cmake does that
+# already, and a second check here fires too early on some Gradle configurations.
 set(LIBROMFS_PREBUILT_GENERATOR "${APP_SOURCE_ROOT}/lib/borealis/libromfs-generator" CACHE STRING "" FORCE)
-if (NOT EXISTS "${LIBROMFS_PREBUILT_GENERATOR}")
-    message(FATAL_ERROR "libromfs-generator has not been built, please refer to lib/borealis/build_libromfs_generator.sh for more information")
-endif()
 
 # app option
 set(PLATFORM_ANDROID ON CACHE BOOL "")
