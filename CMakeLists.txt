@@ -326,11 +326,11 @@ if(PLATFORM_PSV)
         VERSION ${VITA_VERSION}
         NAME    ${VITA_APP_NAME}
 
-        FILE sce_sys/icon0.png                      sce_sys/icon0.png
-        FILE sce_sys/pic0.png                       sce_sys/pic0.png
-        FILE sce_sys/livearea/contents/bg.png       sce_sys/livearea/contents/bg.png
-        FILE sce_sys/livearea/contents/startup.png  sce_sys/livearea/contents/startup.png
-        FILE sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
+        FILE app/platform/psv/sce_sys/icon0.png                      sce_sys/icon0.png
+        FILE app/platform/psv/sce_sys/pic0.png                       sce_sys/pic0.png
+        FILE app/platform/psv/sce_sys/livearea/contents/bg.png       sce_sys/livearea/contents/bg.png
+        FILE app/platform/psv/sce_sys/livearea/contents/startup.png  sce_sys/livearea/contents/startup.png
+        FILE app/platform/psv/sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
 
         FILE ${BOREALIS_DIR}/resources/i18n/en-US/hints.json resources/i18n/en-US/hints.json
         FILE resources/i18n/en-US/main.json                  resources/i18n/en-US/main.json
@@ -418,11 +418,37 @@ if(PLATFORM_PSV)
         FILE resources/material/MaterialIcons-Regular.ttf resources/material/MaterialIcons-Regular.ttf
     )
 
+elseif(PLATFORM_PS4)
+    if(PS4)
+        # PS4 variable is defined by the pacbrew toolchain
+        add_self(${PROJECT_NAME})
+        add_pkg(${PROJECT_NAME}
+            ${CMAKE_BINARY_DIR}/ps4
+            "VSWY00002"
+            "VitaSuwayomi"
+            "01.00"
+            # https://psdevwiki.com/ps4/param.sfo#ATTRIBUTE - Support PS4 Pro
+            8388608
+        )
+    endif()
+    add_custom_target(${PROJECT_NAME}.data
+        # Copy borealis PS4 base files (sce_module, about/right.sprx)
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/ps4 ${CMAKE_BINARY_DIR}/ps4
+        # Override with our custom sce_sys (icon)
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_SOURCE_DIR}/app/platform/ps4 ${CMAKE_BINARY_DIR}/ps4
+        # Copy app resources
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources ${CMAKE_BINARY_DIR}/ps4/resources
+        # Copy borealis system resources
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/i18n ${CMAKE_BINARY_DIR}/ps4/resources/i18n
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/img ${CMAKE_BINARY_DIR}/ps4/resources/img
+    )
+    add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}.data)
+
 elseif(PLATFORM_SWITCH)
     nx_create_nro(${PROJECT_NAME}
         NAME   "VitaSuwayomi"
         AUTHOR "Breezyslasher"
-        ICON   ${CMAKE_CURRENT_SOURCE_DIR}/sce_sys/icon0.png
+        ICON   ${CMAKE_CURRENT_SOURCE_DIR}/app/platform/psv/sce_sys/icon0.png
     )
 
 elseif(PLATFORM_DESKTOP)

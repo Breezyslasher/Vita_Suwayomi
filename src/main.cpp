@@ -19,6 +19,7 @@
 
 #if defined(__ANDROID__)
 #include "platform/android_assets.hpp"
+#include <SDL.h>
 #endif
 
 #ifdef __vita__
@@ -223,6 +224,11 @@ static int appMain(int argc, char* argv[]) {
 #endif
         return 1;
     }
+
+#if defined(__ANDROID__)
+    // Override borealis's default landscape-only hint to allow all rotations.
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait PortraitUpsideDown");
+#endif
 
 #ifdef __vita__
     // Subscribe to log events to write to file (since setLogOutput doesn't work on Vita)
