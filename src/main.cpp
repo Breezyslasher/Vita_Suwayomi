@@ -22,6 +22,10 @@
 #include <SDL.h>
 #endif
 
+#ifdef __PS4__
+#include <sys/stat.h>
+#endif
+
 #ifdef __vita__
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/modulemgr.h>
@@ -203,6 +207,15 @@ static int appMain(int argc, char* argv[]) {
     }
 #endif
 
+#ifdef __PS4__
+    // Create log directory and file on PS4
+    mkdir("/data/VitaSuwayomi", 0777);
+    static FILE* logFile = std::fopen("/data/VitaSuwayomi/debug.log", "w");
+    if (logFile) {
+        setvbuf(logFile, NULL, _IOLBF, 0);
+    }
+#endif
+
     // Initialize Borealis
     brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
 
@@ -230,8 +243,8 @@ static int appMain(int argc, char* argv[]) {
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait PortraitUpsideDown");
 #endif
 
-#ifdef __vita__
-    // Subscribe to log events to write to file (since setLogOutput doesn't work on Vita)
+#if defined(__vita__) || defined(__PS4__)
+    // Subscribe to log events to write to file
     if (logFile) {
         brls::Logger::getLogEvent()->subscribe([](brls::Logger::TimePoint time, brls::LogLevel level, std::string log) {
             if (!logFile) return;
@@ -254,7 +267,11 @@ static int appMain(int argc, char* argv[]) {
                     time_tm.tm_hour, time_tm.tm_min, time_tm.tm_sec,
                     (int)ms, levelStr, log.c_str());
         });
+#ifdef __vita__
         brls::Logger::info("Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log");
+#else
+        brls::Logger::info("Log file initialized: /data/VitaSuwayomi/debug.log");
+#endif
     }
 #endif
 
