@@ -38,17 +38,25 @@ set(APP_PLATFORM_LIB
 # FIX: Do NOT use libromfs for Android.
 #
 # Previously USE_LIBROMFS=ON was set here, which embedded resources into the .so
-# via a romfs blob. This caused two problems:
-#   1. The libromfs generator had to be built and available before CMake configure.
-#   2. The borealis system resources (i18n/hints.json, img/sys/) were not in the
-#      romfs bundle, causing brls::fatal() in createFromXMLFile because borealis
-#      resources were missing.
+# via a romfs blob. This caused the romfs bundle to be missing borealis system
+# resources (i18n/hints.json, img/sys/), causing brls::fatal() in createFromXMLFile.
 #
 # Switchfin (the upstream this app is based on) does NOT use libromfs for Android.
 # Instead it uses RESOURCE_PREFIX="resources/" and SDL2's AAssetManager bridge:
 # SDL_RWFromFile("resources/foo") on Android reads from the APK's assets/ folder.
 # Resources are packaged into assets/ by Gradle (see build.gradle assets.srcDirs).
-# This approach is simpler, more reliable, and matches the upstream exactly.
+# This approach is simpler and matches the upstream exactly.
+#
+# HOWEVER: borealis's toolchain.cmake unconditionally calls check_libromfs_generator()
+# when PLATFORM_ANDROID is set, and fatals if the generator binary is missing —
+# even when USE_LIBROMFS=OFF. So we still need to:
+#   1. Build the generator in CI (build_libromfs_generator.sh in the workflow)
+#   2. Tell borealis where the binary is via LIBROMFS_PREBUILT_GENERATOR
+# The generator binary is built but never actually invoked to embed anything.
+set(LIBROMFS_PREBUILT_GENERATOR "${APP_SOURCE_ROOT}/lib/borealis/libromfs-generator" CACHE STRING "" FORCE)
+if (NOT EXISTS "${LIBROMFS_PREBUILT_GENERATOR}")
+    message(FATAL_ERROR "libromfs-generator has not been built, please refer to lib/borealis/build_libromfs_generator.sh for more information")
+endif()
 
 # app option
 set(PLATFORM_ANDROID ON CACHE BOOL "")
