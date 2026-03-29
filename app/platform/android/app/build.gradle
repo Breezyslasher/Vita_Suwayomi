@@ -80,14 +80,18 @@ android {
     applicationVariants.all { variant ->
         // Make sure assets are synced before they get merged into the APK,
         // and after the native build so EXCLUDE_NATIVE_LIBS logic is settled.
-        def syncTask = tasks.named("syncBorealisResources").get()
-        tasks["merge${variant.name.capitalize()}Assets"].dependsOn(syncTask)
-    }
-    // Gradle 8 task validation: lint tasks read from src/main/assets (populated by
-    // syncBorealisResources), so declare an explicit dependency to avoid
-    // "implicit dependency" failures in CI release builds.
-    tasks.matching { it.name.startsWith("lint") }.configureEach {
-        dependsOn(tasks.named("syncBorealisResources"))
+        def syncTask = tasks.named("syncBorealisResources")
+        def capName = variant.name.capitalize()
+        tasks.named("merge${capName}Assets").configure { dependsOn(syncTask) }
+
+        // Gradle 8 task validation: lint vital tasks read from src/main/assets
+        // (populated by syncBorealisResources). Wire explicit dependencies only
+        // for variant-specific lint vital tasks to keep task graph narrow.
+        ["lintVitalAnalyze${capName}", "lintVitalReport${capName}"].each { taskName ->
+            if (tasks.findByName(taskName) != null) {
+                tasks.named(taskName).configure { dependsOn(syncTask) }
+            }
+        }
     }
     lint {
         abortOnError = false
