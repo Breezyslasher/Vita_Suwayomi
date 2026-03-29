@@ -164,11 +164,13 @@ jobs:
           find "${src_libdir}" -maxdepth 1 \( -name "*.so" -o -name "*.so.*" \) -exec cp -a {} "${dst_libdir}/" \;
         done
     - name: Build APK
-      # FIX: No longer calls build_libromfs_generator.sh.
-      # Resources are now packaged as APK assets via the syncBorealisResources
-      # Gradle task in build.gradle (which also merges borealis system resources).
-      # See app/platform/android/app/jni/CMakeLists.txt for why USE_LIBROMFS was removed.
+      # build_libromfs_generator.sh must run before Gradle/CMake configure because
+      # borealis's toolchain.cmake unconditionally checks that the generator binary
+      # exists when PLATFORM_ANDROID is set — even though USE_LIBROMFS=OFF means
+      # the generator is never actually used to embed anything.
+      # Resources are loaded via APK assets (see build.gradle syncBorealisResources).
       run: |
+        ${{ github.workspace }}/lib/borealis/build_libromfs_generator.sh
         cd app/platform/android && ./gradlew assembleRelease
     - name: Upload dist
       uses: actions/upload-artifact@v4
