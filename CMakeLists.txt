@@ -46,10 +46,28 @@ if(PLATFORM_PSV)
     set(USE_VITA_SHARK  OFF  CACHE BOOL "Use VitaShark for shader compilation" FORCE)
 endif()
 
-set(USE_LIBROMFS OFF CACHE BOOL "Use libromfs" FORCE)
+set(USE_LIBROMFS OFF CACHE BOOL "Use libromfs")
+
+# For Android: point LIBROMFS_PREBUILT_GENERATOR at an existing file so that
+# borealis toolchain.cmake's check_libromfs_generator() does not fatal.
+# We force USE_LIBROMFS OFF below, so the generator is never actually invoked.
+if(PLATFORM_ANDROID)
+    set(LIBROMFS_PREBUILT_GENERATOR "${CMAKE_CURRENT_LIST_FILE}" CACHE STRING "" FORCE)
+endif()
 
 include(${BOREALIS_LIBRARY}/cmake/commonOption.cmake)
 include(${BOREALIS_LIBRARY}/cmake/toolchain.cmake)
+
+# FIX: borealis toolchain.cmake forces USE_LIBROMFS=ON for Android, but we use
+# APK-asset extraction instead (see src/platform/android_assets.cpp).  Override
+# it back to OFF so borealis does not try to compile/link libromfs.
+# Also set BRLS_PLATFORM_RESOURCES_PATH which borealis CMakeLists.txt leaves
+# empty for Android — without it BRLS_RESOURCES is undefined and all file loads
+# via fopen("resources/...") fail.
+if(PLATFORM_ANDROID)
+    set(USE_LIBROMFS OFF)
+    set(BRLS_PLATFORM_RESOURCES_PATH "\"resources/\"")
+endif()
 
 # ---------------------------------------------------------------------------
 # Project (after toolchain so cross-compilers are in effect)
@@ -128,6 +146,11 @@ if(PLATFORM_PSV)
     list(APPEND APP_SOURCES src/utils/vita_stubs.c)
 endif()
 
+# Android asset extraction helper
+if(PLATFORM_ANDROID)
+    list(APPEND APP_SOURCES src/platform/android_assets.cpp)
+endif()
+
 set(APP_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${BOREALIS_LIBRARY}/include
@@ -157,7 +180,8 @@ endif()
 
 if(PLATFORM_PSV)
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
-elseif(PLATFORM_SWITCH)
+elseif(PLATFORM_SWITCH OR USE_LIBROMFS)
+    # Switch always uses romfs. Android does NOT — resources are APK assets via SDL.
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"romfs:/\")
 else()
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"resources/\")
@@ -191,7 +215,20 @@ else()
     endif()
 endif()
 
-if(WIN32)
+if(PLATFORM_ANDROID)
+    # Android dependency bundle intentionally omits libpng/libbz2/libzstd.
+    # Keeping these out of the explicit link list avoids CI link failures when
+    # those optional transitives are not packaged in jniLibs.
+    set(APP_RENDER_LIBS
+        ass
+        freetype
+        fribidi
+        webp
+        z
+        c
+        harfbuzz
+    )
+elseif(WIN32)
     set(APP_RENDER_LIBS
         bz2
         webp
@@ -210,7 +247,7 @@ else()
     )
 endif()
 
-if(NOT PLATFORM_PS4 AND NOT WIN32)
+if(NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
     list(APPEND APP_RENDER_LIBS
         zstd
         harfbuzz
@@ -239,6 +276,11 @@ target_link_libraries(${PROJECT_NAME}
 
 if(NOT PLATFORM_SWITCH AND NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
     target_link_libraries(${PROJECT_NAME} mp3lame)
+endif()
+
+# Android needs the android library for AAssetManager (used by asset extraction)
+if(PLATFORM_ANDROID)
+    target_link_libraries(${PROJECT_NAME} android log)
 endif()
 
 if(PLATFORM_PSV)
@@ -384,11 +426,20 @@ elseif(PLATFORM_SWITCH)
     )
 
 elseif(PLATFORM_DESKTOP)
-    # Copy resources directory next to the binary so relative paths resolve
+    # Copy app resources next to the binary so relative paths resolve.
+    # Also copy borealis system resources (i18n/hints.json, img/sys/) which
+    # are not checked in to resources/ but are required by borealis at runtime.
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/resources
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-        COMMENT "Copying resources for desktop build"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${BOREALIS_DIR}/resources/i18n
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/i18n
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${BOREALIS_DIR}/resources/img
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/img
+        COMMENT "Copying resources (app + borealis) for desktop build"
     )
 endif()
+

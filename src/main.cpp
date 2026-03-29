@@ -15,6 +15,11 @@
 #include "view/rotatable_image.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/http_client.hpp"
+#include <clocale>
+
+#if defined(__ANDROID__)
+#include "platform/android_assets.hpp"
+#endif
 
 #ifdef __vita__
 #include <psp2/kernel/processmgr.h>
@@ -93,7 +98,7 @@ static bool initVitaSystem() {
 }
 
 /**
- * Initialize networking
+ * Initialize networking (Vita-specific: also inits net/ssl/http system modules)
  */
 static bool initVitaNetwork() {
     brls::Logger::info("Initializing networking...");
@@ -127,7 +132,7 @@ static bool initVitaNetwork() {
         return false;
     }
 
-    // Initialize curl
+    // Initialize curl (Vita path)
     vitasuwayomi::HttpClient::globalInit();
 
     brls::Logger::info("Networking initialized");
@@ -156,11 +161,15 @@ static void registerCustomViews() {
 }
 
 /**
- * Main entry point
+ * Main entry point implementation
  */
-int main(int argc, char* argv[]) {
+static int appMain(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
+
+    // Match Switchfin's startup locale so Borealis/font shaping uses a UTF-8
+    // locale on Android instead of falling back to the "C" locale.
+    std::setlocale(LC_ALL, "C.UTF-8");
 
 #ifdef __vita__
     // Initialize Vita-specific systems
@@ -170,6 +179,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (!initVitaNetwork()) {
+        // curl globalInit is called inside initVitaNetwork() on Vita
         sceKernelExitProcess(1);
         return 1;
     }
@@ -180,13 +190,27 @@ int main(int argc, char* argv[]) {
     if (logFile) {
         // Use line buffering so logs are written immediately
         setvbuf(logFile, NULL, _IOLBF, 0);
-        // Note: brls::Logger::setLogOutput doesn't work on Vita (uses sceClibPrintf)
-        // We'll subscribe to log events after Borealis init
+    }
+#else
+    // FIX: On Android and Desktop, curl_global_init must still be called.
+    // Previously this only happened inside initVitaNetwork() which was
+    // behind #ifdef __vita__, so Android builds never initialized curl —
+    // causing a freeze/deadlock the moment any network call was made.
+    if (!vitasuwayomi::HttpClient::globalInit()) {
+        brls::Logger::error("Failed to initialize curl");
+        return 1;
     }
 #endif
 
     // Initialize Borealis
     brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
+
+#if defined(__ANDROID__)
+    // Extract APK assets/resources/ to internal storage so that borealis can
+    // load XML, fonts, and images via standard fopen().  Must happen before
+    // brls::Application::init() which loads fonts and other resources.
+    extractAndroidAssets();
+#endif
 
     if (!brls::Application::init()) {
         brls::Logger::error("Failed to initialize Borealis");
@@ -194,6 +218,8 @@ int main(int argc, char* argv[]) {
         if (logFile) fclose(logFile);
         cleanupVitaNetwork();
         sceKernelExitProcess(1);
+#else
+        vitasuwayomi::HttpClient::globalCleanup();
 #endif
         return 1;
     }
@@ -251,6 +277,8 @@ int main(int argc, char* argv[]) {
 #ifdef __vita__
         cleanupVitaNetwork();
         sceKernelExitProcess(1);
+#else
+        vitasuwayomi::HttpClient::globalCleanup();
 #endif
         return 1;
     }
@@ -264,7 +292,23 @@ int main(int argc, char* argv[]) {
 #ifdef __vita__
     cleanupVitaNetwork();
     sceKernelExitProcess(0);
+#else
+    vitasuwayomi::HttpClient::globalCleanup();
 #endif
 
     return 0;
 }
+
+
+/**
+ * Main entry point
+ */
+int main(int argc, char* argv[]) {
+    return appMain(argc, argv);
+}
+
+#if defined(__ANDROID__)
+extern "C" int SDL_main(int argc, char* argv[]) {
+    return appMain(argc, argv);
+}
+#endif
