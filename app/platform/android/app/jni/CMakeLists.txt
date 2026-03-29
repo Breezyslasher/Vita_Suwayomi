@@ -51,13 +51,20 @@ set(APP_PLATFORM_LIB
 # via SDL2/AAssetManager instead.
 set(USE_LIBROMFS OFF CACHE BOOL "" FORCE)
 
-# Only provide a prebuilt generator path if it exists. This avoids hard-failing
-# Android CI jobs that do not build libromfs-generator when USE_LIBROMFS=OFF.
+# Borealis currently checks for libromfs-generator on Android at configure time,
+# even when USE_LIBROMFS=OFF. Point it to the real generator when present, or to
+# a tiny placeholder script so configure can proceed when libromfs is unused.
 set(_LIBROMFS_GENERATOR "${APP_SOURCE_ROOT}/lib/borealis/libromfs-generator")
 if (EXISTS "${_LIBROMFS_GENERATOR}")
     set(LIBROMFS_PREBUILT_GENERATOR "${_LIBROMFS_GENERATOR}" CACHE STRING "" FORCE)
+else()
+    set(_LIBROMFS_GENERATOR_STUB "${CMAKE_BINARY_DIR}/libromfs-generator-stub.sh")
+    file(WRITE "${_LIBROMFS_GENERATOR_STUB}" "#!/usr/bin/env sh\necho 'libromfs-generator stub: USE_LIBROMFS is OFF for Android.' >&2\nexit 1\n")
+    execute_process(COMMAND chmod +x "${_LIBROMFS_GENERATOR_STUB}")
+    set(LIBROMFS_PREBUILT_GENERATOR "${_LIBROMFS_GENERATOR_STUB}" CACHE STRING "" FORCE)
 endif()
 unset(_LIBROMFS_GENERATOR)
+unset(_LIBROMFS_GENERATOR_STUB)
 
 # app option
 set(PLATFORM_ANDROID ON CACHE BOOL "")
