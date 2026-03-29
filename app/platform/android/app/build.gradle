@@ -122,7 +122,8 @@ tasks.matching { t ->
 //   at build time to keep the source tree clean).
 // ---------------------------------------------------------------------------
 task syncBorealisResources(type: Copy) {
-    def repoRoot    = file("../../../../..")
+    // app/platform/android/app -> repo root is 4 levels up
+    def repoRoot    = file("../../../../")
     def appRes      = file("${repoRoot}/resources")
     def brls        = file("${repoRoot}/lib/borealis/resources")
     def assetsDir   = file("src/main/assets/resources")
