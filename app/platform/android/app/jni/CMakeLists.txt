@@ -51,9 +51,15 @@ set(APP_PLATFORM_LIB
 # PLATFORM_ANDROID is set and fatals if the binary is missing — even when USE_LIBROMFS=OFF.
 # We set LIBROMFS_PREBUILT_GENERATOR so borealis finds the binary that was built by
 # build_libromfs_generator.sh in the CI workflow step before gradlew runs.
-# We do NOT add our own existence check here — borealis's toolchain.cmake does that
-# already, and a second check here fires too early on some Gradle configurations.
+# We do NOT add our own existence check here — borealis's toolchain.cmake handles that.
 set(LIBROMFS_PREBUILT_GENERATOR "${APP_SOURCE_ROOT}/lib/borealis/libromfs-generator" CACHE STRING "" FORCE)
+
+# borealis's libromfs/CMakeLists.txt also unconditionally requires LIBROMFS_PROJECT_NAME
+# and LIBROMFS_RESOURCE_LOCATION to be set, even when USE_LIBROMFS=OFF.
+# Set them to valid values to satisfy the checks. No romfs blob is actually embedded
+# because USE_LIBROMFS is OFF — resources are loaded via APK assets instead.
+set(LIBROMFS_PROJECT_NAME "VitaSuwayomi" CACHE STRING "" FORCE)
+set(LIBROMFS_RESOURCE_LOCATION "${APP_SOURCE_ROOT}/resources" CACHE PATH "" FORCE)
 
 # app option
 set(PLATFORM_ANDROID ON CACHE BOOL "")
