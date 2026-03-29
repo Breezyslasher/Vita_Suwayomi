@@ -5,7 +5,6 @@
     axis="column"
     justifyContent="center"
     alignItems="center"
-    grow="1"
     paddingTop="50"
     paddingBottom="50"
     paddingLeft="100"
@@ -14,14 +13,14 @@
     <!-- Title -->
     <brls:Label
         id="login/title"
-        text="VitaSuwayomi"
+        text="VitaPlex"
         fontSize="36"
         marginBottom="40"/>
 
     <!-- Input container -->
     <brls:Box
         id="login/input_container"
-        width="700"
+        width="400"
         axis="column"
         alignItems="stretch"
         marginBottom="30">
@@ -37,7 +36,7 @@
         <!-- Username -->
         <brls:Label
             id="login/username_label"
-            text="Username: (optional)"
+            text="Username: Not set"
             fontSize="18"
             marginBottom="15"
             focusable="true"/>
@@ -45,8 +44,9 @@
         <!-- Password -->
         <brls:Label
             id="login/password_label"
-            text="Password: (optional)"
+            text="Password: Not set"
             fontSize="18"
+            marginBottom="15"
             focusable="true"/>
 
     </brls:Box>
@@ -55,29 +55,32 @@
     <brls:Box
         axis="row"
         justifyContent="center"
-        alignItems="center"
         marginBottom="20">
 
         <brls:Button
             id="login/login_button"
-            text="Connect"
-            width="180"
-            height="44"
+            text="Login"
+            width="150"
             marginRight="15"/>
 
         <brls:Button
             id="login/offline_button"
             text="Offline"
-            width="150"
-            height="44"/>
+            width="120"/>
 
     </brls:Box>
+
+    <!-- PIN Code display -->
+    <brls:Label
+        id="login/pin_code"
+        text=""
+        fontSize="48"
+        marginBottom="20"/>
 
     <!-- Status message -->
     <brls:Label
         id="login/status"
         text=""
-        fontSize="16"
-        horizontalAlign="center"/>
+        fontSize="16"/>
 
 </brls:Box>
