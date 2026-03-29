@@ -83,6 +83,12 @@ android {
         def syncTask = tasks.named("syncBorealisResources").get()
         tasks["merge${variant.name.capitalize()}Assets"].dependsOn(syncTask)
     }
+    // Gradle 8 task validation: lint tasks read from src/main/assets (populated by
+    // syncBorealisResources), so declare an explicit dependency to avoid
+    // "implicit dependency" failures in CI release builds.
+    tasks.matching { it.name.startsWith("lint") }.configureEach {
+        dependsOn(tasks.named("syncBorealisResources"))
+    }
     lint {
         abortOnError = false
     }
