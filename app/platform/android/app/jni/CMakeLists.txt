@@ -37,27 +37,15 @@ set(APP_PLATFORM_LIB
 
 # FIX: Do NOT use libromfs for Android.
 #
-# Previously USE_LIBROMFS=ON was set here, which embedded resources into the .so
-# via a romfs blob. This caused the romfs bundle to be missing borealis system
-# resources (i18n/hints.json, img/sys/), causing brls::fatal() in createFromXMLFile.
+# Resources are packaged into the APK's assets/ folder by Gradle (see
+# build.gradle syncBorealisResources task) and extracted to internal storage
+# at app startup (see src/platform/android_assets.cpp).  After extraction,
+# borealis loads everything via standard fopen("resources/...").
 #
-# Switchfin (the upstream this app is based on) does NOT use libromfs for Android.
-# Instead it uses RESOURCE_PREFIX="resources/" and SDL2's AAssetManager bridge:
-# SDL_RWFromFile("resources/foo") on Android reads from the APK's assets/ folder.
-# Resources are packaged into assets/ by Gradle (see build.gradle assets.srcDirs).
-# This approach is simpler and matches the upstream exactly.
-#
-# borealis's toolchain.cmake unconditionally calls check_libromfs_generator() when
-# PLATFORM_ANDROID is set and fatals if the binary is missing — even when USE_LIBROMFS=OFF.
-# We set LIBROMFS_PREBUILT_GENERATOR so borealis finds the binary that was built by
-# build_libromfs_generator.sh in the CI workflow step before gradlew runs.
-# We do NOT add our own existence check here — borealis's toolchain.cmake handles that.
-set(LIBROMFS_PREBUILT_GENERATOR "${APP_SOURCE_ROOT}/lib/borealis/libromfs-generator" CACHE STRING "" FORCE)
-
-# borealis's libromfs/CMakeLists.txt also unconditionally requires LIBROMFS_PROJECT_NAME
-# and LIBROMFS_RESOURCE_LOCATION to be set, even when USE_LIBROMFS=OFF.
-# Set them to valid values to satisfy the checks. No romfs blob is actually embedded
-# because USE_LIBROMFS is OFF — resources are loaded via APK assets instead.
+# The main CMakeLists.txt overrides USE_LIBROMFS back to OFF after the
+# borealis toolchain include, and sets BRLS_PLATFORM_RESOURCES_PATH for
+# Android.  The variables below just satisfy CMake-time checks in the
+# borealis build scripts; they have no effect at runtime.
 set(LIBROMFS_PROJECT_NAME "VitaSuwayomi" CACHE STRING "" FORCE)
 set(LIBROMFS_RESOURCE_LOCATION "${APP_SOURCE_ROOT}/resources" CACHE PATH "" FORCE)
 
@@ -67,8 +55,9 @@ set(USE_SYSTEM_CURL ON CACHE BOOL "")
 set(USE_SYSTEM_SDL2 ON CACHE BOOL "")
 set(USE_GLES3 ON CACHE BOOL "")
 set(SIMPLE_HIGHLIGHT ON CACHE BOOL "")
-# USE_LIBROMFS intentionally NOT set — defaults to OFF, giving RESOURCE_PREFIX="resources/"
-# which SDL2 resolves via AAssetManager from the APK assets/ folder.
+# USE_LIBROMFS is forced OFF by the main CMakeLists.txt after toolchain.cmake runs.
+# RESOURCE_PREFIX="resources/" — files are extracted from APK assets to internal
+# storage at startup, so fopen("resources/...") resolves normally.
 
 # https://github.com/curl/curl/issues/12086
 # if (ANDROID_ABI STREQUAL armeabi-v7a)

@@ -17,6 +17,10 @@
 #include "utils/http_client.hpp"
 #include <clocale>
 
+#if defined(__ANDROID__)
+#include "platform/android_assets.hpp"
+#endif
+
 #ifdef __vita__
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/modulemgr.h>
@@ -200,6 +204,13 @@ static int appMain(int argc, char* argv[]) {
 
     // Initialize Borealis
     brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
+
+#if defined(__ANDROID__)
+    // Extract APK assets/resources/ to internal storage so that borealis can
+    // load XML, fonts, and images via standard fopen().  Must happen before
+    // brls::Application::init() which loads fonts and other resources.
+    extractAndroidAssets();
+#endif
 
     if (!brls::Application::init()) {
         brls::Logger::error("Failed to initialize Borealis");
