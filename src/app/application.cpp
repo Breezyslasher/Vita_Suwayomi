@@ -23,8 +23,10 @@
 #include <psp2/io/stat.h>
 #endif
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(__PS4__)
 #include <sys/stat.h>
+#endif
+#if defined(__ANDROID__)
 #include "platform/paths.hpp"
 #endif
 
@@ -55,6 +57,9 @@ static const char* getSettingsDir() {
 // Macros so the rest of the file can still use SETTINGS_PATH / SETTINGS_DIR.
 #define SETTINGS_PATH (getSettingsPath())
 #define SETTINGS_DIR  (getSettingsDir())
+#elif defined(__PS4__)
+static const char* SETTINGS_PATH = "/data/VitaSuwayomi/settings.json";
+static const char* SETTINGS_DIR  = "/data/VitaSuwayomi";
 #else
 static const char* SETTINGS_PATH = "./VitaSuwayomi_settings.json";
 #endif
@@ -154,6 +159,13 @@ bool Application::init() {
     // Create data directory on Vita
     int ret = sceIoMkdir("ux0:data/VitaSuwayomi", 0777);
     brls::Logger::debug("sceIoMkdir result: {:#x}", ret);
+#elif defined(__PS4__)
+    // Create data directory on PS4
+    if (mkdir(SETTINGS_DIR, 0777) == 0) {
+        brls::Logger::info("Created data directory: {}", SETTINGS_DIR);
+    } else if (errno != EEXIST) {
+        brls::Logger::warning("Could not create data directory {}: errno={}", SETTINGS_DIR, errno);
+    }
 #elif defined(__ANDROID__)
     // FIX: Create data directory on Android using POSIX mkdir.
     // SDL_AndroidGetInternalStoragePath() already exists, but our subdir

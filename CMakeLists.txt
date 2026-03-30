@@ -180,6 +180,8 @@ endif()
 
 if(PLATFORM_PSV)
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"app0:resources/\")
+elseif(PLATFORM_PS4)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"/app0/resources/\")
 elseif(PLATFORM_SWITCH OR USE_LIBROMFS)
     # Switch always uses romfs. Android does NOT — resources are APK assets via SDL.
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"romfs:/\")
