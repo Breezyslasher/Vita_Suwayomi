@@ -24,6 +24,7 @@
 
 #ifdef __PS4__
 #include <sys/stat.h>
+#include <orbis/Sysmodule.h>
 #endif
 
 #ifdef __vita__
@@ -197,10 +198,11 @@ static int appMain(int argc, char* argv[]) {
         setvbuf(logFile, NULL, _IOLBF, 0);
     }
 #else
-    // FIX: On Android and Desktop, curl_global_init must still be called.
-    // Previously this only happened inside initVitaNetwork() which was
-    // behind #ifdef __vita__, so Android builds never initialized curl —
-    // causing a freeze/deadlock the moment any network call was made.
+#ifdef __PS4__
+    // PS4: load internal network module before curl (matches switchfin)
+    if (sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_NET) < 0)
+        brls::Logger::error("Cannot load PS4 net module");
+#endif
     if (!vitasuwayomi::HttpClient::globalInit()) {
         brls::Logger::error("Failed to initialize curl");
         return 1;
