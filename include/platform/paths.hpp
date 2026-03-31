@@ -117,6 +117,9 @@ inline bool isPlatformLocalPath(const std::string& url) {
     return url.find("sdmc:/") == 0 || url[0] == '/';
 #elif defined(__ANDROID__)
     return url[0] == '/';
+#elif defined(__PS4__)
+    return url[0] == '/' ||
+           url.find(PLATFORM_DATA_DIR) == 0;
 #else
     // Desktop: absolute path or anything under our data dir
     return url[0] == '/' ||
