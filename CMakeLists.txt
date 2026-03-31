@@ -146,6 +146,11 @@ if(PLATFORM_PSV)
     list(APPEND APP_SOURCES src/utils/vita_stubs.c)
 endif()
 
+# Switch: userAppInit/userAppExit (romfs, sockets, system services init)
+if(PLATFORM_SWITCH)
+    list(APPEND APP_SOURCES ${BOREALIS_LIBRARY}/lib/platforms/switch/switch_wrapper.c)
+endif()
+
 # Android asset extraction helper
 if(PLATFORM_ANDROID)
     list(APPEND APP_SOURCES src/platform/android_assets.cpp)
@@ -447,10 +452,28 @@ elseif(PLATFORM_PS4)
     add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}.data)
 
 elseif(PLATFORM_SWITCH)
-    nx_create_nro(${PROJECT_NAME}
-        NAME   "VitaSuwayomi"
-        AUTHOR "Breezyslasher"
-        ICON   ${CMAKE_CURRENT_SOURCE_DIR}/app/platform/icon_switch.png
+    # Build NRO with embedded romfs resources (matches switchfin approach).
+    # nx_create_nro doesn't embed romfs or set metadata correctly, so we
+    # call nacptool + elf2nro manually.
+    if(USE_DEKO3D)
+        gen_dksh("${CMAKE_CURRENT_SOURCE_DIR}/resources/shaders")
+    endif()
+    add_custom_target(${PROJECT_NAME}.nro ALL DEPENDS ${PROJECT_NAME}
+        # Generate NACP metadata (author, version shown in hbmenu)
+        COMMAND ${NX_NACPTOOL_EXE} --create "VitaSuwayomi" "Breezyslasher"
+            "${PROJECT_VERSION}" ${PROJECT_NAME}.nacp
+        # Assemble romfs: app resources + borealis system resources
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources ${CMAKE_BINARY_DIR}/resources
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${BOREALIS_DIR}/resources/i18n ${CMAKE_BINARY_DIR}/resources/i18n
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${BOREALIS_DIR}/resources/img ${CMAKE_BINARY_DIR}/resources/img
+        # Build NRO with icon, metadata, and romfs
+        COMMAND ${NX_ELF2NRO_EXE} ${PROJECT_NAME}.elf ${PROJECT_NAME}.nro
+            --icon=${CMAKE_CURRENT_SOURCE_DIR}/app/platform/icon_switch.png
+            --nacp=${PROJECT_NAME}.nacp
+            --romfsdir=${CMAKE_BINARY_DIR}/resources
     )
 
 elseif(PLATFORM_DESKTOP)
