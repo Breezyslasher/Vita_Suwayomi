@@ -19,6 +19,14 @@
 
 #if defined(__ANDROID__)
 #include "platform/android_assets.hpp"
+#include <SDL.h>
+#endif
+
+#ifdef __PS4__
+#include <sys/stat.h>
+#include <orbis/Sysmodule.h>
+#include <thread>
+#include <chrono>
 #endif
 
 #ifdef __vita__
@@ -192,13 +200,27 @@ static int appMain(int argc, char* argv[]) {
         setvbuf(logFile, NULL, _IOLBF, 0);
     }
 #else
-    // FIX: On Android and Desktop, curl_global_init must still be called.
-    // Previously this only happened inside initVitaNetwork() which was
-    // behind #ifdef __vita__, so Android builds never initialized curl —
-    // causing a freeze/deadlock the moment any network call was made.
+#ifdef __PS4__
+    // PS4: load internal network module before curl (matches switchfin)
+    if (sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_NET) < 0)
+        brls::Logger::error("Cannot load PS4 net module");
+    // Wait for the network stack to fully initialize before curl operations.
+    // Without this delay, early network requests fail because the PS4 network
+    // module isn't ready yet (login connect button fails on first attempt).
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+#endif
     if (!vitasuwayomi::HttpClient::globalInit()) {
         brls::Logger::error("Failed to initialize curl");
         return 1;
+    }
+#endif
+
+#ifdef __PS4__
+    // Create log directory and file on PS4
+    mkdir("/data/VitaSuwayomi", 0777);
+    static FILE* logFile = std::fopen("/data/VitaSuwayomi/debug.log", "w");
+    if (logFile) {
+        setvbuf(logFile, NULL, _IOLBF, 0);
     }
 #endif
 
@@ -224,8 +246,13 @@ static int appMain(int argc, char* argv[]) {
         return 1;
     }
 
-#ifdef __vita__
-    // Subscribe to log events to write to file (since setLogOutput doesn't work on Vita)
+#if defined(__ANDROID__)
+    // Override borealis's default landscape-only hint to allow all rotations.
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait PortraitUpsideDown");
+#endif
+
+#if defined(__vita__) || defined(__PS4__)
+    // Subscribe to log events to write to file
     if (logFile) {
         brls::Logger::getLogEvent()->subscribe([](brls::Logger::TimePoint time, brls::LogLevel level, std::string log) {
             if (!logFile) return;
@@ -248,7 +275,11 @@ static int appMain(int argc, char* argv[]) {
                     time_tm.tm_hour, time_tm.tm_min, time_tm.tm_sec,
                     (int)ms, levelStr, log.c_str());
         });
+#ifdef __vita__
         brls::Logger::info("Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log");
+#else
+        brls::Logger::info("Log file initialized: /data/VitaSuwayomi/debug.log");
+#endif
     }
 #endif
 
@@ -306,9 +337,3 @@ static int appMain(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     return appMain(argc, argv);
 }
-
-#if defined(__ANDROID__)
-extern "C" int SDL_main(int argc, char* argv[]) {
-    return appMain(argc, argv);
-}
-#endif

@@ -8,6 +8,7 @@
 #include <sstream>
 #include <cstring>
 #include <cstdlib>
+#include <cerrno>
 #include <filesystem>
 
 #ifdef __vita__
@@ -68,6 +69,8 @@ bool LibraryCache::init() {
 std::string LibraryCache::getCacheDir() {
 #ifdef __vita__
     return "ux0:data/VitaSuwayomi/cache";
+#elif defined(__PS4__)
+    return "/data/VitaSuwayomi/cache";
 #else
     const char* homeDir = std::getenv("HOME");
     if (homeDir && *homeDir) {
@@ -111,6 +114,14 @@ bool LibraryCache::ensureDirectoryExists(const std::string& path) {
     if (sceIoGetstat(path.c_str(), &stat) < 0) {
         // Directory doesn't exist, create it
         if (sceIoMkdir(path.c_str(), 0777) < 0) {
+            return false;
+        }
+    }
+    return true;
+#elif defined(__PS4__)
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0) {
+        if (mkdir(path.c_str(), 0777) != 0 && errno != EEXIST) {
             return false;
         }
     }

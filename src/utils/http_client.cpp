@@ -26,7 +26,7 @@ struct WriteCallbackData {
 };
 
 bool HttpClient::globalInit() {
-    CURLcode res = curl_global_init(CURL_GLOBAL_DEFAULT);
+    CURLcode res = curl_global_init(CURL_GLOBAL_ALL);
     if (res != CURLE_OK) {
         brls::Logger::error("curl_global_init failed: {}", curl_easy_strerror(res));
         return false;
