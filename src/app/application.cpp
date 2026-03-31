@@ -17,6 +17,8 @@
 #include <sstream>
 #include <cstring>
 #include <cmath>
+#include <cstdlib>
+#include <filesystem>
 
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
@@ -64,7 +66,28 @@ static const char* SETTINGS_DIR  = "/data/VitaSuwayomi";
 static const char* SETTINGS_PATH = "sdmc:/VitaSuwayomi/settings.json";
 static const char* SETTINGS_DIR  = "sdmc:/VitaSuwayomi";
 #else
-static const char* SETTINGS_PATH = "./VitaSuwayomi_settings.json";
+// Desktop: use XDG-style path under $HOME so settings work regardless of CWD
+static std::string s_desktopSettingsPath;
+static std::string s_desktopSettingsDir;
+static const char* getDesktopSettingsPath() {
+    if (s_desktopSettingsPath.empty()) {
+        const char* home = std::getenv("HOME");
+        if (home && *home) {
+            s_desktopSettingsDir = std::string(home) + "/.local/share/VitaSuwayomi";
+            s_desktopSettingsPath = s_desktopSettingsDir + "/settings.json";
+        } else {
+            s_desktopSettingsDir = "./VitaSuwayomi";
+            s_desktopSettingsPath = s_desktopSettingsDir + "/settings.json";
+        }
+    }
+    return s_desktopSettingsPath.c_str();
+}
+static const char* getDesktopSettingsDir() {
+    getDesktopSettingsPath();
+    return s_desktopSettingsDir.c_str();
+}
+#define SETTINGS_PATH (getDesktopSettingsPath())
+#define SETTINGS_DIR  (getDesktopSettingsDir())
 #endif
 
 // Obfuscation helpers for storing sensitive fields (password, tokens) on disk.
@@ -185,6 +208,17 @@ bool Application::init() {
         brls::Logger::info("Created data directory: {}", dir);
     } else if (errno != EEXIST) {
         brls::Logger::warning("Could not create data directory {}: errno={}", dir, errno);
+    }
+#else
+    // Desktop: create ~/.local/share/VitaSuwayomi/ (and parent dirs)
+    {
+        const char* dir = SETTINGS_DIR;
+        brls::Logger::info("Desktop data directory: {}", dir);
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        if (ec) {
+            brls::Logger::warning("Could not create data directory {}: {}", dir, ec.message());
+        }
     }
 #endif
 

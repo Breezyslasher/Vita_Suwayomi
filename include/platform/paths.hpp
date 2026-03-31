@@ -15,6 +15,7 @@
  */
 
 #include <string>
+#include <cstdlib>
 
 #if defined(__vita__)
     static constexpr const char* PLATFORM_DATA_DIR = "ux0:data/VitaSuwayomi";
@@ -26,8 +27,22 @@
     // of PLATFORM_DATA_DIR directly. platformPath() calls getAndroidDataDir()
     // automatically on Android.
     static constexpr const char* PLATFORM_DATA_DIR = "";
+#elif defined(__PS4__)
+    static constexpr const char* PLATFORM_DATA_DIR = "/data/VitaSuwayomi";
 #else
-    static constexpr const char* PLATFORM_DATA_DIR = "./VitaSuwayomi";
+    // Desktop: resolved at runtime via $HOME
+    inline const std::string& getDesktopDataDir() {
+        static std::string s_dir;
+        if (s_dir.empty()) {
+            const char* home = std::getenv("HOME");
+            if (home && *home) {
+                s_dir = std::string(home) + "/.local/share/VitaSuwayomi";
+            } else {
+                s_dir = "./VitaSuwayomi";
+            }
+        }
+        return s_dir;
+    }
 #endif
 
 #if defined(__ANDROID__)
@@ -64,16 +79,20 @@ inline const std::string& getAndroidDataDir() {
 inline std::string platformPath(const char* relative) {
 #if defined(__ANDROID__)
     return getAndroidDataDir() + "/" + relative;
-#else
+#elif defined(__vita__) || defined(__SWITCH__) || defined(__PS4__)
     return std::string(PLATFORM_DATA_DIR) + "/" + relative;
+#else
+    return getDesktopDataDir() + "/" + relative;
 #endif
 }
 
 inline std::string platformPath(const std::string& relative) {
 #if defined(__ANDROID__)
     return getAndroidDataDir() + "/" + relative;
-#else
+#elif defined(__vita__) || defined(__SWITCH__) || defined(__PS4__)
     return std::string(PLATFORM_DATA_DIR) + "/" + relative;
+#else
+    return getDesktopDataDir() + "/" + relative;
 #endif
 }
 
@@ -101,6 +120,6 @@ inline bool isPlatformLocalPath(const std::string& url) {
 #else
     // Desktop: absolute path or anything under our data dir
     return url[0] == '/' ||
-           url.find(PLATFORM_DATA_DIR) == 0;
+           url.find(getDesktopDataDir()) == 0;
 #endif
 }
