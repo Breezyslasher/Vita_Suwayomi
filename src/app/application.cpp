@@ -463,7 +463,11 @@ void Application::pushLoginActivity() {
 }
 
 void Application::pushMainActivity() {
-    brls::Application::pushActivity(new MainActivity());
+    brls::Logger::info("pushMainActivity: creating MainActivity...");
+    auto* activity = new MainActivity();
+    brls::Logger::info("pushMainActivity: pushing activity...");
+    brls::Application::pushActivity(activity);
+    brls::Logger::info("pushMainActivity: done");
 }
 
 void Application::pushReaderActivity(int mangaId, int chapterIndex, const std::string& mangaTitle) {

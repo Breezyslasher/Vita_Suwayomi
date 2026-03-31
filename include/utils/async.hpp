@@ -13,7 +13,50 @@
 #include <psp2/kernel/threadmgr.h>
 #endif
 
+#if defined(__SWITCH__)
+#include <pthread.h>
+#endif
+
 namespace vitasuwayomi {
+
+// Helper: launch a detached thread with adequate stack size.
+// On Switch libnx the default pthread stack is too small for curl+mbedTLS,
+// so we explicitly request 512 KB. On other platforms std::thread is fine.
+namespace detail {
+
+#if defined(__SWITCH__)
+inline void launchThread(std::function<void()> task) {
+    auto* taskPtr = new std::function<void()>(std::move(task));
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 0x80000); // 512 KB
+    int rc = pthread_create(&tid, &attr, [](void* arg) -> void* {
+        auto* fn = static_cast<std::function<void()>*>(arg);
+        (*fn)();
+        delete fn;
+        return nullptr;
+    }, taskPtr);
+    pthread_attr_destroy(&attr);
+    if (rc == 0) {
+        pthread_detach(tid);
+    } else {
+        // Fallback
+        brls::Logger::error("pthread_create failed ({}), using std::thread", rc);
+        auto t = std::move(*taskPtr);
+        delete taskPtr;
+        std::thread([t]() { t(); }).detach();
+    }
+}
+#else
+inline void launchThread(std::function<void()> task) {
+    std::thread([task]() {
+        task();
+    }).detach();
+}
+#endif
+
+} // namespace detail
 
 #ifdef __vita__
 // Vita-specific thread wrapper with configurable stack size
@@ -44,16 +87,12 @@ inline void asyncRunLargeStack(std::function<void()> task) {
     } else {
         // Fallback to regular thread if creation fails
         delete data;
-        std::thread([task]() {
-            task();
-        }).detach();
+        detail::launchThread(std::move(task));
     }
 }
 #else
 inline void asyncRunLargeStack(std::function<void()> task) {
-    std::thread([task]() {
-        task();
-    }).detach();
+    detail::launchThread(std::move(task));
 }
 #endif
 
@@ -65,12 +104,12 @@ inline void asyncRunLargeStack(std::function<void()> task) {
  */
 template<typename T>
 inline void asyncTask(std::function<T()> task, std::function<void(T)> callback) {
-    std::thread([task, callback]() {
+    detail::launchThread([task, callback]() {
         T result = task();
         brls::sync([callback, result]() {
             callback(result);
         });
-    }).detach();
+    });
 }
 
 /**
@@ -80,12 +119,12 @@ inline void asyncTask(std::function<T()> task, std::function<void(T)> callback) 
  * @param callback Called on UI thread when task completes
  */
 inline void asyncTask(std::function<void()> task, std::function<void()> callback) {
-    std::thread([task, callback]() {
+    detail::launchThread([task, callback]() {
         task();
         brls::sync([callback]() {
             callback();
         });
-    }).detach();
+    });
 }
 
 /**
@@ -94,9 +133,7 @@ inline void asyncTask(std::function<void()> task, std::function<void()> callback
  * @param task The task to run in background
  */
 inline void asyncRun(std::function<void()> task) {
-    std::thread([task]() {
-        task();
-    }).detach();
+    detail::launchThread(std::move(task));
 }
 
 } // namespace vitasuwayomi
