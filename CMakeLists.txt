@@ -471,7 +471,7 @@ elseif(PLATFORM_SWITCH)
             ${BOREALIS_DIR}/resources/img ${CMAKE_BINARY_DIR}/resources/img
         # Build NRO with icon, metadata, and romfs
         COMMAND ${NX_ELF2NRO_EXE} ${PROJECT_NAME}.elf ${PROJECT_NAME}.nro
-            --icon=${CMAKE_CURRENT_SOURCE_DIR}/app/platform/icon_switch.png
+            --icon=${CMAKE_CURRENT_SOURCE_DIR}/app/platform/icon_switch.jpg
             --nacp=${PROJECT_NAME}.nacp
             --romfsdir=${CMAKE_BINARY_DIR}/resources
     )

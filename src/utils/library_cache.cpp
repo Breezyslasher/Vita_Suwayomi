@@ -71,6 +71,8 @@ std::string LibraryCache::getCacheDir() {
     return "ux0:data/VitaSuwayomi/cache";
 #elif defined(__PS4__)
     return "/data/VitaSuwayomi/cache";
+#elif defined(__SWITCH__)
+    return "sdmc:/VitaSuwayomi/cache";
 #else
     const char* homeDir = std::getenv("HOME");
     if (homeDir && *homeDir) {
@@ -118,7 +120,7 @@ bool LibraryCache::ensureDirectoryExists(const std::string& path) {
         }
     }
     return true;
-#elif defined(__PS4__)
+#elif defined(__PS4__) || defined(__SWITCH__)
     struct stat st;
     if (stat(path.c_str(), &st) != 0) {
         if (mkdir(path.c_str(), 0777) != 0 && errno != EEXIST) {

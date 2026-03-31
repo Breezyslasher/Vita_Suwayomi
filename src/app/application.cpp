@@ -23,7 +23,7 @@
 #include <psp2/io/stat.h>
 #endif
 
-#if defined(__ANDROID__) || defined(__PS4__)
+#if defined(__ANDROID__) || defined(__PS4__) || defined(__SWITCH__)
 #include <sys/stat.h>
 #endif
 #if defined(__ANDROID__)
@@ -60,6 +60,9 @@ static const char* getSettingsDir() {
 #elif defined(__PS4__)
 static const char* SETTINGS_PATH = "/data/VitaSuwayomi/settings.json";
 static const char* SETTINGS_DIR  = "/data/VitaSuwayomi";
+#elif defined(__SWITCH__)
+static const char* SETTINGS_PATH = "sdmc:/VitaSuwayomi/settings.json";
+static const char* SETTINGS_DIR  = "sdmc:/VitaSuwayomi";
 #else
 static const char* SETTINGS_PATH = "./VitaSuwayomi_settings.json";
 #endif
@@ -161,6 +164,13 @@ bool Application::init() {
     brls::Logger::debug("sceIoMkdir result: {:#x}", ret);
 #elif defined(__PS4__)
     // Create data directory on PS4
+    if (mkdir(SETTINGS_DIR, 0777) == 0) {
+        brls::Logger::info("Created data directory: {}", SETTINGS_DIR);
+    } else if (errno != EEXIST) {
+        brls::Logger::warning("Could not create data directory {}: errno={}", SETTINGS_DIR, errno);
+    }
+#elif defined(__SWITCH__)
+    // Create data directory on Switch SD card
     if (mkdir(SETTINGS_DIR, 0777) == 0) {
         brls::Logger::info("Created data directory: {}", SETTINGS_DIR);
     } else if (errno != EEXIST) {
