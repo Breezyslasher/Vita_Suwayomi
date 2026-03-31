@@ -25,6 +25,8 @@
 #ifdef __PS4__
 #include <sys/stat.h>
 #include <orbis/Sysmodule.h>
+#include <thread>
+#include <chrono>
 #endif
 
 #ifdef __vita__
@@ -202,6 +204,10 @@ static int appMain(int argc, char* argv[]) {
     // PS4: load internal network module before curl (matches switchfin)
     if (sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_NET) < 0)
         brls::Logger::error("Cannot load PS4 net module");
+    // Wait for the network stack to fully initialize before curl operations.
+    // Without this delay, early network requests fail because the PS4 network
+    // module isn't ready yet (login connect button fails on first attempt).
+    std::this_thread::sleep_for(std::chrono::seconds(2));
 #endif
     if (!vitasuwayomi::HttpClient::globalInit()) {
         brls::Logger::error("Failed to initialize curl");
