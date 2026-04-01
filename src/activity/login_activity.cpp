@@ -398,8 +398,12 @@ void LoginActivity::onConnectPressed() {
                 std::string modeName = getAuthModeName(authMode);
                 if (statusLabel) statusLabel->setText("Connected! (" + modeName + ")");
 
-                Application::getInstance().pushMainActivity();
-                brls::Logger::info("LoginActivity: MainActivity push requested");
+                // Defer to next frame so this sync callback fully returns
+                // before pushMainActivity() clears the activity stack.
+                brls::sync([]() {
+                    Application::getInstance().pushMainActivity();
+                    brls::Logger::info("LoginActivity: MainActivity push requested");
+                });
             } else {
                 if (statusLabel) statusLabel->setText("Connection failed");
             }
@@ -433,9 +437,13 @@ void LoginActivity::onOfflinePressed() {
         Application::getInstance().saveSettings();
     });
 
-    // Navigate immediately from the button callback thread to avoid Android
-    // stalls observed when dispatching this transition through brls::sync.
-    Application::getInstance().pushMainActivity();
+    // Defer navigation to next frame so this button callback fully returns
+    // before pushMainActivity() clears the activity stack (which deletes
+    // this LoginActivity).  Without deferral clear() frees the activity
+    // while its click handler is still on the call-stack.
+    brls::sync([]() {
+        Application::getInstance().pushMainActivity();
+    });
 }
 
 std::string LoginActivity::getAuthModeName(AuthMode mode) {

@@ -26,7 +26,10 @@ MainActivity::MainActivity() {
 }
 
 brls::View* MainActivity::createContentView() {
-    return brls::View::createFromXMLResource("activity/main.xml");
+    brls::Logger::info("MainActivity::createContentView - loading XML");
+    brls::View* view = brls::View::createFromXMLResource("activity/main.xml");
+    brls::Logger::info("MainActivity::createContentView - XML loaded, view={}", view ? "valid" : "NULL");
+    return view;
 }
 
 void MainActivity::onContentAvailable() {

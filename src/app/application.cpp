@@ -17,13 +17,15 @@
 #include <sstream>
 #include <cstring>
 #include <cmath>
+#include <cstdlib>
+#include <filesystem>
 
 #ifdef __vita__
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
 #endif
 
-#if defined(__ANDROID__) || defined(__PS4__)
+#if defined(__ANDROID__) || defined(__PS4__) || defined(__SWITCH__)
 #include <sys/stat.h>
 #endif
 #if defined(__ANDROID__)
@@ -60,8 +62,32 @@ static const char* getSettingsDir() {
 #elif defined(__PS4__)
 static const char* SETTINGS_PATH = "/data/VitaSuwayomi/settings.json";
 static const char* SETTINGS_DIR  = "/data/VitaSuwayomi";
+#elif defined(__SWITCH__)
+static const char* SETTINGS_PATH = "sdmc:/VitaSuwayomi/settings.json";
+static const char* SETTINGS_DIR  = "sdmc:/VitaSuwayomi";
 #else
-static const char* SETTINGS_PATH = "./VitaSuwayomi_settings.json";
+// Desktop: use XDG-style path under $HOME so settings work regardless of CWD
+static std::string s_desktopSettingsPath;
+static std::string s_desktopSettingsDir;
+static const char* getDesktopSettingsPath() {
+    if (s_desktopSettingsPath.empty()) {
+        const char* home = std::getenv("HOME");
+        if (home && *home) {
+            s_desktopSettingsDir = std::string(home) + "/.local/share/VitaSuwayomi";
+            s_desktopSettingsPath = s_desktopSettingsDir + "/settings.json";
+        } else {
+            s_desktopSettingsDir = "./VitaSuwayomi";
+            s_desktopSettingsPath = s_desktopSettingsDir + "/settings.json";
+        }
+    }
+    return s_desktopSettingsPath.c_str();
+}
+static const char* getDesktopSettingsDir() {
+    getDesktopSettingsPath();
+    return s_desktopSettingsDir.c_str();
+}
+#define SETTINGS_PATH (getDesktopSettingsPath())
+#define SETTINGS_DIR  (getDesktopSettingsDir())
 #endif
 
 // Obfuscation helpers for storing sensitive fields (password, tokens) on disk.
@@ -166,6 +192,13 @@ bool Application::init() {
     } else if (errno != EEXIST) {
         brls::Logger::warning("Could not create data directory {}: errno={}", SETTINGS_DIR, errno);
     }
+#elif defined(__SWITCH__)
+    // Create data directory on Switch SD card
+    if (mkdir(SETTINGS_DIR, 0777) == 0) {
+        brls::Logger::info("Created data directory: {}", SETTINGS_DIR);
+    } else if (errno != EEXIST) {
+        brls::Logger::warning("Could not create data directory {}: errno={}", SETTINGS_DIR, errno);
+    }
 #elif defined(__ANDROID__)
     // FIX: Create data directory on Android using POSIX mkdir.
     // SDL_AndroidGetInternalStoragePath() already exists, but our subdir
@@ -175,6 +208,17 @@ bool Application::init() {
         brls::Logger::info("Created data directory: {}", dir);
     } else if (errno != EEXIST) {
         brls::Logger::warning("Could not create data directory {}: errno={}", dir, errno);
+    }
+#else
+    // Desktop: create ~/.local/share/VitaSuwayomi/ (and parent dirs)
+    {
+        const char* dir = SETTINGS_DIR;
+        brls::Logger::info("Desktop data directory: {}", dir);
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        if (ec) {
+            brls::Logger::warning("Could not create data directory {}: {}", dir, ec.message());
+        }
     }
 #endif
 
@@ -453,7 +497,30 @@ void Application::pushLoginActivity() {
 }
 
 void Application::pushMainActivity() {
-    brls::Application::pushActivity(new MainActivity());
+    brls::Logger::info("pushMainActivity: creating MainActivity...");
+    auto* activity = new MainActivity();
+
+    // Clear the activity stack so LoginActivity is fully removed.
+    // Without this, on Switch the focus/hover system transfers input to
+    // LoginActivity's hidden elements, freezing controller input.
+    brls::Logger::info("pushMainActivity: clearing activity stack...");
+    brls::Application::clear();
+
+    brls::Logger::info("pushMainActivity: pushing activity...");
+    brls::Application::pushActivity(activity);
+
+    // On Switch (controller-only input), ensure focus lands on the new
+    // activity.  If getDefaultFocus() returned null (layout not ready),
+    // re-give focus to the content view so input is never stuck.
+    if (!brls::Application::getCurrentFocus()) {
+        brls::View* content = activity->getContentView();
+        if (content) {
+            brls::Application::giveFocus(content);
+            brls::Logger::info("pushMainActivity: re-gave focus to content view");
+        }
+    }
+
+    brls::Logger::info("pushMainActivity: done");
 }
 
 void Application::pushReaderActivity(int mangaId, int chapterIndex, const std::string& mangaTitle) {

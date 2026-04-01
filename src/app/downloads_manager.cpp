@@ -158,7 +158,11 @@ bool DownloadsManager::init() {
     m_downloadsPath = DOWNLOADS_BASE_PATH;
 
     // Create base downloads directory structure
+#if defined(__vita__) || defined(__SWITCH__) || defined(__PS4__)
     createDirectory(PLATFORM_DATA_DIR);
+#elif !defined(__ANDROID__)
+    // Desktop: parent dir created by Application::init()
+#endif
     createDirectory(m_downloadsPath);
 
     // Load saved state

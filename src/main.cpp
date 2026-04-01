@@ -27,6 +27,8 @@
 #include <orbis/Sysmodule.h>
 #include <thread>
 #include <chrono>
+#elif defined(__SWITCH__)
+#include <sys/stat.h>
 #endif
 
 #ifdef __vita__
@@ -222,6 +224,13 @@ static int appMain(int argc, char* argv[]) {
     if (logFile) {
         setvbuf(logFile, NULL, _IOLBF, 0);
     }
+#elif defined(__SWITCH__)
+    // Create log directory and file on Switch
+    mkdir("sdmc:/VitaSuwayomi", 0777);
+    static FILE* logFile = std::fopen("sdmc:/VitaSuwayomi/debug.log", "w");
+    if (logFile) {
+        setvbuf(logFile, NULL, _IOLBF, 0);
+    }
 #endif
 
     // Initialize Borealis
@@ -251,7 +260,7 @@ static int appMain(int argc, char* argv[]) {
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight Portrait PortraitUpsideDown");
 #endif
 
-#if defined(__vita__) || defined(__PS4__)
+#if defined(__vita__) || defined(__PS4__) || defined(__SWITCH__)
     // Subscribe to log events to write to file
     if (logFile) {
         brls::Logger::getLogEvent()->subscribe([](brls::Logger::TimePoint time, brls::LogLevel level, std::string log) {
@@ -277,6 +286,8 @@ static int appMain(int argc, char* argv[]) {
         });
 #ifdef __vita__
         brls::Logger::info("Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log");
+#elif defined(__SWITCH__)
+        brls::Logger::info("Log file initialized: sdmc:/VitaSuwayomi/debug.log");
 #else
         brls::Logger::info("Log file initialized: /data/VitaSuwayomi/debug.log");
 #endif
