@@ -424,6 +424,7 @@ jobs:
       matrix:
         include:
         - { tag: Silicon, arch: arm64, target: "11.0", runner: macos-14 }
+        - { tag: Intel, arch: x86_64, target: "11.0", runner: macos-15-intel }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -437,12 +438,125 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }}
           cmake --build build
+      - name: Bundle macOS dylibs
+        run: |
+          BIN="build/VitaSuwayomi"
+          if [ ! -f "$BIN" ]; then
+            echo "Expected binary not found: $BIN"
+            exit 1
+          fi
+
+          tmpdir="$(mktemp -d)"
+          queue_file="$tmpdir/queue.txt"
+          scanned_file="$tmpdir/scanned.txt"
+          bundled_file="$tmpdir/bundled.txt"
+          printf '%s\n' "$BIN" > "$queue_file"
+          : > "$scanned_file"
+          : > "$bundled_file"
+
+          while [ -s "$queue_file" ]; do
+            current="$(head -n 1 "$queue_file")"
+            tail -n +2 "$queue_file" > "$queue_file.next" || true
+            mv "$queue_file.next" "$queue_file"
+            printf '%s\n' "$current" >> "$scanned_file"
+
+            while IFS= read -r dep; do
+              resolved_dep="$dep"
+              case "$dep" in
+                /usr/lib/*|/System/*|@executable_path/*|@loader_path/*)
+                  continue
+                  ;;
+                @rpath/*)
+                  base_from_rpath="${dep#@rpath/}"
+                  resolved_dep=""
+                  for probe in \
+                    "/usr/local/lib/$base_from_rpath" \
+                    "/opt/homebrew/lib/$base_from_rpath" \
+                    /usr/local/opt/*/lib/"$base_from_rpath" \
+                    /opt/homebrew/opt/*/lib/"$base_from_rpath"; do
+                    if [ -f "$probe" ]; then
+                      resolved_dep="$probe"
+                      break
+                    fi
+                  done
+                  if [ -z "$resolved_dep" ]; then
+                    echo "Skipping unresolved @rpath dependency: $dep"
+                    continue
+                  fi
+                  ;;
+              esac
+
+              if [ ! -f "$resolved_dep" ]; then
+                echo "Skipping missing dependency reference: $dep"
+                continue
+              fi
+
+              base="$(basename "$resolved_dep")"
+              target="build/$base"
+
+              if ! grep -Fxq "$base" "$bundled_file"; then
+                cp -f "$resolved_dep" "$target"
+                install_name_tool -id "@executable_path/$base" "$target"
+                install_name_tool -add_rpath "@executable_path" "$target" 2>/dev/null || true
+                printf '%s\n' "$base" >> "$bundled_file"
+                echo "Bundled $base (from $(basename "$current"))"
+              fi
+
+              install_name_tool -change "$dep" "@executable_path/$base" "$current"
+
+              if ! grep -Fxq "$target" "$scanned_file" && ! grep -Fxq "$target" "$queue_file"; then
+                printf '%s\n' "$target" >> "$queue_file"
+              fi
+            done < <(otool -L "$current" | tail -n +2 | awk '{print $1}')
+          done
+
+          install_name_tool -add_rpath "@executable_path" "$BIN" 2>/dev/null || true
+
+          rm -rf "$tmpdir"
+      - name: Package macOS DMG
+        run: |
+          APP_ROOT="build/dmg-root"
+          APP_DIR="$APP_ROOT/VitaSuwayomi.app"
+          MACOS_DIR="$APP_DIR/Contents/MacOS"
+
+          rm -rf "$APP_ROOT"
+          mkdir -p "$MACOS_DIR"
+
+          cp -f build/VitaSuwayomi "$MACOS_DIR/VitaSuwayomi"
+          cp -R build/resources "$MACOS_DIR/resources"
+          cp -f build/*.dylib "$MACOS_DIR/" 2>/dev/null || true
+          chmod +x "$MACOS_DIR/VitaSuwayomi"
+
+          cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>VitaSuwayomi</string>
+            <key>CFBundleDisplayName</key><string>VitaSuwayomi</string>
+            <key>CFBundleIdentifier</key><string>com.vitasuwayomi.app</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleExecutable</key><string>VitaSuwayomi</string>
+          </dict>
+          </plist>
+          PLIST
+
+          hdiutil create \
+            -volname "VitaSuwayomi" \
+            -srcfolder "$APP_ROOT" \
+            -ov \
+            -format UDZO \
+            "build/VitaSuwayomi-${{ matrix.tag }}.dmg"
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-macos-${{ matrix.tag }}-${{ github.run_number }}
           path: |
             build/VitaSuwayomi
+            build/VitaSuwayomi-*.dmg
+            build/*.dylib
             build/resources/
 
   # ───────────────────────────────────────────────
