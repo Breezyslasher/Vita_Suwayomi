@@ -499,8 +499,31 @@ void Application::pushLoginActivity() {
 void Application::pushMainActivity() {
     brls::Logger::info("pushMainActivity: creating MainActivity...");
     auto* activity = new MainActivity();
+
+    // Clear the activity stack so LoginActivity is fully removed.
+    // Without this, on Switch the focus/hover system transfers input to
+    // LoginActivity's hidden elements, freezing controller input.
+    // Null currentFocus first — clear() deletes the views it points to,
+    // and the subsequent giveFocus() in pushActivity() must not call
+    // onFocusLost() on a dangling pointer.
+    brls::Logger::info("pushMainActivity: clearing activity stack...");
+    brls::Application::currentFocus = nullptr;
+    brls::Application::clear();
+
     brls::Logger::info("pushMainActivity: pushing activity...");
     brls::Application::pushActivity(activity);
+
+    // On Switch (controller-only input), ensure focus lands on the new
+    // activity.  If getDefaultFocus() returned null (layout not ready),
+    // re-give focus to the content view so input is never stuck.
+    if (!brls::Application::getCurrentFocus()) {
+        brls::View* content = activity->getContentView();
+        if (content) {
+            brls::Application::giveFocus(content);
+            brls::Logger::info("pushMainActivity: re-gave focus to content view");
+        }
+    }
+
     brls::Logger::info("pushMainActivity: done");
 }
 

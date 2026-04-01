@@ -20,6 +20,7 @@
 #include <thread>
 #include <chrono>
 #include <fstream>
+#include "utils/async.hpp"
 
 // Vita I/O for local file loading
 #ifdef __vita__
@@ -2581,8 +2582,11 @@ void ImageLoader::ensureWorkersStarted() {
     brls::Logger::info("ImageLoader: Starting {} worker threads", numWorkers);
 
     for (int i = 0; i < numWorkers; i++) {
-        s_workers.emplace_back(workerThreadFunc, i);
-        s_workers.back().detach();
+        // On Switch, use detail::launchThread() for 512KB stack (default
+        // libnx stack is ~128KB, too small for curl+mbedTLS in workers).
+        detail::launchThread([i]() {
+            workerThreadFunc(i);
+        });
     }
 }
 
@@ -2602,10 +2606,20 @@ void ImageLoader::workerThreadFunc(int workerId) {
 
         {
             std::unique_lock<std::mutex> lock(s_queueMutex);
+#if defined(__SWITCH__)
+            // On Switch/libnx, pthread_cond_timedwait is not implemented
+            // (returns ENOSYS), so wait_for() throws.  Poll instead.
+            if (s_loadQueue.empty() && s_rotatableLoadQueue.empty() && !s_shutdownWorkers) {
+                lock.unlock();
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                lock.lock();
+            }
+#else
             // Wait for items to be queued (with timeout to allow shutdown check)
             s_queueCV.wait_for(lock, std::chrono::milliseconds(500), []() {
                 return !s_loadQueue.empty() || !s_rotatableLoadQueue.empty() || s_shutdownWorkers;
             });
+#endif
 
             if (s_shutdownWorkers) break;
 
