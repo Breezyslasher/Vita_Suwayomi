@@ -438,12 +438,66 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }}
           cmake --build build
+      - name: Bundle macOS dylibs
+        run: |
+          BIN="build/VitaSuwayomi"
+          if [ ! -f "$BIN" ]; then
+            echo "Expected binary not found: $BIN"
+            exit 1
+          fi
+
+          tmpdir="$(mktemp -d)"
+          queue_file="$tmpdir/queue.txt"
+          scanned_file="$tmpdir/scanned.txt"
+          bundled_file="$tmpdir/bundled.txt"
+          printf '%s\n' "$BIN" > "$queue_file"
+          : > "$scanned_file"
+          : > "$bundled_file"
+
+          while [ -s "$queue_file" ]; do
+            current="$(head -n 1 "$queue_file")"
+            tail -n +2 "$queue_file" > "$queue_file.next" || true
+            mv "$queue_file.next" "$queue_file"
+            printf '%s\n' "$current" >> "$scanned_file"
+
+            while IFS= read -r dep; do
+              case "$dep" in
+                /usr/lib/*|/System/*|@executable_path/*|@loader_path/*|@rpath/*)
+                  continue
+                  ;;
+              esac
+
+              if [ ! -f "$dep" ]; then
+                echo "Skipping missing dependency reference: $dep"
+                continue
+              fi
+
+              base="$(basename "$dep")"
+              target="build/$base"
+
+              if ! grep -Fxq "$base" "$bundled_file"; then
+                cp -f "$dep" "$target"
+                install_name_tool -id "@executable_path/$base" "$target"
+                printf '%s\n' "$base" >> "$bundled_file"
+                echo "Bundled $base (from $(basename "$current"))"
+              fi
+
+              install_name_tool -change "$dep" "@executable_path/$base" "$current"
+
+              if ! grep -Fxq "$target" "$scanned_file" && ! grep -Fxq "$target" "$queue_file"; then
+                printf '%s\n' "$target" >> "$queue_file"
+              fi
+            done < <(otool -L "$current" | tail -n +2 | awk '{print $1}')
+          done
+
+          rm -rf "$tmpdir"
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-macos-${{ matrix.tag }}-${{ github.run_number }}
           path: |
             build/VitaSuwayomi
+            build/*.dylib
             build/resources/
 
   # ───────────────────────────────────────────────
