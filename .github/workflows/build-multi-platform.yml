@@ -513,12 +513,49 @@ jobs:
           install_name_tool -add_rpath "@executable_path" "$BIN" 2>/dev/null || true
 
           rm -rf "$tmpdir"
+      - name: Package macOS DMG
+        run: |
+          APP_ROOT="build/dmg-root"
+          APP_DIR="$APP_ROOT/VitaSuwayomi.app"
+          MACOS_DIR="$APP_DIR/Contents/MacOS"
+
+          rm -rf "$APP_ROOT"
+          mkdir -p "$MACOS_DIR"
+
+          cp -f build/VitaSuwayomi "$MACOS_DIR/VitaSuwayomi"
+          cp -R build/resources "$MACOS_DIR/resources"
+          cp -f build/*.dylib "$MACOS_DIR/" 2>/dev/null || true
+          chmod +x "$MACOS_DIR/VitaSuwayomi"
+
+          cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>VitaSuwayomi</string>
+            <key>CFBundleDisplayName</key><string>VitaSuwayomi</string>
+            <key>CFBundleIdentifier</key><string>com.vitasuwayomi.app</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleExecutable</key><string>VitaSuwayomi</string>
+          </dict>
+          </plist>
+          PLIST
+
+          hdiutil create \
+            -volname "VitaSuwayomi" \
+            -srcfolder "$APP_ROOT" \
+            -ov \
+            -format UDZO \
+            "build/VitaSuwayomi-${{ matrix.tag }}.dmg"
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-macos-${{ matrix.tag }}-${{ github.run_number }}
           path: |
             build/VitaSuwayomi
+            build/VitaSuwayomi-*.dmg
             build/*.dylib
             build/resources/
 
