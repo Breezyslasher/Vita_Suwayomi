@@ -424,7 +424,7 @@ jobs:
       matrix:
         include:
         - { tag: Silicon, arch: arm64, target: "11.0", runner: macos-14 }
-        - { tag: Intel, arch: x86_64, target: "11.0", runner: macos-13 }
+        - { tag: Intel, arch: x86_64, target: "11.0", runner: macos-15-intel }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
