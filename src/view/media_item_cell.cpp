@@ -285,11 +285,21 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
     // Draw child views via borealis (only Image + lazy badges in hierarchy now)
     brls::Box::draw(vg, x, y, width, height, style, ctx);
 
+    // On constrained consoles, drawing title text for every visible grid cell can
+    // dominate frame time. In grid mode, draw full overlay text only for the
+    // focused card and skip title-box text on unfocused cards.
+#if defined(__vita__) || defined(__PS4__)
+    const bool lowPowerGridTitleMode = (!m_listMode && !m_compactMode);
+#else
+    const bool lowPowerGridTitleMode = false;
+#endif
+    const bool drawOverlayText = (!lowPowerGridTitleMode || this->isFocused());
+
     // --- Flat-rendered title overlay ---
     // PERF: Pre-splits title into cached lines on text change, then draws with
     // nvgText (no wrapping) instead of nvgTextBox (wraps every frame).
     // Also caches badge text dimensions. Saves ~0.2ms/cell × 18 cells = ~3.6ms/frame.
-    if (m_showOverlay && !m_titleText.empty()) {
+    if (m_showOverlay && drawOverlayText && !m_titleText.empty()) {
         float textW = width - m_overlayPadSide * 2.0f;
 
         // Recompute cached text layout when text/font/width changes (not every frame)
