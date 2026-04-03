@@ -55,6 +55,27 @@ A native Suwayomi client for PlayStation Vita. Read manga from your Suwayomi ser
 3. Install using VitaShell
 4. Configure your Suwayomi server URL in settings
 
+## Building (PS Vita)
+
+The PS Vita build now supports two renderer backends:
+
+- **GXM** (`-DPSV_RENDERER=GXM`) — default and recommended for most users.
+- **GLES2** (`-DPSV_RENDERER=GLES2`) — alternative backend.
+
+Example commands:
+
+```bash
+cmake -B build-vita-gxm -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=GXM
+cmake --build build-vita-gxm
+
+cmake -B build-vita-gles2 -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=GLES2
+cmake --build build-vita-gles2
+```
+
+Each build outputs a renderer-specific VPK:
+
+- `VitaSuwayomi-gxm.vpk`
+- `VitaSuwayomi-gles2.vpk`
 
 
 ## License

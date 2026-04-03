@@ -12,6 +12,8 @@ option(PLATFORM_SWITCH  "Build for Nintendo Switch"                    OFF)
 option(PLATFORM_PS4     "Build for PlayStation 4"                      OFF)
 option(PLATFORM_DESKTOP "Build for Desktop (Linux/macOS/Windows)"      OFF)
 option(PLATFORM_ANDROID "Build for Android"                            OFF)
+set(PSV_RENDERER "GXM" CACHE STRING "PS Vita renderer backend (GXM or GLES2)")
+set_property(CACHE PSV_RENDERER PROPERTY STRINGS GXM GLES2)
 
 # Default to desktop when nothing is specified
 set(_PLATFORM_COUNT 0)
@@ -42,7 +44,21 @@ set(PLATFORM_IOS     OFF                 CACHE BOOL "" FORCE)
 set(PLATFORM_ANDROID ${PLATFORM_ANDROID} CACHE BOOL "" FORCE)
 
 if(PLATFORM_PSV)
-    set(BOREALIS_USE_GXM ON  CACHE BOOL "Use GXM renderer for PS Vita" FORCE)
+    string(TOUPPER "${PSV_RENDERER}" PSV_RENDERER_NORMALIZED)
+    if(NOT PSV_RENDERER_NORMALIZED STREQUAL "GXM" AND
+       NOT PSV_RENDERER_NORMALIZED STREQUAL "GLES2")
+        message(FATAL_ERROR "Invalid PSV_RENDERER='${PSV_RENDERER}'. Use GXM or GLES2.")
+    endif()
+    set(PSV_RENDERER "${PSV_RENDERER_NORMALIZED}" CACHE STRING "PS Vita renderer backend (GXM or GLES2)" FORCE)
+
+    if(PSV_RENDERER STREQUAL "GXM")
+        set(BOREALIS_USE_GXM ON  CACHE BOOL "Use GXM renderer for PS Vita" FORCE)
+        set(VITA_RENDERER_SUFFIX "gxm")
+    else()
+        set(BOREALIS_USE_GXM OFF CACHE BOOL "Use GXM renderer for PS Vita" FORCE)
+        set(VITA_RENDERER_SUFFIX "gles2")
+    endif()
+
     set(USE_VITA_SHARK  OFF  CACHE BOOL "Use VitaShark for shader compilation" FORCE)
 endif()
 
@@ -342,7 +358,7 @@ endif()
 if(PLATFORM_PSV)
     vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME} UNSAFE NOASLR)
 
-    vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
+    vita_create_vpk(${PROJECT_NAME}-${VITA_RENDERER_SUFFIX}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
         VERSION ${VITA_VERSION}
         NAME    ${VITA_APP_NAME}
 
@@ -506,4 +522,3 @@ elseif(PLATFORM_DESKTOP)
         COMMENT "Copying resources (app + borealis) for desktop build"
     )
 endif()
-

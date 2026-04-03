@@ -65,10 +65,18 @@ jobs:
   # ───────────────────────────────────────────────
   build-vita:
     if: ${{ inputs.platform == 'psvita' || github.event_name != 'workflow_dispatch' }}
-    name: PS Vita
+    name: PS Vita (${{ matrix.renderer }})
     runs-on: ubuntu-latest
     container:
       image: vitasdk/vitasdk:latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - renderer: GXM
+            renderer_suffix: gxm
+          - renderer: GLES2
+            renderer_suffix: gles2
 
     steps:
       - name: Install build requirements
@@ -91,14 +99,14 @@ jobs:
 
       - name: Build
         run: |
-          cmake -B build -G Ninja -DPLATFORM_PSV=ON
+          cmake -B build -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=${{ matrix.renderer }}
           cmake --build build
 
       - name: Upload VPK
         uses: actions/upload-artifact@v4
         with:
-          name: VitaSuwayomi-vita-${{ github.run_number }}
-          path: build/VitaSuwayomi.vpk
+          name: VitaSuwayomi-vita-${{ matrix.renderer_suffix }}-${{ github.run_number }}
+          path: build/VitaSuwayomi-${{ matrix.renderer_suffix }}.vpk
 
   # ───────────────────────────────────────────────
   # Android — switchfin-style APK build
