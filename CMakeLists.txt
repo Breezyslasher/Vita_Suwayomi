@@ -144,6 +144,18 @@ endif()
 
 add_subdirectory(${BOREALIS_LIBRARY})
 
+if(PLATFORM_PSV AND PSV_RENDERER STREQUAL "GLES2" AND TARGET borealis)
+    foreach(_BRLS_LINK_PROP LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
+        get_target_property(_BRLS_LINKS borealis ${_BRLS_LINK_PROP})
+        if(_BRLS_LINKS)
+            list(TRANSFORM _BRLS_LINKS REPLACE "^libgpu_es4_ext_stub_weak$" "gpu_es4_ext_stub_weak")
+            list(TRANSFORM _BRLS_LINKS REPLACE "^libIMGEGL_stub_weak$" "IMGEGL_stub_weak")
+            list(TRANSFORM _BRLS_LINKS REPLACE "^libGLESv2_stub_weak$" "GLESv2_stub_weak")
+            set_property(TARGET borealis PROPERTY ${_BRLS_LINK_PROP} "${_BRLS_LINKS}")
+        endif()
+    endforeach()
+endif()
+
 # ---------------------------------------------------------------------------
 # Application sources
 # ---------------------------------------------------------------------------
