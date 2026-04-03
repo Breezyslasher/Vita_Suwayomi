@@ -59,6 +59,12 @@ if(PLATFORM_PSV)
         set(USE_GXM OFF CACHE BOOL "Use GXM renderer for PS Vita" FORCE)
         set(USE_GLES2 ON CACHE BOOL "" FORCE)
         set(VITA_RENDERER_SUFFIX "gles2")
+
+        set(VITA_PVR_HINT_HEADER "$ENV{VITASDK}/arm-vita-eabi/include/gpu_es4/psp2_pvr_hint.h")
+        if(NOT EXISTS "${VITA_PVR_HINT_HEADER}")
+            message(WARNING "vitaGL header gpu_es4/psp2_pvr_hint.h was not found under VITASDK. Using local compatibility header for GLES2 build.")
+            include_directories(BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/cmake/vita_gles2_compat)
+        endif()
     endif()
 
     set(USE_VITA_SHARK  OFF  CACHE BOOL "Use VitaShark for shader compilation" FORCE)

@@ -60,7 +60,10 @@ A native Suwayomi client for PlayStation Vita. Read manga from your Suwayomi ser
 The PS Vita build now supports two renderer backends:
 
 - **GXM** (`-DPSV_RENDERER=GXM`) — default and recommended for most users.
-- **GLES2** (`-DPSV_RENDERER=GLES2`) — alternative backend (requires `vitaGL`, e.g. `vdpm vitagl`).
+- **GLES2** (`-DPSV_RENDERER=GLES2`) — alternative backend (recommended: install `vitaGL`, e.g. `vdpm vitagl`).
+
+If `gpu_es4/psp2_pvr_hint.h` is missing from your SDK, the build uses a local compatibility
+header so compilation can continue, but installing `vitaGL` is still preferred.
 
 Example commands:
 
