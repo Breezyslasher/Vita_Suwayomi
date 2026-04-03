@@ -12,6 +12,7 @@ option(PLATFORM_SWITCH  "Build for Nintendo Switch"                    OFF)
 option(PLATFORM_PS4     "Build for PlayStation 4"                      OFF)
 option(PLATFORM_DESKTOP "Build for Desktop (Linux/macOS/Windows)"      OFF)
 option(PLATFORM_ANDROID "Build for Android"                            OFF)
+option(PSV_AUTO_INSTALL_GLES2_DEPS "Auto-install missing Vita GLES2 deps with vdpm when possible" OFF)
 set(PSV_RENDERER "GXM" CACHE STRING "PS Vita renderer backend (GXM or GLES2)")
 set_property(CACHE PSV_RENDERER PROPERTY STRINGS GXM GLES2)
 
@@ -60,9 +61,30 @@ if(PLATFORM_PSV)
         if(DEFINED ENV{VITASDK})
             set(_PSV_PVR_HINT_HEADER "$ENV{VITASDK}/arm-vita-eabi/include/gpu_es4/psp2_pvr_hint.h")
             if(NOT EXISTS "${_PSV_PVR_HINT_HEADER}")
+                if(PSV_AUTO_INSTALL_GLES2_DEPS)
+                    find_program(VDPM_EXECUTABLE vdpm)
+                    if(VDPM_EXECUTABLE)
+                        message(STATUS "Missing vitaGL headers for GLES2. Trying to install with vdpm.")
+                        execute_process(COMMAND "${VDPM_EXECUTABLE}" vitagl
+                            RESULT_VARIABLE _VDPM_RESULT
+                            OUTPUT_QUIET
+                            ERROR_QUIET
+                        )
+                        if(NOT _VDPM_RESULT EQUAL 0)
+                            execute_process(COMMAND "${VDPM_EXECUTABLE}" vitaGL
+                                RESULT_VARIABLE _VDPM_RESULT_ALT
+                                OUTPUT_QUIET
+                                ERROR_QUIET
+                            )
+                        endif()
+                    endif()
+                endif()
+
+                if(NOT EXISTS "${_PSV_PVR_HINT_HEADER}")
                 message(FATAL_ERROR
                     "PSV_RENDERER=GLES2 requires vitaGL headers, but '${_PSV_PVR_HINT_HEADER}' was not found. "
-                    "Install them with 'vdpm vitaGL'.")
+                    "Install them with 'vdpm vitagl' (or 'vdpm vitaGL').")
+                endif()
             endif()
         endif()
     endif()

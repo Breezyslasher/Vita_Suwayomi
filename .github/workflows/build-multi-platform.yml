@@ -100,11 +100,11 @@ jobs:
       - name: Install Vita GLES2 dependency
         if: matrix.renderer == 'GLES2'
         run: |
-          vdpm vitaGL
+          vdpm vitagl || vdpm vitaGL
 
       - name: Build
         run: |
-          cmake -B build -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=${{ matrix.renderer }}
+          cmake -B build -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=${{ matrix.renderer }} -DPSV_AUTO_INSTALL_GLES2_DEPS=ON
           cmake --build build
 
       - name: Upload VPK

@@ -62,6 +62,10 @@ The PS Vita build now supports two renderer backends:
 - **GXM** (`-DPSV_RENDERER=GXM`) — default and recommended for most users.
 - **GLES2** (`-DPSV_RENDERER=GLES2`) — alternative backend (requires `vitaGL`, e.g. `vdpm vitaGL`).
 
+If you want CMake to try installing missing GLES2 deps automatically (when `vdpm` is available), add:
+
+- `-DPSV_AUTO_INSTALL_GLES2_DEPS=ON`
+
 Example commands:
 
 ```bash
