@@ -60,30 +60,22 @@ if(PLATFORM_PSV)
         set(VITA_RENDERER_SUFFIX "gles2")
         if(DEFINED ENV{VITASDK})
             set(_PSV_PVR_HINT_HEADER "$ENV{VITASDK}/arm-vita-eabi/include/gpu_es4/psp2_pvr_hint.h")
-            if(NOT EXISTS "${_PSV_PVR_HINT_HEADER}")
-                if(PSV_AUTO_INSTALL_GLES2_DEPS)
-                    find_program(VDPM_EXECUTABLE vdpm)
-                    if(VDPM_EXECUTABLE)
-                        message(STATUS "Missing vitaGL headers for GLES2. Trying to install with vdpm.")
-                        execute_process(COMMAND "${VDPM_EXECUTABLE}" vitagl
-                            RESULT_VARIABLE _VDPM_RESULT
+            if(NOT EXISTS "${_PSV_PVR_HINT_HEADER}" AND PSV_AUTO_INSTALL_GLES2_DEPS)
+                find_program(VDPM_EXECUTABLE vdpm)
+                if(VDPM_EXECUTABLE)
+                    message(STATUS "Missing vitaGL headers for GLES2. Trying to install with vdpm.")
+                    execute_process(COMMAND "${VDPM_EXECUTABLE}" vitagl
+                        RESULT_VARIABLE _VDPM_RESULT
+                        OUTPUT_QUIET
+                        ERROR_QUIET
+                    )
+                    if(NOT _VDPM_RESULT EQUAL 0)
+                        execute_process(COMMAND "${VDPM_EXECUTABLE}" vitaGL
+                            RESULT_VARIABLE _VDPM_RESULT_ALT
                             OUTPUT_QUIET
                             ERROR_QUIET
                         )
-                        if(NOT _VDPM_RESULT EQUAL 0)
-                            execute_process(COMMAND "${VDPM_EXECUTABLE}" vitaGL
-                                RESULT_VARIABLE _VDPM_RESULT_ALT
-                                OUTPUT_QUIET
-                                ERROR_QUIET
-                            )
-                        endif()
                     endif()
-                endif()
-
-                if(NOT EXISTS "${_PSV_PVR_HINT_HEADER}")
-                message(FATAL_ERROR
-                    "PSV_RENDERER=GLES2 requires vitaGL headers, but '${_PSV_PVR_HINT_HEADER}' was not found. "
-                    "Install them with 'vdpm vitagl' (or 'vdpm vitaGL').")
                 endif()
             endif()
         endif()
@@ -145,6 +137,34 @@ if(PLATFORM_PSV)
         configure_file(${PSV_PLATFORM_PATCH} ${PSV_PLATFORM_TARGET} COPYONLY)
     else()
         message(FATAL_ERROR "Patch file not found: ${PSV_PLATFORM_PATCH}")
+    endif()
+
+    if(PSV_RENDERER STREQUAL "GLES2")
+        set(PSV_SDL_VIDEO_TARGET ${BOREALIS_LIBRARY}/lib/platforms/sdl/sdl_video.cpp)
+        if(EXISTS ${PSV_SDL_VIDEO_TARGET})
+            file(READ ${PSV_SDL_VIDEO_TARGET} PSV_SDL_VIDEO_SOURCE)
+
+            string(REPLACE
+                "#include <gpu_es4/psp2_pvr_hint.h>"
+                "#if __has_include(<gpu_es4/psp2_pvr_hint.h>)\n#include <gpu_es4/psp2_pvr_hint.h>\n#define BRLS_HAS_PSP2_PVR_HINT 1\n#endif"
+                PSV_SDL_VIDEO_SOURCE
+                "${PSV_SDL_VIDEO_SOURCE}")
+
+            string(REPLACE
+                "PVRSRV_PSP2_APPHINT hint;"
+                "#if defined(BRLS_HAS_PSP2_PVR_HINT)\n    PVRSRV_PSP2_APPHINT hint;\n#endif"
+                PSV_SDL_VIDEO_SOURCE
+                "${PSV_SDL_VIDEO_SOURCE}")
+
+            string(REPLACE
+                "    /* Set PVR Hints */\n    PVRSRVInitializeAppHint(&hint);\n    snprintf(hint.szGLES1, MAX_PATH, \"%s/%s\", default_path, \"libGLESv1_CM.suprx\");\n    snprintf(hint.szGLES2, MAX_PATH, \"%s/%s\", default_path, \"libGLESv2.suprx\");\n    snprintf(hint.szWindowSystem, MAX_PATH, \"%s/%s\", default_path, \"libpvrPSP2_WSEGL.suprx\");\n\n    hint.ui32SwTexOpCleanupDelay = 32000; // Set to 32 milliseconds to prevent a pool of unfreed memory\n    PVRSRVCreateVirtualAppHint(&hint);"
+                "    /* Set PVR Hints */\n#if defined(BRLS_HAS_PSP2_PVR_HINT)\n    PVRSRVInitializeAppHint(&hint);\n    snprintf(hint.szGLES1, MAX_PATH, \"%s/%s\", default_path, \"libGLESv1_CM.suprx\");\n    snprintf(hint.szGLES2, MAX_PATH, \"%s/%s\", default_path, \"libGLESv2.suprx\");\n    snprintf(hint.szWindowSystem, MAX_PATH, \"%s/%s\", default_path, \"libpvrPSP2_WSEGL.suprx\");\n\n    hint.ui32SwTexOpCleanupDelay = 32000; // Set to 32 milliseconds to prevent a pool of unfreed memory\n    PVRSRVCreateVirtualAppHint(&hint);\n#endif"
+                PSV_SDL_VIDEO_SOURCE
+                "${PSV_SDL_VIDEO_SOURCE}")
+
+            file(WRITE ${PSV_SDL_VIDEO_TARGET} "${PSV_SDL_VIDEO_SOURCE}")
+            message(STATUS "Patched SDL Vita GLES2 hints fallback in sdl_video.cpp")
+        endif()
     endif()
 endif()
 
