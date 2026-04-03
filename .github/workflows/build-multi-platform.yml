@@ -119,6 +119,15 @@ jobs:
               done &&
               vdpm vitagl || vdpm vitaGL &&
               vdpm libass harfbuzz fribidi freetype libpng libwebp /src/*-arm.tar.xz &&
+              if [ ! -f /usr/local/vitasdk/arm-vita-eabi/lib/libgpu_es4_ext_stub_weak.a ] && [ -f /usr/local/vitasdk/arm-vita-eabi/lib/libgpu_es4_ext_stub.a ]; then
+                ln -sf libgpu_es4_ext_stub.a /usr/local/vitasdk/arm-vita-eabi/lib/libgpu_es4_ext_stub_weak.a;
+              fi &&
+              if [ ! -f /usr/local/vitasdk/arm-vita-eabi/lib/libIMGEGL_stub_weak.a ] && [ -f /usr/local/vitasdk/arm-vita-eabi/lib/libIMGEGL_stub.a ]; then
+                ln -sf libIMGEGL_stub.a /usr/local/vitasdk/arm-vita-eabi/lib/libIMGEGL_stub_weak.a;
+              fi &&
+              if [ ! -f /usr/local/vitasdk/arm-vita-eabi/lib/libGLESv2_stub_weak.a ] && [ -f /usr/local/vitasdk/arm-vita-eabi/lib/libGLESv2_stub.a ]; then
+                ln -sf libGLESv2_stub.a /usr/local/vitasdk/arm-vita-eabi/lib/libGLESv2_stub_weak.a;
+              fi &&
               if [ -f /usr/local/vitasdk/arm-vita-eabi/lib/libgpu_es4_ext_stub_weak.a ]; then
                 ln -sf libgpu_es4_ext_stub_weak.a /usr/local/vitasdk/arm-vita-eabi/lib/liblibgpu_es4_ext_stub_weak.a;
               fi &&
