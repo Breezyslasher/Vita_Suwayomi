@@ -64,6 +64,8 @@ The PS Vita build now supports two renderer backends:
 
 By default, CMake attempts to auto-install `vitaGL` for GLES2 when `vdpm` is available
 (`-DPSV_AUTO_INSTALL_VITAGL=ON`). Disable this behavior with `-DPSV_AUTO_INSTALL_VITAGL=OFF`.
+If `vdpm` reports the package as already installed but the header is still unavailable,
+the build falls back to a local compatibility header for `psp2_pvr_hint.h`.
 
 Example commands:
 
