@@ -104,7 +104,7 @@ jobs:
 
       - name: Build
         run: |
-          cmake -B build -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=${{ matrix.renderer }} -DPSV_AUTO_INSTALL_GLES2_DEPS=ON
+          cmake -B build -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=${{ matrix.renderer }}
           cmake --build build
 
       - name: Upload VPK
