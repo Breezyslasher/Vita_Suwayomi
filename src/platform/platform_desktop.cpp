@@ -97,7 +97,8 @@ bool createDirRecursive(const std::string& path) {
 }
 
 bool removeDir(const std::string& path) {
-    return rmdir(path.c_str()) == 0;
+    std::error_code ec;
+    return std::filesystem::remove(path, ec);
 }
 
 std::vector<std::string> listDir(const std::string& dir) {
