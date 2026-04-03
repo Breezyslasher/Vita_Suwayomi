@@ -108,8 +108,9 @@ jobs:
           docker run --rm \
             -v "$PWD:/src/" \
             -w /src \
+            --entrypoint /bin/sh \
             xfangfang/vitasdk_sdl2_gles2:latest \
-            sh -lc '
+            -c '
               apk update &&
               apk add cmake ninja git zstd tar pkgconf wget &&
               BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/vita-packages" &&
