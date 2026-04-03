@@ -183,7 +183,7 @@ void RecyclingGrid::updateDataOrder(const std::vector<Manga>& items) {
 
     // Update each cell with the new manga data at its position
     // This preserves the grid structure and just updates the displayed content
-    int maxInitialRows = 3;  // Reduced from 6 to prevent FPS drops
+    int maxInitialRows = 1;  // Keep initial thumbnail work minimal during reorder
     int cellsInInitialRows = maxInitialRows * m_columns;
 
     for (size_t i = 0; i < m_cells.size() && i < items.size(); i++) {
@@ -389,7 +389,7 @@ void RecyclingGrid::setupGrid() {
         });
     } else {
         // Small library - all rows built, trigger buffer preload
-        int maxInitialRows = 3;
+        int maxInitialRows = 1;
         int bufferRows = 2;  // Reduced from 3 to prevent queue flooding
         int preloadUpToRow = std::min(maxInitialRows + bufferRows, m_totalRowsNeeded);
         int startCell = std::min(maxInitialRows * m_columns, (int)m_cells.size());
@@ -401,7 +401,7 @@ void RecyclingGrid::setupGrid() {
 }
 
 void RecyclingGrid::createRowRange(int startRow, int endRow) {
-    int maxInitialRows = 3;  // Reduced from 6 - fewer immediate thumbnail loads to prevent FPS drops
+    int maxInitialRows = 1;  // Keep category-entry thumbnail burst very small
 
     for (int row = startRow; row < endRow; row++) {
         auto* rowBox = new brls::Box();
@@ -585,7 +585,7 @@ void RecyclingGrid::buildNextRowBatch() {
         // All rows built - trigger thumbnail preloading for buffer rows
         // Load visible rows (0-2) + 1 buffer row = 18 cells max, prevents queue buildup
         m_incrementalBuildActive = false;
-        int maxInitialRows = 3;
+        int maxInitialRows = 1;
         int bufferRows = 1;  // Reduced from 2: only preload next row to avoid queue flooding
         int preloadUpToRow = std::min(maxInitialRows + bufferRows, m_totalRowsNeeded);
         int startCell = std::min(maxInitialRows * m_columns, (int)m_cells.size());
