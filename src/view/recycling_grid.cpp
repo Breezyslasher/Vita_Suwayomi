@@ -366,11 +366,11 @@ void RecyclingGrid::setupGrid() {
 
     m_totalRowsNeeded = (m_items.size() + m_columns - 1) / m_columns;
 
-    // On PS Vita's 444MHz CPU, creating 98+ MangaItemCell objects (each with ~11
-    // sub-views) at once causes a multi-second freeze. Build incrementally:
-    // - Create first 2 rows immediately (visible content appears fast)
-    // - Build remaining rows in batches of 2 per frame via brls::sync()
-    int immediateRows = std::min(2, m_totalRowsNeeded);
+    // On PS Vita/PS4, category-load FPS can tank if we create too many cells in
+    // a single frame. Build very conservatively:
+    // - Create only the first row immediately (content appears quickly)
+    // - Build remaining rows one row per frame via brls::sync()
+    int immediateRows = std::min(1, m_totalRowsNeeded);
 
     brls::Logger::info("RecyclingGrid: Building {} rows for {} items (first {} immediate)",
                         m_totalRowsNeeded, m_items.size(), immediateRows);
@@ -558,8 +558,9 @@ void RecyclingGrid::buildNextRowBatch() {
         return;
     }
 
-    // Build 2 rows per frame (~12 cells) to keep frames responsive
-    int batchSize = 2;
+    // Build only 1 row per frame to avoid frame-time spikes while loading a
+    // category with many items on constrained hardware.
+    int batchSize = 1;
     int endRow = std::min(m_incrementalBuildRow + batchSize, m_totalRowsNeeded);
 
     createRowRange(m_incrementalBuildRow, endRow);
