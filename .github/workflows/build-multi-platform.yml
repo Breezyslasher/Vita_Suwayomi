@@ -123,8 +123,12 @@ jobs:
               for lib in gpu_es4_ext_stub_weak IMGEGL_stub_weak GLESv2_stub_weak; do
                 target="$LIBDIR/lib${lib}.a";
                 if [ ! -f "$target" ]; then
-                  base="${lib%_weak}";
-                  candidate="$(find "$LIBDIR" -maxdepth 1 -type f -name "lib${base}*.a" | head -n1)";
+                  case "$lib" in
+                    gpu_es4_ext_stub_weak) pattern='libgpu_es4_ext*.a' ;;
+                    IMGEGL_stub_weak) pattern='libIMGEGL*.a' ;;
+                    GLESv2_stub_weak) pattern='libGLESv2*.a' ;;
+                  esac;
+                  candidate="$(find "$LIBDIR" -maxdepth 1 -type f -name "$pattern" | head -n1)";
                   [ -n "$candidate" ] && ln -sf "$(basename "$candidate")" "$target";
                 fi;
               done &&
