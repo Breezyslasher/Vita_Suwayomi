@@ -132,7 +132,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: VitaSuwayomi-vita-${{ matrix.renderer_suffix }}-${{ github.run_number }}
-          path: build/VitaSuwayomi-${{ matrix.renderer_suffix }}.vpk
+          path: build/*.vpk
 
   # ───────────────────────────────────────────────
   # Android — switchfin-style APK build
