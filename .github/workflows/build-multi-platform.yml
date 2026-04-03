@@ -104,6 +104,7 @@ jobs:
       - name: Build GLES2
         if: matrix.renderer == 'GLES2'
         run: |
+          mkdir -p psv/module
           docker run --rm \
             -v "$PWD:/src/" \
             xfangfang/vitasdk_sdl2_gles2:latest \
