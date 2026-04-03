@@ -107,8 +107,26 @@ jobs:
           mkdir -p psv/module
           docker run --rm \
             -v "$PWD:/src/" \
+            -w /src \
             xfangfang/vitasdk_sdl2_gles2:latest \
-            "cmake -B build -G Ninja -DPLATFORM_PSV=ON -DUSE_SYSTEM_SDL2=ON -DCMAKE_BUILD_TYPE=Release -DPSV_RENDERER=GLES2 && cmake --build build"
+            sh -lc '
+              apk update &&
+              apk add cmake ninja git zstd tar pkgconf wget &&
+              BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/vita-packages" &&
+              for pkg in mbedtls-3.6.5-1 curl-8.16.0-2 ffmpeg-n6.0-3 mpv-0.36.0-3; do
+                wget "$BASE_URL/${pkg}-arm.tar.xz";
+              done &&
+              vdpm vitagl || vdpm vitaGL &&
+              vdpm libass harfbuzz fribidi freetype libpng libwebp /src/*-arm.tar.xz &&
+              if [ -f /usr/local/vitasdk/arm-vita-eabi/lib/libgpu_es4_ext_stub_weak.a ]; then
+                ln -sf libgpu_es4_ext_stub_weak.a /usr/local/vitasdk/arm-vita-eabi/lib/liblibgpu_es4_ext_stub_weak.a;
+              fi &&
+              if [ -f /usr/local/vitasdk/arm-vita-eabi/lib/libIMGEGL_stub_weak.a ]; then
+                ln -sf libIMGEGL_stub_weak.a /usr/local/vitasdk/arm-vita-eabi/lib/liblibIMGEGL_stub_weak.a;
+              fi &&
+              cmake -B build -G Ninja -DPLATFORM_PSV=ON -DUSE_SYSTEM_SDL2=ON -DCMAKE_BUILD_TYPE=Release -DPSV_RENDERER=GLES2 &&
+              cmake --build build
+            '
 
       - name: Upload VPK
         uses: actions/upload-artifact@v4
