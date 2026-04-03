@@ -97,6 +97,11 @@ jobs:
           vdpm libass harfbuzz fribidi freetype libpng libwebp $PWD/*-arm.tar.xz
           git config --system --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Install Vita GLES2 dependency
+        if: matrix.renderer == 'GLES2'
+        run: |
+          vdpm vitaGL
+
       - name: Build
         run: |
           cmake -B build -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=${{ matrix.renderer }}

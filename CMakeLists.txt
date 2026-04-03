@@ -57,6 +57,14 @@ if(PLATFORM_PSV)
     else()
         set(BOREALIS_USE_GXM OFF CACHE BOOL "Use GXM renderer for PS Vita" FORCE)
         set(VITA_RENDERER_SUFFIX "gles2")
+        if(DEFINED ENV{VITASDK})
+            set(_PSV_PVR_HINT_HEADER "$ENV{VITASDK}/arm-vita-eabi/include/gpu_es4/psp2_pvr_hint.h")
+            if(NOT EXISTS "${_PSV_PVR_HINT_HEADER}")
+                message(FATAL_ERROR
+                    "PSV_RENDERER=GLES2 requires vitaGL headers, but '${_PSV_PVR_HINT_HEADER}' was not found. "
+                    "Install them with 'vdpm vitaGL'.")
+            endif()
+        endif()
     endif()
 
     set(USE_VITA_SHARK  OFF  CACHE BOOL "Use VitaShark for shader compilation" FORCE)
