@@ -84,12 +84,15 @@ void PerfOverlay::endFrame() {
         m_maxFrameTimeMs = 0.0f;  // Reset worst frame tracking each second
     }
 
-    // Write to log file periodically (every m_logInterval frames)
-    m_logCounter++;
-    if (m_logCounter >= m_logInterval) {
-        m_logCounter = 0;
-        openLogIfNeeded();
-        writeLogEntry();
+    // Write to log file periodically only when explicitly enabled.
+    // Disk I/O + fflush() can cause visible frame dips on Vita/PS4.
+    if (m_logInterval > 0) {
+        m_logCounter++;
+        if (m_logCounter >= m_logInterval) {
+            m_logCounter = 0;
+            openLogIfNeeded();
+            writeLogEntry();
+        }
     }
 }
 

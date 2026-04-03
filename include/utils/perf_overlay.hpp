@@ -52,7 +52,9 @@ private:
 
     // Log file
     FILE* m_logFile = nullptr;
-    int m_logInterval = 60;   // Write to log every N frames (once per second at 60fps)
+    // File logging disabled by default to avoid periodic I/O hitches on
+    // constrained devices (Vita/PS4). Set >0 to enable periodic log writes.
+    int m_logInterval = 0;
     int m_logCounter = 0;
     void openLogIfNeeded();
     void writeLogEntry();
