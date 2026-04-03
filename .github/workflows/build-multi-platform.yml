@@ -67,8 +67,6 @@ jobs:
     if: ${{ inputs.platform == 'psvita' || github.event_name != 'workflow_dispatch' }}
     name: PS Vita (${{ matrix.renderer }})
     runs-on: ubuntu-latest
-    container:
-      image: vitasdk/vitasdk:latest
     strategy:
       fail-fast: false
       matrix:
@@ -79,33 +77,37 @@ jobs:
             renderer_suffix: gles2
 
     steps:
-      - name: Install build requirements
-        run: apk update && apk add cmake ninja git zstd tar pkgconf
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install Vita dependencies
-        env:
-          BASE_URL: https://github.com/dragonflylee/switchfin/releases/download/vita-packages
+      - name: Build GXM
+        if: matrix.renderer == 'GXM'
         run: |
-          for pkg in mbedtls-3.6.5-1 curl-8.16.0-2 ffmpeg-n6.0-3 mpv-0.36.0-3; do
-            wget "$BASE_URL/${pkg}-arm.tar.xz"
-          done
-          vdpm libass harfbuzz fribidi freetype libpng libwebp $PWD/*-arm.tar.xz
-          git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          docker run --rm \
+            -v "$PWD:/src" \
+            -w /src \
+            vitasdk/vitasdk:latest \
+            sh -lc '
+              apk update &&
+              apk add cmake ninja git zstd tar pkgconf wget &&
+              BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/vita-packages" &&
+              for pkg in mbedtls-3.6.5-1 curl-8.16.0-2 ffmpeg-n6.0-3 mpv-0.36.0-3; do
+                wget "$BASE_URL/${pkg}-arm.tar.xz";
+              done &&
+              vdpm libass harfbuzz fribidi freetype libpng libwebp /src/*-arm.tar.xz &&
+              cmake -B build -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=GXM &&
+              cmake --build build
+            '
 
-      - name: Install Vita GLES2 dependency
+      - name: Build GLES2
         if: matrix.renderer == 'GLES2'
         run: |
-          vdpm vitagl || vdpm vitaGL
-
-      - name: Build
-        run: |
-          cmake -B build -G Ninja -DPLATFORM_PSV=ON -DPSV_RENDERER=${{ matrix.renderer }}
-          cmake --build build
+          docker run --rm \
+            -v "$PWD:/src/" \
+            xfangfang/vitasdk_sdl2_gles2:latest \
+            "cmake -B build -G Ninja -DPLATFORM_PSV=ON -DUSE_SYSTEM_SDL2=ON -DCMAKE_BUILD_TYPE=Release -DPSV_RENDERER=GLES2 && cmake --build build"
 
       - name: Upload VPK
         uses: actions/upload-artifact@v4
