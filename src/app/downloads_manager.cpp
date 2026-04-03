@@ -11,7 +11,6 @@
 
 #include <borealis.hpp>
 #include <sstream>
-#include <fstream>
 #include <algorithm>
 #include <thread>
 
@@ -1464,121 +1463,6 @@ void DownloadsManager::loadState() {
     if (hasChanges) {
         saveStateUnlocked();
     }
-#else
-    // Non-Vita: use standard C++ file I/O
-    std::ifstream file(STATE_FILE_PATH);
-    if (!file.is_open()) {
-        brls::Logger::debug("DownloadsManager: No saved state found");
-        return;
-    }
-    std::ostringstream ss;
-    ss << file.rdbuf();
-    std::string content = ss.str();
-    file.close();
-
-    if (content.empty() || content.size() > 1024 * 1024) return;
-
-    brls::Logger::debug("DownloadsManager: Loading state ({} bytes)", content.length());
-
-    m_downloads.clear();
-
-    size_t pos = content.find("\"downloads\":");
-    if (pos == std::string::npos) return;
-    pos = content.find('[', pos);
-    if (pos == std::string::npos) return;
-    size_t arrayEnd = findMatchingBracket(content, pos + 1, '[', ']');
-    if (arrayEnd == std::string::npos) return;
-
-    std::string downloadsArray = content.substr(pos + 1, arrayEnd - pos - 1);
-    size_t mangaStart = 0;
-    while ((mangaStart = downloadsArray.find('{', mangaStart)) != std::string::npos) {
-        size_t mangaEnd = findMatchingBracket(downloadsArray, mangaStart + 1, '{', '}');
-        if (mangaEnd == std::string::npos) break;
-        std::string mangaJson = downloadsArray.substr(mangaStart, mangaEnd - mangaStart + 1);
-
-        DownloadItem item;
-        item.mangaId       = extractJsonInt(mangaJson, "mangaId");
-        item.title         = extractJsonString(mangaJson, "title");
-        item.author        = extractJsonString(mangaJson, "author");
-        item.localPath     = extractJsonString(mangaJson, "localPath");
-        item.localCoverPath = extractJsonString(mangaJson, "localCoverPath");
-        item.state         = static_cast<LocalDownloadState>(extractJsonInt(mangaJson, "state"));
-        item.totalBytes    = extractJsonInt(mangaJson, "totalBytes");
-        item.lastChapterRead = extractJsonInt(mangaJson, "lastChapterRead");
-        item.lastPageRead  = extractJsonInt(mangaJson, "lastPageRead");
-        item.lastReadTime  = extractJsonInt(mangaJson, "lastReadTime");
-
-        size_t chaptersPos = mangaJson.find("\"chapters\":");
-        if (chaptersPos != std::string::npos) {
-            size_t chaptersStart = mangaJson.find('[', chaptersPos);
-            if (chaptersStart != std::string::npos) {
-                size_t chaptersEnd = findMatchingBracket(mangaJson, chaptersStart + 1, '[', ']');
-                if (chaptersEnd != std::string::npos) {
-                    std::string chaptersArray = mangaJson.substr(chaptersStart + 1, chaptersEnd - chaptersStart - 1);
-                    size_t chStart = 0;
-                    while ((chStart = chaptersArray.find('{', chStart)) != std::string::npos) {
-                        size_t chEnd = findMatchingBracket(chaptersArray, chStart + 1, '{', '}');
-                        if (chEnd == std::string::npos) break;
-                        std::string chJson = chaptersArray.substr(chStart, chEnd - chStart + 1);
-
-                        DownloadedChapter chapter;
-                        chapter.chapterId       = extractJsonInt(chJson, "chapterId");
-                        chapter.chapterIndex    = extractJsonInt(chJson, "chapterIndex");
-                        chapter.name            = extractJsonString(chJson, "name");
-                        chapter.chapterNumber   = extractJsonFloat(chJson, "chapterNumber");
-                        chapter.localPath       = extractJsonString(chJson, "localPath");
-                        chapter.pageCount       = extractJsonInt(chJson, "pageCount");
-                        chapter.downloadedPages = extractJsonInt(chJson, "downloadedPages");
-                        chapter.state           = static_cast<LocalDownloadState>(extractJsonInt(chJson, "state"));
-                        chapter.lastPageRead    = extractJsonInt(chJson, "lastPageRead");
-                        chapter.read            = extractJsonBool(chJson, "read");
-
-                        size_t pagesPos = chJson.find("\"pages\":");
-                        if (pagesPos != std::string::npos) {
-                            size_t pagesStart = chJson.find('[', pagesPos);
-                            if (pagesStart != std::string::npos) {
-                                size_t pagesEnd = findMatchingBracket(chJson, pagesStart + 1, '[', ']');
-                                if (pagesEnd != std::string::npos) {
-                                    std::string pagesArray = chJson.substr(pagesStart + 1, pagesEnd - pagesStart - 1);
-                                    size_t pgStart = 0;
-                                    while ((pgStart = pagesArray.find('{', pgStart)) != std::string::npos) {
-                                        size_t pgEnd = pagesArray.find('}', pgStart);
-                                        if (pgEnd == std::string::npos) break;
-                                        std::string pgJson = pagesArray.substr(pgStart, pgEnd - pgStart + 1);
-                                        DownloadedPage page;
-                                        page.index      = extractJsonInt(pgJson, "index");
-                                        page.localPath  = extractJsonString(pgJson, "localPath");
-                                        page.size       = extractJsonInt(pgJson, "size");
-                                        page.downloaded = extractJsonBool(pgJson, "downloaded");
-                                        chapter.pages.push_back(page);
-                                        pgStart = pgEnd + 1;
-                                    }
-                                }
-                            }
-                        }
-                        item.chapters.push_back(chapter);
-                        chStart = chEnd + 1;
-                    }
-                }
-            }
-        }
-
-        item.totalChapters     = static_cast<int>(item.chapters.size());
-        item.completedChapters = 0;
-        for (auto& ch : item.chapters) {
-            if (ch.state == LocalDownloadState::DOWNLOADING)
-                ch.state = LocalDownloadState::QUEUED;
-            if (ch.state == LocalDownloadState::COMPLETED)
-                item.completedChapters++;
-        }
-        if (item.mangaId > 0)
-            m_downloads.push_back(item);
-        mangaStart = mangaEnd + 1;
-    }
-
-    brls::Logger::info("DownloadsManager: State loaded with {} downloads", m_downloads.size());
-    validateDownloadedFiles();
-#endif
 }
 
 void DownloadsManager::setProgressCallback(DownloadProgressCallback callback) {
