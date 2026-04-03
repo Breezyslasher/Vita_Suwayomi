@@ -13,82 +13,18 @@
 #include "utils/perf_overlay.hpp"
 
 #include <borealis.hpp>
-#include <fstream>
 #include <sstream>
 #include <cstring>
 #include <cmath>
 #include <cstdlib>
-#include <filesystem>
-
-#ifdef __vita__
-#include <psp2/io/fcntl.h>
-#include <psp2/io/stat.h>
-#endif
-
-#if defined(__ANDROID__) || defined(__PS4__) || defined(__SWITCH__)
-#include <sys/stat.h>
-#endif
-#if defined(__ANDROID__)
-#include "platform/paths.hpp"
-#endif
+#include "platform/platform.hpp"
 
 namespace vitasuwayomi {
 
-// FIX: Settings path is now platform-aware.
-// Android uses SDL internal storage (writable, no permission needed).
-// Old code used "./VitaSuwayomi_settings.json" for all non-Vita platforms,
-// which is not writable on Android and caused silent settings failures.
-#ifdef __vita__
-static const char* SETTINGS_PATH = "ux0:data/VitaSuwayomi/settings.json";
-static const char* SETTINGS_DIR  = "ux0:data/VitaSuwayomi";
-#elif defined(__ANDROID__)
-// On Android the data dir is resolved at runtime via SDL; build the path lazily.
-static std::string s_settingsPath;
-static std::string s_settingsDir;
-static const char* getSettingsPath() {
-    if (s_settingsPath.empty()) {
-        s_settingsDir  = getAndroidDataDir();   // e.g. /data/user/0/.../files/VitaSuwayomi
-        s_settingsPath = s_settingsDir + "/settings.json";
-    }
-    return s_settingsPath.c_str();
+// Settings path derived from platform data directory
+static std::string getSettingsPath() {
+    return platform::path("settings.json");
 }
-static const char* getSettingsDir() {
-    getSettingsPath(); // ensure initialised
-    return s_settingsDir.c_str();
-}
-// Macros so the rest of the file can still use SETTINGS_PATH / SETTINGS_DIR.
-#define SETTINGS_PATH (getSettingsPath())
-#define SETTINGS_DIR  (getSettingsDir())
-#elif defined(__PS4__)
-static const char* SETTINGS_PATH = "/data/VitaSuwayomi/settings.json";
-static const char* SETTINGS_DIR  = "/data/VitaSuwayomi";
-#elif defined(__SWITCH__)
-static const char* SETTINGS_PATH = "sdmc:/VitaSuwayomi/settings.json";
-static const char* SETTINGS_DIR  = "sdmc:/VitaSuwayomi";
-#else
-// Desktop: use XDG-style path under $HOME so settings work regardless of CWD
-static std::string s_desktopSettingsPath;
-static std::string s_desktopSettingsDir;
-static const char* getDesktopSettingsPath() {
-    if (s_desktopSettingsPath.empty()) {
-        const char* home = std::getenv("HOME");
-        if (home && *home) {
-            s_desktopSettingsDir = std::string(home) + "/.local/share/VitaSuwayomi";
-            s_desktopSettingsPath = s_desktopSettingsDir + "/settings.json";
-        } else {
-            s_desktopSettingsDir = "./VitaSuwayomi";
-            s_desktopSettingsPath = s_desktopSettingsDir + "/settings.json";
-        }
-    }
-    return s_desktopSettingsPath.c_str();
-}
-static const char* getDesktopSettingsDir() {
-    getDesktopSettingsPath();
-    return s_desktopSettingsDir.c_str();
-}
-#define SETTINGS_PATH (getDesktopSettingsPath())
-#define SETTINGS_DIR  (getDesktopSettingsDir())
-#endif
 
 // Obfuscation helpers for storing sensitive fields (password, tokens) on disk.
 // Uses XOR with a static key + base64 encoding. This is NOT cryptographic security
@@ -181,46 +117,12 @@ bool Application::init() {
     brls::Logger::setLogLevel(brls::LogLevel::LOG_DEBUG);
     brls::Logger::info("VitaSuwayomi {} initializing...", VITA_SUWAYOMI_VERSION);
 
-#ifdef __vita__
-    // Create data directory on Vita
-    int ret = sceIoMkdir("ux0:data/VitaSuwayomi", 0777);
-    brls::Logger::debug("sceIoMkdir result: {:#x}", ret);
-#elif defined(__PS4__)
-    // Create data directory on PS4
-    if (mkdir(SETTINGS_DIR, 0777) == 0) {
-        brls::Logger::info("Created data directory: {}", SETTINGS_DIR);
-    } else if (errno != EEXIST) {
-        brls::Logger::warning("Could not create data directory {}: errno={}", SETTINGS_DIR, errno);
+    // Create data directory
+    if (platform::createDirRecursive(platform::dataDir())) {
+        brls::Logger::info("Data directory ready: {}", platform::dataDir());
+    } else {
+        brls::Logger::warning("Could not create data directory: {}", platform::dataDir());
     }
-#elif defined(__SWITCH__)
-    // Create data directory on Switch SD card
-    if (mkdir(SETTINGS_DIR, 0777) == 0) {
-        brls::Logger::info("Created data directory: {}", SETTINGS_DIR);
-    } else if (errno != EEXIST) {
-        brls::Logger::warning("Could not create data directory {}: errno={}", SETTINGS_DIR, errno);
-    }
-#elif defined(__ANDROID__)
-    // FIX: Create data directory on Android using POSIX mkdir.
-    // SDL_AndroidGetInternalStoragePath() already exists, but our subdir
-    // VitaSuwayomi/ does not — create it so settings/downloads can be saved.
-    const char* dir = SETTINGS_DIR;
-    if (mkdir(dir, 0755) == 0) {
-        brls::Logger::info("Created data directory: {}", dir);
-    } else if (errno != EEXIST) {
-        brls::Logger::warning("Could not create data directory {}: errno={}", dir, errno);
-    }
-#else
-    // Desktop: create ~/.local/share/VitaSuwayomi/ (and parent dirs)
-    {
-        const char* dir = SETTINGS_DIR;
-        brls::Logger::info("Desktop data directory: {}", dir);
-        std::error_code ec;
-        std::filesystem::create_directories(dir, ec);
-        if (ec) {
-            brls::Logger::warning("Could not create data directory {}: {}", dir, ec.message());
-        }
-    }
-#endif
 
     // Load saved settings
     brls::Logger::info("Loading saved settings...");
@@ -1337,44 +1239,20 @@ std::string Application::getDownloadQualityString(DownloadQuality quality) {
 }
 
 bool Application::loadSettings() {
-    brls::Logger::debug("loadSettings: Opening {}", SETTINGS_PATH);
+    std::string settingsPath = getSettingsPath();
+    brls::Logger::debug("loadSettings: Opening {}", settingsPath);
 
-    std::string content;
-
-#ifdef __vita__
-    SceUID fd = sceIoOpen(SETTINGS_PATH, SCE_O_RDONLY, 0);
-    if (fd < 0) {
-        brls::Logger::debug("No settings file found (error: {:#x})", fd);
-        return false;
-    }
-
-    // Get file size
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    brls::Logger::debug("loadSettings: File size = {}", size);
-
-    if (size <= 0 || size > 16384) {
-        brls::Logger::error("loadSettings: Invalid file size");
-        sceIoClose(fd);
-        return false;
-    }
-
-    content.resize(size);
-    sceIoRead(fd, &content[0], size);
-    sceIoClose(fd);
-#else
-    // Non-Vita: use standard C++ file I/O
-    std::ifstream file(SETTINGS_PATH);
-    if (!file.is_open()) {
+    auto fileData = platform::readFile(settingsPath);
+    if (fileData.empty()) {
         brls::Logger::debug("No settings file found");
         return false;
     }
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    content = buffer.str();
-    file.close();
-#endif
+    if (fileData.size() > 16384) {
+        brls::Logger::error("loadSettings: Invalid file size");
+        return false;
+    }
+
+    std::string content(reinterpret_cast<const char*>(fileData.data()), fileData.size());
 
     brls::Logger::debug("loadSettings: Read {} bytes", content.length());
 
@@ -1904,7 +1782,7 @@ bool Application::loadSettings() {
 }
 
 bool Application::saveSettings() {
-    brls::Logger::info("saveSettings: Saving to {}", SETTINGS_PATH);
+    brls::Logger::info("saveSettings: Saving to {}", getSettingsPath());
     brls::Logger::debug("saveSettings: serverUrl={}",
                         m_serverUrl.empty() ? "(empty)" : m_serverUrl);
 
@@ -2095,35 +1973,13 @@ bool Application::saveSettings() {
 
     json += "}\n";
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(SETTINGS_PATH, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-    if (fd < 0) {
-        brls::Logger::error("Failed to open settings file for writing: {:#x}", fd);
-        return false;
-    }
-
-    int written = sceIoWrite(fd, json.c_str(), json.length());
-    sceIoClose(fd);
-
-    if (written == (int)json.length()) {
-        brls::Logger::info("Settings saved successfully ({} bytes)", written);
+    if (platform::writeFile(getSettingsPath(), json)) {
+        brls::Logger::info("Settings saved successfully ({} bytes)", json.length());
         return true;
     } else {
-        brls::Logger::error("Failed to write settings: only {} of {} bytes written", written, json.length());
+        brls::Logger::error("Failed to write settings file");
         return false;
     }
-#else
-    // Non-Vita: use standard C++ file I/O
-    std::ofstream file(SETTINGS_PATH);
-    if (!file.is_open()) {
-        brls::Logger::error("Failed to open settings file for writing");
-        return false;
-    }
-    file << json;
-    file.close();
-    brls::Logger::info("Settings saved successfully ({} bytes)", json.length());
-    return true;
-#endif
 }
 
 std::string Application::getActiveServerUrl() const {

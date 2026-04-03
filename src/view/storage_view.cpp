@@ -10,15 +10,7 @@
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
 
-#ifdef __vita__
-#include <psp2/io/fcntl.h>
-#include <psp2/io/stat.h>
-#include <psp2/io/dirent.h>
-#else
-#include <sys/stat.h>
-#include <dirent.h>
-#endif
-
+#include "platform/platform.hpp"
 #include "platform/paths.hpp"
 
 namespace vitasuwayomi {
@@ -167,61 +159,22 @@ void StorageView::loadStorageInfo() {
 
             // Calculate size
             item.sizeBytes = 0;
-#ifdef __vita__
             std::string mangaPath = dm.getDownloadsPath() + "/" + std::to_string(download.mangaId);
-            SceUID dir = sceIoDopen(mangaPath.c_str());
-            if (dir >= 0) {
-                SceIoDirent entry;
-                while (sceIoDread(dir, &entry) > 0) {
-                    if (SCE_S_ISDIR(entry.d_stat.st_mode) && entry.d_name[0] != '.') {
-                        // Count files in chapter directory
-                        std::string chapterPath = mangaPath + "/" + entry.d_name;
-                        SceUID chapterDir = sceIoDopen(chapterPath.c_str());
-                        if (chapterDir >= 0) {
-                            SceIoDirent fileEntry;
-                            while (sceIoDread(chapterDir, &fileEntry) > 0) {
-                                if (SCE_S_ISREG(fileEntry.d_stat.st_mode)) {
-                                    item.sizeBytes += fileEntry.d_stat.st_size;
-                                }
-                            }
-                            sceIoDclose(chapterDir);
-                        }
-                    } else if (SCE_S_ISREG(entry.d_stat.st_mode)) {
-                        item.sizeBytes += entry.d_stat.st_size;
+            for (const auto& name : platform::listDir(mangaPath)) {
+                if (name[0] == '.') continue;
+                std::string entryPath = mangaPath + "/" + name;
+                int64_t sz = platform::fileSize(entryPath);
+                if (sz > 0) {
+                    item.sizeBytes += sz;
+                } else {
+                    // Likely a directory - sum its contents
+                    for (const auto& fname : platform::listDir(entryPath)) {
+                        if (fname[0] == '.') continue;
+                        int64_t fsz = platform::fileSize(entryPath + "/" + fname);
+                        if (fsz > 0) item.sizeBytes += fsz;
                     }
                 }
-                sceIoDclose(dir);
             }
-#else
-            std::string mangaPath = dm.getDownloadsPath() + "/" + std::to_string(download.mangaId);
-            DIR* dir = opendir(mangaPath.c_str());
-            if (dir) {
-                struct dirent* entry;
-                while ((entry = readdir(dir)) != nullptr) {
-                    if (entry->d_name[0] == '.') continue;
-                    std::string entryPath = mangaPath + "/" + entry->d_name;
-                    struct stat st;
-                    if (stat(entryPath.c_str(), &st) != 0) continue;
-                    if (S_ISDIR(st.st_mode)) {
-                        DIR* chapterDir = opendir(entryPath.c_str());
-                        if (chapterDir) {
-                            struct dirent* fileEntry;
-                            while ((fileEntry = readdir(chapterDir)) != nullptr) {
-                                if (fileEntry->d_name[0] == '.') continue;
-                                std::string filePath = entryPath + "/" + fileEntry->d_name;
-                                struct stat fst;
-                                if (stat(filePath.c_str(), &fst) == 0 && S_ISREG(fst.st_mode))
-                                    item.sizeBytes += fst.st_size;
-                            }
-                            closedir(chapterDir);
-                        }
-                    } else if (S_ISREG(st.st_mode)) {
-                        item.sizeBytes += st.st_size;
-                    }
-                }
-                closedir(dir);
-            }
-#endif
             totalSize += item.sizeBytes;
             items.push_back(item);
         }
