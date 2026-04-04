@@ -8,7 +8,7 @@
  * per-cell draw cost roughly in half.
  */
 
-#include "view/media_item_cell.hpp"
+#include "view/manga_item_cell.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/image_loader.hpp"
