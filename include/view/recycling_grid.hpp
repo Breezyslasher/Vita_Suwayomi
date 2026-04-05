@@ -84,8 +84,8 @@ public:
 
 private:
     void setupGrid();
-    void createRowRange(int startRow, int endRow);  // Create rows [startRow, endRow)
-    void buildNextRowBatch();  // Continue incremental grid building
+    void createRowRange(int startRow, int endRow);  // Create empty row skeletons [startRow, endRow)
+    void populateRow(int row);                      // Fill cells into a previously-empty row
     void updateVisibleCells();
     void loadThumbnailsForScrollPosition();  // Scroll-position-based thumbnail loading
     void onItemClicked(int index);
@@ -111,7 +111,9 @@ private:
 
     brls::Box* m_contentBox = nullptr;
     std::vector<brls::Box*> m_rows;
-    std::vector<MangaItemCell*> m_cells;
+    std::vector<MangaItemCell*> m_cells;  // sparse: nullptr slots for rows not yet populated
+    std::vector<bool> m_rowPopulated;     // parallel to m_rows
+    std::vector<int> m_rowHeights;        // parallel to m_rows (list mode varies per row)
 
     int m_columns = 6;
     int m_cellWidth = 140;
@@ -136,17 +138,9 @@ private:
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;
 
-    // Incremental grid building state - spreads cell creation across frames
-    // to prevent multi-second freezes on large libraries (98+ books)
+    // Alive flag for deferred callbacks (kept for any future brls::sync usage).
     std::shared_ptr<bool> m_alive;
-    int m_incrementalBuildRow = 0;
     int m_totalRowsNeeded = 0;
-    bool m_incrementalBuildActive = false;
-
-    // Pending focus - when focusIndex is called during incremental build and the
-    // target cell doesn't exist yet, store the index here. buildNextRowBatch
-    // applies it once the cell is created, preventing focus from jumping to cell 0.
-    int m_pendingFocusIndex = -1;
 };
 
 } // namespace vitasuwayomi
