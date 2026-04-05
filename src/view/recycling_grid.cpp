@@ -4,7 +4,7 @@
  */
 
 #include "view/recycling_grid.hpp"
-#include "view/media_item_cell.hpp"
+#include "view/manga_item_cell.hpp"
 #include "view/long_press_gesture.hpp"
 #include "utils/perf_overlay.hpp"
 #include "app/application.hpp"

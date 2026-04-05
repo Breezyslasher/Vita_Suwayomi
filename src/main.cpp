@@ -9,7 +9,7 @@
 #include <borealis.hpp>
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
-#include "view/media_item_cell.hpp"
+#include "view/manga_item_cell.hpp"
 #include "view/recycling_grid.hpp"
 #include "view/media_detail_view.hpp"
 #include "view/rotatable_image.hpp"
