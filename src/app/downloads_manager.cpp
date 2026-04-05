@@ -11,7 +11,6 @@
 
 #include <borealis.hpp>
 #include <sstream>
-#include <fstream>
 #include <algorithm>
 #include <thread>
 
@@ -26,107 +25,43 @@
 // WebP decoding for format conversion during download
 #include <webp/decode.h>
 
-#ifdef __vita__
-#include <psp2/io/fcntl.h>
-#include <psp2/io/stat.h>
-#include <psp2/io/dirent.h>
-#else
-#if defined(_WIN32)
-#include <direct.h>
-#else
-#include <unistd.h>
-#endif
-#include <sys/stat.h>
-#include <dirent.h>
-#include <cerrno>
-#endif
-
+#include "platform/platform.hpp"
 #include "platform/paths.hpp"
 
 namespace vitasuwayomi {
 
-// FIX: These MUST NOT be static initializers on Android.
-//
-// Static variables with non-trivial constructors are evaluated when the .so
-// is loaded by the dynamic linker (inside __dl_soinfo::call_constructors),
-// which happens BEFORE SDL_main() runs and before SDL has registered the
-// JVM/Activity context. platformPath() calls SDL_AndroidGetInternalStoragePath()
-// which needs a live Activity — calling it at load time triggers a JNI abort
-// and the library load fails immediately (seen as a crash in VitaSuwayomiActivity.onCreate).
-//
-// Fix: use lazy getter functions so platformPath() is only called the first
-// time the value is actually needed (well after SDL init).
+// Lazy getters — platformPath() must not run at static init time on Android
+// (SDL not yet initialized). These are called after SDL_main().
 static const std::string& getDownloadsBasePath() {
-    static const std::string s = platformPath("downloads");
+    static const std::string s = platform::path("downloads");
     return s;
 }
 static const std::string& getStateFilePath() {
-    static const std::string s = platformPath("downloads_state.json");
+    static const std::string s = platform::path("downloads_state.json");
     return s;
 }
-// Keep the old names as macros so no other code needs to change.
 #define DOWNLOADS_BASE_PATH (getDownloadsBasePath())
 #define STATE_FILE_PATH     (getStateFilePath())
 
-// Helper to create directory (cross-platform)
+// Thin wrappers delegating to platform layer
 static bool createDirectory(const std::string& path) {
-#ifdef __vita__
-    int ret = sceIoMkdir(path.c_str(), 0777);
-    return ret >= 0 || ret == 0x80010011;  // Success or already exists
-#else
-#if defined(_WIN32)
-    int ret = _mkdir(path.c_str());
-#else
-    int ret = mkdir(path.c_str(), 0755);
-#endif
-    return ret == 0 || errno == EEXIST;
-#endif
+    return platform::createDir(path);
 }
 
-// Helper to check if file exists
 static bool fileExists(const std::string& path) {
-#ifdef __vita__
-    SceIoStat stat;
-    return sceIoGetstat(path.c_str(), &stat) >= 0;
-#else
-    std::ifstream f(path);
-    return f.good();
-#endif
+    return platform::fileExists(path);
 }
 
-// Helper to delete file
 static bool deleteFile(const std::string& path) {
-#ifdef __vita__
-    return sceIoRemove(path.c_str()) >= 0;
-#else
-    return std::remove(path.c_str()) == 0;
-#endif
+    return platform::deleteFile(path);
 }
 
-// Helper to get file size (returns -1 if file doesn't exist)
 static int64_t getFileSize(const std::string& path) {
-#ifdef __vita__
-    SceIoStat stat;
-    if (sceIoGetstat(path.c_str(), &stat) >= 0) {
-        return stat.st_size;
-    }
-    return -1;
-#else
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (f.good()) {
-        return f.tellg();
-    }
-    return -1;
-#endif
+    return platform::fileSize(path);
 }
 
-// Helper to remove empty directory
 static bool removeDirectory(const std::string& path) {
-#ifdef __vita__
-    return sceIoRmdir(path.c_str()) >= 0;
-#else
-    return rmdir(path.c_str()) == 0;
-#endif
+    return platform::removeDir(path);
 }
 
 // Helper to escape JSON strings
@@ -158,12 +93,7 @@ bool DownloadsManager::init() {
     m_downloadsPath = DOWNLOADS_BASE_PATH;
 
     // Create base downloads directory structure
-#if defined(__vita__) || defined(__SWITCH__) || defined(__PS4__)
-    createDirectory(PLATFORM_DATA_DIR);
-#elif !defined(__ANDROID__)
-    // Desktop: parent dir created by Application::init()
-#endif
-    createDirectory(m_downloadsPath);
+    platform::createDirRecursive(m_downloadsPath);
 
     // Load saved state
     loadState();
@@ -1288,26 +1218,11 @@ void DownloadsManager::saveStateUnlocked() {
 
     std::string json = ss.str();
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(STATE_FILE_PATH.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-    if (fd >= 0) {
-        sceIoWrite(fd, json.c_str(), json.length());
-        sceIoClose(fd);
+    if (platform::writeFile(STATE_FILE_PATH, json)) {
         brls::Logger::debug("DownloadsManager: State saved ({} bytes)", json.length());
     } else {
         brls::Logger::error("DownloadsManager: Failed to save state");
     }
-#else
-    // Non-Vita: use standard C++ file I/O
-    std::ofstream file(STATE_FILE_PATH);
-    if (file.is_open()) {
-        file << json;
-        file.close();
-        brls::Logger::debug("DownloadsManager: State saved ({} bytes)", json.length());
-    } else {
-        brls::Logger::error("DownloadsManager: Failed to save state");
-    }
-#endif
 }
 
 // Helper to extract int from JSON
@@ -1389,25 +1304,17 @@ static size_t findMatchingBracket(const std::string& json, size_t start, char op
 }
 
 void DownloadsManager::loadState() {
-#ifdef __vita__
-    SceUID fd = sceIoOpen(STATE_FILE_PATH.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) {
+    auto fileData = platform::readFile(STATE_FILE_PATH);
+    if (fileData.empty()) {
         brls::Logger::debug("DownloadsManager: No saved state found");
         return;
     }
 
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    if (size <= 0 || size > 1024 * 1024) {  // Max 1MB
-        sceIoClose(fd);
+    if (fileData.size() > 1024 * 1024) {  // Max 1MB
         return;
     }
 
-    std::string content;
-    content.resize(size);
-    sceIoRead(fd, &content[0], size);
-    sceIoClose(fd);
+    std::string content(reinterpret_cast<const char*>(fileData.data()), fileData.size());
 
     brls::Logger::debug("DownloadsManager: Loading state ({} bytes)", content.length());
 
@@ -1556,121 +1463,6 @@ void DownloadsManager::loadState() {
     if (hasChanges) {
         saveStateUnlocked();
     }
-#else
-    // Non-Vita: use standard C++ file I/O
-    std::ifstream file(STATE_FILE_PATH);
-    if (!file.is_open()) {
-        brls::Logger::debug("DownloadsManager: No saved state found");
-        return;
-    }
-    std::ostringstream ss;
-    ss << file.rdbuf();
-    std::string content = ss.str();
-    file.close();
-
-    if (content.empty() || content.size() > 1024 * 1024) return;
-
-    brls::Logger::debug("DownloadsManager: Loading state ({} bytes)", content.length());
-
-    m_downloads.clear();
-
-    size_t pos = content.find("\"downloads\":");
-    if (pos == std::string::npos) return;
-    pos = content.find('[', pos);
-    if (pos == std::string::npos) return;
-    size_t arrayEnd = findMatchingBracket(content, pos + 1, '[', ']');
-    if (arrayEnd == std::string::npos) return;
-
-    std::string downloadsArray = content.substr(pos + 1, arrayEnd - pos - 1);
-    size_t mangaStart = 0;
-    while ((mangaStart = downloadsArray.find('{', mangaStart)) != std::string::npos) {
-        size_t mangaEnd = findMatchingBracket(downloadsArray, mangaStart + 1, '{', '}');
-        if (mangaEnd == std::string::npos) break;
-        std::string mangaJson = downloadsArray.substr(mangaStart, mangaEnd - mangaStart + 1);
-
-        DownloadItem item;
-        item.mangaId       = extractJsonInt(mangaJson, "mangaId");
-        item.title         = extractJsonString(mangaJson, "title");
-        item.author        = extractJsonString(mangaJson, "author");
-        item.localPath     = extractJsonString(mangaJson, "localPath");
-        item.localCoverPath = extractJsonString(mangaJson, "localCoverPath");
-        item.state         = static_cast<LocalDownloadState>(extractJsonInt(mangaJson, "state"));
-        item.totalBytes    = extractJsonInt(mangaJson, "totalBytes");
-        item.lastChapterRead = extractJsonInt(mangaJson, "lastChapterRead");
-        item.lastPageRead  = extractJsonInt(mangaJson, "lastPageRead");
-        item.lastReadTime  = extractJsonInt(mangaJson, "lastReadTime");
-
-        size_t chaptersPos = mangaJson.find("\"chapters\":");
-        if (chaptersPos != std::string::npos) {
-            size_t chaptersStart = mangaJson.find('[', chaptersPos);
-            if (chaptersStart != std::string::npos) {
-                size_t chaptersEnd = findMatchingBracket(mangaJson, chaptersStart + 1, '[', ']');
-                if (chaptersEnd != std::string::npos) {
-                    std::string chaptersArray = mangaJson.substr(chaptersStart + 1, chaptersEnd - chaptersStart - 1);
-                    size_t chStart = 0;
-                    while ((chStart = chaptersArray.find('{', chStart)) != std::string::npos) {
-                        size_t chEnd = findMatchingBracket(chaptersArray, chStart + 1, '{', '}');
-                        if (chEnd == std::string::npos) break;
-                        std::string chJson = chaptersArray.substr(chStart, chEnd - chStart + 1);
-
-                        DownloadedChapter chapter;
-                        chapter.chapterId       = extractJsonInt(chJson, "chapterId");
-                        chapter.chapterIndex    = extractJsonInt(chJson, "chapterIndex");
-                        chapter.name            = extractJsonString(chJson, "name");
-                        chapter.chapterNumber   = extractJsonFloat(chJson, "chapterNumber");
-                        chapter.localPath       = extractJsonString(chJson, "localPath");
-                        chapter.pageCount       = extractJsonInt(chJson, "pageCount");
-                        chapter.downloadedPages = extractJsonInt(chJson, "downloadedPages");
-                        chapter.state           = static_cast<LocalDownloadState>(extractJsonInt(chJson, "state"));
-                        chapter.lastPageRead    = extractJsonInt(chJson, "lastPageRead");
-                        chapter.read            = extractJsonBool(chJson, "read");
-
-                        size_t pagesPos = chJson.find("\"pages\":");
-                        if (pagesPos != std::string::npos) {
-                            size_t pagesStart = chJson.find('[', pagesPos);
-                            if (pagesStart != std::string::npos) {
-                                size_t pagesEnd = findMatchingBracket(chJson, pagesStart + 1, '[', ']');
-                                if (pagesEnd != std::string::npos) {
-                                    std::string pagesArray = chJson.substr(pagesStart + 1, pagesEnd - pagesStart - 1);
-                                    size_t pgStart = 0;
-                                    while ((pgStart = pagesArray.find('{', pgStart)) != std::string::npos) {
-                                        size_t pgEnd = pagesArray.find('}', pgStart);
-                                        if (pgEnd == std::string::npos) break;
-                                        std::string pgJson = pagesArray.substr(pgStart, pgEnd - pgStart + 1);
-                                        DownloadedPage page;
-                                        page.index      = extractJsonInt(pgJson, "index");
-                                        page.localPath  = extractJsonString(pgJson, "localPath");
-                                        page.size       = extractJsonInt(pgJson, "size");
-                                        page.downloaded = extractJsonBool(pgJson, "downloaded");
-                                        chapter.pages.push_back(page);
-                                        pgStart = pgEnd + 1;
-                                    }
-                                }
-                            }
-                        }
-                        item.chapters.push_back(chapter);
-                        chStart = chEnd + 1;
-                    }
-                }
-            }
-        }
-
-        item.totalChapters     = static_cast<int>(item.chapters.size());
-        item.completedChapters = 0;
-        for (auto& ch : item.chapters) {
-            if (ch.state == LocalDownloadState::DOWNLOADING)
-                ch.state = LocalDownloadState::QUEUED;
-            if (ch.state == LocalDownloadState::COMPLETED)
-                item.completedChapters++;
-        }
-        if (item.mangaId > 0)
-            m_downloads.push_back(item);
-        mangaStart = mangaEnd + 1;
-    }
-
-    brls::Logger::info("DownloadsManager: State loaded with {} downloads", m_downloads.size());
-    validateDownloadedFiles();
-#endif
 }
 
 void DownloadsManager::setProgressCallback(DownloadProgressCallback callback) {
@@ -1731,27 +1523,12 @@ std::string DownloadsManager::downloadCoverImage(int mangaId, const std::string&
         return "";
     }
 
-#ifdef __vita__
-    // Ensure directory exists
-    createDirectory(m_downloadsPath + "/manga_" + std::to_string(mangaId));
+    platform::createDir(m_downloadsPath + "/manga_" + std::to_string(mangaId));
 
-    SceUID fd = sceIoOpen(localPath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-    if (fd >= 0) {
-        sceIoWrite(fd, resp.body.data(), resp.body.size());
-        sceIoClose(fd);
+    if (platform::writeFile(localPath, resp.body.data(), resp.body.size())) {
         brls::Logger::debug("DownloadsManager: Cover saved to {}", localPath);
         return localPath;
     }
-#else
-    createDirectory(m_downloadsPath + "/manga_" + std::to_string(mangaId));
-    std::ofstream file(localPath, std::ios::binary);
-    if (file.is_open()) {
-        file.write(resp.body.data(), resp.body.size());
-        file.close();
-        brls::Logger::debug("DownloadsManager: Cover saved to {}", localPath);
-        return localPath;
-    }
-#endif
 
     return "";
 }
@@ -2198,50 +1975,12 @@ bool DownloadsManager::processImageQuality(const std::string& filePath) {
 bool DownloadsManager::convertWebPToJpeg(const std::string& filePath) {
     // Read the first 12 bytes to check the WebP magic number (RIFF....WEBP)
     // without loading the entire file into memory.
-#ifdef __vita__
-    SceUID fd = sceIoOpen(filePath.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) return false;
-
-    unsigned char header[12];
-    SceSSize bytesRead = sceIoRead(fd, header, 12);
-    if (bytesRead < 12) {
-        sceIoClose(fd);
-        return false;  // Too small to be WebP
-    }
-
-    bool isWebP = (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' &&
-                   header[8] == 'W' && header[9] == 'E' && header[10] == 'B' && header[11] == 'P');
-    if (!isWebP) {
-        sceIoClose(fd);
-        return false;  // Not WebP, nothing to do
-    }
-
-    // Read the full file
-    SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-    if (fileSize <= 0 || fileSize > 50 * 1024 * 1024) {
-        sceIoClose(fd);
-        return false;
-    }
-
-    std::vector<uint8_t> fileData(fileSize);
-    bytesRead = sceIoRead(fd, fileData.data(), fileSize);
-    sceIoClose(fd);
-    if (bytesRead != fileSize) return false;
-#else
-    std::ifstream file(filePath, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) return false;
-    auto fileSize = file.tellg();
-    if (fileSize < 12 || fileSize > 50 * 1024 * 1024) return false;
-    file.seekg(0, std::ios::beg);
-    std::vector<uint8_t> fileData(fileSize);
-    if (!file.read(reinterpret_cast<char*>(fileData.data()), fileSize)) return false;
-    file.close();
+    std::vector<uint8_t> fileData = platform::readFile(filePath);
+    if (fileData.size() < 12 || fileData.size() > 50 * 1024 * 1024) return false;
 
     bool isWebP = (fileData[0] == 'R' && fileData[1] == 'I' && fileData[2] == 'F' && fileData[3] == 'F' &&
                    fileData[8] == 'W' && fileData[9] == 'E' && fileData[10] == 'B' && fileData[11] == 'P');
     if (!isWebP) return false;
-#endif
 
     // Decode WebP to RGB
     int width = 0, height = 0;
@@ -2351,22 +2090,7 @@ void DownloadsManager::preConvertToPageCache(int mangaId, int chapterIndex, int 
         tgaPath += ".tga";
     }
 
-    bool writeOk = false;
-#ifdef __vita__
-    SceUID fd = sceIoOpen(tgaPath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd >= 0) {
-        SceSSize written = sceIoWrite(fd, tgaData.data(), tgaData.size());
-        sceIoClose(fd);
-        writeOk = (written == (SceSSize)tgaData.size());
-    }
-#else
-    std::ofstream out(tgaPath, std::ios::binary);
-    if (out.is_open()) {
-        out.write(reinterpret_cast<const char*>(tgaData.data()), tgaData.size());
-        writeOk = out.good();
-        out.close();
-    }
-#endif
+    bool writeOk = platform::writeFile(tgaPath, tgaData.data(), tgaData.size());
 
     if (writeOk) {
         // Delete the original JPEG now that TGA is saved

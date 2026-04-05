@@ -17,10 +17,9 @@
 #include <sstream>
 #include <thread>
 
+#include "platform/platform.hpp"
+
 #ifdef __vita__
-#include <psp2/io/fcntl.h>
-#include <psp2/io/dirent.h>
-#include <psp2/io/stat.h>
 #include <psp2/net/netctl.h>
 #endif
 
@@ -2580,9 +2579,9 @@ void SettingsTab::exportBackup() {
 
     SuwayomiClient& client = SuwayomiClient::getInstance();
 
-#ifdef __vita__
     // Create backup directory
-    sceIoMkdir("ux0:data/VitaSuwayomi/backup", 0777);
+    std::string backupDir = platform::path("backup");
+    platform::createDir(backupDir);
 
     // Generate filename with timestamp
     time_t now = time(nullptr);
@@ -2590,16 +2589,13 @@ void SettingsTab::exportBackup() {
     char filename[64];
     strftime(filename, sizeof(filename), "backup_%Y%m%d_%H%M%S.json", tm_info);
 
-    std::string backupPath = "ux0:data/VitaSuwayomi/backup/" + std::string(filename);
+    std::string backupPath = backupDir + "/" + std::string(filename);
 
     if (client.exportBackup(backupPath)) {
         brls::Application::notify("Backup saved: " + std::string(filename));
     } else {
         brls::Application::notify("Failed to create backup");
     }
-#else
-    brls::Application::notify("Backup feature requires PS Vita");
-#endif
 }
 
 void SettingsTab::importBackup() {
@@ -2613,25 +2609,16 @@ void SettingsTab::importBackup() {
 
         SuwayomiClient& client = SuwayomiClient::getInstance();
 
-#ifdef __vita__
         // Find most recent backup file
-        std::string backupDir = "ux0:data/VitaSuwayomi/backup";
+        std::string backupDir = platform::path("backup");
         std::string latestBackup;
 
-        SceUID dir = sceIoDopen(backupDir.c_str());
-        if (dir >= 0) {
-            SceIoDirent entry;
-            while (sceIoDread(dir, &entry) > 0) {
-                if (SCE_S_ISREG(entry.d_stat.st_mode)) {
-                    std::string name = entry.d_name;
-                    if (name.find("backup_") == 0 && name.find(".json") != std::string::npos) {
-                        if (name > latestBackup) {
-                            latestBackup = name;
-                        }
-                    }
+        for (const auto& name : platform::listDir(backupDir)) {
+            if (name.find("backup_") == 0 && name.find(".json") != std::string::npos) {
+                if (name > latestBackup) {
+                    latestBackup = name;
                 }
             }
-            sceIoDclose(dir);
         }
 
         if (latestBackup.empty()) {
@@ -2645,9 +2632,6 @@ void SettingsTab::importBackup() {
         } else {
             brls::Application::notify("Failed to import backup");
         }
-#else
-        brls::Application::notify("Backup feature requires PS Vita");
-#endif
     });
 
     dialog->open();
@@ -2848,47 +2832,31 @@ void SettingsTab::showUpdateDialog(const std::string& newVersion, const std::str
 }
 
 void SettingsTab::downloadAndInstallUpdate(const std::string& downloadUrl, const std::string& version) {
-#ifdef __vita__
     brls::Application::notify("Downloading update...");
 
     // Create update directory
-    sceIoMkdir("ux0:data/VitaSuwayomi/updates", 0777);
+    std::string updateDir = platform::path("updates");
+    platform::createDir(updateDir);
 
-    std::string vpkPath = "ux0:data/VitaSuwayomi/updates/VitaSuwayomi_" + version + ".vpk";
+    std::string pkgPath = updateDir + "/VitaSuwayomi_" + version + ".vpk";
 
     HttpClient client;
     client.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
     client.setTimeout(300);  // 5 minute timeout for large downloads
     client.setFollowRedirects(true);
 
-    if (client.downloadToFile(downloadUrl, vpkPath)) {
-        // Show success dialog with instructions
+    if (client.downloadToFile(downloadUrl, pkgPath)) {
         std::string msg = "Update downloaded successfully!\n\n"
-                          "VPK saved to:\n" + vpkPath + "\n\n"
-                          "Please install using VitaShell:\n"
-                          "1. Open VitaShell\n"
-                          "2. Navigate to ux0:data/VitaSuwayomi/updates/\n"
-                          "3. Select the VPK and press X to install\n"
-                          "4. Restart VitaSuwayomi after installation";
+                          "Saved to:\n" + pkgPath + "\n\n"
+                          "Please install the update package and restart.";
 
         brls::Dialog* successDialog = new brls::Dialog(msg);
-        successDialog->setCancelable(true);  // Allow back button to close dialog
-
+        successDialog->setCancelable(true);
         successDialog->addButton("OK", []() {});
-
         successDialog->open();
     } else {
         brls::Application::notify("Failed to download update");
     }
-#else
-    brls::Application::notify("Update download requires PS Vita");
-
-    // On non-Vita platforms, just show the download URL
-    brls::Dialog* dialog = new brls::Dialog("Download from:\n" + downloadUrl);
-    dialog->setCancelable(true);  // Allow back button to close dialog
-    dialog->addButton("OK", []() {});
-    dialog->open();
-#endif
 }
 
 } // namespace vitasuwayomi

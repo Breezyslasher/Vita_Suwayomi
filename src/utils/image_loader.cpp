@@ -21,12 +21,9 @@
 #include <chrono>
 #include <fstream>
 #include "utils/async.hpp"
+#include "platform/platform.hpp"
 
-// Vita I/O for local file loading
-#ifdef __vita__
-#include <psp2/io/fcntl.h>
-#include <psp2/io/stat.h>
-#endif
+// Platform I/O for local file loading
 
 #include "platform/paths.hpp"
 
@@ -2606,20 +2603,10 @@ void ImageLoader::workerThreadFunc(int workerId) {
 
         {
             std::unique_lock<std::mutex> lock(s_queueMutex);
-#if defined(__SWITCH__)
-            // On Switch/libnx, pthread_cond_timedwait is not implemented
-            // (returns ENOSYS), so wait_for() throws.  Poll instead.
-            if (s_loadQueue.empty() && s_rotatableLoadQueue.empty() && !s_shutdownWorkers) {
-                lock.unlock();
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                lock.lock();
-            }
-#else
-            // Wait for items to be queued (with timeout to allow shutdown check)
-            s_queueCV.wait_for(lock, std::chrono::milliseconds(500), []() {
+            // Wait for items (platform handles Switch ENOSYS by polling)
+            platform::condWaitFor(s_queueMutex, lock, 500, []() {
                 return !s_loadQueue.empty() || !s_rotatableLoadQueue.empty() || s_shutdownWorkers;
             });
-#endif
 
             if (s_shutdownWorkers) break;
 
@@ -2757,36 +2744,14 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         // Load from local file
         brls::Logger::debug("ImageLoader: Loading local file: {}", url);
 
-#ifdef __vita__
-        SceUID fd = sceIoOpen(url.c_str(), SCE_O_RDONLY, 0);
-        if (fd >= 0) {
-            SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
-            sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-            if (fileSize > 0 && fileSize < 50 * 1024 * 1024) {  // Max 50MB
-                imageBody.resize(fileSize);
-                SceSSize bytesRead = sceIoRead(fd, &imageBody[0], fileSize);
-                if (bytesRead == fileSize) {
-                    loadSuccess = true;
-                    brls::Logger::debug("ImageLoader: Loaded {} bytes from local file", fileSize);
-                }
-            }
-            sceIoClose(fd);
+        auto fileData = platform::readFile(url);
+        if (!fileData.empty()) {
+            imageBody.assign(reinterpret_cast<const char*>(fileData.data()), fileData.size());
+            loadSuccess = true;
+            brls::Logger::debug("ImageLoader: Loaded {} bytes from local file", fileData.size());
         } else {
             brls::Logger::error("ImageLoader: Failed to open local file: {}", url);
         }
-#else
-        // Non-Vita: use standard file I/O
-        std::ifstream file(url, std::ios::binary | std::ios::ate);
-        if (file.is_open()) {
-            std::streamsize size = file.tellg();
-            file.seekg(0, std::ios::beg);
-            imageBody.resize(size);
-            if (file.read(&imageBody[0], size)) {
-                loadSuccess = true;
-            }
-        }
-#endif
     } else {
         // Skip network requests when offline to avoid flooding workers with
         // doomed HTTP requests that exhaust curl handles and crash the Vita.
@@ -3435,32 +3400,11 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
     bool isLocalFile = isPlatformLocalPath(url);
 
     if (isLocalFile) {
-#ifdef __vita__
-        SceUID fd = sceIoOpen(url.c_str(), SCE_O_RDONLY, 0);
-        if (fd >= 0) {
-            SceOff fileSize = sceIoLseek(fd, 0, SCE_SEEK_END);
-            sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-            if (fileSize > 0 && fileSize < 50 * 1024 * 1024) {
-                imageData.resize(fileSize);
-                SceSSize bytesRead = sceIoRead(fd, &imageData[0], fileSize);
-                if (bytesRead == fileSize) {
-                    loadSuccess = true;
-                }
-            }
-            sceIoClose(fd);
+        auto fileData = platform::readFile(url);
+        if (!fileData.empty()) {
+            imageData.assign(reinterpret_cast<const char*>(fileData.data()), fileData.size());
+            loadSuccess = true;
         }
-#else
-        std::ifstream file(url, std::ios::binary | std::ios::ate);
-        if (file.is_open()) {
-            std::streamsize size = file.tellg();
-            file.seekg(0, std::ios::beg);
-            imageData.resize(size);
-            if (file.read(&imageData[0], size)) {
-                loadSuccess = true;
-            }
-        }
-#endif
     } else {
         // Load from HTTP with automatic JWT refresh on 401/403
         HttpResponse resp = authenticatedGet(url, 2);

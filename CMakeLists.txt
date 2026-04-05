@@ -156,6 +156,19 @@ if(PLATFORM_ANDROID)
     list(APPEND APP_SOURCES src/platform/android_assets.cpp)
 endif()
 
+# Platform abstraction layer — one .cpp per platform, selected at build time
+if(PLATFORM_PSV)
+    list(APPEND APP_SOURCES src/platform/platform_vita.cpp)
+elseif(PLATFORM_SWITCH)
+    list(APPEND APP_SOURCES src/platform/platform_switch.cpp)
+elseif(PLATFORM_PS4)
+    list(APPEND APP_SOURCES src/platform/platform_ps4.cpp)
+elseif(PLATFORM_ANDROID)
+    list(APPEND APP_SOURCES src/platform/platform_android.cpp)
+else()
+    list(APPEND APP_SOURCES src/platform/platform_desktop.cpp)
+endif()
+
 set(APP_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${BOREALIS_LIBRARY}/include

@@ -4,24 +4,11 @@
 
 #include "utils/library_cache.hpp"
 #include <borealis.hpp>
-#include <fstream>
 #include <sstream>
 #include <cstring>
 #include <cstdlib>
-#include <cerrno>
-#include <filesystem>
 
-#ifdef __vita__
-#include <psp2/io/fcntl.h>
-#include <psp2/io/stat.h>
-#include <psp2/io/dirent.h>
-#else
-#include <sys/stat.h>
-#include <dirent.h>
-#ifdef _WIN32
-#include <direct.h>
-#endif
-#endif
+#include "platform/platform.hpp"
 
 namespace vitasuwayomi {
 
@@ -67,19 +54,7 @@ bool LibraryCache::init() {
 }
 
 std::string LibraryCache::getCacheDir() {
-#ifdef __vita__
-    return "ux0:data/VitaSuwayomi/cache";
-#elif defined(__PS4__)
-    return "/data/VitaSuwayomi/cache";
-#elif defined(__SWITCH__)
-    return "sdmc:/VitaSuwayomi/cache";
-#else
-    const char* homeDir = std::getenv("HOME");
-    if (homeDir && *homeDir) {
-        return std::string(homeDir) + "/.local/share/VitaSuwayomi/cache";
-    }
-    return "./cache";
-#endif
+    return platform::path("cache");
 }
 
 std::string LibraryCache::getCoverCacheDir() {
@@ -111,31 +86,7 @@ std::string LibraryCache::getMangaDetailsFilePath(int mangaId) {
 }
 
 bool LibraryCache::ensureDirectoryExists(const std::string& path) {
-#ifdef __vita__
-    SceIoStat stat;
-    if (sceIoGetstat(path.c_str(), &stat) < 0) {
-        // Directory doesn't exist, create it
-        if (sceIoMkdir(path.c_str(), 0777) < 0) {
-            return false;
-        }
-    }
-    return true;
-#elif defined(__PS4__) || defined(__SWITCH__)
-    struct stat st;
-    if (stat(path.c_str(), &st) != 0) {
-        if (mkdir(path.c_str(), 0777) != 0 && errno != EEXIST) {
-            return false;
-        }
-    }
-    return true;
-#else
-    std::error_code ec;
-    if (std::filesystem::exists(path, ec)) {
-        return !ec;
-    }
-    std::filesystem::create_directories(path, ec);
-    return !ec;
-#endif
+    return platform::createDirRecursive(path);
 }
 
 std::string LibraryCache::serializeManga(const Manga& manga) {
@@ -248,31 +199,15 @@ bool LibraryCache::saveCategories(const std::vector<Category>& categories) {
 
     std::string path = getCategoriesFilePath();
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd < 0) {
+    std::string content;
+    for (const auto& c : categories) {
+        content += serializeCategory(c) + "\n";
+    }
+
+    if (!platform::writeFile(path, content)) {
         brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
         return false;
     }
-
-    for (const auto& c : categories) {
-        std::string line = serializeCategory(c) + "\n";
-        sceIoWrite(fd, line.c_str(), line.size());
-    }
-
-    sceIoClose(fd);
-#else
-    std::ofstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    for (const auto& c : categories) {
-        file << serializeCategory(c) << "\n";
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Saved {} categories", categories.size());
     return true;
@@ -286,26 +221,10 @@ bool LibraryCache::loadCategories(std::vector<Category>& categories) {
     std::string path = getCategoriesFilePath();
     categories.clear();
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) {
-        return false;
-    }
+    auto fileData = platform::readFile(path);
+    if (fileData.empty()) return false;
 
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    if (size <= 0 || size > 1024 * 1024) {
-        sceIoClose(fd);
-        return false;
-    }
-
-    std::vector<char> buffer(size + 1);
-    sceIoRead(fd, buffer.data(), size);
-    buffer[size] = '\0';
-    sceIoClose(fd);
-
-    std::istringstream stream(buffer.data());
+    std::istringstream stream(std::string(reinterpret_cast<const char*>(fileData.data()), fileData.size()));
     std::string line;
     while (std::getline(stream, line)) {
         if (line.empty()) continue;
@@ -314,38 +233,13 @@ bool LibraryCache::loadCategories(std::vector<Category>& categories) {
             categories.push_back(c);
         }
     }
-#else
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    std::string line;
-    while (std::getline(file, line)) {
-        if (line.empty()) continue;
-        Category c;
-        if (deserializeCategory(line, c)) {
-            categories.push_back(c);
-        }
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Loaded {} categories from cache", categories.size());
     return !categories.empty();
 }
 
 bool LibraryCache::hasCategoriesCache() {
-    std::string path = getCategoriesFilePath();
-
-#ifdef __vita__
-    SceIoStat stat;
-    return sceIoGetstat(path.c_str(), &stat) >= 0;
-#else
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
-#endif
+    return platform::fileExists(getCategoriesFilePath());
 }
 
 bool LibraryCache::saveCategoryManga(int categoryId, const std::vector<Manga>& manga) {
@@ -355,31 +249,15 @@ bool LibraryCache::saveCategoryManga(int categoryId, const std::vector<Manga>& m
 
     std::string path = getCategoryFilePath(categoryId);
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd < 0) {
+    std::string content;
+    for (const auto& m : manga) {
+        content += serializeManga(m) + "\n";
+    }
+
+    if (!platform::writeFile(path, content)) {
         brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
         return false;
     }
-
-    for (const auto& m : manga) {
-        std::string line = serializeManga(m) + "\n";
-        sceIoWrite(fd, line.c_str(), line.size());
-    }
-
-    sceIoClose(fd);
-#else
-    std::ofstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    for (const auto& m : manga) {
-        file << serializeManga(m) << "\n";
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Saved {} manga for category {}", manga.size(), categoryId);
     return true;
@@ -393,27 +271,10 @@ bool LibraryCache::loadCategoryManga(int categoryId, std::vector<Manga>& manga) 
     std::string path = getCategoryFilePath(categoryId);
     manga.clear();
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) {
-        return false;
-    }
+    auto fileData = platform::readFile(path);
+    if (fileData.empty()) return false;
 
-    // Get file size
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    if (size <= 0 || size > 10 * 1024 * 1024) {
-        sceIoClose(fd);
-        return false;
-    }
-
-    std::vector<char> buffer(size + 1);
-    sceIoRead(fd, buffer.data(), size);
-    buffer[size] = '\0';
-    sceIoClose(fd);
-
-    std::istringstream stream(buffer.data());
+    std::istringstream stream(std::string(reinterpret_cast<const char*>(fileData.data()), fileData.size()));
     std::string line;
     while (std::getline(stream, line)) {
         if (line.empty()) continue;
@@ -422,49 +283,18 @@ bool LibraryCache::loadCategoryManga(int categoryId, std::vector<Manga>& manga) 
             manga.push_back(m);
         }
     }
-#else
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    std::string line;
-    while (std::getline(file, line)) {
-        if (line.empty()) continue;
-        Manga m;
-        if (deserializeManga(line, m)) {
-            manga.push_back(m);
-        }
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Loaded {} manga for category {} from cache", manga.size(), categoryId);
     return !manga.empty();
 }
 
 bool LibraryCache::hasCategoryCache(int categoryId) {
-    std::string path = getCategoryFilePath(categoryId);
-
-#ifdef __vita__
-    SceIoStat stat;
-    return sceIoGetstat(path.c_str(), &stat) >= 0;
-#else
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
-#endif
+    return platform::fileExists(getCategoryFilePath(categoryId));
 }
 
 void LibraryCache::invalidateCategoryCache(int categoryId) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    std::string path = getCategoryFilePath(categoryId);
-
-#ifdef __vita__
-    sceIoRemove(path.c_str());
-#else
-    remove(path.c_str());
-#endif
+    platform::deleteFile(getCategoryFilePath(categoryId));
 }
 
 bool LibraryCache::saveAllLibraryManga(const std::vector<Manga>& manga) {
@@ -474,31 +304,15 @@ bool LibraryCache::saveAllLibraryManga(const std::vector<Manga>& manga) {
 
     std::string path = getAllLibraryFilePath();
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd < 0) {
+    std::string content;
+    for (const auto& m : manga) {
+        content += serializeManga(m) + "\n";
+    }
+
+    if (!platform::writeFile(path, content)) {
         brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
         return false;
     }
-
-    for (const auto& m : manga) {
-        std::string line = serializeManga(m) + "\n";
-        sceIoWrite(fd, line.c_str(), line.size());
-    }
-
-    sceIoClose(fd);
-#else
-    std::ofstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    for (const auto& m : manga) {
-        file << serializeManga(m) << "\n";
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Saved {} manga to all-library cache", manga.size());
     return true;
@@ -512,26 +326,10 @@ bool LibraryCache::loadAllLibraryManga(std::vector<Manga>& manga) {
     std::string path = getAllLibraryFilePath();
     manga.clear();
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) {
-        return false;
-    }
+    auto fileData = platform::readFile(path);
+    if (fileData.empty()) return false;
 
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    if (size <= 0 || size > 10 * 1024 * 1024) {
-        sceIoClose(fd);
-        return false;
-    }
-
-    std::vector<char> buffer(size + 1);
-    sceIoRead(fd, buffer.data(), size);
-    buffer[size] = '\0';
-    sceIoClose(fd);
-
-    std::istringstream stream(buffer.data());
+    std::istringstream stream(std::string(reinterpret_cast<const char*>(fileData.data()), fileData.size()));
     std::string line;
     while (std::getline(stream, line)) {
         if (line.empty()) continue;
@@ -540,64 +338,20 @@ bool LibraryCache::loadAllLibraryManga(std::vector<Manga>& manga) {
             manga.push_back(m);
         }
     }
-#else
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    std::string line;
-    while (std::getline(file, line)) {
-        if (line.empty()) continue;
-        Manga m;
-        if (deserializeManga(line, m)) {
-            manga.push_back(m);
-        }
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Loaded {} manga from all-library cache", manga.size());
     return !manga.empty();
 }
 
 bool LibraryCache::hasAllLibraryCache() {
-    std::string path = getAllLibraryFilePath();
-
-#ifdef __vita__
-    SceIoStat stat;
-    return sceIoGetstat(path.c_str(), &stat) >= 0;
-#else
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
-#endif
+    return platform::fileExists(getAllLibraryFilePath());
 }
 
 bool LibraryCache::saveCoverImage(int mangaId, const std::vector<uint8_t>& imageData) {
     if (!m_coverCacheEnabled || imageData.empty()) return false;
 
     std::lock_guard<std::mutex> lock(m_coverMutex);
-
-    std::string path = getCoverCachePath(mangaId);
-
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd < 0) {
-        return false;
-    }
-    sceIoWrite(fd, imageData.data(), imageData.size());
-    sceIoClose(fd);
-#else
-    std::ofstream file(path, std::ios::binary);
-    if (!file.is_open()) {
-        return false;
-    }
-    file.write(reinterpret_cast<const char*>(imageData.data()), imageData.size());
-    file.close();
-#endif
-
-    return true;
+    return platform::writeFile(getCoverCachePath(mangaId), imageData.data(), imageData.size());
 }
 
 bool LibraryCache::loadCoverImage(int mangaId, std::vector<uint8_t>& imageData) {
@@ -605,68 +359,21 @@ bool LibraryCache::loadCoverImage(int mangaId, std::vector<uint8_t>& imageData) 
 
     std::lock_guard<std::mutex> lock(m_coverMutex);
 
-    std::string path = getCoverCachePath(mangaId);
-    imageData.clear();
-
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) {
+    imageData = platform::readFile(getCoverCachePath(mangaId));
+    if (imageData.size() > 5 * 1024 * 1024) {
+        imageData.clear();
         return false;
     }
-
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    if (size <= 0 || size > 5 * 1024 * 1024) {
-        sceIoClose(fd);
-        return false;
-    }
-
-    imageData.resize(size);
-    sceIoRead(fd, imageData.data(), size);
-    sceIoClose(fd);
-#else
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    std::streamsize size = file.tellg();
-    file.seekg(0, std::ios::beg);
-
-    if (size <= 0 || size > 5 * 1024 * 1024) {
-        return false;
-    }
-
-    imageData.resize(size);
-    file.read(reinterpret_cast<char*>(imageData.data()), size);
-    file.close();
-#endif
-
     return !imageData.empty();
 }
 
 bool LibraryCache::deleteCoverImage(int mangaId) {
     std::lock_guard<std::mutex> lock(m_coverMutex);
-    std::string path = getCoverCachePath(mangaId);
-
-#ifdef __vita__
-    return sceIoRemove(path.c_str()) >= 0;
-#else
-    return remove(path.c_str()) == 0;
-#endif
+    return platform::deleteFile(getCoverCachePath(mangaId));
 }
 
 bool LibraryCache::hasCoverCache(int mangaId) {
-    std::string path = getCoverCachePath(mangaId);
-
-#ifdef __vita__
-    SceIoStat stat;
-    return sceIoGetstat(path.c_str(), &stat) >= 0;
-#else
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
-#endif
+    return platform::fileExists(getCoverCachePath(mangaId));
 }
 
 // --- Reader page image caching ---
@@ -689,56 +396,17 @@ bool LibraryCache::savePageImage(int mangaId, int chapterId, int pageIndex, cons
     ensureDirectoryExists(getPageCacheDir());
 
     std::string path = getPageCachePath(mangaId, chapterId, pageIndex);
-
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd < 0) return false;
-    sceIoWrite(fd, imageData.data(), imageData.size());
-    sceIoClose(fd);
-#else
-    std::ofstream file(path, std::ios::binary);
-    if (!file.is_open()) return false;
-    file.write(reinterpret_cast<const char*>(imageData.data()), imageData.size());
-    file.close();
-#endif
-
-    return true;
+    return platform::writeFile(path, imageData.data(), imageData.size());
 }
 
 bool LibraryCache::loadPageImage(int mangaId, int chapterId, int pageIndex, std::vector<uint8_t>& imageData) {
     std::lock_guard<std::mutex> lock(m_pageMutex);
 
-    std::string path = getPageCachePath(mangaId, chapterId, pageIndex);
-    imageData.clear();
-
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) return false;
-
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    if (size <= 18 || size > 16 * 1024 * 1024) {  // TGA must be > 18 bytes, max 16MB
-        sceIoClose(fd);
+    imageData = platform::readFile(getPageCachePath(mangaId, chapterId, pageIndex));
+    if (imageData.size() <= 18 || imageData.size() > 16 * 1024 * 1024) {
+        imageData.clear();
         return false;
     }
-
-    imageData.resize(size);
-    sceIoRead(fd, imageData.data(), size);
-    sceIoClose(fd);
-#else
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) return false;
-
-    std::streamsize size = file.tellg();
-    file.seekg(0, std::ios::beg);
-
-    if (size <= 18 || size > 16 * 1024 * 1024) return false;
-
-    imageData.resize(size);
-    file.read(reinterpret_cast<char*>(imageData.data()), size);
-    file.close();
-#endif
 
     // Validate TGA header
     if (imageData.size() > 18 &&
@@ -753,46 +421,18 @@ bool LibraryCache::loadPageImage(int mangaId, int chapterId, int pageIndex, std:
 }
 
 bool LibraryCache::hasPageCache(int mangaId, int chapterId, int pageIndex) {
-    std::string path = getPageCachePath(mangaId, chapterId, pageIndex);
-
-#ifdef __vita__
-    SceIoStat stat;
-    return sceIoGetstat(path.c_str(), &stat) >= 0;
-#else
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
-#endif
+    return platform::fileExists(getPageCachePath(mangaId, chapterId, pageIndex));
 }
 
 void LibraryCache::clearPageCache() {
     std::lock_guard<std::mutex> lock(m_pageMutex);
     std::string dir = getPageCacheDir();
 
-#ifdef __vita__
-    SceUID dfd = sceIoDopen(dir.c_str());
-    if (dfd >= 0) {
-        SceIoDirent entry;
-        while (sceIoDread(dfd, &entry) > 0) {
-            if (strstr(entry.d_name, ".tga") != nullptr) {
-                std::string path = dir + "/" + entry.d_name;
-                sceIoRemove(path.c_str());
-            }
+    for (const auto& name : platform::listDir(dir)) {
+        if (name.find(".tga") != std::string::npos) {
+            platform::deleteFile(dir + "/" + name);
         }
-        sceIoDclose(dfd);
     }
-#else
-    DIR* d = opendir(dir.c_str());
-    if (d) {
-        struct dirent* dentry;
-        while ((dentry = readdir(d)) != nullptr) {
-            if (strstr(dentry->d_name, ".tga") != nullptr) {
-                std::string path = dir + "/" + dentry->d_name;
-                remove(path.c_str());
-            }
-        }
-        closedir(d);
-    }
-#endif
 
     brls::Logger::info("LibraryCache: Page cache cleared");
 }
@@ -802,31 +442,11 @@ void LibraryCache::clearPageCache(int mangaId) {
     std::string dir = getPageCacheDir();
     std::string prefix = std::to_string(mangaId) + "_";
 
-#ifdef __vita__
-    SceUID dfd = sceIoDopen(dir.c_str());
-    if (dfd >= 0) {
-        SceIoDirent entry;
-        while (sceIoDread(dfd, &entry) > 0) {
-            if (strncmp(entry.d_name, prefix.c_str(), prefix.size()) == 0) {
-                std::string path = dir + "/" + entry.d_name;
-                sceIoRemove(path.c_str());
-            }
+    for (const auto& name : platform::listDir(dir)) {
+        if (name.compare(0, prefix.size(), prefix) == 0) {
+            platform::deleteFile(dir + "/" + name);
         }
-        sceIoDclose(dfd);
     }
-#else
-    DIR* d = opendir(dir.c_str());
-    if (d) {
-        struct dirent* dentry;
-        while ((dentry = readdir(d)) != nullptr) {
-            if (strncmp(dentry->d_name, prefix.c_str(), prefix.size()) == 0) {
-                std::string path = dir + "/" + dentry->d_name;
-                remove(path.c_str());
-            }
-        }
-        closedir(d);
-    }
-#endif
 }
 
 void LibraryCache::clearAllCache() {
@@ -839,33 +459,11 @@ void LibraryCache::clearLibraryCache() {
     std::lock_guard<std::mutex> lock(m_mutex);
     std::string dir = getCacheDir();
 
-#ifdef __vita__
-    SceUID dfd = sceIoDopen(dir.c_str());
-    if (dfd >= 0) {
-        SceIoDirent entry;
-        while (sceIoDread(dfd, &entry) > 0) {
-            if (strstr(entry.d_name, "category_") != nullptr ||
-                strcmp(entry.d_name, "all_library.txt") == 0) {
-                std::string path = dir + "/" + entry.d_name;
-                sceIoRemove(path.c_str());
-            }
+    for (const auto& name : platform::listDir(dir)) {
+        if (name.find("category_") != std::string::npos || name == "all_library.txt") {
+            platform::deleteFile(dir + "/" + name);
         }
-        sceIoDclose(dfd);
     }
-#else
-    DIR* d = opendir(dir.c_str());
-    if (d) {
-        struct dirent* entry;
-        while ((entry = readdir(d)) != nullptr) {
-            if (strstr(entry->d_name, "category_") != nullptr ||
-                strcmp(entry->d_name, "all_library.txt") == 0) {
-                std::string path = dir + "/" + entry->d_name;
-                remove(path.c_str());
-            }
-        }
-        closedir(d);
-    }
-#endif
 
     brls::Logger::info("LibraryCache: Library cache cleared");
 }
@@ -874,63 +472,23 @@ void LibraryCache::clearCoverCache() {
     std::lock_guard<std::mutex> lock(m_mutex);
     std::string dir = getCoverCacheDir();
 
-#ifdef __vita__
-    SceUID dfd = sceIoDopen(dir.c_str());
-    if (dfd >= 0) {
-        SceIoDirent entry;
-        while (sceIoDread(dfd, &entry) > 0) {
-            if (strstr(entry.d_name, ".tga") != nullptr) {
-                std::string path = dir + "/" + entry.d_name;
-                sceIoRemove(path.c_str());
-            }
+    for (const auto& name : platform::listDir(dir)) {
+        if (name.find(".tga") != std::string::npos) {
+            platform::deleteFile(dir + "/" + name);
         }
-        sceIoDclose(dfd);
     }
-#else
-    DIR* d = opendir(dir.c_str());
-    if (d) {
-        struct dirent* entry;
-        while ((entry = readdir(d)) != nullptr) {
-            if (strstr(entry->d_name, ".tga") != nullptr) {
-                std::string path = dir + "/" + entry->d_name;
-                remove(path.c_str());
-            }
-        }
-        closedir(d);
-    }
-#endif
 
     brls::Logger::info("LibraryCache: Cover cache cleared");
 }
 
 size_t LibraryCache::getCacheSize() {
-    // Approximate calculation
     size_t total = 0;
     std::string coverDir = getCoverCacheDir();
 
-#ifdef __vita__
-    SceUID dfd = sceIoDopen(coverDir.c_str());
-    if (dfd >= 0) {
-        SceIoDirent entry;
-        while (sceIoDread(dfd, &entry) > 0) {
-            total += entry.d_stat.st_size;
-        }
-        sceIoDclose(dfd);
+    for (const auto& name : platform::listDir(coverDir)) {
+        int64_t sz = platform::fileSize(coverDir + "/" + name);
+        if (sz > 0) total += static_cast<size_t>(sz);
     }
-#else
-    DIR* d = opendir(coverDir.c_str());
-    if (d) {
-        struct dirent* entry;
-        while ((entry = readdir(d)) != nullptr) {
-            std::string path = coverDir + "/" + entry->d_name;
-            struct stat st;
-            if (stat(path.c_str(), &st) == 0) {
-                total += st.st_size;
-            }
-        }
-        closedir(d);
-    }
-#endif
 
     return total;
 }
@@ -1064,22 +622,10 @@ bool LibraryCache::saveMangaDetails(const Manga& manga) {
     std::string path = getMangaDetailsFilePath(manga.id);
     std::string data = serializeMangaDetails(manga);
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd < 0) {
+    if (!platform::writeFile(path, data)) {
         brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
         return false;
     }
-    sceIoWrite(fd, data.c_str(), data.size());
-    sceIoClose(fd);
-#else
-    std::ofstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-    file << data;
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Saved manga details for id={}", manga.id);
     return true;
@@ -1090,39 +636,10 @@ bool LibraryCache::loadMangaDetails(int mangaId, Manga& manga) {
 
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    std::string path = getMangaDetailsFilePath(mangaId);
+    auto fileData = platform::readFile(getMangaDetailsFilePath(mangaId));
+    if (fileData.empty()) return false;
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) {
-        return false;
-    }
-
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    if (size <= 0 || size > 1024 * 1024) {
-        sceIoClose(fd);
-        return false;
-    }
-
-    std::vector<char> buffer(size + 1);
-    sceIoRead(fd, buffer.data(), size);
-    buffer[size] = '\0';
-    sceIoClose(fd);
-
-    std::string data(buffer.data());
-#else
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    std::ostringstream ss;
-    ss << file.rdbuf();
-    file.close();
-    std::string data = ss.str();
-#endif
+    std::string data(reinterpret_cast<const char*>(fileData.data()), fileData.size());
 
     if (deserializeMangaDetails(data, manga)) {
         brls::Logger::debug("LibraryCache: Loaded manga details for id={}", mangaId);
@@ -1133,15 +650,7 @@ bool LibraryCache::loadMangaDetails(int mangaId, Manga& manga) {
 }
 
 bool LibraryCache::hasMangaDetailsCache(int mangaId) {
-    std::string path = getMangaDetailsFilePath(mangaId);
-
-#ifdef __vita__
-    SceIoStat stat;
-    return sceIoGetstat(path.c_str(), &stat) >= 0;
-#else
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
-#endif
+    return platform::fileExists(getMangaDetailsFilePath(mangaId));
 }
 
 // ---- Reading History Cache ----
@@ -1210,31 +719,15 @@ bool LibraryCache::saveHistory(const std::vector<ReadingHistoryItem>& history) {
 
     std::string path = getHistoryFilePath();
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd < 0) {
+    std::string content;
+    for (const auto& item : history) {
+        content += serializeHistoryItem(item) + "\n";
+    }
+
+    if (!platform::writeFile(path, content)) {
         brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
         return false;
     }
-
-    for (const auto& item : history) {
-        std::string line = serializeHistoryItem(item) + "\n";
-        sceIoWrite(fd, line.c_str(), line.size());
-    }
-
-    sceIoClose(fd);
-#else
-    std::ofstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    for (const auto& item : history) {
-        file << serializeHistoryItem(item) << "\n";
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Saved {} history items", history.size());
     return true;
@@ -1245,29 +738,12 @@ bool LibraryCache::loadHistory(std::vector<ReadingHistoryItem>& history) {
 
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    std::string path = getHistoryFilePath();
     history.clear();
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) {
-        return false;
-    }
+    auto fileData = platform::readFile(getHistoryFilePath());
+    if (fileData.empty()) return false;
 
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    if (size <= 0 || size > 5 * 1024 * 1024) {
-        sceIoClose(fd);
-        return false;
-    }
-
-    std::vector<char> buffer(size + 1);
-    sceIoRead(fd, buffer.data(), size);
-    buffer[size] = '\0';
-    sceIoClose(fd);
-
-    std::istringstream stream(buffer.data());
+    std::istringstream stream(std::string(reinterpret_cast<const char*>(fileData.data()), fileData.size()));
     std::string line;
     while (std::getline(stream, line)) {
         if (line.empty()) continue;
@@ -1276,49 +752,18 @@ bool LibraryCache::loadHistory(std::vector<ReadingHistoryItem>& history) {
             history.push_back(item);
         }
     }
-#else
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    std::string line;
-    while (std::getline(file, line)) {
-        if (line.empty()) continue;
-        ReadingHistoryItem item;
-        if (deserializeHistoryItem(line, item)) {
-            history.push_back(item);
-        }
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Loaded {} history items from cache", history.size());
     return !history.empty();
 }
 
 bool LibraryCache::hasHistoryCache() {
-    std::string path = getHistoryFilePath();
-
-#ifdef __vita__
-    SceIoStat stat;
-    return sceIoGetstat(path.c_str(), &stat) >= 0;
-#else
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
-#endif
+    return platform::fileExists(getHistoryFilePath());
 }
 
 void LibraryCache::invalidateHistoryCache() {
     std::lock_guard<std::mutex> lock(m_mutex);
-    std::string path = getHistoryFilePath();
-
-#ifdef __vita__
-    sceIoRemove(path.c_str());
-#else
-    remove(path.c_str());
-#endif
+    platform::deleteFile(getHistoryFilePath());
 }
 
 // ---- Chapter caching ----
@@ -1391,31 +836,15 @@ bool LibraryCache::saveChapters(int mangaId, const std::vector<Chapter>& chapter
     ensureDirectoryExists(getChaptersCacheDir());
     std::string path = getChaptersFilePath(mangaId);
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd < 0) {
+    std::string content;
+    for (const auto& ch : chapters) {
+        content += serializeChapter(ch) + "\n";
+    }
+
+    if (!platform::writeFile(path, content)) {
         brls::Logger::error("LibraryCache: Failed to open {} for writing", path);
         return false;
     }
-
-    for (const auto& ch : chapters) {
-        std::string line = serializeChapter(ch) + "\n";
-        sceIoWrite(fd, line.c_str(), line.size());
-    }
-
-    sceIoClose(fd);
-#else
-    std::ofstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    for (const auto& ch : chapters) {
-        file << serializeChapter(ch) << "\n";
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Saved {} chapters for manga {}", chapters.size(), mangaId);
     return true;
@@ -1426,29 +855,12 @@ bool LibraryCache::loadChapters(int mangaId, std::vector<Chapter>& chapters) {
 
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    std::string path = getChaptersFilePath(mangaId);
     chapters.clear();
 
-#ifdef __vita__
-    SceUID fd = sceIoOpen(path.c_str(), SCE_O_RDONLY, 0);
-    if (fd < 0) {
-        return false;
-    }
+    auto fileData = platform::readFile(getChaptersFilePath(mangaId));
+    if (fileData.empty()) return false;
 
-    SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-    if (size <= 0 || size > 10 * 1024 * 1024) {
-        sceIoClose(fd);
-        return false;
-    }
-
-    std::vector<char> buffer(size + 1);
-    sceIoRead(fd, buffer.data(), size);
-    buffer[size] = '\0';
-    sceIoClose(fd);
-
-    std::istringstream stream(buffer.data());
+    std::istringstream stream(std::string(reinterpret_cast<const char*>(fileData.data()), fileData.size()));
     std::string line;
     while (std::getline(stream, line)) {
         if (line.empty()) continue;
@@ -1457,48 +869,18 @@ bool LibraryCache::loadChapters(int mangaId, std::vector<Chapter>& chapters) {
             chapters.push_back(ch);
         }
     }
-#else
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    std::string line;
-    while (std::getline(file, line)) {
-        if (line.empty()) continue;
-        Chapter ch;
-        if (deserializeChapter(line, ch)) {
-            chapters.push_back(ch);
-        }
-    }
-
-    file.close();
-#endif
 
     brls::Logger::debug("LibraryCache: Loaded {} chapters for manga {} from cache", chapters.size(), mangaId);
     return true;
 }
 
 bool LibraryCache::hasChaptersCache(int mangaId) {
-    std::string path = getChaptersFilePath(mangaId);
-#ifdef __vita__
-    SceIoStat stat;
-    return sceIoGetstat(path.c_str(), &stat) >= 0;
-#else
-    struct stat st;
-    return ::stat(path.c_str(), &st) == 0;
-#endif
+    return platform::fileExists(getChaptersFilePath(mangaId));
 }
 
 void LibraryCache::invalidateChaptersCache(int mangaId) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    std::string path = getChaptersFilePath(mangaId);
-
-#ifdef __vita__
-    sceIoRemove(path.c_str());
-#else
-    remove(path.c_str());
-#endif
+    platform::deleteFile(getChaptersFilePath(mangaId));
 }
 
 } // namespace vitasuwayomi

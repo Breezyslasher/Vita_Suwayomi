@@ -12,49 +12,18 @@
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/image_loader.hpp"
+#include "platform/platform.hpp"
 #include <cmath>
 #include <ctime>
-#include <fstream>
-
-#ifdef __vita__
-#include <psp2/io/fcntl.h>
-#endif
 
 namespace vitasuwayomi {
 
-// Helper to load local cover image on Vita
 static void loadLocalCoverToImage(brls::Image* image, const std::string& localPath) {
     if (localPath.empty() || !image) return;
-
-#ifdef __vita__
-    SceUID fd = sceIoOpen(localPath.c_str(), SCE_O_RDONLY, 0);
-    if (fd >= 0) {
-        SceOff size = sceIoLseek(fd, 0, SCE_SEEK_END);
-        sceIoLseek(fd, 0, SCE_SEEK_SET);
-
-        if (size > 0 && size < 10 * 1024 * 1024) {  // Max 10MB
-            std::vector<uint8_t> data(size);
-            if (sceIoRead(fd, data.data(), size) == size) {
-                image->setImageFromMem(data.data(), data.size());
-            }
-        }
-        sceIoClose(fd);
+    auto data = platform::readFile(localPath);
+    if (!data.empty() && data.size() < 10 * 1024 * 1024) {
+        image->setImageFromMem(data.data(), data.size());
     }
-#else
-    std::ifstream file(localPath, std::ios::binary | std::ios::ate);
-    if (file.is_open()) {
-        std::streamsize size = file.tellg();
-        file.seekg(0, std::ios::beg);
-
-        if (size > 0 && size < 10 * 1024 * 1024) {
-            std::vector<uint8_t> data(size);
-            if (file.read(reinterpret_cast<char*>(data.data()), size)) {
-                image->setImageFromMem(data.data(), data.size());
-            }
-        }
-        file.close();
-    }
-#endif
 }
 
 MangaItemCell::MangaItemCell() {
