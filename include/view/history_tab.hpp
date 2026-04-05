@@ -18,6 +18,8 @@ public:
 
     void onFocusGained() override;
     void willDisappear(bool resetState) override;
+    void draw(NVGcontext* vg, float x, float y, float width, float height,
+              brls::Style style, brls::FrameContext* ctx) override;
     void refresh();
 
 private:
@@ -49,6 +51,12 @@ private:
     bool m_hasMoreItems = true;
     int m_currentOffset = 0;
     static const int ITEMS_PER_PAGE = 20;
+
+    // Scroll-velocity tracking for deferring ImageLoader texture uploads
+    // while the user is scrolling fast (each upload costs ~15-20ms on Vita).
+    float m_prevScrollY = 0.0f;
+    int m_scrollSettledFrames = 0;
+    bool m_uploadsDeferred = false;
 
     // Shared pointer to track if this object is still alive
     std::shared_ptr<bool> m_alive;
