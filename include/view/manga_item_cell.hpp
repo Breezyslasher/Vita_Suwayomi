@@ -66,7 +66,6 @@ private:
     // Cached pre-wrapped title lines (up to 2) so draw() doesn't need to
     // re-measure text per frame. Recomputed only when title or width changes.
     std::string m_line1;
-    std::string m_line2;
     float m_wrappedForWidth = -1.0f;
     brls::Image* m_thumbnailImage = nullptr;
     bool m_thumbnailLoaded = false;
