@@ -121,6 +121,7 @@ set(APP_SOURCES
     src/view/settings_tab.cpp
     src/view/media_detail_view.cpp
     src/view/recycling_grid.cpp
+    src/view/manga_item_cell.cpp
     src/view/rotatable_box.cpp
     src/view/rotatable_image.cpp
     src/view/rotatable_label.cpp
