@@ -11,7 +11,6 @@
 #include "activity/login_activity.hpp"
 #include "activity/main_activity.hpp"
 #include "activity/reader_activity.hpp"
-#include "utils/perf_overlay.hpp"
 
 #include <borealis.hpp>
 #include <sstream>
@@ -133,8 +132,6 @@ bool Application::init() {
     // Apply settings
     applyTheme();
     applyLogLevel();
-    PerfOverlay::getInstance().setEnabled(m_settings.showPerfOverlay);
-
     // Initialize library cache
     LibraryCache::getInstance().init();
 
@@ -388,9 +385,6 @@ void Application::run() {
             pushLoginActivity();
         }
     }
-
-    // Sync perf overlay setting
-    PerfOverlay::getInstance().setEnabled(m_settings.showPerfOverlay);
 
     // Main loop handled by Borealis
     while (brls::Application::mainLoop()) {
@@ -1316,7 +1310,6 @@ bool Application::loadSettings() {
     }
     m_settings.showClock = extractBool("showClock", true);
     m_settings.debugLogging = extractBool("debugLogging", false);
-    m_settings.showPerfOverlay = extractBool("showPerfOverlay", false);
 
     // Load reader settings
     m_settings.readingMode = static_cast<ReadingMode>(extractInt("readingMode"));
@@ -1815,7 +1808,6 @@ bool Application::saveSettings() {
     json += "  \"theme\": " + std::to_string(static_cast<int>(m_settings.theme)) + ",\n";
     json += "  \"showClock\": " + std::string(m_settings.showClock ? "true" : "false") + ",\n";
     json += "  \"debugLogging\": " + std::string(m_settings.debugLogging ? "true" : "false") + ",\n";
-    json += "  \"showPerfOverlay\": " + std::string(m_settings.showPerfOverlay ? "true" : "false") + ",\n";
 
     // Reader settings
     json += "  \"readingMode\": " + std::to_string(static_cast<int>(m_settings.readingMode)) + ",\n";

@@ -6,7 +6,6 @@
 #include "view/recycling_grid.hpp"
 #include "view/manga_item_cell.hpp"
 #include "view/long_press_gesture.hpp"
-#include "utils/perf_overlay.hpp"
 #include "utils/image_loader.hpp"
 #include "app/application.hpp"
 #include <cmath>
@@ -681,10 +680,6 @@ void RecyclingGrid::resetThumbnailLoadStates() {
 }
 
 void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) {
-    auto& perf = PerfOverlay::getInstance();
-    perf.endFrame();   // End previous frame timing
-    perf.beginFrame(); // Start this frame timing
-
     // Visibility culling: hide off-screen rows so ScrollingFrame::draw() skips them.
     // Without this, ALL rows (including off-screen) get full NanoVG draw calls issued,
     // wasting ~80% of CPU frame time on path generation for invisible content.
@@ -752,10 +747,8 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         }
     }
 
-    PERF_BEGIN("grid_draw");
     // Call parent draw - now only visible rows are rendered
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
-    PERF_END("grid_draw");
 
     // Pause ImageLoader GPU texture uploads while the user is actively
     // scrolling fast. Each upload (setImageFromMem) costs ~15-20ms on Vita
@@ -805,10 +798,6 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         }
     }
 
-    // Draw performance overlay on top (uses screen coordinates, ignores scroll)
-    // Reset scissor so overlay draws over everything
-    nvgResetScissor(vg);
-    perf.draw(vg, 960.0f, 544.0f);
 }
 
 void RecyclingGrid::loadThumbnailsForScrollPosition() {

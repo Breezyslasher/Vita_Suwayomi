@@ -6,7 +6,6 @@
 #include "view/webtoon_scroll_view.hpp"
 #include "app/application.hpp"
 #include "utils/image_loader.hpp"
-#include "utils/perf_overlay.hpp"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -1443,11 +1442,6 @@ void WebtoonScrollView::updateCurrentPage() {
 
 void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, float height,
                               brls::Style style, brls::FrameContext* ctx) {
-    auto& perf = PerfOverlay::getInstance();
-    perf.endFrame();
-    perf.beginFrame();
-    PERF_BEGIN("webtoon_draw");
-
     // Update view dimensions
     m_viewWidth = width;
     m_viewHeight = height;
@@ -1581,12 +1575,6 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
 
     // Restore state
     nvgRestore(vg);
-
-    PERF_END("webtoon_draw");
-
-    // Draw perf overlay on top
-    nvgResetScissor(vg);
-    PerfOverlay::getInstance().draw(vg, 960.0f, 544.0f);
 
     // Call onFrame for momentum updates
     onFrame();

@@ -140,15 +140,9 @@ public:
     void setSlideOffset(float x, float y);
     void resetSlideOffset();
 
-    /**
-     * Mark as primary for perf overlay (drives frame timing + draws overlay)
-     */
-    void setPerfPrimary(bool primary) { m_perfPrimary = primary; }
-
     static brls::View* create();
 
 private:
-    bool m_perfPrimary = false;  // If true, drives perf overlay frame timing
     int m_nvgImage = 0;           // NanoVG image handle (single texture)
     int m_imageWidth = 0;
     int m_imageHeight = 0;

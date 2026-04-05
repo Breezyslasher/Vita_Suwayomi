@@ -138,7 +138,6 @@ set(APP_SOURCES
     src/utils/http_client.cpp
     src/utils/image_loader.cpp
     src/utils/library_cache.cpp
-    src/utils/perf_overlay.cpp
 )
 
 # vita_stubs.c only needed on Vita (no-op stdio locks, SDL_OpenURL stub)
