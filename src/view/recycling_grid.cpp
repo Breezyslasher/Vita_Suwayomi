@@ -9,6 +9,7 @@
 #include "utils/perf_overlay.hpp"
 #include "app/application.hpp"
 #include <cmath>
+#include <chrono>
 
 namespace vitasuwayomi {
 
@@ -339,6 +340,8 @@ void RecyclingGrid::clearViews() {
 }
 
 void RecyclingGrid::setupGrid() {
+    auto setupStart = std::chrono::steady_clock::now();
+
     // Cancel any ongoing incremental build
     m_incrementalBuildActive = false;
     m_pendingFocusIndex = -1;
@@ -358,11 +361,25 @@ void RecyclingGrid::setupGrid() {
     }
 
     // Clear existing views
+    size_t oldCellCount = m_cells.size();
+    auto clearStart = std::chrono::steady_clock::now();
     m_contentBox->clearViews();
     m_rows.clear();
     m_cells.clear();
+    auto clearEnd = std::chrono::steady_clock::now();
+    float clearMs = std::chrono::duration<float, std::milli>(clearEnd - clearStart).count();
 
-    if (m_items.empty()) return;
+    // Reset visibility cache — m_rows is empty so the cached range is stale.
+    m_cachedFirstVisible = -1;
+    m_cachedLastVisible = -1;
+
+    if (m_items.empty()) {
+        float setupMs = std::chrono::duration<float, std::milli>(
+            std::chrono::steady_clock::now() - setupStart).count();
+        brls::Logger::info("RecyclingGrid: setupGrid took {:.1f}ms (clear {:.1f}ms, {} old cells, empty items)",
+                           setupMs, clearMs, oldCellCount);
+        return;
+    }
 
     m_totalRowsNeeded = (m_items.size() + m_columns - 1) / m_columns;
 
@@ -375,7 +392,14 @@ void RecyclingGrid::setupGrid() {
     brls::Logger::info("RecyclingGrid: Building {} rows for {} items (first {} immediate)",
                         m_totalRowsNeeded, m_items.size(), immediateRows);
 
+    auto buildStart = std::chrono::steady_clock::now();
     createRowRange(0, immediateRows);
+    float buildMs = std::chrono::duration<float, std::milli>(
+        std::chrono::steady_clock::now() - buildStart).count();
+    float setupMs = std::chrono::duration<float, std::milli>(
+        std::chrono::steady_clock::now() - setupStart).count();
+    brls::Logger::info("RecyclingGrid: setupGrid took {:.1f}ms (clear {:.1f}ms of {} cells, build-immediate {:.1f}ms for {} rows)",
+                       setupMs, clearMs, oldCellCount, buildMs, immediateRows);
 
     // Schedule remaining rows for incremental building
     if (immediateRows < m_totalRowsNeeded) {
@@ -573,7 +597,14 @@ void RecyclingGrid::buildNextRowBatch() {
     int batchSize = 2;
     int endRow = std::min(m_incrementalBuildRow + batchSize, m_totalRowsNeeded);
 
+    auto batchStart = std::chrono::steady_clock::now();
     createRowRange(m_incrementalBuildRow, endRow);
+    float batchMs = std::chrono::duration<float, std::milli>(
+        std::chrono::steady_clock::now() - batchStart).count();
+    if (batchMs > 10.0f) {
+        brls::Logger::info("RecyclingGrid: row batch {}..{} took {:.1f}ms",
+                           m_incrementalBuildRow, endRow, batchMs);
+    }
     m_incrementalBuildRow = endRow;
 
     // Apply pending focus if the target cell was just created
