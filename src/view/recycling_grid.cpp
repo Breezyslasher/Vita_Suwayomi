@@ -26,6 +26,16 @@ RecyclingGrid::RecyclingGrid() {
     // PS Vita screen: 960x544, use 6 columns
     m_columns = 6;
 
+    // Register Back (B) once on the grid so cells don't each need their own
+    // copy. Returns false when no handler is set, letting B propagate further
+    // up the view hierarchy as before.
+    this->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+        if (m_onBackPressed) {
+            return m_onBackPressed();
+        }
+        return false;
+    }, true);
+
     // Register action for pull-to-refresh when at top
     // When user is at top and presses up on D-pad, trigger refresh
     this->registerAction("Refresh", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
@@ -530,27 +540,12 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
 
-            cell->addGestureRecognizer(new LongPressGestureRecognizer(
-                cell,
-                [this, cell, index](LongPressGestureStatus status) {
-                    if (status.state == brls::GestureState::START) {
-                        m_longPressTriggered = true;
-                        // Clear press visual since context menu is opening
-                        cell->setPressed(false);
-                        if (index >= 0 && index < (int)m_items.size() && m_onItemLongPressed) {
-                            m_onItemLongPressed(m_items[index], index);
-                        }
-                    }
-                },
-                400
-            ));
-
-            cell->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
-                if (m_onBackPressed) {
-                    return m_onBackPressed();
-                }
-                return false;
-            }, true);
+            // NOTE: LongPressGestureRecognizer and per-cell Back action registration
+            // have been removed from the hot path. With the simple-box MangaItemCell
+            // in use for FPS tuning, long-press context menus aren't needed, and the
+            // Back (B) button already propagates up the view hierarchy to whatever
+            // parent handles it. Every microsecond saved here multiplies by the
+            // number of cells built per frame during category switches.
 
             cell->getFocusEvent()->subscribe([this, index](brls::View*) {
                 m_focusedIndex = index;
@@ -593,8 +588,13 @@ void RecyclingGrid::buildNextRowBatch() {
         return;
     }
 
-    // Build 2 rows per frame (~12 cells) to keep frames responsive
-    int batchSize = 2;
+    // Build 1 row per frame (~6 cells) to keep frames responsive on the Vita.
+    // Each row costs ~25ms to create (per-cell gesture recognizers + yoga
+    // reflow on addView), and each additional row adds another yoga reflow
+    // pass across the contentBox's growing child list. One row per frame
+    // leaves enough budget for a render pass: 25ms build + 16ms render =
+    // ~40ms frame vs. the previous 65ms frame at 2 rows/batch.
+    int batchSize = 1;
     int endRow = std::min(m_incrementalBuildRow + batchSize, m_totalRowsNeeded);
 
     auto batchStart = std::chrono::steady_clock::now();
