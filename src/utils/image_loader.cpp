@@ -95,6 +95,7 @@ std::atomic<bool> ImageLoader::s_shutdownWorkers{false};
 std::queue<ImageLoader::PendingTextureUpdate> ImageLoader::s_pendingTextures;
 std::mutex ImageLoader::s_pendingMutex;
 std::atomic<bool> ImageLoader::s_pendingScheduled{false};
+std::atomic<bool> ImageLoader::s_deferTextureUploads{false};
 
 // Batched texture upload queue (reader pages / RotatableImage)
 std::queue<ImageLoader::PendingRotatableTextureUpdate> ImageLoader::s_pendingRotatableTextures;
@@ -2033,6 +2034,18 @@ void ImageLoader::setMaxConcurrentLoads(int max) {
     s_maxConcurrentLoads = std::max(1, std::min(max, 6));
 }
 
+void ImageLoader::setDeferTextureUploads(bool defer) {
+    bool wasDeferred = s_deferTextureUploads.exchange(defer);
+    // When transitioning from deferred -> allowed, wake the processor so
+    // queued textures start uploading immediately.
+    if (wasDeferred && !defer) {
+        bool expected = false;
+        if (s_pendingScheduled.compare_exchange_strong(expected, true)) {
+            brls::sync([]() { processPendingTextures(); });
+        }
+    }
+}
+
 void ImageLoader::setMaxThumbnailSize(int maxSize) {
     s_maxThumbnailSize = maxSize > 0 ? maxSize : 0;
 }
@@ -2095,6 +2108,23 @@ void ImageLoader::queueTextureUpdate(const std::vector<uint8_t>& data, brls::Ima
 
 void ImageLoader::processPendingTextures() {
     s_pendingScheduled = false;
+
+    // If uploads are deferred (e.g. grid is actively scrolling), skip
+    // GPU uploads this frame. Re-schedule so we try again next frame.
+    if (s_deferTextureUploads.load()) {
+        bool morePending = false;
+        {
+            std::lock_guard<std::mutex> lock(s_pendingMutex);
+            morePending = !s_pendingTextures.empty();
+        }
+        if (morePending) {
+            bool expected = false;
+            if (s_pendingScheduled.compare_exchange_strong(expected, true)) {
+                brls::sync([]() { processPendingTextures(); });
+            }
+        }
+        return;
+    }
 
     // Process up to MAX_TEXTURES_PER_FRAME textures this frame, with a time budget.
     // Each GPU texture upload (setImageFromMem) can take 15-20ms on PS Vita,

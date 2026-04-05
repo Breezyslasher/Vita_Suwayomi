@@ -1,35 +1,29 @@
 /**
- * VitaSuwayomi - Manga Item Cell (simple box placeholder)
+ * VitaSuwayomi - Manga Item Cell
  *
- * Minimal focusable box per manga for FPS tuning. No cover image,
- * no title, no text — just a solid box so the grid layout works.
+ * Minimal focusable cell with a cover image. No title/badge overlays —
+ * just a rounded card that shows the manga cover.
  */
 
 #pragma once
 
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
+#include <memory>
 
 namespace vitasuwayomi {
 
 class MangaItemCell : public brls::Box {
 public:
-    MangaItemCell() {
-        // Make the cell focusable so it works with grid navigation.
-        this->setFocusable(true);
-        // Solid background so the box is visible.
-        this->setBackgroundColor(nvgRGB(60, 60, 70));
-        // A small margin border visible via cornerRadius.
-        this->setCornerRadius(4.0f);
-    }
-    ~MangaItemCell() override = default;
+    MangaItemCell();
+    ~MangaItemCell() override;
 
-    void setManga(const Manga& manga) { m_manga = manga; }
-    void setMangaDeferred(const Manga& manga) { m_manga = manga; }
+    void setManga(const Manga& manga);
+    void setMangaDeferred(const Manga& manga) { setManga(manga); }
     void updateMangaData(const Manga& manga) { m_manga = manga; }
 
-    void loadThumbnailIfNeeded() { m_thumbnailLoaded = true; }
-    void unloadThumbnail() { m_thumbnailLoaded = false; }
+    void loadThumbnailIfNeeded();
+    void unloadThumbnail();
     void resetThumbnailLoadState() { m_thumbnailLoaded = false; }
 
     bool isThumbnailLoaded() const { return m_thumbnailLoaded; }
@@ -42,10 +36,7 @@ public:
     void setShowLibraryBadge(bool) {}
     void refreshLibraryBadge() {}
 
-    void setPressed(bool pressed) {
-        m_pressed = pressed;
-        this->setBackgroundColor(pressed ? nvgRGB(90, 90, 110) : nvgRGB(60, 60, 70));
-    }
+    void setPressed(bool pressed);
     bool isPressed() const { return m_pressed; }
 
     void setSelected(bool selected) { m_selected = selected; }
@@ -54,21 +45,21 @@ public:
     static brls::View* create() { return new MangaItemCell(); }
 
 protected:
-    void onFocusGained() override {
-        brls::Box::onFocusGained();
-        this->setBackgroundColor(nvgRGB(100, 120, 160));
-    }
-
-    void onFocusLost() override {
-        brls::Box::onFocusLost();
-        this->setBackgroundColor(m_pressed ? nvgRGB(90, 90, 110) : nvgRGB(60, 60, 70));
-    }
+    void onFocusGained() override;
+    void onFocusLost() override;
 
 private:
+    void loadThumbnail();
+
     Manga m_manga;
+    brls::Image* m_thumbnailImage = nullptr;
     bool m_thumbnailLoaded = false;
     bool m_pressed = false;
     bool m_selected = false;
+
+    // Shared flag so in-flight ImageLoader callbacks skip writing to us
+    // after this cell has been destroyed.
+    std::shared_ptr<bool> m_alive;
 };
 
 using MediaItemCell = MangaItemCell;

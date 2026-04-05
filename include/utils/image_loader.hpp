@@ -84,6 +84,13 @@ public:
     // Set max thumbnail size for downscaling (default: 200)
     static void setMaxThumbnailSize(int maxSize);
 
+    // While true, processPendingTextures() defers GPU uploads to a later
+    // frame. Used by RecyclingGrid during fast scrolling so texture
+    // uploads (which take ~15-20ms each on Vita) don't stall the scroll
+    // frame. Pending textures continue to queue up and are flushed when
+    // the flag is cleared.
+    static void setDeferTextureUploads(bool defer);
+
 private:
     // Pending load request for brls::Image
     struct LoadRequest {
@@ -158,6 +165,7 @@ private:
     static std::queue<PendingTextureUpdate> s_pendingTextures;
     static std::mutex s_pendingMutex;
     static std::atomic<bool> s_pendingScheduled;
+    static std::atomic<bool> s_deferTextureUploads;
     static constexpr int MAX_TEXTURES_PER_FRAME = 2;  // Limit GPU uploads per frame (reduced from 6 - each upload stalls Vita GPU for ~15-20ms)
 
     // Queue a texture for batched upload on the main thread

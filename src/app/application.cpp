@@ -6,6 +6,7 @@
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/library_cache.hpp"
+#include "utils/image_loader.hpp"
 #include "utils/async.hpp"
 #include "activity/login_activity.hpp"
 #include "activity/main_activity.hpp"
@@ -136,6 +137,15 @@ bool Application::init() {
 
     // Initialize library cache
     LibraryCache::getInstance().init();
+
+    // Size thumbnails to the platform's cover height so downscaling
+    // matches what the grid actually displays (e.g. 168 on Vita,
+    // 420 on desktop/Android/PS4).
+    const auto& ic = platform::imageConstraints();
+    int maxDim = ic.coverHeight > ic.coverWidth ? ic.coverHeight : ic.coverWidth;
+    ImageLoader::setMaxThumbnailSize(maxDim);
+    brls::Logger::info("ImageLoader: thumbnail max dimension = {}px (cover {}x{})",
+                       maxDim, ic.coverWidth, ic.coverHeight);
 
     m_initialized = true;
     return true;

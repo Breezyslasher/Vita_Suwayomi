@@ -7,6 +7,7 @@
 #include "view/manga_item_cell.hpp"
 #include "view/long_press_gesture.hpp"
 #include "utils/perf_overlay.hpp"
+#include "utils/image_loader.hpp"
 #include "app/application.hpp"
 #include <cmath>
 #include <chrono>
@@ -89,6 +90,11 @@ RecyclingGrid::~RecyclingGrid() {
     if (m_alive) {
         *m_alive = false;
     }
+    // Clear defer flag in case this grid was torn down while scrolling,
+    // so pending texture uploads can resume for any remaining views.
+    if (m_uploadsDeferred) {
+        ImageLoader::setDeferTextureUploads(false);
+    }
 }
 
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
@@ -146,6 +152,7 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
             brls::Box* lastRow = m_rows.back();
             m_rows.pop_back();
             if (!m_rowPopulated.empty()) m_rowPopulated.pop_back();
+            if (!m_rowPopulatedCount.empty()) m_rowPopulatedCount.pop_back();
             if (!m_rowHeights.empty()) m_rowHeights.pop_back();
             m_contentBox->removeView(lastRow);
 
@@ -341,6 +348,7 @@ void RecyclingGrid::clearViews() {
     m_rows.clear();
     m_cells.clear();
     m_rowPopulated.clear();
+    m_rowPopulatedCount.clear();
     m_rowHeights.clear();
     if (m_contentBox) {
         m_contentBox->clearViews();
@@ -371,6 +379,7 @@ void RecyclingGrid::setupGrid() {
     m_rows.clear();
     m_cells.clear();
     m_rowPopulated.clear();
+    m_rowPopulatedCount.clear();
     m_rowHeights.clear();
     auto clearEnd = std::chrono::steady_clock::now();
     float clearMs = std::chrono::duration<float, std::milli>(clearEnd - clearStart).count();
@@ -499,13 +508,14 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
         m_contentBox->addView(rowBox);
         m_rows.push_back(rowBox);
         m_rowPopulated.push_back(false);
+        m_rowPopulatedCount.push_back(0);
         m_rowHeights.push_back(rowHeight);
     }
 }
 
-void RecyclingGrid::populateRow(int row) {
-    if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
-    if (m_rowPopulated[row]) return;
+int RecyclingGrid::populateRow(int row, int budget) {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return 0;
+    if (m_rowPopulated[row]) return 0;
 
     brls::Box* rowBox = m_rows[row];
     int startIdx = row * m_columns;
@@ -514,7 +524,16 @@ void RecyclingGrid::populateRow(int row) {
                         ? m_rowHeights[row]
                         : m_cellHeight;
 
-    for (int i = startIdx; i < endIdx; i++) {
+    int alreadyDone = (row < static_cast<int>(m_rowPopulatedCount.size()))
+                          ? m_rowPopulatedCount[row] : 0;
+    int firstToMake = startIdx + alreadyDone;
+    int lastToMake = endIdx;
+    if (budget > 0) {
+        lastToMake = std::min(lastToMake, firstToMake + budget);
+    }
+
+    int madeThisCall = 0;
+    for (int i = firstToMake; i < lastToMake; i++) {
         auto* cell = new MangaItemCell();
         cell->setWidth(m_cellWidth);
         cell->setHeight(rowHeight);
@@ -563,9 +582,16 @@ void RecyclingGrid::populateRow(int row) {
 
         rowBox->addView(cell);
         m_cells[i] = cell;
+        madeThisCall++;
     }
 
-    m_rowPopulated[row] = true;
+    if (row < static_cast<int>(m_rowPopulatedCount.size())) {
+        m_rowPopulatedCount[row] = alreadyDone + madeThisCall;
+        if (startIdx + m_rowPopulatedCount[row] >= endIdx) {
+            m_rowPopulated[row] = true;
+        }
+    }
+    return madeThisCall;
 }
 
 // buildNextRowBatch() removed: rows are now populated lazily by the
@@ -707,16 +733,20 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             m_cachedLastVisible = lastVisible;
         }
 
-        // Populate at most one row per frame as rows enter the visible
-        // range (or its 1-row buffer). Populating a row costs ~25ms on
-        // the Vita, so a one-row-per-frame budget keeps any single frame
-        // at ~41ms (24 FPS) in the worst case, instead of stacking
-        // multiple populates into one frame when the user scrolls fast.
-        for (int i = firstVisible; i < lastVisible; i++) {
+        // Populate a small number of cells per frame as rows enter the
+        // visible range. A single cell creation costs ~7ms on the Vita
+        // (new MangaItemCell + Image + addView triggering yoga layout),
+        // so budgeting 2 cells/frame keeps the extra work to ~14ms and
+        // leaves room for the rest of the frame. Rows may stay partially
+        // populated for a few frames during fast scroll; the empty slots
+        // render as the rowBox background until filled.
+        int cellBudget = 2;
+        for (int i = firstVisible; i < lastVisible && cellBudget > 0; i++) {
             if (i >= 0 && i < static_cast<int>(m_rowPopulated.size())
                 && !m_rowPopulated[i]) {
-                populateRow(i);
-                break;
+                int made = populateRow(i, cellBudget);
+                cellBudget -= made;
+                if (made == 0) break;  // safety against infinite loop
             }
         }
     }
@@ -725,6 +755,29 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     // Call parent draw - now only visible rows are rendered
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     PERF_END("grid_draw");
+
+    // Pause ImageLoader GPU texture uploads while the user is actively
+    // scrolling fast. Each upload (setImageFromMem) costs ~15-20ms on Vita
+    // and stalls the frame. Holding them off until scroll settles keeps
+    // scrolling smooth; queued textures flush as soon as velocity drops.
+    {
+        float curY = this->getContentOffsetY();
+        float frameDelta = std::abs(curY - m_prevScrollY);
+        m_prevScrollY = curY;
+        float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
+        // "Fast scroll" = moving more than ~1/3 of a row per frame
+        bool movingFast = frameDelta > rowHeight * 0.33f;
+        if (movingFast) {
+            m_scrollSettledFrames = 0;
+        } else {
+            m_scrollSettledFrames++;
+        }
+        bool wantDefer = movingFast || m_scrollSettledFrames < 3;
+        if (wantDefer != m_uploadsDeferred) {
+            m_uploadsDeferred = wantDefer;
+            ImageLoader::setDeferTextureUploads(wantDefer);
+        }
+    }
 
     // Check scroll position for thumbnail loading during touch scrolling.
     // The focus-based loading (loadThumbnailsNearIndex) handles D-pad navigation,
