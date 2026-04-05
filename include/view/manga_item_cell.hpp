@@ -1,8 +1,8 @@
 /**
- * VitaSuwayomi - Manga Item Cell (temporary placeholder)
+ * VitaSuwayomi - Manga Item Cell (simple box placeholder)
  *
- * This no-op implementation keeps the app building while the real
- * media/manga item cell is being rewritten.
+ * Minimal focusable box per manga for FPS tuning. No cover image,
+ * no title, no text — just a solid box so the grid layout works.
  */
 
 #pragma once
@@ -14,7 +14,14 @@ namespace vitasuwayomi {
 
 class MangaItemCell : public brls::Box {
 public:
-    MangaItemCell() = default;
+    MangaItemCell() {
+        // Make the cell focusable so it works with grid navigation.
+        this->setFocusable(true);
+        // Solid background so the box is visible.
+        this->setBackgroundColor(nvgRGB(60, 60, 70));
+        // A small margin border visible via cornerRadius.
+        this->setCornerRadius(4.0f);
+    }
     ~MangaItemCell() override = default;
 
     void setManga(const Manga& manga) { m_manga = manga; }
@@ -35,13 +42,27 @@ public:
     void setShowLibraryBadge(bool) {}
     void refreshLibraryBadge() {}
 
-    void setPressed(bool pressed) { m_pressed = pressed; }
+    void setPressed(bool pressed) {
+        m_pressed = pressed;
+        this->setBackgroundColor(pressed ? nvgRGB(90, 90, 110) : nvgRGB(60, 60, 70));
+    }
     bool isPressed() const { return m_pressed; }
 
     void setSelected(bool selected) { m_selected = selected; }
     bool isSelected() const { return m_selected; }
 
     static brls::View* create() { return new MangaItemCell(); }
+
+protected:
+    void onFocusGained() override {
+        brls::Box::onFocusGained();
+        this->setBackgroundColor(nvgRGB(100, 120, 160));
+    }
+
+    void onFocusLost() override {
+        brls::Box::onFocusLost();
+        this->setBackgroundColor(m_pressed ? nvgRGB(90, 90, 110) : nvgRGB(60, 60, 70));
+    }
 
 private:
     Manga m_manga;
