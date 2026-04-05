@@ -85,7 +85,10 @@ public:
 private:
     void setupGrid();
     void createRowRange(int startRow, int endRow);  // Create empty row skeletons [startRow, endRow)
-    void populateRow(int row);                      // Fill cells into a previously-empty row
+    // Populate up to `budget` remaining cells in `row`. Returns number of
+    // cells actually created this call. Default budget -1 = populate
+    // the entire row in one call.
+    int populateRow(int row, int budget = -1);
     void updateVisibleCells();
     void loadThumbnailsForScrollPosition();  // Scroll-position-based thumbnail loading
     void onItemClicked(int index);
@@ -112,8 +115,9 @@ private:
     brls::Box* m_contentBox = nullptr;
     std::vector<brls::Box*> m_rows;
     std::vector<MangaItemCell*> m_cells;  // sparse: nullptr slots for rows not yet populated
-    std::vector<bool> m_rowPopulated;     // parallel to m_rows
-    std::vector<int> m_rowHeights;        // parallel to m_rows (list mode varies per row)
+    std::vector<bool> m_rowPopulated;       // parallel to m_rows (true when count == row's cell count)
+    std::vector<int> m_rowPopulatedCount;   // parallel to m_rows (number of cells populated so far)
+    std::vector<int> m_rowHeights;          // parallel to m_rows (list mode varies per row)
 
     int m_columns = 6;
     int m_cellWidth = 140;
