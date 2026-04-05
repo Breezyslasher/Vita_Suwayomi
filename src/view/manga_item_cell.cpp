@@ -170,10 +170,10 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
     // Cached line splits so the draw path is just 2 nvgText calls per
     // cell with no per-frame measurement.
     constexpr float kPadSide = 5.0f;
-    constexpr float kFontSize = 12.0f;
-    constexpr float kLineH = 16.0f;
+    constexpr float kFontSize = 10.0f;
+    constexpr float kLineH = 13.0f;
     constexpr float kTitleAreaH = 36.0f;  // matches thumbnail positionBottom
-    constexpr float kTitleTopPad = 2.0f;
+    constexpr float kTitleTopPad = 3.0f;
 
     float textW = width - kPadSide * 2.0f;
 
