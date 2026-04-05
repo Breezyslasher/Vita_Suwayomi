@@ -6,6 +6,7 @@
 #include "view/manga_item_cell.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/image_loader.hpp"
+#include <cmath>
 #include <fstream>
 #include <vector>
 
@@ -75,6 +76,8 @@ MangaItemCell::~MangaItemCell() {
 void MangaItemCell::setManga(const Manga& manga) {
     m_manga = manga;
     m_title = manga.title;
+    m_truncatedTitle.clear();
+    m_truncatedForWidth = -1.0f;
     m_thumbnailLoaded = false;
 }
 
@@ -136,11 +139,55 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
 
     // --- Flat-rendered title overlay ---
     // Drawn directly via NanoVG instead of a brls::Label child so we don't
-    // pay per-cell frame() overhead each draw.
+    // pay per-cell frame() overhead each draw. The truncated title is
+    // cached so we also don't call nvgTextBounds or nvgIntersectScissor
+    // every frame (those cost ~0.5-0.7ms/cell × 24 cells on Vita).
     constexpr float kPadSide = 5.0f;
-    constexpr float kPadV = 4.0f;
     constexpr float kFontSize = 13.0f;
     constexpr float kOverlayH = 22.0f;
+
+    float textW = width - kPadSide * 2.0f;
+
+    nvgFontFace(vg, "regular");
+    nvgFontSize(vg, kFontSize);
+
+    // Re-truncate only when cell width changed or title was reassigned.
+    if (m_truncatedTitle.empty() || std::fabs(m_truncatedForWidth - width) > 0.5f) {
+        m_truncatedForWidth = width;
+
+        float bounds[4];
+        nvgTextBounds(vg, 0, 0, m_title.c_str(), nullptr, bounds);
+        float fullW = bounds[2] - bounds[0];
+
+        if (fullW <= textW) {
+            m_truncatedTitle = m_title;
+        } else {
+            // Binary-search a byte cut that fits, then append an ellipsis.
+            // Byte-level cut is safe here because worst case it clips a
+            // UTF-8 tail — NanoVG will just skip the partial codepoint.
+            const char* s = m_title.c_str();
+            int lo = 0, hi = static_cast<int>(m_title.size());
+            float ellipsisW = 0.0f;
+            nvgTextBounds(vg, 0, 0, "\xE2\x80\xA6", nullptr, bounds);
+            ellipsisW = bounds[2] - bounds[0];
+            int best = 0;
+            while (lo <= hi) {
+                int mid = (lo + hi) / 2;
+                nvgTextBounds(vg, 0, 0, s, s + mid, bounds);
+                float w = (bounds[2] - bounds[0]) + ellipsisW;
+                if (w <= textW) {
+                    best = mid;
+                    lo = mid + 1;
+                } else {
+                    hi = mid - 1;
+                }
+            }
+            // Trim a trailing space before the ellipsis
+            while (best > 0 && m_title[best - 1] == ' ') best--;
+            m_truncatedTitle.assign(m_title, 0, best);
+            m_truncatedTitle.append("\xE2\x80\xA6");  // UTF-8 "…"
+        }
+    }
 
     float overlayY = y + height - kOverlayH;
 
@@ -150,17 +197,10 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
     nvgFillColor(vg, nvgRGBA(0, 0, 0, 170));
     nvgFill(vg);
 
-    nvgFontFace(vg, "regular");
-    nvgFontSize(vg, kFontSize);
     nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
     nvgFillColor(vg, nvgRGBA(255, 255, 255, 235));
-
-    // Clip so long titles truncate cleanly to the cell width
-    nvgSave(vg);
-    nvgIntersectScissor(vg, x + kPadSide, overlayY, width - kPadSide * 2.0f, kOverlayH);
-    nvgText(vg, x + kPadSide, overlayY + kOverlayH * 0.5f - kPadV * 0.25f,
-            m_title.c_str(), nullptr);
-    nvgRestore(vg);
+    nvgText(vg, x + kPadSide, overlayY + kOverlayH * 0.5f,
+            m_truncatedTitle.c_str(), nullptr);
 }
 
 void MangaItemCell::setPressed(bool pressed) {

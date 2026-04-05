@@ -58,6 +58,10 @@ private:
 
     Manga m_manga;
     std::string m_title;
+    // Cached pre-truncated title so draw() doesn't need nvgTextBounds /
+    // scissor clipping per cell per frame.
+    std::string m_truncatedTitle;
+    float m_truncatedForWidth = -1.0f;
     brls::Image* m_thumbnailImage = nullptr;
     bool m_thumbnailLoaded = false;
     bool m_pressed = false;
