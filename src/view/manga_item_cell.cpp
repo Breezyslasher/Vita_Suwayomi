@@ -74,6 +74,7 @@ MangaItemCell::~MangaItemCell() {
 
 void MangaItemCell::setManga(const Manga& manga) {
     m_manga = manga;
+    m_title = manga.title;
     m_thumbnailLoaded = false;
 }
 
@@ -124,6 +125,42 @@ void MangaItemCell::loadThumbnail() {
     }
 
     ImageLoader::loadAsync(url, nullptr, m_thumbnailImage, m_alive);
+}
+
+void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float height,
+                         brls::Style style, brls::FrameContext* ctx) {
+    // Draw the cover image (child view)
+    brls::Box::draw(vg, x, y, width, height, style, ctx);
+
+    if (!m_showTitle || m_title.empty()) return;
+
+    // --- Flat-rendered title overlay ---
+    // Drawn directly via NanoVG instead of a brls::Label child so we don't
+    // pay per-cell frame() overhead each draw.
+    constexpr float kPadSide = 5.0f;
+    constexpr float kPadV = 4.0f;
+    constexpr float kFontSize = 13.0f;
+    constexpr float kOverlayH = 22.0f;
+
+    float overlayY = y + height - kOverlayH;
+
+    // Semi-transparent dark overlay for text legibility
+    nvgBeginPath(vg);
+    nvgRect(vg, x, overlayY, width, kOverlayH);
+    nvgFillColor(vg, nvgRGBA(0, 0, 0, 170));
+    nvgFill(vg);
+
+    nvgFontFace(vg, "regular");
+    nvgFontSize(vg, kFontSize);
+    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 235));
+
+    // Clip so long titles truncate cleanly to the cell width
+    nvgSave(vg);
+    nvgIntersectScissor(vg, x + kPadSide, overlayY, width - kPadSide * 2.0f, kOverlayH);
+    nvgText(vg, x + kPadSide, overlayY + kOverlayH * 0.5f - kPadV * 0.25f,
+            m_title.c_str(), nullptr);
+    nvgRestore(vg);
 }
 
 void MangaItemCell::setPressed(bool pressed) {

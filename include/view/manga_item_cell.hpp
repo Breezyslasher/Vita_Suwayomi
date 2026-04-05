@@ -1,8 +1,9 @@
 /**
  * VitaSuwayomi - Manga Item Cell
  *
- * Minimal focusable cell with a cover image. No title/badge overlays —
- * just a rounded card that shows the manga cover.
+ * Focusable cell with cover image and a title overlay at the bottom.
+ * Title is drawn directly via NanoVG to avoid per-cell brls::Label
+ * frame() traversals on every scroll frame.
  */
 
 #pragma once
@@ -10,6 +11,7 @@
 #include <borealis.hpp>
 #include "app/suwayomi_client.hpp"
 #include <memory>
+#include <string>
 
 namespace vitasuwayomi {
 
@@ -20,7 +22,7 @@ public:
 
     void setManga(const Manga& manga);
     void setMangaDeferred(const Manga& manga) { setManga(manga); }
-    void updateMangaData(const Manga& manga) { m_manga = manga; }
+    void updateMangaData(const Manga& manga) { m_manga = manga; m_title = manga.title; }
 
     void loadThumbnailIfNeeded();
     void unloadThumbnail();
@@ -29,7 +31,7 @@ public:
     bool isThumbnailLoaded() const { return m_thumbnailLoaded; }
     const Manga& getManga() const { return m_manga; }
 
-    void setCompactMode(bool) {}
+    void setCompactMode(bool compact) { m_showTitle = !compact; }
     void setListMode(bool) {}
     void setListRowSize(int) {}
     void setGridColumns(int) {}
@@ -44,6 +46,9 @@ public:
 
     static brls::View* create() { return new MangaItemCell(); }
 
+    void draw(NVGcontext* vg, float x, float y, float width, float height,
+              brls::Style style, brls::FrameContext* ctx) override;
+
 protected:
     void onFocusGained() override;
     void onFocusLost() override;
@@ -52,10 +57,12 @@ private:
     void loadThumbnail();
 
     Manga m_manga;
+    std::string m_title;
     brls::Image* m_thumbnailImage = nullptr;
     bool m_thumbnailLoaded = false;
     bool m_pressed = false;
     bool m_selected = false;
+    bool m_showTitle = true;
 
     // Shared flag so in-flight ImageLoader callbacks skip writing to us
     // after this cell has been destroyed.
