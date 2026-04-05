@@ -135,6 +135,13 @@ private:
     float m_lastScrollLoadY = 0.0f;  // Last scroll Y where we triggered thumbnail loading
     int m_scrollLoadCooldown = 0;   // Frame cooldown to throttle scroll-based loading
 
+    // Scroll velocity tracking — used to defer ImageLoader texture uploads
+    // while the user is actively scrolling fast, so 15-20ms GPU uploads
+    // don't stall the frame. See RecyclingGrid::draw().
+    float m_prevScrollY = 0.0f;
+    int m_scrollSettledFrames = 0;   // Frames since last large scroll delta
+    bool m_uploadsDeferred = false;  // True while we've told ImageLoader to pause
+
     // Cached visible row range to avoid full iteration every frame
     int m_cachedFirstVisible = -1;
     int m_cachedLastVisible = -1;

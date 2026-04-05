@@ -7,6 +7,7 @@
 #include "view/manga_item_cell.hpp"
 #include "view/long_press_gesture.hpp"
 #include "utils/perf_overlay.hpp"
+#include "utils/image_loader.hpp"
 #include "app/application.hpp"
 #include <cmath>
 #include <chrono>
@@ -88,6 +89,11 @@ RecyclingGrid::RecyclingGrid() {
 RecyclingGrid::~RecyclingGrid() {
     if (m_alive) {
         *m_alive = false;
+    }
+    // Clear defer flag in case this grid was torn down while scrolling,
+    // so pending texture uploads can resume for any remaining views.
+    if (m_uploadsDeferred) {
+        ImageLoader::setDeferTextureUploads(false);
     }
 }
 
@@ -749,6 +755,29 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     // Call parent draw - now only visible rows are rendered
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     PERF_END("grid_draw");
+
+    // Pause ImageLoader GPU texture uploads while the user is actively
+    // scrolling fast. Each upload (setImageFromMem) costs ~15-20ms on Vita
+    // and stalls the frame. Holding them off until scroll settles keeps
+    // scrolling smooth; queued textures flush as soon as velocity drops.
+    {
+        float curY = this->getContentOffsetY();
+        float frameDelta = std::abs(curY - m_prevScrollY);
+        m_prevScrollY = curY;
+        float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
+        // "Fast scroll" = moving more than ~1/3 of a row per frame
+        bool movingFast = frameDelta > rowHeight * 0.33f;
+        if (movingFast) {
+            m_scrollSettledFrames = 0;
+        } else {
+            m_scrollSettledFrames++;
+        }
+        bool wantDefer = movingFast || m_scrollSettledFrames < 3;
+        if (wantDefer != m_uploadsDeferred) {
+            m_uploadsDeferred = wantDefer;
+            ImageLoader::setDeferTextureUploads(wantDefer);
+        }
+    }
 
     // Check scroll position for thumbnail loading during touch scrolling.
     // The focus-based loading (loadThumbnailsNearIndex) handles D-pad navigation,
