@@ -1,0 +1,31 @@
+=== VitaSuwayomi Perf Log ===
+FPS | Frame(ms) | Max(ms) | TexUp | Pending | Sections...
+-----------------------------------------------------------
+FPS:54 Frame:16.7ms Max:16.8ms TexUp:0 Pend:0 | grid_draw:2.0ms
+FPS:60 Frame:16.6ms Max:17.0ms TexUp:0 Pend:0 | grid_draw:2.0ms
+FPS:34 Frame:16.6ms Max:16.8ms TexUp:0 Pend:0 | grid_draw:2.0ms
+FPS:60 Frame:16.6ms Max:16.8ms TexUp:0 Pend:0 | grid_draw:2.0ms
+FPS:60 Frame:16.7ms Max:17.0ms TexUp:0 Pend:0 | grid_draw:2.0ms
+FPS:60 Frame:16.7ms Max:111.9ms TexUp:0 Pend:0 | grid_draw:0.5ms
+FPS:56 Frame:16.6ms Max:17.1ms TexUp:0 Pend:0 | grid_draw:0.5ms
+FPS:60 Frame:16.7ms Max:16.9ms TexUp:0 Pend:0 | grid_draw:0.5ms
+FPS:26 Frame:16.6ms Max:16.8ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:61 Frame:16.6ms Max:16.8ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:60 Frame:16.7ms Max:16.8ms TexUp:0 Pend:0 | grid_draw:2.9ms
+FPS:60 Frame:16.7ms Max:17.0ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:28 Frame:16.7ms Max:91.6ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:42 Frame:14.1ms Max:14.2ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:61 Frame:16.8ms Max:16.8ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:32 Frame:16.9ms Max:17.0ms TexUp:0 Pend:0 | grid_draw:2.9ms
+FPS:45 Frame:187.1ms Max:187.1ms TexUp:0 Pend:0 | grid_draw:2.9ms
+FPS:51 Frame:16.6ms Max:16.8ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:60 Frame:47.9ms Max:176.3ms TexUp:0 Pend:0 | grid_draw:2.9ms
+FPS:44 Frame:16.7ms Max:16.9ms TexUp:0 Pend:0 | grid_draw:2.9ms
+FPS:60 Frame:16.6ms Max:17.0ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:51 Frame:16.6ms Max:19.0ms TexUp:0 Pend:0 | grid_draw:1.9ms
+FPS:60 Frame:16.5ms Max:16.9ms TexUp:0 Pend:0 | grid_draw:1.9ms
+FPS:60 Frame:16.7ms Max:157.9ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:47 Frame:174.7ms Max:174.7ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:44 Frame:16.3ms Max:16.9ms TexUp:0 Pend:0 | grid_draw:2.9ms
+FPS:49 Frame:16.6ms Max:122.9ms TexUp:0 Pend:0 | grid_draw:2.8ms
+FPS:30 Frame:16.8ms Max:16.8ms TexUp:0 Pend:0 | grid_draw:2.8ms
