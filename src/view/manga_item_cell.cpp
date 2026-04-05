@@ -6,6 +6,7 @@
 #include "view/manga_item_cell.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/image_loader.hpp"
+#include <cmath>
 #include <fstream>
 #include <vector>
 
@@ -14,6 +15,12 @@
 #endif
 
 namespace vitasuwayomi {
+
+static bool s_titlesEnabled = true;
+
+void MangaItemCell::setTitlesEnabled(bool enabled) {
+    s_titlesEnabled = enabled;
+}
 
 static void loadLocalCoverToImage(brls::Image* image, const std::string& localPath) {
     if (localPath.empty() || !image) return;
@@ -52,9 +59,11 @@ MangaItemCell::MangaItemCell() {
 
     this->setFocusable(true);
     this->setCornerRadius(4.0f);
-    this->setBackgroundColor(nvgRGB(60, 60, 70));
+    this->setBackgroundColor(nvgRGB(40, 40, 48));
     this->setClipsToBounds(true);
 
+    // Cover fills the cell minus a 36px strip at the bottom for the
+    // 2-line title area (drawn flat via NanoVG in draw()).
     m_thumbnailImage = new brls::Image();
     m_thumbnailImage->setScalingType(brls::ImageScalingType::FILL);
     m_thumbnailImage->setCornerRadius(4.0f);
@@ -62,7 +71,7 @@ MangaItemCell::MangaItemCell() {
     m_thumbnailImage->setPositionTop(0);
     m_thumbnailImage->setPositionLeft(0);
     m_thumbnailImage->setPositionRight(0);
-    m_thumbnailImage->setPositionBottom(0);
+    m_thumbnailImage->setPositionBottom(36);
     this->addView(m_thumbnailImage);
 }
 
@@ -75,6 +84,9 @@ MangaItemCell::~MangaItemCell() {
 void MangaItemCell::setManga(const Manga& manga) {
     m_manga = manga;
     m_title = manga.title;
+    m_line1.clear();
+    m_line2.clear();
+    m_wrappedForWidth = -1.0f;
     m_thumbnailLoaded = false;
 }
 
@@ -127,40 +139,103 @@ void MangaItemCell::loadThumbnail() {
     ImageLoader::loadAsync(url, nullptr, m_thumbnailImage, m_alive);
 }
 
+// Binary-search the largest byte prefix of `str` (len `len`) that fits
+// into `maxW` when measured through nvgTextBounds. Returns the byte
+// count.
+static int fitPrefix(NVGcontext* vg, const char* str, int len, float maxW) {
+    float bounds[4];
+    int lo = 0, hi = len, best = 0;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        nvgTextBounds(vg, 0, 0, str, str + mid, bounds);
+        float w = bounds[2] - bounds[0];
+        if (w <= maxW) {
+            best = mid;
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return best;
+}
+
 void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float height,
                          brls::Style style, brls::FrameContext* ctx) {
     // Draw the cover image (child view)
     brls::Box::draw(vg, x, y, width, height, style, ctx);
 
-    if (!m_showTitle || m_title.empty()) return;
+    if (!m_showTitle || m_title.empty() || !s_titlesEnabled) return;
 
-    // --- Flat-rendered title overlay ---
-    // Drawn directly via NanoVG instead of a brls::Label child so we don't
-    // pay per-cell frame() overhead each draw.
+    // --- Flat-rendered title below the cover (2 lines) ---
+    // Cached line splits so the draw path is just 2 nvgText calls per
+    // cell with no per-frame measurement.
     constexpr float kPadSide = 5.0f;
-    constexpr float kPadV = 4.0f;
-    constexpr float kFontSize = 13.0f;
-    constexpr float kOverlayH = 22.0f;
+    constexpr float kFontSize = 12.0f;
+    constexpr float kLineH = 16.0f;
+    constexpr float kTitleAreaH = 36.0f;  // matches thumbnail positionBottom
+    constexpr float kTitleTopPad = 2.0f;
 
-    float overlayY = y + height - kOverlayH;
-
-    // Semi-transparent dark overlay for text legibility
-    nvgBeginPath(vg);
-    nvgRect(vg, x, overlayY, width, kOverlayH);
-    nvgFillColor(vg, nvgRGBA(0, 0, 0, 170));
-    nvgFill(vg);
+    float textW = width - kPadSide * 2.0f;
 
     nvgFontFace(vg, "regular");
     nvgFontSize(vg, kFontSize);
-    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-    nvgFillColor(vg, nvgRGBA(255, 255, 255, 235));
 
-    // Clip so long titles truncate cleanly to the cell width
-    nvgSave(vg);
-    nvgIntersectScissor(vg, x + kPadSide, overlayY, width - kPadSide * 2.0f, kOverlayH);
-    nvgText(vg, x + kPadSide, overlayY + kOverlayH * 0.5f - kPadV * 0.25f,
-            m_title.c_str(), nullptr);
-    nvgRestore(vg);
+    // Re-wrap only when cell width changed or title was reassigned.
+    if (m_wrappedForWidth < 0.0f || std::fabs(m_wrappedForWidth - width) > 0.5f) {
+        m_wrappedForWidth = width;
+        m_line1.clear();
+        m_line2.clear();
+
+        float bounds[4];
+        const char* s = m_title.c_str();
+        int len = static_cast<int>(m_title.size());
+
+        nvgTextBounds(vg, 0, 0, s, s + len, bounds);
+        float fullW = bounds[2] - bounds[0];
+
+        if (fullW <= textW) {
+            // Fits on one line
+            m_line1 = m_title;
+        } else {
+            // Find a word break inside the first-line fit range
+            int fit1 = fitPrefix(vg, s, len, textW);
+            int breakAt = fit1;
+            for (int i = fit1; i > 0; i--) {
+                if (s[i] == ' ') { breakAt = i; break; }
+            }
+            if (breakAt <= 0) breakAt = fit1;
+            m_line1.assign(s, breakAt);
+
+            int line2Start = breakAt;
+            while (line2Start < len && s[line2Start] == ' ') line2Start++;
+
+            int rest = len - line2Start;
+            const char* s2 = s + line2Start;
+            nvgTextBounds(vg, 0, 0, s2, s2 + rest, bounds);
+            float remW = bounds[2] - bounds[0];
+
+            if (remW <= textW) {
+                m_line2.assign(s2, rest);
+            } else {
+                // Truncate line 2 with ellipsis
+                nvgTextBounds(vg, 0, 0, "\xE2\x80\xA6", nullptr, bounds);
+                float ellipsisW = bounds[2] - bounds[0];
+                int fit2 = fitPrefix(vg, s2, rest, textW - ellipsisW);
+                while (fit2 > 0 && s2[fit2 - 1] == ' ') fit2--;
+                m_line2.assign(s2, fit2);
+                m_line2.append("\xE2\x80\xA6");
+            }
+        }
+    }
+
+    float titleY = y + height - kTitleAreaH + kTitleTopPad;
+
+    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+    nvgFillColor(vg, nvgRGBA(235, 235, 235, 255));
+    nvgText(vg, x + kPadSide, titleY, m_line1.c_str(), nullptr);
+    if (!m_line2.empty()) {
+        nvgText(vg, x + kPadSide, titleY + kLineH, m_line2.c_str(), nullptr);
+    }
 }
 
 void MangaItemCell::setPressed(bool pressed) {

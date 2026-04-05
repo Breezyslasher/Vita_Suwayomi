@@ -46,6 +46,11 @@ public:
 
     static brls::View* create() { return new MangaItemCell(); }
 
+    // When false, draw() skips the per-cell title text. Used by
+    // RecyclingGrid to suppress title rendering during fast scrolls
+    // (each 2-line nvgText per cell across 24+ cells costs ~14ms on Vita).
+    static void setTitlesEnabled(bool enabled);
+
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override;
 
@@ -58,6 +63,11 @@ private:
 
     Manga m_manga;
     std::string m_title;
+    // Cached pre-wrapped title lines (up to 2) so draw() doesn't need to
+    // re-measure text per frame. Recomputed only when title or width changes.
+    std::string m_line1;
+    std::string m_line2;
+    float m_wrappedForWidth = -1.0f;
     brls::Image* m_thumbnailImage = nullptr;
     bool m_thumbnailLoaded = false;
     bool m_pressed = false;

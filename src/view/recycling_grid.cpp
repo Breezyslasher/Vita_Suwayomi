@@ -94,6 +94,7 @@ RecyclingGrid::~RecyclingGrid() {
     // so pending texture uploads can resume for any remaining views.
     if (m_uploadsDeferred) {
         ImageLoader::setDeferTextureUploads(false);
+        MangaItemCell::setTitlesEnabled(true);
     }
 }
 
@@ -776,6 +777,10 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         if (wantDefer != m_uploadsDeferred) {
             m_uploadsDeferred = wantDefer;
             ImageLoader::setDeferTextureUploads(wantDefer);
+            // Also skip the per-cell title nvgText calls during fast
+            // scroll — 2 lines × ~24 cells × ~0.3ms = ~14ms/frame
+            // which is the main source of grid_draw cost on Vita.
+            MangaItemCell::setTitlesEnabled(!wantDefer);
         }
     }
 
