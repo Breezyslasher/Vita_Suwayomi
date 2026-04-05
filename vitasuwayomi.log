@@ -1,0 +1,205 @@
+03:35:11.635 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+03:35:12.220 [INFO] DownloadsManager: Initializing...
+03:35:12.230 [DEBUG] DownloadsManager: Loading state (5022 bytes)
+03:35:12.235 [DEBUG] DownloadsManager: Loaded manga 622 with 2 chapters
+03:35:12.236 [INFO] DownloadsManager: State loaded with 1 downloads
+03:35:12.236 [INFO] DownloadsManager: Validating downloaded files...
+03:35:12.266 [INFO] DownloadsManager: Validation complete - 34 pages valid, 0 pages missing
+03:35:12.266 [INFO] DownloadsManager: Initialized with 1 downloads
+03:35:12.272 [INFO] VitaSuwayomi 1.0.0 initializing...
+03:35:12.282 [INFO] Data directory ready: ux0:data/VitaSuwayomi
+03:35:12.290 [INFO] Loading saved settings...
+03:35:12.299 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+03:35:12.318 [DEBUG] loadSettings: Read 2586 bytes
+03:35:12.329 [INFO] loadSettings: serverUrl=Http://192.168.1.28:4568
+03:35:12.392 [DEBUG] Loaded 4 hidden categories
+03:35:12.397 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+03:35:12.403 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+03:35:12.412 [INFO] loadSettings: enabledSourceLanguages count = 2
+03:35:12.421 [INFO] loadSettings: localUrl=Http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+03:35:12.432 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=1, defaultSort=0, groupMode=0
+03:35:12.442 [DEBUG] Loaded 2 per-category sort modes
+03:35:12.454 [DEBUG] Loaded 1 search history entries
+03:35:12.462 [DEBUG] Loaded 1 per-manga reader settings
+03:35:12.468 [INFO] Restored auth credentials for user: Breezyslasher
+03:35:12.473 [INFO] Restored auth tokens
+03:35:12.482 [INFO] Settings loaded successfully
+03:35:12.491 [INFO] Settings load result: success
+03:35:12.501 [INFO] Applied theme: Dark
+03:35:12.513 [INFO] Debug logging disabled
+03:35:16.459 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+03:35:16.475 [INFO] ImageLoader: thumbnail max dimension = 168px (cover 120x168)
+03:35:16.486 [INFO] Application::run - isConnected=false, serverUrl=Http://192.168.1.28:4568
+03:35:16.494 [INFO] LoginActivity: building login UI programmatically
+03:35:16.571 [INFO] Restoring saved connection (async)...
+03:35:16.577 [INFO] Attempting to refresh JWT tokens...
+03:35:16.661 [INFO] Token refreshed successfully
+03:35:16.669 [INFO] Token refresh successful
+03:35:16.679 [INFO] Fetching server info via GraphQL...
+03:35:16.716 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2087
+03:35:16.727 [INFO] Server reachable, validating auth with protected query...
+03:35:16.763 [INFO] validateAuthWithProtectedQuery: auth validated successfully
+03:35:16.768 [INFO] Auth validated with protected query
+03:35:16.774 [INFO] Connection restored successfully
+03:35:16.797 [INFO] Syncing offline reading progress to server...
+03:35:16.806 [INFO] pushMainActivity: creating MainActivity...
+03:35:16.816 [INFO] pushMainActivity: pushing activity...
+03:35:16.817 [INFO] DownloadsManager: Synced 1 chapter progress, marked 0 as read
+03:35:16.827 [INFO] MainActivity::createContentView - loading XML
+03:35:16.871 [INFO] MainActivity::createContentView - XML loaded, view=valid
+03:35:16.959 [INFO] MainActivity: Tabs created, isOnline=true
+03:35:17.132 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+03:35:17.155 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+03:35:17.170 [INFO] pushMainActivity: done
+03:35:17.194 [INFO] Offline reading progress synced to server
+03:35:17.210 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+03:35:19.875 [INFO] LibrarySectionTab: Loaded 15 manga from cache for category 1
+03:35:19.890 [INFO] RecyclingGrid: Building 3 row skeletons for 15 items
+03:35:20.031 [INFO] RecyclingGrid: setupGrid took 141.3ms (clear 0.1ms of 0 cells, skeletons 9.6ms for 3 rows, populate 120.9ms for 3 rows)
+03:35:20.044 [INFO] GraphQL: Fetching manga for category 1 with filter
+03:35:20.178 [INFO] GraphQL: Fetched 16 manga for category 1 (filter method)
+03:35:20.184 [INFO] LibrarySectionTab: Got 16 manga for category 1 from server
+03:35:20.223 [INFO] RecyclingGrid: Building 3 row skeletons for 16 items
+03:35:20.375 [INFO] RecyclingGrid: setupGrid took 152.3ms (clear 0.3ms of 15 cells, skeletons 9.4ms for 3 rows, populate 129.9ms for 3 rows)
+03:35:21.700 [INFO] ImageLoader: Starting 3 worker threads
+03:35:22.223 [INFO] ImageLoader: WebP BGRA decode OK 193x278->116x168
+03:35:22.231 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/900/thumbnail
+03:35:22.262 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/900/thumbnail
+03:35:22.569 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/894/thumbnail
+03:35:22.605 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/894/thumbnail
+03:35:22.735 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/887/thumbnail
+03:35:22.772 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/887/thumbnail
+03:35:22.896 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/905/thumbnail
+03:35:22.923 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/905/thumbnail
+03:35:23.030 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/934/thumbnail
+03:35:23.066 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/934/thumbnail
+03:35:23.185 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/903/thumbnail
+03:35:23.234 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/903/thumbnail
+03:35:23.334 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/768/thumbnail
+03:35:23.365 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/768/thumbnail
+03:35:23.466 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/932/thumbnail
+03:35:23.560 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/932/thumbnail
+03:35:23.830 [INFO] ImageLoader: Decode OK (80658 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/927/thumbnail
+03:35:23.871 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/927/thumbnail
+03:35:24.106 [INFO] ImageLoader: Decode OK (90066 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/95/thumbnail
+03:35:24.137 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/95/thumbnail
+03:35:24.256 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/769/thumbnail
+03:35:24.295 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/769/thumbnail
+03:35:24.331 [INFO] ImageLoader: WebP BGRA decode OK 193x278->116x168
+03:35:24.342 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/908/thumbnail
+03:35:24.381 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/908/thumbnail
+03:35:24.505 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/910/thumbnail
+03:35:24.537 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/910/thumbnail
+03:35:25.106 [INFO] ImageLoader: Decode OK (79314 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/922/thumbnail
+03:35:25.144 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/922/thumbnail
+03:35:25.238 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/921/thumbnail
+03:35:25.278 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/921/thumbnail
+03:35:26.362 [INFO] ImageLoader: Decode OK (77298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/765/thumbnail
+03:35:26.399 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/765/thumbnail
+03:35:31.588 [INFO] LibrarySectionTab: Loaded 4 manga from cache for category 2
+03:35:31.601 [INFO] RecyclingGrid: Building 1 row skeletons for 4 items
+03:35:31.648 [INFO] RecyclingGrid: setupGrid took 47.2ms (clear 0.3ms of 16 cells, skeletons 3.5ms for 1 rows, populate 33.1ms for 1 rows)
+03:35:31.660 [INFO] GraphQL: Fetching manga for category 2 with filter
+03:35:31.838 [INFO] GraphQL: Fetched 4 manga for category 2 (filter method)
+03:35:31.846 [INFO] LibrarySectionTab: Got 4 manga for category 2 from server
+03:35:31.928 [INFO] ImageLoader: Decode OK (75282 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/772/thumbnail
+03:35:31.973 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/772/thumbnail
+03:35:32.235 [INFO] ImageLoader: Decode OK (99474 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/863/thumbnail
+03:35:32.274 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/863/thumbnail
+03:35:32.536 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/936/thumbnail
+03:35:32.630 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/936/thumbnail
+03:35:32.740 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/906/thumbnail
+03:35:32.767 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/906/thumbnail
+03:35:34.016 [INFO] LibrarySectionTab: Loaded 97 manga from cache for category 3
+03:35:34.033 [INFO] RecyclingGrid: Building 17 row skeletons for 97 items
+03:35:34.317 [INFO] RecyclingGrid: setupGrid took 284.7ms (clear 0.3ms of 4 cells, skeletons 75.6ms for 17 rows, populate 198.4ms for 3 rows)
+03:35:34.331 [INFO] GraphQL: Fetching manga for category 3 with filter
+03:35:34.656 [INFO] GraphQL: Fetched 97 manga for category 3 (filter method)
+03:35:34.662 [INFO] LibrarySectionTab: Got 97 manga for category 3 from server
+03:35:34.754 [INFO] ImageLoader: WebP BGRA decode OK 288x412->117x168
+03:35:34.767 [INFO] ImageLoader: Decode OK (78642 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/546/thumbnail
+03:35:34.811 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/546/thumbnail
+03:35:35.162 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/619/thumbnail
+03:35:35.206 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/619/thumbnail
+03:35:35.550 [INFO] ImageLoader: Decode OK (82674 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/615/thumbnail
+03:35:35.590 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/615/thumbnail
+03:35:36.432 [INFO] ImageLoader: WebP BGRA decode OK 2000x2897->115x168
+03:35:36.439 [INFO] ImageLoader: Decode OK (77298 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/626/thumbnail
+03:35:36.474 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/626/thumbnail
+03:35:36.749 [INFO] ImageLoader: Decode OK (90066 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/310/thumbnail
+03:35:36.788 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/310/thumbnail
+03:35:44.881 [INFO] ImageLoader: Decode OK (79314 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/580/thumbnail
+03:35:44.918 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/580/thumbnail
+03:35:45.055 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/567/thumbnail
+03:35:45.100 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/567/thumbnail
+03:35:45.598 [INFO] ImageLoader: Decode OK (75282 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/601/thumbnail
+03:35:45.664 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/601/thumbnail
+03:35:45.705 [INFO] ImageLoader: WebP BGRA decode OK 225x320->118x168
+03:35:45.717 [INFO] ImageLoader: Decode OK (79314 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/547/thumbnail
+03:35:45.745 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/547/thumbnail
+03:35:55.113 [INFO] ImageLoader: Decode OK (79314 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/618/thumbnail
+03:35:55.173 [INFO] ImageLoader: WebP BGRA decode OK 193x278->116x168
+03:35:55.187 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/570/thumbnail
+03:35:55.253 [INFO] ImageLoader: WebP BGRA decode OK 225x303->124x168
+03:35:55.261 [INFO] ImageLoader: Decode OK (83346 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/565/thumbnail
+03:35:55.421 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+03:35:55.457 [INFO] Settings saved successfully (2585 bytes)
+03:35:56.479 [ERROR] Cannot set texture: 0
+03:35:57.049 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+03:35:57.383 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+03:35:57.409 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+03:35:57.579 [INFO] LibrarySectionTab: Loaded 15 manga from cache for category 1
+03:35:57.591 [INFO] RecyclingGrid: Building 3 row skeletons for 15 items
+03:35:57.712 [INFO] SearchTab: Got 86 sources
+03:35:57.741 [INFO] RecyclingGrid: setupGrid took 150.9ms (clear 0.1ms of 0 cells, skeletons 10.3ms for 3 rows, populate 131.5ms for 3 rows)
+03:35:57.748 [INFO] GraphQL: Fetching manga for category 1 with filter
+03:35:57.748 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+03:35:58.152 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+03:35:58.230 [INFO] GraphQL: Fetched 16 manga for category 1 (filter method)
+03:35:58.239 [INFO] LibrarySectionTab: Got 16 manga for category 1 from server
+03:35:58.279 [INFO] RecyclingGrid: Building 3 row skeletons for 16 items
+03:35:58.442 [INFO] RecyclingGrid: setupGrid took 163.6ms (clear 0.4ms of 15 cells, skeletons 10.8ms for 3 rows, populate 145.0ms for 3 rows)
+03:36:01.502 [INFO] LibrarySectionTab: Loaded 15 manga from cache for category 1
+03:36:01.518 [INFO] RecyclingGrid: Building 3 row skeletons for 15 items
+03:36:01.672 [INFO] RecyclingGrid: setupGrid took 153.5ms (clear 0.3ms of 16 cells, skeletons 10.2ms for 3 rows, populate 132.7ms for 3 rows)
+03:36:01.686 [INFO] GraphQL: Fetching manga for category 1 with filter
+03:36:01.774 [INFO] GraphQL: Fetched 16 manga for category 1 (filter method)
+03:36:01.786 [INFO] LibrarySectionTab: Got 16 manga for category 1 from server
+03:36:01.850 [INFO] RecyclingGrid: Building 3 row skeletons for 16 items
+03:36:02.010 [INFO] RecyclingGrid: setupGrid took 160.4ms (clear 0.3ms of 15 cells, skeletons 10.0ms for 3 rows, populate 138.8ms for 3 rows)
+03:36:04.800 [INFO] LibrarySectionTab: Loaded 97 manga from cache for category 3
+03:36:04.818 [INFO] RecyclingGrid: Building 17 row skeletons for 97 items
+03:36:05.101 [INFO] RecyclingGrid: setupGrid took 283.2ms (clear 0.4ms of 16 cells, skeletons 76.2ms for 17 rows, populate 199.2ms for 3 rows)
+03:36:05.119 [INFO] GraphQL: Fetching manga for category 3 with filter
+03:36:05.279 [INFO] ImageLoader: WebP BGRA decode OK 193x278->116x168
+03:36:05.285 [INFO] ImageLoader: Decode OK (77970 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/598/thumbnail
+03:36:05.323 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/598/thumbnail
+03:36:05.402 [INFO] GraphQL: Fetched 97 manga for category 3 (filter method)
+03:36:05.414 [INFO] LibrarySectionTab: Got 97 manga for category 3 from server
+03:36:05.895 [INFO] ImageLoader: Decode OK (112914 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/577/thumbnail
+03:36:05.940 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/577/thumbnail
+03:36:07.463 [INFO] ImageLoader: Decode OK (79314 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/551/thumbnail
+03:36:07.495 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/551/thumbnail
+03:36:07.777 [INFO] ImageLoader: Decode OK (90066 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/362/thumbnail
+03:36:07.872 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/362/thumbnail
+03:36:07.937 [INFO] ImageLoader: WebP BGRA decode OK 288x412->117x168
+03:36:07.944 [INFO] ImageLoader: Decode OK (78642 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/592/thumbnail
+03:36:07.984 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/592/thumbnail
+03:36:08.042 [INFO] ImageLoader: WebP BGRA decode OK 288x412->117x168
+03:36:08.057 [INFO] ImageLoader: Decode OK (78642 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/545/thumbnail
+03:36:08.100 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/545/thumbnail
+03:36:08.143 [INFO] ImageLoader: WebP BGRA decode OK 225x321->117x168
+03:36:08.157 [INFO] ImageLoader: Decode OK (78642 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/559/thumbnail
+03:36:08.194 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/559/thumbnail
+03:36:16.901 [INFO] ImageLoader: Decode OK (79314 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/566/thumbnail
+03:36:16.940 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/566/thumbnail
+03:36:17.459 [INFO] ImageLoader: Decode OK (86706 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/888/thumbnail
+03:36:17.497 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/888/thumbnail
+03:36:20.652 [INFO] ImageLoader: Decode OK (76626 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/845/thumbnail
+03:36:20.696 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/845/thumbnail
+03:36:21.633 [INFO] ImageLoader: WebP BGRA decode OK 2000x2861->117x168
+03:36:21.643 [INFO] ImageLoader: Decode OK (78642 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/925/thumbnail
+03:36:21.690 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/925/thumbnail
+03:36:22.633 [INFO] ImageLoader: WebP BGRA decode OK 2000x2861->117x168
+03:36:22.642 [INFO] ImageLoader: Decode OK (78642 bytes TGA) for Http://192.168.1.28:4568/api/v1/manga/621/thumbnail
+03:36:22.685 [INFO] ImageLoader: Queued texture for Http://192.168.1.28:4568/api/v1/manga/621/thumbnail
