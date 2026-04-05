@@ -546,6 +546,17 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
             m_cells.push_back(cell);
         }
 
+        // Hide newly-added rows that are outside the current visible range.
+        // Without this, incrementally-appended off-screen rows are created
+        // VISIBLE and the cull pass in draw() never hides them, because the
+        // visible range (clamped to viewport) doesn't change as rows are
+        // appended beyond it. Result: grid_draw iterates every row every
+        // frame until a scroll event finally forces a range update.
+        if (m_cachedLastVisible >= 0 &&
+            (row < m_cachedFirstVisible || row >= m_cachedLastVisible)) {
+            rowBox->setVisibility(brls::Visibility::INVISIBLE);
+        }
+
         m_contentBox->addView(rowBox);
         m_rows.push_back(rowBox);
     }
