@@ -1,12 +1,11 @@
 /**
  * VitaSuwayomi - Manga Item Cell implementation
- * Minimal cell: rounded card with a cover image.
+ * Minimal cell: rounded card with a cover image and title label.
  */
 
 #include "view/manga_item_cell.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/image_loader.hpp"
-#include <cmath>
 #include <fstream>
 #include <vector>
 
@@ -20,6 +19,14 @@ static bool s_titlesEnabled = true;
 
 void MangaItemCell::setTitlesEnabled(bool enabled) {
     s_titlesEnabled = enabled;
+}
+
+void MangaItemCell::syncTitleVisibility() {
+    bool shouldShow = m_showTitle && s_titlesEnabled;
+    if (m_titleBox && m_titleVisible != shouldShow) {
+        m_titleVisible = shouldShow;
+        m_titleBox->setVisibility(shouldShow ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
 }
 
 static void loadLocalCoverToImage(brls::Image* image, const std::string& localPath) {
@@ -62,9 +69,7 @@ MangaItemCell::MangaItemCell() {
     this->setBackgroundColor(nvgRGB(40, 40, 48));
     this->setClipsToBounds(true);
 
-    // Cover fills the cell minus a 20px strip at the bottom for a single
-    // title line (drawn flat via NanoVG in draw()). Going to 1 line cuts
-    // per-frame text cost in half (~7ms saved on Vita at 24 visible cells).
+    // Cover fills the cell minus a 20px strip at the bottom for title.
     m_thumbnailImage = new brls::Image();
     m_thumbnailImage->setScalingType(brls::ImageScalingType::FILL);
     m_thumbnailImage->setCornerRadius(4.0f);
@@ -74,6 +79,25 @@ MangaItemCell::MangaItemCell() {
     m_thumbnailImage->setPositionRight(0);
     m_thumbnailImage->setPositionBottom(20);
     this->addView(m_thumbnailImage);
+
+    m_titleBox = new brls::Box();
+    m_titleBox->setPositionType(brls::PositionType::ABSOLUTE);
+    m_titleBox->setPositionLeft(0);
+    m_titleBox->setPositionRight(0);
+    m_titleBox->setPositionBottom(0);
+    m_titleBox->setHeight(20);
+    m_titleBox->setPaddingLeft(5);
+    m_titleBox->setPaddingRight(5);
+    m_titleBox->setPaddingTop(4);
+    m_titleBox->setBackgroundColor(nvgRGBA(0, 0, 0, 160));
+    this->addView(m_titleBox);
+
+    m_titleLabel = new brls::Label();
+    m_titleLabel->setFontSize(10);
+    m_titleLabel->setTextColor(nvgRGBA(235, 235, 235, 255));
+    m_titleBox->addView(m_titleLabel);
+    m_titleVisible = !(m_showTitle && s_titlesEnabled);
+    syncTitleVisibility();
 }
 
 MangaItemCell::~MangaItemCell() {
@@ -85,9 +109,23 @@ MangaItemCell::~MangaItemCell() {
 void MangaItemCell::setManga(const Manga& manga) {
     m_manga = manga;
     m_title = manga.title;
-    m_line1.clear();
-    m_wrappedForWidth = -1.0f;
+    if (m_titleLabel) {
+        m_titleLabel->setText(m_title);
+    }
     m_thumbnailLoaded = false;
+}
+
+void MangaItemCell::updateMangaData(const Manga& manga) {
+    m_manga = manga;
+    m_title = manga.title;
+    if (m_titleLabel) {
+        m_titleLabel->setText(m_title);
+    }
+}
+
+void MangaItemCell::setCompactMode(bool compact) {
+    m_showTitle = !compact;
+    syncTitleVisibility();
 }
 
 void MangaItemCell::loadThumbnailIfNeeded() {
@@ -139,76 +177,10 @@ void MangaItemCell::loadThumbnail() {
     ImageLoader::loadAsync(url, nullptr, m_thumbnailImage, m_alive);
 }
 
-// Binary-search the largest byte prefix of `str` (len `len`) that fits
-// into `maxW` when measured through nvgTextBounds. Returns the byte
-// count.
-static int fitPrefix(NVGcontext* vg, const char* str, int len, float maxW) {
-    float bounds[4];
-    int lo = 0, hi = len, best = 0;
-    while (lo <= hi) {
-        int mid = (lo + hi) / 2;
-        nvgTextBounds(vg, 0, 0, str, str + mid, bounds);
-        float w = bounds[2] - bounds[0];
-        if (w <= maxW) {
-            best = mid;
-            lo = mid + 1;
-        } else {
-            hi = mid - 1;
-        }
-    }
-    return best;
-}
-
 void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float height,
                          brls::Style style, brls::FrameContext* ctx) {
-    // Draw the cover image (child view)
+    syncTitleVisibility();
     brls::Box::draw(vg, x, y, width, height, style, ctx);
-
-    if (!m_showTitle || m_title.empty() || !s_titlesEnabled) return;
-
-    // --- Flat-rendered single-line title below the cover ---
-    // One line keeps text cost per cell to a single nvgText call; on
-    // Vita with 24 visible cells this is ~7ms/frame vs ~14ms for 2 lines.
-    constexpr float kPadSide = 5.0f;
-    constexpr float kFontSize = 10.0f;
-    constexpr float kTitleAreaH = 20.0f;  // matches thumbnail positionBottom
-    constexpr float kTitleTopPad = 4.0f;
-
-    float textW = width - kPadSide * 2.0f;
-
-    nvgFontFace(vg, "regular");
-    nvgFontSize(vg, kFontSize);
-
-    // Re-wrap only when cell width changed or title was reassigned.
-    if (m_wrappedForWidth < 0.0f || std::fabs(m_wrappedForWidth - width) > 0.5f) {
-        m_wrappedForWidth = width;
-        m_line1.clear();
-
-        float bounds[4];
-        const char* s = m_title.c_str();
-        int len = static_cast<int>(m_title.size());
-
-        nvgTextBounds(vg, 0, 0, s, s + len, bounds);
-        float fullW = bounds[2] - bounds[0];
-
-        if (fullW <= textW) {
-            m_line1 = m_title;
-        } else {
-            // Truncate with trailing ellipsis
-            nvgTextBounds(vg, 0, 0, "\xE2\x80\xA6", nullptr, bounds);
-            float ellipsisW = bounds[2] - bounds[0];
-            int fit = fitPrefix(vg, s, len, textW - ellipsisW);
-            while (fit > 0 && s[fit - 1] == ' ') fit--;
-            m_line1.assign(s, fit);
-            m_line1.append("\xE2\x80\xA6");
-        }
-    }
-
-    float titleY = y + height - kTitleAreaH + kTitleTopPad;
-
-    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-    nvgFillColor(vg, nvgRGBA(235, 235, 235, 255));
-    nvgText(vg, x + kPadSide, titleY, m_line1.c_str(), nullptr);
 }
 
 void MangaItemCell::setPressed(bool pressed) {
