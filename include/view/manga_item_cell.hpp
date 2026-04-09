@@ -29,7 +29,7 @@ public:
     bool isThumbnailLoaded() const { return m_thumbnailLoaded; }
     const Manga& getManga() const { return m_manga; }
 
-    void setCompactMode(bool compact) { m_showTitle = !compact; }
+    void setCompactMode(bool compact);
     void setListMode(bool) {}
     void setListRowSize(int) {}
     void setGridColumns(int) {}
@@ -56,6 +56,7 @@ protected:
 
 private:
     void loadThumbnail();
+    void syncTitleVisibility();
 
     Manga m_manga;
     std::string m_title;
@@ -66,6 +67,7 @@ private:
     bool m_pressed = false;
     bool m_selected = false;
     bool m_showTitle = true;
+    bool m_titleVisible = true;
 
     // Shared flag so in-flight ImageLoader callbacks skip writing to us
     // after this cell has been destroyed.

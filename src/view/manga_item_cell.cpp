@@ -21,6 +21,14 @@ void MangaItemCell::setTitlesEnabled(bool enabled) {
     s_titlesEnabled = enabled;
 }
 
+void MangaItemCell::syncTitleVisibility() {
+    bool shouldShow = m_showTitle && s_titlesEnabled;
+    if (m_titleBox && m_titleVisible != shouldShow) {
+        m_titleVisible = shouldShow;
+        m_titleBox->setVisibility(shouldShow ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    }
+}
+
 static void loadLocalCoverToImage(brls::Image* image, const std::string& localPath) {
     if (localPath.empty() || !image) return;
 
@@ -88,7 +96,8 @@ MangaItemCell::MangaItemCell() {
     m_titleLabel->setFontSize(10);
     m_titleLabel->setTextColor(nvgRGBA(235, 235, 235, 255));
     m_titleBox->addView(m_titleLabel);
-    m_titleBox->setVisibility((m_showTitle && s_titlesEnabled) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
+    m_titleVisible = !(m_showTitle && s_titlesEnabled);
+    syncTitleVisibility();
 }
 
 MangaItemCell::~MangaItemCell() {
@@ -112,6 +121,11 @@ void MangaItemCell::updateMangaData(const Manga& manga) {
     if (m_titleLabel) {
         m_titleLabel->setText(m_title);
     }
+}
+
+void MangaItemCell::setCompactMode(bool compact) {
+    m_showTitle = !compact;
+    syncTitleVisibility();
 }
 
 void MangaItemCell::loadThumbnailIfNeeded() {
@@ -165,10 +179,7 @@ void MangaItemCell::loadThumbnail() {
 
 void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float height,
                          brls::Style style, brls::FrameContext* ctx) {
-    if (m_titleBox) {
-        m_titleBox->setVisibility((m_showTitle && s_titlesEnabled) ? brls::Visibility::VISIBLE : brls::Visibility::GONE);
-    }
-
+    syncTitleVisibility();
     brls::Box::draw(vg, x, y, width, height, style, ctx);
 }
 
