@@ -1,6 +1,7 @@
 /**
  * VitaSuwayomi - Recycling Grid implementation
- * Uses lazy loading to prevent UI freezes on large libraries
+ * Rows are fully populated at creation time to avoid per-cell yoga layout
+ * recalculations during scroll. Visibility culling hides off-screen rows.
  */
 
 #include "view/recycling_grid.hpp"
@@ -152,8 +153,6 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
             // Remove last row view (deletes the row box and its children)
             brls::Box* lastRow = m_rows.back();
             m_rows.pop_back();
-            if (!m_rowPopulated.empty()) m_rowPopulated.pop_back();
-            if (!m_rowPopulatedCount.empty()) m_rowPopulatedCount.pop_back();
             if (!m_rowHeights.empty()) m_rowHeights.pop_back();
             m_contentBox->removeView(lastRow);
 
@@ -348,8 +347,6 @@ void RecyclingGrid::clearViews() {
     m_items.clear();
     m_rows.clear();
     m_cells.clear();
-    m_rowPopulated.clear();
-    m_rowPopulatedCount.clear();
     m_rowHeights.clear();
     if (m_contentBox) {
         m_contentBox->clearViews();
@@ -379,8 +376,6 @@ void RecyclingGrid::setupGrid() {
     m_contentBox->clearViews();
     m_rows.clear();
     m_cells.clear();
-    m_rowPopulated.clear();
-    m_rowPopulatedCount.clear();
     m_rowHeights.clear();
     auto clearEnd = std::chrono::steady_clock::now();
     float clearMs = std::chrono::duration<float, std::milli>(clearEnd - clearStart).count();
@@ -399,91 +394,47 @@ void RecyclingGrid::setupGrid() {
 
     m_totalRowsNeeded = (m_items.size() + m_columns - 1) / m_columns;
 
-    // Lazy row population: create all row skeletons (empty boxes with the
-    // correct height) up front, then populate only the rows that are
-    // initially visible. The draw-path culler will populate additional rows
-    // as the user scrolls. This trades a small one-time O(n) skeleton cost
-    // for avoiding the N successive frame drops of the old incremental
-    // per-row build.
-    brls::Logger::info("RecyclingGrid: Building {} row skeletons for {} items",
+    brls::Logger::info("RecyclingGrid: Building {} rows for {} items",
                         m_totalRowsNeeded, m_items.size());
 
-    auto skeletonStart = std::chrono::steady_clock::now();
+    auto buildStart = std::chrono::steady_clock::now();
     createRowRange(0, m_totalRowsNeeded);
-    float skeletonMs = std::chrono::duration<float, std::milli>(
-        std::chrono::steady_clock::now() - skeletonStart).count();
-
-    int initialPopulate = std::min(3, m_totalRowsNeeded);
-    auto populateStart = std::chrono::steady_clock::now();
-    for (int row = 0; row < initialPopulate; row++) {
-        populateRow(row);
-    }
-    float populateMs = std::chrono::duration<float, std::milli>(
-        std::chrono::steady_clock::now() - populateStart).count();
+    float buildMs = std::chrono::duration<float, std::milli>(
+        std::chrono::steady_clock::now() - buildStart).count();
 
     float setupMs = std::chrono::duration<float, std::milli>(
         std::chrono::steady_clock::now() - setupStart).count();
-    brls::Logger::info("RecyclingGrid: setupGrid took {:.1f}ms (clear {:.1f}ms of {} cells, skeletons {:.1f}ms for {} rows, populate {:.1f}ms for {} rows)",
-                       setupMs, clearMs, oldCellCount, skeletonMs, m_totalRowsNeeded, populateMs, initialPopulate);
+    brls::Logger::info("RecyclingGrid: setupGrid took {:.1f}ms (clear {:.1f}ms of {} cells, build {:.1f}ms for {} rows)",
+                       setupMs, clearMs, oldCellCount, buildMs, m_totalRowsNeeded);
 }
 
 void RecyclingGrid::createRowRange(int startRow, int endRow) {
-    // Create only empty row skeletons here — no cells. Cells are created
-    // lazily by populateRow() when a row first becomes visible. Every row's
-    // m_items slots are pre-allocated in m_cells as nullptrs so index-based
-    // access stays valid across the grid's lifetime.
-
     for (int row = startRow; row < endRow; row++) {
         auto* rowBox = new brls::Box();
         rowBox->setAxis(brls::Axis::ROW);
         rowBox->setJustifyContent(brls::JustifyContent::FLEX_START);
         rowBox->setMarginBottom(m_rowMargin);
 
-        // Determine the item range this row will hold
         int startIdx = row * m_columns;
         int endIdx = std::min(startIdx + m_columns, (int)m_items.size());
 
-        // For list mode, auto-adapt row height based on title width
         int rowHeight = m_cellHeight;
         if (m_listMode) {
             int maxWidthUnits = 0;
             for (int i = startIdx; i < endIdx; i++) {
-                // Estimate visual width in "width units" (1 unit ≈ 1 Latin char width).
-                // CJK / wide characters (multi-byte UTF-8) count as 2 units since
-                // they render roughly twice as wide as Latin characters.
                 const std::string& title = m_items[i].title;
                 int widthUnits = 0;
                 for (size_t j = 0; j < title.size(); ) {
                     unsigned char c = static_cast<unsigned char>(title[j]);
-                    if (c < 0x80) {
-                        // ASCII: 1 byte, 1 width unit
-                        widthUnits += 1;
-                        j += 1;
-                    } else if (c < 0xC0) {
-                        // Continuation byte (shouldn't appear here), skip
-                        j += 1;
-                    } else if (c < 0xE0) {
-                        // 2-byte sequence (Latin extended, etc): 1 width unit
-                        widthUnits += 1;
-                        j += 2;
-                    } else if (c < 0xF0) {
-                        // 3-byte sequence (CJK, Japanese, Korean, etc): 2 width units
-                        widthUnits += 2;
-                        j += 3;
-                    } else {
-                        // 4-byte sequence (emoji, etc): 2 width units
-                        widthUnits += 2;
-                        j += 4;
-                    }
+                    if (c < 0x80)      { widthUnits += 1; j += 1; }
+                    else if (c < 0xC0) { j += 1; }
+                    else if (c < 0xE0) { widthUnits += 1; j += 2; }
+                    else if (c < 0xF0) { widthUnits += 2; j += 3; }
+                    else               { widthUnits += 2; j += 4; }
                 }
-                if (widthUnits > maxWidthUnits) {
-                    maxWidthUnits = widthUnits;
-                }
+                if (widthUnits > maxWidthUnits) maxWidthUnits = widthUnits;
             }
-            // At font 14 on the Vita (900px cell, ~32px padding), roughly 108
-            // Latin-width characters fit per line.
-            int charsPerLine = 100;  // Slightly conservative
-            int lines = (maxWidthUnits + charsPerLine - 1) / charsPerLine;
+            int lines = (maxWidthUnits + 99) / 100;
             if (lines < 1) lines = 1;
             if (lines > 3) lines = 3;
             rowHeight = 40 + (lines * 20);
@@ -493,111 +444,59 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
 
         rowBox->setHeight(rowHeight);
 
-        // Reserve cell slots for this row; they are filled in populateRow().
+        // Create all cells for this row BEFORE attaching to contentBox.
+        // This batches yoga layout: 1 invalidation per row instead of per cell.
         for (int i = startIdx; i < endIdx; i++) {
-            (void)i;
-            m_cells.push_back(nullptr);
-        }
+            auto* cell = new MangaItemCell();
+            cell->setWidth(m_cellWidth);
+            cell->setHeight(rowHeight);
+            cell->setMarginRight(m_cellMargin);
 
-        // All non-visible rows start INVISIBLE; the draw-path culler will
-        // show them (and populate them) once they enter the viewport.
-        if (m_cachedLastVisible >= 0 &&
-            (row < m_cachedFirstVisible || row >= m_cachedLastVisible)) {
-            rowBox->setVisibility(brls::Visibility::INVISIBLE);
+            if (m_listMode) cell->setListMode(true);
+            else if (m_compactMode) cell->setCompactMode(true);
+
+            cell->setGridColumns(m_columns);
+            if (m_showLibraryBadge) cell->setShowLibraryBadge(true);
+
+            cell->setManga(m_items[i]);
+
+            int index = i;
+            cell->registerClickAction([this, cell, index](brls::View*) {
+                if (m_longPressTriggered) {
+                    m_longPressTriggered = false;
+                    return true;
+                }
+                if (!cell->isFocused()) {
+                    brls::Application::giveFocus(cell);
+                }
+                onItemClicked(index);
+                return true;
+            });
+            cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+
+            cell->getFocusEvent()->subscribe([this, index](brls::View*) {
+                m_focusedIndex = index;
+                loadThumbnailsNearIndex(index);
+
+                if (m_onEndReached && !m_endReachedFired) {
+                    int threshold = m_columns * 2;
+                    if (index >= static_cast<int>(m_items.size()) - threshold) {
+                        m_endReachedFired = true;
+                        m_onEndReached();
+                    }
+                }
+            });
+
+            rowBox->addView(cell);
+            m_cells.push_back(cell);
         }
 
         m_contentBox->addView(rowBox);
         m_rows.push_back(rowBox);
-        m_rowPopulated.push_back(false);
-        m_rowPopulatedCount.push_back(0);
         m_rowHeights.push_back(rowHeight);
     }
 }
 
-int RecyclingGrid::populateRow(int row, int budget) {
-    if (row < 0 || row >= static_cast<int>(m_rows.size())) return 0;
-    if (m_rowPopulated[row]) return 0;
-
-    brls::Box* rowBox = m_rows[row];
-    int startIdx = row * m_columns;
-    int endIdx = std::min(startIdx + m_columns, (int)m_items.size());
-    int rowHeight = (row < static_cast<int>(m_rowHeights.size()))
-                        ? m_rowHeights[row]
-                        : m_cellHeight;
-
-    int alreadyDone = (row < static_cast<int>(m_rowPopulatedCount.size()))
-                          ? m_rowPopulatedCount[row] : 0;
-    int firstToMake = startIdx + alreadyDone;
-    int lastToMake = endIdx;
-    if (budget > 0) {
-        lastToMake = std::min(lastToMake, firstToMake + budget);
-    }
-
-    int madeThisCall = 0;
-    for (int i = firstToMake; i < lastToMake; i++) {
-        auto* cell = new MangaItemCell();
-        cell->setWidth(m_cellWidth);
-        cell->setHeight(rowHeight);
-        cell->setMarginRight(m_cellMargin);
-
-        if (m_listMode) {
-            cell->setListMode(true);
-        } else if (m_compactMode) {
-            cell->setCompactMode(true);
-        }
-
-        cell->setGridColumns(m_columns);
-
-        if (m_showLibraryBadge) {
-            cell->setShowLibraryBadge(true);
-        }
-
-        cell->setManga(m_items[i]);
-
-        int index = i;
-        cell->registerClickAction([this, cell, index](brls::View* view) {
-            if (m_longPressTriggered) {
-                m_longPressTriggered = false;
-                return true;
-            }
-            if (!cell->isFocused()) {
-                brls::Application::giveFocus(cell);
-            }
-            onItemClicked(index);
-            return true;
-        });
-        cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
-
-        cell->getFocusEvent()->subscribe([this, index](brls::View*) {
-            m_focusedIndex = index;
-            loadThumbnailsNearIndex(index);
-
-            if (m_onEndReached && !m_endReachedFired) {
-                int threshold = m_columns * 2;
-                if (index >= static_cast<int>(m_items.size()) - threshold) {
-                    m_endReachedFired = true;
-                    m_onEndReached();
-                }
-            }
-        });
-
-        rowBox->addView(cell);
-        m_cells[i] = cell;
-        madeThisCall++;
-    }
-
-    if (row < static_cast<int>(m_rowPopulatedCount.size())) {
-        m_rowPopulatedCount[row] = alreadyDone + madeThisCall;
-        if (startIdx + m_rowPopulatedCount[row] >= endIdx) {
-            m_rowPopulated[row] = true;
-        }
-    }
-    return madeThisCall;
-}
-
-// buildNextRowBatch() removed: rows are now populated lazily by the
-// draw-path culler as they enter the viewport, so there is no
-// incremental per-row scheduling loop to keep running in the background.
 
 void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     if (m_cells.empty() || m_columns <= 0) return;
@@ -734,22 +633,6 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             m_cachedLastVisible = lastVisible;
         }
 
-        // Populate a small number of cells per frame as rows enter the
-        // visible range. A single cell creation costs ~7ms on the Vita
-        // (new MangaItemCell + Image + addView triggering yoga layout),
-        // so budgeting 2 cells/frame keeps the extra work to ~14ms and
-        // leaves room for the rest of the frame. Rows may stay partially
-        // populated for a few frames during fast scroll; the empty slots
-        // render as the rowBox background until filled.
-        int cellBudget = 2;
-        for (int i = firstVisible; i < lastVisible && cellBudget > 0; i++) {
-            if (i >= 0 && i < static_cast<int>(m_rowPopulated.size())
-                && !m_rowPopulated[i]) {
-                int made = populateRow(i, cellBudget);
-                cellBudget -= made;
-                if (made == 0) break;  // safety against infinite loop
-            }
-        }
     }
 
     PERF_BEGIN("grid_draw");
@@ -1046,9 +929,6 @@ brls::View* RecyclingGrid::getFirstCell() const {
     if (m_cells.empty()) {
         return nullptr;
     }
-    // With lazy row population, m_cells[0] might be nullptr briefly (only
-    // during the setupGrid window before populateRow(0) runs). Returning the
-    // first non-null cell keeps the existing contract for callers.
     for (auto* c : m_cells) {
         if (c) return c;
     }
@@ -1066,13 +946,6 @@ void RecyclingGrid::focusIndex(int index) {
             }
         }
         return;
-    }
-
-    // If the target row hasn't been populated yet (user asked to focus a cell
-    // that's off-screen), populate it now so the focus target exists.
-    int row = index / m_columns;
-    if (row >= 0 && row < static_cast<int>(m_rowPopulated.size()) && !m_rowPopulated[row]) {
-        populateRow(row);
     }
 
     if (m_cells[index]) {
