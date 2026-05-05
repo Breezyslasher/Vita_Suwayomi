@@ -642,17 +642,20 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     // Batched cover draw: render cover textures for visible cells.
     // Covers are NVG image handles managed directly on cells (no brls::Image
     // child views), drawn here as textured quads via nvgImagePattern.
-    if (m_cachedFirstVisible >= 0) {
+    // Screen coords: grid(x,y) + contentBox offset + scroll + row + cell.
+    if (m_cachedFirstVisible >= 0 && m_contentBox) {
         float scrollY = this->getContentOffsetY();
-        float pad = 10.0f;
-        float baseX = x + pad;
-        float baseY = y + pad - scrollY;
+        float cbX = x + m_contentBox->getX();
+        float cbY = y + m_contentBox->getY() - scrollY;
 
         for (int r = m_cachedFirstVisible; r < m_cachedLastVisible; r++) {
             if (r < 0 || r >= static_cast<int>(m_rows.size())) continue;
-            int rh = (r < static_cast<int>(m_rowHeights.size()))
-                         ? m_rowHeights[r] : m_cellHeight;
-            float rowY = baseY + m_rows[r]->getY();
+            brls::Box* row = m_rows[r];
+            if (!row || row->getVisibility() != brls::Visibility::VISIBLE) continue;
+
+            float rowScreenX = cbX + row->getX();
+            float rowScreenY = cbY + row->getY();
+
             int startIdx = r * m_columns;
             int endIdx = std::min(startIdx + m_columns,
                                   static_cast<int>(m_cells.size()));
@@ -663,26 +666,25 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
                 int nvgImg = cell->getCoverImage();
                 if (nvgImg == 0) continue;
 
-                int col = i - startIdx;
-                float cx = baseX + col * (m_cellWidth + m_cellMargin);
-                float cw = static_cast<float>(m_cellWidth);
-                float ch = static_cast<float>(rh);
+                float cx = rowScreenX + cell->getX();
+                float cy = rowScreenY + cell->getY();
+                float cw = cell->getWidth();
+                float ch = cell->getHeight();
 
                 float imgW = static_cast<float>(cell->getCoverWidth());
                 float imgH = static_cast<float>(cell->getCoverHeight());
                 if (imgW <= 0 || imgH <= 0) continue;
 
-                // FILL scaling: scale to cover entire cell, center-crop
                 float scale = std::max(cw / imgW, ch / imgH);
                 float sw = imgW * scale;
                 float sh = imgH * scale;
                 float ox = cx + (cw - sw) * 0.5f;
-                float oy = rowY + (ch - sh) * 0.5f;
+                float oy = cy + (ch - sh) * 0.5f;
 
                 NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh,
                                                   0, nvgImg, 1.0f);
                 nvgBeginPath(vg);
-                nvgRoundedRect(vg, cx, rowY, cw, ch, 4.0f);
+                nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
                 nvgFillPaint(vg, paint);
                 nvgFill(vg);
             }

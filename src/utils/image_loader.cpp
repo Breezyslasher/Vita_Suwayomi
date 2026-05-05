@@ -2257,22 +2257,25 @@ void ImageLoader::processPendingCovers() {
     NVGcontext* vg = brls::Application::getNVGContext();
     if (!vg) return;
 
-    PendingCoverUpload upload;
-    {
-        std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
-        if (s_pendingCovers.empty()) return;
-        upload = std::move(s_pendingCovers.front());
-        s_pendingCovers.pop();
-    }
+    int uploaded = 0;
+    while (uploaded < 2) {
+        PendingCoverUpload upload;
+        {
+            std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
+            if (s_pendingCovers.empty()) return;
+            upload = std::move(s_pendingCovers.front());
+            s_pendingCovers.pop();
+        }
 
-    if (upload.alive && !*upload.alive) {
-        // Cell destroyed — skip, but reschedule for remaining items
-    } else if (!upload.rgbaData.empty() && upload.width > 0 && upload.height > 0) {
+        if (upload.alive && !*upload.alive) continue;
+        if (upload.rgbaData.empty() || upload.width <= 0 || upload.height <= 0) continue;
+
         int nvgImg = nvgCreateImageRGBA(vg, upload.width, upload.height,
                                          0, upload.rgbaData.data());
         if (nvgImg != 0 && upload.callback) {
             upload.callback(nvgImg, upload.width, upload.height);
         }
+        uploaded++;
     }
 
     // Reschedule if more pending
