@@ -84,7 +84,7 @@ std::set<std::string> ImageLoader::s_pendingFullSizeUrls;
 std::mutex ImageLoader::s_queueMutex;
 std::condition_variable ImageLoader::s_queueCV;
 int ImageLoader::s_maxConcurrentLoads = 3;  // Worker thread count - kept low for PS Vita memory limits
-int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
+int ImageLoader::s_maxThumbnailSize = 120;  // Match grid cell width to minimize GPU upload cost
 
 // Worker thread pool
 std::vector<std::thread> ImageLoader::s_workers;
