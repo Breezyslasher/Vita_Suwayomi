@@ -640,23 +640,21 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     PERF_END("grid_draw");
 
-    // Pause ImageLoader GPU texture uploads while the user is actively
-    // scrolling fast. Each upload (setImageFromMem) costs ~15-20ms on Vita
-    // and stalls the frame. Holding them off until scroll settles keeps
-    // scrolling smooth; queued textures flush as soon as velocity drops.
+    // Pause ImageLoader GPU texture uploads while the user is scrolling.
+    // Each upload (setImageFromMem) costs ~15-20ms on Vita and stalls the
+    // frame. Defer ALL uploads until scroll has fully stopped for several
+    // frames so scrolling stays at 60 FPS.
     {
         float curY = this->getContentOffsetY();
         float frameDelta = std::abs(curY - m_prevScrollY);
         m_prevScrollY = curY;
-        float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
-        // "Fast scroll" = moving more than ~1/3 of a row per frame
-        bool movingFast = frameDelta > rowHeight * 0.33f;
-        if (movingFast) {
+        bool scrolling = frameDelta > 0.5f;
+        if (scrolling) {
             m_scrollSettledFrames = 0;
         } else {
             m_scrollSettledFrames++;
         }
-        bool wantDefer = movingFast || m_scrollSettledFrames < 3;
+        bool wantDefer = scrolling || m_scrollSettledFrames < 6;
         if (wantDefer != m_uploadsDeferred) {
             m_uploadsDeferred = wantDefer;
             ImageLoader::setDeferTextureUploads(wantDefer);
