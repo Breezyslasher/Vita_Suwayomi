@@ -166,7 +166,7 @@ private:
     static std::mutex s_pendingMutex;
     static std::atomic<bool> s_pendingScheduled;
     static std::atomic<bool> s_deferTextureUploads;
-    static constexpr int MAX_TEXTURES_PER_FRAME = 2;  // Limit GPU uploads per frame (reduced from 6 - each upload stalls Vita GPU for ~15-20ms)
+    static constexpr int MAX_TEXTURES_PER_FRAME = 1;  // Limit GPU uploads per frame (each upload stalls Vita GPU for ~15-20ms)
 
     // Queue a texture for batched upload on the main thread
     static void queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback,

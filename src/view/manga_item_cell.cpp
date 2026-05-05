@@ -12,7 +12,7 @@ MangaItemCell::MangaItemCell() {
     this->setClipsToBounds(true);
 
     m_coverImage = new brls::Image();
-    m_coverImage->setScalingType(brls::ImageScalingType::FILL);
+    m_coverImage->setScalingType(brls::ImageScalingType::FIT);
     m_coverImage->setCornerRadius(4.0f);
     m_coverImage->setWidthPercentage(100.0f);
     m_coverImage->setHeightPercentage(100.0f);
