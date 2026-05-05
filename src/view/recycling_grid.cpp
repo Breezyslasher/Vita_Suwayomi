@@ -640,55 +640,47 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     PERF_END("grid_draw");
 
     // Batched cover draw: render cover textures for visible cells.
-    // Covers are NVG image handles managed directly on cells (no brls::Image
-    // child views), drawn here as textured quads via nvgImagePattern.
-    // Screen coords: grid(x,y) + contentBox offset + scroll + row + cell.
-    if (m_cachedFirstVisible >= 0 && m_contentBox) {
-        float scrollY = this->getContentOffsetY();
-        float cbX = x + m_contentBox->getX();
-        float cbY = y + m_contentBox->getY() - scrollY;
+    // Uses each cell's stored draw coordinates (captured during Box::draw)
+    // to guarantee covers align exactly with cell backgrounds.
+    if (m_cachedFirstVisible >= 0) {
+        nvgSave(vg);
+        nvgIntersectScissor(vg, x, y, width, height);
 
-        for (int r = m_cachedFirstVisible; r < m_cachedLastVisible; r++) {
-            if (r < 0 || r >= static_cast<int>(m_rows.size())) continue;
-            brls::Box* row = m_rows[r];
-            if (!row || row->getVisibility() != brls::Visibility::VISIBLE) continue;
+        int startIdx = m_cachedFirstVisible * m_columns;
+        int endIdx = std::min(m_cachedLastVisible * m_columns,
+                              static_cast<int>(m_cells.size()));
 
-            float rowScreenX = cbX + row->getX();
-            float rowScreenY = cbY + row->getY();
+        for (int i = startIdx; i < endIdx; i++) {
+            MangaItemCell* cell = m_cells[i];
+            if (!cell) continue;
+            int nvgImg = cell->getCoverImage();
+            if (nvgImg == 0) continue;
 
-            int startIdx = r * m_columns;
-            int endIdx = std::min(startIdx + m_columns,
-                                  static_cast<int>(m_cells.size()));
+            float cx = cell->getDrawX();
+            float cy = cell->getDrawY();
+            float cw = cell->getDrawW();
+            float ch = cell->getDrawH();
+            if (cw <= 0 || ch <= 0) continue;
 
-            for (int i = startIdx; i < endIdx; i++) {
-                MangaItemCell* cell = m_cells[i];
-                if (!cell) continue;
-                int nvgImg = cell->getCoverImage();
-                if (nvgImg == 0) continue;
+            float imgW = static_cast<float>(cell->getCoverWidth());
+            float imgH = static_cast<float>(cell->getCoverHeight());
+            if (imgW <= 0 || imgH <= 0) continue;
 
-                float cx = rowScreenX + cell->getX();
-                float cy = rowScreenY + cell->getY();
-                float cw = cell->getWidth();
-                float ch = cell->getHeight();
+            float scale = std::max(cw / imgW, ch / imgH);
+            float sw = imgW * scale;
+            float sh = imgH * scale;
+            float ox = cx + (cw - sw) * 0.5f;
+            float oy = cy + (ch - sh) * 0.5f;
 
-                float imgW = static_cast<float>(cell->getCoverWidth());
-                float imgH = static_cast<float>(cell->getCoverHeight());
-                if (imgW <= 0 || imgH <= 0) continue;
-
-                float scale = std::max(cw / imgW, ch / imgH);
-                float sw = imgW * scale;
-                float sh = imgH * scale;
-                float ox = cx + (cw - sw) * 0.5f;
-                float oy = cy + (ch - sh) * 0.5f;
-
-                NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh,
-                                                  0, nvgImg, 1.0f);
-                nvgBeginPath(vg);
-                nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
-                nvgFillPaint(vg, paint);
-                nvgFill(vg);
-            }
+            NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh,
+                                              0, nvgImg, 1.0f);
+            nvgBeginPath(vg);
+            nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
+            nvgFillPaint(vg, paint);
+            nvgFill(vg);
         }
+
+        nvgRestore(vg);
     }
 
     // Pause ImageLoader GPU texture uploads (brls::Image path only) while scrolling.

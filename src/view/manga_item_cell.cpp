@@ -41,6 +41,15 @@ void MangaItemCell::updateMangaData(const Manga& manga) {
     }
 }
 
+void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float height,
+                         brls::Style style, brls::FrameContext* ctx) {
+    m_drawX = x;
+    m_drawY = y;
+    m_drawW = width;
+    m_drawH = height;
+    brls::Box::draw(vg, x, y, width, height, style, ctx);
+}
+
 void MangaItemCell::loadThumbnailIfNeeded() {
     if (m_thumbnailLoaded) return;
     if (m_manga.id <= 0 && m_manga.thumbnailUrl.empty()) return;
