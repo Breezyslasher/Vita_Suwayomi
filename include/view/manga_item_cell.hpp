@@ -23,6 +23,10 @@ public:
     bool isThumbnailLoaded() const { return m_thumbnailLoaded; }
     const Manga& getManga() const { return m_manga; }
 
+    int getCoverImage() const { return m_nvgCover; }
+    int getCoverWidth() const { return m_coverW; }
+    int getCoverHeight() const { return m_coverH; }
+
     void setCompactMode(bool compact) { m_compact = compact; }
     void setListMode(bool list) { m_listMode = list; }
     void setListRowSize(int) {}
@@ -41,7 +45,9 @@ public:
 
 private:
     Manga m_manga;
-    brls::Image* m_coverImage = nullptr;
+    int m_nvgCover = 0;
+    int m_coverW = 0;
+    int m_coverH = 0;
     bool m_pressed = false;
     bool m_compact = false;
     bool m_listMode = false;

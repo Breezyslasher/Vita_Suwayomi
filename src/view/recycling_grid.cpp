@@ -636,11 +636,60 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     }
 
     PERF_BEGIN("grid_draw");
-    // Call parent draw - now only visible rows are rendered
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     PERF_END("grid_draw");
 
-    // Pause ImageLoader GPU texture uploads while the user is scrolling.
+    // Batched cover draw: render cover textures for visible cells.
+    // Covers are NVG image handles managed directly on cells (no brls::Image
+    // child views), drawn here as textured quads via nvgImagePattern.
+    if (m_cachedFirstVisible >= 0) {
+        float scrollY = this->getContentOffsetY();
+        float pad = 10.0f;
+        float baseX = x + pad;
+        float baseY = y + pad - scrollY;
+
+        for (int r = m_cachedFirstVisible; r < m_cachedLastVisible; r++) {
+            if (r < 0 || r >= static_cast<int>(m_rows.size())) continue;
+            int rh = (r < static_cast<int>(m_rowHeights.size()))
+                         ? m_rowHeights[r] : m_cellHeight;
+            float rowY = baseY + m_rows[r]->getY();
+            int startIdx = r * m_columns;
+            int endIdx = std::min(startIdx + m_columns,
+                                  static_cast<int>(m_cells.size()));
+
+            for (int i = startIdx; i < endIdx; i++) {
+                MangaItemCell* cell = m_cells[i];
+                if (!cell) continue;
+                int nvgImg = cell->getCoverImage();
+                if (nvgImg == 0) continue;
+
+                int col = i - startIdx;
+                float cx = baseX + col * (m_cellWidth + m_cellMargin);
+                float cw = static_cast<float>(m_cellWidth);
+                float ch = static_cast<float>(rh);
+
+                float imgW = static_cast<float>(cell->getCoverWidth());
+                float imgH = static_cast<float>(cell->getCoverHeight());
+                if (imgW <= 0 || imgH <= 0) continue;
+
+                // FILL scaling: scale to cover entire cell, center-crop
+                float scale = std::max(cw / imgW, ch / imgH);
+                float sw = imgW * scale;
+                float sh = imgH * scale;
+                float ox = cx + (cw - sw) * 0.5f;
+                float oy = rowY + (ch - sh) * 0.5f;
+
+                NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh,
+                                                  0, nvgImg, 1.0f);
+                nvgBeginPath(vg);
+                nvgRoundedRect(vg, cx, rowY, cw, ch, 4.0f);
+                nvgFillPaint(vg, paint);
+                nvgFill(vg);
+            }
+        }
+    }
+
+    // Pause ImageLoader GPU texture uploads (brls::Image path only) while scrolling.
     // Each upload (setImageFromMem) costs ~15-20ms on Vita and stalls the
     // frame. Defer ALL uploads until scroll has fully stopped for several
     // frames so scrolling stays at 60 FPS.

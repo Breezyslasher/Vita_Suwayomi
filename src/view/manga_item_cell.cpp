@@ -9,19 +9,15 @@ MangaItemCell::MangaItemCell() {
     this->setFocusable(true);
     this->setCornerRadius(4.0f);
     this->setBackgroundColor(nvgRGB(40, 40, 48));
-    this->setClipsToBounds(true);
-
-    m_coverImage = new brls::Image();
-    m_coverImage->setScalingType(brls::ImageScalingType::FILL);
-    m_coverImage->setCornerRadius(4.0f);
-    m_coverImage->setWidthPercentage(100.0f);
-    m_coverImage->setHeightPercentage(100.0f);
-    this->addView(m_coverImage);
 }
 
 MangaItemCell::~MangaItemCell() {
     if (m_alive) {
         *m_alive = false;
+    }
+    if (m_nvgCover != 0) {
+        NVGcontext* vg = brls::Application::getNVGContext();
+        if (vg) nvgDeleteImage(vg, m_nvgCover);
     }
 }
 
@@ -34,12 +30,19 @@ void MangaItemCell::updateMangaData(const Manga& manga) {
     bool coverChanged = (m_manga.thumbnailUrl != manga.thumbnailUrl);
     m_manga = manga;
     if (coverChanged) {
+        if (m_nvgCover != 0) {
+            NVGcontext* vg = brls::Application::getNVGContext();
+            if (vg) nvgDeleteImage(vg, m_nvgCover);
+            m_nvgCover = 0;
+            m_coverW = 0;
+            m_coverH = 0;
+        }
         m_thumbnailLoaded = false;
     }
 }
 
 void MangaItemCell::loadThumbnailIfNeeded() {
-    if (m_thumbnailLoaded || !m_coverImage) return;
+    if (m_thumbnailLoaded) return;
     if (m_manga.id <= 0 && m_manga.thumbnailUrl.empty()) return;
     m_thumbnailLoaded = true;
 
@@ -60,18 +63,33 @@ void MangaItemCell::loadThumbnailIfNeeded() {
         url = client.getMangaThumbnailUrl(m_manga.id);
     }
 
-    ImageLoader::loadAsync(url, nullptr, m_coverImage, m_alive);
+    std::weak_ptr<bool> weakAlive(m_alive);
+    MangaItemCell* self = this;
+
+    ImageLoader::loadCoverAsync(url,
+        [self, weakAlive](int nvgImg, int w, int h) {
+            auto alive = weakAlive.lock();
+            if (!alive || !*alive) {
+                NVGcontext* vg = brls::Application::getNVGContext();
+                if (vg && nvgImg != 0) nvgDeleteImage(vg, nvgImg);
+                return;
+            }
+            self->m_nvgCover = nvgImg;
+            self->m_coverW = w;
+            self->m_coverH = h;
+        },
+        m_alive);
 }
 
 void MangaItemCell::unloadThumbnail() {
-    if (!m_thumbnailLoaded || !m_coverImage) return;
-
-    static const unsigned char s_clearPixel[] = {
-        0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        1, 0, 1, 0, 32, 0,
-        0, 0, 0, 0
-    };
-    m_coverImage->setImageFromMem(s_clearPixel, sizeof(s_clearPixel));
+    if (!m_thumbnailLoaded) return;
+    if (m_nvgCover != 0) {
+        NVGcontext* vg = brls::Application::getNVGContext();
+        if (vg) nvgDeleteImage(vg, m_nvgCover);
+        m_nvgCover = 0;
+        m_coverW = 0;
+        m_coverH = 0;
+    }
     m_thumbnailLoaded = false;
 }
 

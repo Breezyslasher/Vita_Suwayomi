@@ -24,6 +24,7 @@ class ImageLoader {
 public:
     using LoadCallback = std::function<void(brls::Image*)>;
     using RotatableLoadCallback = std::function<void(RotatableImage*)>;
+    using CoverReadyCallback = std::function<void(int nvgImage, int w, int h)>;
 
     // Set authentication credentials for image loading
     static void setAuthCredentials(const std::string& username, const std::string& password);
@@ -39,6 +40,13 @@ public:
     static std::string getAuthPassword();
     static std::string getAccessToken();
     static std::string getSessionCookie();
+
+    // Load cover image: worker thread decodes to RGBA, main thread does GPU
+    // upload only via nvgCreateImageRGBA (no TGA double-decode). Callback
+    // receives the NVG image handle + dimensions. Not affected by scroll
+    // deferral so covers load continuously.
+    static void loadCoverAsync(const std::string& url, CoverReadyCallback callback,
+                               std::shared_ptr<bool> alive);
 
     // Load image asynchronously from URL (with thumbnail downscaling) - for brls::Image
     static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target);
@@ -99,6 +107,7 @@ private:
         brls::Image* target;
         bool fullSize;  // true = no downscaling
         std::shared_ptr<bool> alive;  // If set and *alive==false, skip (owner destroyed)
+        CoverReadyCallback coverCallback;  // If set, use cover mode (RGBA direct upload)
     };
 
     // Pending load request for RotatableImage
@@ -173,6 +182,23 @@ private:
                                    std::shared_ptr<bool> alive = nullptr);
     // Process a batch of pending texture uploads (called on main thread)
     static void processPendingTextures();
+
+    // Cover upload queue: carries pre-decoded RGBA from worker thread.
+    // Main thread only does nvgCreateImageRGBA (pure GPU upload, no decode).
+    // Not affected by s_deferTextureUploads so covers load during scroll.
+    struct PendingCoverUpload {
+        std::vector<uint8_t> rgbaData;
+        int width = 0;
+        int height = 0;
+        CoverReadyCallback callback;
+        std::shared_ptr<bool> alive;
+    };
+    static std::queue<PendingCoverUpload> s_pendingCovers;
+    static std::mutex s_pendingCoverMutex;
+    static std::atomic<bool> s_pendingCoverScheduled;
+    static void queueCoverUpload(std::vector<uint8_t> rgbaData, int w, int h,
+                                  CoverReadyCallback callback, std::shared_ptr<bool> alive);
+    static void processPendingCovers();
 
     // Batched texture upload queue for RotatableImage (webtoon/manga reader pages).
     // Same concept as PendingTextureUpdate but for full-size reader images.
