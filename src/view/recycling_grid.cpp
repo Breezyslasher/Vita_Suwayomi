@@ -605,6 +605,8 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     // to guarantee covers align exactly with cell backgrounds.
     if (m_cachedFirstVisible >= 0) {
         nvgSave(vg);
+        bool showBadge = Application::getInstance().getSettings().showUnreadBadge;
+        NVGcolor badgeColor = Application::getInstance().getTealColor();
         nvgIntersectScissor(vg, x, y, width, height);
 
         int startIdx = m_cachedFirstVisible * m_columns;
@@ -639,6 +641,32 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
             nvgFillPaint(vg, paint);
             nvgFill(vg);
+
+            // Unread badge (top-left corner of cell)
+            int unread = cell->getManga().unreadCount;
+            if (showBadge && unread > 0) {
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d", unread);
+
+                nvgFontFace(vg, "regular");
+                nvgFontSize(vg, 10.0f);
+                nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+                float bb[4];
+                nvgTextBounds(vg, 0, 0, buf, nullptr, bb);
+                float tw = bb[2] - bb[0];
+                float th = bb[3] - bb[1];
+                float padX = 4.0f, padY = 2.0f;
+                float bx = cx + 4.0f;
+                float by = cy + 4.0f;
+
+                nvgBeginPath(vg);
+                nvgRoundedRect(vg, bx, by, tw + padX * 2, th + padY * 2, 2.0f);
+                nvgFillColor(vg, badgeColor);
+                nvgFill(vg);
+
+                nvgFillColor(vg, nvgRGB(255, 255, 255));
+                nvgText(vg, bx + padX, by + padY, buf, nullptr);
+            }
         }
 
         nvgRestore(vg);
