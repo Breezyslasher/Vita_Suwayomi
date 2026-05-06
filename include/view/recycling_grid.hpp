@@ -140,10 +140,6 @@ private:
     int m_cachedFirstVisible = -1;
     int m_cachedLastVisible = -1;
 
-    // Progressive cover loader: each frame queues a few cells until all loaded
-    int m_nextCoverLoadIdx = 0;
-    bool m_allCoversQueued = false;
-
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;
 
