@@ -24,11 +24,26 @@ MangaItemCell::~MangaItemCell() {
 void MangaItemCell::setManga(const Manga& manga) {
     m_manga = manga;
     m_thumbnailLoaded = false;
+    if (manga.unreadCount > 0) {
+        m_badgeText = std::to_string(manga.unreadCount);
+        m_badgeMeasured = false;
+    } else {
+        m_badgeText.clear();
+    }
 }
 
 void MangaItemCell::updateMangaData(const Manga& manga) {
     bool coverChanged = (m_manga.thumbnailUrl != manga.thumbnailUrl);
+    bool unreadChanged = (m_manga.unreadCount != manga.unreadCount);
     m_manga = manga;
+    if (unreadChanged) {
+        if (manga.unreadCount > 0) {
+            m_badgeText = std::to_string(manga.unreadCount);
+            m_badgeMeasured = false;
+        } else {
+            m_badgeText.clear();
+        }
+    }
     if (coverChanged) {
         if (m_nvgCover != 0) {
             NVGcontext* vg = brls::Application::getNVGContext();

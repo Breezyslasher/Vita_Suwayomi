@@ -35,6 +35,13 @@ public:
     float getDrawW() const { return m_drawW; }
     float getDrawH() const { return m_drawH; }
 
+    int getUnreadCount() const { return m_manga.unreadCount; }
+    const std::string& getBadgeText() const { return m_badgeText; }
+    float getBadgeTextW() const { return m_badgeTextW; }
+    float getBadgeTextH() const { return m_badgeTextH; }
+    bool hasBadgeMeasured() const { return m_badgeMeasured; }
+    void setBadgeMeasured(float tw, float th) { m_badgeTextW = tw; m_badgeTextH = th; m_badgeMeasured = true; }
+
     void setCompactMode(bool compact) { m_compact = compact; }
     void setListMode(bool list) { m_listMode = list; }
     void setListRowSize(int) {}
@@ -64,6 +71,10 @@ private:
     bool m_compact = false;
     bool m_listMode = false;
     bool m_thumbnailLoaded = false;
+    std::string m_badgeText;
+    float m_badgeTextW = 0;
+    float m_badgeTextH = 0;
+    bool m_badgeMeasured = false;
     std::shared_ptr<bool> m_alive;
 };
 

@@ -605,9 +605,11 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     // to guarantee covers align exactly with cell backgrounds.
     if (m_cachedFirstVisible >= 0) {
         nvgSave(vg);
-        bool showBadge = Application::getInstance().getSettings().showUnreadBadge;
-        NVGcolor badgeColor = Application::getInstance().getTealColor();
         nvgIntersectScissor(vg, x, y, width, height);
+
+        bool showBadge = !m_uploadsDeferred &&
+                         Application::getInstance().getSettings().showUnreadBadge;
+        NVGcolor badgeColor = Application::getInstance().getTealColor();
 
         int startIdx = m_cachedFirstVisible * m_columns;
         int endIdx = std::min(m_cachedLastVisible * m_columns,
@@ -641,20 +643,32 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
             nvgFillPaint(vg, paint);
             nvgFill(vg);
+        }
 
-            // Unread badge (top-left corner of cell)
-            int unread = cell->getManga().unreadCount;
-            if (showBadge && unread > 0) {
-                char buf[16];
-                snprintf(buf, sizeof(buf), "%d", unread);
+        // Unread badges: drawn as a separate pass with font set once.
+        // Text dimensions are cached on the cell to avoid per-frame nvgTextBounds.
+        if (showBadge) {
+            nvgFontFace(vg, "regular");
+            nvgFontSize(vg, 10.0f);
+            nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
 
-                nvgFontFace(vg, "regular");
-                nvgFontSize(vg, 10.0f);
-                nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-                float bb[4];
-                nvgTextBounds(vg, 0, 0, buf, nullptr, bb);
-                float tw = bb[2] - bb[0];
-                float th = bb[3] - bb[1];
+            for (int i = startIdx; i < endIdx; i++) {
+                MangaItemCell* cell = m_cells[i];
+                if (!cell) continue;
+                const std::string& txt = cell->getBadgeText();
+                if (txt.empty()) continue;
+
+                float cx = cell->getDrawX();
+                float cy = cell->getDrawY();
+
+                if (!cell->hasBadgeMeasured()) {
+                    float bb[4];
+                    nvgTextBounds(vg, 0, 0, txt.c_str(), nullptr, bb);
+                    cell->setBadgeMeasured(bb[2] - bb[0], bb[3] - bb[1]);
+                }
+
+                float tw = cell->getBadgeTextW();
+                float th = cell->getBadgeTextH();
                 float padX = 4.0f, padY = 2.0f;
                 float bx = cx + 4.0f;
                 float by = cy + 4.0f;
@@ -665,7 +679,7 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
                 nvgFill(vg);
 
                 nvgFillColor(vg, nvgRGB(255, 255, 255));
-                nvgText(vg, bx + padX, by + padY, buf, nullptr);
+                nvgText(vg, bx + padX, by + padY, txt.c_str(), nullptr);
             }
         }
 
@@ -718,11 +732,12 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         }
     }
 
-    // Progressive cover loader: queue a few unloaded cells each frame until
-    // all covers are loaded, so the entire library loads without scrolling.
-    if (!m_allCoversQueued && !m_cells.empty()) {
+    // Progressive cover loader: queue a couple of unloaded cells per frame
+    // until all covers are loaded. Only runs when not scrolling to avoid
+    // competing with the render thread for CPU time.
+    if (!m_allCoversQueued && !m_cells.empty() && !m_uploadsDeferred) {
         int total = static_cast<int>(m_cells.size());
-        int budget = 6;
+        int budget = 2;
         while (budget > 0 && m_nextCoverLoadIdx < total) {
             MangaItemCell* cell = m_cells[m_nextCoverLoadIdx];
             if (cell && !cell->isThumbnailLoaded()) {
