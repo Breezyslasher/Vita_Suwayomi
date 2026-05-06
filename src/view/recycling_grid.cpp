@@ -523,39 +523,6 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
         }
     }
 
-    // Texture recycling: unload thumbnails far from visible area to free GPU memory
-    // On PS Vita with 128MB RAM, keeping 100+ cover textures loaded wastes VRAM.
-    // Unload cells more than 12 rows away from focus - they'll reload from
-    // ImageLoader's LRU memory cache when scrolled back (fast, no network hit).
-    static constexpr int UNLOAD_DISTANCE_ROWS = 8;  // Reduced from 12 to free GPU memory faster
-    int unloadAboveRow = focusedRow - UNLOAD_DISTANCE_ROWS;
-    int unloadBelowRow = focusedRow + UNLOAD_DISTANCE_ROWS;
-
-    // Unload cells far above
-    constexpr int UNLOAD_BUDGET_PER_CALL = 24;
-    int unloadBudgetAbove = UNLOAD_BUDGET_PER_CALL / 2;
-    int unloadBudgetBelow = UNLOAD_BUDGET_PER_CALL - unloadBudgetAbove;
-
-    if (unloadAboveRow > 0) {
-        int unloadEnd = std::min(unloadAboveRow * m_columns, static_cast<int>(m_cells.size()));
-        for (int i = 0; i < unloadEnd && unloadBudgetAbove > 0; i++) {
-            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
-                m_cells[i]->unloadThumbnail();
-                unloadBudgetAbove--;
-            }
-        }
-    }
-
-    // Unload cells far below
-    if (unloadBelowRow < totalRows) {
-        int unloadStart = std::max(0, unloadBelowRow * m_columns);
-        for (int i = unloadStart; i < static_cast<int>(m_cells.size()) && unloadBudgetBelow > 0; i++) {
-            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
-                m_cells[i]->unloadThumbnail();
-                unloadBudgetBelow--;
-            }
-        }
-    }
 }
 
 void RecyclingGrid::updateVisibleCells() {
@@ -763,38 +730,6 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
         }
     }
 
-    // Also apply texture recycling for scroll-based movement (same as focus-based)
-    // Only iterate through actual unload ranges, not all cells
-    static constexpr int SCROLL_UNLOAD_DISTANCE_ROWS = 8;  // Reduced from 12
-    int centerRow = (firstVisibleRow + lastVisibleRow) / 2;
-    int unloadAboveRow = centerRow - SCROLL_UNLOAD_DISTANCE_ROWS;
-    int unloadBelowRow = centerRow + SCROLL_UNLOAD_DISTANCE_ROWS;
-
-    constexpr int UNLOAD_BUDGET_PER_CALL = 24;
-    int unloadBudgetAbove = UNLOAD_BUDGET_PER_CALL / 2;
-    int unloadBudgetBelow = UNLOAD_BUDGET_PER_CALL - unloadBudgetAbove;
-
-    if (unloadAboveRow > 0) {
-        // Only iterate cells in the range [0, unloadAboveRow)
-        int unloadEnd = std::min(unloadAboveRow * m_columns, static_cast<int>(m_cells.size()));
-        for (int i = 0; i < unloadEnd && unloadBudgetAbove > 0; i++) {
-            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
-                m_cells[i]->unloadThumbnail();
-                unloadBudgetAbove--;
-            }
-        }
-    }
-    if (unloadBelowRow < totalRows) {
-        // Only iterate cells in the range [unloadBelowRow, end)
-        int unloadStart = std::max(0, unloadBelowRow * m_columns);
-        int unloadEnd = static_cast<int>(m_cells.size());
-        for (int i = unloadStart; i < unloadEnd && unloadBudgetBelow > 0; i++) {
-            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
-                m_cells[i]->unloadThumbnail();
-                unloadBudgetBelow--;
-            }
-        }
-    }
 }
 
 void RecyclingGrid::onItemClicked(int index) {
