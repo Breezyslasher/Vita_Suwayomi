@@ -1,0 +1,107 @@
+23:59:39.345 [INFO] Log file initialized: ux0:data/VitaSuwayomi/vitasuwayomi.log
+23:59:39.930 [INFO] DownloadsManager: Initializing...
+23:59:39.940 [DEBUG] DownloadsManager: Loading state (5022 bytes)
+23:59:39.970 [DEBUG] DownloadsManager: Loaded manga 622 with 2 chapters
+23:59:39.971 [INFO] DownloadsManager: State loaded with 1 downloads
+23:59:39.971 [INFO] DownloadsManager: Validating downloaded files...
+23:59:40.001 [INFO] DownloadsManager: Validation complete - 34 pages valid, 0 pages missing
+23:59:40.001 [INFO] DownloadsManager: Initialized with 1 downloads
+23:59:40.007 [INFO] VitaSuwayomi 1.0.0 initializing...
+23:59:40.015 [INFO] Data directory ready: ux0:data/VitaSuwayomi
+23:59:40.023 [INFO] Loading saved settings...
+23:59:40.032 [DEBUG] loadSettings: Opening ux0:data/VitaSuwayomi/settings.json
+23:59:40.049 [DEBUG] loadSettings: Read 2365 bytes
+23:59:40.060 [INFO] loadSettings: serverUrl=Http://192.168.1.28:4568
+23:59:40.075 [DEBUG] Loaded 4 hidden categories
+23:59:40.079 [INFO] loadSettings: downloadMode = 2 (0=Server, 1=Local, 2=Both)
+23:59:40.085 [INFO] loadSettings: downloadQuality = 0 (0=Original, 1=High, 2=Medium, 3=Low)
+23:59:40.092 [INFO] loadSettings: enabledSourceLanguages count = 2
+23:59:40.101 [INFO] loadSettings: localUrl=Http://192.168.1.28:4568, remoteUrl=https://breezy-book.duckdns.org, useRemote=false, autoSwitch=true
+23:59:40.110 [INFO] loadSettings: libraryDisplayMode=0, libraryGridSize=1, listRowSize=1, defaultSort=0, groupMode=0
+23:59:40.121 [DEBUG] Loaded 2 per-category sort modes
+23:59:40.132 [DEBUG] Loaded 1 search history entries
+23:59:40.145 [DEBUG] Loaded 3 per-manga reader settings
+23:59:40.150 [INFO] Restored auth credentials for user: Breezyslasher
+23:59:40.156 [INFO] Settings loaded successfully
+23:59:40.162 [INFO] Settings load result: success
+23:59:40.171 [INFO] Applied theme: Dark
+23:59:40.180 [INFO] Debug logging disabled
+23:59:40.195 [INFO] LibraryCache: Initialized at ux0:data/VitaSuwayomi/cache
+23:59:40.206 [INFO] ImageLoader: thumbnail max dimension = 168px (cover 120x168)
+23:59:40.218 [INFO] Application::run - isConnected=false, serverUrl=Http://192.168.1.28:4568
+23:59:40.223 [INFO] LoginActivity: building login UI programmatically
+23:59:40.303 [INFO] Restoring saved connection (async)...
+23:59:40.310 [INFO] Fetching server info via GraphQL...
+23:59:40.458 [INFO] Server (GraphQL): Suwayomi-Server vv2.1.2087
+23:59:40.467 [INFO] Server reachable, validating auth with protected query...
+23:59:40.500 [WARNING] GraphQL errors: [{"message":"Exception while fetching data (/categories) : Unauthorized\r\n\r\nsuwayomi.tachidesk.server.user.UnauthorizedException: Unauthorized\n\tat suwayomi.tachidesk.server.user.UserTypeKt.requir
+23:59:40.511 [INFO] GraphQL returned Unauthorized, attempting token refresh...
+23:59:40.523 [INFO] No refresh token available, skipping GraphQL refresh
+23:59:40.528 [INFO] Attempting re-login with stored credentials...
+23:59:40.592 [INFO] Login successful, received JWT tokens
+23:59:40.599 [INFO] Re-login successful, tokens refreshed
+23:59:40.608 [INFO] Token refreshed successfully, retrying GraphQL request
+23:59:40.703 [INFO] validateAuthWithProtectedQuery: auth validated successfully
+23:59:40.714 [INFO] Auth validated with protected query
+23:59:40.725 [INFO] Connection restored successfully
+23:59:40.806 [INFO] Syncing offline reading progress to server...
+23:59:40.812 [INFO] pushMainActivity: creating MainActivity...
+23:59:40.817 [INFO] pushMainActivity: pushing activity...
+23:59:40.824 [INFO] MainActivity::createContentView - loading XML
+23:59:40.860 [INFO] MainActivity::createContentView - XML loaded, view=valid
+23:59:40.862 [INFO] DownloadsManager: Synced 1 chapter progress, marked 0 as read
+23:59:40.958 [INFO] MainActivity: Tabs created, isOnline=true
+23:59:41.145 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+23:59:41.174 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+23:59:41.357 [INFO] LibrarySectionTab: Loaded 26 manga from cache for category 1
+23:59:41.369 [INFO] RecyclingGrid: Building 5 rows for 26 items
+23:59:41.494 [INFO] RecyclingGrid: setupGrid took 124.8ms (clear 0.0ms of 0 cells, build 118.1ms for 5 rows)
+23:59:41.503 [INFO] GraphQL: Fetching manga for category 1 with filter
+23:59:41.504 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+23:59:41.526 [INFO] pushMainActivity: done
+23:59:41.560 [INFO] Offline reading progress synced to server
+23:59:41.720 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+23:59:41.960 [INFO] GraphQL: Fetched 27 manga for category 1 (filter method)
+23:59:41.970 [INFO] LibrarySectionTab: Got 27 manga for category 1 from server
+23:59:42.015 [INFO] RecyclingGrid: Building 5 rows for 27 items
+23:59:42.144 [INFO] RecyclingGrid: setupGrid took 129.6ms (clear 0.3ms of 26 cells, build 121.9ms for 5 rows)
+23:59:46.162 [INFO] LibrarySectionTab: Loaded 26 manga from cache for category 1
+23:59:46.176 [INFO] RecyclingGrid: Building 5 rows for 26 items
+23:59:46.301 [INFO] RecyclingGrid: setupGrid took 125.7ms (clear 0.3ms of 27 cells, build 117.3ms for 5 rows)
+23:59:46.311 [INFO] GraphQL: Fetching manga for category 1 with filter
+23:59:46.581 [INFO] GraphQL: Fetched 27 manga for category 1 (filter method)
+23:59:46.593 [INFO] LibrarySectionTab: Got 27 manga for category 1 from server
+23:59:46.635 [INFO] RecyclingGrid: Building 5 rows for 27 items
+23:59:46.768 [INFO] RecyclingGrid: setupGrid took 132.6ms (clear 0.3ms of 26 cells, build 121.1ms for 5 rows)
+00:00:06.500 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+00:00:06.757 [INFO] SearchTab: Got 86 sources
+00:00:06.870 [ERROR] Cannot set texture: 0
+00:00:15.791 [INFO] saveSettings: Saving to ux0:data/VitaSuwayomi/settings.json
+00:00:15.821 [INFO] Settings saved successfully (2364 bytes)
+00:00:16.852 [INFO] RecyclingGrid: Grid size set to 6 columns, cell 143x200
+00:00:16.871 [INFO] LibrarySectionTab: Loaded 13 categories from cache
+00:00:17.049 [INFO] LibrarySectionTab: Loaded 26 manga from cache for category 1
+00:00:17.064 [INFO] RecyclingGrid: Building 5 rows for 26 items
+00:00:17.190 [INFO] RecyclingGrid: setupGrid took 125.9ms (clear 0.0ms of 0 cells, build 117.3ms for 5 rows)
+00:00:17.202 [INFO] GraphQL: Fetching manga for category 1 with filter
+00:00:17.202 [INFO] GraphQL: Fetching categories + manga for category 0 in single request
+00:00:17.358 [INFO] LibrarySectionTab: Combined query got 13 categories + 0 manga
+00:00:17.500 [INFO] GraphQL: Fetched 27 manga for category 1 (filter method)
+00:00:17.511 [INFO] LibrarySectionTab: Got 27 manga for category 1 from server
+00:00:17.568 [INFO] RecyclingGrid: Building 5 rows for 27 items
+00:00:17.699 [INFO] RecyclingGrid: setupGrid took 131.7ms (clear 0.3ms of 26 cells, build 122.4ms for 5 rows)
+00:00:21.697 [INFO] LibrarySectionTab: Loaded 26 manga from cache for category 1
+00:00:21.714 [INFO] RecyclingGrid: Building 5 rows for 26 items
+00:00:21.840 [INFO] RecyclingGrid: setupGrid took 126.4ms (clear 0.3ms of 27 cells, build 117.5ms for 5 rows)
+00:00:21.853 [INFO] GraphQL: Fetching manga for category 1 with filter
+00:00:22.094 [INFO] GraphQL: Fetched 27 manga for category 1 (filter method)
+00:00:22.100 [INFO] LibrarySectionTab: Got 27 manga for category 1 from server
+00:00:22.138 [INFO] RecyclingGrid: Building 5 rows for 27 items
+00:00:22.272 [INFO] RecyclingGrid: setupGrid took 134.9ms (clear 0.3ms of 26 cells, build 121.7ms for 5 rows)
+00:00:25.583 [INFO] LibrarySectionTab: Loaded 6 manga from cache for category 2
+00:00:25.593 [INFO] RecyclingGrid: Building 1 rows for 6 items
+00:00:25.626 [INFO] RecyclingGrid: setupGrid took 32.5ms (clear 0.3ms of 27 cells, build 26.5ms for 1 rows)
+00:00:25.635 [INFO] GraphQL: Fetching manga for category 2 with filter
+00:00:25.837 [INFO] GraphQL: Fetched 6 manga for category 2 (filter method)
+00:00:25.848 [INFO] LibrarySectionTab: Got 6 manga for category 2 from server
+00:00:35.630 [INFO] MangaDetailView: Creating for 'The Saga of Tanya the Evil' id=772
