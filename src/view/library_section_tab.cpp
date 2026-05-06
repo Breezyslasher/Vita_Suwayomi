@@ -611,12 +611,11 @@ void LibrarySectionTab::willDisappear(bool resetState) {
     // Cancel pending image loads to free up worker threads and network bandwidth
     ImageLoader::cancelAll();
 
-    // Reset thumbnail load states on all grid cells. cancelAll() may have cancelled
-    // pending loads that already set m_thumbnailLoaded=true (set optimistically in
-    // loadThumbnail). Without this reset, cells would show stale/wrong covers and
-    // refuse to reload because they think they're already loaded.
+    // Free all cover GPU textures to reclaim VRAM before the detail view
+    // allocates its own textures. Covers reload from ImageLoader's in-memory
+    // cache on return (no network hit).
     if (m_contentGrid) {
-        m_contentGrid->resetThumbnailLoadStates();
+        m_contentGrid->unloadAllThumbnails();
     }
     m_thumbnailsInvalidated = true;
 }
