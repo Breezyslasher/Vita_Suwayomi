@@ -1,6 +1,6 @@
 /**
  * VitaSuwayomi - Recycling Grid
- * Efficient grid view with lazy loading for displaying manga items
+ * Efficient grid view for displaying manga items
  */
 
 #pragma once
@@ -84,8 +84,7 @@ public:
 
 private:
     void setupGrid();
-    void createRowRange(int startRow, int endRow);  // Create rows [startRow, endRow)
-    void buildNextRowBatch();  // Continue incremental grid building
+    void createRowRange(int startRow, int endRow);
     void updateVisibleCells();
     void loadThumbnailsForScrollPosition();  // Scroll-position-based thumbnail loading
     void onItemClicked(int index);
@@ -112,6 +111,7 @@ private:
     brls::Box* m_contentBox = nullptr;
     std::vector<brls::Box*> m_rows;
     std::vector<MangaItemCell*> m_cells;
+    std::vector<int> m_rowHeights;
 
     int m_columns = 6;
     int m_cellWidth = 140;
@@ -129,24 +129,27 @@ private:
     float m_lastScrollLoadY = 0.0f;  // Last scroll Y where we triggered thumbnail loading
     int m_scrollLoadCooldown = 0;   // Frame cooldown to throttle scroll-based loading
 
+    // Scroll velocity tracking — used to defer ImageLoader texture uploads
+    // while the user is actively scrolling fast, so 15-20ms GPU uploads
+    // don't stall the frame. See RecyclingGrid::draw().
+    float m_prevScrollY = 0.0f;
+    int m_scrollSettledFrames = 0;   // Frames since last large scroll delta
+    bool m_uploadsDeferred = false;  // True while we've told ImageLoader to pause
+
     // Cached visible row range to avoid full iteration every frame
     int m_cachedFirstVisible = -1;
     int m_cachedLastVisible = -1;
 
+    // Progressive cover loader: each frame queues a few cells until all loaded
+    int m_nextCoverLoadIdx = 0;
+    bool m_allCoversQueued = false;
+
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;
 
-    // Incremental grid building state - spreads cell creation across frames
-    // to prevent multi-second freezes on large libraries (98+ books)
+    // Alive flag for deferred callbacks (kept for any future brls::sync usage).
     std::shared_ptr<bool> m_alive;
-    int m_incrementalBuildRow = 0;
     int m_totalRowsNeeded = 0;
-    bool m_incrementalBuildActive = false;
-
-    // Pending focus - when focusIndex is called during incremental build and the
-    // target cell doesn't exist yet, store the index here. buildNextRowBatch
-    // applies it once the cell is created, preventing focus from jumping to cell 0.
-    int m_pendingFocusIndex = -1;
 };
 
 } // namespace vitasuwayomi

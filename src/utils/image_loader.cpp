@@ -84,7 +84,7 @@ std::set<std::string> ImageLoader::s_pendingFullSizeUrls;
 std::mutex ImageLoader::s_queueMutex;
 std::condition_variable ImageLoader::s_queueCV;
 int ImageLoader::s_maxConcurrentLoads = 3;  // Worker thread count - kept low for PS Vita memory limits
-int ImageLoader::s_maxThumbnailSize = 180;  // Smaller thumbnails for speed
+int ImageLoader::s_maxThumbnailSize = 120;  // Match grid cell width to minimize GPU upload cost
 
 // Worker thread pool
 std::vector<std::thread> ImageLoader::s_workers;
@@ -95,6 +95,12 @@ std::atomic<bool> ImageLoader::s_shutdownWorkers{false};
 std::queue<ImageLoader::PendingTextureUpdate> ImageLoader::s_pendingTextures;
 std::mutex ImageLoader::s_pendingMutex;
 std::atomic<bool> ImageLoader::s_pendingScheduled{false};
+std::atomic<bool> ImageLoader::s_deferTextureUploads{false};
+
+// Cover upload queue (pre-decoded RGBA, GPU upload only on main thread)
+std::queue<ImageLoader::PendingCoverUpload> ImageLoader::s_pendingCovers;
+std::mutex ImageLoader::s_pendingCoverMutex;
+std::atomic<bool> ImageLoader::s_pendingCoverScheduled{false};
 
 // Batched texture upload queue (reader pages / RotatableImage)
 std::queue<ImageLoader::PendingRotatableTextureUpdate> ImageLoader::s_pendingRotatableTextures;
@@ -2033,6 +2039,18 @@ void ImageLoader::setMaxConcurrentLoads(int max) {
     s_maxConcurrentLoads = std::max(1, std::min(max, 6));
 }
 
+void ImageLoader::setDeferTextureUploads(bool defer) {
+    bool wasDeferred = s_deferTextureUploads.exchange(defer);
+    // When transitioning from deferred -> allowed, wake the processor so
+    // queued textures start uploading immediately.
+    if (wasDeferred && !defer) {
+        bool expected = false;
+        if (s_pendingScheduled.compare_exchange_strong(expected, true)) {
+            brls::sync([]() { processPendingTextures(); });
+        }
+    }
+}
+
 void ImageLoader::setMaxThumbnailSize(int maxSize) {
     s_maxThumbnailSize = maxSize > 0 ? maxSize : 0;
 }
@@ -2096,6 +2114,23 @@ void ImageLoader::queueTextureUpdate(const std::vector<uint8_t>& data, brls::Ima
 void ImageLoader::processPendingTextures() {
     s_pendingScheduled = false;
 
+    // If uploads are deferred (e.g. grid is actively scrolling), skip
+    // GPU uploads this frame. Re-schedule so we try again next frame.
+    if (s_deferTextureUploads.load()) {
+        bool morePending = false;
+        {
+            std::lock_guard<std::mutex> lock(s_pendingMutex);
+            morePending = !s_pendingTextures.empty();
+        }
+        if (morePending) {
+            bool expected = false;
+            if (s_pendingScheduled.compare_exchange_strong(expected, true)) {
+                brls::sync([]() { processPendingTextures(); });
+            }
+        }
+        return;
+    }
+
     // Process up to MAX_TEXTURES_PER_FRAME textures this frame, with a time budget.
     // Each GPU texture upload (setImageFromMem) can take 15-20ms on PS Vita,
     // so we also enforce a 8ms time limit to avoid blowing the 16.7ms frame budget.
@@ -2157,6 +2192,102 @@ void ImageLoader::processPendingTextures() {
             brls::sync([]() {
                 processPendingTextures();
             });
+        }
+    }
+}
+
+void ImageLoader::loadCoverAsync(const std::string& url, CoverReadyCallback callback,
+                                  std::shared_ptr<bool> alive) {
+    if (url.empty()) return;
+
+    // Memory cache: decode TGA→RGBA here (fast, <0.5ms for 120px thumbnails),
+    // then queue the RGBA for GPU upload on the next frame.
+    {
+        std::vector<uint8_t> cachedData;
+        if (cacheGet(url, cachedData)) {
+            int w, h, c;
+            uint8_t* rgba = stbi_load_from_memory(cachedData.data(),
+                static_cast<int>(cachedData.size()), &w, &h, &c, 4);
+            if (rgba) {
+                std::vector<uint8_t> rgbaVec(rgba, rgba + w * h * 4);
+                stbi_image_free(rgba);
+                queueCoverUpload(std::move(rgbaVec), w, h, std::move(callback), std::move(alive));
+            }
+            return;
+        }
+    }
+
+    // Queue for worker thread (disk cache / network download + decode)
+    {
+        std::lock_guard<std::mutex> lock(s_queueMutex);
+        LoadRequest req;
+        req.url = url;
+        req.callback = nullptr;
+        req.target = nullptr;
+        req.fullSize = true;
+        req.alive = alive;
+        req.coverCallback = std::move(callback);
+        s_loadQueue.push(std::move(req));
+    }
+    s_queueCV.notify_one();
+    ensureWorkersStarted();
+}
+
+void ImageLoader::queueCoverUpload(std::vector<uint8_t> rgbaData, int w, int h,
+                                    CoverReadyCallback callback, std::shared_ptr<bool> alive) {
+    {
+        std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
+        PendingCoverUpload upload;
+        upload.rgbaData = std::move(rgbaData);
+        upload.width = w;
+        upload.height = h;
+        upload.callback = std::move(callback);
+        upload.alive = std::move(alive);
+        s_pendingCovers.push(std::move(upload));
+    }
+    bool expected = false;
+    if (s_pendingCoverScheduled.compare_exchange_strong(expected, true)) {
+        brls::sync([]() { processPendingCovers(); });
+    }
+}
+
+void ImageLoader::processPendingCovers() {
+    s_pendingCoverScheduled = false;
+
+    NVGcontext* vg = brls::Application::getNVGContext();
+    if (!vg) return;
+
+    int uploaded = 0;
+    while (uploaded < 2) {
+        PendingCoverUpload upload;
+        {
+            std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
+            if (s_pendingCovers.empty()) return;
+            upload = std::move(s_pendingCovers.front());
+            s_pendingCovers.pop();
+        }
+
+        if (upload.alive && !*upload.alive) continue;
+        if (upload.rgbaData.empty() || upload.width <= 0 || upload.height <= 0) continue;
+
+        int nvgImg = nvgCreateImageRGBA(vg, upload.width, upload.height,
+                                         0, upload.rgbaData.data());
+        if (nvgImg != 0 && upload.callback) {
+            upload.callback(nvgImg, upload.width, upload.height);
+        }
+        uploaded++;
+    }
+
+    // Reschedule if more pending
+    bool morePending;
+    {
+        std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
+        morePending = !s_pendingCovers.empty();
+    }
+    if (morePending) {
+        bool expected = false;
+        if (s_pendingCoverScheduled.compare_exchange_strong(expected, true)) {
+            brls::sync([]() { processPendingCovers(); });
         }
     }
 }
@@ -2310,9 +2441,16 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
                     cachePut(url, diskData);
                     // Re-check alive after disk I/O
                     if (alive && !*alive) return;
-                    // Queue for batched texture upload (prevents main thread freeze
-                    // when 50+ covers load from disk cache simultaneously)
-                    if (target) {
+                    if (request.coverCallback) {
+                        int w, h, c;
+                        uint8_t* rgba = stbi_load_from_memory(diskData.data(),
+                            static_cast<int>(diskData.size()), &w, &h, &c, 4);
+                        if (rgba) {
+                            std::vector<uint8_t> rgbaVec(rgba, rgba + w * h * 4);
+                            stbi_image_free(rgba);
+                            queueCoverUpload(std::move(rgbaVec), w, h, request.coverCallback, alive);
+                        }
+                    } else if (target) {
                         queueTextureUpdate(diskData, target, callback, alive);
                     }
                     return;
@@ -2561,11 +2699,20 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     // and crashes on setImageFromMem().
     if (alive && !*alive) return;
 
-    // Queue for batched texture upload on main thread
-    if (target) {
+    // Cover mode: decode TGA→RGBA on this worker thread, queue pure GPU upload
+    if (request.coverCallback) {
+        int w, h, c;
+        uint8_t* rgba = stbi_load_from_memory(imageData.data(),
+            static_cast<int>(imageData.size()), &w, &h, &c, 4);
+        if (rgba) {
+            std::vector<uint8_t> rgbaVec(rgba, rgba + w * h * 4);
+            stbi_image_free(rgba);
+            queueCoverUpload(std::move(rgbaVec), w, h, request.coverCallback, alive);
+        }
+    } else if (target) {
         queueTextureUpdate(imageData, target, callback, alive);
     }
-    brls::Logger::info("ImageLoader: Queued texture for {}", url);
+    brls::Logger::debug("ImageLoader: Queued texture for {}", url);
 }
 
 void ImageLoader::ensureWorkersStarted() {

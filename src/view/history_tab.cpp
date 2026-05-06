@@ -133,7 +133,36 @@ HistoryTab::~HistoryTab() {
     if (m_alive) {
         *m_alive = false;
     }
+    if (m_uploadsDeferred) {
+        ImageLoader::setDeferTextureUploads(false);
+    }
     brls::Logger::debug("HistoryTab: Destroyed");
+}
+
+void HistoryTab::draw(NVGcontext* vg, float x, float y, float width, float height,
+                      brls::Style style, brls::FrameContext* ctx) {
+    // Pause ImageLoader GPU texture uploads while actively scrolling fast.
+    // Each upload costs ~15-20ms on Vita and stalls the frame.
+    if (m_scrollView) {
+        float curY = m_scrollView->getContentOffsetY();
+        float frameDelta = std::fabs(curY - m_prevScrollY);
+        m_prevScrollY = curY;
+        // History rows are ~86px tall. Pause uploads when scrolling more
+        // than ~1/3 of a row per frame (≈28px), plus a 3-frame settle.
+        bool movingFast = frameDelta > 28.0f;
+        if (movingFast) {
+            m_scrollSettledFrames = 0;
+        } else {
+            m_scrollSettledFrames++;
+        }
+        bool wantDefer = movingFast || m_scrollSettledFrames < 3;
+        if (wantDefer != m_uploadsDeferred) {
+            m_uploadsDeferred = wantDefer;
+            ImageLoader::setDeferTextureUploads(wantDefer);
+        }
+    }
+
+    brls::Box::draw(vg, x, y, width, height, style, ctx);
 }
 
 void HistoryTab::willDisappear(bool resetState) {
@@ -144,6 +173,10 @@ void HistoryTab::willDisappear(bool resetState) {
 
     // Cancel pending image loads to free up worker threads and network bandwidth
     ImageLoader::cancelAll();
+    if (m_uploadsDeferred) {
+        m_uploadsDeferred = false;
+        ImageLoader::setDeferTextureUploads(false);
+    }
     m_isLoadingMore = false;
 }
 

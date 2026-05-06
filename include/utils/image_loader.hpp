@@ -24,6 +24,7 @@ class ImageLoader {
 public:
     using LoadCallback = std::function<void(brls::Image*)>;
     using RotatableLoadCallback = std::function<void(RotatableImage*)>;
+    using CoverReadyCallback = std::function<void(int nvgImage, int w, int h)>;
 
     // Set authentication credentials for image loading
     static void setAuthCredentials(const std::string& username, const std::string& password);
@@ -39,6 +40,13 @@ public:
     static std::string getAuthPassword();
     static std::string getAccessToken();
     static std::string getSessionCookie();
+
+    // Load cover image: worker thread decodes to RGBA, main thread does GPU
+    // upload only via nvgCreateImageRGBA (no TGA double-decode). Callback
+    // receives the NVG image handle + dimensions. Not affected by scroll
+    // deferral so covers load continuously.
+    static void loadCoverAsync(const std::string& url, CoverReadyCallback callback,
+                               std::shared_ptr<bool> alive);
 
     // Load image asynchronously from URL (with thumbnail downscaling) - for brls::Image
     static void loadAsync(const std::string& url, LoadCallback callback, brls::Image* target);
@@ -84,6 +92,13 @@ public:
     // Set max thumbnail size for downscaling (default: 200)
     static void setMaxThumbnailSize(int maxSize);
 
+    // While true, processPendingTextures() defers GPU uploads to a later
+    // frame. Used by RecyclingGrid during fast scrolling so texture
+    // uploads (which take ~15-20ms each on Vita) don't stall the scroll
+    // frame. Pending textures continue to queue up and are flushed when
+    // the flag is cleared.
+    static void setDeferTextureUploads(bool defer);
+
 private:
     // Pending load request for brls::Image
     struct LoadRequest {
@@ -92,6 +107,7 @@ private:
         brls::Image* target;
         bool fullSize;  // true = no downscaling
         std::shared_ptr<bool> alive;  // If set and *alive==false, skip (owner destroyed)
+        CoverReadyCallback coverCallback;  // If set, use cover mode (RGBA direct upload)
     };
 
     // Pending load request for RotatableImage
@@ -158,13 +174,31 @@ private:
     static std::queue<PendingTextureUpdate> s_pendingTextures;
     static std::mutex s_pendingMutex;
     static std::atomic<bool> s_pendingScheduled;
-    static constexpr int MAX_TEXTURES_PER_FRAME = 2;  // Limit GPU uploads per frame (reduced from 6 - each upload stalls Vita GPU for ~15-20ms)
+    static std::atomic<bool> s_deferTextureUploads;
+    static constexpr int MAX_TEXTURES_PER_FRAME = 1;  // Limit GPU uploads per frame (each upload stalls Vita GPU for ~15-20ms)
 
     // Queue a texture for batched upload on the main thread
     static void queueTextureUpdate(const std::vector<uint8_t>& data, brls::Image* target, LoadCallback callback,
                                    std::shared_ptr<bool> alive = nullptr);
     // Process a batch of pending texture uploads (called on main thread)
     static void processPendingTextures();
+
+    // Cover upload queue: carries pre-decoded RGBA from worker thread.
+    // Main thread only does nvgCreateImageRGBA (pure GPU upload, no decode).
+    // Not affected by s_deferTextureUploads so covers load during scroll.
+    struct PendingCoverUpload {
+        std::vector<uint8_t> rgbaData;
+        int width = 0;
+        int height = 0;
+        CoverReadyCallback callback;
+        std::shared_ptr<bool> alive;
+    };
+    static std::queue<PendingCoverUpload> s_pendingCovers;
+    static std::mutex s_pendingCoverMutex;
+    static std::atomic<bool> s_pendingCoverScheduled;
+    static void queueCoverUpload(std::vector<uint8_t> rgbaData, int w, int h,
+                                  CoverReadyCallback callback, std::shared_ptr<bool> alive);
+    static void processPendingCovers();
 
     // Batched texture upload queue for RotatableImage (webtoon/manga reader pages).
     // Same concept as PendingTextureUpdate but for full-size reader images.
