@@ -384,6 +384,10 @@ void RecyclingGrid::setupGrid() {
     m_cachedFirstVisible = -1;
     m_cachedLastVisible = -1;
 
+    // Reset progressive cover loader
+    m_nextCoverLoadIdx = 0;
+    m_allCoversQueued = false;
+
     if (m_items.empty()) {
         float setupMs = std::chrono::duration<float, std::milli>(
             std::chrono::steady_clock::now() - setupStart).count();
@@ -504,25 +508,15 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     int focusedRow = index / m_columns;
     int totalRows = (static_cast<int>(m_cells.size()) + m_columns - 1) / m_columns;
 
-    // Load thumbnails for rows around the focused cell: 1 row above, 2 rows below
-    // Reduced from 1+3 to 1+2 to prevent queue flooding: ~18 cells instead of 30
     int loadFromRow = std::max(0, focusedRow - 1);
     int loadToRow = std::min(totalRows, focusedRow + 3);
 
     int startCell = loadFromRow * m_columns;
     int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
 
-    // loadThumbnailIfNeeded() checks m_thumbnailLoaded internally,
-    // so calling it on already-loaded cells is a no-op (just a bool check).
-    // This avoids gaps when the user jumps to a distant row.
-    int loadBudget = 18;
-    for (int i = startCell; i < endCell && loadBudget > 0; i++) {
-        if (m_cells[i]) {
-            m_cells[i]->loadThumbnailIfNeeded();
-            loadBudget--;
-        }
+    for (int i = startCell; i < endCell; i++) {
+        if (m_cells[i]) m_cells[i]->loadThumbnailIfNeeded();
     }
-
 }
 
 void RecyclingGrid::updateVisibleCells() {
@@ -696,6 +690,24 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         }
     }
 
+    // Progressive cover loader: queue a few unloaded cells each frame until
+    // all covers are loaded, so the entire library loads without scrolling.
+    if (!m_allCoversQueued && !m_cells.empty()) {
+        int total = static_cast<int>(m_cells.size());
+        int budget = 6;
+        while (budget > 0 && m_nextCoverLoadIdx < total) {
+            MangaItemCell* cell = m_cells[m_nextCoverLoadIdx];
+            if (cell && !cell->isThumbnailLoaded()) {
+                cell->loadThumbnailIfNeeded();
+                budget--;
+            }
+            m_nextCoverLoadIdx++;
+        }
+        if (m_nextCoverLoadIdx >= total) {
+            m_allCoversQueued = true;
+        }
+    }
+
     // Draw performance overlay on top (uses screen coordinates, ignores scroll)
     // Reset scissor so overlay draws over everything
     nvgResetScissor(vg);
@@ -710,26 +722,18 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
     float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
     int totalRows = (static_cast<int>(m_cells.size()) + m_columns - 1) / m_columns;
 
-    // Calculate which rows are currently visible based on scroll position
     int firstVisibleRow = std::max(0, static_cast<int>(scrollY / rowHeight));
     int lastVisibleRow = std::min(totalRows, static_cast<int>((scrollY + viewHeight) / rowHeight) + 1);
 
-    // Load 1 row above and 2 rows below the visible area as buffer
-    // Reduced from 2+3 to 1+2 to prevent queue flooding during fast scrolling
     int loadFromRow = std::max(0, firstVisibleRow - 1);
     int loadToRow = std::min(totalRows, lastVisibleRow + 2);
 
     int startCell = loadFromRow * m_columns;
     int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
 
-    int loadBudget = 18;
-    for (int i = startCell; i < endCell && loadBudget > 0; i++) {
-        if (m_cells[i]) {
-            m_cells[i]->loadThumbnailIfNeeded();
-            loadBudget--;
-        }
+    for (int i = startCell; i < endCell; i++) {
+        if (m_cells[i]) m_cells[i]->loadThumbnailIfNeeded();
     }
-
 }
 
 void RecyclingGrid::onItemClicked(int index) {
