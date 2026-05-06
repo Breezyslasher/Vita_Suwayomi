@@ -636,27 +636,68 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     }
 
     PERF_BEGIN("grid_draw");
-    // Call parent draw - now only visible rows are rendered
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     PERF_END("grid_draw");
 
-    // Pause ImageLoader GPU texture uploads while the user is actively
-    // scrolling fast. Each upload (setImageFromMem) costs ~15-20ms on Vita
-    // and stalls the frame. Holding them off until scroll settles keeps
-    // scrolling smooth; queued textures flush as soon as velocity drops.
+    // Batched cover draw: render cover textures for visible cells.
+    // Uses each cell's stored draw coordinates (captured during Box::draw)
+    // to guarantee covers align exactly with cell backgrounds.
+    if (m_cachedFirstVisible >= 0) {
+        nvgSave(vg);
+        nvgIntersectScissor(vg, x, y, width, height);
+
+        int startIdx = m_cachedFirstVisible * m_columns;
+        int endIdx = std::min(m_cachedLastVisible * m_columns,
+                              static_cast<int>(m_cells.size()));
+
+        for (int i = startIdx; i < endIdx; i++) {
+            MangaItemCell* cell = m_cells[i];
+            if (!cell) continue;
+            int nvgImg = cell->getCoverImage();
+            if (nvgImg == 0) continue;
+
+            float cx = cell->getDrawX();
+            float cy = cell->getDrawY();
+            float cw = cell->getDrawW();
+            float ch = cell->getDrawH();
+            if (cw <= 0 || ch <= 0) continue;
+
+            float imgW = static_cast<float>(cell->getCoverWidth());
+            float imgH = static_cast<float>(cell->getCoverHeight());
+            if (imgW <= 0 || imgH <= 0) continue;
+
+            float scale = std::max(cw / imgW, ch / imgH);
+            float sw = imgW * scale;
+            float sh = imgH * scale;
+            float ox = cx + (cw - sw) * 0.5f;
+            float oy = cy + (ch - sh) * 0.5f;
+
+            NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh,
+                                              0, nvgImg, 1.0f);
+            nvgBeginPath(vg);
+            nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
+            nvgFillPaint(vg, paint);
+            nvgFill(vg);
+        }
+
+        nvgRestore(vg);
+    }
+
+    // Pause ImageLoader GPU texture uploads (brls::Image path only) while scrolling.
+    // Each upload (setImageFromMem) costs ~15-20ms on Vita and stalls the
+    // frame. Defer ALL uploads until scroll has fully stopped for several
+    // frames so scrolling stays at 60 FPS.
     {
         float curY = this->getContentOffsetY();
         float frameDelta = std::abs(curY - m_prevScrollY);
         m_prevScrollY = curY;
-        float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
-        // "Fast scroll" = moving more than ~1/3 of a row per frame
-        bool movingFast = frameDelta > rowHeight * 0.33f;
-        if (movingFast) {
+        bool scrolling = frameDelta > 0.5f;
+        if (scrolling) {
             m_scrollSettledFrames = 0;
         } else {
             m_scrollSettledFrames++;
         }
-        bool wantDefer = movingFast || m_scrollSettledFrames < 3;
+        bool wantDefer = scrolling || m_scrollSettledFrames < 6;
         if (wantDefer != m_uploadsDeferred) {
             m_uploadsDeferred = wantDefer;
             ImageLoader::setDeferTextureUploads(wantDefer);
