@@ -237,15 +237,6 @@ private:
     brls::View* m_preCategoryPanelFocus = nullptr;
     bool m_categoryPanelVisible = false;
 
-    // Deferred icon loading (PS Vita crashes if all textures upload in constructor)
-    brls::Image* m_selectIcon = nullptr;
-    brls::Image* m_rButtonIcon = nullptr;
-    brls::Image* m_yButtonIcon = nullptr;
-    brls::Image* m_filterIcon = nullptr;
-    brls::Image* m_startButtonIcon = nullptr;
-    brls::Image* m_menuIcon = nullptr;
-    bool m_iconsLoaded = false;
-
     // Friend for data source access
     friend class ChaptersDataSource;
 };

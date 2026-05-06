@@ -1038,14 +1038,17 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     this->addView(m_categoryOverlay);
 
-    // Store icon pointers for deferred loading in willAppear()
-    // Loading 7 textures synchronously in the constructor crashes PS Vita
-    m_selectIcon = selectIcon;
-    m_rButtonIcon = rButtonIcon;
-    m_yButtonIcon = yButtonIcon;
-    m_filterIcon = filterIcon;
-    m_startButtonIcon = startButtonIcon;
-    m_menuIcon = menuIcon;
+    // Load button icons immediately (avoids blank→loaded flash)
+    selectIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
+    rButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/r_button.png");
+    updateSortIcon();
+    yButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
+    filterIcon->setImageFromFile(RESOURCE_PREFIX "icons/filter-menu-outline.png");
+    startButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
+    menuIcon->setImageFromFile(RESOURCE_PREFIX "icons/menu.png");
+
+    // Load full details
+    loadDetails();
 }
 
 brls::View* MangaDetailView::create() {
@@ -1061,20 +1064,6 @@ void MangaDetailView::willAppear(bool resetState) {
 
     // Restore alive flag (cleared by willDisappear to cancel in-flight async ops)
     *m_alive = true;
-
-    // Deferred icon loading: load textures here instead of constructor
-    // to avoid crashing PS Vita with too many GPU uploads during construction
-    if (!m_iconsLoaded) {
-        m_iconsLoaded = true;
-        if (m_selectIcon) m_selectIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
-        if (m_rButtonIcon) m_rButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/r_button.png");
-        updateSortIcon();
-        if (m_yButtonIcon) m_yButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
-        if (m_filterIcon) m_filterIcon->setImageFromFile(RESOURCE_PREFIX "icons/filter-menu-outline.png");
-        if (m_startButtonIcon) m_startButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
-        if (m_menuIcon) m_menuIcon->setImageFromFile(RESOURCE_PREFIX "icons/menu.png");
-        loadDetails();
-    }
 
     // Register live download callbacks for chapter icon updates
     m_progressCallbackActive.store(true);

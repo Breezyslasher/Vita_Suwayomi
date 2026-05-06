@@ -384,6 +384,10 @@ void RecyclingGrid::setupGrid() {
     m_cachedFirstVisible = -1;
     m_cachedLastVisible = -1;
 
+    // Reset progressive cover loader
+    m_nextCoverLoadIdx = 0;
+    m_allCoversQueued = false;
+
     if (m_items.empty()) {
         float setupMs = std::chrono::duration<float, std::milli>(
             std::chrono::steady_clock::now() - setupStart).count();
@@ -504,57 +508,14 @@ void RecyclingGrid::loadThumbnailsNearIndex(int index) {
     int focusedRow = index / m_columns;
     int totalRows = (static_cast<int>(m_cells.size()) + m_columns - 1) / m_columns;
 
-    // Load thumbnails for rows around the focused cell: 1 row above, 2 rows below
-    // Reduced from 1+3 to 1+2 to prevent queue flooding: ~18 cells instead of 30
     int loadFromRow = std::max(0, focusedRow - 1);
     int loadToRow = std::min(totalRows, focusedRow + 3);
 
     int startCell = loadFromRow * m_columns;
     int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
 
-    // loadThumbnailIfNeeded() checks m_thumbnailLoaded internally,
-    // so calling it on already-loaded cells is a no-op (just a bool check).
-    // This avoids gaps when the user jumps to a distant row.
-    int loadBudget = 18;
-    for (int i = startCell; i < endCell && loadBudget > 0; i++) {
-        if (m_cells[i]) {
-            m_cells[i]->loadThumbnailIfNeeded();
-            loadBudget--;
-        }
-    }
-
-    // Texture recycling: unload thumbnails far from visible area to free GPU memory
-    // On PS Vita with 128MB RAM, keeping 100+ cover textures loaded wastes VRAM.
-    // Unload cells more than 12 rows away from focus - they'll reload from
-    // ImageLoader's LRU memory cache when scrolled back (fast, no network hit).
-    static constexpr int UNLOAD_DISTANCE_ROWS = 8;  // Reduced from 12 to free GPU memory faster
-    int unloadAboveRow = focusedRow - UNLOAD_DISTANCE_ROWS;
-    int unloadBelowRow = focusedRow + UNLOAD_DISTANCE_ROWS;
-
-    // Unload cells far above
-    constexpr int UNLOAD_BUDGET_PER_CALL = 24;
-    int unloadBudgetAbove = UNLOAD_BUDGET_PER_CALL / 2;
-    int unloadBudgetBelow = UNLOAD_BUDGET_PER_CALL - unloadBudgetAbove;
-
-    if (unloadAboveRow > 0) {
-        int unloadEnd = std::min(unloadAboveRow * m_columns, static_cast<int>(m_cells.size()));
-        for (int i = 0; i < unloadEnd && unloadBudgetAbove > 0; i++) {
-            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
-                m_cells[i]->unloadThumbnail();
-                unloadBudgetAbove--;
-            }
-        }
-    }
-
-    // Unload cells far below
-    if (unloadBelowRow < totalRows) {
-        int unloadStart = std::max(0, unloadBelowRow * m_columns);
-        for (int i = unloadStart; i < static_cast<int>(m_cells.size()) && unloadBudgetBelow > 0; i++) {
-            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
-                m_cells[i]->unloadThumbnail();
-                unloadBudgetBelow--;
-            }
-        }
+    for (int i = startCell; i < endCell; i++) {
+        if (m_cells[i]) m_cells[i]->loadThumbnailIfNeeded();
     }
 }
 
@@ -636,27 +597,68 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     }
 
     PERF_BEGIN("grid_draw");
-    // Call parent draw - now only visible rows are rendered
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     PERF_END("grid_draw");
 
-    // Pause ImageLoader GPU texture uploads while the user is actively
-    // scrolling fast. Each upload (setImageFromMem) costs ~15-20ms on Vita
-    // and stalls the frame. Holding them off until scroll settles keeps
-    // scrolling smooth; queued textures flush as soon as velocity drops.
+    // Batched cover draw: render cover textures for visible cells.
+    // Uses each cell's stored draw coordinates (captured during Box::draw)
+    // to guarantee covers align exactly with cell backgrounds.
+    if (m_cachedFirstVisible >= 0) {
+        nvgSave(vg);
+        nvgIntersectScissor(vg, x, y, width, height);
+
+        int startIdx = m_cachedFirstVisible * m_columns;
+        int endIdx = std::min(m_cachedLastVisible * m_columns,
+                              static_cast<int>(m_cells.size()));
+
+        for (int i = startIdx; i < endIdx; i++) {
+            MangaItemCell* cell = m_cells[i];
+            if (!cell) continue;
+            int nvgImg = cell->getCoverImage();
+            if (nvgImg == 0) continue;
+
+            float cx = cell->getDrawX();
+            float cy = cell->getDrawY();
+            float cw = cell->getDrawW();
+            float ch = cell->getDrawH();
+            if (cw <= 0 || ch <= 0) continue;
+
+            float imgW = static_cast<float>(cell->getCoverWidth());
+            float imgH = static_cast<float>(cell->getCoverHeight());
+            if (imgW <= 0 || imgH <= 0) continue;
+
+            float scale = std::max(cw / imgW, ch / imgH);
+            float sw = imgW * scale;
+            float sh = imgH * scale;
+            float ox = cx + (cw - sw) * 0.5f;
+            float oy = cy + (ch - sh) * 0.5f;
+
+            NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh,
+                                              0, nvgImg, 1.0f);
+            nvgBeginPath(vg);
+            nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
+            nvgFillPaint(vg, paint);
+            nvgFill(vg);
+        }
+
+        nvgRestore(vg);
+    }
+
+    // Pause ImageLoader GPU texture uploads (brls::Image path only) while scrolling.
+    // Each upload (setImageFromMem) costs ~15-20ms on Vita and stalls the
+    // frame. Defer ALL uploads until scroll has fully stopped for several
+    // frames so scrolling stays at 60 FPS.
     {
         float curY = this->getContentOffsetY();
         float frameDelta = std::abs(curY - m_prevScrollY);
         m_prevScrollY = curY;
-        float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
-        // "Fast scroll" = moving more than ~1/3 of a row per frame
-        bool movingFast = frameDelta > rowHeight * 0.33f;
-        if (movingFast) {
+        bool scrolling = frameDelta > 0.5f;
+        if (scrolling) {
             m_scrollSettledFrames = 0;
         } else {
             m_scrollSettledFrames++;
         }
-        bool wantDefer = movingFast || m_scrollSettledFrames < 3;
+        bool wantDefer = scrolling || m_scrollSettledFrames < 6;
         if (wantDefer != m_uploadsDeferred) {
             m_uploadsDeferred = wantDefer;
             ImageLoader::setDeferTextureUploads(wantDefer);
@@ -688,6 +690,24 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         }
     }
 
+    // Progressive cover loader: queue a few unloaded cells each frame until
+    // all covers are loaded, so the entire library loads without scrolling.
+    if (!m_allCoversQueued && !m_cells.empty()) {
+        int total = static_cast<int>(m_cells.size());
+        int budget = 6;
+        while (budget > 0 && m_nextCoverLoadIdx < total) {
+            MangaItemCell* cell = m_cells[m_nextCoverLoadIdx];
+            if (cell && !cell->isThumbnailLoaded()) {
+                cell->loadThumbnailIfNeeded();
+                budget--;
+            }
+            m_nextCoverLoadIdx++;
+        }
+        if (m_nextCoverLoadIdx >= total) {
+            m_allCoversQueued = true;
+        }
+    }
+
     // Draw performance overlay on top (uses screen coordinates, ignores scroll)
     // Reset scissor so overlay draws over everything
     nvgResetScissor(vg);
@@ -702,57 +722,17 @@ void RecyclingGrid::loadThumbnailsForScrollPosition() {
     float rowHeight = static_cast<float>(m_cellHeight + m_rowMargin);
     int totalRows = (static_cast<int>(m_cells.size()) + m_columns - 1) / m_columns;
 
-    // Calculate which rows are currently visible based on scroll position
     int firstVisibleRow = std::max(0, static_cast<int>(scrollY / rowHeight));
     int lastVisibleRow = std::min(totalRows, static_cast<int>((scrollY + viewHeight) / rowHeight) + 1);
 
-    // Load 1 row above and 2 rows below the visible area as buffer
-    // Reduced from 2+3 to 1+2 to prevent queue flooding during fast scrolling
     int loadFromRow = std::max(0, firstVisibleRow - 1);
     int loadToRow = std::min(totalRows, lastVisibleRow + 2);
 
     int startCell = loadFromRow * m_columns;
     int endCell = std::min(loadToRow * m_columns, static_cast<int>(m_cells.size()));
 
-    int loadBudget = 18;
-    for (int i = startCell; i < endCell && loadBudget > 0; i++) {
-        if (m_cells[i]) {
-            m_cells[i]->loadThumbnailIfNeeded();
-            loadBudget--;
-        }
-    }
-
-    // Also apply texture recycling for scroll-based movement (same as focus-based)
-    // Only iterate through actual unload ranges, not all cells
-    static constexpr int SCROLL_UNLOAD_DISTANCE_ROWS = 8;  // Reduced from 12
-    int centerRow = (firstVisibleRow + lastVisibleRow) / 2;
-    int unloadAboveRow = centerRow - SCROLL_UNLOAD_DISTANCE_ROWS;
-    int unloadBelowRow = centerRow + SCROLL_UNLOAD_DISTANCE_ROWS;
-
-    constexpr int UNLOAD_BUDGET_PER_CALL = 24;
-    int unloadBudgetAbove = UNLOAD_BUDGET_PER_CALL / 2;
-    int unloadBudgetBelow = UNLOAD_BUDGET_PER_CALL - unloadBudgetAbove;
-
-    if (unloadAboveRow > 0) {
-        // Only iterate cells in the range [0, unloadAboveRow)
-        int unloadEnd = std::min(unloadAboveRow * m_columns, static_cast<int>(m_cells.size()));
-        for (int i = 0; i < unloadEnd && unloadBudgetAbove > 0; i++) {
-            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
-                m_cells[i]->unloadThumbnail();
-                unloadBudgetAbove--;
-            }
-        }
-    }
-    if (unloadBelowRow < totalRows) {
-        // Only iterate cells in the range [unloadBelowRow, end)
-        int unloadStart = std::max(0, unloadBelowRow * m_columns);
-        int unloadEnd = static_cast<int>(m_cells.size());
-        for (int i = unloadStart; i < unloadEnd && unloadBudgetBelow > 0; i++) {
-            if (m_cells[i] && m_cells[i]->isThumbnailLoaded()) {
-                m_cells[i]->unloadThumbnail();
-                unloadBudgetBelow--;
-            }
-        }
+    for (int i = startCell; i < endCell; i++) {
+        if (m_cells[i]) m_cells[i]->loadThumbnailIfNeeded();
     }
 }
 
