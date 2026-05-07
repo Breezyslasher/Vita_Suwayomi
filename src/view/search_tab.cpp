@@ -466,9 +466,6 @@ void SearchTab::willDisappear(bool resetState) {
 
     // Cancel pending image loads to free up worker threads and network bandwidth
     ImageLoader::cancelAll();
-    if (m_contentGrid) {
-        m_contentGrid->unloadAllThumbnails();
-    }
     m_isLoadingPage = false;
 }
 
