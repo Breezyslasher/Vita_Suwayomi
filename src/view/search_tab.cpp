@@ -2577,7 +2577,11 @@ void SearchTab::onSourceSelected(const Source& source) {
 void SearchTab::onMangaSelected(const Manga& manga) {
     brls::Logger::debug("SearchTab: Selected manga '{}' id={}", manga.title, manga.id);
 
-    // Push manga detail view
+    ImageLoader::cancelAll();
+    if (m_contentGrid) {
+        m_contentGrid->unloadAllThumbnails();
+    }
+
     auto* detailView = new MangaDetailView(manga);
     brls::Application::pushActivity(new brls::Activity(detailView));
 }
