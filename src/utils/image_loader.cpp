@@ -69,9 +69,9 @@ namespace vitasuwayomi {
 // Static member initialization
 std::list<ImageLoader::CacheEntry> ImageLoader::s_cacheList;
 std::map<std::string, std::list<ImageLoader::CacheEntry>::iterator> ImageLoader::s_cacheMap;
-size_t ImageLoader::s_maxCacheSize = 30;  // LRU cache: 30 entries to limit PS Vita memory usage
+size_t ImageLoader::s_maxCacheSize = 20;  // LRU cache: 20 entries to limit PS Vita memory usage
 size_t ImageLoader::s_currentCacheMemory = 0;
-static const size_t MAX_CACHE_MEMORY = 20 * 1024 * 1024;  // 20MB max cache memory (reduced from 25MB to prevent OOM with animated WebP pages)
+static const size_t MAX_CACHE_MEMORY = 10 * 1024 * 1024;  // 10MB max cache memory (reduced for PS Vita OOM safety)
 std::mutex ImageLoader::s_cacheMutex;
 std::string ImageLoader::s_authUsername;
 std::string ImageLoader::s_authPassword;
