@@ -2581,6 +2581,7 @@ void SearchTab::onMangaSelected(const Manga& manga) {
     if (m_contentGrid) {
         m_contentGrid->unloadAllThumbnails();
     }
+    ImageLoader::clearCache();
 
     auto* detailView = new MangaDetailView(manga);
     brls::Application::pushActivity(new brls::Activity(detailView));

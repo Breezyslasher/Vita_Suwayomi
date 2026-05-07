@@ -1716,13 +1716,14 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
 void LibrarySectionTab::onMangaSelected(const Manga& manga) {
     brls::Logger::debug("LibrarySectionTab: Selected manga '{}' id={}", manga.title, manga.id);
 
-    // Free cover textures BEFORE constructing the detail view.
+    // Free all image memory BEFORE constructing the detail view.
     // pushActivity creates the new view before calling willDisappear on this one,
     // so we must free memory here to avoid OOM during MangaDetailView construction.
     ImageLoader::cancelAll();
     if (m_contentGrid) {
         m_contentGrid->unloadAllThumbnails();
     }
+    ImageLoader::clearCache();
 
     auto* detailView = new MangaDetailView(manga);
     brls::Application::pushActivity(new brls::Activity(detailView));
