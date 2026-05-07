@@ -540,6 +540,19 @@ void RecyclingGrid::resetThumbnailLoadStates() {
     brls::Logger::debug("RecyclingGrid: Reset thumbnail load states for {} cells", m_cells.size());
 }
 
+void RecyclingGrid::unloadAllThumbnails() {
+    int freed = 0;
+    for (auto* cell : m_cells) {
+        if (cell && cell->isThumbnailLoaded()) {
+            cell->unloadThumbnail();
+            freed++;
+        }
+    }
+    m_allCoversQueued = false;
+    m_nextCoverLoadIdx = 0;
+    brls::Logger::info("RecyclingGrid: Unloaded {} cover textures to free memory", freed);
+}
+
 void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) {
     auto& perf = PerfOverlay::getInstance();
     perf.endFrame();   // End previous frame timing

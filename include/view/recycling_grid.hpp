@@ -77,6 +77,9 @@ public:
     // Called after ImageLoader::cancelAll() to fix stale thumbnail states.
     void resetThumbnailLoadStates();
 
+    // Free all cover GPU textures to reclaim memory before navigating away.
+    void unloadAllThumbnails();
+
     // Override draw to check scroll position and load visible thumbnails
     void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) override;
 

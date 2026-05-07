@@ -464,8 +464,11 @@ void SearchTab::willDisappear(bool resetState) {
     // Invalidate load generation so any in-flight async results are ignored
     m_loadGeneration++;
 
-    // Cancel pending image loads to free up worker threads and network bandwidth
+    // Cancel pending image loads and free cover textures to reclaim memory
     ImageLoader::cancelAll();
+    if (m_contentGrid) {
+        m_contentGrid->unloadAllThumbnails();
+    }
     m_isLoadingPage = false;
 }
 
