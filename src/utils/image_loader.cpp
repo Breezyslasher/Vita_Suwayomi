@@ -3706,7 +3706,7 @@ void ImageLoader::cancelAll() {
         }
         s_pendingFullSizeUrls.clear();
     }
-    // Also clear pending texture uploads (both thumbnail and reader page queues)
+    // Also clear pending texture uploads (all queues: thumbnail, cover, reader page)
     {
         std::lock_guard<std::mutex> lock2(s_pendingMutex);
         while (!s_pendingTextures.empty()) {
@@ -3714,7 +3714,13 @@ void ImageLoader::cancelAll() {
         }
     }
     {
-        std::lock_guard<std::mutex> lock3(s_pendingRotatableMutex);
+        std::lock_guard<std::mutex> lock3(s_pendingCoverMutex);
+        while (!s_pendingCovers.empty()) {
+            s_pendingCovers.pop();
+        }
+    }
+    {
+        std::lock_guard<std::mutex> lock4(s_pendingRotatableMutex);
         while (!s_pendingRotatableTextures.empty()) {
             s_pendingRotatableTextures.pop();
         }
