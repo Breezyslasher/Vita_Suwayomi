@@ -147,6 +147,11 @@ private:
     // Long-press tracking - when true, the next click should be skipped
     bool m_longPressTriggered = false;
 
+    // Start button hint icon drawn on the focused cell (after cover pass)
+    int m_startHintNvg = 0;
+    int m_startHintW = 0;
+    int m_startHintH = 0;
+
     // Alive flag for deferred callbacks (kept for any future brls::sync usage).
     std::shared_ptr<bool> m_alive;
     int m_totalRowsNeeded = 0;
