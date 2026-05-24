@@ -648,6 +648,54 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         nvgRestore(vg);
     }
 
+    // Draw unread count badges on visible cells (after covers so they're on top)
+    if (m_cachedFirstVisible >= 0 && Application::getInstance().getSettings().showUnreadBadge) {
+        int startIdx = m_cachedFirstVisible * m_columns;
+        int endIdx = std::min(m_cachedLastVisible * m_columns,
+                              static_cast<int>(m_cells.size()));
+
+        nvgSave(vg);
+        nvgIntersectScissor(vg, x, y, width, height);
+
+        for (int i = startIdx; i < endIdx; i++) {
+            MangaItemCell* cell = m_cells[i];
+            if (!cell) continue;
+            int unread = cell->getManga().unreadCount;
+            if (unread <= 0) continue;
+
+            float cx = cell->getDrawX();
+            float cy = cell->getDrawY();
+            if (cx == 0 && cy == 0) continue;
+
+            std::string text = std::to_string(unread);
+            float fontSize = (m_columns <= 4) ? 13.0f : (m_columns >= 8) ? 8.0f : 10.0f;
+            float margin = (m_columns <= 4) ? 8.0f : (m_columns >= 8) ? 4.0f : 6.0f;
+            float padX = 4.0f;
+            float padY = 2.0f;
+
+            nvgFontFace(vg, "regular");
+            nvgFontSize(vg, fontSize);
+            nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+            float bb[4];
+            nvgTextBounds(vg, 0, 0, text.c_str(), nullptr, bb);
+            float tw = bb[2] - bb[0];
+            float th = bb[3] - bb[1];
+
+            float bx = cx + margin;
+            float by = cy + margin;
+
+            nvgBeginPath(vg);
+            nvgRoundedRect(vg, bx, by, tw + padX * 2, th + padY * 2, 2.0f);
+            nvgFillColor(vg, Application::getInstance().getTealColor());
+            nvgFill(vg);
+
+            nvgFillColor(vg, nvgRGB(255, 255, 255));
+            nvgText(vg, bx + padX, by + padY, text.c_str(), nullptr);
+        }
+
+        nvgRestore(vg);
+    }
+
     // Draw start button hint on the focused cell (after covers so it's on top)
     if (m_focusedIndex >= 0 && m_focusedIndex < static_cast<int>(m_cells.size())) {
         MangaItemCell* focused = m_cells[m_focusedIndex];
