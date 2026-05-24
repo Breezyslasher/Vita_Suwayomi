@@ -152,6 +152,12 @@ private:
     int m_startHintW = 0;
     int m_startHintH = 0;
 
+    // Cached unread badge drawing state (computed once in setupGrid, not per-frame)
+    bool m_showUnreadBadge = true;
+    float m_badgeFontSize = 10.0f;
+    float m_badgeMargin = 6.0f;
+    NVGcolor m_badgeColor = {};
+
     // Alive flag for deferred callbacks (kept for any future brls::sync usage).
     std::shared_ptr<bool> m_alive;
     int m_totalRowsNeeded = 0;

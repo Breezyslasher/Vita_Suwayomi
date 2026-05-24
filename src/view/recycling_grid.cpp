@@ -392,6 +392,12 @@ void RecyclingGrid::setupGrid() {
     m_nextCoverLoadIdx = 0;
     m_allCoversQueued = false;
 
+    // Cache badge drawing parameters (avoids per-frame settings/color lookups)
+    m_showUnreadBadge = Application::getInstance().getSettings().showUnreadBadge;
+    m_badgeColor = Application::getInstance().getTealColor();
+    m_badgeFontSize = (m_columns <= 4) ? 13.0f : (m_columns >= 8) ? 8.0f : 10.0f;
+    m_badgeMargin = (m_columns <= 4) ? 8.0f : (m_columns >= 8) ? 4.0f : 6.0f;
+
     if (m_items.empty()) {
         float setupMs = std::chrono::duration<float, std::milli>(
             std::chrono::steady_clock::now() - setupStart).count();
@@ -649,48 +655,40 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     }
 
     // Draw unread count badges on visible cells (after covers so they're on top)
-    if (m_cachedFirstVisible >= 0 && Application::getInstance().getSettings().showUnreadBadge) {
+    if (m_cachedFirstVisible >= 0 && m_showUnreadBadge) {
         int startIdx = m_cachedFirstVisible * m_columns;
         int endIdx = std::min(m_cachedLastVisible * m_columns,
                               static_cast<int>(m_cells.size()));
 
         nvgSave(vg);
         nvgIntersectScissor(vg, x, y, width, height);
+        nvgFontFace(vg, "regular");
+        nvgFontSize(vg, m_badgeFontSize);
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
 
         for (int i = startIdx; i < endIdx; i++) {
             MangaItemCell* cell = m_cells[i];
-            if (!cell) continue;
-            int unread = cell->getManga().unreadCount;
-            if (unread <= 0) continue;
+            if (!cell || !cell->hasBadge()) continue;
+
+            // Lazy-cache text bounds once per cell (not per frame)
+            cell->cacheBadgeBounds(vg, m_badgeFontSize);
 
             float cx = cell->getDrawX();
             float cy = cell->getDrawY();
-            if (cx == 0 && cy == 0) continue;
-
-            std::string text = std::to_string(unread);
-            float fontSize = (m_columns <= 4) ? 13.0f : (m_columns >= 8) ? 8.0f : 10.0f;
-            float margin = (m_columns <= 4) ? 8.0f : (m_columns >= 8) ? 4.0f : 6.0f;
-            float padX = 4.0f;
-            float padY = 2.0f;
-
-            nvgFontFace(vg, "regular");
-            nvgFontSize(vg, fontSize);
-            nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-            float bb[4];
-            nvgTextBounds(vg, 0, 0, text.c_str(), nullptr, bb);
-            float tw = bb[2] - bb[0];
-            float th = bb[3] - bb[1];
-
-            float bx = cx + margin;
-            float by = cy + margin;
+            float bx = cx + m_badgeMargin;
+            float by = cy + m_badgeMargin;
+            float tw = cell->getBadgeTextW();
+            float th = cell->getBadgeTextH();
+            static constexpr float padX = 4.0f;
+            static constexpr float padY = 2.0f;
 
             nvgBeginPath(vg);
             nvgRoundedRect(vg, bx, by, tw + padX * 2, th + padY * 2, 2.0f);
-            nvgFillColor(vg, Application::getInstance().getTealColor());
+            nvgFillColor(vg, m_badgeColor);
             nvgFill(vg);
 
             nvgFillColor(vg, nvgRGB(255, 255, 255));
-            nvgText(vg, bx + padX, by + padY, text.c_str(), nullptr);
+            nvgText(vg, bx + padX, by + padY, cell->getBadgeText().c_str(), nullptr);
         }
 
         nvgRestore(vg);

@@ -24,10 +24,14 @@ MangaItemCell::~MangaItemCell() {
 void MangaItemCell::setManga(const Manga& manga) {
     m_manga = manga;
     m_thumbnailLoaded = false;
+    m_badgeText = (manga.unreadCount > 0) ? std::to_string(manga.unreadCount) : std::string();
+    m_badgeTextW = 0;
+    m_badgeTextH = 0;
 }
 
 void MangaItemCell::updateMangaData(const Manga& manga) {
     bool coverChanged = (m_manga.thumbnailUrl != manga.thumbnailUrl);
+    bool unreadChanged = (m_manga.unreadCount != manga.unreadCount);
     m_manga = manga;
     if (coverChanged) {
         if (m_nvgCover != 0) {
@@ -39,6 +43,22 @@ void MangaItemCell::updateMangaData(const Manga& manga) {
         }
         m_thumbnailLoaded = false;
     }
+    if (unreadChanged) {
+        m_badgeText = (manga.unreadCount > 0) ? std::to_string(manga.unreadCount) : std::string();
+        m_badgeTextW = 0;
+        m_badgeTextH = 0;
+    }
+}
+
+void MangaItemCell::cacheBadgeBounds(NVGcontext* vg, float fontSize) {
+    if (m_badgeTextW > 0 || m_badgeText.empty()) return;
+    nvgFontFace(vg, "regular");
+    nvgFontSize(vg, fontSize);
+    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+    float bb[4];
+    nvgTextBounds(vg, 0, 0, m_badgeText.c_str(), nullptr, bb);
+    m_badgeTextW = bb[2] - bb[0];
+    m_badgeTextH = bb[3] - bb[1];
 }
 
 void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float height,
