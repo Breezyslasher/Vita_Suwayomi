@@ -158,6 +158,11 @@ private:
     float m_badgeMargin = 6.0f;
     NVGcolor m_badgeColor = {};
 
+    // Cached title drawing state (computed once in setupGrid)
+    bool m_showTitles = false;
+    float m_titleFontSize = 10.0f;
+    float m_titleAreaHeight = 28.0f;
+
     // Alive flag for deferred callbacks (kept for any future brls::sync usage).
     std::shared_ptr<bool> m_alive;
     int m_totalRowsNeeded = 0;
