@@ -106,38 +106,6 @@ void MangaItemCell::resetThumbnailLoadState() {
     m_thumbnailLoaded = false;
 }
 
-void MangaItemCell::onFocusGained() {
-    brls::Box::onFocusGained();
-    auto* hint = ensureStartHintIcon();
-    if (!m_startHintImageLoaded) {
-        hint->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
-        m_startHintImageLoaded = true;
-    }
-    hint->setVisibility(brls::Visibility::VISIBLE);
-}
-
-void MangaItemCell::onFocusLost() {
-    brls::Box::onFocusLost();
-    if (m_startHintIcon) {
-        m_startHintIcon->setVisibility(brls::Visibility::GONE);
-    }
-}
-
-brls::Image* MangaItemCell::ensureStartHintIcon() {
-    if (!m_startHintIcon) {
-        m_startHintIcon = new brls::Image();
-        m_startHintIcon->setWidth(64);
-        m_startHintIcon->setHeight(16);
-        m_startHintIcon->setScalingType(brls::ImageScalingType::FIT);
-        m_startHintIcon->setPositionType(brls::PositionType::ABSOLUTE);
-        m_startHintIcon->setPositionTop(6);
-        m_startHintIcon->setPositionRight(6);
-        m_startHintIcon->setVisibility(brls::Visibility::GONE);
-        this->addView(m_startHintIcon);
-    }
-    return m_startHintIcon;
-}
-
 void MangaItemCell::setPressed(bool pressed) {
     m_pressed = pressed;
 }

@@ -42,9 +42,6 @@ public:
     void setShowLibraryBadge(bool) {}
     void refreshLibraryBadge() {}
 
-    void onFocusGained() override;
-    void onFocusLost() override;
-
     void setPressed(bool pressed);
     bool isPressed() const { return m_pressed; }
 
@@ -55,8 +52,6 @@ public:
     static void setTitlesEnabled(bool) {}
 
 private:
-    brls::Image* ensureStartHintIcon();
-
     Manga m_manga;
     int m_nvgCover = 0;
     int m_coverW = 0;
@@ -69,8 +64,6 @@ private:
     bool m_compact = false;
     bool m_listMode = false;
     bool m_thumbnailLoaded = false;
-    bool m_startHintImageLoaded = false;
-    brls::Image* m_startHintIcon = nullptr;
     std::shared_ptr<bool> m_alive;
 };
 

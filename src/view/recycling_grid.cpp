@@ -97,6 +97,10 @@ RecyclingGrid::~RecyclingGrid() {
         ImageLoader::setDeferTextureUploads(false);
         MangaItemCell::setTitlesEnabled(true);
     }
+    if (m_startHintNvg != 0) {
+        NVGcontext* vg = brls::Application::getNVGContext();
+        if (vg) nvgDeleteImage(vg, m_startHintNvg);
+    }
 }
 
 void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
@@ -642,6 +646,36 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         }
 
         nvgRestore(vg);
+    }
+
+    // Draw start button hint on the focused cell (after covers so it's on top)
+    if (m_focusedIndex >= 0 && m_focusedIndex < static_cast<int>(m_cells.size())) {
+        MangaItemCell* focused = m_cells[m_focusedIndex];
+        if (focused && focused->isFocused()) {
+            // Lazy-load the start_button.png NVG image once
+            if (m_startHintNvg == 0) {
+                m_startHintNvg = nvgCreateImage(vg, RESOURCE_PREFIX "images/start_button.png", 0);
+                if (m_startHintNvg != 0)
+                    nvgImageSize(vg, m_startHintNvg, &m_startHintW, &m_startHintH);
+            }
+            if (m_startHintNvg != 0 && m_startHintW > 0 && m_startHintH > 0) {
+                float cx = focused->getDrawX();
+                float cy = focused->getDrawY();
+                float cw = focused->getDrawW();
+                float hintW = static_cast<float>(m_startHintW);
+                float hintH = static_cast<float>(m_startHintH);
+                float hx = cx + cw - hintW - 6.0f;
+                float hy = cy + 6.0f;
+
+                nvgSave(vg);
+                NVGpaint paint = nvgImagePattern(vg, hx, hy, hintW, hintH, 0, m_startHintNvg, 1.0f);
+                nvgBeginPath(vg);
+                nvgRect(vg, hx, hy, hintW, hintH);
+                nvgFillPaint(vg, paint);
+                nvgFill(vg);
+                nvgRestore(vg);
+            }
+        }
     }
 
     // Pause ImageLoader GPU texture uploads (brls::Image path only) while scrolling.
