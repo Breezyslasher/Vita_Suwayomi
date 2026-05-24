@@ -699,16 +699,26 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
                     nvgFontSize(vg, m_titleFontSize);
                     nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
                     titleFontSet = true;
+                    fontSet = false;
                 } else if (fontSet) {
                     nvgFontSize(vg, m_titleFontSize);
-                    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+                    fontSet = false;
                 }
-                nvgFillColor(vg, nvgRGBA(255, 255, 255, 230));
-                float tx = cx + 2.0f;
-                float ty = cy + coverH + 2.0f;
-                float maxW = cw - 4.0f;
-                nvgTextBox(vg, tx, ty, maxW,
-                           cell->getManga().title.c_str(), nullptr);
+                cell->cacheTitleText(vg, m_titleFontSize, cw - 4.0f, 2);
+                const std::string& cached = cell->getCachedTitle();
+                if (!cached.empty()) {
+                    nvgFillColor(vg, nvgRGBA(255, 255, 255, 230));
+                    float ty = cy + coverH + 2.0f;
+                    float lineH = m_titleFontSize * 1.2f;
+                    size_t pos = 0;
+                    size_t nl = cached.find('\n');
+                    nvgText(vg, cx + 2.0f, ty, cached.c_str() + pos,
+                            (nl != std::string::npos) ? cached.c_str() + nl : nullptr);
+                    if (nl != std::string::npos) {
+                        nvgText(vg, cx + 2.0f, ty + lineH,
+                                cached.c_str() + nl + 1, nullptr);
+                    }
+                }
             }
         }
 

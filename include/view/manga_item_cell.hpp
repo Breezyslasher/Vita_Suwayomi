@@ -49,6 +49,11 @@ public:
     bool hasBadge() const { return !m_badgeText.empty(); }
     void cacheBadgeBounds(NVGcontext* vg, float fontSize);
 
+    // Cached truncated title (precomputed once, drawn with nvgText not nvgTextBox)
+    const std::string& getCachedTitle() const { return m_cachedTitle; }
+    bool hasCachedTitle() const { return m_titleCached; }
+    void cacheTitleText(NVGcontext* vg, float fontSize, float maxWidth, int maxLines);
+
     void setPressed(bool pressed);
     bool isPressed() const { return m_pressed; }
 
@@ -74,6 +79,8 @@ private:
     std::string m_badgeText;
     float m_badgeTextW = 0;
     float m_badgeTextH = 0;
+    std::string m_cachedTitle;
+    bool m_titleCached = false;
     std::shared_ptr<bool> m_alive;
 };
 
