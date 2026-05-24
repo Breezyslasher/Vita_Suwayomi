@@ -3671,12 +3671,29 @@ void LibrarySectionTab::updateMangaCellsIncrementally(const std::vector<Manga>& 
 
     brls::Logger::debug("LibrarySectionTab: Metadata changed, updating cells in place");
 
-    // Update the manga list and apply sort via sortMangaList(), which uses
-    // updateDataOrder() to properly handle thumbnail updates when manga
-    // change positions. Previously used updateCellData() here which preserved
-    // old thumbnails even when the sort order changed, causing cover mismatches.
-    m_mangaList = newManga;
-    sortMangaList();
+    // Update metadata on the existing sorted list without re-sorting.
+    // Re-sorting would shuffle cover positions every time the server returns
+    // slightly different metadata (unread counts, timestamps), causing a
+    // visible flicker as covers reload in new positions.
+    std::map<int, const Manga*> newById;
+    for (const auto& m : newManga) {
+        newById[m.id] = &m;
+    }
+    for (auto& m : m_mangaList) {
+        auto it = newById.find(m.id);
+        if (it != newById.end()) {
+            const Manga* updated = it->second;
+            m.unreadCount = updated->unreadCount;
+            m.lastReadAt = updated->lastReadAt;
+            m.latestChapterUploadDate = updated->latestChapterUploadDate;
+            m.chapterCount = updated->chapterCount;
+            m.downloadedCount = updated->downloadedCount;
+            m.thumbnailUrl = updated->thumbnailUrl;
+        }
+    }
+    if (m_contentGrid) {
+        m_contentGrid->updateCellData(m_mangaList);
+    }
 
     // Update cache
     m_cachedMangaList.clear();
