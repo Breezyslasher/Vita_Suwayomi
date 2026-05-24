@@ -623,7 +623,7 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         int endIdx = std::min(m_cachedLastVisible * m_columns,
                               static_cast<int>(m_cells.size()));
 
-        bool drawBadges = m_showUnreadBadge && !m_uploadsDeferred;
+        bool drawBadges = m_showUnreadBadge;
         bool fontSet = false;
 
         for (int i = startIdx; i < endIdx; i++) {
