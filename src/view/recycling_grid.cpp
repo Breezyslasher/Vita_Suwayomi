@@ -628,7 +628,7 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
 
         bool drawBadges = m_showUnreadBadge;
         bool drawTitles = m_showTitles && !m_uploadsDeferred;
-        float titleAreaH = m_titleAreaHeight;
+        float titleAreaH = m_showTitles ? m_titleAreaHeight : 0.0f;
         bool fontSet = false;
         bool titleFontSet = false;
 
@@ -642,7 +642,7 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             float ch = cell->getDrawH();
             if (cw <= 0 || ch <= 0) continue;
 
-            float coverH = drawTitles ? (ch - titleAreaH) : ch;
+            float coverH = ch - titleAreaH;
 
             int nvgImg = cell->getCoverImage();
             if (nvgImg != 0) {
