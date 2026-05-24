@@ -1300,8 +1300,21 @@ void LibrarySectionTab::loadCategories() {
 
                 brls::Logger::info("LibrarySectionTab: Applied prefetched manga ({} items) from combined query",
                                   prefetchedManga.size());
+            } else if (selectedId == m_currentCategoryId && m_loaded) {
+                // Category already loaded and displayed — just refresh UI state
+                // (tabs may have been recreated, so update index/styles/scroll)
+                m_selectedCategoryIndex = 0;
+                for (size_t i = 0; i < m_categories.size(); i++) {
+                    if (m_categories[i].id == selectedId) {
+                        m_selectedCategoryIndex = static_cast<int>(i);
+                        break;
+                    }
+                }
+                updateCategoryButtonStyles();
+                scrollToCategoryIndex(m_selectedCategoryIndex);
+                brls::Logger::info("LibrarySectionTab: Category {} already loaded, skipping redundant reload", selectedId);
             } else {
-                // No prefetched manga or category changed - use normal selectCategory flow
+                // Different category or not yet loaded - use normal selectCategory flow
                 selectCategory(selectedId);
             }
 
