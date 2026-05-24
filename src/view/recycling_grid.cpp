@@ -627,7 +627,7 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
                               static_cast<int>(m_cells.size()));
 
         bool drawBadges = m_showUnreadBadge;
-        bool drawTitles = m_showTitles && !m_uploadsDeferred;
+        bool drawTitles = m_showTitles;
         float titleAreaH = m_showTitles ? m_titleAreaHeight : 0.0f;
         bool fontSet = false;
         bool titleFontSet = false;
