@@ -95,7 +95,6 @@ RecyclingGrid::~RecyclingGrid() {
     // so pending texture uploads can resume for any remaining views.
     if (m_uploadsDeferred) {
         ImageLoader::setDeferTextureUploads(false);
-        MangaItemCell::setTitlesEnabled(true);
     }
     if (m_startHintNvg != 0) {
         NVGcontext* vg = brls::Application::getNVGContext();
@@ -398,6 +397,11 @@ void RecyclingGrid::setupGrid() {
     m_badgeFontSize = (m_columns <= 4) ? 13.0f : (m_columns >= 8) ? 8.0f : 10.0f;
     m_badgeMargin = (m_columns <= 4) ? 8.0f : (m_columns >= 8) ? 4.0f : 6.0f;
 
+    // Cache title drawing parameters
+    m_showTitles = !m_compactMode && !m_listMode;
+    m_titleFontSize = (m_columns <= 4) ? 13.0f : (m_columns >= 8) ? 9.0f : 11.0f;
+    m_titleAreaHeight = (m_columns <= 4) ? 32.0f : (m_columns >= 8) ? 22.0f : 28.0f;
+
     if (m_items.empty()) {
         float setupMs = std::chrono::duration<float, std::milli>(
             std::chrono::steady_clock::now() - setupStart).count();
@@ -610,11 +614,10 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     PERF_END("grid_draw");
 
-    // Batched cover + badge draw: single pass over visible cells.
-    // Covers are drawn first, then badges on top, all in one loop to avoid
-    // iterating visible cells multiple times. Placeholder backgrounds are
-    // drawn for cells without a loaded cover (replaces per-cell drawBackground
-    // which was 4 NVG calls per cell per frame even when hidden by a cover).
+    // Batched cover + badge + title draw: single pass over visible cells.
+    // Covers fill the cover area (full cell in compact, top portion in normal).
+    // Titles are drawn below the cover area in normal mode.
+    // Badges are drawn on top of covers. All in one loop.
     if (m_cachedFirstVisible >= 0) {
         nvgSave(vg);
         nvgIntersectScissor(vg, x, y, width, height);
@@ -624,7 +627,10 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
                               static_cast<int>(m_cells.size()));
 
         bool drawBadges = m_showUnreadBadge;
+        bool drawTitles = m_showTitles;
+        float titleAreaH = m_showTitles ? m_titleAreaHeight : 0.0f;
         bool fontSet = false;
+        bool titleFontSet = false;
 
         for (int i = startIdx; i < endIdx; i++) {
             MangaItemCell* cell = m_cells[i];
@@ -636,27 +642,29 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             float ch = cell->getDrawH();
             if (cw <= 0 || ch <= 0) continue;
 
+            float coverH = ch - titleAreaH;
+
             int nvgImg = cell->getCoverImage();
             if (nvgImg != 0) {
                 float imgW = static_cast<float>(cell->getCoverWidth());
                 float imgH = static_cast<float>(cell->getCoverHeight());
                 if (imgW > 0 && imgH > 0) {
-                    float scale = std::max(cw / imgW, ch / imgH);
+                    float scale = std::max(cw / imgW, coverH / imgH);
                     float sw = imgW * scale;
                     float sh = imgH * scale;
                     float ox = cx + (cw - sw) * 0.5f;
-                    float oy = cy + (ch - sh) * 0.5f;
+                    float oy = cy + (coverH - sh) * 0.5f;
 
                     NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh,
                                                       0, nvgImg, 1.0f);
                     nvgBeginPath(vg);
-                    nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
+                    nvgRoundedRect(vg, cx, cy, cw, coverH, 4.0f);
                     nvgFillPaint(vg, paint);
                     nvgFill(vg);
                 }
             } else {
                 nvgBeginPath(vg);
-                nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
+                nvgRoundedRect(vg, cx, cy, cw, coverH, 4.0f);
                 nvgFillColor(vg, nvgRGB(40, 40, 48));
                 nvgFill(vg);
             }
@@ -683,6 +691,34 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
 
                 nvgFillColor(vg, nvgRGB(255, 255, 255));
                 nvgText(vg, bx + padX, by + padY, cell->getBadgeText().c_str(), nullptr);
+            }
+
+            if (drawTitles) {
+                if (!titleFontSet) {
+                    nvgFontFace(vg, "regular");
+                    nvgFontSize(vg, m_titleFontSize);
+                    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+                    titleFontSet = true;
+                    fontSet = false;
+                } else if (fontSet) {
+                    nvgFontSize(vg, m_titleFontSize);
+                    fontSet = false;
+                }
+                cell->cacheTitleText(vg, m_titleFontSize, cw - 4.0f, 2);
+                const std::string& cached = cell->getCachedTitle();
+                if (!cached.empty()) {
+                    nvgFillColor(vg, nvgRGBA(255, 255, 255, 230));
+                    float ty = cy + coverH + 2.0f;
+                    float lineH = m_titleFontSize * 1.2f;
+                    size_t pos = 0;
+                    size_t nl = cached.find('\n');
+                    nvgText(vg, cx + 2.0f, ty, cached.c_str() + pos,
+                            (nl != std::string::npos) ? cached.c_str() + nl : nullptr);
+                    if (nl != std::string::npos) {
+                        nvgText(vg, cx + 2.0f, ty + lineH,
+                                cached.c_str() + nl + 1, nullptr);
+                    }
+                }
             }
         }
 
@@ -737,10 +773,6 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         if (wantDefer != m_uploadsDeferred) {
             m_uploadsDeferred = wantDefer;
             ImageLoader::setDeferTextureUploads(wantDefer);
-            // Also skip the per-cell title nvgText calls during fast
-            // scroll — 2 lines × ~24 cells × ~0.3ms = ~14ms/frame
-            // which is the main source of grid_draw cost on Vita.
-            MangaItemCell::setTitlesEnabled(!wantDefer);
         }
     }
 
@@ -912,9 +944,11 @@ void RecyclingGrid::setGridSize(int columns) {
     if (m_listMode) {
         m_cellHeight = 80;  // Fixed height for list mode
     } else if (m_compactMode) {
-        m_cellHeight = static_cast<int>(m_cellWidth * 1.4);  // Taller for compact (cover only)
+        m_cellHeight = static_cast<int>(m_cellWidth * 1.4);
     } else {
-        m_cellHeight = static_cast<int>(m_cellWidth * 1.4);  // Normal height with 2-line title
+        // Normal mode: cover + title area below
+        int titleArea = (m_columns <= 4) ? 32 : (m_columns >= 8) ? 22 : 28;
+        m_cellHeight = static_cast<int>(m_cellWidth * 1.4) + titleArea;
     }
 
     brls::Logger::info("RecyclingGrid: Grid size set to {} columns, cell {}x{}",

@@ -23,6 +23,7 @@ MangaItemCell::~MangaItemCell() {
 void MangaItemCell::setManga(const Manga& manga) {
     m_manga = manga;
     m_thumbnailLoaded = false;
+    m_titleCached = false;
     m_badgeText = (manga.unreadCount > 0) ? std::to_string(manga.unreadCount) : std::string();
     m_badgeTextW = 0;
     m_badgeTextH = 0;
@@ -31,7 +32,11 @@ void MangaItemCell::setManga(const Manga& manga) {
 void MangaItemCell::updateMangaData(const Manga& manga) {
     bool coverChanged = (m_manga.thumbnailUrl != manga.thumbnailUrl);
     bool unreadChanged = (m_manga.unreadCount != manga.unreadCount);
+    bool titleChanged = (m_manga.title != manga.title);
     m_manga = manga;
+    if (titleChanged) {
+        m_titleCached = false;
+    }
     if (coverChanged) {
         if (m_nvgCover != 0) {
             NVGcontext* vg = brls::Application::getNVGContext();
@@ -123,6 +128,41 @@ void MangaItemCell::unloadThumbnail() {
 
 void MangaItemCell::resetThumbnailLoadState() {
     m_thumbnailLoaded = false;
+}
+
+void MangaItemCell::cacheTitleText(NVGcontext* vg, float fontSize, float maxWidth, int maxLines) {
+    if (m_titleCached) return;
+    m_titleCached = true;
+
+    const std::string& title = m_manga.title;
+    if (title.empty()) {
+        m_cachedTitle.clear();
+        return;
+    }
+
+    nvgFontFace(vg, "regular");
+    nvgFontSize(vg, fontSize);
+    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+
+    // Measure how many characters fit on each line using NVG's row-break API
+    NVGtextRow rows[4];
+    int maxRows = (maxLines > 4) ? 4 : maxLines;
+    int nrows = nvgTextBreakLines(vg, title.c_str(), nullptr, maxWidth, rows, maxRows);
+
+    m_cachedTitle.clear();
+    for (int r = 0; r < nrows; r++) {
+        if (r > 0) m_cachedTitle += '\n';
+        if (r == maxRows - 1 && rows[r].end != (title.c_str() + title.size())) {
+            // Last visible line but more text remains — add ellipsis
+            m_cachedTitle.append(rows[r].start, rows[r].end);
+            // Trim trailing space before ellipsis
+            while (!m_cachedTitle.empty() && m_cachedTitle.back() == ' ')
+                m_cachedTitle.pop_back();
+            m_cachedTitle += "...";
+        } else {
+            m_cachedTitle.append(rows[r].start, rows[r].end);
+        }
+    }
 }
 
 void MangaItemCell::setPressed(bool pressed) {
