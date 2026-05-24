@@ -42,6 +42,13 @@ public:
     void setShowLibraryBadge(bool) {}
     void refreshLibraryBadge() {}
 
+    // Cached unread badge data (precomputed, not per-frame)
+    const std::string& getBadgeText() const { return m_badgeText; }
+    float getBadgeTextW() const { return m_badgeTextW; }
+    float getBadgeTextH() const { return m_badgeTextH; }
+    bool hasBadge() const { return !m_badgeText.empty(); }
+    void cacheBadgeBounds(NVGcontext* vg, float fontSize);
+
     void setPressed(bool pressed);
     bool isPressed() const { return m_pressed; }
 
@@ -64,6 +71,9 @@ private:
     bool m_compact = false;
     bool m_listMode = false;
     bool m_thumbnailLoaded = false;
+    std::string m_badgeText;
+    float m_badgeTextW = 0;
+    float m_badgeTextH = 0;
     std::shared_ptr<bool> m_alive;
 };
 
