@@ -8,7 +8,6 @@ MangaItemCell::MangaItemCell() {
     m_alive = std::make_shared<bool>(true);
     this->setFocusable(true);
     this->setCornerRadius(4.0f);
-    this->setBackgroundColor(nvgRGB(40, 40, 48));
 }
 
 MangaItemCell::~MangaItemCell() {

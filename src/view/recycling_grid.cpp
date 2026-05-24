@@ -610,9 +610,11 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     PERF_END("grid_draw");
 
-    // Batched cover draw: render cover textures for visible cells.
-    // Uses each cell's stored draw coordinates (captured during Box::draw)
-    // to guarantee covers align exactly with cell backgrounds.
+    // Batched cover + badge draw: single pass over visible cells.
+    // Covers are drawn first, then badges on top, all in one loop to avoid
+    // iterating visible cells multiple times. Placeholder backgrounds are
+    // drawn for cells without a loaded cover (replaces per-cell drawBackground
+    // which was 4 NVG calls per cell per frame even when hidden by a cover).
     if (m_cachedFirstVisible >= 0) {
         nvgSave(vg);
         nvgIntersectScissor(vg, x, y, width, height);
@@ -621,11 +623,12 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         int endIdx = std::min(m_cachedLastVisible * m_columns,
                               static_cast<int>(m_cells.size()));
 
+        bool drawBadges = m_showUnreadBadge;
+        bool fontSet = false;
+
         for (int i = startIdx; i < endIdx; i++) {
             MangaItemCell* cell = m_cells[i];
             if (!cell) continue;
-            int nvgImg = cell->getCoverImage();
-            if (nvgImg == 0) continue;
 
             float cx = cell->getDrawX();
             float cy = cell->getDrawY();
@@ -633,62 +636,54 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             float ch = cell->getDrawH();
             if (cw <= 0 || ch <= 0) continue;
 
-            float imgW = static_cast<float>(cell->getCoverWidth());
-            float imgH = static_cast<float>(cell->getCoverHeight());
-            if (imgW <= 0 || imgH <= 0) continue;
+            int nvgImg = cell->getCoverImage();
+            if (nvgImg != 0) {
+                float imgW = static_cast<float>(cell->getCoverWidth());
+                float imgH = static_cast<float>(cell->getCoverHeight());
+                if (imgW > 0 && imgH > 0) {
+                    float scale = std::max(cw / imgW, ch / imgH);
+                    float sw = imgW * scale;
+                    float sh = imgH * scale;
+                    float ox = cx + (cw - sw) * 0.5f;
+                    float oy = cy + (ch - sh) * 0.5f;
 
-            float scale = std::max(cw / imgW, ch / imgH);
-            float sw = imgW * scale;
-            float sh = imgH * scale;
-            float ox = cx + (cw - sw) * 0.5f;
-            float oy = cy + (ch - sh) * 0.5f;
+                    NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh,
+                                                      0, nvgImg, 1.0f);
+                    nvgBeginPath(vg);
+                    nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
+                    nvgFillPaint(vg, paint);
+                    nvgFill(vg);
+                }
+            } else {
+                nvgBeginPath(vg);
+                nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
+                nvgFillColor(vg, nvgRGB(40, 40, 48));
+                nvgFill(vg);
+            }
 
-            NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh,
-                                              0, nvgImg, 1.0f);
-            nvgBeginPath(vg);
-            nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
-            nvgFillPaint(vg, paint);
-            nvgFill(vg);
-        }
+            if (drawBadges && cell->hasBadge()) {
+                if (!fontSet) {
+                    nvgFontFace(vg, "regular");
+                    nvgFontSize(vg, m_badgeFontSize);
+                    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+                    fontSet = true;
+                }
+                cell->cacheBadgeBounds(vg, m_badgeFontSize);
+                float bx = cx + m_badgeMargin;
+                float by = cy + m_badgeMargin;
+                float tw = cell->getBadgeTextW();
+                float th = cell->getBadgeTextH();
+                static constexpr float padX = 4.0f;
+                static constexpr float padY = 2.0f;
 
-        nvgRestore(vg);
-    }
+                nvgBeginPath(vg);
+                nvgRoundedRect(vg, bx, by, tw + padX * 2, th + padY * 2, 2.0f);
+                nvgFillColor(vg, m_badgeColor);
+                nvgFill(vg);
 
-    // Draw unread count badges on visible cells (after covers so they're on top)
-    if (m_cachedFirstVisible >= 0 && m_showUnreadBadge) {
-        int startIdx = m_cachedFirstVisible * m_columns;
-        int endIdx = std::min(m_cachedLastVisible * m_columns,
-                              static_cast<int>(m_cells.size()));
-
-        nvgSave(vg);
-        nvgIntersectScissor(vg, x, y, width, height);
-        nvgFontFace(vg, "regular");
-        nvgFontSize(vg, m_badgeFontSize);
-        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-
-        for (int i = startIdx; i < endIdx; i++) {
-            MangaItemCell* cell = m_cells[i];
-            if (!cell || !cell->hasBadge()) continue;
-
-            // Lazy-cache text bounds once per cell (not per frame)
-            cell->cacheBadgeBounds(vg, m_badgeFontSize);
-
-            float cx = cell->getDrawX();
-            float cy = cell->getDrawY();
-            float bx = cx + m_badgeMargin;
-            float by = cy + m_badgeMargin;
-            float tw = cell->getBadgeTextW();
-            float th = cell->getBadgeTextH();
-            static constexpr float padX = 4.0f;
-            static constexpr float padY = 2.0f;
-
-            nvgBeginPath(vg);
-            nvgRoundedRect(vg, bx, by, tw + padX * 2, th + padY * 2, 2.0f);
-            nvgFillColor(vg, m_badgeColor);
-            nvgFill(vg);
-
-            nvgFillColor(vg, nvgRGB(255, 255, 255));
-            nvgText(vg, bx + padX, by + padY, cell->getBadgeText().c_str(), nullptr);
+                nvgFillColor(vg, nvgRGB(255, 255, 255));
+                nvgText(vg, bx + padX, by + padY, cell->getBadgeText().c_str(), nullptr);
+            }
         }
 
         nvgRestore(vg);

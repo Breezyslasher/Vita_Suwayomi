@@ -1300,8 +1300,21 @@ void LibrarySectionTab::loadCategories() {
 
                 brls::Logger::info("LibrarySectionTab: Applied prefetched manga ({} items) from combined query",
                                   prefetchedManga.size());
+            } else if (selectedId == m_currentCategoryId && m_loaded) {
+                // Category already loaded and displayed — just refresh UI state
+                // (tabs may have been recreated, so update index/styles/scroll)
+                m_selectedCategoryIndex = 0;
+                for (size_t i = 0; i < m_categories.size(); i++) {
+                    if (m_categories[i].id == selectedId) {
+                        m_selectedCategoryIndex = static_cast<int>(i);
+                        break;
+                    }
+                }
+                updateCategoryButtonStyles();
+                scrollToCategoryIndex(m_selectedCategoryIndex);
+                brls::Logger::info("LibrarySectionTab: Category {} already loaded, skipping redundant reload", selectedId);
             } else {
-                // No prefetched manga or category changed - use normal selectCategory flow
+                // Different category or not yet loaded - use normal selectCategory flow
                 selectCategory(selectedId);
             }
 
@@ -3658,12 +3671,29 @@ void LibrarySectionTab::updateMangaCellsIncrementally(const std::vector<Manga>& 
 
     brls::Logger::debug("LibrarySectionTab: Metadata changed, updating cells in place");
 
-    // Update the manga list and apply sort via sortMangaList(), which uses
-    // updateDataOrder() to properly handle thumbnail updates when manga
-    // change positions. Previously used updateCellData() here which preserved
-    // old thumbnails even when the sort order changed, causing cover mismatches.
-    m_mangaList = newManga;
-    sortMangaList();
+    // Update metadata on the existing sorted list without re-sorting.
+    // Re-sorting would shuffle cover positions every time the server returns
+    // slightly different metadata (unread counts, timestamps), causing a
+    // visible flicker as covers reload in new positions.
+    std::map<int, const Manga*> newById;
+    for (const auto& m : newManga) {
+        newById[m.id] = &m;
+    }
+    for (auto& m : m_mangaList) {
+        auto it = newById.find(m.id);
+        if (it != newById.end()) {
+            const Manga* updated = it->second;
+            m.unreadCount = updated->unreadCount;
+            m.lastReadAt = updated->lastReadAt;
+            m.latestChapterUploadDate = updated->latestChapterUploadDate;
+            m.chapterCount = updated->chapterCount;
+            m.downloadedCount = updated->downloadedCount;
+            m.thumbnailUrl = updated->thumbnailUrl;
+        }
+    }
+    if (m_contentGrid) {
+        m_contentGrid->updateCellData(m_mangaList);
+    }
 
     // Update cache
     m_cachedMangaList.clear();
