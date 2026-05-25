@@ -1039,6 +1039,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     this->addView(m_categoryOverlay);
 
     // Load button icons immediately (avoids blank→loaded flash)
+    brls::Logger::info("MangaDetailView: Loading icons...");
     selectIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
     rButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/r_button.png");
     updateSortIcon();
@@ -1046,6 +1047,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     filterIcon->setImageFromFile(RESOURCE_PREFIX "icons/filter-menu-outline.png");
     startButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
     menuIcon->setImageFromFile(RESOURCE_PREFIX "icons/menu.png");
+    brls::Logger::info("MangaDetailView: Icons loaded, starting detail fetch...");
 
     // Load full details
     loadDetails();
