@@ -147,8 +147,6 @@ void HistoryTab::draw(NVGcontext* vg, float x, float y, float width, float heigh
         float curY = m_scrollView->getContentOffsetY();
         float frameDelta = std::fabs(curY - m_prevScrollY);
         m_prevScrollY = curY;
-        // History rows are ~86px tall. Pause uploads when scrolling more
-        // than ~1/3 of a row per frame (≈28px), plus a 3-frame settle.
         bool movingFast = frameDelta > 28.0f;
         if (movingFast) {
             m_scrollSettledFrames = 0;
@@ -159,6 +157,27 @@ void HistoryTab::draw(NVGcontext* vg, float x, float y, float width, float heigh
         if (wantDefer != m_uploadsDeferred) {
             m_uploadsDeferred = wantDefer;
             ImageLoader::setDeferTextureUploads(wantDefer);
+        }
+
+        // Visibility culling: hide off-screen rows so borealis skips their
+        // entire View::frame() call tree (~7 child views per row, each doing
+        // nvgSave/drawBackground/draw/nvgRestore).  INVISIBLE keeps layout
+        // space but skips all NVG work (no yoga invalidation either).
+        float viewportH = m_scrollView->getHeight();
+        float scrollY   = curY;
+        float pad        = viewportH;
+        float visTop     = scrollY - pad;
+        float visBottom  = scrollY + viewportH + pad;
+
+        for (brls::View* child : m_contentBox->getChildren()) {
+            float cy = child->getY();
+            float ch = child->getHeight();
+            bool onScreen = (cy + ch >= visTop && cy <= visBottom);
+            auto cur = child->getVisibility();
+            if (onScreen && cur == brls::Visibility::INVISIBLE)
+                child->setVisibility(brls::Visibility::VISIBLE);
+            else if (!onScreen && cur == brls::Visibility::VISIBLE)
+                child->setVisibility(brls::Visibility::INVISIBLE);
         }
     }
 
