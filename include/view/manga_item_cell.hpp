@@ -17,7 +17,6 @@ public:
     void updateMangaData(const Manga& manga);
 
     void loadThumbnailIfNeeded();
-    void unloadThumbnail();
     void resetThumbnailLoadState();
 
     bool isThumbnailLoaded() const { return m_thumbnailLoaded; }

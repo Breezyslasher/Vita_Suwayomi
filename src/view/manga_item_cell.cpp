@@ -114,18 +114,6 @@ void MangaItemCell::loadThumbnailIfNeeded() {
         m_alive);
 }
 
-void MangaItemCell::unloadThumbnail() {
-    if (!m_thumbnailLoaded) return;
-    if (m_nvgCover != 0) {
-        NVGcontext* vg = brls::Application::getNVGContext();
-        if (vg) nvgDeleteImage(vg, m_nvgCover);
-        m_nvgCover = 0;
-        m_coverW = 0;
-        m_coverH = 0;
-    }
-    m_thumbnailLoaded = false;
-}
-
 void MangaItemCell::resetThumbnailLoadState() {
     m_thumbnailLoaded = false;
 }

@@ -1008,7 +1008,11 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_chaptersRecycler->registerCell("chapter", ChapterCell::create);
 
     m_chaptersDataSource = new ChaptersDataSource(this);
-    m_chaptersRecycler->setDataSource(m_chaptersDataSource);
+    // Don't set data source here — RecyclerFrame::selectRowAt crashes with
+    // an out-of-bounds access when the data source has 0 rows during the
+    // first yoga layout pass. Data source is attached in populateChaptersList
+    // once chapters are available. We pass false to setDataSource later so
+    // it never tries to delete our data source object.
 
     recyclerContainer->addView(m_chaptersRecycler);
     rightPanel->addView(recyclerContainer);
@@ -1039,6 +1043,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     this->addView(m_categoryOverlay);
 
     // Load button icons immediately (avoids blank→loaded flash)
+    brls::Logger::info("MangaDetailView: Loading icons...");
     selectIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
     rButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/r_button.png");
     updateSortIcon();
@@ -1046,6 +1051,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     filterIcon->setImageFromFile(RESOURCE_PREFIX "icons/filter-menu-outline.png");
     startButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
     menuIcon->setImageFromFile(RESOURCE_PREFIX "icons/menu.png");
+    brls::Logger::info("MangaDetailView: Icons loaded, starting detail fetch...");
 
     // Load full details
     loadDetails();
@@ -1764,9 +1770,17 @@ void MangaDetailView::populateChaptersList() {
     }
     dlLock.unlock();
 
-    // RecyclerFrame handles everything: only visible rows are created.
-    // No incremental batch building needed - instant for any chapter count.
-    m_chaptersRecycler->reloadData();
+    // RecyclerFrame::selectRowAt crashes with an out-of-bounds access when
+    // the data source reports 0 rows. Avoid calling reloadData in that case.
+    if (m_sortedFilteredChapters.empty()) {
+        if (m_chaptersRecycler->getDataSource()) {
+            m_chaptersRecycler->setDataSource(nullptr, false);
+        }
+    } else if (!m_chaptersRecycler->getDataSource()) {
+        m_chaptersRecycler->setDataSource(m_chaptersDataSource, false);
+    } else {
+        m_chaptersRecycler->reloadData();
+    }
     setupChapterNavigation();
 
     brls::Logger::debug("MangaDetailView: Recycler loaded {} chapters (only visible rows created)",
@@ -4080,7 +4094,7 @@ MangaDetailView::~MangaDetailView() {
     dm.setChapterCompletionCallback(nullptr);
     Application::getInstance().setReaderResultCallback(nullptr);
 
-    // Note: m_chaptersDataSource is owned and deleted by m_chaptersRecycler
+    delete m_chaptersDataSource;
 }
 
 } // namespace vitasuwayomi
