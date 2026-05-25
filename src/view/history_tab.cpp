@@ -164,15 +164,14 @@ void HistoryTab::draw(NVGcontext* vg, float x, float y, float width, float heigh
         // nvgSave/drawBackground/draw/nvgRestore).  INVISIBLE keeps layout
         // space but skips all NVG work (no yoga invalidation either).
         float viewportH = m_scrollView->getHeight();
-        float scrollY   = curY;
-        float pad        = viewportH;
-        float visTop     = scrollY - pad;
-        float visBottom  = scrollY + viewportH + pad;
+        float svTop     = m_scrollView->getY();
+        float svBot     = svTop + viewportH;
+        float pad       = viewportH;
 
         for (brls::View* child : m_contentBox->getChildren()) {
             float cy = child->getY();
             float ch = child->getHeight();
-            bool onScreen = (cy + ch >= visTop && cy <= visBottom);
+            bool onScreen = (cy + ch >= svTop - pad && cy <= svBot + pad);
             auto cur = child->getVisibility();
             if (onScreen && cur == brls::Visibility::INVISIBLE)
                 child->setVisibility(brls::Visibility::VISIBLE);
