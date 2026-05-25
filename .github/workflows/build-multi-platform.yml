@@ -99,8 +99,12 @@ jobs:
         with:
           name: VitaSuwayomi-vita-${{ github.run_number }}
           path: build/VitaSuwayomi.vpk
-          
-          path: build/VitaSuwayomi.elf
+      - name: Upload ELF
+        uses: actions/upload-artifact@v4
+        with:
+             name: VitaSuwayomi-elf-${{ github.run_number }}
+             path: build/VitaSuwayomi.elf
+         
 
   # ───────────────────────────────────────────────
   # Android — switchfin-style APK build
