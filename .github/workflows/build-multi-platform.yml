@@ -99,6 +99,8 @@ jobs:
         with:
           name: VitaSuwayomi-vita-${{ github.run_number }}
           path: build/VitaSuwayomi.vpk
+          name: VitaSuwayomi-vita-${{ github.run_number }}
+          path: build/VitaSuwayomi.elf
 
   # ───────────────────────────────────────────────
   # Android — switchfin-style APK build
