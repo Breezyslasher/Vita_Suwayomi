@@ -3,6 +3,7 @@
  */
 
 #include "utils/http_client.hpp"
+#include "app/application.hpp"
 
 #include <borealis.hpp>
 #include <curl/curl.h>
@@ -13,8 +14,7 @@
 
 namespace vitasuwayomi {
 
-// User agent string
-static const char* USER_AGENT = "VitaSuwayomi/1.0.0 (PlayStation Vita)";
+static const char* USER_AGENT = "VitaSuwayomi/" VITA_SUWAYOMI_VERSION;
 
 // Curl write callback data
 struct WriteCallbackData {

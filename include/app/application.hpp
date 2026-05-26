@@ -14,9 +14,10 @@
 #include <cstdint>
 #include <nanovg.h>
 
-// Application version
+// Application version — set by CMake via -DAPP_VERSION, fallback for IDE indexers
+#ifndef VITA_SUWAYOMI_VERSION
 #define VITA_SUWAYOMI_VERSION "1.0.0"
-#define VITA_SUWAYOMI_VERSION_NUM 100
+#endif
 
 // Client identification
 #define SUWAYOMI_CLIENT_ID "vita-suwayomi-client-001"
