@@ -141,6 +141,9 @@ private:
     void handleBackNavigation();
     bool m_isNavigatingBack = false;  // Guard against double back-press
 
+    // Returns true if focus is currently inside this SearchTab's view hierarchy
+    bool hasFocusInside() const;
+
     // Data
     std::vector<Source> m_sources;
     std::vector<Manga> m_mangaList;

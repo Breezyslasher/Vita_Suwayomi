@@ -550,6 +550,15 @@ brls::View* SearchTab::getNextFocus(brls::FocusDirection direction, brls::View* 
     return brls::Box::getNextFocus(direction, currentView);
 }
 
+bool SearchTab::hasFocusInside() const {
+    brls::View* cur = brls::Application::getCurrentFocus();
+    while (cur) {
+        if (cur == this) return true;
+        cur = cur->getParent();
+    }
+    return false;
+}
+
 void SearchTab::loadSources() {
     brls::Logger::debug("SearchTab: Loading sources");
     m_browseMode = BrowseMode::SOURCES;
@@ -586,8 +595,9 @@ void SearchTab::loadSources() {
                 if (!alive || !*alive) return;
                 hideLoadingIndicator();
                 m_resultsLabel->setText("App is offline - connect to a server to browse sources");
-                // Focus on history button so user can still navigate
-                brls::Application::giveFocus(m_historyBtn);
+                if (hasFocusInside()) {
+                    brls::Application::giveFocus(m_historyBtn);
+                }
             });
         }
     });
@@ -766,9 +776,13 @@ void SearchTab::showSources() {
     m_historyBtn->setFocusable(true);
     m_globalSearchBtn->setFocusable(true);
 
-    // CRITICAL: Move focus to a safe target before clearing any views.
-    // Focus may be on a grid cell or search result row that will be deleted.
-    brls::Application::giveFocus(m_historyBtn);
+    // Move focus to a safe target before clearing views that may hold focus.
+    // Only do this if focus is actually inside this tab — otherwise we'd steal
+    // focus from whichever tab the user is currently viewing.
+    bool weHaveFocus = hasFocusInside();
+    if (weHaveFocus) {
+        brls::Application::giveFocus(m_historyBtn);
+    }
 
     // Clear manga grid, results by source, and hide search results view
     m_mangaList.clear();
@@ -931,8 +945,8 @@ void SearchTab::showSources() {
         m_globalSearchBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, nullptr);
     }
 
-    // Transfer focus to first source row
-    if (firstSourceRow) {
+    // Transfer focus to first source row (only if we already have focus)
+    if (firstSourceRow && weHaveFocus) {
         brls::Application::giveFocus(firstSourceRow);
     }
 }

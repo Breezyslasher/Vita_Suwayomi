@@ -96,6 +96,7 @@ private:
     std::function<bool()> m_onBackPressed;
     std::function<void()> m_onEndReached;
     bool m_endReachedFired = false;  // Prevent repeated firing until new data is loaded
+    bool m_isAppending = false;      // Guard: suppress end-reached during appendItems
     std::function<void(int count)> m_onSelectionChanged;
 
     // Pull-to-refresh state
