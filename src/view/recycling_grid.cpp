@@ -116,6 +116,13 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     // calls into loadNextPage while we're rebuilding rows.
     m_isAppending = true;
 
+    // Save scroll position and focused index so we can restore them after
+    // adding rows.  borealis ScrollingFrame (CENTERED mode) uses
+    // getDefaultFocus() — not the actual current focus — in updateScrolling,
+    // which can jump the scroll to cell[0] if lastFocusedView is stale.
+    float savedScrollY = this->getContentOffsetY();
+    int savedFocusIdx = m_focusedIndex;
+
     int oldCellCount = static_cast<int>(m_cells.size());
     int oldRowCount = static_cast<int>(m_rows.size());
 
@@ -207,11 +214,17 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     m_isAppending = false;
     m_endReachedFired = false;
 
+    // Restore scroll position.  addView calls during cell/row creation
+    // trigger invalidate() up the tree; borealis ScrollingFrame may
+    // recalculate scroll via updateScrolling(getDefaultFocus()) which
+    // can jump to cell[0].  Force scroll back to where the user was.
+    this->setContentOffsetY(savedScrollY, false);
+
     // Trigger thumbnail loading for newly added cells around the current
     // focus position.  The m_isAppending guard suppressed this during
     // createRowRange, so we do it once now.
-    if (m_focusedIndex >= 0) {
-        loadThumbnailsNearIndex(m_focusedIndex);
+    if (savedFocusIdx >= 0) {
+        loadThumbnailsNearIndex(savedFocusIdx);
     }
 
     // Reset the progressive cover loader so the new cells get their
@@ -219,10 +232,23 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     m_nextCoverLoadIdx = oldCellCount;
     m_allCoversQueued = false;
 
-    // Invalidate the visibility cache so the next draw() pass sets
-    // correct visibility on all rows (including the newly added ones).
-    m_cachedFirstVisible = -1;
-    m_cachedLastVisible = -1;
+    // Set visibility for newly added rows based on current scroll position.
+    // Don't invalidate the cache for existing rows — their visibility is
+    // already correct and re-evaluating all rows can cause a flash.
+    if (m_cellHeight > 0) {
+        float viewH = this->getHeight();
+        float rowH = static_cast<float>(m_cellHeight + m_rowMargin);
+        int firstVis = std::max(0, static_cast<int>(savedScrollY / rowH) - 1);
+        int lastVis = std::min(static_cast<int>(m_rows.size()),
+                               static_cast<int>((savedScrollY + viewH) / rowH) + 2);
+
+        for (int i = oldRowCount; i < static_cast<int>(m_rows.size()); i++) {
+            brls::Visibility vis = (i >= firstVis && i < lastVis)
+                ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE;
+            m_rows[i]->setVisibility(vis);
+        }
+        m_cachedLastVisible = lastVis;
+    }
 
     brls::Logger::info("RecyclingGrid: appendItems - added {} items, now {} total ({} rows)",
                         newItems.size(), m_items.size(), newTotalRows);
