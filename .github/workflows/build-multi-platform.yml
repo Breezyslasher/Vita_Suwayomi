@@ -5,7 +5,7 @@ name: Build
 # Supports labels like "Beta 1.0.0" or plain "1.0.0".
 # Non-release builds (no git tag) fall back to the CI build number.
 env:
-  APP_VERSION: "Beta 1.0.0"
+  APP_VERSION: "Beta 2.1.0"
 
 on:
   push:
