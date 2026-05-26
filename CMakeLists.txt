@@ -225,6 +225,10 @@ else()
     target_compile_definitions(${PROJECT_NAME} PRIVATE RESOURCE_PREFIX=\"resources/\")
 endif()
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    VITA_SUWAYOMI_VERSION=\"${APP_VERSION}\"
+)
+
 # ---------------------------------------------------------------------------
 # Link libraries
 # ---------------------------------------------------------------------------

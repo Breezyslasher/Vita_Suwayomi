@@ -23,11 +23,6 @@
 #include <psp2/net/netctl.h>
 #endif
 
-// Version defined in CMakeLists.txt or here
-#ifndef VITA_SUWAYOMI_VERSION
-#define VITA_SUWAYOMI_VERSION "1.0.0"
-#endif
-
 namespace vitasuwayomi {
 
 SettingsTab::SettingsTab() {
