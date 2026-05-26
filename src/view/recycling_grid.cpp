@@ -141,12 +141,24 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
         } else if (cellsInLastRow < m_columns) {
             // Partial last row - remove and rebuild it with new items
 
-            // Move focus away if it's on a cell in the partial row being removed
+            // Move focus to a cell in an EARLIER row before removing the
+            // partial row.  giveFocus(m_contentBox) is not safe because
+            // Box::getDefaultFocus() may return a cell in the partial row
+            // via the stale lastFocusedView pointer, and removeView does
+            // not clear lastFocusedView — leaving a dangling pointer.
             int partialStart = oldCellCount - cellsInLastRow;
+            bool needsFocusMove = false;
             for (int i = partialStart; i < oldCellCount; i++) {
                 if (m_cells[i] && m_cells[i]->isFocused()) {
-                    brls::Application::giveFocus(m_contentBox);
+                    needsFocusMove = true;
                     break;
+                }
+            }
+            if (needsFocusMove) {
+                if (partialStart > 0 && m_cells[0]) {
+                    brls::Application::giveFocus(m_cells[0]);
+                } else {
+                    brls::Application::giveFocus(this);
                 }
             }
 
