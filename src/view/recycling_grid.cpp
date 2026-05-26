@@ -116,6 +116,13 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     // calls into loadNextPage while we're rebuilding rows.
     m_isAppending = true;
 
+    // Save scroll position and focused index so we can restore them after
+    // adding rows.  borealis ScrollingFrame (CENTERED mode) uses
+    // getDefaultFocus() — not the actual current focus — in updateScrolling,
+    // which can jump the scroll to cell[0] if lastFocusedView is stale.
+    float savedScrollY = this->getContentOffsetY();
+    int savedFocusIdx = m_focusedIndex;
+
     int oldCellCount = static_cast<int>(m_cells.size());
     int oldRowCount = static_cast<int>(m_rows.size());
 
@@ -127,53 +134,71 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     int newTotalRows = (m_items.size() + m_columns - 1) / m_columns;
     m_totalRowsNeeded = newTotalRows;
 
-    // If the last existing row was partial, remove and rebuild it with new items
-    // Use m_cells.size() (not m_items.size()) to compute the actual number of cells
-    // in the last row, since incremental build may not have created all rows yet.
+    // If the last existing row was partial, fill it with new cells in-place
+    // instead of destroying and rebuilding it.  This preserves already-loaded
+    // thumbnails and avoids the dangling lastFocusedView pointer in borealis
+    // Box::removeView.
     int startRow;
     if (oldCellCount > 0 && oldRowCount > 0) {
         int cellsInLastRow = oldCellCount - (oldRowCount - 1) * m_columns;
 
-        // Sanity check: cellsInLastRow must be valid
         if (cellsInLastRow <= 0 || cellsInLastRow > m_columns) {
-            // State is inconsistent - fall back to full rebuild from existing rows
             startRow = oldRowCount;
         } else if (cellsInLastRow < m_columns) {
-            // Partial last row - remove and rebuild it with new items
+            // Fill the partial row with new cells
+            brls::Box* lastRowBox = m_rows.back();
+            int rowHeight = m_rowHeights.empty() ? m_cellHeight : m_rowHeights.back();
+            int rowStartIdx = (oldRowCount - 1) * m_columns;
+            int fillEnd = std::min(rowStartIdx + m_columns, (int)m_items.size());
 
-            // Move focus to a cell in an EARLIER row before removing the
-            // partial row.  giveFocus(m_contentBox) is not safe because
-            // Box::getDefaultFocus() may return a cell in the partial row
-            // via the stale lastFocusedView pointer, and removeView does
-            // not clear lastFocusedView — leaving a dangling pointer.
-            int partialStart = oldCellCount - cellsInLastRow;
-            bool needsFocusMove = false;
-            for (int i = partialStart; i < oldCellCount; i++) {
-                if (m_cells[i] && m_cells[i]->isFocused()) {
-                    needsFocusMove = true;
-                    break;
-                }
+            for (int i = rowStartIdx + cellsInLastRow; i < fillEnd; i++) {
+                auto* cell = new MangaItemCell();
+                cell->setWidth(m_cellWidth);
+                cell->setHeight(rowHeight);
+                cell->setMarginRight(m_cellMargin);
+
+                if (m_listMode) cell->setListMode(true);
+                else if (m_compactMode) cell->setCompactMode(true);
+
+                cell->setGridColumns(m_columns);
+                if (m_showLibraryBadge) cell->setShowLibraryBadge(true);
+
+                cell->setManga(m_items[i]);
+
+                int index = i;
+                cell->registerClickAction([this, cell, index](brls::View*) {
+                    if (m_longPressTriggered) {
+                        m_longPressTriggered = false;
+                        return true;
+                    }
+                    if (!cell->isFocused()) {
+                        brls::Application::giveFocus(cell);
+                    }
+                    onItemClicked(index);
+                    return true;
+                });
+                cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+
+                cell->getFocusEvent()->subscribe([this, index](brls::View*) {
+                    m_focusedIndex = index;
+                    if (!m_isAppending) {
+                        loadThumbnailsNearIndex(index);
+                    }
+                    if (m_onEndReached && !m_endReachedFired && !m_isAppending) {
+                        int threshold = m_columns * 2;
+                        if (index >= static_cast<int>(m_items.size()) - threshold) {
+                            m_endReachedFired = true;
+                            m_onEndReached();
+                        }
+                    }
+                });
+
+                lastRowBox->addView(cell);
+                m_cells.push_back(cell);
             }
-            if (needsFocusMove) {
-                if (partialStart > 0 && m_cells[0]) {
-                    brls::Application::giveFocus(m_cells[0]);
-                } else {
-                    brls::Application::giveFocus(this);
-                }
-            }
 
-            // Remove cell pointers for the partial row (view memory freed by removeView)
-            for (int i = 0; i < cellsInLastRow; i++) {
-                m_cells.pop_back();
-            }
-
-            // Remove last row view (deletes the row box and its children)
-            brls::Box* lastRow = m_rows.back();
-            m_rows.pop_back();
-            if (!m_rowHeights.empty()) m_rowHeights.pop_back();
-            m_contentBox->removeView(lastRow);
-
-            startRow = oldRowCount - 1;
+            // New full rows start after this completed row
+            startRow = oldRowCount;
         } else {
             // Last row is full, just append new rows
             startRow = oldRowCount;
@@ -186,10 +211,44 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     createRowRange(startRow, newTotalRows);
 
     // Allow end-reached to fire again now that all rows are built.
-    // Reset AFTER createRowRange so focus events during cell creation
-    // don't re-trigger loadNextPage while the grid is mid-construction.
     m_isAppending = false;
     m_endReachedFired = false;
+
+    // Restore scroll position.  addView calls during cell/row creation
+    // trigger invalidate() up the tree; borealis ScrollingFrame may
+    // recalculate scroll via updateScrolling(getDefaultFocus()) which
+    // can jump to cell[0].  Force scroll back to where the user was.
+    this->setContentOffsetY(savedScrollY, false);
+
+    // Trigger thumbnail loading for newly added cells around the current
+    // focus position.  The m_isAppending guard suppressed this during
+    // createRowRange, so we do it once now.
+    if (savedFocusIdx >= 0) {
+        loadThumbnailsNearIndex(savedFocusIdx);
+    }
+
+    // Reset the progressive cover loader so the new cells get their
+    // thumbnails queued in subsequent frames (6 per frame).
+    m_nextCoverLoadIdx = oldCellCount;
+    m_allCoversQueued = false;
+
+    // Set visibility for newly added rows based on current scroll position.
+    // Don't invalidate the cache for existing rows — their visibility is
+    // already correct and re-evaluating all rows can cause a flash.
+    if (m_cellHeight > 0) {
+        float viewH = this->getHeight();
+        float rowH = static_cast<float>(m_cellHeight + m_rowMargin);
+        int firstVis = std::max(0, static_cast<int>(savedScrollY / rowH) - 1);
+        int lastVis = std::min(static_cast<int>(m_rows.size()),
+                               static_cast<int>((savedScrollY + viewH) / rowH) + 2);
+
+        for (int i = oldRowCount; i < static_cast<int>(m_rows.size()); i++) {
+            brls::Visibility vis = (i >= firstVis && i < lastVis)
+                ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE;
+            m_rows[i]->setVisibility(vis);
+        }
+        m_cachedLastVisible = lastVis;
+    }
 
     brls::Logger::info("RecyclingGrid: appendItems - added {} items, now {} total ({} rows)",
                         newItems.size(), m_items.size(), newTotalRows);
