@@ -112,6 +112,10 @@ void RecyclingGrid::setDataSource(const std::vector<Manga>& items) {
 void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     if (newItems.empty()) return;
 
+    // Suppress end-reached callbacks during the append to prevent re-entrant
+    // calls into loadNextPage while we're rebuilding rows.
+    m_isAppending = true;
+
     int oldCellCount = static_cast<int>(m_cells.size());
     int oldRowCount = static_cast<int>(m_rows.size());
 
@@ -119,8 +123,6 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
     for (const auto& item : newItems) {
         m_items.push_back(item);
     }
-
-    m_endReachedFired = false;  // Allow end-reached to fire again
 
     int newTotalRows = (m_items.size() + m_columns - 1) / m_columns;
     m_totalRowsNeeded = newTotalRows;
@@ -170,6 +172,12 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
 
     // Create only the new rows
     createRowRange(startRow, newTotalRows);
+
+    // Allow end-reached to fire again now that all rows are built.
+    // Reset AFTER createRowRange so focus events during cell creation
+    // don't re-trigger loadNextPage while the grid is mid-construction.
+    m_isAppending = false;
+    m_endReachedFired = false;
 
     brls::Logger::info("RecyclingGrid: appendItems - added {} items, now {} total ({} rows)",
                         newItems.size(), m_items.size(), newTotalRows);
@@ -494,9 +502,11 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
 
             cell->getFocusEvent()->subscribe([this, index](brls::View*) {
                 m_focusedIndex = index;
-                loadThumbnailsNearIndex(index);
+                if (!m_isAppending) {
+                    loadThumbnailsNearIndex(index);
+                }
 
-                if (m_onEndReached && !m_endReachedFired) {
+                if (m_onEndReached && !m_endReachedFired && !m_isAppending) {
                     int threshold = m_columns * 2;
                     if (index >= static_cast<int>(m_items.size()) - threshold) {
                         m_endReachedFired = true;
