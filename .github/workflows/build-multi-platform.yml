@@ -32,6 +32,10 @@ on:
         - android
         - aur
         - deb
+      pre_release:
+        description: 'Upload artifacts to a GitHub pre-release'
+        type: boolean
+        default: false
       disable_builtin_nsp:
         description: disable builtin NSP
         type: boolean
@@ -46,6 +50,7 @@ jobs:
     outputs:
       version: ${{ steps.resolve.outputs.version }}
       version_number: ${{ steps.resolve.outputs.version_number }}
+      version_tag: ${{ steps.resolve.outputs.version_tag }}
     steps:
       - name: Resolve build version
         id: resolve
@@ -63,10 +68,14 @@ jobs:
           if [[ -z "$NUM" ]]; then
             NUM="0.0.${{ github.run_number }}"
           fi
+          # Filename/tag-safe version (spaces → hyphens)
+          TAG="${V// /-}"
           echo "version=${V}" >> "$GITHUB_OUTPUT"
           echo "version_number=${NUM}" >> "$GITHUB_OUTPUT"
+          echo "version_tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Display version: ${V}"
           echo "Numeric version: ${NUM}"
+          echo "Tag/filename version: ${TAG}"
 
   upload-release:
     needs: [ resolve-version, build-mingw, build-nx, build-macos, build-flatpak, build-aur, build-ps4, build-vita, build-android ]
@@ -98,6 +107,92 @@ jobs:
             VitaSuwayomi-Flatpak-*/*
             VitaSuwayomi-aur-*/*.pkg.tar.*
             VitaSuwayomi-android-*/*
+
+  # ───────────────────────────────────────────────
+  # Pre-release — manually triggered
+  # ───────────────────────────────────────────────
+  upload-prerelease:
+    needs: [resolve-version, build-mingw, build-nx, build-macos, build-flatpak, build-aur, build-ps4, build-vita, build-android, build-deb]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: ${{ !cancelled() && !failure() && github.event_name == 'workflow_dispatch' && inputs.pre_release == true }}
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+      - name: Rename artifacts for release
+        env:
+          FVER: ${{ needs.resolve-version.outputs.version_tag }}
+        run: |
+          mkdir -p release
+
+          # Vita VPK
+          for f in $(find . -name "*.vpk"); do
+            cp "$f" "release/VitaSuwayomi.${FVER}.vpk"
+          done
+
+          # Android APKs (Gradle names them VitaSuwayomi-{abi}.apk)
+          for apk in $(find . -name "*.apk"); do
+            abi=$(basename "$apk" .apk | sed 's/VitaSuwayomi-//')
+            [ -n "$abi" ] && cp "$apk" "release/VitaSuwayomi.${FVER}-${abi}.apk"
+          done
+
+          # Windows — zip each arch (exe + dlls + resources)
+          for dir in VitaSuwayomi-mingw-*; do
+            [ -d "$dir" ] || continue
+            arch=$(echo "$dir" | sed -E 's/VitaSuwayomi-mingw-([^-]+)-.*/\1/')
+            (cd "$dir" && zip -r "../release/VitaSuwayomi.${FVER}-windows-${arch}.zip" .)
+          done
+
+          # Flatpak tarballs
+          for tgz in $(find . -name "VitaSuwayomi-Linux-*.tar.gz"); do
+            base=$(basename "$tgz")
+            info=$(echo "$base" | sed -E 's/VitaSuwayomi-Linux-(.+)-[0-9]+\.tar\.gz/\1/')
+            cp "$tgz" "release/VitaSuwayomi.${FVER}-Flatpak-${info}.tar.gz"
+          done
+
+          # Switch NRO
+          for dir in VitaSuwayomi-nx-*; do
+            [ -d "$dir" ] || continue
+            driver=$(echo "$dir" | sed -E 's/VitaSuwayomi-nx-([^-]+)-.*/\1/')
+            nro=$(find "$dir" -name "*.nro" | head -1)
+            [ -n "$nro" ] && cp "$nro" "release/VitaSuwayomi.${FVER}-nx-${driver}.nro"
+          done
+
+          # PS4 pkg
+          for f in $(find . -path "*ps4*" -name "*.pkg"); do
+            cp "$f" "release/VitaSuwayomi.${FVER}-ps4.pkg"
+          done
+
+          # macOS DMG
+          for dir in VitaSuwayomi-macos-*; do
+            [ -d "$dir" ] || continue
+            tag=$(echo "$dir" | sed -E 's/VitaSuwayomi-macos-([^-]+)-.*/\1/')
+            dmg=$(find "$dir" -name "*.dmg" | head -1)
+            [ -n "$dmg" ] && cp "$dmg" "release/VitaSuwayomi.${FVER}-macOS-${tag}.dmg"
+          done
+
+          # Deb
+          for f in $(find . -name "*.deb"); do
+            arch=$(dpkg-deb -f "$f" Architecture 2>/dev/null || echo "amd64")
+            cp "$f" "release/VitaSuwayomi.${FVER}-Linux_${arch}.deb"
+          done
+
+          # AUR
+          for f in $(find . -name "*.pkg.tar.zst"); do
+            cp "$f" "release/VitaSuwayomi.${FVER}-Linux.pkg.tar.zst"
+          done
+
+          echo "Release files:"
+          ls -lh release/
+      - name: Create pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: VitaSuwayomi ${{ needs.resolve-version.outputs.version }}
+          tag_name: ${{ needs.resolve-version.outputs.version_tag }}
+          prerelease: true
+          generate_release_notes: true
+          files: release/*
 
   # ───────────────────────────────────────────────
   # PS Vita — VPK
@@ -225,104 +320,6 @@ jobs:
       with:
         name: VitaSuwayomi-android-${{ github.run_number }}
         path: app/platform/android/app/build/outputs/apk/release/*.apk
-
-  # ───────────────────────────────────────────────
-  # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
-  # ───────────────────────────────────────────────
-  build-desktop-windows-matrix:
-    needs: [resolve-version]
-    if: ${{ inputs.platform == 'mingw64' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
-    name: Desktop (Windows ${{ matrix.arch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-        - { arch: x64, sys: mingw64, env: x86_64, runner: windows-latest }
-        - { arch: x86, sys: mingw32, env: i686, runner: windows-latest }
-        - { arch: arm64, sys: clangarm64, env: clang-aarch64, runner: windows-11-arm }
-    runs-on: ${{ matrix.runner }}
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-      - uses: msys2/setup-msys2@v2
-        with:
-          msystem: ${{ matrix.sys }}
-          path-type: inherit
-          cache: false
-          release: ${{ contains(matrix.sys, 'arm64') }}
-          install: >-
-            mingw-w64-${{ matrix.env }}-ninja
-            mingw-w64-${{ matrix.env }}-cc
-            mingw-w64-${{ matrix.env }}-cmake
-            mingw-w64-${{ matrix.env }}-glfw
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - name: Install dependency
-        run: |
-          for pkg in glfw-3.5.0-1 curl-8.16.0-1 mpv-0.41.0-1 libwebp-1.6.0-1; do
-            curl -sLO https://github.com/dragonflylee/switchfin/releases/download/mingw-packages/${MINGW_PACKAGE_PREFIX}-${pkg}-any.pkg.tar.zst
-          done
-          pacman -U --noconfirm *.pkg.tar.zst
-      - name: Build
-        run: |
-          cmake -B build -G Ninja \
-            -DPLATFORM_DESKTOP=ON \
-            -DWIN32_TERMINAL=OFF \
-            -DZLIB_USE_STATIC_LIBS=ON \
-            -DUSE_SYSTEM_GLFW=ON \
-            -DUSE_D3D11=ON \
-            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
-          cmake --build build
-      - name: Bundle runtime DLLs
-        run: |
-          EXE="build/VitaSuwayomi.exe"
-          DLL_DIR="${MINGW_PREFIX}/bin"
-          if [ ! -f "$EXE" ]; then
-            echo "Expected binary not found: $EXE"
-            exit 1
-          fi
-          if [ ! -d "$DLL_DIR" ]; then
-            echo "Expected DLL directory not found: $DLL_DIR"
-            exit 1
-          fi
-
-          queue=("$EXE")
-          declare -A scanned
-          declare -A bundled
-          while [ ${#queue[@]} -gt 0 ]; do
-            current="${queue[0]}"
-            queue=("${queue[@]:1}")
-            scanned["$current"]=1
-
-            mapfile -t dlls < <(objdump -p "$current" | awk '/DLL Name:/{print $3}' | sort -u)
-            for dll in "${dlls[@]}"; do
-              candidate="$DLL_DIR/$dll"
-              target="build/$dll"
-              if [ -f "$candidate" ]; then
-                if [ -z "${bundled[$dll]+x}" ]; then
-                  cp -f "$candidate" "$target"
-                  bundled["$dll"]=1
-                  echo "Bundled $dll (from $(basename "$current"))"
-                fi
-                if [ -z "${scanned[$target]+x}" ]; then
-                  queue+=("$target")
-                fi
-              fi
-            done
-          done
-
-          echo "DLLs bundled into build/:"
-          ls -1 build/*.dll
-      - name: Upload Windows binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: VitaSuwayomi-windows-${{ matrix.arch }}-${{ github.run_number }}
-          path: |
-            build/VitaSuwayomi.exe
-            build/*.dll
-            build/resources/
 
   # ───────────────────────────────────────────────
   # Flatpak — Linux Matrix (x86_64 + aarch64, OpenGL)
