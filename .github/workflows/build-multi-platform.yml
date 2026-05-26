@@ -1,5 +1,12 @@
 name: Build
 
+# ── Release version ─────────────────────────────────────────────────────────
+# Change this line to set the version for all platforms.
+# Supports labels like "Beta 1.0.0" or plain "1.0.0".
+# Non-release builds (no git tag) fall back to the CI build number.
+env:
+  APP_VERSION: "Beta 2.1.0"
+
 on:
   push:
     branches: ['**']
@@ -7,6 +14,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      version:
+        description: 'Version override (leave empty to use APP_VERSION)'
+        type: string
+        default: ''
       platform:
         description: which platform to build
         type: choice
@@ -29,8 +40,35 @@ on:
 # ─────────────────────────────────────────────────────────────────────────────
 jobs:
 
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      version_number: ${{ steps.resolve.outputs.version_number }}
+    steps:
+      - name: Resolve build version
+        id: resolve
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            V="${{ inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            V="${{ env.APP_VERSION }}"
+          else
+            V="0.0.${{ github.run_number }}"
+          fi
+          V="${V#v}"
+          # Extract numeric X.Y.Z for CMake / Vita / PS4 / deb (no labels)
+          NUM=$(echo "$V" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+          if [[ -z "$NUM" ]]; then
+            NUM="0.0.${{ github.run_number }}"
+          fi
+          echo "version=${V}" >> "$GITHUB_OUTPUT"
+          echo "version_number=${NUM}" >> "$GITHUB_OUTPUT"
+          echo "Display version: ${V}"
+          echo "Numeric version: ${NUM}"
+
   upload-release:
-    needs: [ build-mingw, build-nx, build-macos, build-flatpak, build-aur, build-ps4, build-vita, build-android ]
+    needs: [ resolve-version, build-mingw, build-nx, build-macos, build-flatpak, build-aur, build-ps4, build-vita, build-android ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -64,6 +102,7 @@ jobs:
   # PS Vita — VPK
   # ───────────────────────────────────────────────
   build-vita:
+    needs: [resolve-version]
     if: ${{ inputs.platform == 'psvita' || github.event_name != 'workflow_dispatch' }}
     name: PS Vita
     runs-on: ubuntu-latest
@@ -91,7 +130,8 @@ jobs:
 
       - name: Build
         run: |
-          cmake -B build -G Ninja -DPLATFORM_PSV=ON
+          cmake -B build -G Ninja -DPLATFORM_PSV=ON \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
           cmake --build build
 
       - name: Upload VPK
@@ -104,12 +144,13 @@ jobs:
         with:
              name: VitaSuwayomi-elf-${{ github.run_number }}
              path: build/VitaSuwayomi.velf
-         
+
 
   # ───────────────────────────────────────────────
   # Android — switchfin-style APK build
   # ───────────────────────────────────────────────
   build-android:
+    needs: [resolve-version]
     if: ${{ inputs.platform == 'android' || github.event_name != 'workflow_dispatch' }}
     name: Android
     runs-on: ubuntu-latest
@@ -145,7 +186,7 @@ jobs:
       with:
         gradlePath: app/platform/android/app/build.gradle
         versionCode: ${{ github.run_number }}
-        versionName: ${{ github.ref_name }}
+        versionName: ${{ needs.resolve-version.outputs.version }}
     - name: Prepare Android sources and native dependencies
       run: |
         rm -rf app/platform/android/app/libs
@@ -188,6 +229,7 @@ jobs:
   # Desktop — Windows Matrix via MSYS2 (x64/x86/arm64)
   # ───────────────────────────────────────────────
   build-desktop-windows-matrix:
+    needs: [resolve-version]
     name: Desktop (Windows ${{ matrix.arch }})
     strategy:
       fail-fast: false
@@ -228,7 +270,8 @@ jobs:
             -DWIN32_TERMINAL=OFF \
             -DZLIB_USE_STATIC_LIBS=ON \
             -DUSE_SYSTEM_GLFW=ON \
-            -DUSE_D3D11=ON
+            -DUSE_D3D11=ON \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
           cmake --build build
       - name: Bundle runtime DLLs
         run: |
@@ -283,6 +326,7 @@ jobs:
   # Flatpak — Linux Matrix (x86_64 + aarch64, OpenGL)
   # ───────────────────────────────────────────────
   build-flatpak:
+    needs: [resolve-version]
     if: ${{ inputs.platform == 'flatpak' || github.event_name != 'workflow_dispatch' }}
     name: Flatpak (${{ matrix.arch }}-${{ matrix.driver }})
     strategy:
@@ -334,7 +378,8 @@ jobs:
           fi
       - name: Build desktop target in flatpak container
         run: |
-          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_GLES2=${{ matrix.gles2 }}
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_GLES2=${{ matrix.gles2 }} \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
           cmake --build build
           tar -czf VitaSuwayomi-Linux-${{ matrix.arch }}-${{ matrix.driver }}-${{ github.run_number }}.tar.gz -C build VitaSuwayomi resources
       - name: Upload Flatpak artifact
@@ -347,6 +392,7 @@ jobs:
   # Nintendo Switch — Matrix (opengl + deko3d)
   # ───────────────────────────────────────────────
   build-nx:
+    needs: [resolve-version]
     if: ${{ inputs.platform == 'nx' || github.event_name != 'workflow_dispatch' }}
     name: NX (${{ matrix.driver }})
     runs-on: ubuntu-latest
@@ -376,6 +422,7 @@ jobs:
         run: |
           cmake -B build -G Ninja \
             -DPLATFORM_SWITCH=ON \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }} \
             ${{ matrix.cmake_extra }}
           cmake --build build
       - name: Upload NRO
@@ -388,6 +435,7 @@ jobs:
   # PS4
   # ───────────────────────────────────────────────
   build-ps4:
+    needs: [resolve-version]
     if: ${{ inputs.platform == 'ps4' || github.event_name != 'workflow_dispatch' }}
     name: PS4
     runs-on: ubuntu-latest
@@ -408,7 +456,8 @@ jobs:
         env:
           OPENORBIS: /opt/pacbrew/ps4/openorbis
         run: |
-          cmake -B build -DPLATFORM_PS4=ON
+          cmake -B build -DPLATFORM_PS4=ON \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
           cmake --build build
       - name: Upload PS4 artifacts
         uses: actions/upload-artifact@v4
@@ -423,6 +472,7 @@ jobs:
   # macOS matrix (explicit job name parity)
   # ───────────────────────────────────────────────
   build-macos:
+    needs: [resolve-version]
     if: ${{ inputs.platform == 'macos' || github.event_name != 'workflow_dispatch' }}
     name: macOS (${{ matrix.tag }})
     strategy:
@@ -442,7 +492,8 @@ jobs:
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON \
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }}
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }} \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
           cmake --build build
       - name: Bundle macOS dylibs
         run: |
@@ -541,8 +592,8 @@ jobs:
             <key>CFBundleName</key><string>VitaSuwayomi</string>
             <key>CFBundleDisplayName</key><string>VitaSuwayomi</string>
             <key>CFBundleIdentifier</key><string>com.vitasuwayomi.app</string>
-            <key>CFBundleVersion</key><string>1</string>
-            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>CFBundleVersion</key><string>${{ needs.resolve-version.outputs.version_number }}</string>
+            <key>CFBundleShortVersionString</key><string>${{ needs.resolve-version.outputs.version }}</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>CFBundleExecutable</key><string>VitaSuwayomi</string>
           </dict>
@@ -569,6 +620,7 @@ jobs:
   # MinGW matrix (x64/x86/arm64)
   # ───────────────────────────────────────────────
   build-mingw:
+    needs: [resolve-version]
     if: ${{ inputs.platform == 'mingw64' || github.event_name != 'workflow_dispatch' }}
     name: MinGW (${{ matrix.arch }})
     strategy:
@@ -605,7 +657,8 @@ jobs:
           pacman -U --noconfirm *.pkg.tar.zst
       - name: Build
         run: |
-          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON -DUSE_D3D11=ON
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON -DUSE_D3D11=ON \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
           cmake --build build
       - name: Bundle runtime DLLs
         run: |
@@ -660,6 +713,7 @@ jobs:
   # Debian package-like build
   # ───────────────────────────────────────────────
   build-deb:
+    needs: [resolve-version]
     if: ${{ inputs.platform == 'deb' || github.event_name != 'workflow_dispatch' }}
     name: Deb build
     runs-on: ubuntu-24.04
@@ -679,7 +733,8 @@ jobs:
             wayland-protocols libwayland-bin libwayland-dev libxkbcommon-dev xorg-dev
       - name: Build
         run: |
-          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
           cmake --build build
           PKGROOT="pkgroot"
           rm -rf "$PKGROOT"
@@ -706,7 +761,7 @@ jobs:
           ARCH="$(dpkg --print-architecture)"
           {
             echo "Package: vitasuwayomi"
-            echo "Version: 0.1.${{ github.run_number }}"
+            echo "Version: ${{ needs.resolve-version.outputs.version_number }}"
             echo "Section: utils"
             echo "Priority: optional"
             echo "Architecture: ${ARCH}"
@@ -724,6 +779,7 @@ jobs:
   # AUR-like build
   # ───────────────────────────────────────────────
   build-aur:
+    needs: [resolve-version]
     if: ${{ inputs.platform == 'aur' || github.event_name != 'workflow_dispatch' }}
     name: AUR build
     runs-on: ubuntu-24.04
@@ -743,7 +799,8 @@ jobs:
             wayland-protocols libwayland-bin libwayland-dev libxkbcommon-dev xorg-dev
       - name: Build
         run: |
-          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
           cmake --build build
           tar --zstd -cf VitaSuwayomi-${{ github.run_number }}.pkg.tar.zst -C build VitaSuwayomi resources
       - name: Upload aur artifact

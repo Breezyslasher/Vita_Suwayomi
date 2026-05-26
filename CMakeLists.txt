@@ -71,12 +71,30 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Project (after toolchain so cross-compilers are in effect)
+# Pass -DAPP_VERSION=X.Y.Z from CI to override the default.
 # ---------------------------------------------------------------------------
-project(VitaSuwayomi VERSION 1.0.0 LANGUAGES C CXX)
+if(NOT DEFINED APP_VERSION)
+    set(APP_VERSION "1.0.0")
+endif()
+string(REGEX REPLACE "^v" "" APP_VERSION "${APP_VERSION}")
+project(VitaSuwayomi VERSION ${APP_VERSION} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -frtti -fexceptions")
+
+# XX.YY version string for Vita/PS4 param.sfo
+if(PROJECT_VERSION_MAJOR LESS 10)
+    set(_SFO_MAJOR "0${PROJECT_VERSION_MAJOR}")
+else()
+    set(_SFO_MAJOR "${PROJECT_VERSION_MAJOR}")
+endif()
+if(PROJECT_VERSION_MINOR LESS 10)
+    set(_SFO_MINOR "0${PROJECT_VERSION_MINOR}")
+else()
+    set(_SFO_MINOR "${PROJECT_VERSION_MINOR}")
+endif()
+set(APP_SFO_VERSION "${_SFO_MAJOR}.${_SFO_MINOR}")
 
 # ---------------------------------------------------------------------------
 # Vita VPK metadata
@@ -84,7 +102,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -frtti -fexceptions")
 if(PLATFORM_PSV)
     set(VITA_APP_NAME "VitaSuwayomi")
     set(VITA_TITLEID  "VSWY00001")
-    set(VITA_VERSION  "01.00")
+    set(VITA_VERSION  "${APP_SFO_VERSION}")
     set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d PARENTAL_LEVEL=1 -d ATTRIBUTE2=12")
 endif()
 
@@ -446,7 +464,7 @@ elseif(PLATFORM_PS4)
             ${CMAKE_BINARY_DIR}/ps4
             "VSWY00002"
             "VitaSuwayomi"
-            "01.00"
+            "${APP_SFO_VERSION}"
             # https://psdevwiki.com/ps4/param.sfo#ATTRIBUTE - Support PS4 Pro
             8388608
         )
