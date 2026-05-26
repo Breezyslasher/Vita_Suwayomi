@@ -22,6 +22,7 @@ on:
         description: which platform to build
         type: choice
         options:
+        - all
         - mingw64
         - macos
         - nx
@@ -103,7 +104,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-vita:
     needs: [resolve-version]
-    if: ${{ inputs.platform == 'psvita' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.platform == 'psvita' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: PS Vita
     runs-on: ubuntu-latest
     container:
@@ -151,7 +152,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-android:
     needs: [resolve-version]
-    if: ${{ inputs.platform == 'android' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.platform == 'android' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: Android
     runs-on: ubuntu-latest
     steps:
@@ -230,6 +231,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-desktop-windows-matrix:
     needs: [resolve-version]
+    if: ${{ inputs.platform == 'mingw64' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: Desktop (Windows ${{ matrix.arch }})
     strategy:
       fail-fast: false
@@ -327,7 +329,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-flatpak:
     needs: [resolve-version]
-    if: ${{ inputs.platform == 'flatpak' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.platform == 'flatpak' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: Flatpak (${{ matrix.arch }}-${{ matrix.driver }})
     strategy:
       fail-fast: false
@@ -393,7 +395,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-nx:
     needs: [resolve-version]
-    if: ${{ inputs.platform == 'nx' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.platform == 'nx' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: NX (${{ matrix.driver }})
     runs-on: ubuntu-latest
     strategy:
@@ -436,7 +438,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-ps4:
     needs: [resolve-version]
-    if: ${{ inputs.platform == 'ps4' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.platform == 'ps4' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: PS4
     runs-on: ubuntu-latest
     container:
@@ -473,7 +475,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-macos:
     needs: [resolve-version]
-    if: ${{ inputs.platform == 'macos' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.platform == 'macos' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: macOS (${{ matrix.tag }})
     strategy:
       fail-fast: false
@@ -621,7 +623,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-mingw:
     needs: [resolve-version]
-    if: ${{ inputs.platform == 'mingw64' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.platform == 'mingw64' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: MinGW (${{ matrix.arch }})
     strategy:
       fail-fast: false
@@ -714,7 +716,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-deb:
     needs: [resolve-version]
-    if: ${{ inputs.platform == 'deb' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.platform == 'deb' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: Deb build
     runs-on: ubuntu-24.04
     steps:
@@ -780,7 +782,7 @@ jobs:
   # ───────────────────────────────────────────────
   build-aur:
     needs: [resolve-version]
-    if: ${{ inputs.platform == 'aur' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.platform == 'aur' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
     name: AUR build
     runs-on: ubuntu-24.04
     steps:
