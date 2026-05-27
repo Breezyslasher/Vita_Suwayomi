@@ -2689,15 +2689,23 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         bodyVec.clear();
         bodyVec.shrink_to_fit();
     }
+    brls::Logger::info("ImageLoader: [1] bodyVec released for {}", url);
 
     // Cache the image in memory using LRU eviction
     cachePut(url, imageData);
+    brls::Logger::info("ImageLoader: [2] cachePut done for {}", url);
 
     // Save to disk cache if enabled
-    if (Application::getInstance().getSettings().cacheCoverImages) {
+    brls::Logger::info("ImageLoader: [3] checking disk cache setting...");
+    bool shouldCacheToDisk = Application::getInstance().getSettings().cacheCoverImages;
+    brls::Logger::info("ImageLoader: [3b] cacheCoverImages={}", shouldCacheToDisk);
+    if (shouldCacheToDisk) {
         int mangaId = extractMangaIdFromUrl(url);
+        brls::Logger::info("ImageLoader: [4] mangaId={} for {}", mangaId, url);
         if (mangaId > 0) {
+            brls::Logger::info("ImageLoader: [5] saving cover to disk...");
             LibraryCache::getInstance().saveCoverImage(mangaId, imageData);
+            brls::Logger::info("ImageLoader: [6] disk save done");
         }
     }
 
@@ -2705,17 +2713,27 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     // view may have been destroyed while we were downloading / decoding.
     // Without this, a stale `target` pointer reaches processPendingTextures()
     // and crashes on setImageFromMem().
+    brls::Logger::info("ImageLoader: [7] checking alive flag...");
     if (alive && !*alive) return;
 
     // Cover mode: decode TGA→RGBA on this worker thread, queue pure GPU upload
+    brls::Logger::info("ImageLoader: [8] coverCallback={}, target={}",
+                       (bool)request.coverCallback, (void*)target);
     if (request.coverCallback) {
         int w, h, c;
+        brls::Logger::info("ImageLoader: [9] calling stbi_load_from_memory ({} bytes)...",
+                           imageData.size());
         uint8_t* rgba = stbi_load_from_memory(imageData.data(),
             static_cast<int>(imageData.size()), &w, &h, &c, 4);
+        brls::Logger::info("ImageLoader: [10] stbi returned {}x{} rgba={}",
+                           w, h, (void*)rgba);
         if (rgba) {
             brls::Logger::info("ImageLoader: TGA→RGBA {}x{} for {}", w, h, url);
-            std::vector<uint8_t> rgbaVec(rgba, rgba + w * h * 4);
+            size_t rgbaSize = (size_t)w * h * 4;
+            brls::Logger::info("ImageLoader: [11] allocating rgbaVec ({} bytes)...", rgbaSize);
+            std::vector<uint8_t> rgbaVec(rgba, rgba + rgbaSize);
             stbi_image_free(rgba);
+            brls::Logger::info("ImageLoader: [12] queueing cover upload...");
             queueCoverUpload(std::move(rgbaVec), w, h, request.coverCallback, alive);
         } else {
             brls::Logger::error("ImageLoader: TGA→RGBA decode failed for {}", url);
