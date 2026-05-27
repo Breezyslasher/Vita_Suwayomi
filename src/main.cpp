@@ -27,6 +27,58 @@
 #include <orbis/Sysmodule.h>
 #include <thread>
 #include <chrono>
+#include <signal.h>
+#include <unistd.h>
+
+static FILE* g_crashLogFile = nullptr;
+
+static void ps4CrashSignalHandler(int sig, siginfo_t* info, void* ucontext) {
+    // Write directly to the log file using async-signal-safe functions where possible.
+    // fprintf is NOT async-signal-safe but we're about to die anyway — best effort.
+    FILE* f = g_crashLogFile;
+    if (f) {
+        const char* sigName = "UNKNOWN";
+        switch (sig) {
+            case SIGSEGV: sigName = "SIGSEGV"; break;
+            case SIGBUS:  sigName = "SIGBUS";  break;
+            case SIGABRT: sigName = "SIGABRT"; break;
+            case SIGFPE:  sigName = "SIGFPE";  break;
+            case SIGILL:  sigName = "SIGILL";  break;
+        }
+        fprintf(f, "\n========== CRASH ==========\n");
+        fprintf(f, "Signal: %s (%d)\n", sigName, sig);
+        if (info) {
+            fprintf(f, "Fault address: %p\n", info->si_addr);
+            fprintf(f, "Signal code: %d\n", info->si_code);
+        }
+        fprintf(f, "===========================\n");
+        fflush(f);
+        fsync(fileno(f));
+    }
+
+    // Re-raise with default handler so the process actually terminates
+    struct sigaction sa;
+    sa.sa_handler = SIG_DFL;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(sig, &sa, nullptr);
+    raise(sig);
+}
+
+static void installPS4CrashHandlers(FILE* logFile) {
+    g_crashLogFile = logFile;
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = ps4CrashSignalHandler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, nullptr);
+    sigaction(SIGBUS, &sa, nullptr);
+    sigaction(SIGABRT, &sa, nullptr);
+    sigaction(SIGFPE, &sa, nullptr);
+    sigaction(SIGILL, &sa, nullptr);
+}
+
 #elif defined(__SWITCH__)
 #include <sys/stat.h>
 #endif
@@ -224,6 +276,7 @@ static int appMain(int argc, char* argv[]) {
     if (logFile) {
         setvbuf(logFile, NULL, _IOLBF, 0);
     }
+    installPS4CrashHandlers(logFile);
 #elif defined(__SWITCH__)
     // Create log directory and file on Switch
     mkdir("sdmc:/VitaSuwayomi", 0777);
