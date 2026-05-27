@@ -2270,10 +2270,15 @@ void ImageLoader::processPendingCovers() {
         if (upload.alive && !*upload.alive) continue;
         if (upload.rgbaData.empty() || upload.width <= 0 || upload.height <= 0) continue;
 
+        brls::Logger::info("ImageLoader: GPU upload {}x{} ({}KB RGBA)",
+                           upload.width, upload.height,
+                           upload.rgbaData.size() / 1024);
         int nvgImg = nvgCreateImageRGBA(vg, upload.width, upload.height,
                                          0, upload.rgbaData.data());
         if (nvgImg != 0 && upload.callback) {
             upload.callback(nvgImg, upload.width, upload.height);
+        } else if (nvgImg == 0) {
+            brls::Logger::error("ImageLoader: nvgCreateImageRGBA failed for {}x{}", upload.width, upload.height);
         }
         uploaded++;
     }
@@ -2471,12 +2476,15 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     if (alive && !*alive) return;
 
     // Authenticated GET with automatic JWT refresh on 401/403
+    brls::Logger::info("ImageLoader: Downloading {}", url);
     HttpResponse resp = authenticatedGet(url, 2);
 
     if (!resp.success || resp.body.empty()) {
         brls::Logger::warning("ImageLoader: Failed to load {} (status {})", url, resp.statusCode);
         return;
     }
+
+    brls::Logger::info("ImageLoader: Downloaded {} ({} bytes)", url, resp.body.size());
 
     // Check alive flag after download - skip decode if owner was destroyed
     if (alive && !*alive) return;
@@ -2705,9 +2713,12 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         uint8_t* rgba = stbi_load_from_memory(imageData.data(),
             static_cast<int>(imageData.size()), &w, &h, &c, 4);
         if (rgba) {
+            brls::Logger::info("ImageLoader: TGA→RGBA {}x{} for {}", w, h, url);
             std::vector<uint8_t> rgbaVec(rgba, rgba + w * h * 4);
             stbi_image_free(rgba);
             queueCoverUpload(std::move(rgbaVec), w, h, request.coverCallback, alive);
+        } else {
+            brls::Logger::error("ImageLoader: TGA→RGBA decode failed for {}", url);
         }
     } else if (target) {
         queueTextureUpdate(imageData, target, callback, alive);
@@ -2727,21 +2738,23 @@ void ImageLoader::ensureWorkersStarted() {
     brls::Logger::info("ImageLoader: Starting {} worker threads", numWorkers);
 
     for (int i = 0; i < numWorkers; i++) {
-        // On Switch, use detail::launchThread() for 512KB stack (default
-        // libnx stack is ~128KB, too small for curl+mbedTLS in workers).
-        detail::launchThread([i]() {
-            workerThreadFunc(i);
-        });
+        try {
+            detail::launchThread([i]() {
+                workerThreadFunc(i);
+            });
+        } catch (const std::exception& e) {
+            brls::Logger::error("ImageLoader: Failed to start worker {}: {}", i, e.what());
+        } catch (...) {
+            brls::Logger::error("ImageLoader: Failed to start worker {} (unknown error)", i);
+        }
     }
 }
 
 void ImageLoader::workerThreadFunc(int workerId) {
-    // Each worker has its own HttpClient for TCP connection reuse (HTTP keep-alive).
-    // This avoids creating a new TCP connection for every cover download.
+    brls::Logger::info("ImageLoader: Worker {} running", workerId);
+
     HttpClient httpClient;
     applyAuthHeaders(httpClient);
-
-    brls::Logger::debug("ImageLoader: Worker {} started", workerId);
 
     while (!s_shutdownWorkers) {
         LoadRequest request;
