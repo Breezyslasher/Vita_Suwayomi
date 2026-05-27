@@ -192,6 +192,7 @@ private:
         int height = 0;
         CoverReadyCallback callback;
         std::shared_ptr<bool> alive;
+        bool rawEncoded = false;  // true = rgbaData holds JPEG/PNG, use nvgCreateImageMem
     };
     static std::queue<PendingCoverUpload> s_pendingCovers;
     static std::mutex s_pendingCoverMutex;

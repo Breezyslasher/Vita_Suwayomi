@@ -2056,9 +2056,7 @@ void ImageLoader::setMaxThumbnailSize(int maxSize) {
 }
 
 void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& data) {
-    brls::Logger::info("ImageLoader: cachePut [a] locking mutex...");
     std::lock_guard<std::mutex> lock(s_cacheMutex);
-    brls::Logger::info("ImageLoader: cachePut [b] locked, map size={} list size={}", s_cacheMap.size(), s_cacheList.size());
 
     // If key already exists, remove old entry and track memory
     auto it = s_cacheMap.find(url);
@@ -2067,7 +2065,6 @@ void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& d
         s_cacheList.erase(it->second);
         s_cacheMap.erase(it);
     }
-    brls::Logger::info("ImageLoader: cachePut [c] dedup done");
 
     // Evict oldest entries if over count limit OR memory limit
     while (s_cacheList.size() >= s_maxCacheSize ||
@@ -2077,14 +2074,11 @@ void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& d
         s_cacheMap.erase(oldest.url);
         s_cacheList.pop_back();
     }
-    brls::Logger::info("ImageLoader: cachePut [d] eviction done, inserting {} bytes", data.size());
 
     // Insert at front (most recently used)
     s_cacheList.push_front({url, data});
-    brls::Logger::info("ImageLoader: cachePut [e] list insert done");
     s_cacheMap[url] = s_cacheList.begin();
     s_currentCacheMemory += data.size();
-    brls::Logger::info("ImageLoader: cachePut [f] done, total cache {}KB", s_currentCacheMemory / 1024);
 }
 
 bool ImageLoader::cacheGet(const std::string& url, std::vector<uint8_t>& data) {
@@ -2206,11 +2200,26 @@ void ImageLoader::loadCoverAsync(const std::string& url, CoverReadyCallback call
                                   std::shared_ptr<bool> alive) {
     if (url.empty()) return;
 
-    // Memory cache: decode TGA→RGBA here (fast, <0.5ms for 120px thumbnails),
-    // then queue the RGBA for GPU upload on the next frame.
+    // Memory cache hit: queue for GPU upload on the next frame.
     {
         std::vector<uint8_t> cachedData;
         if (cacheGet(url, cachedData)) {
+#ifdef __PS4__
+            // PS4: cached data is raw JPEG/PNG — queue for nvgCreateImageMem
+            {
+                std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
+                PendingCoverUpload upload;
+                upload.rgbaData = std::move(cachedData);
+                upload.rawEncoded = true;
+                upload.callback = std::move(callback);
+                upload.alive = std::move(alive);
+                s_pendingCovers.push(std::move(upload));
+            }
+            bool expected = false;
+            if (s_pendingCoverScheduled.compare_exchange_strong(expected, true)) {
+                brls::sync([]() { processPendingCovers(); });
+            }
+#else
             int w, h, c;
             uint8_t* rgba = stbi_load_from_memory(cachedData.data(),
                 static_cast<int>(cachedData.size()), &w, &h, &c, 4);
@@ -2219,6 +2228,7 @@ void ImageLoader::loadCoverAsync(const std::string& url, CoverReadyCallback call
                 stbi_image_free(rgba);
                 queueCoverUpload(std::move(rgbaVec), w, h, std::move(callback), std::move(alive));
             }
+#endif
             return;
         }
     }
@@ -2274,17 +2284,29 @@ void ImageLoader::processPendingCovers() {
         }
 
         if (upload.alive && !*upload.alive) continue;
-        if (upload.rgbaData.empty() || upload.width <= 0 || upload.height <= 0) continue;
+        if (upload.rgbaData.empty()) continue;
 
-        brls::Logger::info("ImageLoader: GPU upload {}x{} ({}KB RGBA)",
-                           upload.width, upload.height,
-                           upload.rgbaData.size() / 1024);
-        int nvgImg = nvgCreateImageRGBA(vg, upload.width, upload.height,
-                                         0, upload.rgbaData.data());
+        int nvgImg = 0;
+        int w = upload.width, h = upload.height;
+        if (upload.rawEncoded) {
+            nvgImg = nvgCreateImageMem(vg, 0, upload.rgbaData.data(),
+                                       static_cast<int>(upload.rgbaData.size()));
+            if (nvgImg != 0) {
+                nvgImageSize(vg, nvgImg, &w, &h);
+                brls::Logger::info("ImageLoader: GPU upload (nvgCreateImageMem) {}x{} from {}KB encoded",
+                                   w, h, upload.rgbaData.size() / 1024);
+            }
+        } else {
+            if (w <= 0 || h <= 0) continue;
+            brls::Logger::info("ImageLoader: GPU upload {}x{} ({}KB RGBA)",
+                               w, h, upload.rgbaData.size() / 1024);
+            nvgImg = nvgCreateImageRGBA(vg, w, h, 0, upload.rgbaData.data());
+        }
         if (nvgImg != 0 && upload.callback) {
-            upload.callback(nvgImg, upload.width, upload.height);
+            upload.callback(nvgImg, w, h);
         } else if (nvgImg == 0) {
-            brls::Logger::error("ImageLoader: nvgCreateImageRGBA failed for {}x{}", upload.width, upload.height);
+            brls::Logger::error("ImageLoader: Cover upload failed ({}KB data)",
+                                upload.rgbaData.size() / 1024);
         }
         uploaded++;
     }
@@ -2453,6 +2475,22 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
                     // Re-check alive after disk I/O
                     if (alive && !*alive) return;
                     if (request.coverCallback) {
+#ifdef __PS4__
+                        // PS4: queue TGA for nvgCreateImageMem (avoid direct stbi calls)
+                        {
+                            std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
+                            PendingCoverUpload upload;
+                            upload.rgbaData = std::move(diskData);
+                            upload.rawEncoded = true;
+                            upload.callback = request.coverCallback;
+                            upload.alive = alive;
+                            s_pendingCovers.push(std::move(upload));
+                        }
+                        bool expected = false;
+                        if (s_pendingCoverScheduled.compare_exchange_strong(expected, true)) {
+                            brls::sync([]() { processPendingCovers(); });
+                        }
+#else
                         int w, h, c;
                         uint8_t* rgba = stbi_load_from_memory(diskData.data(),
                             static_cast<int>(diskData.size()), &w, &h, &c, 4);
@@ -2461,6 +2499,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
                             stbi_image_free(rgba);
                             queueCoverUpload(std::move(rgbaVec), w, h, request.coverCallback, alive);
                         }
+#endif
                     } else if (target) {
                         queueTextureUpdate(diskData, target, callback, alive);
                     }
@@ -2573,6 +2612,33 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         return;
     }
     { std::string().swap(resp.body); }  // release resp.body memory now
+
+#ifdef __PS4__
+    // PS4: skip manual stbi decode for covers — let nanovg decode on the main
+    // thread via nvgCreateImageMem.  Calling stbi_load_from_memory directly on
+    // PS4 worker threads corrupts the heap (SIGABRT), while nanovg's internal
+    // stbi copy (compiled as C in nanovg.c) works correctly.
+    if (request.coverCallback) {
+        cachePut(url, bodyVec);
+        if (alive && !*alive) return;
+        brls::Logger::info("ImageLoader: PS4 cover path, queueing {}KB raw for {}", bodyVec.size() / 1024, url);
+        {
+            std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
+            PendingCoverUpload upload;
+            upload.rgbaData = std::move(bodyVec);
+            upload.rawEncoded = true;
+            upload.callback = request.coverCallback;
+            upload.alive = alive;
+            s_pendingCovers.push(std::move(upload));
+        }
+        bool expected = false;
+        if (s_pendingCoverScheduled.compare_exchange_strong(expected, true)) {
+            brls::sync([]() { processPendingCovers(); });
+        }
+        return;
+    }
+#endif
+
     const uint8_t* decData = bodyVec.data();
     size_t decSize = bodyVec.size();
 
@@ -2695,23 +2761,15 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
         bodyVec.clear();
         bodyVec.shrink_to_fit();
     }
-    brls::Logger::info("ImageLoader: [1] bodyVec released for {}", url);
 
     // Cache the image in memory using LRU eviction
     cachePut(url, imageData);
-    brls::Logger::info("ImageLoader: [2] cachePut done for {}", url);
 
     // Save to disk cache if enabled
-    brls::Logger::info("ImageLoader: [3] checking disk cache setting...");
-    bool shouldCacheToDisk = Application::getInstance().getSettings().cacheCoverImages;
-    brls::Logger::info("ImageLoader: [3b] cacheCoverImages={}", shouldCacheToDisk);
-    if (shouldCacheToDisk) {
+    if (Application::getInstance().getSettings().cacheCoverImages) {
         int mangaId = extractMangaIdFromUrl(url);
-        brls::Logger::info("ImageLoader: [4] mangaId={} for {}", mangaId, url);
         if (mangaId > 0) {
-            brls::Logger::info("ImageLoader: [5] saving cover to disk...");
             LibraryCache::getInstance().saveCoverImage(mangaId, imageData);
-            brls::Logger::info("ImageLoader: [6] disk save done");
         }
     }
 
@@ -2719,27 +2777,17 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     // view may have been destroyed while we were downloading / decoding.
     // Without this, a stale `target` pointer reaches processPendingTextures()
     // and crashes on setImageFromMem().
-    brls::Logger::info("ImageLoader: [7] checking alive flag...");
     if (alive && !*alive) return;
 
     // Cover mode: decode TGA→RGBA on this worker thread, queue pure GPU upload
-    brls::Logger::info("ImageLoader: [8] coverCallback={}, target={}",
-                       (bool)request.coverCallback, (void*)target);
     if (request.coverCallback) {
         int w, h, c;
-        brls::Logger::info("ImageLoader: [9] calling stbi_load_from_memory ({} bytes)...",
-                           imageData.size());
         uint8_t* rgba = stbi_load_from_memory(imageData.data(),
             static_cast<int>(imageData.size()), &w, &h, &c, 4);
-        brls::Logger::info("ImageLoader: [10] stbi returned {}x{} rgba={}",
-                           w, h, (void*)rgba);
         if (rgba) {
             brls::Logger::info("ImageLoader: TGA→RGBA {}x{} for {}", w, h, url);
-            size_t rgbaSize = (size_t)w * h * 4;
-            brls::Logger::info("ImageLoader: [11] allocating rgbaVec ({} bytes)...", rgbaSize);
-            std::vector<uint8_t> rgbaVec(rgba, rgba + rgbaSize);
+            std::vector<uint8_t> rgbaVec(rgba, rgba + (size_t)w * h * 4);
             stbi_image_free(rgba);
-            brls::Logger::info("ImageLoader: [12] queueing cover upload...");
             queueCoverUpload(std::move(rgbaVec), w, h, request.coverCallback, alive);
         } else {
             brls::Logger::error("ImageLoader: TGA→RGBA decode failed for {}", url);
@@ -2747,7 +2795,6 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     } else if (target) {
         queueTextureUpdate(imageData, target, callback, alive);
     }
-    brls::Logger::debug("ImageLoader: Queued texture for {}", url);
 }
 
 void ImageLoader::ensureWorkersStarted() {
