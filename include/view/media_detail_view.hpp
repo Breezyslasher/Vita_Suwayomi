@@ -38,6 +38,19 @@ public:
     // Track which chapter this cell currently represents
     int chapterIndex = -1;
     int rowIndex = -1;
+
+    // Cached chapter metadata — updated by bindCell, read by gesture/action handlers.
+    // Allows focus event and pan gesture to be subscribed ONCE (not per-recycle).
+    MangaDetailView* m_view = nullptr;
+    int chapterId = -1;
+    float chapterNum = 0;
+    bool chapterRead = false;
+    bool serverDownloaded = false;
+    std::string chapterNameStr;
+
+    bool m_focusSubscribed = false;
+    bool m_panGestureAdded = false;
+    int m_lastDlState = -2;  // Track last applied download state to skip redundant icon loads
 };
 
 // Data source for the chapter RecyclerFrame
@@ -51,11 +64,12 @@ public:
     void didSelectRowAt(brls::RecyclerFrame* recycler, brls::IndexPath indexPath) override;
     float heightForRow(brls::RecyclerFrame* recycler, brls::IndexPath index) override;
 
+    void applyDownloadState(ChapterCell* cell, int dlState, int downloadedPages, int pageCount, const Chapter& chapter);
+
 private:
     MangaDetailView* m_view;
 
     void bindCell(ChapterCell* cell, int row);
-    void applyDownloadState(ChapterCell* cell, int dlState, int downloadedPages, int pageCount, const Chapter& chapter);
 };
 
 class MangaDetailView : public brls::Box {

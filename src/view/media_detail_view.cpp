@@ -109,6 +109,7 @@ ChapterCell::ChapterCell() {
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     xButtonIcon->setMarginLeft(8);
+    xButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/square_button.png");
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     statusBox->addView(xButtonIcon);
 
@@ -126,6 +127,10 @@ void ChapterCell::prepareForReuse() {
     brls::RecyclerCell::prepareForReuse();
     chapterIndex = -1;
     rowIndex = -1;
+    chapterId = -1;
+    chapterRead = false;
+    serverDownloaded = false;
+    m_lastDlState = -2;
     titleLabel->setText("");
     titleLabel->setTextColor(nvgRGB(255, 255, 255));
     subtitleLabel->setText("");
@@ -133,7 +138,7 @@ void ChapterCell::prepareForReuse() {
     readLabel->setVisibility(brls::Visibility::GONE);
     dlIcon->setVisibility(brls::Visibility::GONE);
     dlLabel->setVisibility(brls::Visibility::GONE);
-    dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));  // Neutral button color
+    dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     this->setBackgroundColor(Application::getInstance().getRowBackground());
 }
@@ -173,6 +178,14 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     cell->chapterIndex = chapter.index;
     cell->rowIndex = row;
 
+    // Update cached chapter metadata (read by gesture/action handlers)
+    cell->m_view = m_view;
+    cell->chapterId = chapter.id;
+    cell->chapterNum = chapter.chapterNumber;
+    cell->chapterRead = chapter.read;
+    cell->serverDownloaded = chapter.downloaded;
+    cell->chapterNameStr = chapter.name;
+
     // Title
     std::string title = chapter.name;
     if (title.empty()) {
@@ -188,7 +201,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
             subtitle = chapter.scanlator;
         }
         if (chapter.uploadDate > 0) {
-            time_t rawTime = static_cast<time_t>(chapter.uploadDate / 1000);  // ms to seconds
+            time_t rawTime = static_cast<time_t>(chapter.uploadDate / 1000);
             struct tm* timeInfo = localtime(&rawTime);
             if (timeInfo) {
                 char dateBuf[32];
@@ -213,45 +226,48 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
     auto dlProgress = m_view->getDownloadProgressForRow(row);
     applyDownloadState(cell, dlState, dlProgress.first, dlProgress.second, chapter);
 
-    // Focus event: show X button icon
-    MangaDetailView* view = m_view;
-    brls::Image* xIcon = cell->xButtonIcon;
-    cell->getFocusEvent()->subscribe([view, xIcon](brls::View*) {
-        brls::Image* prev = view->getCurrentFocusedIcon();
-        if (prev && prev != xIcon) {
-            prev->setVisibility(brls::Visibility::INVISIBLE);
-        }
-        if (xIcon->getVisibility() != brls::Visibility::VISIBLE) {
-            xIcon->setImageFromFile(RESOURCE_PREFIX "images/square_button.png");
-        }
-        xIcon->setVisibility(brls::Visibility::VISIBLE);
-        view->setCurrentFocusedIcon(xIcon);
-    });
+    // Focus event: subscribe ONCE per cell lifetime (not per recycle).
+    // The handler reads from cell->m_view which is updated each bind.
+    if (!cell->m_focusSubscribed) {
+        cell->m_focusSubscribed = true;
+        brls::Image* xIcon = cell->xButtonIcon;
+        cell->getFocusEvent()->subscribe([cell, xIcon](brls::View*) {
+            MangaDetailView* v = cell->m_view;
+            if (!v) return;
+            brls::Image* prev = v->getCurrentFocusedIcon();
+            if (prev && prev != xIcon) {
+                prev->setVisibility(brls::Visibility::INVISIBLE);
+            }
+            xIcon->setVisibility(brls::Visibility::VISIBLE);
+            v->setCurrentFocusedIcon(xIcon);
+        });
+    }
 
-    // Click action - open chapter
-    Chapter capturedChapter = chapter;
-    cell->registerClickAction([view, capturedChapter](brls::View*) {
-        view->onChapterSelected(capturedChapter);
+    // Click action - reads chapter from sorted list at cell->rowIndex (live lookup)
+    MangaDetailView* view = m_view;
+    cell->registerClickAction([view, cell](brls::View*) {
+        auto& chs = view->getSortedFilteredChapters();
+        if (cell->rowIndex >= 0 && cell->rowIndex < static_cast<int>(chs.size())) {
+            view->onChapterSelected(chs[cell->rowIndex]);
+        }
         return true;
     });
 
-    // X button action: download/delete/cancel
-    // Query live state at action time via view->getDownloadStateForRow() so the
-    // callback always reflects the current download status, not stale bind-time values.
+    // X button action: reads live state via cell->rowIndex
     int mangaId = m_view->m_manga.id;
-    int chapterIdx = chapter.index;
     std::weak_ptr<bool> aliveWeakForBtn = m_view->m_alive;
     cell->registerAction("Download", brls::ControllerButton::BUTTON_X,
-        [view, capturedChapter, cell, mangaId, chapterIdx, aliveWeakForBtn](brls::View*) {
+        [view, cell, mangaId, aliveWeakForBtn](brls::View*) {
         int curState = view->getDownloadStateForRow(cell->rowIndex);
         bool queued = curState == static_cast<int>(LocalDownloadState::QUEUED);
         bool downloading = curState == static_cast<int>(LocalDownloadState::DOWNLOADING);
         bool downloaded = curState == static_cast<int>(LocalDownloadState::COMPLETED);
+        auto& chs = view->getSortedFilteredChapters();
+        if (cell->rowIndex < 0 || cell->rowIndex >= static_cast<int>(chs.size())) return true;
+        const Chapter& ch = chs[cell->rowIndex];
         if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
-            if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
-                // Defer UI refresh to next frame to avoid mutating the view
-                // hierarchy while borealis is still dispatching the button event.
+            if (dm.cancelChapterDownload(mangaId, ch.index)) {
                 brls::sync([view, aliveWeakForBtn]() {
                     auto alive = aliveWeakForBtn.lock();
                     if (!alive || !*alive) return;
@@ -259,22 +275,25 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                 });
             }
         } else if (downloaded) {
-            view->deleteChapterDownload(capturedChapter);
+            view->deleteChapterDownload(ch);
         } else {
-            view->downloadChapter(capturedChapter);
+            view->downloadChapter(ch);
         }
         return true;
     });
 
-    // Download button click
-    cell->dlBtn->registerClickAction([view, capturedChapter, cell, mangaId, chapterIdx, aliveWeakForBtn](brls::View*) {
+    // Download button click (same logic as X button)
+    cell->dlBtn->registerClickAction([view, cell, mangaId, aliveWeakForBtn](brls::View*) {
         int curState = view->getDownloadStateForRow(cell->rowIndex);
         bool queued = curState == static_cast<int>(LocalDownloadState::QUEUED);
         bool downloading = curState == static_cast<int>(LocalDownloadState::DOWNLOADING);
         bool downloaded = curState == static_cast<int>(LocalDownloadState::COMPLETED);
+        auto& chs = view->getSortedFilteredChapters();
+        if (cell->rowIndex < 0 || cell->rowIndex >= static_cast<int>(chs.size())) return true;
+        const Chapter& ch = chs[cell->rowIndex];
         if (queued || downloading) {
             DownloadsManager& dm = DownloadsManager::getInstance();
-            if (dm.cancelChapterDownload(mangaId, chapterIdx)) {
+            if (dm.cancelChapterDownload(mangaId, ch.index)) {
                 brls::sync([view, aliveWeakForBtn]() {
                     auto alive = aliveWeakForBtn.lock();
                     if (!alive || !*alive) return;
@@ -282,173 +301,184 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                 });
             }
         } else if (downloaded) {
-            view->deleteChapterDownload(capturedChapter);
+            view->deleteChapterDownload(ch);
         } else {
-            view->downloadChapter(capturedChapter);
+            view->downloadChapter(ch);
         }
         return true;
     });
 
-    // Swipe gesture support (Komikku-style)
-    // Capture only immutable chapter metadata; download state is queried live.
-    int chapterId = capturedChapter.id;
-    int chapterIndex = capturedChapter.index;
-    float chapterNum = capturedChapter.chapterNumber;
-    std::string mangaTitle = m_view->m_manga.title;
-    std::string chapterName = capturedChapter.name;
-    bool serverDownloaded = capturedChapter.downloaded;
-    bool chapterRead = chapter.read;
+    // Swipe gesture: add ONCE per cell lifetime, reads chapter data from cell fields
+    if (!cell->m_panGestureAdded) {
+        cell->m_panGestureAdded = true;
+        std::string mangaTitle = m_view->m_manga.title;
 
-    cell->addGestureRecognizer(new brls::PanGestureRecognizer(
-        [view, cell, mangaId, chapterIndex, chapterId, chapterNum, chapterRead,
-         serverDownloaded,
-         mangaTitle, chapterName](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
-            static brls::Point touchStart;
-            static bool isValidSwipe = false;
-            const NVGcolor originalBgColor = Application::getInstance().getRowBackground();
-            const float SWIPE_THRESHOLD = 60.0f;
-            const float TAP_THRESHOLD = 15.0f;
+        cell->addGestureRecognizer(new brls::PanGestureRecognizer(
+            [view, cell, mangaId, mangaTitle](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+                static brls::Point touchStart;
+                static bool isValidSwipe = false;
+                const NVGcolor originalBgColor = Application::getInstance().getRowBackground();
+                const float SWIPE_THRESHOLD = 60.0f;
+                const float TAP_THRESHOLD = 15.0f;
 
-            // Query live download state for swipe color hints
-            int liveDlState = view->getDownloadStateForRow(cell->rowIndex);
-            bool isLiveDownloaded = liveDlState == static_cast<int>(LocalDownloadState::COMPLETED);
-            bool isLiveQueued = liveDlState == static_cast<int>(LocalDownloadState::QUEUED);
-            bool isLiveDownloading = liveDlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
+                int liveDlState = view->getDownloadStateForRow(cell->rowIndex);
+                bool isLiveDownloaded = liveDlState == static_cast<int>(LocalDownloadState::COMPLETED);
+                bool isLiveQueued = liveDlState == static_cast<int>(LocalDownloadState::QUEUED);
+                bool isLiveDownloading = liveDlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
 
-            if (status.state == brls::GestureState::START) {
-                touchStart = status.position;
-                isValidSwipe = false;
-            } else if (status.state == brls::GestureState::STAY) {
-                float dx = status.position.x - touchStart.x;
-                float dy = status.position.y - touchStart.y;
+                // Read current chapter data from cell (updated each bind)
+                int curChapterIndex = cell->chapterIndex;
+                int curChapterId = cell->chapterId;
+                float curChapterNum = cell->chapterNum;
+                bool curChapterRead = cell->chapterRead;
+                bool curServerDownloaded = cell->serverDownloaded;
+                std::string curChapterName = cell->chapterNameStr;
 
-                if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
-                    isValidSwipe = true;
+                if (status.state == brls::GestureState::START) {
+                    touchStart = status.position;
+                    isValidSwipe = false;
+                } else if (status.state == brls::GestureState::STAY) {
+                    float dx = status.position.x - touchStart.x;
+                    float dy = status.position.y - touchStart.y;
 
-                    if (dx < -SWIPE_THRESHOLD * 0.5f) {
-                        cell->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
-                    } else if (dx > SWIPE_THRESHOLD * 0.5f) {
-                        if (isLiveDownloaded || serverDownloaded || isLiveQueued || isLiveDownloading) {
-                            cell->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
+                    if (std::abs(dx) > std::abs(dy) * 1.5f && std::abs(dx) > TAP_THRESHOLD) {
+                        isValidSwipe = true;
+
+                        if (dx < -SWIPE_THRESHOLD * 0.5f) {
+                            cell->setBackgroundColor(nvgRGBA(52, 152, 219, 100));
+                        } else if (dx > SWIPE_THRESHOLD * 0.5f) {
+                            if (isLiveDownloaded || curServerDownloaded || isLiveQueued || isLiveDownloading) {
+                                cell->setBackgroundColor(nvgRGBA(231, 76, 60, 100));
+                            } else {
+                                cell->setBackgroundColor(nvgRGBA(46, 204, 113, 100));
+                            }
                         } else {
-                            cell->setBackgroundColor(nvgRGBA(46, 204, 113, 100));
+                            cell->setBackgroundColor(originalBgColor);
                         }
-                    } else {
-                        cell->setBackgroundColor(originalBgColor);
                     }
-                }
-            } else if (status.state == brls::GestureState::END) {
-                cell->setBackgroundColor(originalBgColor);
+                } else if (status.state == brls::GestureState::END) {
+                    cell->setBackgroundColor(originalBgColor);
 
-                float dx = status.position.x - touchStart.x;
-                float dy = status.position.y - touchStart.y;
+                    float dx = status.position.x - touchStart.x;
+                    float dy = status.position.y - touchStart.y;
 
-                if (isValidSwipe && std::abs(dx) > SWIPE_THRESHOLD && std::abs(dx) > std::abs(dy) * 1.5f) {
-                    if (dx < 0) {
-                        // Swipe left: toggle read/unread
-                        if (chapterRead) {
-                            asyncRun([mangaId, chapterIndex]() {
-                                SuwayomiClient::getInstance().markChapterUnread(mangaId, chapterIndex);
-                                brls::sync([]() { brls::Application::notify("Marked as unread"); });
-                            });
+                    if (isValidSwipe && std::abs(dx) > SWIPE_THRESHOLD && std::abs(dx) > std::abs(dy) * 1.5f) {
+                        if (dx < 0) {
+                            if (curChapterRead) {
+                                asyncRun([mangaId, curChapterIndex]() {
+                                    SuwayomiClient::getInstance().markChapterUnread(mangaId, curChapterIndex);
+                                    brls::sync([]() { brls::Application::notify("Marked as unread"); });
+                                });
+                            } else {
+                                asyncRun([mangaId, curChapterIndex]() {
+                                    SuwayomiClient::getInstance().markChapterRead(mangaId, curChapterIndex);
+                                    brls::sync([]() { brls::Application::notify("Marked as read"); });
+                                });
+                            }
                         } else {
-                            asyncRun([mangaId, chapterIndex]() {
-                                SuwayomiClient::getInstance().markChapterRead(mangaId, chapterIndex);
-                                brls::sync([]() { brls::Application::notify("Marked as read"); });
-                            });
-                        }
-                    } else {
-                        // Swipe right: download/delete — use live state
-                        DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
+                            DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
 
-                        if (isLiveQueued || isLiveDownloading) {
-                            asyncRun([view, mangaId, chapterIndex]() {
-                                DownloadsManager& dm = DownloadsManager::getInstance();
-                                if (dm.cancelChapterDownload(mangaId, chapterIndex)) {
-                                    brls::sync([view]() {
-                                        brls::Application::notify("Removed from queue");
+                            if (isLiveQueued || isLiveDownloading) {
+                                asyncRun([view, mangaId, curChapterIndex]() {
+                                    DownloadsManager& dm = DownloadsManager::getInstance();
+                                    if (dm.cancelChapterDownload(mangaId, curChapterIndex)) {
+                                        brls::sync([view]() {
+                                            brls::Application::notify("Removed from queue");
+                                            view->refreshVisibleDownloadIcons();
+                                        });
+                                    }
+                                });
+                            } else if (isLiveDownloaded || curServerDownloaded) {
+                                asyncRun([view, mangaId, curChapterId, curChapterIndex, downloadMode,
+                                          curServerDownloaded, isLiveDownloaded]() {
+                                    int serverDeleted = 0;
+                                    int localDeleted = 0;
+                                    if (curServerDownloaded &&
+                                        (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
+                                        SuwayomiClient& client = SuwayomiClient::getInstance();
+                                        std::vector<int> chapterIds = {curChapterId};
+                                        std::vector<int> chapterIndexes = {curChapterIndex};
+                                        if (client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes)) {
+                                            serverDeleted = 1;
+                                        }
+                                    }
+                                    if (isLiveDownloaded &&
+                                        (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
+                                        DownloadsManager& dm = DownloadsManager::getInstance();
+                                        if (dm.deleteChapterDownload(mangaId, curChapterIndex)) {
+                                            localDeleted = 1;
+                                        }
+                                    }
+                                    brls::sync([view, serverDeleted, localDeleted]() {
+                                        if (serverDeleted > 0 || localDeleted > 0) {
+                                            brls::Application::notify("Download deleted");
+                                        }
                                         view->refreshVisibleDownloadIcons();
                                     });
-                                }
-                            });
-                        } else if (isLiveDownloaded || serverDownloaded) {
-                            asyncRun([view, mangaId, chapterId, chapterIndex, downloadMode,
-                                      serverDownloaded, isLiveDownloaded]() {
-                                int serverDeleted = 0;
-                                int localDeleted = 0;
-                                if (serverDownloaded &&
-                                    (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH)) {
+                                });
+                            } else {
+                                asyncRun([view, mangaId, curChapterId, curChapterIndex, curChapterNum, mangaTitle,
+                                          curChapterName, downloadMode]() {
                                     SuwayomiClient& client = SuwayomiClient::getInstance();
-                                    std::vector<int> chapterIds = {chapterId};
-                                    std::vector<int> chapterIndexes = {chapterIndex};
-                                    if (client.deleteChapterDownloads(chapterIds, mangaId, chapterIndexes)) {
-                                        serverDeleted = 1;
-                                    }
-                                }
-                                if (isLiveDownloaded &&
-                                    (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH)) {
                                     DownloadsManager& dm = DownloadsManager::getInstance();
-                                    if (dm.deleteChapterDownload(mangaId, chapterIndex)) {
-                                        localDeleted = 1;
+                                    bool serverQueued = false;
+                                    bool localQueued = false;
+                                    if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
+                                        std::vector<int> chapterIds = {curChapterId};
+                                        serverQueued = client.queueChapterDownloads(chapterIds);
                                     }
-                                }
-                                brls::sync([view, serverDeleted, localDeleted]() {
-                                    if (serverDeleted > 0 || localDeleted > 0) {
-                                        brls::Application::notify("Download deleted");
+                                    if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
+                                        dm.init();
+                                        localQueued = dm.queueChapterDownload(mangaId, curChapterId, curChapterIndex,
+                                                                              mangaTitle, curChapterName, curChapterNum);
+                                        if (localQueued) { dm.startDownloads(); }
                                     }
-                                    view->refreshVisibleDownloadIcons();
+                                    brls::sync([view, serverQueued, localQueued]() {
+                                        if (serverQueued || localQueued) {
+                                            brls::Application::notify("Download queued");
+                                        } else {
+                                            brls::Application::notify("Failed to queue");
+                                        }
+                                        view->refreshVisibleDownloadIcons();
+                                    });
                                 });
-                            });
-                        } else {
-                            asyncRun([view, mangaId, chapterId, chapterIndex, chapterNum, mangaTitle,
-                                      chapterName, downloadMode]() {
-                                SuwayomiClient& client = SuwayomiClient::getInstance();
-                                DownloadsManager& dm = DownloadsManager::getInstance();
-                                bool serverQueued = false;
-                                bool localQueued = false;
-                                if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
-                                    std::vector<int> chapterIds = {chapterId};
-                                    serverQueued = client.queueChapterDownloads(chapterIds);
-                                }
-                                if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
-                                    dm.init();
-                                    localQueued = dm.queueChapterDownload(mangaId, chapterId, chapterIndex,
-                                                                          mangaTitle, chapterName, chapterNum);
-                                    if (localQueued) { dm.startDownloads(); }
-                                }
-                                brls::sync([view, serverQueued, localQueued]() {
-                                    if (serverQueued || localQueued) {
-                                        brls::Application::notify("Download queued");
-                                    } else {
-                                        brls::Application::notify("Failed to queue");
-                                    }
-                                    view->refreshVisibleDownloadIcons();
-                                });
-                            });
+                            }
                         }
                     }
+                    isValidSwipe = false;
                 }
-                isValidSwipe = false;
-            }
-        }, brls::PanAxis::HORIZONTAL));
+            }, brls::PanAxis::HORIZONTAL));
+    }
 }
 
 void ChaptersDataSource::applyDownloadState(ChapterCell* cell, int dlState, int downloadedPages, int pageCount, const Chapter& chapter) {
-    bool isLocallyDownloaded = dlState == static_cast<int>(LocalDownloadState::COMPLETED);
     bool isLocallyDownloading = dlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
-    bool isLocallyQueued = dlState == static_cast<int>(LocalDownloadState::QUEUED);
-    bool isLocallyFailed = dlState == static_cast<int>(LocalDownloadState::FAILED);
 
+    // Downloading state updates the progress label every call (page count changes)
     if (isLocallyDownloading) {
-        cell->dlIcon->setVisibility(brls::Visibility::GONE);
-        cell->dlLabel->setVisibility(brls::Visibility::VISIBLE);
+        if (cell->m_lastDlState != dlState) {
+            cell->dlIcon->setVisibility(brls::Visibility::GONE);
+            cell->dlLabel->setVisibility(brls::Visibility::VISIBLE);
+            cell->dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
+        }
         if (pageCount > 0) {
             cell->dlLabel->setText(std::to_string(downloadedPages) + "/" + std::to_string(pageCount));
         } else {
             cell->dlLabel->setText("...");
         }
-        cell->dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
-    } else if (isLocallyDownloaded) {
+        cell->m_lastDlState = dlState;
+        return;
+    }
+
+    // For non-downloading states, skip if state unchanged (avoids setImageFromFile + invalidate)
+    if (cell->m_lastDlState == dlState) return;
+    cell->m_lastDlState = dlState;
+
+    bool isLocallyDownloaded = dlState == static_cast<int>(LocalDownloadState::COMPLETED);
+    bool isLocallyQueued = dlState == static_cast<int>(LocalDownloadState::QUEUED);
+    bool isLocallyFailed = dlState == static_cast<int>(LocalDownloadState::FAILED);
+
+    if (isLocallyDownloaded) {
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
         cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/checkbox_checked.png");
         cell->dlLabel->setVisibility(brls::Visibility::GONE);
@@ -464,8 +494,6 @@ void ChaptersDataSource::applyDownloadState(ChapterCell* cell, int dlState, int 
         cell->dlLabel->setVisibility(brls::Visibility::GONE);
         cell->dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));
     } else {
-        // Default "not downloaded" state - show download arrow icon.
-        // With RecyclerFrame only ~8 cells exist, so loading icons is cheap.
         cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
         cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/download.png");
         cell->dlLabel->setVisibility(brls::Visibility::GONE);
@@ -1644,7 +1672,7 @@ void MangaDetailView::updateChapterDownloadStates() {
 
 void MangaDetailView::refreshVisibleDownloadIcons() {
     if (!m_alive || !*m_alive) return;
-    if (!m_chaptersRecycler) return;
+    if (!m_chaptersRecycler || !m_chaptersDataSource) return;
     if (m_sortedFilteredChapters.empty()) return;
 
     // Refresh the download state + progress snapshot
@@ -1665,9 +1693,7 @@ void MangaDetailView::refreshVisibleDownloadIcons() {
     }
     dlLock.unlock();
 
-    // Navigate RecyclerFrame hierarchy: RecyclerFrame -> contentBox -> ChapterCells
-    // RecyclerFrame's direct children include its internal contentBox.
-    // The contentBox's children are the actual visible ChapterCell instances.
+    // Walk visible cells and apply download state via shared helper
     for (auto* container : m_chaptersRecycler->getChildren()) {
         brls::Box* contentBox = dynamic_cast<brls::Box*>(container);
         if (!contentBox) continue;
@@ -1678,45 +1704,10 @@ void MangaDetailView::refreshVisibleDownloadIcons() {
             if (row >= static_cast<int>(m_chapterDlStates.size())) continue;
             if (row >= static_cast<int>(m_sortedFilteredChapters.size())) continue;
 
-            int dlState = m_chapterDlStates[row];
-            auto progress = m_chapterDlProgress[row];
-
-            bool isDownloaded = dlState == static_cast<int>(LocalDownloadState::COMPLETED);
-            bool isDownloading = dlState == static_cast<int>(LocalDownloadState::DOWNLOADING);
-            bool isQueued = dlState == static_cast<int>(LocalDownloadState::QUEUED);
-            bool isFailed = dlState == static_cast<int>(LocalDownloadState::FAILED);
-
-            if (isDownloading) {
-                cell->dlIcon->setVisibility(brls::Visibility::GONE);
-                cell->dlLabel->setVisibility(brls::Visibility::VISIBLE);
-                if (progress.second > 0) {
-                    cell->dlLabel->setText(std::to_string(progress.first) + "/" + std::to_string(progress.second));
-                } else {
-                    cell->dlLabel->setText("...");
-                }
-                cell->dlBtn->setBackgroundColor(nvgRGBA(52, 152, 219, 200));
-                cell->dlBtn->invalidate();
-            } else if (isDownloaded) {
-                cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-                cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/checkbox_checked.png");
-                cell->dlLabel->setVisibility(brls::Visibility::GONE);
-                cell->dlBtn->setBackgroundColor(nvgRGBA(46, 204, 113, 200));
-            } else if (isQueued) {
-                cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-                cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/refresh.png");
-                cell->dlLabel->setVisibility(brls::Visibility::GONE);
-                cell->dlBtn->setBackgroundColor(nvgRGBA(241, 196, 15, 200));
-            } else if (isFailed) {
-                cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-                cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/cross.png");
-                cell->dlLabel->setVisibility(brls::Visibility::GONE);
-                cell->dlBtn->setBackgroundColor(nvgRGBA(231, 76, 60, 200));
-            } else {
-                cell->dlIcon->setVisibility(brls::Visibility::VISIBLE);
-                cell->dlIcon->setImageFromFile(RESOURCE_PREFIX "icons/download.png");
-                cell->dlLabel->setVisibility(brls::Visibility::GONE);
-                cell->dlBtn->setBackgroundColor(nvgRGBA(60, 60, 60, 200));
-            }
+            m_chaptersDataSource->applyDownloadState(
+                cell, m_chapterDlStates[row],
+                m_chapterDlProgress[row].first, m_chapterDlProgress[row].second,
+                m_sortedFilteredChapters[row]);
         }
     }
 }
