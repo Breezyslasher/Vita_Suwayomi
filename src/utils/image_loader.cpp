@@ -2723,6 +2723,7 @@ void ImageLoader::ensureWorkersStarted() {
 
     s_shutdownWorkers = false;
     int numWorkers = s_maxConcurrentLoads;
+    if (numWorkers <= 0) numWorkers = 3;
     brls::Logger::info("ImageLoader: Starting {} worker threads", numWorkers);
 
     for (int i = 0; i < numWorkers; i++) {
