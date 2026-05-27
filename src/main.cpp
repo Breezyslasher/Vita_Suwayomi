@@ -69,7 +69,7 @@ static void installPS4CrashHandlers(FILE* logFile) {
     g_crashLogFile = logFile;
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
-    sa.sa_sigaction = ps4CrashSignalHandler;
+    sa.__sa_handler.__sa_sigaction = ps4CrashSignalHandler;
     sa.sa_flags = SA_SIGINFO;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGSEGV, &sa, nullptr);
