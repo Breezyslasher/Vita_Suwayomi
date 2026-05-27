@@ -90,6 +90,34 @@ jobs:
           echo "Numeric version: ${NUM}"
           echo "Tag/filename version: ${TAG}"
 
+  # ───────────────────────────────────────────────
+  # Save version override back to the workflow file
+  # ───────────────────────────────────────────────
+  save-version:
+    needs: [resolve-version]
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: Update APP_VERSION in workflow file
+        run: |
+          sed -i 's/^  APP_VERSION: ".*"/  APP_VERSION: "${{ inputs.version }}"/' \
+            .github/workflows/build-multi-platform.yml
+          echo "Updated APP_VERSION to: ${{ inputs.version }}"
+          grep 'APP_VERSION:' .github/workflows/build-multi-platform.yml
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/build-multi-platform.yml
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Update APP_VERSION to ${{ inputs.version }}"
+          git push
+
   upload-release:
     needs: [ resolve-version, build-mingw, build-nx, build-macos, build-flatpak, build-aur, build-ps4, build-vita, build-android ]
     runs-on: ubuntu-latest
