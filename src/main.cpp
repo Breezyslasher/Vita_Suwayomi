@@ -33,23 +33,26 @@
 static FILE* g_crashLogFile = nullptr;
 
 static void ps4CrashSignalHandler(int sig, siginfo_t* info, void* ucontext) {
-    // Write directly to the log file using async-signal-safe functions where possible.
-    // fprintf is NOT async-signal-safe but we're about to die anyway — best effort.
+    // Write directly to the log file — best effort before we die.
     FILE* f = g_crashLogFile;
     if (f) {
         const char* sigName = "UNKNOWN";
         switch (sig) {
-            case SIGSEGV: sigName = "SIGSEGV"; break;
-            case SIGBUS:  sigName = "SIGBUS";  break;
-            case SIGABRT: sigName = "SIGABRT"; break;
-            case SIGFPE:  sigName = "SIGFPE";  break;
-            case SIGILL:  sigName = "SIGILL";  break;
+            case SIGSEGV: sigName = "SIGSEGV (bad memory access)"; break;
+            case SIGBUS:  sigName = "SIGBUS (alignment/bus error)";  break;
+            case SIGABRT: sigName = "SIGABRT (abort/assert/heap corruption)"; break;
+            case SIGFPE:  sigName = "SIGFPE (arithmetic error)";  break;
+            case SIGILL:  sigName = "SIGILL (illegal instruction)";  break;
         }
         fprintf(f, "\n========== CRASH ==========\n");
         fprintf(f, "Signal: %s (%d)\n", sigName, sig);
         if (info) {
             fprintf(f, "Fault address: %p\n", info->si_addr);
             fprintf(f, "Signal code: %d\n", info->si_code);
+            fprintf(f, "si_pid: %d, si_uid: %d\n", info->si_pid, info->si_uid);
+            fprintf(f, "si_errno: %d\n", info->si_errno);
+        } else {
+            fprintf(f, "siginfo_t: NULL\n");
         }
         fprintf(f, "===========================\n");
         fflush(f);

@@ -2056,7 +2056,9 @@ void ImageLoader::setMaxThumbnailSize(int maxSize) {
 }
 
 void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& data) {
+    brls::Logger::info("ImageLoader: cachePut [a] locking mutex...");
     std::lock_guard<std::mutex> lock(s_cacheMutex);
+    brls::Logger::info("ImageLoader: cachePut [b] locked, map size={} list size={}", s_cacheMap.size(), s_cacheList.size());
 
     // If key already exists, remove old entry and track memory
     auto it = s_cacheMap.find(url);
@@ -2065,6 +2067,7 @@ void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& d
         s_cacheList.erase(it->second);
         s_cacheMap.erase(it);
     }
+    brls::Logger::info("ImageLoader: cachePut [c] dedup done");
 
     // Evict oldest entries if over count limit OR memory limit
     while (s_cacheList.size() >= s_maxCacheSize ||
@@ -2074,11 +2077,14 @@ void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& d
         s_cacheMap.erase(oldest.url);
         s_cacheList.pop_back();
     }
+    brls::Logger::info("ImageLoader: cachePut [d] eviction done, inserting {} bytes", data.size());
 
     // Insert at front (most recently used)
     s_cacheList.push_front({url, data});
+    brls::Logger::info("ImageLoader: cachePut [e] list insert done");
     s_cacheMap[url] = s_cacheList.begin();
     s_currentCacheMemory += data.size();
+    brls::Logger::info("ImageLoader: cachePut [f] done, total cache {}KB", s_currentCacheMemory / 1024);
 }
 
 bool ImageLoader::cacheGet(const std::string& url, std::vector<uint8_t>& data) {
