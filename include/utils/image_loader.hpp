@@ -18,8 +18,6 @@
 #include <vector>
 #include <thread>
 
-namespace vitasuwayomi { class HttpClient; }
-
 namespace vitasuwayomi {
 
 class ImageLoader {
@@ -122,8 +120,8 @@ private:
         std::shared_ptr<bool> alive;  // If set and *alive==false, skip (owner destroyed)
     };
 
-    static void executeLoad(const LoadRequest& request, vitasuwayomi::HttpClient& httpClient);
-    static void executeRotatableLoad(const RotatableLoadRequest& request, vitasuwayomi::HttpClient& httpClient);
+    static void executeLoad(const LoadRequest& request);
+    static void executeRotatableLoad(const RotatableLoadRequest& request);
 
     // LRU cache: list stores entries in access order (most recent at front)
     // map provides O(1) lookup by URL
@@ -194,7 +192,6 @@ private:
         int height = 0;
         CoverReadyCallback callback;
         std::shared_ptr<bool> alive;
-        bool rawEncoded = false;  // true = rgbaData holds JPEG/PNG, use nvgCreateImageMem
     };
     static std::queue<PendingCoverUpload> s_pendingCovers;
     static std::mutex s_pendingCoverMutex;

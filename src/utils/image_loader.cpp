@@ -1990,8 +1990,8 @@ static void applyAuthHeaders(HttpClient& client) {
 // Authenticated HTTP GET with automatic JWT token refresh on 401/403.
 // If the request fails due to an expired token, refreshes via SuwayomiClient
 // and retries once with the new token.
-static HttpResponse authenticatedGet(HttpClient& client, const std::string& url, int maxRetries = 2) {
-    client.clearDefaultHeaders();
+static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2) {
+    HttpClient client;
     applyAuthHeaders(client);
 
     HttpResponse resp;
@@ -2012,6 +2012,8 @@ static HttpResponse authenticatedGet(HttpClient& client, const std::string& url,
                               resp.statusCode, url);
             auto& suwayomiClient = SuwayomiClient::getInstance();
             bool refreshed = suwayomiClient.refreshToken();
+            // Always re-apply auth headers: even if OUR refresh failed,
+            // another thread may have already refreshed the token successfully.
             tokenRefreshed = true;
             client.clearDefaultHeaders();
             applyAuthHeaders(client);
@@ -2020,6 +2022,7 @@ static HttpResponse authenticatedGet(HttpClient& client, const std::string& url,
             } else {
                 brls::Logger::warning("ImageLoader: Token refresh failed for {}, retrying with current token", url);
             }
+            // Don't count this as a retry attempt
             attempt--;
             continue;
         }
@@ -2197,26 +2200,11 @@ void ImageLoader::loadCoverAsync(const std::string& url, CoverReadyCallback call
                                   std::shared_ptr<bool> alive) {
     if (url.empty()) return;
 
-    // Memory cache hit: queue for GPU upload on the next frame.
+    // Memory cache: decode TGA→RGBA here (fast, <0.5ms for 120px thumbnails),
+    // then queue the RGBA for GPU upload on the next frame.
     {
         std::vector<uint8_t> cachedData;
         if (cacheGet(url, cachedData)) {
-#ifdef __PS4__
-            // PS4: cached data is raw JPEG/PNG — queue for nvgCreateImageMem
-            {
-                std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
-                PendingCoverUpload upload;
-                upload.rgbaData = std::move(cachedData);
-                upload.rawEncoded = true;
-                upload.callback = std::move(callback);
-                upload.alive = std::move(alive);
-                s_pendingCovers.push(std::move(upload));
-            }
-            bool expected = false;
-            if (s_pendingCoverScheduled.compare_exchange_strong(expected, true)) {
-                brls::sync([]() { processPendingCovers(); });
-            }
-#else
             int w, h, c;
             uint8_t* rgba = stbi_load_from_memory(cachedData.data(),
                 static_cast<int>(cachedData.size()), &w, &h, &c, 4);
@@ -2225,7 +2213,6 @@ void ImageLoader::loadCoverAsync(const std::string& url, CoverReadyCallback call
                 stbi_image_free(rgba);
                 queueCoverUpload(std::move(rgbaVec), w, h, std::move(callback), std::move(alive));
             }
-#endif
             return;
         }
     }
@@ -2281,29 +2268,12 @@ void ImageLoader::processPendingCovers() {
         }
 
         if (upload.alive && !*upload.alive) continue;
-        if (upload.rgbaData.empty()) continue;
+        if (upload.rgbaData.empty() || upload.width <= 0 || upload.height <= 0) continue;
 
-        int nvgImg = 0;
-        int w = upload.width, h = upload.height;
-        if (upload.rawEncoded) {
-            nvgImg = nvgCreateImageMem(vg, 0, upload.rgbaData.data(),
-                                       static_cast<int>(upload.rgbaData.size()));
-            if (nvgImg != 0) {
-                nvgImageSize(vg, nvgImg, &w, &h);
-                brls::Logger::info("ImageLoader: GPU upload (nvgCreateImageMem) {}x{} from {}KB encoded",
-                                   w, h, upload.rgbaData.size() / 1024);
-            }
-        } else {
-            if (w <= 0 || h <= 0) continue;
-            brls::Logger::info("ImageLoader: GPU upload {}x{} ({}KB RGBA)",
-                               w, h, upload.rgbaData.size() / 1024);
-            nvgImg = nvgCreateImageRGBA(vg, w, h, 0, upload.rgbaData.data());
-        }
+        int nvgImg = nvgCreateImageRGBA(vg, upload.width, upload.height,
+                                         0, upload.rgbaData.data());
         if (nvgImg != 0 && upload.callback) {
-            upload.callback(nvgImg, w, h);
-        } else if (nvgImg == 0) {
-            brls::Logger::error("ImageLoader: Cover upload failed ({}KB data)",
-                                upload.rgbaData.size() / 1024);
+            upload.callback(nvgImg, upload.width, upload.height);
         }
         uploaded++;
     }
@@ -2431,7 +2401,7 @@ void ImageLoader::processPendingRotatableTextures() {
     }
 }
 
-void ImageLoader::executeLoad(const LoadRequest& request, HttpClient& httpClient) {
+void ImageLoader::executeLoad(const LoadRequest& request) {
     const std::string& url = request.url;
     brls::Image* target = request.target;
     LoadCallback callback = request.callback;
@@ -2472,22 +2442,6 @@ void ImageLoader::executeLoad(const LoadRequest& request, HttpClient& httpClient
                     // Re-check alive after disk I/O
                     if (alive && !*alive) return;
                     if (request.coverCallback) {
-#ifdef __PS4__
-                        // PS4: queue TGA for nvgCreateImageMem (avoid direct stbi calls)
-                        {
-                            std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
-                            PendingCoverUpload upload;
-                            upload.rgbaData = std::move(diskData);
-                            upload.rawEncoded = true;
-                            upload.callback = request.coverCallback;
-                            upload.alive = alive;
-                            s_pendingCovers.push(std::move(upload));
-                        }
-                        bool expected = false;
-                        if (s_pendingCoverScheduled.compare_exchange_strong(expected, true)) {
-                            brls::sync([]() { processPendingCovers(); });
-                        }
-#else
                         int w, h, c;
                         uint8_t* rgba = stbi_load_from_memory(diskData.data(),
                             static_cast<int>(diskData.size()), &w, &h, &c, 4);
@@ -2496,7 +2450,6 @@ void ImageLoader::executeLoad(const LoadRequest& request, HttpClient& httpClient
                             stbi_image_free(rgba);
                             queueCoverUpload(std::move(rgbaVec), w, h, request.coverCallback, alive);
                         }
-#endif
                     } else if (target) {
                         queueTextureUpdate(diskData, target, callback, alive);
                     }
@@ -2518,15 +2471,12 @@ void ImageLoader::executeLoad(const LoadRequest& request, HttpClient& httpClient
     if (alive && !*alive) return;
 
     // Authenticated GET with automatic JWT refresh on 401/403
-    brls::Logger::info("ImageLoader: Downloading {}", url);
-    HttpResponse resp = authenticatedGet(httpClient, url, 2);
+    HttpResponse resp = authenticatedGet(url, 2);
 
     if (!resp.success || resp.body.empty()) {
         brls::Logger::warning("ImageLoader: Failed to load {} (status {})", url, resp.statusCode);
         return;
     }
-
-    brls::Logger::info("ImageLoader: Downloaded {} ({} bytes)", url, resp.body.size());
 
     // Check alive flag after download - skip decode if owner was destroyed
     if (alive && !*alive) return;
@@ -2609,33 +2559,6 @@ void ImageLoader::executeLoad(const LoadRequest& request, HttpClient& httpClient
         return;
     }
     { std::string().swap(resp.body); }  // release resp.body memory now
-
-#ifdef __PS4__
-    // PS4: skip manual stbi decode for covers — let nanovg decode on the main
-    // thread via nvgCreateImageMem.  Calling stbi_load_from_memory directly on
-    // PS4 worker threads corrupts the heap (SIGABRT), while nanovg's internal
-    // stbi copy (compiled as C in nanovg.c) works correctly.
-    if (request.coverCallback) {
-        cachePut(url, bodyVec);
-        if (alive && !*alive) return;
-        brls::Logger::info("ImageLoader: PS4 cover path, queueing {}KB raw for {}", bodyVec.size() / 1024, url);
-        {
-            std::lock_guard<std::mutex> lock(s_pendingCoverMutex);
-            PendingCoverUpload upload;
-            upload.rgbaData = std::move(bodyVec);
-            upload.rawEncoded = true;
-            upload.callback = request.coverCallback;
-            upload.alive = alive;
-            s_pendingCovers.push(std::move(upload));
-        }
-        bool expected = false;
-        if (s_pendingCoverScheduled.compare_exchange_strong(expected, true)) {
-            brls::sync([]() { processPendingCovers(); });
-        }
-        return;
-    }
-#endif
-
     const uint8_t* decData = bodyVec.data();
     size_t decSize = bodyVec.size();
 
@@ -2782,16 +2705,14 @@ void ImageLoader::executeLoad(const LoadRequest& request, HttpClient& httpClient
         uint8_t* rgba = stbi_load_from_memory(imageData.data(),
             static_cast<int>(imageData.size()), &w, &h, &c, 4);
         if (rgba) {
-            brls::Logger::info("ImageLoader: TGA→RGBA {}x{} for {}", w, h, url);
-            std::vector<uint8_t> rgbaVec(rgba, rgba + (size_t)w * h * 4);
+            std::vector<uint8_t> rgbaVec(rgba, rgba + w * h * 4);
             stbi_image_free(rgba);
             queueCoverUpload(std::move(rgbaVec), w, h, request.coverCallback, alive);
-        } else {
-            brls::Logger::error("ImageLoader: TGA→RGBA decode failed for {}", url);
         }
     } else if (target) {
         queueTextureUpdate(imageData, target, callback, alive);
     }
+    brls::Logger::debug("ImageLoader: Queued texture for {}", url);
 }
 
 void ImageLoader::ensureWorkersStarted() {
@@ -2802,27 +2723,24 @@ void ImageLoader::ensureWorkersStarted() {
 
     s_shutdownWorkers = false;
     int numWorkers = s_maxConcurrentLoads;
-    if (numWorkers <= 0) numWorkers = 3;
     brls::Logger::info("ImageLoader: Starting {} worker threads", numWorkers);
 
     for (int i = 0; i < numWorkers; i++) {
-        try {
-            detail::launchThread([i]() {
-                workerThreadFunc(i);
-            });
-        } catch (const std::exception& e) {
-            brls::Logger::error("ImageLoader: Failed to start worker {}: {}", i, e.what());
-        } catch (...) {
-            brls::Logger::error("ImageLoader: Failed to start worker {} (unknown error)", i);
-        }
+        // On Switch, use detail::launchThread() for 512KB stack (default
+        // libnx stack is ~128KB, too small for curl+mbedTLS in workers).
+        detail::launchThread([i]() {
+            workerThreadFunc(i);
+        });
     }
 }
 
 void ImageLoader::workerThreadFunc(int workerId) {
-    brls::Logger::info("ImageLoader: Worker {} running", workerId);
-
+    // Each worker has its own HttpClient for TCP connection reuse (HTTP keep-alive).
+    // This avoids creating a new TCP connection for every cover download.
     HttpClient httpClient;
     applyAuthHeaders(httpClient);
+
+    brls::Logger::debug("ImageLoader: Worker {} started", workerId);
 
     while (!s_shutdownWorkers) {
         LoadRequest request;
@@ -2854,14 +2772,18 @@ void ImageLoader::workerThreadFunc(int workerId) {
 
         if (!hasRequest) continue;
 
+        // Refresh auth headers in case token was refreshed by another thread
+        httpClient.clearDefaultHeaders();
+        applyAuthHeaders(httpClient);
+
         // Top-level safety net: catch any std::bad_alloc that slipped past
         // the per-function try-catch blocks.  Without this, an uncaught
         // exception terminates the whole app on PS Vita with stack corruption.
         try {
             if (isRotatable) {
-                executeRotatableLoad(rotatableRequest, httpClient);
+                executeRotatableLoad(rotatableRequest);
             } else {
-                executeLoad(request, httpClient);
+                executeLoad(request);
             }
         } catch (const std::bad_alloc&) {
             signalOOM("worker top-level");
@@ -2906,7 +2828,7 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
     ensureWorkersStarted();
 }
 
-void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request, HttpClient& httpClient) {
+void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
     const std::string& url = request.url;
     RotatableLoadCallback callback = request.callback;
     RotatableImage* target = request.target;
@@ -2985,7 +2907,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request, Http
         }
 
         // Load from HTTP with automatic JWT refresh on 401/403
-        HttpResponse resp = authenticatedGet(httpClient, url, 2);
+        HttpResponse resp = authenticatedGet(url, 2);
         if (resp.success && !resp.body.empty()) {
             imageBody = std::move(resp.body);
             loadSuccess = true;
@@ -3618,9 +3540,6 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
 
     if (url.empty()) return false;
 
-    HttpClient httpClient;
-    applyAuthHeaders(httpClient);
-
     std::string imageData;
     bool loadSuccess = false;
 
@@ -3635,7 +3554,7 @@ bool ImageLoader::getImageDimensions(const std::string& url, int& width, int& he
         }
     } else {
         // Load from HTTP with automatic JWT refresh on 401/403
-        HttpResponse resp = authenticatedGet(httpClient, url, 2);
+        HttpResponse resp = authenticatedGet(url, 2);
         if (resp.success && !resp.body.empty()) {
             imageData = std::move(resp.body);
             loadSuccess = true;

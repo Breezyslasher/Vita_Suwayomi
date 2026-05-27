@@ -27,61 +27,6 @@
 #include <orbis/Sysmodule.h>
 #include <thread>
 #include <chrono>
-#include <signal.h>
-#include <unistd.h>
-
-static FILE* g_crashLogFile = nullptr;
-
-static void ps4CrashSignalHandler(int sig, siginfo_t* info, void* ucontext) {
-    // Write directly to the log file — best effort before we die.
-    FILE* f = g_crashLogFile;
-    if (f) {
-        const char* sigName = "UNKNOWN";
-        switch (sig) {
-            case SIGSEGV: sigName = "SIGSEGV (bad memory access)"; break;
-            case SIGBUS:  sigName = "SIGBUS (alignment/bus error)";  break;
-            case SIGABRT: sigName = "SIGABRT (abort/assert/heap corruption)"; break;
-            case SIGFPE:  sigName = "SIGFPE (arithmetic error)";  break;
-            case SIGILL:  sigName = "SIGILL (illegal instruction)";  break;
-        }
-        fprintf(f, "\n========== CRASH ==========\n");
-        fprintf(f, "Signal: %s (%d)\n", sigName, sig);
-        if (info) {
-            fprintf(f, "Fault address: %p\n", info->si_addr);
-            fprintf(f, "Signal code: %d\n", info->si_code);
-            fprintf(f, "si_pid: %d, si_uid: %d\n", info->si_pid, info->si_uid);
-            fprintf(f, "si_errno: %d\n", info->si_errno);
-        } else {
-            fprintf(f, "siginfo_t: NULL\n");
-        }
-        fprintf(f, "===========================\n");
-        fflush(f);
-        fsync(fileno(f));
-    }
-
-    // Re-raise with default handler so the process actually terminates
-    struct sigaction sa;
-    sa.sa_handler = SIG_DFL;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sigaction(sig, &sa, nullptr);
-    raise(sig);
-}
-
-static void installPS4CrashHandlers(FILE* logFile) {
-    g_crashLogFile = logFile;
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.__sa_handler.__sa_sigaction = ps4CrashSignalHandler;
-    sa.sa_flags = SA_SIGINFO;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGSEGV, &sa, nullptr);
-    sigaction(SIGBUS, &sa, nullptr);
-    sigaction(SIGABRT, &sa, nullptr);
-    sigaction(SIGFPE, &sa, nullptr);
-    sigaction(SIGILL, &sa, nullptr);
-}
-
 #elif defined(__SWITCH__)
 #include <sys/stat.h>
 #endif
@@ -279,7 +224,6 @@ static int appMain(int argc, char* argv[]) {
     if (logFile) {
         setvbuf(logFile, NULL, _IOLBF, 0);
     }
-    installPS4CrashHandlers(logFile);
 #elif defined(__SWITCH__)
     // Create log directory and file on Switch
     mkdir("sdmc:/VitaSuwayomi", 0777);
