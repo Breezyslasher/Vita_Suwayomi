@@ -1,4 +1,4 @@
-# Suwayomi-Server GraphQL API Reference
+# Suwayomi-Server GraphQL API Reference 
 # VitaSuwayomi Client API Documentation
 #
 # Server: https://github.com/Suwayomi/Suwayomi-Server
