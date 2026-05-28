@@ -337,6 +337,10 @@ public:
     NVGcolor getButtonColor() const;       // Default button background
     bool isVaporwaveTheme() const { return m_settings.theme == AppTheme::NEON_VAPORWAVE; }
 
+    // Deep link handling (e.g. vitasuwayomi://manga/123)
+    void setDeeplink(const std::string& uri) { m_pendingDeeplink = uri; }
+    void processPendingDeeplink();
+
     // Apply log level based on settings
     void applyLogLevel();
 
@@ -392,6 +396,7 @@ private:
     AppSettings m_settings;
     ReaderResult m_lastReaderResult;
     ReaderResultCallback m_readerResultCallback;
+    std::string m_pendingDeeplink;
 };
 
 } // namespace vitasuwayomi

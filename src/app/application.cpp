@@ -11,6 +11,7 @@
 #include "activity/login_activity.hpp"
 #include "activity/main_activity.hpp"
 #include "activity/reader_activity.hpp"
+#include "view/media_detail_view.hpp"
 #include "utils/perf_overlay.hpp"
 
 #include <borealis.hpp>
@@ -414,6 +415,10 @@ void Application::pushMainActivity() {
     brls::Logger::info("pushMainActivity: pushing activity...");
     brls::Application::pushActivity(activity);
     brls::Logger::info("pushMainActivity: done");
+
+    if (!m_pendingDeeplink.empty()) {
+        brls::sync([this]() { processPendingDeeplink(); });
+    }
 }
 
 void Application::pushReaderActivity(int mangaId, int chapterIndex, const std::string& mangaTitle) {
@@ -426,8 +431,50 @@ void Application::pushReaderActivityAtPage(int mangaId, int chapterIndex, int st
 }
 
 void Application::pushMangaDetailView(int mangaId) {
-    // TODO: Push manga detail view
-    brls::Logger::info("Push manga detail view for manga {}", mangaId);
+    brls::Logger::info("pushMangaDetailView: fetching manga {}", mangaId);
+    auto& client = SuwayomiClient::getInstance();
+    Manga manga;
+    if (!client.fetchMangaFull(mangaId, manga)) {
+        brls::Logger::error("pushMangaDetailView: failed to fetch manga {}", mangaId);
+        return;
+    }
+    auto* detailView = new MangaDetailView(manga);
+    brls::Application::pushActivity(new brls::Activity(detailView));
+}
+
+void Application::processPendingDeeplink() {
+    if (m_pendingDeeplink.empty()) return;
+    std::string uri = m_pendingDeeplink;
+    m_pendingDeeplink.clear();
+
+    brls::Logger::info("Processing deeplink: {}", uri);
+
+    // Parse vitasuwayomi://manga/{id} or vitasuwayomi://chapter/{mangaId}/{chapterId}
+    const std::string scheme = "vitasuwayomi://";
+    if (uri.find(scheme) != 0) return;
+    std::string path = uri.substr(scheme.size());
+
+    // Strip trailing slash
+    while (!path.empty() && path.back() == '/') path.pop_back();
+
+    if (path.find("manga/") == 0) {
+        int mangaId = std::atoi(path.c_str() + 6);
+        if (mangaId > 0) {
+            brls::Logger::info("Deeplink: opening manga {}", mangaId);
+            pushMangaDetailView(mangaId);
+        }
+    } else if (path.find("chapter/") == 0) {
+        std::string rest = path.substr(8);
+        size_t slash = rest.find('/');
+        if (slash != std::string::npos) {
+            int mangaId = std::atoi(rest.substr(0, slash).c_str());
+            int chapterId = std::atoi(rest.substr(slash + 1).c_str());
+            if (mangaId > 0 && chapterId > 0) {
+                brls::Logger::info("Deeplink: opening chapter {}/{}", mangaId, chapterId);
+                pushReaderActivity(mangaId, chapterId, "");
+            }
+        }
+    }
 }
 
 void Application::applyTheme() {

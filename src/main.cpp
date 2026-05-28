@@ -174,8 +174,13 @@ static void registerCustomViews() {
  * Main entry point implementation
  */
 static int appMain(int argc, char* argv[]) {
-    (void)argc;
-    (void)argv;
+    // Parse --deeplink argument (passed from Android intent)
+    std::string pendingDeeplink;
+    for (int i = 1; i < argc; i++) {
+        if (std::strcmp(argv[i], "--deeplink") == 0 && i + 1 < argc) {
+            pendingDeeplink = argv[++i];
+        }
+    }
 
     // Match Switchfin's startup locale so Borealis/font shaping uses a UTF-8
     // locale on Android instead of falling back to the "C" locale.
@@ -323,6 +328,10 @@ static int appMain(int argc, char* argv[]) {
         vitasuwayomi::HttpClient::globalCleanup();
 #endif
         return 1;
+    }
+
+    if (!pendingDeeplink.empty()) {
+        app.setDeeplink(pendingDeeplink);
     }
 
     // Run application (blocking)
