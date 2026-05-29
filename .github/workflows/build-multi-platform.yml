@@ -8,7 +8,7 @@ permissions:
 # Tagged releases use this version as-is (e.g. "2.1.0").
 # Non-release builds append the CI run number (e.g. "2.1.0.456").
 env:
-  APP_VERSION: "Beta 2.1.0"
+  APP_VERSION: "Beta 2.1.2"
 
 on:
   push:

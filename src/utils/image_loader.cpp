@@ -1990,9 +1990,13 @@ static void applyAuthHeaders(HttpClient& client) {
 // Authenticated HTTP GET with automatic JWT token refresh on 401/403.
 // If the request fails due to an expired token, refreshes via SuwayomiClient
 // and retries once with the new token.
-static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2) {
-    HttpClient client;
-    applyAuthHeaders(client);
+static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2,
+                                     HttpClient* existingClient = nullptr) {
+    HttpClient tempClient;
+    HttpClient& client = existingClient ? *existingClient : tempClient;
+    if (!existingClient) {
+        applyAuthHeaders(client);
+    }
 
     HttpResponse resp;
     bool success = false;
@@ -2058,6 +2062,12 @@ void ImageLoader::setMaxThumbnailSize(int maxSize) {
 void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& data) {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
 
+    // Guard against PS4/OpenOrbis static initializer issue: .init_array may
+    // not run, leaving s_maxCacheSize as 0 (zero-initialized) instead of 30.
+    // With 0, the eviction loop condition (size >= 0) is always true and
+    // .back() on an empty list causes a crash.
+    if (s_maxCacheSize == 0) s_maxCacheSize = 30;
+
     // If key already exists, remove old entry and track memory
     auto it = s_cacheMap.find(url);
     if (it != s_cacheMap.end()) {
@@ -2067,8 +2077,9 @@ void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& d
     }
 
     // Evict oldest entries if over count limit OR memory limit
-    while (s_cacheList.size() >= s_maxCacheSize ||
-           (s_currentCacheMemory + data.size() > MAX_CACHE_MEMORY && !s_cacheList.empty())) {
+    while (!s_cacheList.empty() &&
+           (s_cacheList.size() >= s_maxCacheSize ||
+            s_currentCacheMemory + data.size() > MAX_CACHE_MEMORY)) {
         auto& oldest = s_cacheList.back();
         s_currentCacheMemory -= oldest.data.size();
         s_cacheMap.erase(oldest.url);
@@ -2401,7 +2412,7 @@ void ImageLoader::processPendingRotatableTextures() {
     }
 }
 
-void ImageLoader::executeLoad(const LoadRequest& request) {
+void ImageLoader::executeLoad(const LoadRequest& request, HttpClient& httpClient) {
     const std::string& url = request.url;
     brls::Image* target = request.target;
     LoadCallback callback = request.callback;
@@ -2471,7 +2482,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     if (alive && !*alive) return;
 
     // Authenticated GET with automatic JWT refresh on 401/403
-    HttpResponse resp = authenticatedGet(url, 2);
+    HttpResponse resp = authenticatedGet(url, 2, &httpClient);
 
     if (!resp.success || resp.body.empty()) {
         brls::Logger::warning("ImageLoader: Failed to load {} (status {})", url, resp.statusCode);
@@ -2723,6 +2734,13 @@ void ImageLoader::ensureWorkersStarted() {
 
     s_shutdownWorkers = false;
     int numWorkers = s_maxConcurrentLoads;
+    // Guard against a zero/negative worker count. On the PS4 (OpenOrbis)
+    // toolchain, C++ static initializers in .init_array are not reliably
+    // executed, so s_maxConcurrentLoads can read back as 0 instead of its
+    // initializer value — which would start no workers and load no images.
+    if (numWorkers <= 0) {
+        numWorkers = 3;
+    }
     brls::Logger::info("ImageLoader: Starting {} worker threads", numWorkers);
 
     for (int i = 0; i < numWorkers; i++) {
@@ -2781,9 +2799,9 @@ void ImageLoader::workerThreadFunc(int workerId) {
         // exception terminates the whole app on PS Vita with stack corruption.
         try {
             if (isRotatable) {
-                executeRotatableLoad(rotatableRequest);
+                executeRotatableLoad(rotatableRequest, httpClient);
             } else {
-                executeLoad(request);
+                executeLoad(request, httpClient);
             }
         } catch (const std::bad_alloc&) {
             signalOOM("worker top-level");
@@ -2828,7 +2846,7 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
     ensureWorkersStarted();
 }
 
-void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
+void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request, HttpClient& httpClient) {
     const std::string& url = request.url;
     RotatableLoadCallback callback = request.callback;
     RotatableImage* target = request.target;
@@ -2907,7 +2925,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
 
         // Load from HTTP with automatic JWT refresh on 401/403
-        HttpResponse resp = authenticatedGet(url, 2);
+        HttpResponse resp = authenticatedGet(url, 2, &httpClient);
         if (resp.success && !resp.body.empty()) {
             imageBody = std::move(resp.body);
             loadSuccess = true;
