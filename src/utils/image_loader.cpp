@@ -1990,9 +1990,13 @@ static void applyAuthHeaders(HttpClient& client) {
 // Authenticated HTTP GET with automatic JWT token refresh on 401/403.
 // If the request fails due to an expired token, refreshes via SuwayomiClient
 // and retries once with the new token.
-static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2) {
-    HttpClient client;
-    applyAuthHeaders(client);
+static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2,
+                                     HttpClient* existingClient = nullptr) {
+    HttpClient tempClient;
+    HttpClient& client = existingClient ? *existingClient : tempClient;
+    if (!existingClient) {
+        applyAuthHeaders(client);
+    }
 
     HttpResponse resp;
     bool success = false;
@@ -2401,7 +2405,7 @@ void ImageLoader::processPendingRotatableTextures() {
     }
 }
 
-void ImageLoader::executeLoad(const LoadRequest& request) {
+void ImageLoader::executeLoad(const LoadRequest& request, HttpClient& httpClient) {
     const std::string& url = request.url;
     brls::Image* target = request.target;
     LoadCallback callback = request.callback;
@@ -2471,7 +2475,7 @@ void ImageLoader::executeLoad(const LoadRequest& request) {
     if (alive && !*alive) return;
 
     // Authenticated GET with automatic JWT refresh on 401/403
-    HttpResponse resp = authenticatedGet(url, 2);
+    HttpResponse resp = authenticatedGet(url, 2, &httpClient);
 
     if (!resp.success || resp.body.empty()) {
         brls::Logger::warning("ImageLoader: Failed to load {} (status {})", url, resp.statusCode);
@@ -2781,9 +2785,9 @@ void ImageLoader::workerThreadFunc(int workerId) {
         // exception terminates the whole app on PS Vita with stack corruption.
         try {
             if (isRotatable) {
-                executeRotatableLoad(rotatableRequest);
+                executeRotatableLoad(rotatableRequest, httpClient);
             } else {
-                executeLoad(request);
+                executeLoad(request, httpClient);
             }
         } catch (const std::bad_alloc&) {
             signalOOM("worker top-level");
@@ -2828,7 +2832,7 @@ void ImageLoader::loadAsync(const std::string& url, LoadCallback callback, brls:
     ensureWorkersStarted();
 }
 
-void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
+void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request, HttpClient& httpClient) {
     const std::string& url = request.url;
     RotatableLoadCallback callback = request.callback;
     RotatableImage* target = request.target;
@@ -2907,7 +2911,7 @@ void ImageLoader::executeRotatableLoad(const RotatableLoadRequest& request) {
         }
 
         // Load from HTTP with automatic JWT refresh on 401/403
-        HttpResponse resp = authenticatedGet(url, 2);
+        HttpResponse resp = authenticatedGet(url, 2, &httpClient);
         if (resp.success && !resp.body.empty()) {
             imageBody = std::move(resp.body);
             loadSuccess = true;

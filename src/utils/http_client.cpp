@@ -180,7 +180,8 @@ HttpResponse HttpClient::request(const HttpRequest& req) {
     // User agent
     curl_easy_setopt(curl, CURLOPT_USERAGENT, m_userAgent.c_str());
 
-    // Response buffer
+    // Response buffer - pre-allocate to reduce reallocations during download
+    response.body.reserve(32 * 1024);
     WriteCallbackData writeData;
     writeData.buffer = &response.body;
     writeData.totalSize = 0;
