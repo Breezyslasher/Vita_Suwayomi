@@ -787,6 +787,7 @@ void SearchTab::showSources() {
     // Clear manga grid, results by source, and hide search results view
     m_mangaList.clear();
     m_resultsBySource.clear();
+    m_contentGrid->setShowSourceLabels(false);
     m_contentGrid->setDataSource(m_mangaList);
     m_hasNextPage = false;
     if (m_searchResultsScrollView) {
@@ -1012,6 +1013,7 @@ void SearchTab::showSourceBrowser(const Source& source) {
     if (m_searchResultsBox) {
         m_searchResultsBox->clearViews();
     }
+    m_contentGrid->setShowSourceLabels(false);
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
     // Navigation chain: [< Back] → [Tag] → [History] → [Search]
@@ -2522,6 +2524,7 @@ void SearchTab::performSearch(const std::string& query) {
                     m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
                 }
                 ImageLoader::setDeferTextureUploads(false);
+                m_contentGrid->setShowSourceLabels(true);
                 m_contentGrid->setDataSource(m_mangaList);
                 m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
                 brls::Application::giveFocus(m_contentGrid);
