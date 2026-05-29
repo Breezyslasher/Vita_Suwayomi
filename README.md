@@ -65,19 +65,28 @@ adb shell am start -a android.intent.action.VIEW -d "vitasuwayomi://manga/42"
 ```
 
 The manga and chapter IDs match the Suwayomi server's internal IDs (visible in the server's API or web UI URLs).
+## Mobile
+ Platform | Status |
+|:--|:--:|
+| Android | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/291) |
+| Android TV | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/292) |
+| PS Vita | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/128) |
 
-## Platforms
-
+## Consoles
 | Platform | Status |
-|----------|--------|
-| PS Vita | Supported https://github.com/Breezyslasher/Vita_Suwayomi/issues/284|
-| Android | Supported  |
-| Android TV | Supported  |
-| PS4 | Supported |
-| Nintendo Switch | Supported |
-| Windows | Supported |
-| macOS | Supported |
-| Linux | Supported (Flatpak, Deb, AUR) https://github.com/Breezyslasher/Vita_Suwayomi/issues/232 |
+|:--|:--:|
+| PS4 | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/284) |
+| Nintendo Switch | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/290) |
+
+## Desktop
+| Platform | Status |
+|:--|:--:|
+| Windows | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/283) |
+| macOS | ❌ Untested |
+| Linux | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/232) *(Flatpak, Deb, AUR)* |
+
+> [!NOTE]
+> Some console platforms require modded/homebrew-enabled systems.
 
 ## Requirements
 
