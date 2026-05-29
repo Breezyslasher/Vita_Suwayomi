@@ -2062,6 +2062,12 @@ void ImageLoader::setMaxThumbnailSize(int maxSize) {
 void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& data) {
     std::lock_guard<std::mutex> lock(s_cacheMutex);
 
+    // Guard against PS4/OpenOrbis static initializer issue: .init_array may
+    // not run, leaving s_maxCacheSize as 0 (zero-initialized) instead of 30.
+    // With 0, the eviction loop condition (size >= 0) is always true and
+    // .back() on an empty list causes a crash.
+    if (s_maxCacheSize == 0) s_maxCacheSize = 30;
+
     // If key already exists, remove old entry and track memory
     auto it = s_cacheMap.find(url);
     if (it != s_cacheMap.end()) {
@@ -2071,8 +2077,9 @@ void ImageLoader::cachePut(const std::string& url, const std::vector<uint8_t>& d
     }
 
     // Evict oldest entries if over count limit OR memory limit
-    while (s_cacheList.size() >= s_maxCacheSize ||
-           (s_currentCacheMemory + data.size() > MAX_CACHE_MEMORY && !s_cacheList.empty())) {
+    while (!s_cacheList.empty() &&
+           (s_cacheList.size() >= s_maxCacheSize ||
+            s_currentCacheMemory + data.size() > MAX_CACHE_MEMORY)) {
         auto& oldest = s_cacheList.back();
         s_currentCacheMemory -= oldest.data.size();
         s_cacheMap.erase(oldest.url);
