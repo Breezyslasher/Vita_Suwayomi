@@ -17,13 +17,14 @@ namespace vitasuwayomi {
 
 class CullingScrollFrame : public brls::ScrollingFrame {
 public:
+    void setContentBox(brls::Box* box) { m_contentBox = box; }
+
     void draw(NVGcontext* vg, float x, float y, float width, float height,
               brls::Style style, brls::FrameContext* ctx) override {
-        brls::Box* content = dynamic_cast<brls::Box*>(getContentView());
-        if (content) {
+        if (m_contentBox) {
             float scrollY = getContentOffsetY();
             float viewH = height;
-            for (auto* child : content->getChildren()) {
+            for (auto* child : m_contentBox->getChildren()) {
                 float cy = child->getY();
                 float ch = child->getHeight();
                 bool vis = (cy + ch > scrollY) && (cy < scrollY + viewH);
@@ -33,6 +34,9 @@ public:
         }
         brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
     }
+
+private:
+    brls::Box* m_contentBox = nullptr;
 };
 
 SearchTab::SearchTab() {
@@ -2631,6 +2635,7 @@ void SearchTab::populateSearchResultsBySource() {
         m_searchResultsBox->setPadding(10);
 
         m_searchResultsScrollView->setContentView(m_searchResultsBox);
+        static_cast<CullingScrollFrame*>(m_searchResultsScrollView)->setContentBox(m_searchResultsBox);
 
         // Register B button on search results scroll view to handle back navigation
         m_searchResultsScrollView->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
