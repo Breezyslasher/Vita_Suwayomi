@@ -928,6 +928,11 @@ void SearchTab::showSources() {
     m_contentGrid->setVisibility(brls::Visibility::GONE);
     m_sourceScrollView->setVisibility(brls::Visibility::VISIBLE);
 
+    // The library tab's RecyclingGrid may have left s_deferTextureUploads=true
+    // (set during scroll and never cleared when the tab became invisible).
+    // Clear it so source icon texture uploads can proceed.
+    ImageLoader::setDeferTextureUploads(false);
+
     // Add scroll view if not already added
     if (m_sourceScrollView->getParent() == nullptr) {
         m_mainContent->addView(m_sourceScrollView);
@@ -2636,6 +2641,9 @@ void SearchTab::populateSearchResultsBySource() {
         }
     }
 
+    // Clear deferred texture uploads so search result covers can load
+    ImageLoader::setDeferTextureUploads(false);
+
     // Show search results view, hide others
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
@@ -2694,6 +2702,7 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     // Create manga cells for each result
     for (size_t i = 0; i < manga.size(); i++) {
         auto* cell = new MangaItemCell();
+        cell->setSelfDrawCover(true);
         cell->setShowLibraryBadge(true);  // Show star for library items in search results
         if (compactMode) {
             cell->setCompactMode(true);
