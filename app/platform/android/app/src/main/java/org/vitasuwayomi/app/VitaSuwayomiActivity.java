@@ -1,8 +1,10 @@
 package org.vitasuwayomi.app;
 
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Settings;
@@ -16,9 +18,11 @@ import org.libsdl.app.SDLActivity;
 public class VitaSuwayomiActivity extends SDLActivity
 {
     protected static SurfaceView mpvSurface;
+    private static String pendingDeeplink = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        pendingDeeplink = extractDeeplink(getIntent());
         super.onCreate(savedInstanceState);
         mSurface.getHolder().setFormat(PixelFormat.RGBA_8888);
         mSurface.setZOrderOnTop(true);
@@ -31,6 +35,35 @@ public class VitaSuwayomiActivity extends SDLActivity
                 Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS),
                 true,
                 brightnessObserver);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String deeplink = extractDeeplink(intent);
+        if (deeplink != null) {
+            pendingDeeplink = deeplink;
+        }
+    }
+
+    private String extractDeeplink(Intent intent) {
+        if (intent == null) return null;
+        Uri data = intent.getData();
+        if (data != null && "vitasuwayomi".equals(data.getScheme())) {
+            return data.toString();
+        }
+        return null;
+    }
+
+    @Override
+    protected String[] getArguments() {
+        if (pendingDeeplink != null) {
+            String[] args = new String[] { "--deeplink", pendingDeeplink };
+            pendingDeeplink = null;
+            return args;
+        }
+        return new String[0];
     }
 
     private void _setAppScreenBrightness(float value) {

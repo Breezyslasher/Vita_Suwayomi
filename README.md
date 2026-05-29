@@ -39,21 +39,63 @@ A native Suwayomi client for PlayStation Vita. Read manga from your Suwayomi ser
 - Reading history with quick resume
 - Extension management
 - Dual URL support (LAN/WAN) with auto-failover
+- Android TV support with D-pad navigation
+- Deep links for opening manga and chapters directly
+
+## Deep Links (Android)
+
+VitaSuwayomi supports deep links on Android to open manga or chapters directly from other apps, browsers, or automation tools.
+
+**URL Scheme:** `vitasuwayomi://`
+
+| Link | Action |
+|------|--------|
+| `vitasuwayomi://manga/{id}` | Open manga detail page |
+| `vitasuwayomi://chapter/{mangaId}/{chapterId}` | Open chapter in reader |
+
+**Examples:**
+```
+vitasuwayomi://manga/42
+vitasuwayomi://chapter/42/157
+```
+
+**Usage from ADB:**
+```bash
+adb shell am start -a android.intent.action.VIEW -d "vitasuwayomi://manga/42"
+```
+
+The manga and chapter IDs match the Suwayomi server's internal IDs (visible in the server's API or web UI URLs).
+
+## Platforms
+
+| Platform | Status |
+|----------|--------|
+| PS Vita | Supported |
+| Android | Supported (including Android TV) |
+| PS4 | Supported |
+| Nintendo Switch | Supported |
+| Windows | Supported |
+| macOS | Supported |
+| Linux | Supported (Flatpak, Deb, AUR) |
 
 ## Requirements
 
-- PlayStation Vita with HENkaku/Enso
 - Suwayomi-Server running and accessible
-- Network connectivity between Vita and server
+- Network connectivity between device and server
 
-
+**PS Vita:** Requires HENkaku/Enso
 
 ## Installation
 
+**PS Vita:**
 1. Download the VPK file
 2. Transfer to Vita via USB or FTP
 3. Install using VitaShell
 4. Configure your Suwayomi server URL in settings
+
+**Android:** Install the APK and configure your server URL on first launch.
+
+**Other platforms:** Download the appropriate build from [Releases](../../releases) and run the application.
 
 
 
