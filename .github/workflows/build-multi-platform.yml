@@ -101,6 +101,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
     permissions:
       contents: write
+      workflows: write
     steps:
       - uses: actions/checkout@v4
         with:
