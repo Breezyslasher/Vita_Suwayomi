@@ -25,7 +25,7 @@ public:
             float scrollY = getContentOffsetY();
             float viewH = height;
             for (auto* child : m_contentBox->getChildren()) {
-                float cy = child->getY();
+                float cy = child->getLocalY();
                 float ch = child->getHeight();
                 bool vis = (cy + ch > scrollY) && (cy < scrollY + viewH);
                 child->setVisibility(vis ? brls::Visibility::VISIBLE
