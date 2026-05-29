@@ -3737,6 +3737,12 @@ void ImageLoader::cancelAll() {
             s_pendingRotatableTextures.pop();
         }
     }
+    {
+        std::lock_guard<std::mutex> lock4(s_pendingCoverMutex);
+        while (!s_pendingCovers.empty()) {
+            s_pendingCovers.pop();
+        }
+    }
 }
 
 } // namespace vitasuwayomi

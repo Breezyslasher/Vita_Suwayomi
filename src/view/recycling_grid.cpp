@@ -416,13 +416,26 @@ void RecyclingGrid::setOnSelectionChanged(std::function<void(int count)> callbac
 }
 
 void RecyclingGrid::clearViews() {
-    // Move focus away from cells before deleting them (same reason as setupGrid)
-    for (auto* cell : m_cells) {
-        if (cell && cell->isFocused()) {
-            if (m_contentBox) {
-                brls::Application::giveFocus(m_contentBox);
+    // Move focus away from cells before deleting them.
+    // giveFocus(m_contentBox) resolves via getDefaultFocus() back to a cell,
+    // leaving currentFocus pointing at the about-to-be-destroyed cell.
+    // When the deletion pool frees the row box, the cell is deleted and
+    // currentFocus becomes a dangling pointer → crash on the next frame.
+    // Fix: make m_contentBox temporarily focusable so giveFocus targets it
+    // directly instead of resolving to a child.
+    if (m_contentBox) {
+        brls::View* focus = brls::Application::getCurrentFocus();
+        if (focus) {
+            brls::View* v = focus;
+            while (v) {
+                if (v == m_contentBox) {
+                    m_contentBox->setFocusable(true);
+                    brls::Application::giveFocus(m_contentBox);
+                    m_contentBox->setFocusable(false);
+                    break;
+                }
+                v = v->hasParent() ? v->getParent() : nullptr;
             }
-            break;
         }
     }
 
@@ -442,13 +455,26 @@ void RecyclingGrid::setupGrid() {
     m_lastScrollLoadY = 0.0f;
 
     // CRITICAL: Move focus away from cells before deleting them.
-    // clearViews() will destroy all cells, but brls may still hold
-    // a pointer to the currently-focused cell. Without this, brls
-    // accesses freed memory on the next frame → vtable crash.
-    for (auto* cell : m_cells) {
-        if (cell && cell->isFocused()) {
-            brls::Application::giveFocus(m_contentBox);
-            break;
+    // clearViews() will destroy all cells, but brls holds a pointer
+    // (Application::currentFocus) to the focused cell. Without this fix,
+    // the deletion pool frees the row box (and its cell children), leaving
+    // currentFocus as a dangling pointer → crash on the next frame.
+    // Plain giveFocus(m_contentBox) doesn't work because getDefaultFocus()
+    // resolves right back to the focused cell. Making m_contentBox
+    // temporarily focusable forces giveFocus to target it directly.
+    {
+        brls::View* focus = brls::Application::getCurrentFocus();
+        if (focus) {
+            brls::View* v = focus;
+            while (v) {
+                if (v == m_contentBox) {
+                    m_contentBox->setFocusable(true);
+                    brls::Application::giveFocus(m_contentBox);
+                    m_contentBox->setFocusable(false);
+                    break;
+                }
+                v = v->hasParent() ? v->getParent() : nullptr;
+            }
         }
     }
 
