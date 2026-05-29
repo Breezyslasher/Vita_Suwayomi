@@ -15,6 +15,30 @@
 
 namespace vitasuwayomi {
 
+class CullingScrollFrame : public brls::ScrollingFrame {
+public:
+    void setContentBox(brls::Box* box) { m_contentBox = box; }
+
+    void draw(NVGcontext* vg, float x, float y, float width, float height,
+              brls::Style style, brls::FrameContext* ctx) override {
+        if (m_contentBox) {
+            float scrollY = getContentOffsetY();
+            float viewH = height;
+            for (auto* child : m_contentBox->getChildren()) {
+                float cy = child->getLocalY();
+                float ch = child->getHeight();
+                bool vis = (cy + ch > scrollY) && (cy < scrollY + viewH);
+                child->setVisibility(vis ? brls::Visibility::VISIBLE
+                                         : brls::Visibility::INVISIBLE);
+            }
+        }
+        brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
+    }
+
+private:
+    brls::Box* m_contentBox = nullptr;
+};
+
 SearchTab::SearchTab() {
     m_alive = std::make_shared<bool>(true);
 
@@ -2599,7 +2623,7 @@ void SearchTab::onMangaSelected(const Manga& manga) {
 void SearchTab::populateSearchResultsBySource() {
     // Create or clear the search results scroll view
     if (!m_searchResultsScrollView) {
-        m_searchResultsScrollView = new brls::ScrollingFrame();
+        m_searchResultsScrollView = new CullingScrollFrame();
         m_searchResultsScrollView->setGrow(1.0f);
         // Use centered scrolling to keep focused items visible
         m_searchResultsScrollView->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);
@@ -2611,6 +2635,7 @@ void SearchTab::populateSearchResultsBySource() {
         m_searchResultsBox->setPadding(10);
 
         m_searchResultsScrollView->setContentView(m_searchResultsBox);
+        static_cast<CullingScrollFrame*>(m_searchResultsScrollView)->setContentBox(m_searchResultsBox);
 
         // Register B button on search results scroll view to handle back navigation
         m_searchResultsScrollView->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View* view) {
@@ -2702,7 +2727,6 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     // Create manga cells for each result
     for (size_t i = 0; i < manga.size(); i++) {
         auto* cell = new MangaItemCell();
-        cell->setSelfDrawCover(true);
         cell->setShowLibraryBadge(true);  // Show star for library items in search results
         if (compactMode) {
             cell->setCompactMode(true);
