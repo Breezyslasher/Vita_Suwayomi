@@ -2514,8 +2514,17 @@ void SearchTab::performSearch(const std::string& query) {
                 }
                 m_resultsLabel->setText(resultText);
 
-                // Display results grouped by source in horizontal rows
-                populateSearchResultsBySource();
+                // Display results in the same grid as library/single-source browse
+                if (m_sourceScrollView) {
+                    m_sourceScrollView->setVisibility(brls::Visibility::GONE);
+                }
+                if (m_searchResultsScrollView) {
+                    m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
+                }
+                ImageLoader::setDeferTextureUploads(false);
+                m_contentGrid->setDataSource(m_mangaList);
+                m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
+                brls::Application::giveFocus(m_contentGrid);
             }
         });
     });
