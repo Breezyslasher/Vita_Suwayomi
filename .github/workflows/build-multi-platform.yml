@@ -1,7 +1,5 @@
 name: Build
-permissions:
-  contents: write
-  actions: write
+
 # ── Release version ─────────────────────────────────────────────────────────
 # Version is read from the VERSION file in the repo root.
 # Supports labels like "Beta 1.0.0" or plain "1.0.0".
