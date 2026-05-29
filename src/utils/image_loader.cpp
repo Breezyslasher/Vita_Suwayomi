@@ -2727,6 +2727,13 @@ void ImageLoader::ensureWorkersStarted() {
 
     s_shutdownWorkers = false;
     int numWorkers = s_maxConcurrentLoads;
+    // Guard against a zero/negative worker count. On the PS4 (OpenOrbis)
+    // toolchain, C++ static initializers in .init_array are not reliably
+    // executed, so s_maxConcurrentLoads can read back as 0 instead of its
+    // initializer value — which would start no workers and load no images.
+    if (numWorkers <= 0) {
+        numWorkers = 3;
+    }
     brls::Logger::info("ImageLoader: Starting {} worker threads", numWorkers);
 
     for (int i = 0; i < numWorkers; i++) {
