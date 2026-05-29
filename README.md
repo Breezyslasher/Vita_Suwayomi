@@ -83,7 +83,7 @@ The manga and chapter IDs match the Suwayomi server's internal IDs (visible in t
 |:--|:--:| :--:|
 | Windows | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/283) | None |
 | macOS | ❌ Untested |
-| Linux | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/232) *(Flatpak, Deb, AUR)* |
+| Linux | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/232) *(Flatpak, Deb, AUR)* | None |
 
 > [!NOTE]
 > Some console platforms require modded/homebrew-enabled systems.
