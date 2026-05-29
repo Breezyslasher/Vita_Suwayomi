@@ -240,6 +240,13 @@ if(PLATFORM_ANDROID)
 elseif(WIN32)
     set(APP_FFMPEG_LIBS mpv)
     set(APP_FFMPEG_LINK_BLOCK ${APP_FFMPEG_LIBS})
+elseif(UNIX AND NOT APPLE AND NOT PLATFORM_PS4)
+    # Linux/SteamOS: mpv is unused and FFmpeg is only for AVIF/HEIF (rare).
+    # Skip both to avoid runtime errors on distros with different FFmpeg
+    # versions (e.g. SteamOS ships FFmpeg 7.x, CI builds against 6.x).
+    set(APP_FFMPEG_LIBS)
+    set(APP_FFMPEG_LINK_BLOCK)
+    add_definitions(-DVITASUWAYOMI_NO_FFMPEG)
 else()
     set(APP_FFMPEG_LIBS
         mpv
