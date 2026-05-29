@@ -68,13 +68,13 @@ The manga and chapter IDs match the Suwayomi server's internal IDs (visible in t
 ## Mobile
  Platform | Status | Issues |
 |:--|:--:| :--:|
-| Android | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/291) |
+| Android | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/291) | None |
 | PS Vita | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/128) |
 
 ## Consoles
 | Platform | Status | Issues |
 |:--|:--:| :--:|
-| PS4 | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/284) |
+| PS4 | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/284) | [Cover Problems](https://github.com/Breezyslasher/Vita_Suwayomi/issues/285)
 | Android TV | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/292) |
 | Nintendo Switch | ✅ [Supported](https://github.com/Breezyslasher/Vita_Suwayomi/issues/290) |
 
