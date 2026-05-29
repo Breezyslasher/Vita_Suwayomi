@@ -70,13 +70,14 @@ The manga and chapter IDs match the Suwayomi server's internal IDs (visible in t
 
 | Platform | Status |
 |----------|--------|
-| PS Vita | Supported |
-| Android | Supported (including Android TV) |
+| PS Vita | Supported https://github.com/Breezyslasher/Vita_Suwayomi/issues/284|
+| Android | Supported  |
+| Android TV | Supported  |
 | PS4 | Supported |
 | Nintendo Switch | Supported |
 | Windows | Supported |
 | macOS | Supported |
-| Linux | Supported (Flatpak, Deb, AUR) |
+| Linux | Supported (Flatpak, Deb, AUR) https://github.com/Breezyslasher/Vita_Suwayomi/issues/232 |
 
 ## Requirements
 
