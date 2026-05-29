@@ -1,5 +1,7 @@
 name: Build
-
+permissions:
+  contents: write
+  actions: write
 # ── Release version ─────────────────────────────────────────────────────────
 # Change this line to set the version for all platforms.
 # Supports labels like "Beta 1.0.0" or plain "1.0.0".
