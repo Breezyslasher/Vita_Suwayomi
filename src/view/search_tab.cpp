@@ -928,6 +928,11 @@ void SearchTab::showSources() {
     m_contentGrid->setVisibility(brls::Visibility::GONE);
     m_sourceScrollView->setVisibility(brls::Visibility::VISIBLE);
 
+    // The library tab's RecyclingGrid may have left s_deferTextureUploads=true
+    // (set during scroll and never cleared when the tab became invisible).
+    // Clear it so source icon texture uploads can proceed.
+    ImageLoader::setDeferTextureUploads(false);
+
     // Add scroll view if not already added
     if (m_sourceScrollView->getParent() == nullptr) {
         m_mainContent->addView(m_sourceScrollView);
@@ -2436,6 +2441,8 @@ void SearchTab::performSearch(const std::string& query) {
         int failedSources = 0;
         int searchedSources = 0;
 
+        int maxPerSource = std::max(5, 200 / static_cast<int>(sourcesToSearch.size()));
+
         // Search each filtered source
         for (const auto& source : sourcesToSearch) {
             std::vector<Manga> results;
@@ -2448,19 +2455,15 @@ void SearchTab::performSearch(const std::string& query) {
                     for (auto& manga : results) {
                         manga.sourceName = source.name;
                     }
+                    if (static_cast<int>(results.size()) > maxPerSource) {
+                        results.resize(maxPerSource);
+                    }
                     resultsBySource[source.name] = results;
                     totalResults += results.size();
                 }
             } else {
                 failedSources++;
                 brls::Logger::warning("SearchTab: Search failed for source '{}'", source.name);
-            }
-
-            // Limit to prevent too many requests on constrained hardware
-            if (totalResults >= 100) {
-                brls::Logger::info("SearchTab: Hit 100-result limit after {} of {} sources",
-                                   searchedSources, sourcesToSearch.size());
-                break;
             }
         }
 
@@ -2476,7 +2479,7 @@ void SearchTab::performSearch(const std::string& query) {
         }
 
         int totalSourceCount = static_cast<int>(sourcesToSearch.size());
-        bool wasTruncated = (totalResults >= 100 && searchedSources < totalSourceCount);
+        bool wasTruncated = false;
 
         brls::sync([this, allResults, resultsBySource, failedSources, searchedSources,
                      totalSourceCount, wasTruncated, gen, aliveWeak]() {
@@ -2638,6 +2641,9 @@ void SearchTab::populateSearchResultsBySource() {
         }
     }
 
+    // Clear deferred texture uploads so search result covers can load
+    ImageLoader::setDeferTextureUploads(false);
+
     // Show search results view, hide others
     if (m_sourceScrollView) {
         m_sourceScrollView->setVisibility(brls::Visibility::GONE);
@@ -2696,6 +2702,7 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     // Create manga cells for each result
     for (size_t i = 0; i < manga.size(); i++) {
         auto* cell = new MangaItemCell();
+        cell->setSelfDrawCover(true);
         cell->setShowLibraryBadge(true);  // Show star for library items in search results
         if (compactMode) {
             cell->setCompactMode(true);
@@ -2704,6 +2711,7 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
         }
         cell->setGridColumns(columns);
         cell->setManga(manga[i]);
+        cell->loadThumbnailIfNeeded();
         cell->setWidth(cellWidth);
         cell->setHeight(cellHeight);
         cell->setMarginRight(10);
