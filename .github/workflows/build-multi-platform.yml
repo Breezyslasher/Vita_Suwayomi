@@ -2,6 +2,7 @@ name: Build
 permissions:
   contents: write
   actions: write
+  workflows: write
 # ── Release version ─────────────────────────────────────────────────────────
 # Change this line to set the version for all platforms.
 # Supports labels like "Beta 1.0.0" or plain "1.0.0".
@@ -101,7 +102,6 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
     permissions:
       contents: write
-      workflows: write
     steps:
       - uses: actions/checkout@v4
         with:
