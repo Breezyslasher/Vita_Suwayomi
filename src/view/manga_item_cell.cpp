@@ -72,32 +72,6 @@ void MangaItemCell::draw(NVGcontext* vg, float x, float y, float width, float he
     m_drawW = width;
     m_drawH = height;
     brls::Box::draw(vg, x, y, width, height, style, ctx);
-
-    if (m_selfDrawCover && width > 0 && height > 0) {
-        if (m_nvgCover != 0) {
-            float imgW = static_cast<float>(m_coverW);
-            float imgH = static_cast<float>(m_coverH);
-            if (imgW > 0 && imgH > 0) {
-                float scaleW = width / imgW, scaleH = height / imgH;
-                float scale = (scaleW > scaleH) ? scaleW : scaleH;
-                float sw = imgW * scale;
-                float sh = imgH * scale;
-                float ox = x + (width - sw) * 0.5f;
-                float oy = y + (height - sh) * 0.5f;
-
-                NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh, 0, m_nvgCover, 1.0f);
-                nvgBeginPath(vg);
-                nvgRoundedRect(vg, x, y, width, height, 4.0f);
-                nvgFillPaint(vg, paint);
-                nvgFill(vg);
-            }
-        } else {
-            nvgBeginPath(vg);
-            nvgRoundedRect(vg, x, y, width, height, 4.0f);
-            nvgFillColor(vg, nvgRGB(40, 40, 48));
-            nvgFill(vg);
-        }
-    }
 }
 
 void MangaItemCell::loadThumbnailIfNeeded() {

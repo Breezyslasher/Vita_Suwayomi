@@ -2702,7 +2702,6 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     // Create manga cells for each result
     for (size_t i = 0; i < manga.size(); i++) {
         auto* cell = new MangaItemCell();
-        cell->setSelfDrawCover(true);
         cell->setShowLibraryBadge(true);  // Show star for library items in search results
         if (compactMode) {
             cell->setCompactMode(true);

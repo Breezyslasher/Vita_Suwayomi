@@ -3,6 +3,7 @@
  */
 
 #include "view/horizontal_scroll_row.hpp"
+#include "view/manga_item_cell.hpp"
 
 namespace vitasuwayomi {
 
@@ -17,6 +18,52 @@ HorizontalScrollRow::HorizontalScrollRow() {
         [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
             onPan(status, soundToPlay);
         }, brls::PanAxis::HORIZONTAL));
+}
+
+void HorizontalScrollRow::draw(NVGcontext* vg, float x, float y, float width, float height,
+                               brls::Style style, brls::FrameContext* ctx) {
+    brls::Box::draw(vg, x, y, width, height, style, ctx);
+
+    nvgSave(vg);
+    nvgIntersectScissor(vg, x, y, width, height);
+
+    for (auto* child : this->getChildren()) {
+        auto* cell = dynamic_cast<MangaItemCell*>(child);
+        if (!cell) continue;
+
+        float cx = cell->getDrawX();
+        float cy = cell->getDrawY();
+        float cw = cell->getDrawW();
+        float ch = cell->getDrawH();
+        if (cw <= 0 || ch <= 0) continue;
+
+        int nvgImg = cell->getCoverImage();
+        if (nvgImg != 0) {
+            float imgW = static_cast<float>(cell->getCoverWidth());
+            float imgH = static_cast<float>(cell->getCoverHeight());
+            if (imgW > 0 && imgH > 0) {
+                float scaleW = cw / imgW, scaleH = ch / imgH;
+                float scale = (scaleW > scaleH) ? scaleW : scaleH;
+                float sw = imgW * scale;
+                float sh = imgH * scale;
+                float ox = cx + (cw - sw) * 0.5f;
+                float oy = cy + (ch - sh) * 0.5f;
+
+                NVGpaint paint = nvgImagePattern(vg, ox, oy, sw, sh, 0, nvgImg, 1.0f);
+                nvgBeginPath(vg);
+                nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
+                nvgFillPaint(vg, paint);
+                nvgFill(vg);
+            }
+        } else {
+            nvgBeginPath(vg);
+            nvgRoundedRect(vg, cx, cy, cw, ch, 4.0f);
+            nvgFillColor(vg, nvgRGB(40, 40, 48));
+            nvgFill(vg);
+        }
+    }
+
+    nvgRestore(vg);
 }
 
 void HorizontalScrollRow::onLayout() {

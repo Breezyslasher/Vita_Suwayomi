@@ -34,7 +34,6 @@ public:
     float getDrawW() const { return m_drawW; }
     float getDrawH() const { return m_drawH; }
 
-    void setSelfDrawCover(bool v) { m_selfDrawCover = v; }
     void setCompactMode(bool compact) { m_compact = compact; }
     void setListMode(bool list) { m_listMode = list; }
     void setListRowSize(int) {}
@@ -75,7 +74,6 @@ private:
     bool m_pressed = false;
     bool m_compact = false;
     bool m_listMode = false;
-    bool m_selfDrawCover = false;
     bool m_thumbnailLoaded = false;
     std::string m_badgeText;
     float m_badgeTextW = 0;

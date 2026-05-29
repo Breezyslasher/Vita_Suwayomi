@@ -9,10 +9,14 @@
 
 namespace vitasuwayomi {
 
+class MangaItemCell;
+
 class HorizontalScrollRow : public brls::Box {
 public:
     HorizontalScrollRow();
 
+    void draw(NVGcontext* vg, float x, float y, float width, float height,
+              brls::Style style, brls::FrameContext* ctx) override;
     void onLayout() override;
     brls::View* getNextFocus(brls::FocusDirection direction, brls::View* currentView) override;
 
