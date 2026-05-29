@@ -41,7 +41,6 @@ public:
     void setListMode(bool listMode);  // List view instead of grid
     void setListRowSize(int rowSize);  // List row size: 0=small(60), 1=medium(80), 2=large(100), 3=auto
     void setShowLibraryBadge(bool show);  // Show star badge for library items (browser/search only)
-    void setShowSourceLabels(bool show) { m_showSourceLabels = show; }
     void refreshLibraryBadges();  // Re-evaluate star badge visibility on all cells
     int getGridColumns() const { return m_columns; }
     bool isCompactMode() const { return m_compactMode; }
@@ -162,7 +161,6 @@ private:
 
     // Cached title drawing state (computed once in setupGrid)
     bool m_showTitles = false;
-    bool m_showSourceLabels = false;
     float m_titleFontSize = 10.0f;
     float m_titleAreaHeight = 28.0f;
 

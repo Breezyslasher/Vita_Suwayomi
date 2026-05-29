@@ -15,6 +15,26 @@
 
 namespace vitasuwayomi {
 
+class CullingScrollFrame : public brls::ScrollingFrame {
+public:
+    void draw(NVGcontext* vg, float x, float y, float width, float height,
+              brls::Style style, brls::FrameContext* ctx) override {
+        brls::Box* content = dynamic_cast<brls::Box*>(getContentView());
+        if (content) {
+            float scrollY = getContentOffsetY();
+            float viewH = height;
+            for (auto* child : content->getChildren()) {
+                float cy = child->getY();
+                float ch = child->getHeight();
+                bool vis = (cy + ch > scrollY) && (cy < scrollY + viewH);
+                child->setVisibility(vis ? brls::Visibility::VISIBLE
+                                         : brls::Visibility::INVISIBLE);
+            }
+        }
+        brls::ScrollingFrame::draw(vg, x, y, width, height, style, ctx);
+    }
+};
+
 SearchTab::SearchTab() {
     m_alive = std::make_shared<bool>(true);
 
@@ -787,7 +807,6 @@ void SearchTab::showSources() {
     // Clear manga grid, results by source, and hide search results view
     m_mangaList.clear();
     m_resultsBySource.clear();
-    m_contentGrid->setShowSourceLabels(false);
     m_contentGrid->setDataSource(m_mangaList);
     m_hasNextPage = false;
     if (m_searchResultsScrollView) {
@@ -1013,7 +1032,6 @@ void SearchTab::showSourceBrowser(const Source& source) {
     if (m_searchResultsBox) {
         m_searchResultsBox->clearViews();
     }
-    m_contentGrid->setShowSourceLabels(false);
     m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
 
     // Navigation chain: [< Back] → [Tag] → [History] → [Search]
@@ -2516,18 +2534,8 @@ void SearchTab::performSearch(const std::string& query) {
                 }
                 m_resultsLabel->setText(resultText);
 
-                // Display results in the same grid as library/single-source browse
-                if (m_sourceScrollView) {
-                    m_sourceScrollView->setVisibility(brls::Visibility::GONE);
-                }
-                if (m_searchResultsScrollView) {
-                    m_searchResultsScrollView->setVisibility(brls::Visibility::GONE);
-                }
-                ImageLoader::setDeferTextureUploads(false);
-                m_contentGrid->setShowSourceLabels(true);
-                m_contentGrid->setDataSource(m_mangaList);
-                m_contentGrid->setVisibility(brls::Visibility::VISIBLE);
-                brls::Application::giveFocus(m_contentGrid);
+                // Display results grouped by source in horizontal rows
+                populateSearchResultsBySource();
             }
         });
     });
@@ -2611,7 +2619,7 @@ void SearchTab::onMangaSelected(const Manga& manga) {
 void SearchTab::populateSearchResultsBySource() {
     // Create or clear the search results scroll view
     if (!m_searchResultsScrollView) {
-        m_searchResultsScrollView = new brls::ScrollingFrame();
+        m_searchResultsScrollView = new CullingScrollFrame();
         m_searchResultsScrollView->setGrow(1.0f);
         // Use centered scrolling to keep focused items visible
         m_searchResultsScrollView->setScrollingBehavior(brls::ScrollingBehavior::CENTERED);

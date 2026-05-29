@@ -776,25 +776,6 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
                 nvgFill(vg);
             }
 
-            if (m_showSourceLabels) {
-                const std::string& src = cell->getManga().sourceName;
-                if (!src.empty()) {
-                    if (!fontSet) {
-                        nvgFontFace(vg, "regular");
-                        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-                        fontSet = true;
-                    }
-                    nvgFontSize(vg, 9.0f);
-                    float slY = cy + coverH - 16.0f;
-                    nvgBeginPath(vg);
-                    nvgRect(vg, cx, slY, cw, 16.0f);
-                    nvgFillColor(vg, nvgRGBA(0, 0, 0, 160));
-                    nvgFill(vg);
-                    nvgFillColor(vg, nvgRGBA(255, 255, 255, 220));
-                    nvgText(vg, cx + 3.0f, slY + 2.0f, src.c_str(), nullptr);
-                }
-            }
-
             if (drawBadges && cell->hasBadge()) {
                 if (!fontSet) {
                     nvgFontFace(vg, "regular");
