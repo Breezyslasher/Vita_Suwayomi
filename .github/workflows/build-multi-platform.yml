@@ -467,7 +467,7 @@ jobs:
       - name: Upload NRO
         uses: actions/upload-artifact@v4
         with:
-          name: VitaSuwayomi-nx-${{ matrix.driver }}-${{ github.run_number }}
+          name: VitaSuwayomi-Switch-${{ matrix.driver }}-${{ github.run_number }}
           path: build/VitaSuwayomi.nro
 
   # ───────────────────────────────────────────────
