@@ -120,6 +120,33 @@ if(PLATFORM_PSV)
     endif()
 endif()
 
+# ---------------------------------------------------------------------------
+# Borealis fontstash patch (all platforms): caches kerning advances so
+# stb_truetype's GPOS table walk doesn't run per glyph pair per frame
+# ---------------------------------------------------------------------------
+set(FONTSTASH_PATCH  ${CMAKE_CURRENT_SOURCE_DIR}/patches/fontstash.h)
+set(FONTSTASH_TARGET ${BOREALIS_LIBRARY}/include/borealis/extern/nanovg/fontstash.h)
+if(EXISTS ${FONTSTASH_PATCH})
+    message(STATUS "Applying patch: fontstash.h")
+    configure_file(${FONTSTASH_PATCH} ${FONTSTASH_TARGET} COPYONLY)
+else()
+    message(FATAL_ERROR "Patch file not found: ${FONTSTASH_PATCH}")
+endif()
+
+# ---------------------------------------------------------------------------
+# Borealis nanovg patch (all platforms): adds nvgTextBatchBegin/End so the
+# grid can draw all visible titles as a single render call instead of one
+# draw call per text line
+# ---------------------------------------------------------------------------
+set(NANOVG_PATCH  ${CMAKE_CURRENT_SOURCE_DIR}/patches/nanovg.c)
+set(NANOVG_TARGET ${BOREALIS_LIBRARY}/lib/extern/nanovg/nanovg.c)
+if(EXISTS ${NANOVG_PATCH})
+    message(STATUS "Applying patch: nanovg.c")
+    configure_file(${NANOVG_PATCH} ${NANOVG_TARGET} COPYONLY)
+else()
+    message(FATAL_ERROR "Patch file not found: ${NANOVG_PATCH}")
+endif()
+
 add_subdirectory(${BOREALIS_LIBRARY})
 
 # ---------------------------------------------------------------------------
