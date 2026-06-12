@@ -13,6 +13,13 @@
 #include <cmath>
 #include <chrono>
 
+// From the patched nanovg.c (patches/nanovg.c): accumulates consecutive
+// nvgText calls with identical state into a single render call.
+extern "C" {
+void nvgTextBatchBegin(NVGcontext* ctx);
+void nvgTextBatchEnd(NVGcontext* ctx);
+}
+
 namespace vitasuwayomi {
 
 RecyclingGrid::RecyclingGrid() {
@@ -736,9 +743,9 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         bool drawBadges = m_showUnreadBadge;
         bool drawTitles = m_showTitles;
         float titleAreaH = m_showTitles ? m_titleAreaHeight : 0.0f;
-        bool fontSet = false;
-        bool titleFontSet = false;
 
+        // Pass 1: covers. Kept separate from text so the backend isn't
+        // ping-ponging between the image and text fragment shaders per cell.
         for (int i = startIdx; i < endIdx; i++) {
             MangaItemCell* cell = m_cells[i];
             if (!cell) continue;
@@ -775,57 +782,74 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
                 nvgFillColor(vg, nvgRGB(40, 40, 48));
                 nvgFill(vg);
             }
+        }
 
-            if (drawBadges && cell->hasBadge()) {
-                if (!fontSet) {
-                    nvgFontFace(vg, "regular");
-                    nvgFontSize(vg, m_badgeFontSize);
-                    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-                    fontSet = true;
+        // Pass 2: badge backgrounds + all text, batched so consecutive text
+        // draws share the same fragment program and font atlas texture.
+        if (drawBadges || drawTitles) {
+            nvgFontFace(vg, "regular");
+            nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+
+            if (drawBadges) {
+                nvgFontSize(vg, m_badgeFontSize);
+                for (int i = startIdx; i < endIdx; i++) {
+                    MangaItemCell* cell = m_cells[i];
+                    if (!cell || !cell->hasBadge()) continue;
+
+                    float cx = cell->getDrawX();
+                    float cy = cell->getDrawY();
+                    if (cell->getDrawW() <= 0 || cell->getDrawH() <= 0) continue;
+
+                    cell->cacheBadgeBounds(vg, m_badgeFontSize);
+                    float bx = cx + m_badgeMargin;
+                    float by = cy + m_badgeMargin;
+                    float tw = cell->getBadgeTextW();
+                    float th = cell->getBadgeTextH();
+                    static constexpr float padX = 4.0f;
+                    static constexpr float padY = 2.0f;
+
+                    nvgBeginPath(vg);
+                    nvgRoundedRect(vg, bx, by, tw + padX * 2, th + padY * 2, 2.0f);
+                    nvgFillColor(vg, m_badgeColor);
+                    nvgFill(vg);
+
+                    nvgFillColor(vg, nvgRGB(255, 255, 255));
+                    nvgText(vg, bx + padX, by + padY, cell->getBadgeText().c_str(), nullptr);
                 }
-                cell->cacheBadgeBounds(vg, m_badgeFontSize);
-                float bx = cx + m_badgeMargin;
-                float by = cy + m_badgeMargin;
-                float tw = cell->getBadgeTextW();
-                float th = cell->getBadgeTextH();
-                static constexpr float padX = 4.0f;
-                static constexpr float padY = 2.0f;
-
-                nvgBeginPath(vg);
-                nvgRoundedRect(vg, bx, by, tw + padX * 2, th + padY * 2, 2.0f);
-                nvgFillColor(vg, m_badgeColor);
-                nvgFill(vg);
-
-                nvgFillColor(vg, nvgRGB(255, 255, 255));
-                nvgText(vg, bx + padX, by + padY, cell->getBadgeText().c_str(), nullptr);
             }
 
             if (drawTitles) {
-                if (!titleFontSet) {
-                    nvgFontFace(vg, "regular");
-                    nvgFontSize(vg, m_titleFontSize);
-                    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-                    titleFontSet = true;
-                    fontSet = false;
-                } else if (fontSet) {
-                    nvgFontSize(vg, m_titleFontSize);
-                    fontSet = false;
-                }
-                cell->cacheTitleText(vg, m_titleFontSize, cw - 4.0f, 2);
-                const std::string& cached = cell->getCachedTitle();
-                if (!cached.empty()) {
-                    nvgFillColor(vg, nvgRGBA(255, 255, 255, 230));
-                    float ty = cy + coverH + 2.0f;
-                    float lineH = m_titleFontSize * 1.2f;
-                    size_t pos = 0;
+                nvgFontSize(vg, m_titleFontSize);
+                nvgFillColor(vg, nvgRGBA(255, 255, 255, 230));
+                float lineH = m_titleFontSize * 1.2f;
+                // All title lines share identical NVG state, so they can be
+                // accumulated into a single render call. No path fills may
+                // happen between Begin and End (they'd clobber the batch).
+                nvgTextBatchBegin(vg);
+                for (int i = startIdx; i < endIdx; i++) {
+                    MangaItemCell* cell = m_cells[i];
+                    if (!cell) continue;
+
+                    float cx = cell->getDrawX();
+                    float cy = cell->getDrawY();
+                    float cw = cell->getDrawW();
+                    float ch = cell->getDrawH();
+                    if (cw <= 0 || ch <= 0) continue;
+
+                    cell->cacheTitleText(vg, m_titleFontSize, cw - 4.0f, 2);
+                    const std::string& cached = cell->getCachedTitle();
+                    if (cached.empty()) continue;
+
+                    float ty = cy + (ch - titleAreaH) + 2.0f;
                     size_t nl = cached.find('\n');
-                    nvgText(vg, cx + 2.0f, ty, cached.c_str() + pos,
+                    nvgText(vg, cx + 2.0f, ty, cached.c_str(),
                             (nl != std::string::npos) ? cached.c_str() + nl : nullptr);
                     if (nl != std::string::npos) {
                         nvgText(vg, cx + 2.0f, ty + lineH,
                                 cached.c_str() + nl + 1, nullptr);
                     }
                 }
+                nvgTextBatchEnd(vg);
             }
         }
 
