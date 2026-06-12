@@ -38,7 +38,8 @@ ReaderActivity::ReaderActivity(int mangaId, int chapterIndex, const std::string&
     : m_mangaId(mangaId)
     , m_chapterIndex(chapterIndex)
     , m_mangaTitle(mangaTitle)
-    , m_startPage(0) {
+    , m_startPage(0)
+    , m_lastProgressSaveTime(std::chrono::steady_clock::now() - std::chrono::seconds(10)) {
     brls::Logger::info("ReaderActivity: manga={}, chapter={}", mangaId, chapterIndex);
 }
 
@@ -46,7 +47,8 @@ ReaderActivity::ReaderActivity(int mangaId, int chapterIndex, int startPage, con
     : m_mangaId(mangaId)
     , m_chapterIndex(chapterIndex)
     , m_mangaTitle(mangaTitle)
-    , m_startPage(startPage) {
+    , m_startPage(startPage)
+    , m_lastProgressSaveTime(std::chrono::steady_clock::now() - std::chrono::seconds(10)) {
     brls::Logger::info("ReaderActivity: manga={}, chapter={}, startPage={}",
                        mangaId, chapterIndex, startPage);
 }
@@ -1749,7 +1751,6 @@ void ReaderActivity::updateProgress() {
     int currentPage = 0;
 
     if (m_continuousScrollMode && webtoonScroll) {
-        // Webtoon mode: use segment tracking for correct chapter/page
         int rawPage = webtoonScroll->getCurrentPage();
         if (webtoonScroll->isTransitionPage(rawPage)) return;
 
@@ -1758,32 +1759,55 @@ void ReaderActivity::updateProgress() {
         chapterIndex = chapterId;
         currentPage = pageInChapter;
     } else {
-        // Manga mode: use m_pages and m_currentPage
         if (m_pages.empty() || m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
         if (isTransitionPage(m_currentPage)) return;
 
         currentPage = m_currentPage;
-        // Adjust page index to exclude the prepended transition page
         if (m_pages[0].imageUrl == TRANSITION_PREV) {
             currentPage = m_currentPage - 1;
         }
     }
 
+    // Store pending progress for deferred save
+    m_pendingProgressChapterId = chapterIndex;
+    m_pendingProgressPage = currentPage;
+
+    // Throttle: save at most once every 3 seconds to avoid server spam
+    // during fast D-pad presses or webtoon momentum scrolling
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_lastProgressSaveTime).count();
+    if (elapsed < 3000) return;
+
+    flushPendingProgress();
+}
+
+void ReaderActivity::flushPendingProgress() {
+    if (m_pendingProgressChapterId < 0) return;
+
+    int mangaId = m_mangaId;
+    int chapterId = m_pendingProgressChapterId;
+    int page = m_pendingProgressPage;
+    m_pendingProgressChapterId = -1;
+    m_lastProgressSaveTime = std::chrono::steady_clock::now();
+
     if (Application::getInstance().isConnected()) {
-        // Save reading progress to server
-        vitasuwayomi::asyncRun([mangaId, chapterIndex, currentPage]() {
-            SuwayomiClient& client = SuwayomiClient::getInstance();
-            client.updateChapterProgress(mangaId, chapterIndex, currentPage);
+        vitasuwayomi::asyncRun([mangaId, chapterId, page]() {
+            SuwayomiClient::getInstance().updateChapterProgress(mangaId, chapterId, page);
         });
     } else {
-        // Save progress locally when offline
-        DownloadsManager::getInstance().updateReadingProgress(mangaId, chapterIndex, currentPage);
+        DownloadsManager::getInstance().updateReadingProgress(mangaId, chapterId, page);
     }
 }
 
 void ReaderActivity::nextPage() {
     if (m_pages.empty()) return;
     if (m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
+
+    // Webtoon mode: scroll forward by 80% of viewport
+    if (m_continuousScrollMode && webtoonScroll) {
+        webtoonScroll->scrollByViewport(0.8f);
+        return;
+    }
 
     brls::Logger::info("NEXTPAGE: currentPage={}/{} url={}",
         m_currentPage, static_cast<int>(m_pages.size()),
@@ -1792,11 +1816,9 @@ void ReaderActivity::nextPage() {
     if (isTransitionPage(m_currentPage)) {
         const std::string& url = m_pages[m_currentPage].imageUrl;
         if (url == TRANSITION_NEXT) {
-            // End-of-chapter transition: "next" means go to next chapter
             brls::Logger::info("NEXTPAGE: on TRANSITION_NEXT → nextChapter()");
             nextChapter();
         } else if (url == TRANSITION_PREV) {
-            // Beginning-of-chapter transition: "next" means go to first real page
             brls::Logger::info("NEXTPAGE: on TRANSITION_PREV → first real page");
             if (m_currentPage < static_cast<int>(m_pages.size()) - 1) {
                 m_currentPage++;
@@ -1804,16 +1826,29 @@ void ReaderActivity::nextPage() {
                 loadPage(m_currentPage);
             }
         }
-        // TRANSITION_END: no-op
         return;
     }
 
     if (m_currentPage < static_cast<int>(m_pages.size()) - 1) {
-        m_currentPage++;
+        int targetPage = m_currentPage + 1;
+
+        // Transfer pre-loaded preview image for instant display
+        if (!isTransitionPage(targetPage) && pageImage) {
+            RotatableImage* source = nullptr;
+            if (m_posPreviewIdx == targetPage && previewImage && previewImage->hasImage()) {
+                source = previewImage;
+            } else if (m_negPreviewIdx == targetPage && previewImageB && previewImageB->hasImage()) {
+                source = previewImageB;
+            }
+            if (source) {
+                pageImage->takeImageFrom(source);
+            }
+        }
+
+        m_currentPage = targetPage;
         brls::Logger::info("NEXTPAGE: advancing to page {}", m_currentPage);
         updatePageDisplay();
         loadPage(m_currentPage);
-        // Don't save progress for transition pages
         if (!isTransitionPage(m_currentPage)) {
             updateProgress();
         }
@@ -1824,6 +1859,12 @@ void ReaderActivity::previousPage() {
     if (m_pages.empty()) return;
     if (m_currentPage < 0 || m_currentPage >= static_cast<int>(m_pages.size())) return;
 
+    // Webtoon mode: scroll backward by 80% of viewport
+    if (m_continuousScrollMode && webtoonScroll) {
+        webtoonScroll->scrollByViewport(-0.8f);
+        return;
+    }
+
     brls::Logger::info("PREVPAGE: currentPage={}/{} url={}",
         m_currentPage, static_cast<int>(m_pages.size()),
         m_pages[m_currentPage].imageUrl);
@@ -1831,11 +1872,9 @@ void ReaderActivity::previousPage() {
     if (isTransitionPage(m_currentPage)) {
         const std::string& url = m_pages[m_currentPage].imageUrl;
         if (url == TRANSITION_PREV) {
-            // Beginning-of-chapter transition: "prev" means go to previous chapter
             brls::Logger::info("PREVPAGE: on TRANSITION_PREV → previousChapter()");
             previousChapter();
         } else if (url == TRANSITION_NEXT || url == TRANSITION_END) {
-            // End-of-chapter transition: "prev" means go to last real page
             brls::Logger::info("PREVPAGE: on end transition → last real page");
             if (m_currentPage > 0) {
                 m_currentPage--;
@@ -1847,10 +1886,24 @@ void ReaderActivity::previousPage() {
     }
 
     if (m_currentPage > 0) {
-        m_currentPage--;
+        int targetPage = m_currentPage - 1;
+
+        // Transfer pre-loaded preview image for instant display
+        if (!isTransitionPage(targetPage) && pageImage) {
+            RotatableImage* source = nullptr;
+            if (m_posPreviewIdx == targetPage && previewImage && previewImage->hasImage()) {
+                source = previewImage;
+            } else if (m_negPreviewIdx == targetPage && previewImageB && previewImageB->hasImage()) {
+                source = previewImageB;
+            }
+            if (source) {
+                pageImage->takeImageFrom(source);
+            }
+        }
+
+        m_currentPage = targetPage;
         updatePageDisplay();
         loadPage(m_currentPage);
-        // Don't save progress for transition pages
         if (!isTransitionPage(m_currentPage)) {
             updateProgress();
         }
@@ -4039,6 +4092,9 @@ void ReaderActivity::willDisappear(bool resetState) {
         DownloadsManager::getInstance().updateReadingProgress(
             m_mangaId, result.chapterId, result.lastPageRead);
     }
+
+    // Flush any throttled progress save before shutting down
+    flushPendingProgress();
 
     // Invalidate alive flag so pending async callbacks bail out safely.
     // This must happen BEFORE any cleanup so that in-flight callbacks

@@ -84,6 +84,13 @@ public:
     void scrollToPage(int pageIndex);
 
     /**
+     * Scroll forward or backward by a fraction of the viewport.
+     * Positive fraction scrolls forward (towards end), negative scrolls backward.
+     * Used for D-pad navigation in webtoon mode.
+     */
+    void scrollByViewport(float fraction);
+
+    /**
      * Get the currently visible page (topmost page in view)
      */
     int getCurrentPage() const { return m_currentPage; }
