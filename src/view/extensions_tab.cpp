@@ -8,6 +8,7 @@
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "utils/image_loader.hpp"
+#include "utils/button_icons.hpp"
 
 #include <borealis.hpp>
 #include <algorithm>
@@ -694,7 +695,7 @@ ExtensionsTab::ExtensionsTab() {
     selectButtonIcon->setWidth(64);
     selectButtonIcon->setHeight(16);
     selectButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    selectButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
+    selectButtonIcon->setImageFromFile(BUTTON_IMG("select_button.png"));
     selectButtonIcon->setMarginBottom(2);
     repoContainer->addView(selectButtonIcon);
 
@@ -725,7 +726,7 @@ ExtensionsTab::ExtensionsTab() {
     startButtonIcon->setWidth(64);
     startButtonIcon->setHeight(16);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    startButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
+    startButtonIcon->setImageFromFile(BUTTON_IMG("start_button.png"));
     startButtonIcon->setMarginBottom(2);
     searchContainer->addView(startButtonIcon);
 
@@ -755,7 +756,7 @@ ExtensionsTab::ExtensionsTab() {
     triangleButtonIcon->setWidth(16);
     triangleButtonIcon->setHeight(16);
     triangleButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    triangleButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
+    triangleButtonIcon->setImageFromFile(BUTTON_IMG("triangle_button.png"));
     triangleButtonIcon->setMarginBottom(2);
     refreshContainer->addView(triangleButtonIcon);
 

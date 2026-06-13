@@ -9,6 +9,7 @@
 #include "app/application.hpp"
 #include "utils/image_loader.hpp"
 #include "utils/async.hpp"
+#include "utils/button_icons.hpp"
 #include "platform/platform.hpp"
 #include <memory>
 #include <thread>
@@ -1092,7 +1093,7 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     xButtonIcon->setWidth(24);
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    xButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/square_button.png");
+    xButtonIcon->setImageFromFile(BUTTON_IMG("square_button.png"));
     xButtonIcon->setMarginLeft(8);
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     outXButtonIcon = xButtonIcon;
@@ -1499,7 +1500,7 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     xButtonIcon->setWidth(24);
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    xButtonIcon->setImageFromFile(RESOURCE_PREFIX "images/square_button.png");
+    xButtonIcon->setImageFromFile(BUTTON_IMG("square_button.png"));
     xButtonIcon->setMarginLeft(8);
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     outXButtonIcon = xButtonIcon;

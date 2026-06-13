@@ -14,6 +14,7 @@
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
 #include "utils/library_cache.hpp"
+#include "utils/button_icons.hpp"
 #include "view/migrate_search_view.hpp"
 #include <atomic>
 #include <chrono>
@@ -83,7 +84,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_lHintIcon->setWidth(24);
     m_lHintIcon->setHeight(24);
     m_lHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_lHintIcon->setImageFromFile(RESOURCE_PREFIX "images/l_button.png");
+    m_lHintIcon->setImageFromFile(BUTTON_IMG("l_button.png"));
     m_lHintIcon->setMarginRight(6);
     topRow->addView(m_lHintIcon);
 
@@ -136,7 +137,7 @@ LibrarySectionTab::LibrarySectionTab() {
     m_rHintIcon->setWidth(24);
     m_rHintIcon->setHeight(24);
     m_rHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    m_rHintIcon->setImageFromFile(RESOURCE_PREFIX "images/r_button.png");
+    m_rHintIcon->setImageFromFile(BUTTON_IMG("r_button.png"));
     m_rHintIcon->setMarginRight(10);
     topRow->addView(m_rHintIcon);
 
@@ -156,7 +157,7 @@ LibrarySectionTab::LibrarySectionTab() {
     sortHintIcon->setWidth(16);
     sortHintIcon->setHeight(16);
     sortHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    sortHintIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
+    sortHintIcon->setImageFromFile(BUTTON_IMG("triangle_button.png"));
     sortHintIcon->setMarginBottom(2);
     sortContainer->addView(sortHintIcon);
 
@@ -200,7 +201,7 @@ LibrarySectionTab::LibrarySectionTab() {
     auto* updateHintIcon = new brls::Image();
     updateHintIcon->setHeight(16);
     updateHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    updateHintIcon->setImageFromFile(RESOURCE_PREFIX "images/select_button.png");
+    updateHintIcon->setImageFromFile(BUTTON_IMG("select_button.png"));
     updateHintIcon->setMarginBottom(2);
     m_updateContainer->addView(updateHintIcon);
 
@@ -241,7 +242,7 @@ LibrarySectionTab::LibrarySectionTab() {
     groupHintIcon->setWidth(16);
     groupHintIcon->setHeight(16);
     groupHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    groupHintIcon->setImageFromFile(RESOURCE_PREFIX "images/square_button.png");
+    groupHintIcon->setImageFromFile(BUTTON_IMG("square_button.png"));
     groupHintIcon->setMarginBottom(2);
     groupContainer->addView(groupHintIcon);
 

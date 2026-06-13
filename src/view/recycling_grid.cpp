@@ -9,6 +9,7 @@
 #include "view/long_press_gesture.hpp"
 #include "utils/perf_overlay.hpp"
 #include "utils/image_loader.hpp"
+#include "utils/button_icons.hpp"
 #include "app/application.hpp"
 #include <cmath>
 #include <chrono>
@@ -862,7 +863,7 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         if (focused && focused->isFocused()) {
             // Lazy-load the start_button.png NVG image once
             if (m_startHintNvg == 0) {
-                m_startHintNvg = nvgCreateImage(vg, RESOURCE_PREFIX "images/start_button.png", 0);
+                m_startHintNvg = nvgCreateImage(vg, BUTTON_IMG("start_button.png"), 0);
                 if (m_startHintNvg != 0)
                     nvgImageSize(vg, m_startHintNvg, &m_startHintW, &m_startHintH);
             }
