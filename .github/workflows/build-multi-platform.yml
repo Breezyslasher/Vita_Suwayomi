@@ -439,8 +439,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - { driver: opengl, mpv_pkg: switch-libmpv-0.41.0-5-any.pkg.tar.zst, cmake_extra: "" }
-        - { driver: deko3d, mpv_pkg: switch-libmpv-deko3d-0.41.0-5-any.pkg.tar.zst, cmake_extra: "-DUSE_DEKO3D=ON" }
+        - { driver: opengl, mpv_pkg: switch-libmpv-0.36.0-5-any.pkg.tar.zst, cmake_extra: "" }
+        - { driver: deko3d, mpv_pkg: switch-libmpv-deko3d-0.36.0-5-any.pkg.tar.zst, cmake_extra: "-DUSE_DEKO3D=ON" }
     container:
       image: devkitpro/devkita64:20260219
     steps:
