@@ -684,7 +684,6 @@ jobs:
             mingw-w64-${{ matrix.env }}-ninja
             mingw-w64-${{ matrix.env }}-cc
             mingw-w64-${{ matrix.env }}-cmake
-            mingw-w64-${{ matrix.env }}-glfw
       - uses: actions/checkout@v4
         with:
           submodules: recursive
