@@ -110,7 +110,7 @@ ChapterCell::ChapterCell() {
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     xButtonIcon->setMarginLeft(8);
-    xButtonIcon->setImageFromFile(BUTTON_IMG("square_button.png"));
+    setButtonIcon(xButtonIcon, BUTTON_IMG("square_button.png"));
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     statusBox->addView(xButtonIcon);
 
@@ -1073,12 +1073,12 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     // Load button icons immediately (avoids blank→loaded flash)
     brls::Logger::info("MangaDetailView: Loading icons...");
-    selectIcon->setImageFromFile(BUTTON_IMG("select_button.png"));
-    rButtonIcon->setImageFromFile(BUTTON_IMG("r_button.png"));
+    setButtonIcon(selectIcon, BUTTON_IMG("select_button.png"));
+    setButtonIcon(rButtonIcon, BUTTON_IMG("r_button.png"));
     updateSortIcon();
-    yButtonIcon->setImageFromFile(BUTTON_IMG("triangle_button.png"));
+    setButtonIcon(yButtonIcon, BUTTON_IMG("triangle_button.png"));
     filterIcon->setImageFromFile(RESOURCE_PREFIX "icons/filter-menu-outline.png");
-    startButtonIcon->setImageFromFile(BUTTON_IMG("start_button.png"));
+    setButtonIcon(startButtonIcon, BUTTON_IMG("start_button.png"));
     menuIcon->setImageFromFile(RESOURCE_PREFIX "icons/menu.png");
     brls::Logger::info("MangaDetailView: Icons loaded, starting detail fetch...");
 

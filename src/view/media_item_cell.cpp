@@ -262,7 +262,7 @@ void MangaItemCell::onFocusGained() {
     if (!m_showLibraryBadge) {
         auto* hint = ensureStartHintIcon();
         if (!m_startHintImageLoaded) {
-            hint->setImageFromFile(BUTTON_IMG("start_button.png"));
+            setButtonIcon(hint, BUTTON_IMG("start_button.png"));
             m_startHintImageLoaded = true;
         }
         hint->setVisibility(brls::Visibility::VISIBLE);

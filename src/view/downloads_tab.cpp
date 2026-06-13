@@ -1093,7 +1093,7 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
     xButtonIcon->setWidth(24);
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    xButtonIcon->setImageFromFile(BUTTON_IMG("square_button.png"));
+    setButtonIcon(xButtonIcon, BUTTON_IMG("square_button.png"));
     xButtonIcon->setMarginLeft(8);
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     outXButtonIcon = xButtonIcon;
@@ -1500,7 +1500,7 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
     xButtonIcon->setWidth(24);
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    xButtonIcon->setImageFromFile(BUTTON_IMG("square_button.png"));
+    setButtonIcon(xButtonIcon, BUTTON_IMG("square_button.png"));
     xButtonIcon->setMarginLeft(8);
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     outXButtonIcon = xButtonIcon;

@@ -88,7 +88,7 @@ SourceBrowseTab::SourceBrowseTab(const Source& source)
     startButtonIcon->setWidth(64);
     startButtonIcon->setHeight(16);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    startButtonIcon->setImageFromFile(BUTTON_IMG("start_button.png"));
+    setButtonIcon(startButtonIcon, BUTTON_IMG("start_button.png"));
     startButtonIcon->setMarginBottom(2);
     searchContainer->addView(startButtonIcon);
 

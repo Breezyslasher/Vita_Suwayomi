@@ -78,7 +78,7 @@ SearchTab::SearchTab() {
     triangleHintIcon->setWidth(16);
     triangleHintIcon->setHeight(16);
     triangleHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    triangleHintIcon->setImageFromFile(BUTTON_IMG("triangle_button.png"));
+    setButtonIcon(triangleHintIcon, BUTTON_IMG("triangle_button.png"));
     triangleHintIcon->setMarginBottom(2);
     m_filterBtnContainer->addView(triangleHintIcon);
 
@@ -126,7 +126,7 @@ SearchTab::SearchTab() {
     selectButtonIcon->setWidth(48);
     selectButtonIcon->setHeight(16);
     selectButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    selectButtonIcon->setImageFromFile(BUTTON_IMG("select_button.png"));
+    setButtonIcon(selectButtonIcon, BUTTON_IMG("select_button.png"));
     selectButtonIcon->setMarginBottom(2);
     historyContainer->addView(selectButtonIcon);
 
@@ -173,7 +173,7 @@ SearchTab::SearchTab() {
     startButtonIcon->setWidth(64);
     startButtonIcon->setHeight(16);
     startButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    startButtonIcon->setImageFromFile(BUTTON_IMG("start_button.png"));
+    setButtonIcon(startButtonIcon, BUTTON_IMG("start_button.png"));
     startButtonIcon->setMarginBottom(2);
     searchContainer->addView(startButtonIcon);
 

@@ -863,9 +863,11 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         if (focused && focused->isFocused()) {
             // Lazy-load the start_button.png NVG image once
             if (m_startHintNvg == 0) {
+#ifndef HIDE_BUTTON_HINTS
                 m_startHintNvg = nvgCreateImage(vg, BUTTON_IMG("start_button.png"), 0);
                 if (m_startHintNvg != 0)
                     nvgImageSize(vg, m_startHintNvg, &m_startHintW, &m_startHintH);
+#endif
             }
             if (m_startHintNvg != 0 && m_startHintW > 0 && m_startHintH > 0) {
                 float cx = focused->getDrawX();

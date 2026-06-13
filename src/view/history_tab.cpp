@@ -47,7 +47,7 @@ HistoryTab::HistoryTab() {
     triangleIcon->setWidth(16);
     triangleIcon->setHeight(16);
     triangleIcon->setScalingType(brls::ImageScalingType::FIT);
-    triangleIcon->setImageFromFile(BUTTON_IMG("triangle_button.png"));
+    setButtonIcon(triangleIcon, BUTTON_IMG("triangle_button.png"));
     triangleIcon->setMarginBottom(2);
     refreshContainer->addView(triangleIcon);
 
