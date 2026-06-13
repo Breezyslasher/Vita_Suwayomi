@@ -147,6 +147,19 @@ else()
     message(FATAL_ERROR "Patch file not found: ${NANOVG_PATCH}")
 endif()
 
+# ---------------------------------------------------------------------------
+# GLFW keyboard mapping patch (desktop only): adds keyboard shortcuts for
+# Start, Back, Y, X, LB, RB buttons (F1, F2, F, X, Q, E)
+# ---------------------------------------------------------------------------
+if(NOT PLATFORM_SWITCH AND NOT PLATFORM_PSV AND NOT PLATFORM_PS4 AND NOT PLATFORM_ANDROID)
+    set(GLFW_INPUT_PATCH  ${CMAKE_CURRENT_SOURCE_DIR}/patches/glfw_input.cpp)
+    set(GLFW_INPUT_TARGET ${BOREALIS_LIBRARY}/lib/platforms/glfw/glfw_input.cpp)
+    if(EXISTS ${GLFW_INPUT_PATCH})
+        message(STATUS "Applying patch: glfw_input.cpp")
+        configure_file(${GLFW_INPUT_PATCH} ${GLFW_INPUT_TARGET} COPYONLY)
+    endif()
+endif()
+
 add_subdirectory(${BOREALIS_LIBRARY})
 
 # ---------------------------------------------------------------------------
@@ -474,18 +487,18 @@ if(PLATFORM_PSV)
         FILE resources/icons/filter-menu-outline.png      resources/icons/filter-menu-outline.png
         FILE resources/icons/format-list-group.png        resources/icons/format-list-group.png
 
-        FILE resources/images/circle_button.png   resources/images/circle_button.png
-        FILE resources/images/cross_button.png    resources/images/cross_button.png
-        FILE resources/images/dpad.png            resources/images/dpad.png
-        FILE resources/images/gradient.png        resources/images/gradient.png
-        FILE resources/images/l_button.png        resources/images/l_button.png
-        FILE resources/images/logo-small.png      resources/images/logo-small.png
-        FILE resources/images/logo.png            resources/images/logo.png
-        FILE resources/images/r_button.png        resources/images/r_button.png
-        FILE resources/images/select_button.png   resources/images/select_button.png
-        FILE resources/images/square_button.png   resources/images/square_button.png
-        FILE resources/images/start_button.png    resources/images/start_button.png
-        FILE resources/images/triangle_button.png resources/images/triangle_button.png
+        FILE resources/images/PSV/circle_button.png   resources/images/PSV/circle_button.png
+        FILE resources/images/PSV/cross_button.png    resources/images/PSV/cross_button.png
+        FILE resources/images/PSV/dpad.png            resources/images/PSV/dpad.png
+        FILE resources/images/PSV/gradient.png        resources/images/PSV/gradient.png
+        FILE resources/images/PSV/l_button.png        resources/images/PSV/l_button.png
+        FILE resources/images/PSV/logo-small.png      resources/images/PSV/logo-small.png
+        FILE resources/images/PSV/logo.png            resources/images/PSV/logo.png
+        FILE resources/images/PSV/r_button.png        resources/images/PSV/r_button.png
+        FILE resources/images/PSV/select_button.png   resources/images/PSV/select_button.png
+        FILE resources/images/PSV/square_button.png   resources/images/PSV/square_button.png
+        FILE resources/images/PSV/start_button.png    resources/images/PSV/start_button.png
+        FILE resources/images/PSV/triangle_button.png resources/images/PSV/triangle_button.png
 
         FILE resources/font/font.ttf                      resources/font/font.ttf
         FILE resources/font/icon.ttf                      resources/font/icon.ttf
@@ -512,8 +525,12 @@ elseif(PLATFORM_PS4)
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/ps4 ${CMAKE_BINARY_DIR}/ps4
         # Override with our custom sce_sys (icon)
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_SOURCE_DIR}/app/platform/ps4 ${CMAKE_BINARY_DIR}/ps4
-        # Copy app resources
-        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources ${CMAKE_BINARY_DIR}/ps4/resources
+        # Copy only the resources needed for PS4
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/font ${CMAKE_BINARY_DIR}/ps4/resources/font
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons ${CMAKE_BINARY_DIR}/ps4/resources/icons
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buttons/ps4 ${CMAKE_BINARY_DIR}/ps4/resources/images/buttons/ps4
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/material ${CMAKE_BINARY_DIR}/ps4/resources/material
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/xml ${CMAKE_BINARY_DIR}/ps4/resources/xml
         # Copy borealis system resources
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/i18n ${CMAKE_BINARY_DIR}/ps4/resources/i18n
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/img ${CMAKE_BINARY_DIR}/ps4/resources/img
@@ -531,9 +548,17 @@ elseif(PLATFORM_SWITCH)
         # Generate NACP metadata (author, version shown in hbmenu)
         COMMAND ${NX_NACPTOOL_EXE} --create "VitaSuwayomi" "Breezyslasher"
             "${PROJECT_VERSION}" ${PROJECT_NAME}.nacp
-        # Assemble romfs: app resources + borealis system resources
+        # Assemble romfs: only resources needed for Switch
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources ${CMAKE_BINARY_DIR}/resources
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/font ${CMAKE_BINARY_DIR}/resources/font
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons ${CMAKE_BINARY_DIR}/resources/icons
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buttons/switch ${CMAKE_BINARY_DIR}/resources/images/buttons/switch
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/material ${CMAKE_BINARY_DIR}/resources/material
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/xml ${CMAKE_BINARY_DIR}/resources/xml
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${BOREALIS_DIR}/resources/i18n ${CMAKE_BINARY_DIR}/resources/i18n
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -551,8 +576,20 @@ elseif(PLATFORM_DESKTOP)
     # are not checked in to resources/ but are required by borealis at runtime.
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/font
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/font
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/icons
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buttons/keyboard
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/images/buttons/keyboard
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/material
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/material
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/xml
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/xml
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${BOREALIS_DIR}/resources/i18n
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/i18n

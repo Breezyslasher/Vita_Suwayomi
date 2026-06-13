@@ -313,6 +313,12 @@ private:
 
     // Guard flag: prevents slider callback from firing during programmatic setProgress
     bool m_updatingSlider = false;
+
+    // Progress save throttling: prevent server spam during fast scrolling/swiping
+    std::chrono::steady_clock::time_point m_lastProgressSaveTime;
+    int m_pendingProgressChapterId = -1;
+    int m_pendingProgressPage = -1;
+    void flushPendingProgress();
 };
 
 } // namespace vitasuwayomi

@@ -9,6 +9,7 @@
 #include "view/long_press_gesture.hpp"
 #include "utils/perf_overlay.hpp"
 #include "utils/image_loader.hpp"
+#include "utils/button_icons.hpp"
 #include "app/application.hpp"
 #include <cmath>
 #include <chrono>
@@ -862,9 +863,11 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
         if (focused && focused->isFocused()) {
             // Lazy-load the start_button.png NVG image once
             if (m_startHintNvg == 0) {
-                m_startHintNvg = nvgCreateImage(vg, RESOURCE_PREFIX "images/start_button.png", 0);
+#ifndef HIDE_BUTTON_HINTS
+                m_startHintNvg = nvgCreateImage(vg, BUTTON_IMG("start_button.png"), 0);
                 if (m_startHintNvg != 0)
                     nvgImageSize(vg, m_startHintNvg, &m_startHintW, &m_startHintH);
+#endif
             }
             if (m_startHintNvg != 0 && m_startHintW > 0 && m_startHintH > 0) {
                 float cx = focused->getDrawX();
@@ -872,6 +875,13 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
                 float cw = focused->getDrawW();
                 float hintW = static_cast<float>(m_startHintW);
                 float hintH = static_cast<float>(m_startHintH);
+                // Cap icon height to 20px so large source icons don't dominate the cover
+                const float maxH = 20.0f;
+                if (hintH > maxH) {
+                    float scale = maxH / hintH;
+                    hintW *= scale;
+                    hintH = maxH;
+                }
                 float hx = cx + cw - hintW - 6.0f;
                 float hy = cy + 6.0f;
 

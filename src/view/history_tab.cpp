@@ -8,6 +8,7 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
+#include "utils/button_icons.hpp"
 #include <ctime>
 #include <iomanip>
 #include <sstream>
@@ -46,7 +47,7 @@ HistoryTab::HistoryTab() {
     triangleIcon->setWidth(16);
     triangleIcon->setHeight(16);
     triangleIcon->setScalingType(brls::ImageScalingType::FIT);
-    triangleIcon->setImageFromFile(RESOURCE_PREFIX "images/triangle_button.png");
+    setButtonIcon(triangleIcon, BUTTON_IMG("triangle_button.png"));
     triangleIcon->setMarginBottom(2);
     refreshContainer->addView(triangleIcon);
 

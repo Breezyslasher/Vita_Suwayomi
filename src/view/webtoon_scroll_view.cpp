@@ -948,6 +948,25 @@ void WebtoonScrollView::scrollToPage(int pageIndex) {
     updateCurrentPage();
 }
 
+void WebtoonScrollView::scrollByViewport(float fraction) {
+    float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
+    float scrollAmount = viewSize * fraction;
+
+    m_scrollY -= scrollAmount;
+
+    float maxScroll = 0.0f;
+    float totalContentSize = getTotalContentSize();
+    float minScroll = -(totalContentSize - viewSize);
+    if (minScroll > maxScroll) minScroll = maxScroll;
+    m_scrollY = std::max(minScroll, std::min(maxScroll, m_scrollY));
+    m_scrollVelocity = 0.0f;
+
+    if (!m_userHasScrolled) m_userHasScrolled = true;
+
+    updateVisibleImages();
+    updateCurrentPage();
+}
+
 float WebtoonScrollView::getScrollProgress() const {
     float viewSize = isHorizontalLayout() ? m_viewWidth : m_viewHeight;
     float totalContentSize = getTotalContentSize();

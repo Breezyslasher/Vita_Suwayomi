@@ -13,6 +13,7 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/image_loader.hpp"
 #include "platform/platform.hpp"
+#include "utils/button_icons.hpp"
 #include <cmath>
 #include <ctime>
 
@@ -261,7 +262,7 @@ void MangaItemCell::onFocusGained() {
     if (!m_showLibraryBadge) {
         auto* hint = ensureStartHintIcon();
         if (!m_startHintImageLoaded) {
-            hint->setImageFromFile(RESOURCE_PREFIX "images/start_button.png");
+            setButtonIcon(hint, BUTTON_IMG("start_button.png"));
             m_startHintImageLoaded = true;
         }
         hint->setVisibility(brls::Visibility::VISIBLE);
