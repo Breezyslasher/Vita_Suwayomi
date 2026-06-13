@@ -512,8 +512,12 @@ elseif(PLATFORM_PS4)
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/ps4 ${CMAKE_BINARY_DIR}/ps4
         # Override with our custom sce_sys (icon)
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_SOURCE_DIR}/app/platform/ps4 ${CMAKE_BINARY_DIR}/ps4
-        # Copy app resources
-        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources ${CMAKE_BINARY_DIR}/ps4/resources
+        # Copy only the resources needed for PS4
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/font ${CMAKE_BINARY_DIR}/ps4/resources/font
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons ${CMAKE_BINARY_DIR}/ps4/resources/icons
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buttons/ps4 ${CMAKE_BINARY_DIR}/ps4/resources/images/buttons/ps4
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/material ${CMAKE_BINARY_DIR}/ps4/resources/material
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/xml ${CMAKE_BINARY_DIR}/ps4/resources/xml
         # Copy borealis system resources
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/i18n ${CMAKE_BINARY_DIR}/ps4/resources/i18n
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/img ${CMAKE_BINARY_DIR}/ps4/resources/img
@@ -531,9 +535,17 @@ elseif(PLATFORM_SWITCH)
         # Generate NACP metadata (author, version shown in hbmenu)
         COMMAND ${NX_NACPTOOL_EXE} --create "VitaSuwayomi" "Breezyslasher"
             "${PROJECT_VERSION}" ${PROJECT_NAME}.nacp
-        # Assemble romfs: app resources + borealis system resources
+        # Assemble romfs: only resources needed for Switch
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources ${CMAKE_BINARY_DIR}/resources
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/font ${CMAKE_BINARY_DIR}/resources/font
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons ${CMAKE_BINARY_DIR}/resources/icons
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buttons/switch ${CMAKE_BINARY_DIR}/resources/images/buttons/switch
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/material ${CMAKE_BINARY_DIR}/resources/material
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/xml ${CMAKE_BINARY_DIR}/resources/xml
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${BOREALIS_DIR}/resources/i18n ${CMAKE_BINARY_DIR}/resources/i18n
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -551,8 +563,20 @@ elseif(PLATFORM_DESKTOP)
     # are not checked in to resources/ but are required by borealis at runtime.
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/font
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/font
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/icons
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buttons/xbox
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/images/buttons/xbox
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/material
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/material
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/xml
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/xml
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${BOREALIS_DIR}/resources/i18n
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/i18n
