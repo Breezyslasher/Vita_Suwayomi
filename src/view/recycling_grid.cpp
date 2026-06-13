@@ -875,6 +875,13 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
                 float cw = focused->getDrawW();
                 float hintW = static_cast<float>(m_startHintW);
                 float hintH = static_cast<float>(m_startHintH);
+                // Cap icon height to 20px so large source icons don't dominate the cover
+                const float maxH = 20.0f;
+                if (hintH > maxH) {
+                    float scale = maxH / hintH;
+                    hintW *= scale;
+                    hintH = maxH;
+                }
                 float hx = cx + cw - hintW - 6.0f;
                 float hy = cy + 6.0f;
 

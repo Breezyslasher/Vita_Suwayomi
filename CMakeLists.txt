@@ -487,18 +487,18 @@ if(PLATFORM_PSV)
         FILE resources/icons/filter-menu-outline.png      resources/icons/filter-menu-outline.png
         FILE resources/icons/format-list-group.png        resources/icons/format-list-group.png
 
-        FILE resources/images/PSV/circle_button.png   resources/images/circle_button.png
-        FILE resources/images/PSV/cross_button.png    resources/images/cross_button.png
-        FILE resources/images/PSV/dpad.png            resources/images/dpad.png
-        FILE resources/images/PSV/gradient.png        resources/images/gradient.png
-        FILE resources/images/PSV/l_button.png        resources/images/l_button.png
-        FILE resources/images/PSV/logo-small.png      resources/images/logo-small.png
-        FILE resources/images/PSV/logo.png            resources/images/logo.png
-        FILE resources/images/PSV/r_button.png        resources/images/r_button.png
-        FILE resources/images/PSV/select_button.png   resources/images/select_button.png
-        FILE resources/images/PSV/square_button.png   resources/images/square_button.png
-        FILE resources/images/PSV/start_button.png    resources/images/start_button.png
-        FILE resources/images/PSV/triangle_button.png resources/images/triangle_button.png
+        FILE resources/images/PSV/circle_button.png   resources/images/PSV/circle_button.png
+        FILE resources/images/PSV/cross_button.png    resources/images/PSV/cross_button.png
+        FILE resources/images/PSV/dpad.png            resources/images/PSV/dpad.png
+        FILE resources/images/PSV/gradient.png        resources/images/PSV/gradient.png
+        FILE resources/images/PSV/l_button.png        resources/images/PSV/l_button.png
+        FILE resources/images/PSV/logo-small.png      resources/images/PSV/logo-small.png
+        FILE resources/images/PSV/logo.png            resources/images/PSV/logo.png
+        FILE resources/images/PSV/r_button.png        resources/images/PSV/r_button.png
+        FILE resources/images/PSV/select_button.png   resources/images/PSV/select_button.png
+        FILE resources/images/PSV/square_button.png   resources/images/PSV/square_button.png
+        FILE resources/images/PSV/start_button.png    resources/images/PSV/start_button.png
+        FILE resources/images/PSV/triangle_button.png resources/images/PSV/triangle_button.png
 
         FILE resources/font/font.ttf                      resources/font/font.ttf
         FILE resources/font/icon.ttf                      resources/font/icon.ttf
