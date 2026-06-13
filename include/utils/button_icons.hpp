@@ -16,7 +16,7 @@
 #elif defined(PS4) || defined(__PS4__)
   #define BUTTON_ICON_DIR "images/buttons/ps4/"
 #else
-  #define BUTTON_ICON_DIR "images/buttons/xbox/"
+  #define BUTTON_ICON_DIR "images/buttons/keyboard/"
 #endif
 
 #ifdef HIDE_BUTTON_HINTS

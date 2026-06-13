@@ -147,6 +147,19 @@ else()
     message(FATAL_ERROR "Patch file not found: ${NANOVG_PATCH}")
 endif()
 
+# ---------------------------------------------------------------------------
+# GLFW keyboard mapping patch (desktop only): adds keyboard shortcuts for
+# Start, Back, Y, X, LB, RB buttons (F1, F2, F, X, Q, E)
+# ---------------------------------------------------------------------------
+if(NOT PLATFORM_SWITCH AND NOT PLATFORM_PSV AND NOT PLATFORM_PS4 AND NOT PLATFORM_ANDROID)
+    set(GLFW_INPUT_PATCH  ${CMAKE_CURRENT_SOURCE_DIR}/patches/glfw_input.cpp)
+    set(GLFW_INPUT_TARGET ${BOREALIS_LIBRARY}/lib/platforms/glfw/glfw_input.cpp)
+    if(EXISTS ${GLFW_INPUT_PATCH})
+        message(STATUS "Applying patch: glfw_input.cpp")
+        configure_file(${GLFW_INPUT_PATCH} ${GLFW_INPUT_TARGET} COPYONLY)
+    endif()
+endif()
+
 add_subdirectory(${BOREALIS_LIBRARY})
 
 # ---------------------------------------------------------------------------
@@ -569,8 +582,8 @@ elseif(PLATFORM_DESKTOP)
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/icons
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/icons
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buttons/xbox
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/images/buttons/xbox
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/images/buttons/keyboard
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/images/buttons/keyboard
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/material
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/material
