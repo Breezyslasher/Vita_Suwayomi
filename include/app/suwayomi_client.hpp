@@ -617,6 +617,15 @@ public:
     // Apply server image settings (configure serveConversions to send only PNG/JPEG)
     bool applyServerImageSettings();
 
+    // SyncYomi settings (server-side)
+    bool fetchSyncYomiSettings(bool& enabled, std::string& host, std::string& apiKey,
+                                bool& dataManga, bool& dataChapters, bool& dataTracking,
+                                bool& dataHistory, bool& dataCategories);
+    bool updateSyncYomiSettings(bool enabled, const std::string& host, const std::string& apiKey,
+                                 bool dataManga, bool dataChapters, bool dataTracking,
+                                 bool dataHistory, bool dataCategories);
+    bool triggerSync(std::string& result);
+
     // Get update summary
     bool fetchUpdateSummary(int& pendingUpdates, int& runningJobs, bool& isUpdating);
 

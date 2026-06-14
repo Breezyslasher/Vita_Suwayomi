@@ -225,6 +225,16 @@ struct AppSettings {
     // Server image settings (applied once on first connection)
     bool serverImageSettingsApplied = false;
 
+    // SyncYomi Settings (server-side, configured via setSettings mutation)
+    bool syncYomiEnabled = false;
+    std::string syncYomiHost;
+    std::string syncYomiApiKey;
+    bool syncDataManga = true;
+    bool syncDataChapters = true;
+    bool syncDataTracking = true;
+    bool syncDataHistory = true;
+    bool syncDataCategories = true;
+
     // Per-manga reader settings (keyed by manga ID)
     // If a manga has custom settings, they override the defaults above
     std::map<int, MangaReaderSettings> mangaReaderSettings;

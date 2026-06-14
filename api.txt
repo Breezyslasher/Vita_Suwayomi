@@ -1690,6 +1690,86 @@ mutation DeleteGlobalMetas($keys: [String!], $keyStartsWith: [String!]) {
 }
 
 # ============================================================================
+# SYNCYOMI
+# ============================================================================
+
+# SyncYomi Settings (part of server settings)
+# These are configured via the setSettings mutation and queried via settings query.
+#
+# Server Settings Fields:
+#   syncYomiEnabled: Boolean       # Enable/disable SyncYomi sync
+#   syncYomiHost: String           # SyncYomi server URL
+#   syncYomiApiKey: String         # API key for authentication
+#   syncDataManga: Boolean         # Sync manga data (default: true)
+#   syncDataChapters: Boolean      # Sync chapter data (default: true)
+#   syncDataTracking: Boolean      # Sync tracking data (default: true)
+#   syncDataHistory: Boolean       # Sync reading history (default: true)
+#   syncDataCategories: Boolean    # Sync categories (default: true)
+#   syncInterval: Duration         # Auto-sync interval (default: 0 = disabled)
+
+# Get SyncYomi Settings
+query GetSyncYomiSettings {
+    settings {
+        syncYomiEnabled
+        syncYomiHost
+        syncYomiApiKey
+        syncDataManga
+        syncDataChapters
+        syncDataTracking
+        syncDataHistory
+        syncDataCategories
+    }
+}
+
+# Update SyncYomi Settings
+mutation UpdateSyncYomiSettings {
+    setSettings(input: { settings: {
+        syncYomiEnabled: true,
+        syncYomiHost: "https://sync.example.com",
+        syncYomiApiKey: "your-api-key",
+        syncDataManga: true,
+        syncDataChapters: true,
+        syncDataTracking: true,
+        syncDataHistory: true,
+        syncDataCategories: true
+    }}) {
+        settings {
+            syncYomiEnabled
+        }
+    }
+}
+
+# Trigger Sync
+mutation StartSync {
+    startSync(input: {}) {
+        result                     # StartSyncResult: SUCCESS, SYNC_IN_PROGRESS, SYNC_DISABLED
+    }
+}
+
+# Get Last Sync Status
+query GetLastSyncStatus {
+    lastSyncStatus {
+        state                      # SyncState: STARTED, CREATING_BACKUP, DOWNLOADING,
+                                   #   MERGING, UPLOADING, RESTORING, SUCCESS, ERROR
+        startDate                  # Long timestamp
+        endDate                    # Long timestamp (null if still running)
+        backupRestoreId            # String (for RESTORING state)
+        errorMessage               # String (for ERROR state)
+    }
+}
+
+# Sync Status Subscription (WebSocket)
+subscription SyncStatusChanged {
+    syncStatusChanged {
+        state
+        startDate
+        endDate
+        backupRestoreId
+        errorMessage
+    }
+}
+
+# ============================================================================
 # BACKUP/RESTORE
 # ============================================================================
 
