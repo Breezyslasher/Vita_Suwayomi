@@ -1362,21 +1362,23 @@ void SettingsTab::createSyncYomiSection() {
     auto* apiKeyCell = new brls::DetailCell();
     apiKeyCell->setText("API Key");
     apiKeyCell->setDetailText(settings.syncYomiApiKey.empty() ? "Not set" : "••••••••");
-    apiKeyCell->registerClickAction([this, apiKeyCell, alive](brls::View* view) {
-        showUrlInputDialog("SyncYomi API Key", "Enter API key",
-            Application::getInstance().getSettings().syncYomiApiKey,
-            [apiKeyCell, alive](const std::string& newKey) {
-                if (!*alive) return;
+    apiKeyCell->registerClickAction([apiKeyCell, alive](brls::View* view) {
+        std::string currentKey = Application::getInstance().getSettings().syncYomiApiKey;
+        brls::Application::getImeManager()->openForText([apiKeyCell, alive](std::string text) {
+            if (!*alive) return;
+            AppSettings& s = Application::getInstance().getSettings();
+            s.syncYomiApiKey = text;
+            brls::sync([apiKeyCell, text]() {
+                apiKeyCell->setDetailText(text.empty() ? "Not set" : "••••••••");
+            });
+            vitasuwayomi::asyncRun([text]() {
                 AppSettings& s = Application::getInstance().getSettings();
-                s.syncYomiApiKey = newKey;
-                brls::sync([apiKeyCell, newKey]() {
-                    apiKeyCell->setDetailText(newKey.empty() ? "Not set" : "••••••••");
-                });
                 SuwayomiClient::getInstance().updateSyncYomiSettings(
-                    s.syncYomiEnabled, s.syncYomiHost, newKey,
+                    s.syncYomiEnabled, s.syncYomiHost, text,
                     s.syncDataManga, s.syncDataChapters, s.syncDataTracking,
                     s.syncDataHistory, s.syncDataCategories);
             });
+        }, "Enter API Key", "", 256, currentKey, 0);
         return true;
     });
     m_contentBox->addView(apiKeyCell);
