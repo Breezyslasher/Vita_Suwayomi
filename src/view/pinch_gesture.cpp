@@ -1,9 +1,9 @@
 /**
  * VitaSuwayomi - Pinch Gesture Recognizer implementation
  *
- * Polls the Vita front touchscreen directly for two-finger input.
- * Touch coordinates are in the range 0-1919 x 0-1087 and must be
- * halved to get screen-space pixels (960x544).
+ * Polls platform touch hardware directly for two-finger input:
+ *   - Vita: sceTouchPeek() with coords 0-1919 x 0-1087 (halved for 960x544)
+ *   - SDL:  SDL_GetTouchFinger() with normalized 0.0-1.0 coords
  */
 
 #include "view/pinch_gesture.hpp"
@@ -11,6 +11,8 @@
 
 #ifdef __vita__
 #include <psp2/touch.h>
+#elif defined(__SDL2__)
+#include <SDL2/SDL.h>
 #endif
 
 namespace vitasuwayomi {
@@ -104,8 +106,90 @@ brls::GestureState PinchGestureRecognizer::recognitionLoop(
 
     return this->state;
 
+#elif defined(__SDL2__)
+    float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    bool hasTwoFingers = false;
+
+    int devices = SDL_GetNumTouchDevices();
+    for (int d = 0; d < devices && !hasTwoFingers; d++) {
+        SDL_TouchID device = SDL_GetTouchDevice(d);
+        if (SDL_GetNumTouchFingers(device) >= 2) {
+            SDL_Finger* f0 = SDL_GetTouchFinger(device, 0);
+            SDL_Finger* f1 = SDL_GetTouchFinger(device, 1);
+            if (f0 && f1) {
+                float w = brls::Application::contentWidth;
+                float h = brls::Application::contentHeight;
+                x0 = f0->x * w;
+                y0 = f0->y * h;
+                x1 = f1->x * w;
+                y1 = f1->y * h;
+                hasTwoFingers = true;
+            }
+        }
+    }
+
+    if (!hasTwoFingers) {
+        if (m_tracking) {
+            m_tracking = false;
+            this->state = brls::GestureState::END;
+
+            PinchGestureStatus status{};
+            status.state = brls::GestureState::END;
+            status.scaleFactor = 1.0f;
+            status.center = {0, 0};
+
+            if (m_callback) {
+                m_callback(status, soundToPlay);
+            }
+            return this->state;
+        }
+
+        this->state = brls::GestureState::FAILED;
+        return this->state;
+    }
+
+    {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        float distance = std::sqrt(dx * dx + dy * dy);
+        brls::Point center = {(x0 + x1) / 2.0f, (y0 + y1) / 2.0f};
+
+        if (!m_tracking) {
+            if (distance < MIN_PINCH_DISTANCE) {
+                this->state = brls::GestureState::FAILED;
+                return this->state;
+            }
+
+            m_tracking = true;
+            m_initialDistance = distance;
+            this->state = brls::GestureState::START;
+
+            PinchGestureStatus status{};
+            status.state = brls::GestureState::START;
+            status.scaleFactor = 1.0f;
+            status.center = center;
+
+            if (m_callback) {
+                m_callback(status, soundToPlay);
+            }
+        } else {
+            float scale = (m_initialDistance > 0.0f) ? (distance / m_initialDistance) : 1.0f;
+            this->state = brls::GestureState::STAY;
+
+            PinchGestureStatus status{};
+            status.state = brls::GestureState::STAY;
+            status.scaleFactor = scale;
+            status.center = center;
+
+            if (m_callback) {
+                m_callback(status, soundToPlay);
+            }
+        }
+
+        return this->state;
+    }
+
 #else
-    // Non-Vita platforms: pinch not supported
     this->state = brls::GestureState::FAILED;
     return this->state;
 #endif

@@ -1,10 +1,13 @@
 /**
  * VitaSuwayomi - Pinch Gesture Recognizer
- * Detects two-finger pinch-to-zoom on the PS Vita front touchscreen.
+ * Detects two-finger pinch-to-zoom via platform-specific multi-touch polling.
  *
- * Borealis only exposes single-touch data, so this recognizer polls
- * sceTouchPeek() directly to read both fingers.  It fires its callback
- * continuously during the STAY phase so the zoom updates live.
+ * Borealis gesture recognizers only receive one touch at a time, so this
+ * recognizer bypasses that by polling the touch hardware directly:
+ *   - Vita: sceTouchPeek()
+ *   - SDL platforms (Switch, Desktop, Android, PS4): SDL finger API
+ *
+ * Fires its callback continuously during the STAY phase so zoom updates live.
  */
 
 #pragma once
@@ -14,6 +17,8 @@
 
 #ifdef __vita__
 #include <psp2/touch.h>
+#elif defined(__SDL2__)
+#include <SDL2/SDL.h>
 #endif
 
 namespace vitasuwayomi {
