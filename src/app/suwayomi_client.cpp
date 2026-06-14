@@ -3088,6 +3088,130 @@ bool SuwayomiClient::removeExtensionRepo(const std::string& repoUrl) {
 }
 
 // ============================================================================
+// SyncYomi Settings
+// ============================================================================
+
+bool SuwayomiClient::fetchSyncYomiSettings(bool& enabled, std::string& host, std::string& apiKey,
+                                            bool& dataManga, bool& dataChapters, bool& dataTracking,
+                                            bool& dataHistory, bool& dataCategories) {
+    const char* query = R"(
+        query GetSyncYomiSettings {
+            settings {
+                syncYomiEnabled
+                syncYomiHost
+                syncYomiApiKey
+                syncDataManga
+                syncDataChapters
+                syncDataTracking
+                syncDataHistory
+                syncDataCategories
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query, "");
+    if (response.empty()) return false;
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) return false;
+
+    std::string settings = extractJsonObject(data, "settings");
+    if (settings.empty()) return false;
+
+    enabled = extractJsonBool(settings, "syncYomiEnabled");
+    host = extractJsonValue(settings, "syncYomiHost");
+    apiKey = extractJsonValue(settings, "syncYomiApiKey");
+    dataManga = extractJsonBool(settings, "syncDataManga");
+    dataChapters = extractJsonBool(settings, "syncDataChapters");
+    dataTracking = extractJsonBool(settings, "syncDataTracking");
+    dataHistory = extractJsonBool(settings, "syncDataHistory");
+    dataCategories = extractJsonBool(settings, "syncDataCategories");
+
+    brls::Logger::debug("Fetched SyncYomi settings: enabled={}, host={}", enabled, host);
+    return true;
+}
+
+bool SuwayomiClient::updateSyncYomiSettings(bool enabled, const std::string& host, const std::string& apiKey,
+                                              bool dataManga, bool dataChapters, bool dataTracking,
+                                              bool dataHistory, bool dataCategories) {
+    const char* query = R"(
+        mutation SetSettings($input: SetSettingsInput!) {
+            setSettings(input: $input) {
+                settings {
+                    syncYomiEnabled
+                }
+            }
+        }
+    )";
+
+    std::string escapedHost;
+    for (char c : host) {
+        if (c == '"') escapedHost += "\\\"";
+        else if (c == '\\') escapedHost += "\\\\";
+        else escapedHost += c;
+    }
+
+    std::string escapedKey;
+    for (char c : apiKey) {
+        if (c == '"') escapedKey += "\\\"";
+        else if (c == '\\') escapedKey += "\\\\";
+        else escapedKey += c;
+    }
+
+    std::string variables = "{\"input\":{\"settings\":{"
+        "\"syncYomiEnabled\":" + std::string(enabled ? "true" : "false") + ","
+        "\"syncYomiHost\":\"" + escapedHost + "\","
+        "\"syncYomiApiKey\":\"" + escapedKey + "\","
+        "\"syncDataManga\":" + std::string(dataManga ? "true" : "false") + ","
+        "\"syncDataChapters\":" + std::string(dataChapters ? "true" : "false") + ","
+        "\"syncDataTracking\":" + std::string(dataTracking ? "true" : "false") + ","
+        "\"syncDataHistory\":" + std::string(dataHistory ? "true" : "false") + ","
+        "\"syncDataCategories\":" + std::string(dataCategories ? "true" : "false") +
+        "}}}";
+
+    std::string response = executeGraphQL(query, variables);
+    if (response.empty()) {
+        brls::Logger::error("Failed to update SyncYomi settings");
+        return false;
+    }
+
+    brls::Logger::info("SyncYomi settings updated: enabled={}, host={}", enabled, host);
+    return true;
+}
+
+bool SuwayomiClient::triggerSync(std::string& result) {
+    const char* query = R"(
+        mutation StartSync {
+            startSync(input: {}) {
+                result
+            }
+        }
+    )";
+
+    std::string response = executeGraphQL(query, "");
+    if (response.empty()) {
+        result = "FAILED";
+        return false;
+    }
+
+    std::string data = extractJsonObject(response, "data");
+    if (data.empty()) {
+        result = "FAILED";
+        return false;
+    }
+
+    std::string syncResult = extractJsonObject(data, "startSync");
+    if (syncResult.empty()) {
+        result = "FAILED";
+        return false;
+    }
+
+    result = extractJsonValue(syncResult, "result");
+    brls::Logger::info("Sync triggered: result={}", result);
+    return true;
+}
+
+// ============================================================================
 // Source Management
 // ============================================================================
 

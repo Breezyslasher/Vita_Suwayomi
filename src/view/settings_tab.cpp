@@ -57,6 +57,8 @@ SettingsTab::SettingsTab() {
     addSectionSeparator();
     createBrowseSection();
     addSectionSeparator();
+    createSyncYomiSection();
+    addSectionSeparator();
     createStatisticsSection();
     addSectionSeparator();
     createBackupSection();
@@ -1275,6 +1277,215 @@ void SettingsTab::createBrowseSection() {
             Application::getInstance().saveSettings();
         });
     m_contentBox->addView(searchHistorySelector);
+}
+
+void SettingsTab::createSyncYomiSection() {
+    Application& app = Application::getInstance();
+    AppSettings& settings = app.getSettings();
+
+    auto* header = new brls::Header();
+    header->setTitle("SyncYomi");
+    m_contentBox->addView(header);
+
+    auto* descLabel = new brls::Label();
+    descLabel->setText("Sync library data with a SyncYomi server");
+    descLabel->setFontSize(14);
+    descLabel->setMarginLeft(16);
+    descLabel->setMarginBottom(8);
+    descLabel->setTextColor(Application::getInstance().getSubtitleColor());
+    m_contentBox->addView(descLabel);
+
+    // Fetch current server-side settings
+    auto alive = m_alive;
+    vitasuwayomi::asyncRun([alive]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        AppSettings& s = Application::getInstance().getSettings();
+
+        bool enabled = false;
+        std::string host, apiKey;
+        bool dataManga = true, dataChapters = true, dataTracking = true;
+        bool dataHistory = true, dataCategories = true;
+
+        if (client.fetchSyncYomiSettings(enabled, host, apiKey,
+                dataManga, dataChapters, dataTracking, dataHistory, dataCategories)) {
+            s.syncYomiEnabled = enabled;
+            s.syncYomiHost = host;
+            s.syncYomiApiKey = apiKey;
+            s.syncDataManga = dataManga;
+            s.syncDataChapters = dataChapters;
+            s.syncDataTracking = dataTracking;
+            s.syncDataHistory = dataHistory;
+            s.syncDataCategories = dataCategories;
+        }
+    });
+
+    // Enable/disable toggle
+    auto* enableToggle = new brls::BooleanCell();
+    enableToggle->init("Enable SyncYomi", settings.syncYomiEnabled, [alive](bool value) {
+        if (!*alive) return;
+        AppSettings& s = Application::getInstance().getSettings();
+        s.syncYomiEnabled = value;
+        vitasuwayomi::asyncRun([value]() {
+            AppSettings& s = Application::getInstance().getSettings();
+            SuwayomiClient::getInstance().updateSyncYomiSettings(
+                value, s.syncYomiHost, s.syncYomiApiKey,
+                s.syncDataManga, s.syncDataChapters, s.syncDataTracking,
+                s.syncDataHistory, s.syncDataCategories);
+        });
+    });
+    m_contentBox->addView(enableToggle);
+
+    // Host URL
+    auto* hostCell = new brls::DetailCell();
+    hostCell->setText("SyncYomi Host");
+    hostCell->setDetailText(settings.syncYomiHost.empty() ? "Not configured" : settings.syncYomiHost);
+    hostCell->registerClickAction([this, hostCell, alive](brls::View* view) {
+        showUrlInputDialog("SyncYomi Host URL", "https://sync.example.com",
+            Application::getInstance().getSettings().syncYomiHost,
+            [hostCell, alive](const std::string& newUrl) {
+                if (!*alive) return;
+                AppSettings& s = Application::getInstance().getSettings();
+                s.syncYomiHost = newUrl;
+                brls::sync([hostCell, newUrl]() {
+                    hostCell->setDetailText(newUrl.empty() ? "Not configured" : newUrl);
+                });
+                SuwayomiClient::getInstance().updateSyncYomiSettings(
+                    s.syncYomiEnabled, newUrl, s.syncYomiApiKey,
+                    s.syncDataManga, s.syncDataChapters, s.syncDataTracking,
+                    s.syncDataHistory, s.syncDataCategories);
+            });
+        return true;
+    });
+    m_contentBox->addView(hostCell);
+
+    // API Key
+    auto* apiKeyCell = new brls::DetailCell();
+    apiKeyCell->setText("API Key");
+    apiKeyCell->setDetailText(settings.syncYomiApiKey.empty() ? "Not set" : "••••••••");
+    apiKeyCell->registerClickAction([this, apiKeyCell, alive](brls::View* view) {
+        showUrlInputDialog("SyncYomi API Key", "Enter API key",
+            Application::getInstance().getSettings().syncYomiApiKey,
+            [apiKeyCell, alive](const std::string& newKey) {
+                if (!*alive) return;
+                AppSettings& s = Application::getInstance().getSettings();
+                s.syncYomiApiKey = newKey;
+                brls::sync([apiKeyCell, newKey]() {
+                    apiKeyCell->setDetailText(newKey.empty() ? "Not set" : "••••••••");
+                });
+                SuwayomiClient::getInstance().updateSyncYomiSettings(
+                    s.syncYomiEnabled, s.syncYomiHost, newKey,
+                    s.syncDataManga, s.syncDataChapters, s.syncDataTracking,
+                    s.syncDataHistory, s.syncDataCategories);
+            });
+        return true;
+    });
+    m_contentBox->addView(apiKeyCell);
+
+    // Data sync toggles
+    auto* syncMangaToggle = new brls::BooleanCell();
+    syncMangaToggle->init("Sync Manga", settings.syncDataManga, [alive](bool value) {
+        if (!*alive) return;
+        AppSettings& s = Application::getInstance().getSettings();
+        s.syncDataManga = value;
+        vitasuwayomi::asyncRun([value]() {
+            AppSettings& s = Application::getInstance().getSettings();
+            SuwayomiClient::getInstance().updateSyncYomiSettings(
+                s.syncYomiEnabled, s.syncYomiHost, s.syncYomiApiKey,
+                value, s.syncDataChapters, s.syncDataTracking,
+                s.syncDataHistory, s.syncDataCategories);
+        });
+    });
+    m_contentBox->addView(syncMangaToggle);
+
+    auto* syncChaptersToggle = new brls::BooleanCell();
+    syncChaptersToggle->init("Sync Chapters", settings.syncDataChapters, [alive](bool value) {
+        if (!*alive) return;
+        AppSettings& s = Application::getInstance().getSettings();
+        s.syncDataChapters = value;
+        vitasuwayomi::asyncRun([value]() {
+            AppSettings& s = Application::getInstance().getSettings();
+            SuwayomiClient::getInstance().updateSyncYomiSettings(
+                s.syncYomiEnabled, s.syncYomiHost, s.syncYomiApiKey,
+                s.syncDataManga, value, s.syncDataTracking,
+                s.syncDataHistory, s.syncDataCategories);
+        });
+    });
+    m_contentBox->addView(syncChaptersToggle);
+
+    auto* syncTrackingToggle = new brls::BooleanCell();
+    syncTrackingToggle->init("Sync Tracking", settings.syncDataTracking, [alive](bool value) {
+        if (!*alive) return;
+        AppSettings& s = Application::getInstance().getSettings();
+        s.syncDataTracking = value;
+        vitasuwayomi::asyncRun([value]() {
+            AppSettings& s = Application::getInstance().getSettings();
+            SuwayomiClient::getInstance().updateSyncYomiSettings(
+                s.syncYomiEnabled, s.syncYomiHost, s.syncYomiApiKey,
+                s.syncDataManga, s.syncDataChapters, value,
+                s.syncDataHistory, s.syncDataCategories);
+        });
+    });
+    m_contentBox->addView(syncTrackingToggle);
+
+    auto* syncHistoryToggle = new brls::BooleanCell();
+    syncHistoryToggle->init("Sync History", settings.syncDataHistory, [alive](bool value) {
+        if (!*alive) return;
+        AppSettings& s = Application::getInstance().getSettings();
+        s.syncDataHistory = value;
+        vitasuwayomi::asyncRun([value]() {
+            AppSettings& s = Application::getInstance().getSettings();
+            SuwayomiClient::getInstance().updateSyncYomiSettings(
+                s.syncYomiEnabled, s.syncYomiHost, s.syncYomiApiKey,
+                s.syncDataManga, s.syncDataChapters, s.syncDataTracking,
+                value, s.syncDataCategories);
+        });
+    });
+    m_contentBox->addView(syncHistoryToggle);
+
+    auto* syncCategoriesToggle = new brls::BooleanCell();
+    syncCategoriesToggle->init("Sync Categories", settings.syncDataCategories, [alive](bool value) {
+        if (!*alive) return;
+        AppSettings& s = Application::getInstance().getSettings();
+        s.syncDataCategories = value;
+        vitasuwayomi::asyncRun([value]() {
+            AppSettings& s = Application::getInstance().getSettings();
+            SuwayomiClient::getInstance().updateSyncYomiSettings(
+                s.syncYomiEnabled, s.syncYomiHost, s.syncYomiApiKey,
+                s.syncDataManga, s.syncDataChapters, s.syncDataTracking,
+                s.syncDataHistory, value);
+        });
+    });
+    m_contentBox->addView(syncCategoriesToggle);
+
+    // Trigger sync button
+    auto* syncNowCell = new brls::DetailCell();
+    syncNowCell->setText("Sync Now");
+    syncNowCell->setDetailText("Trigger SyncYomi sync");
+    syncNowCell->registerClickAction([alive](brls::View* view) {
+        if (!Application::getInstance().isConnected()) {
+            brls::Application::notify("Not connected to server");
+            return true;
+        }
+        brls::Application::notify("Starting sync...");
+        vitasuwayomi::asyncRun([alive]() {
+            std::string result;
+            SuwayomiClient::getInstance().triggerSync(result);
+            brls::sync([result, alive]() {
+                if (!*alive) return;
+                if (result == "SUCCESS") {
+                    brls::Application::notify("Sync started successfully");
+                } else if (result == "SYNC_IN_PROGRESS") {
+                    brls::Application::notify("Sync already in progress");
+                } else if (result == "SYNC_DISABLED") {
+                    brls::Application::notify("SyncYomi is not enabled");
+                } else {
+                    brls::Application::notify("Sync failed: " + result);
+                }
+            });
+        });
+        return true;
+    });
+    m_contentBox->addView(syncNowCell);
 }
 
 void SettingsTab::updateLanguageFilterCellText() {

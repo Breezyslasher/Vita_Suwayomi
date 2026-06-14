@@ -28,6 +28,7 @@ private:
     void createReaderSection();
     void createDownloadsSection();
     void createBrowseSection();
+    void createSyncYomiSection();
     void createBackupSection();
     void createStatisticsSection();
     void createAboutSection();

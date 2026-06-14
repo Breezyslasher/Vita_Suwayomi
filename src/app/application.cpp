@@ -1669,6 +1669,16 @@ bool Application::loadSettings() {
     m_settings.lastReadDate = extractInt64("lastReadDate");
     m_settings.totalReadingTime = extractInt64("totalReadingTime");
 
+    // Load SyncYomi settings
+    m_settings.syncYomiEnabled = extractBool("syncYomiEnabled", false);
+    m_settings.syncYomiHost = extractString("syncYomiHost");
+    m_settings.syncYomiApiKey = deobfuscate(extractString("syncYomiApiKey"));
+    m_settings.syncDataManga = extractBool("syncDataManga", true);
+    m_settings.syncDataChapters = extractBool("syncDataChapters", true);
+    m_settings.syncDataTracking = extractBool("syncDataTracking", true);
+    m_settings.syncDataHistory = extractBool("syncDataHistory", true);
+    m_settings.syncDataCategories = extractBool("syncDataCategories", true);
+
     // Load per-manga reader settings
     m_settings.mangaReaderSettings.clear();
     size_t mangaSettingsPos = content.find("\"mangaReaderSettings\"");
@@ -2009,6 +2019,16 @@ bool Application::saveSettings() {
     json += "  \"longestStreak\": " + std::to_string(m_settings.longestStreak) + ",\n";
     json += "  \"lastReadDate\": " + std::to_string(m_settings.lastReadDate) + ",\n";
     json += "  \"totalReadingTime\": " + std::to_string(m_settings.totalReadingTime) + ",\n";
+
+    // SyncYomi settings (cached locally from server)
+    json += "  \"syncYomiEnabled\": " + std::string(m_settings.syncYomiEnabled ? "true" : "false") + ",\n";
+    json += "  \"syncYomiHost\": \"" + m_settings.syncYomiHost + "\",\n";
+    json += "  \"syncYomiApiKey\": \"" + obfuscate(m_settings.syncYomiApiKey) + "\",\n";
+    json += "  \"syncDataManga\": " + std::string(m_settings.syncDataManga ? "true" : "false") + ",\n";
+    json += "  \"syncDataChapters\": " + std::string(m_settings.syncDataChapters ? "true" : "false") + ",\n";
+    json += "  \"syncDataTracking\": " + std::string(m_settings.syncDataTracking ? "true" : "false") + ",\n";
+    json += "  \"syncDataHistory\": " + std::string(m_settings.syncDataHistory ? "true" : "false") + ",\n";
+    json += "  \"syncDataCategories\": " + std::string(m_settings.syncDataCategories ? "true" : "false") + ",\n";
 
     // Per-manga reader settings
     json += "  \"mangaReaderSettings\": {";
