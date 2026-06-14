@@ -186,6 +186,18 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
                     return true;
                 });
                 cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+                cell->addGestureRecognizer(new LongPressGestureRecognizer(cell,
+                    [this, index](LongPressGestureStatus status) {
+                        if (status.state == brls::GestureState::START &&
+                            m_onItemLongPressed && index < static_cast<int>(m_items.size())) {
+                            m_longPressTriggered = true;
+                            m_onItemLongPressed(m_items[index], index);
+                        } else if (status.state == brls::GestureState::END) {
+                            // Tap was already interrupted by the long-press; clear the
+                            // suppression flag so it can't eat the next legitimate tap.
+                            m_longPressTriggered = false;
+                        }
+                    }));
 
                 cell->getFocusEvent()->subscribe([this, index](brls::View*) {
                     m_focusedIndex = index;
@@ -604,6 +616,18 @@ void RecyclingGrid::createRowRange(int startRow, int endRow) {
                 return true;
             });
             cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+            cell->addGestureRecognizer(new LongPressGestureRecognizer(cell,
+                [this, index](LongPressGestureStatus status) {
+                    if (status.state == brls::GestureState::START &&
+                        m_onItemLongPressed && index < static_cast<int>(m_items.size())) {
+                        m_longPressTriggered = true;
+                        m_onItemLongPressed(m_items[index], index);
+                    } else if (status.state == brls::GestureState::END) {
+                        // Tap was already interrupted by the long-press; clear the
+                        // suppression flag so it can't eat the next legitimate tap.
+                        m_longPressTriggered = false;
+                    }
+                }));
 
             cell->getFocusEvent()->subscribe([this, index](brls::View*) {
                 m_focusedIndex = index;
