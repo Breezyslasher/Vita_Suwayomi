@@ -1,4 +1,4 @@
-# Suwayomi-Server GraphQL API Reference 
+# Suwayomi-Server GraphQL API Reference
 # VitaSuwayomi Client API Documentation
 #
 # Server: https://github.com/Suwayomi/Suwayomi-Server
@@ -44,34 +44,158 @@ mutation RefreshToken($refreshToken: String!) {
 # SERVER INFO
 # ============================================================================
 
-# Get Server Information
+# Get Server Information (no auth required)
 query GetServerInfo {
     aboutServer {
         name
         version
-        revision
+        revision          # deprecated: version includes revision as patch number
+        buildType
+        buildTime
+        github
+        discord
+    }
+}
+
+# Check for Server Updates
+query CheckForServerUpdates {
+    checkForServerUpdates {
+        channel
+        tag
+        url
+    }
+}
+
+# Get WebUI Info
+query AboutWebUI {
+    aboutWebUI {
+        channel           # WebUIChannel: BUNDLED, STABLE, PREVIEW
+        tag
+        updateTimestamp
+    }
+}
+
+# Check for WebUI Update
+query CheckForWebUIUpdate {
+    checkForWebUIUpdate {
+        channel
+        tag
+        updateAvailable
+    }
+}
+
+# Get WebUI Update Status
+query GetWebUIUpdateStatus {
+    getWebUIUpdateStatus {
+        info {
+            channel
+            tag
+        }
+        state             # UpdateState: IDLE, DOWNLOADING, FINISHED, ERROR
+        progress
     }
 }
 
 # ============================================================================
-# SOURCES (Extensions)
+# SERVER SETTINGS
+# ============================================================================
+
+# Get Server Settings
+query GetSettings {
+    settings {
+        ip
+        port
+        socksProxyEnabled
+        socksProxyVersion
+        socksProxyHost
+        socksProxyPort
+        socksProxyUsername
+        socksProxyPassword
+        webUIFlavor
+        initialOpenInBrowserEnabled
+        webUIInterface
+        electronPath
+        webUIChannel
+        webUIUpdateCheckInterval
+        downloadAsCbz
+        downloadsPath
+        autoDownloadNewChapters
+        excludeEntryWithUnreadChapters
+        autoDownloadNewChaptersLimit
+        autoDownloadIgnoreReUploads
+        extensionRepos
+        maxSourcesInParallel
+        excludeUnreadChapters
+        excludeNotStarted
+        excludeCompleted
+        globalUpdateInterval
+        updateMangas
+        basicAuthEnabled
+        basicAuthUsername
+        basicAuthPassword
+        debugLogsEnabled
+        gqlDebugLogsEnabled
+        systemTrayEnabled
+        backupPath
+        backupTime
+        backupInterval
+        backupTTL
+        localSourcePath
+        flareSolverrEnabled
+        flareSolverrUrl
+        flareSolverrTimeout
+        flareSolverrSessionName
+        flareSolverrSessionTtl
+        flareSolverrAsResponseFallback
+    }
+}
+
+# Update Server Settings
+mutation SetSettings($input: SetSettingsInput!) {
+    setSettings(input: $input) {
+        settings {
+            # returns updated SettingsType (same fields as query)
+        }
+    }
+}
+
+# Reset Server Settings to Defaults
+mutation ResetSettings {
+    resetSettings(input: {}) {
+        settings {
+            # returns default SettingsType
+        }
+    }
+}
+
+# ============================================================================
+# SOURCES
 # ============================================================================
 
 # Get All Sources
 query GetSources {
     sources {
         nodes {
-            id
+            id                # LongString
             name
             displayName
             lang
             iconUrl
+            baseUrl           # NEW: source base URL
             isNsfw
             supportsLatest
             isConfigurable
         }
     }
 }
+
+# Sources support filtering, ordering, and pagination:
+# sources(
+#     condition: SourceCondition    # exact match: id, name, lang, isNsfw
+#     filter: SourceFilter          # comparison: id, name, lang, isNsfw (with and/or/not)
+#     order: [SourceOrder]          # by: ID, NAME, LANG; byType: ASC, DESC
+#     first: Int, last: Int, before: Cursor, after: Cursor, offset: Int
+# )
 
 # Get Single Source
 query GetSource($sourceId: LongString!) {
@@ -81,6 +205,7 @@ query GetSource($sourceId: LongString!) {
         displayName
         lang
         iconUrl
+        baseUrl
         isNsfw
         supportsLatest
         isConfigurable
@@ -96,34 +221,43 @@ query GetSourcePreferences($sourceId: LongString!) {
                 key
                 title
                 summary
-                currentValue
-                default
+                visible
+                enabled
+                currentValue      # Boolean
+                default           # Boolean
             }
             ... on CheckBoxPreference {
                 __typename
                 key
                 title
                 summary
-                currentValue
-                default
+                visible
+                enabled
+                currentValue      # Boolean
+                default           # Boolean
             }
             ... on EditTextPreference {
                 __typename
                 key
                 title
                 summary
-                currentValue
-                default
+                visible
+                enabled
+                currentValue      # String
+                default           # String
                 dialogTitle
                 dialogMessage
+                text
             }
             ... on ListPreference {
                 __typename
                 key
                 title
                 summary
-                currentValue
-                default
+                visible
+                enabled
+                currentValue      # String
+                default           # String
                 entries
                 entryValues
             }
@@ -132,10 +266,39 @@ query GetSourcePreferences($sourceId: LongString!) {
                 key
                 title
                 summary
-                currentValue
-                default
+                visible
+                enabled
+                currentValue      # [String]
+                default           # [String]
+                dialogTitle
+                dialogMessage
                 entries
                 entryValues
+            }
+        }
+    }
+}
+
+# Get Source Filters (for filtered search)
+query GetSourceFilters($sourceId: LongString!) {
+    source(id: $sourceId) {
+        filters {
+            ... on HeaderFilter { __typename name }
+            ... on SeparatorFilter { __typename name }
+            ... on TextFilter { __typename name default }
+            ... on CheckBoxFilter { __typename name default }
+            ... on TriStateFilter { __typename name default }
+            ... on SelectFilter { __typename name default values }
+            ... on SortFilter { __typename name values default { index ascending } }
+            ... on GroupFilter {
+                __typename name
+                filters {
+                    ... on TextFilter { __typename name default }
+                    ... on CheckBoxFilter { __typename name default }
+                    ... on TriStateFilter { __typename name default }
+                    ... on SelectFilter { __typename name default values }
+                    ... on SortFilter { __typename name values default { index ascending } }
+                }
             }
         }
     }
@@ -144,6 +307,51 @@ query GetSourcePreferences($sourceId: LongString!) {
 # Update Source Preference
 mutation UpdateSourcePreference($sourceId: LongString!, $change: SourcePreferenceChangeInput!) {
     updateSourcePreference(input: { source: $sourceId, change: $change }) {
+        source {
+            id
+        }
+        preferences       # returns updated List<Preference>
+    }
+}
+
+# SourcePreferenceChangeInput fields:
+# {
+#   position: Int!        # index of the preference to change
+#   checkBoxState: Boolean
+#   switchState: Boolean
+#   editTextState: String
+#   listState: String
+#   multiSelectState: [String]
+# }
+
+# Update Source (enable/disable)
+mutation UpdateSource($id: LongString!, $isEnabled: Boolean) {
+    updateSource(input: { id: $id, patch: { isEnabled: $isEnabled } }) {
+        source {
+            id
+        }
+    }
+}
+
+# Set Source Metadata
+mutation SetSourceMeta($sourceId: LongString!, $key: String!, $value: String!) {
+    setSourceMeta(input: { meta: { sourceId: $sourceId, key: $key, value: $value } }) {
+        meta {
+            key
+            value
+        }
+        source {
+            id
+        }
+    }
+}
+
+# Delete Source Metadata
+mutation DeleteSourceMeta($sourceId: LongString!, $key: String!) {
+    deleteSourceMeta(input: { sourceId: $sourceId, key: $key }) {
+        meta {
+            key
+        }
         source {
             id
         }
@@ -163,14 +371,25 @@ query GetExtensions {
             lang
             versionName
             versionCode
+            iconUrl
+            repo              # NEW: repository URL
+            apkName
             isInstalled
             hasUpdate
             isObsolete
             isNsfw
-            iconUrl
         }
     }
 }
+
+# Extensions support filtering, ordering, and pagination:
+# extensions(
+#     condition: ExtensionCondition  # exact match: repo, apkName, name, pkgName, versionName,
+#                                    #   versionCode, lang, isNsfw, isInstalled, hasUpdate, isObsolete
+#     filter: ExtensionFilter        # comparison filters (with and/or/not)
+#     order: [ExtensionOrder]        # by: PKG_NAME, NAME, APK_NAME; byType: ASC, DESC
+#     first: Int, last: Int, before: Cursor, after: Cursor, offset: Int
+# )
 
 # Get Installed Extensions
 query GetInstalledExtensions {
@@ -186,6 +405,32 @@ query GetInstalledExtensions {
             isObsolete
             isNsfw
             iconUrl
+            repo
+        }
+    }
+}
+
+# Get Single Extension
+query GetExtension($pkgName: String!) {
+    extension(pkgName: $pkgName) {
+        pkgName
+        name
+        lang
+        versionName
+        versionCode
+        iconUrl
+        repo
+        isInstalled
+        hasUpdate
+        isObsolete
+        isNsfw
+        source {
+            nodes {
+                id
+                name
+                displayName
+                isConfigurable
+            }
         }
     }
 }
@@ -199,16 +444,6 @@ mutation InstallExtension($pkgName: String!) {
         }
     }
 }
-
-# Install External Extension (from APK file)
-# mutation InstallExternalExtension($file: Upload!) {
-#     installExternalExtension(input: { extensionFile: $file }) {
-#         extension {
-#             pkgName
-#             isInstalled
-#         }
-#     }
-# }
 
 # Update Extension
 mutation UpdateExtension($pkgName: String!) {
@@ -227,6 +462,46 @@ mutation UninstallExtension($pkgName: String!) {
         extension {
             pkgName
             isInstalled
+        }
+    }
+}
+
+# Batch Update Extensions
+mutation UpdateExtensions($ids: [String!]!, $patch: UpdateExtensionPatch!) {
+    updateExtensions(input: { ids: $ids, patch: $patch }) {
+        extensions {
+            pkgName
+            isInstalled
+            hasUpdate
+        }
+    }
+}
+
+# UpdateExtensionPatch fields:
+# {
+#   install: Boolean
+#   update: Boolean
+#   uninstall: Boolean
+# }
+
+# Install External Extension (from APK file upload)
+mutation InstallExternalExtension($file: Upload!) {
+    installExternalExtension(input: { extensionFile: $file }) {
+        extension {
+            pkgName
+            isInstalled
+        }
+    }
+}
+
+# Fetch/Refresh Extension List from Repositories
+mutation FetchExtensions {
+    fetchExtensions(input: {}) {
+        extensions {
+            pkgName
+            name
+            isInstalled
+            hasUpdate
         }
     }
 }
@@ -283,6 +558,55 @@ mutation SearchManga($sourceId: LongString!, $query: String!, $page: Int!) {
     }
 }
 
+# Search Manga with Filters
+mutation SearchWithFilters($sourceId: LongString!, $page: Int!) {
+    fetchSourceManga(input: {
+        source: $sourceId,
+        type: SEARCH,
+        page: $page,
+        query: "optional search text",
+        filters: [
+            { position: 0, checkBoxState: true },
+            { position: 1, selectState: 2 },
+            { position: 2, textState: "value" },
+            { position: 3, triState: INCLUDE },
+            { position: 4, sortState: { index: 0, ascending: true } },
+            { position: 5, groupChange: { position: 0, checkBoxState: true } }
+        ]
+    }) {
+        mangas {
+            id
+            title
+            thumbnailUrl
+            author
+            artist
+            description
+            inLibrary
+        }
+        hasNextPage
+    }
+}
+
+# FetchSourceMangaInput fields:
+# {
+#   source: LongString!
+#   type: FetchSourceMangaType!   # POPULAR, LATEST, SEARCH
+#   page: Int!
+#   query: String                 # search term (for SEARCH type)
+#   filters: [FilterChange]       # source-specific filters
+# }
+
+# FilterChange fields:
+# {
+#   position: Int!
+#   selectState: Int
+#   textState: String
+#   checkBoxState: Boolean
+#   triState: TriState            # IGNORE, INCLUDE, EXCLUDE
+#   sortState: SortSelection      # { index: Int!, ascending: Boolean! }
+#   groupChange: FilterChange     # nested filter for GroupFilter
+# }
+
 # ============================================================================
 # MANGA OPERATIONS
 # ============================================================================
@@ -295,38 +619,58 @@ query GetManga($mangaId: Int!) {
         url
         title
         thumbnailUrl
+        thumbnailUrlLastFetched    # NEW
         artist
         author
         description
         genre
-        status
+        status                     # MangaStatus enum: UNKNOWN, ONGOING, COMPLETED, LICENSED,
+                                   #   PUBLISHING_FINISHED, CANCELLED, ON_HIATUS
         inLibrary
+        inLibraryAt                # NEW: timestamp when added to library
         initialized
+        realUrl
+        updateStrategy             # NEW: UpdateStrategy enum
+        lastFetchedAt              # NEW
+        chaptersLastFetchedAt      # NEW
+
+        # Computed fields (resolver-backed):
         unreadCount
         downloadCount
-        chapters {
-            totalCount
-        }
-        lastReadChapter {
-            id
-            chapterNumber
-        }
-        chapters {
-            nodes {
-                id
-                name
-                chapterNumber
-                isRead
-                isBookmarked
-                isDownloaded
-            }
-        }
-        meta {
-            key
-            value
-        }
+        bookmarkCount              # NEW
+        hasDuplicateChapters       # NEW: Boolean
+        age                        # NEW: Long? computed from lastFetchedAt
+        chaptersAge                # NEW: Long? computed from chaptersLastFetchedAt
+
+        # Related chapter resolvers:
+        lastReadChapter { id chapterNumber lastReadAt }
+        latestReadChapter { id chapterNumber }         # NEW
+        latestFetchedChapter { id chapterNumber }      # NEW
+        latestUploadedChapter { id uploadDate }
+        firstUnreadChapter { id chapterNumber }        # NEW
+        highestNumberedChapter { id chapterNumber }    # NEW
+
+        # Related entities:
+        chapters { nodes { id name chapterNumber } totalCount }
+        categories { nodes { id name } }
+        source { id displayName }
+        trackRecords { nodes { id trackerId title } }
+        meta { key value }
     }
 }
+
+# Mangas list query supports filtering, ordering, and pagination:
+# mangas(
+#     condition: MangaCondition    # exact match: id, sourceId, url, title, initialized, artist,
+#                                  #   author, description, genre, status, inLibrary, inLibraryAt,
+#                                  #   realUrl, lastFetchedAt, chaptersLastFetchedAt, categoryIds
+#     filter: MangaFilter          # comparison: id, sourceId, url, title, thumbnailUrl, initialized,
+#                                  #   artist, author, description, genre, status, inLibrary,
+#                                  #   inLibraryAt, realUrl, lastFetchedAt, chaptersLastFetchedAt,
+#                                  #   categoryId (with and/or/not)
+#     order: [MangaOrder]          # by: ID, TITLE, IN_LIBRARY_AT, LAST_FETCHED_AT; byType: ASC, DESC
+#     first: Int, last: Int, before: Cursor, after: Cursor, offset: Int
+# )
 
 # Refresh Manga (Fetch latest from source)
 mutation RefreshManga($mangaId: Int!) {
@@ -337,6 +681,31 @@ mutation RefreshManga($mangaId: Int!) {
             thumbnailUrl
             description
             initialized
+        }
+    }
+}
+
+# Update Manga (add/remove from library)
+mutation UpdateManga($mangaId: Int!, $patch: UpdateMangaPatch!) {
+    updateManga(input: { id: $mangaId, patch: $patch }) {
+        manga {
+            id
+            inLibrary
+        }
+    }
+}
+
+# UpdateMangaPatch fields:
+# {
+#   inLibrary: Boolean
+# }
+
+# Batch Update Mangas
+mutation UpdateMangas($ids: [Int!]!, $patch: UpdateMangaPatch!) {
+    updateMangas(input: { ids: $ids, patch: $patch }) {
+        mangas {
+            id
+            inLibrary
         }
     }
 }
@@ -361,49 +730,81 @@ mutation RemoveFromLibrary($mangaId: Int!) {
     }
 }
 
-# Set Manga Metadata
-mutation SetMangaMeta($mangaId: Int!, $key: String!, $value: String!) {
-    setMangaMeta(input: { meta: { mangaId: $mangaId, key: $key, value: $value } }) {
-        manga {
-            id
-            meta {
-                key
-                value
-            }
-        }
-    }
-}
-
-# Delete Manga Metadata
-mutation DeleteMangaMeta($mangaId: Int!, $key: String!) {
-    deleteMangaMeta(input: { mangaId: $mangaId, key: $key }) {
-        manga {
-            id
-        }
-    }
-}
-
 # ============================================================================
 # CHAPTERS
 # ============================================================================
 
+# Get Single Chapter
+query GetChapter($chapterId: Int!) {
+    chapter(id: $chapterId) {
+        id
+        url
+        name
+        scanlator
+        mangaId
+        chapterNumber
+        uploadDate
+        sourceOrder            # NEW: order from source
+        fetchedAt              # NEW: when chapter was fetched
+        realUrl
+        isRead
+        isBookmarked
+        isDownloaded
+        lastPageRead
+        lastReadAt             # NEW: timestamp of last read
+        pageCount
+        manga { id title }
+        meta { key value }
+    }
+}
+
 # Get Manga Chapters
 query GetChapters($mangaId: Int!) {
-    manga(id: $mangaId) {
+    chapters(
+        condition: { mangaId: $mangaId }
+        first: 1000
+        order: [{ by: SOURCE_ORDER, byType: DESC }]
+    ) {
+        nodes {
+            id
+            name
+            chapterNumber
+            scanlator
+            uploadDate
+            sourceOrder
+            fetchedAt
+            isRead
+            isDownloaded
+            isBookmarked
+            pageCount
+            lastPageRead
+            lastReadAt
+        }
+        totalCount
+    }
+}
+
+# Chapters support filtering, ordering, and pagination:
+# chapters(
+#     condition: ChapterCondition  # exact match: id, url, name, uploadDate, chapterNumber,
+#                                  #   scanlator, mangaId, isRead, isBookmarked, lastPageRead,
+#                                  #   lastReadAt, sourceOrder, realUrl, fetchedAt, isDownloaded, pageCount
+#     filter: ChapterFilter        # comparison: id, url, name, uploadDate, chapterNumber,
+#                                  #   scanlator, mangaId, isRead, isBookmarked, lastPageRead,
+#                                  #   lastReadAt, sourceOrder, realUrl, fetchedAt, isDownloaded,
+#                                  #   pageCount, inLibrary (with and/or/not)
+#     order: [ChapterOrder]        # by: ID, SOURCE_ORDER, NAME, UPLOAD_DATE, CHAPTER_NUMBER,
+#                                  #   LAST_READ_AT, FETCHED_AT; byType: ASC, DESC
+#     first: Int, last: Int, before: Cursor, after: Cursor, offset: Int
+# )
+
+# Fetch Chapters from Source (refresh chapter list)
+mutation FetchChapters($mangaId: Int!) {
+    fetchChapters(input: { mangaId: $mangaId }) {
         chapters {
-            nodes {
-                id
-                url
-                name
-                scanlator
-                chapterNumber
-                uploadDate
-                isRead
-                isBookmarked
-                isDownloaded
-                lastPageRead
-                pageCount
-            }
+            id
+            name
+            chapterNumber
         }
     }
 }
@@ -411,7 +812,43 @@ query GetChapters($mangaId: Int!) {
 # Fetch Chapter Pages
 mutation FetchChapterPages($chapterId: Int!) {
     fetchChapterPages(input: { chapterId: $chapterId }) {
-        pages
+        pages              # [String] - array of page image URLs
+        chapter {          # NEW: returns the chapter object too
+            id
+            pageCount
+            isDownloaded
+        }
+    }
+}
+
+# Update Chapter (mark read, update progress, bookmark)
+mutation UpdateChapter($chapterId: Int!, $patch: UpdateChapterPatch!) {
+    updateChapter(input: { id: $chapterId, patch: $patch }) {
+        chapter {
+            id
+            isRead
+            isBookmarked
+            lastPageRead
+        }
+    }
+}
+
+# UpdateChapterPatch fields:
+# {
+#   isBookmarked: Boolean
+#   isRead: Boolean
+#   lastPageRead: Int
+# }
+
+# Batch Update Chapters
+mutation UpdateChapters($ids: [Int!]!, $patch: UpdateChapterPatch!) {
+    updateChapters(input: { ids: $ids, patch: $patch }) {
+        chapters {
+            id
+            isRead
+            isBookmarked
+            lastPageRead
+        }
     }
 }
 
@@ -473,10 +910,20 @@ query GetLibrary {
             status
             genre
             inLibrary
+            inLibraryAt
             unreadCount
             downloadCount
             chapters {
                 totalCount
+            }
+            lastReadChapter {
+                lastReadAt
+            }
+            latestUploadedChapter {
+                uploadDate
+            }
+            source {
+                displayName
             }
             categories {
                 nodes {
@@ -500,12 +947,22 @@ query GetCategories {
             name
             order
             default
+            includeInUpdate      # NEW: IncludeOrExclude enum
+            includeInDownload    # NEW: IncludeOrExclude enum
             mangas {
                 totalCount
             }
         }
     }
 }
+
+# Categories support filtering, ordering, and pagination:
+# categories(
+#     condition: CategoryCondition  # exact match: id, order, name, default
+#     filter: CategoryFilter        # comparison: id, order, name, default (with and/or/not)
+#     order: [CategoryOrder]        # by: ID, NAME, ORDER; byType: ASC, DESC
+#     first: Int, last: Int, before: Cursor, after: Cursor, offset: Int
+# )
 
 # Get Category with Manga
 query GetCategoryManga($categoryId: Int!) {
@@ -531,6 +988,7 @@ mutation CreateCategory($name: String!) {
         category {
             id
             name
+            order
         }
     }
 }
@@ -545,12 +1003,42 @@ mutation DeleteCategory($categoryId: Int!) {
 }
 
 # Update Category
-mutation UpdateCategory($categoryId: Int!, $name: String, $default: Boolean) {
-    updateCategory(input: { id: $categoryId, patch: { name: $name, default: $default } }) {
+mutation UpdateCategory($categoryId: Int!, $patch: UpdateCategoryPatch!) {
+    updateCategory(input: { id: $categoryId, patch: $patch }) {
         category {
             id
             name
             default
+            includeInUpdate
+            includeInDownload
+        }
+    }
+}
+
+# UpdateCategoryPatch fields:
+# {
+#   name: String
+#   default: Boolean
+#   includeInUpdate: IncludeOrExclude    # NEW: UNSET, INCLUDE, EXCLUDE
+#   includeInDownload: IncludeOrExclude  # NEW: UNSET, INCLUDE, EXCLUDE
+# }
+
+# Batch Update Categories
+mutation UpdateCategories($ids: [Int!]!, $patch: UpdateCategoryPatch!) {
+    updateCategories(input: { ids: $ids, patch: $patch }) {
+        categories {
+            id
+            name
+        }
+    }
+}
+
+# Reorder Category
+mutation UpdateCategoryOrder($categoryId: Int!, $position: Int!) {
+    updateCategoryOrder(input: { id: $categoryId, position: $position }) {
+        categories {
+            id
+            order
         }
     }
 }
@@ -569,6 +1057,28 @@ mutation SetMangaCategories($mangaId: Int!, $categoryIds: [Int!]!) {
     }
 }
 
+# UpdateMangaCategoriesPatch fields:
+# {
+#   clearCategories: Boolean       # remove all existing categories first
+#   addToCategories: [Int]         # category IDs to add
+#   removeFromCategories: [Int]    # category IDs to remove
+# }
+
+# Category Metadata
+mutation SetCategoryMeta($categoryId: Int!, $key: String!, $value: String!) {
+    setCategoryMeta(input: { meta: { categoryId: $categoryId, key: $key, value: $value } }) {
+        meta { key value }
+        category { id }
+    }
+}
+
+mutation DeleteCategoryMeta($categoryId: Int!, $key: String!) {
+    deleteCategoryMeta(input: { categoryId: $categoryId, key: $key }) {
+        meta { key }
+        category { id }
+    }
+}
+
 # ============================================================================
 # DOWNLOADS
 # ============================================================================
@@ -576,23 +1086,27 @@ mutation SetMangaCategories($mangaId: Int!, $categoryIds: [Int!]!) {
 # Get Download Queue
 query GetDownloadQueue {
     downloadStatus {
+        state                  # DownloaderState: STARTED, STOPPED
         queue {
             chapter {
                 id
                 name
                 chapterNumber
+                pageCount
                 manga {
                     id
                     title
                 }
             }
+            state              # DownloadState: QUEUED, DOWNLOADING, FINISHED, ERROR
             progress
-            state
+            tries
+            position
         }
     }
 }
 
-# Enqueue Chapter Download
+# Enqueue Single Chapter Download
 mutation EnqueueDownload($chapterId: Int!) {
     enqueueChapterDownload(input: { id: $chapterId }) {
         downloadStatus {
@@ -601,9 +1115,56 @@ mutation EnqueueDownload($chapterId: Int!) {
     }
 }
 
-# Dequeue Chapter Download
+# Enqueue Multiple Chapter Downloads (batch)
+mutation EnqueueDownloads($ids: [Int!]!) {
+    enqueueChapterDownloads(input: { ids: $ids }) {
+        downloadStatus {
+            state
+        }
+    }
+}
+
+# Dequeue Single Chapter Download
 mutation DequeueDownload($chapterId: Int!) {
     dequeueChapterDownload(input: { id: $chapterId }) {
+        downloadStatus {
+            state
+        }
+    }
+}
+
+# Dequeue Multiple Chapter Downloads (batch)
+mutation DequeueDownloads($ids: [Int!]!) {
+    dequeueChapterDownloads(input: { ids: $ids }) {
+        downloadStatus {
+            state
+        }
+    }
+}
+
+# Delete Downloaded Chapter
+mutation DeleteDownload($chapterId: Int!) {
+    deleteDownloadedChapter(input: { id: $chapterId }) {
+        chapters {
+            id
+            isDownloaded
+        }
+    }
+}
+
+# Delete Multiple Downloaded Chapters (batch)
+mutation DeleteDownloads($ids: [Int!]!) {
+    deleteDownloadedChapters(input: { ids: $ids }) {
+        chapters {
+            id
+            isDownloaded
+        }
+    }
+}
+
+# Reorder Chapter in Download Queue
+mutation ReorderDownload($chapterId: Int!, $position: Int!) {
+    reorderChapterDownload(input: { chapterId: $chapterId, to: $position }) {
         downloadStatus {
             state
         }
@@ -637,22 +1198,12 @@ mutation ClearDownloads {
     }
 }
 
-# Delete Downloaded Chapter
-mutation DeleteDownload($chapterId: Int!) {
-    deleteDownloadedChapter(input: { id: $chapterId }) {
-        chapters {
-            id
-            isDownloaded
-        }
-    }
-}
-
 # ============================================================================
 # LIBRARY UPDATE
 # ============================================================================
 
-# Trigger Library Update (All Categories)
-mutation UpdateLibrary {
+# Trigger Full Library Update
+mutation UpdateLibraryManga {
     updateLibraryManga(input: {}) {
         updateStatus {
             isRunning
@@ -660,25 +1211,89 @@ mutation UpdateLibrary {
     }
 }
 
-# Trigger Category Update (update manga in a specific category)
-mutation UpdateCategoryManga($categoryId: Int!) {
-    updateCategoryManga(input: { categories: [$categoryId] }) {
+# Trigger Library Update (with optional category filter)
+mutation UpdateLibrary($categories: [Int!]) {
+    updateLibrary(input: { categories: $categories }) {
+        updateStatus {
+            # returns LibraryUpdateStatus
+            jobsInfo {
+                isRunning
+                totalJobs
+                finishedJobs
+            }
+        }
+    }
+}
+
+# Trigger Category-Specific Update
+mutation UpdateCategoryManga($categories: [Int!]!) {
+    updateCategoryManga(input: { categories: $categories }) {
         updateStatus {
             isRunning
         }
     }
 }
 
-# Get Update Status
+# Stop Library Update
+mutation UpdateStop {
+    updateStop(input: {}) {
+        clientMutationId
+    }
+}
+
+# Get Update Status (deprecated, use libraryUpdateStatus)
 query GetUpdateStatus {
     updateStatus {
         isRunning
-        completeJobs {
-            mangas {
-                id
-                title
-            }
+        skippedCategories {
+            categories { nodes { id name } }
         }
+        updatingCategories {
+            categories { nodes { id name } }
+        }
+        pendingJobs {
+            mangas { nodes { id title } }
+        }
+        runningJobs {
+            mangas { nodes { id title } }
+        }
+        completeJobs {
+            mangas { nodes { id title } }
+        }
+        failedJobs {
+            mangas { nodes { id title } }
+        }
+        skippedJobs {
+            mangas { nodes { id title } }
+        }
+    }
+}
+
+# Get Library Update Status (new)
+query GetLibraryUpdateStatus {
+    libraryUpdateStatus {
+        categoryUpdates {
+            category { id name }
+            status                 # CategoryJobStatus: UPDATING, SKIPPED
+        }
+        mangaUpdates {
+            manga { id title }
+            status                 # MangaJobStatus: PENDING, RUNNING, COMPLETE, FAILED, SKIPPED
+        }
+        jobsInfo {
+            isRunning
+            totalJobs
+            finishedJobs
+            skippedCategoriesCount
+            skippedMangasCount
+        }
+    }
+}
+
+# Get Last Update Timestamp
+query GetLastUpdateTimestamp {
+    lastUpdateTimestamp {
+        timestamp
     }
 }
 
@@ -690,8 +1305,7 @@ query GetUpdateStatus {
 query GetReadingHistory($offset: Int!, $limit: Int!) {
     chapters(
         filter: { lastReadAt: { greaterThan: "0" } }
-        orderBy: LAST_READ_AT
-        orderByType: DESC
+        order: [{ by: LAST_READ_AT, byType: DESC }]
         offset: $offset
         first: $limit
     ) {
@@ -702,12 +1316,17 @@ query GetReadingHistory($offset: Int!, $limit: Int!) {
             lastPageRead
             pageCount
             lastReadAt
+            isRead
             manga {
                 id
                 title
                 thumbnailUrl
+                source {
+                    displayName
+                }
             }
         }
+        totalCount
     }
 }
 
@@ -716,21 +1335,8 @@ query GetReadingHistory($offset: Int!, $limit: Int!) {
 # ============================================================================
 
 # NOTE: There is NO global search mutation in the Suwayomi API.
-# To search across multiple sources, you must call fetchSourceManga
+# To search across multiple sources, call fetchSourceManga
 # with type: SEARCH for each source individually.
-
-# Search Single Source (use this for each source in a global search)
-# mutation SearchSource($sourceId: LongString!, $query: String!, $page: Int!) {
-#     fetchSourceManga(input: { source: $sourceId, type: SEARCH, query: $query, page: $page }) {
-#         mangas {
-#             id
-#             title
-#             thumbnailUrl
-#             author
-#         }
-#         hasNextPage
-#     }
-# }
 
 # ============================================================================
 # TRACKERS
@@ -743,8 +1349,12 @@ query GetTrackers {
             id
             name
             icon
+            authUrl                    # NEW: OAuth URL for login
             isLoggedIn
             isTokenExpired
+            supportsTrackDeletion      # NEW
+            supportsReadingDates       # NEW
+            supportsPrivateTracking    # NEW
             statuses {
                 value
                 name
@@ -754,34 +1364,103 @@ query GetTrackers {
     }
 }
 
-# Get Manga Tracking Info
-query GetMangaTracking($mangaId: Int!) {
-    manga(id: $mangaId) {
-        trackRecords {
-            nodes {
+# Trackers support ordering and pagination:
+# trackers(
+#     condition: TrackerCondition  # exact match: id, name, icon, isLoggedIn
+#     order: [TrackerOrder]        # by: ID, NAME, IS_LOGGED_IN; byType: ASC, DESC
+#     first: Int, last: Int, before: Cursor, after: Cursor, offset: Int
+# )
+
+# Get Single Tracker
+query GetTracker($trackerId: Int!) {
+    tracker(id: $trackerId) {
+        id
+        name
+        icon
+        authUrl
+        isLoggedIn
+        isTokenExpired
+        supportsTrackDeletion
+        supportsReadingDates
+        supportsPrivateTracking
+        statuses {
+            name
+            value
+        }
+        scores
+    }
+}
+
+# Get Single Track Record
+query GetTrackRecord($recordId: Int!) {
+    trackRecord(id: $recordId) {
+        id
+        mangaId
+        trackerId
+        remoteId
+        libraryId              # NEW
+        remoteUrl
+        title
+        lastChapterRead
+        totalChapters
+        status
+        score
+        displayScore
+        startDate
+        finishDate
+        private                # NEW
+        manga { id title }
+        tracker { id name icon }
+    }
+}
+
+# Get Track Records (with filtering)
+query GetTrackRecords($mangaId: Int!) {
+    trackRecords(condition: { mangaId: $mangaId }) {
+        nodes {
+            id
+            mangaId
+            trackerId
+            remoteId
+            libraryId
+            remoteUrl
+            title
+            lastChapterRead
+            totalChapters
+            score
+            status
+            displayScore
+            startDate
+            finishDate
+            private
+            tracker {
                 id
-                trackerId
-                remoteId
-                remoteUrl
-                title
-                status
-                lastChapterRead
-                totalChapters
-                score
-                displayScore
-                startDate
-                finishDate
-                tracker {
-                    id
+                name
+                icon
+                isLoggedIn
+                statuses {
                     name
-                    icon
+                    value
                 }
+                scores
             }
         }
     }
 }
 
-# Search Tracker (NOTE: This is a QUERY, not a mutation)
+# TrackRecords support filtering, ordering, and pagination:
+# trackRecords(
+#     condition: TrackRecordCondition  # exact match: id, mangaId, trackerId, remoteId, libraryId,
+#                                      #   title, lastChapterRead, totalChapters, status, score,
+#                                      #   remoteUrl, startDate, finishDate, private
+#     filter: TrackRecordFilter        # comparison filters (with and/or/not)
+#     order: [TrackRecordOrder]        # by: ID, MANGA_ID, TRACKER_ID, REMOTE_ID, TITLE,
+#                                      #   LAST_CHAPTER_READ, TOTAL_CHAPTERS, SCORE,
+#                                      #   START_DATE, FINISH_DATE, PRIVATE; byType: ASC, DESC
+#     first: Int, last: Int, before: Cursor, after: Cursor, offset: Int
+# )
+
+# Search Tracker
 query SearchTracker($trackerId: Int!, $query: String!) {
     searchTracker(input: { trackerId: $trackerId, query: $query }) {
         trackSearches {
@@ -798,7 +1477,7 @@ query SearchTracker($trackerId: Int!, $query: String!) {
 }
 
 # Bind Tracker to Manga
-mutation BindTracker($mangaId: Int!, $trackerId: Int!, $remoteId: Long!) {
+mutation BindTracker($mangaId: Int!, $trackerId: Int!, $remoteId: LongString!) {
     bindTrack(input: { mangaId: $mangaId, trackerId: $trackerId, remoteId: $remoteId }) {
         trackRecord {
             id
@@ -810,8 +1489,8 @@ mutation BindTracker($mangaId: Int!, $trackerId: Int!, $remoteId: Long!) {
 }
 
 # Unbind Tracker
-mutation UnbindTracker($recordId: Int!) {
-    unbindTrack(input: { recordId: $recordId }) {
+mutation UnbindTracker($recordId: Int!, $deleteRemoteTrack: Boolean) {
+    unbindTrack(input: { recordId: $recordId, deleteRemoteTrack: $deleteRemoteTrack }) {
         trackRecord {
             id
         }
@@ -819,14 +1498,15 @@ mutation UnbindTracker($recordId: Int!) {
 }
 
 # Update Track Record
-mutation UpdateTrackRecord($recordId: Int!, $status: Int, $lastChapterRead: Float, $score: String, $startDate: Long, $finishDate: Long) {
+mutation UpdateTrackRecord($recordId: Int!) {
     updateTrack(input: {
         recordId: $recordId,
-        status: $status,
-        lastChapterRead: $lastChapterRead,
-        scoreString: $score,
-        startDate: $startDate,
-        finishDate: $finishDate
+        status: 1,                    # Int, optional
+        lastChapterRead: 10.0,        # Double, optional
+        scoreString: "8.5",           # String, optional
+        startDate: 1700000000,        # Long, optional
+        finishDate: 1700000000,       # Long, optional
+        private: false                # Boolean, optional (NEW)
     }) {
         trackRecord {
             id
@@ -836,6 +1516,30 @@ mutation UpdateTrackRecord($recordId: Int!, $status: Int, $lastChapterRead: Floa
             displayScore
             startDate
             finishDate
+            private
+        }
+    }
+}
+
+# Fetch/Refresh Track Record from Remote
+mutation FetchTrack($recordId: Int!) {
+    fetchTrack(input: { recordId: $recordId }) {
+        trackRecord {
+            id
+            title
+            lastChapterRead
+            status
+            score
+        }
+    }
+}
+
+# Track Reading Progress (auto-sync with tracker)
+mutation TrackProgress($mangaId: Int!) {
+    trackProgress(input: { mangaId: $mangaId }) {
+        trackRecords {
+            id
+            lastChapterRead
         }
     }
 }
@@ -844,16 +1548,144 @@ mutation UpdateTrackRecord($recordId: Int!, $status: Int, $lastChapterRead: Floa
 mutation LoginTrackerCredentials($trackerId: Int!, $username: String!, $password: String!) {
     loginTrackerCredentials(input: { trackerId: $trackerId, username: $username, password: $password }) {
         isLoggedIn
+        tracker {
+            id
+            name
+            isLoggedIn
+        }
+    }
+}
+
+# Login to Tracker (OAuth)
+mutation LoginTrackerOAuth($trackerId: Int!, $callbackUrl: String!) {
+    loginTrackerOAuth(input: { trackerId: $trackerId, callbackUrl: $callbackUrl }) {
+        isLoggedIn
+        tracker {
+            id
+            name
+            isLoggedIn
+        }
     }
 }
 
 # Logout from Tracker
 mutation LogoutTracker($trackerId: Int!) {
     logoutTracker(input: { trackerId: $trackerId }) {
+        isLoggedIn
         tracker {
             id
+            name
             isLoggedIn
         }
+    }
+}
+
+# ============================================================================
+# MANGA METADATA
+# ============================================================================
+
+# Set Manga Metadata
+mutation SetMangaMeta($mangaId: Int!, $key: String!, $value: String!) {
+    setMangaMeta(input: { meta: { mangaId: $mangaId, key: $key, value: $value } }) {
+        meta {
+            key
+            value
+        }
+        manga {
+            id
+        }
+    }
+}
+
+# Delete Manga Metadata
+mutation DeleteMangaMeta($mangaId: Int!, $key: String!) {
+    deleteMangaMeta(input: { mangaId: $mangaId, key: $key }) {
+        meta {
+            key
+        }
+        manga {
+            id
+        }
+    }
+}
+
+# Batch Set Manga Metadata
+mutation SetMangaMetas($metas: [MangaMetaInput!]!) {
+    setMangaMetas(input: { metas: $metas }) {
+        metas { key value }
+        mangas { id }
+    }
+}
+
+# MangaMetaInput: { mangaId: Int!, key: String!, value: String! }
+
+# Batch Delete Manga Metadata
+mutation DeleteMangaMetas($metas: [DeleteMangaMetasItem!]!) {
+    deleteMangaMetas(input: { metas: $metas }) {
+        mangas { id }
+    }
+}
+
+# DeleteMangaMetasItem: { mangaId: Int!, key: String, keyStartsWith: String }
+
+# ============================================================================
+# CHAPTER METADATA
+# ============================================================================
+
+mutation SetChapterMeta($chapterId: Int!, $key: String!, $value: String!) {
+    setChapterMeta(input: { meta: { chapterId: $chapterId, key: $key, value: $value } }) {
+        meta { key value }
+        chapter { id }
+    }
+}
+
+mutation DeleteChapterMeta($chapterId: Int!, $key: String!) {
+    deleteChapterMeta(input: { chapterId: $chapterId, key: $key }) {
+        meta { key }
+        chapter { id }
+    }
+}
+
+# Batch operations:
+mutation SetChapterMetas($metas: [ChapterMetaInput!]!) {
+    setChapterMetas(input: { metas: $metas }) {
+        metas { key value }
+        chapters { id }
+    }
+}
+
+mutation DeleteChapterMetas($metas: [DeleteChapterMetasItem!]!) {
+    deleteChapterMetas(input: { metas: $metas }) {
+        chapters { id }
+    }
+}
+
+# ============================================================================
+# GLOBAL METADATA
+# ============================================================================
+
+mutation SetGlobalMeta($key: String!, $value: String!) {
+    setGlobalMeta(input: { meta: { key: $key, value: $value } }) {
+        meta { key value }
+    }
+}
+
+mutation DeleteGlobalMeta($key: String!) {
+    deleteGlobalMeta(input: { key: $key }) {
+        meta { key }
+    }
+}
+
+# Batch operations:
+mutation SetGlobalMetas($metas: [GlobalMetaInput!]!) {
+    setGlobalMetas(input: { metas: $metas }) {
+        metas { key value }
+    }
+}
+
+mutation DeleteGlobalMetas($keys: [String!], $keyStartsWith: [String!]) {
+    deleteGlobalMetas(input: { keys: $keys, keyStartsWith: $keyStartsWith }) {
+        clientMutationId
     }
 }
 
@@ -872,58 +1704,405 @@ mutation CreateBackup {
 mutation RestoreBackup($backup: Upload!) {
     restoreBackup(input: { backup: $backup }) {
         status {
+            mangaProgress
+            totalManga
             state
         }
     }
 }
 
 # ============================================================================
+# SUBSCRIPTIONS (WebSocket)
+# ============================================================================
+
+# Download Status Changed
+subscription DownloadStatusChanged($maxUpdates: Int) {
+    downloadStatusChanged(input: { maxUpdates: $maxUpdates }) {
+        state                  # DownloaderState: STARTED, STOPPED
+        updates {
+            type               # DownloadUpdateType: QUEUED, DEQUEUED, PAUSED, STOPPED,
+                               #   PROGRESS, FINISHED, ERROR, POSITION
+            download {
+                state          # DownloadState: QUEUED, DOWNLOADING, FINISHED, ERROR
+                progress
+                tries
+                position
+                chapter { id name manga { id title } }
+            }
+        }
+        initial {              # only in first message
+            state
+            position
+            progress
+            chapter { id name }
+        }
+        omittedUpdates         # Boolean - if true, re-fetch downloadStatus query
+    }
+}
+
+# Library Update Status Changed
+subscription LibraryUpdateStatusChanged($maxUpdates: Int) {
+    libraryUpdateStatusChanged(input: { maxUpdates: $maxUpdates }) {
+        categoryUpdates {
+            category { id name }
+            status             # CategoryJobStatus: UPDATING, SKIPPED
+        }
+        mangaUpdates {
+            manga { id title }
+            status             # MangaJobStatus: PENDING, RUNNING, COMPLETE, FAILED, SKIPPED
+        }
+        initial {              # only in first message - full LibraryUpdateStatus
+            categoryUpdates { category { id name } status }
+            mangaUpdates { manga { id title } status }
+            jobsInfo { isRunning totalJobs finishedJobs }
+        }
+        jobsInfo {
+            isRunning
+            totalJobs
+            finishedJobs
+            skippedCategoriesCount
+            skippedMangasCount
+        }
+        omittedUpdates         # Boolean - if true, re-fetch libraryUpdateStatus query
+    }
+}
+
+# WebUI Update Status Change
+subscription WebUIUpdateStatusChange {
+    webUIUpdateStatusChange {
+        info {
+            channel
+            tag
+        }
+        state                  # UpdateState: IDLE, DOWNLOADING, FINISHED, ERROR
+        progress
+    }
+}
+
+# Deprecated subscriptions (still available):
+# subscription DownloadChanged { downloadChanged { ... } }
+# subscription UpdateStatusChanged { updateStatusChanged { ... } }
+
+# ============================================================================
+# TYPE REFERENCE
+# ============================================================================
+
+# MangaType fields:
+#   id: Int!
+#   sourceId: LongString!
+#   url: String!
+#   title: String!
+#   thumbnailUrl: String
+#   thumbnailUrlLastFetched: Long
+#   initialized: Boolean!
+#   artist: String
+#   author: String
+#   description: String
+#   genre: [String!]!
+#   status: MangaStatus!          # UNKNOWN, ONGOING, COMPLETED, LICENSED,
+#                                  #   PUBLISHING_FINISHED, CANCELLED, ON_HIATUS
+#   inLibrary: Boolean!
+#   inLibraryAt: Long!
+#   updateStrategy: UpdateStrategy!
+#   realUrl: String
+#   lastFetchedAt: Long
+#   chaptersLastFetchedAt: Long
+#   # Computed resolvers:
+#   downloadCount: Int!
+#   unreadCount: Int!
+#   bookmarkCount: Int!
+#   hasDuplicateChapters: Boolean!
+#   age: Long
+#   chaptersAge: Long
+#   # Related:
+#   lastReadChapter: ChapterType
+#   latestReadChapter: ChapterType
+#   latestFetchedChapter: ChapterType
+#   latestUploadedChapter: ChapterType
+#   firstUnreadChapter: ChapterType
+#   highestNumberedChapter: ChapterType
+#   chapters: ChapterNodeList!
+#   categories: CategoryNodeList!
+#   source: SourceType
+#   trackRecords: TrackRecordNodeList!
+#   meta: [MangaMetaType!]!
+
+# ChapterType fields:
+#   id: Int!
+#   url: String!
+#   name: String!
+#   uploadDate: Long!
+#   chapterNumber: Float!
+#   scanlator: String
+#   mangaId: Int!
+#   isRead: Boolean!
+#   isBookmarked: Boolean!
+#   lastPageRead: Int!
+#   lastReadAt: Long!
+#   sourceOrder: Int!
+#   realUrl: String
+#   fetchedAt: Long!
+#   isDownloaded: Boolean!
+#   pageCount: Int!
+#   # Related:
+#   manga: MangaType!
+#   meta: [ChapterMetaType!]!
+
+# CategoryType fields:
+#   id: Int!
+#   order: Int!
+#   name: String!
+#   default: Boolean!
+#   includeInUpdate: IncludeOrExclude!
+#   includeInDownload: IncludeOrExclude!
+#   # Related:
+#   mangas: MangaNodeList!
+#   meta: [CategoryMetaType!]!
+
+# SourceType fields:
+#   id: LongString!
+#   name: String!
+#   lang: String!
+#   iconUrl: String!
+#   supportsLatest: Boolean!
+#   isConfigurable: Boolean!
+#   isNsfw: Boolean!
+#   displayName: String!
+#   baseUrl: String
+#   # Related:
+#   manga: MangaNodeList!
+#   extension: ExtensionType!
+#   preferences: [Preference!]!
+#   filters: [Filter!]!
+#   meta: [SourceMetaType!]!
+
+# ExtensionType fields:
+#   repo: String
+#   apkName: String!
+#   iconUrl: String!
+#   name: String!
+#   pkgName: String!
+#   versionName: String!
+#   versionCode: Int!
+#   lang: String!
+#   isNsfw: Boolean!
+#   isInstalled: Boolean!
+#   hasUpdate: Boolean!
+#   isObsolete: Boolean!
+#   # Related:
+#   source: SourceNodeList!
+
+# TrackerType fields:
+#   id: Int!
+#   name: String!
+#   icon: String!
+#   isLoggedIn: Boolean!
+#   authUrl: String
+#   supportsTrackDeletion: Boolean!
+#   supportsReadingDates: Boolean!
+#   supportsPrivateTracking: Boolean!
+#   # Related:
+#   statuses: [TrackStatusType!]!
+#   scores: [String!]!
+#   trackRecords: TrackRecordNodeList!
+#   isTokenExpired: Boolean!
+
+# TrackRecordType fields:
+#   id: Int!
+#   mangaId: Int!
+#   trackerId: Int!
+#   remoteId: Long!
+#   libraryId: Long
+#   title: String!
+#   lastChapterRead: Double!
+#   totalChapters: Int!
+#   status: Int!
+#   score: Double!
+#   remoteUrl: String!
+#   startDate: Long!
+#   finishDate: Long!
+#   private: Boolean!
+#   # Related:
+#   displayScore: String!
+#   manga: MangaType!
+#   tracker: TrackerType!
+
+# TrackSearchType fields:
+#   id: Int!
+#   trackerId: Int!
+#   remoteId: Long!
+#   libraryId: Long
+#   title: String!
+#   lastChapterRead: Double!
+#   totalChapters: Int!
+#   trackingUrl: String!
+#   coverUrl: String!
+#   summary: String!
+#   publishingStatus: String!
+#   publishingType: String!
+#   startDate: String!
+#   status: Int!
+#   score: Double!
+#   startedReadingDate: Long!
+#   finishedReadingDate: Long!
+#   private: Boolean!
+
+# DownloadStatus fields:
+#   state: DownloaderState!        # STARTED, STOPPED
+#   queue: [DownloadType!]!
+
+# DownloadType fields:
+#   state: DownloadState!          # QUEUED, DOWNLOADING, FINISHED, ERROR
+#   progress: Float!
+#   tries: Int!
+#   position: Int!
+#   manga: MangaType!
+#   chapter: ChapterType!
+
+# MetaType interface:
+#   key: String!
+#   value: String!
+# Implementations: MangaMetaType, ChapterMetaType, CategoryMetaType, SourceMetaType, GlobalMetaType
+
+# ============================================================================
+# ENUMS
+# ============================================================================
+
+# MangaStatus: UNKNOWN, ONGOING, COMPLETED, LICENSED, PUBLISHING_FINISHED, CANCELLED, ON_HIATUS
+# IncludeOrExclude: UNSET, INCLUDE, EXCLUDE
+# DownloaderState: STARTED, STOPPED
+# DownloadState: QUEUED, DOWNLOADING, FINISHED, ERROR
+# DownloadUpdateType: QUEUED, DEQUEUED, PAUSED, STOPPED, PROGRESS, FINISHED, ERROR, POSITION
+# MangaJobStatus: PENDING, RUNNING, COMPLETE, FAILED, SKIPPED
+# CategoryJobStatus: UPDATING, SKIPPED
+# UpdateState: IDLE, DOWNLOADING, FINISHED, ERROR
+# WebUIChannel: BUNDLED, STABLE, PREVIEW
+# TriState: IGNORE, INCLUDE, EXCLUDE
+# FetchSourceMangaType: POPULAR, LATEST, SEARCH
+# SortOrder: ASC, DESC, ASC_NULLS_FIRST, ASC_NULLS_LAST, DESC_NULLS_FIRST, DESC_NULLS_LAST
+
+# ============================================================================
+# PAGINATION (Relay-style)
+# ============================================================================
+
+# All list queries return NodeList types with:
+#   nodes: [Type!]!              # the items
+#   edges: [Edge!]!              # items with cursors
+#   pageInfo: PageInfo!          # pagination info
+#   totalCount: Int!             # total number of items
+#
+# PageInfo:
+#   hasNextPage: Boolean!
+#   hasPreviousPage: Boolean!
+#   startCursor: Cursor
+#   endCursor: Cursor
+#
+# Edge:
+#   cursor: Cursor!
+#   node: Type!
+#
+# Pagination parameters:
+#   first: Int       # return first N items
+#   last: Int        # return last N items
+#   after: Cursor    # return items after cursor
+#   before: Cursor   # return items before cursor
+#   offset: Int      # skip N items
+
+# ============================================================================
+# FILTER TYPES (used in list queries)
+# ============================================================================
+
+# IntFilter: { equalTo, notEqualTo, in, notIn, lessThan, lessThanOrEqualTo,
+#              greaterThan, greaterThanOrEqualTo, isNull, distinctFrom, notDistinctFrom }
+# LongFilter: same as IntFilter but for Long values
+# DoubleFilter: same as IntFilter but for Double values
+# StringFilter: { equalTo, notEqualTo, in, notIn, lessThan, lessThanOrEqualTo,
+#                 greaterThan, greaterThanOrEqualTo, isNull, like, likeInsensitive, contains }
+# BooleanFilter: { equalTo, notEqualTo, isNull }
+#
+# All entity filters support logical combinators:
+#   and: [Filter]    # all conditions must match
+#   or: [Filter]     # any condition must match
+#   not: Filter      # negate the condition
+
+# ============================================================================
 # REST API ENDPOINTS (Legacy)
 # ============================================================================
 
 # Server Info
-# GET /api/v1/meta
+# GET /api/v1/settings/about
 
 # Extensions
 # GET /api/v1/extension/list
 # GET /api/v1/extension/install/{pkgName}
 # GET /api/v1/extension/update/{pkgName}
 # GET /api/v1/extension/uninstall/{pkgName}
+# GET /api/v1/extension/icon/{apkName}
 
 # Sources
 # GET /api/v1/source/list
 # GET /api/v1/source/{sourceId}
-# GET /api/v1/source/{sourceId}/popular/{page}
-# GET /api/v1/source/{sourceId}/latest/{page}
+# GET /api/v1/source/{sourceId}/filters
+# GET /api/v1/source/{sourceId}/popular?pageNum={page}
+# GET /api/v1/source/{sourceId}/latest?pageNum={page}
 # GET /api/v1/source/{sourceId}/search?searchTerm={query}&pageNum={page}
+# POST /api/v1/source/{sourceId}/quick-search
 
 # Manga
 # GET /api/v1/manga/{mangaId}
 # GET /api/v1/manga/{mangaId}/full
-# GET /api/v1/manga/{mangaId}/chapters
+# GET /api/v1/manga/{mangaId}?onlineFetch=true
 # GET /api/v1/manga/{mangaId}/library
 # DELETE /api/v1/manga/{mangaId}/library
+# GET /api/v1/manga/{mangaId}/thumbnail
+# GET /api/v1/manga/{mangaId}/meta
+# PATCH /api/v1/manga/{mangaId}/meta
+# DELETE /api/v1/manga/{mangaId}/meta/{key}
 
 # Chapters
+# GET /api/v1/manga/{mangaId}/chapters
 # GET /api/v1/manga/{mangaId}/chapter/{chapterIndex}
-# GET /api/v1/manga/{mangaId}/chapter/{chapterIndex}/page/{pageIndex}
 # PATCH /api/v1/manga/{mangaId}/chapter/{chapterIndex}
+# POST /api/v1/manga/{mangaId}/chapter/batch
+# GET /api/v1/chapter/{chapterId}
+# PATCH /api/v1/chapter/{chapterId}
+# GET /api/v1/chapter/{chapterId}/page/{pageIndex}
 
 # Categories
 # GET /api/v1/category
 # POST /api/v1/category
 # PATCH /api/v1/category/{categoryId}
 # DELETE /api/v1/category/{categoryId}
+# PATCH /api/v1/category/reorder
+# GET /api/v1/category/{categoryId}/manga
+# GET /api/v1/manga/{mangaId}/category/{categoryId}
+# DELETE /api/v1/manga/{mangaId}/category/{categoryId}
 
 # Library
 # GET /api/v1/library
-# POST /api/v1/update
+# POST /api/v1/update/fetch
+# GET /api/v1/update/recentChapters/{page}
+# GET /api/v1/update/summary
 
 # Downloads
 # GET /api/v1/downloads
 # GET /api/v1/downloads/start
 # GET /api/v1/downloads/stop
 # GET /api/v1/downloads/clear
+# GET /api/v1/download/{mangaId}/chapter/{chapterIndex}
+# DELETE /api/v1/download/{mangaId}/chapter/{chapterIndex}
+# PATCH /api/v1/download/{mangaId}/chapter/{chapterIndex}/reorder/{position}
+# DELETE /api/v1/download/batch
+
+# Backup
+# GET /api/v1/backup/export/file
+# POST /api/v1/backup/import/file
+
+# Image Proxy
+# GET /api/v1/imageUrl/fetch?url={encodedUrl}
+
+# Authentication
+# POST /login.html (form data: username, password)
 
 # ============================================================================
 # NOTES
@@ -941,9 +2120,15 @@ mutation RestoreBackup($backup: Upload!) {
 # Authentication Headers:
 # Basic Auth: Authorization: Basic base64(username:password)
 # JWT Auth:   Authorization: Bearer <accessToken>
+# Cookie:     Cookie: suwayomi-server-token=<accessToken>
 
 # Thumbnail URLs:
 # Manga: {serverUrl}/api/v1/manga/{mangaId}/thumbnail
 # Chapter Page: {serverUrl}/api/v1/manga/{mangaId}/chapter/{chapterId}/page/{pageIndex}
-# Extension Icon: {serverUrl}/api/v1/extension/icon/{pkgName}
+# Extension Icon: {serverUrl}/api/v1/extension/icon/{apkName}
 # Source Icon: {serverUrl}/api/v1/source/{sourceId}/icon
+
+# WebSocket Subscriptions:
+# Connect to: ws://{serverUrl}/api/graphql
+# Protocol: graphql-transport-ws
+# Send connection_init, then subscribe messages
