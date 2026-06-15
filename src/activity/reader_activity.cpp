@@ -643,18 +643,9 @@ void ReaderActivity::onContentAvailable() {
                             completeSwipeAnimation(false);
                         }
                     } else {
-                        // Secondary axis swipe (fallback navigation)
-                        // Use logical inversion for correct page direction
-                        float crossDelta = useVerticalSwipe ? dx : dy;
-                        float logicalCross = invertDirection ? -crossDelta : crossDelta;
-
-                        if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
-                            if (logicalCross > 0) {
-                                previousPage();
-                            } else {
-                                nextPage();
-                            }
-                        }
+                        // Cross-axis swipe — ignore in paged mode (only horizontal
+                        // swipes should turn pages). Vertical/webtoon modes already
+                        // use the primary axis for scrolling.
                         resetSwipeState();
                     }
 
@@ -921,15 +912,6 @@ void ReaderActivity::onContentAvailable() {
                             completeSwipeAnimation(false);
                         }
                     } else {
-                        float crossDelta = useVerticalSwipe ? dx : dy;
-                        float logicalCross = invertDirection ? -crossDelta : crossDelta;
-
-                        if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
-                            if (logicalCross > 0)
-                                previousPage();
-                            else
-                                nextPage();
-                        }
                         resetSwipeState();
                     }
                     m_isPanning = false;
@@ -1020,9 +1002,6 @@ void ReaderActivity::onContentAvailable() {
                         } else {
                             m_settings.direction == ReaderDirection::RIGHT_TO_LEFT ? previousPage() : nextPage();
                         }
-                    } else if (std::abs(crossDelta) >= PAGE_TURN_THRESHOLD) {
-                        float logicalCross = invertDirection ? -crossDelta : crossDelta;
-                        logicalCross > 0 ? previousPage() : nextPage();
                     }
                 }
             }, brls::PanAxis::ANY));
