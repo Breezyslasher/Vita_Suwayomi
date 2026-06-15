@@ -109,7 +109,7 @@ void WebtoonScrollView::setupGestures() {
 
             // Mouse scroll wheel: deltaOnly events with delta.y
             if (status.deltaOnly) {
-                float scrollDelta = -status.delta.y;
+                float scrollDelta = status.delta.y;
                 float totalContentSize = getTotalContentSize();
                 bool horizontal = isHorizontalLayout();
                 float viewSize = horizontal ? m_viewWidth : m_viewHeight;
