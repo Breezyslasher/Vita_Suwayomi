@@ -210,6 +210,10 @@ private:
     // Track first appearance to avoid duplicate chapter loading
     bool m_firstAppearance = true;
 
+    // Tracks whether we've already attempted a detail fetch (prevents infinite
+    // re-fetching when the server/source genuinely has no genres/tags)
+    bool m_detailsFetched = false;
+
     // Description expand/collapse
     bool m_descriptionExpanded = false;
     std::string m_fullDescription;

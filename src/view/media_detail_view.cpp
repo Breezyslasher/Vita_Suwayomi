@@ -833,8 +833,6 @@ MangaDetailView::MangaDetailView(const Manga& manga)
             genreLabel->setMarginRight(12);
             m_genreBox->addView(genreLabel);
         }
-    } else {
-        m_genreBox->setVisibility(brls::Visibility::GONE);
     }
     rightPanel->addView(m_genreBox);
 
@@ -1240,8 +1238,10 @@ void MangaDetailView::loadDetails() {
         }
     }
 
-    // Fetch full details when description, genre, or status are missing (common for non-library books from browse/search)
-    bool needsDetailFetch = m_manga.description.empty() || m_manga.genre.empty() || m_manga.status == MangaStatus::UNKNOWN;
+    // Fetch full details when description, genre, or status are missing (common for non-library books from browse/search).
+    // m_detailsFetched prevents infinite re-fetching when the source genuinely has no genres/tags.
+    bool needsDetailFetch = !m_detailsFetched &&
+        (m_manga.description.empty() || m_manga.genre.empty() || m_manga.status == MangaStatus::UNKNOWN);
     if (needsDetailFetch && Application::getInstance().isConnected()) {
         // Use combined query to fetch manga details + chapters in one request
         brls::Logger::info("MangaDetailView: Using combined query for details + chapters");
@@ -1314,6 +1314,8 @@ void MangaDetailView::loadDetails() {
                 brls::sync([this, updatedManga, chapters, chaptersToDownload, aliveWeak]() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
+
+                    m_detailsFetched = true;
 
                     // Apply manga details
                     bool needsUpdate = false;
@@ -1417,6 +1419,7 @@ void MangaDetailView::loadDetails() {
                 brls::sync([this, aliveWeak]() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;
+                    m_detailsFetched = true;
                     loadChapters();
                 });
 
