@@ -983,7 +983,7 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
     // Draw performance overlay on top (uses screen coordinates, ignores scroll)
     // Reset scissor so overlay draws over everything
     nvgResetScissor(vg);
-    perf.draw(vg, 960.0f, 544.0f);
+    perf.draw(vg, brls::Application::contentWidth, brls::Application::contentHeight);
 }
 
 void RecyclingGrid::loadThumbnailsForScrollPosition() {

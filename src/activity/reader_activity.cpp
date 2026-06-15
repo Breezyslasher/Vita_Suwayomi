@@ -1496,8 +1496,8 @@ void ReaderActivity::loadPages() {
                 });
 
                 // Load all pages into the scroll view
-                // Use actual view width (internal rendering coords, ~1280) rather than
-                // physical screen width (960) to avoid coordinate system mismatch.
+                // Use actual view width (internal rendering coords) to avoid
+                // coordinate system mismatch.
                 float viewW = webtoonScroll->getWidth();
                 if (viewW <= 0) viewW = container ? container->getWidth() : brls::Application::contentWidth;
                 webtoonScroll->setPages(m_pages, viewW, m_currentPage);
@@ -2460,10 +2460,10 @@ void ReaderActivity::saveSettingsToApp() {
 int ReaderActivity::getTapZone(brls::Point position) const {
     // Map physical tap position to user's perceived left/center/right zone,
     // accounting for how the device is held at each rotation.
-    //   0°:   user's left = low X,  right = high X  (screen width 960)
-    //   90°:  user's left = low Y,  right = high Y  (screen height 544)
-    //   180°: user's left = high X, right = low X   (screen width 960, inverted)
-    //   270°: user's left = high Y, right = low Y   (screen height 544, inverted)
+    //   0°:   user's left = low X,  right = high X
+    //   90°:  user's left = low Y,  right = high Y
+    //   180°: user's left = high X, right = low X  (inverted)
+    //   270°: user's left = high Y, right = low Y  (inverted)
     float normalized;
     int rotation = static_cast<int>(m_settings.rotation);
     float screenW = brls::Application::contentWidth;
@@ -2565,8 +2565,8 @@ void ReaderActivity::showPageError(const std::string& message) {
     m_errorOverlay->setAxis(brls::Axis::COLUMN);
     m_errorOverlay->setJustifyContent(brls::JustifyContent::CENTER);
     m_errorOverlay->setAlignItems(brls::AlignItems::CENTER);
-    m_errorOverlay->setWidth(960);
-    m_errorOverlay->setHeight(544);
+    m_errorOverlay->setWidth(brls::Application::contentWidth);
+    m_errorOverlay->setHeight(brls::Application::contentHeight);
     m_errorOverlay->setPositionType(brls::PositionType::ABSOLUTE);
     m_errorOverlay->setPositionTop(0);
     m_errorOverlay->setPositionLeft(0);

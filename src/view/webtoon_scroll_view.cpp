@@ -78,8 +78,8 @@ void WebtoonScrollView::setupGestures() {
                     m_lastTapPosition = status.position;
 
                     // Scale tap position from physical to view coords
-                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
-                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / brls::Application::contentWidth) : 1.0f;
+                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / brls::Application::contentHeight) : 1.0f;
                     float tapX = status.position.x * scaleX;
                     float tapY = status.position.y * scaleY;
 
@@ -123,8 +123,8 @@ void WebtoonScrollView::setupGestures() {
                 // Divide by zoom level since offset is in pre-scale space;
                 // without this, panning moves too fast at higher zoom levels.
                 if (m_isZoomed) {
-                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
-                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / brls::Application::contentWidth) : 1.0f;
+                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / brls::Application::contentHeight) : 1.0f;
                     m_zoomOffset.x += rawDx * scaleX / m_zoomLevel;
                     m_zoomOffset.y += rawDy * scaleY / m_zoomLevel;
                     m_touchLast = status.position;
@@ -144,8 +144,8 @@ void WebtoonScrollView::setupGestures() {
                 // position is in view coords (~1280x726). Scale for 1:1 tracking.
                 float scrollDelta = 0.0f;
                 int rotation = static_cast<int>(m_rotationDegrees);
-                float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
-                float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
+                float scaleY = (m_viewHeight > 0) ? (m_viewHeight / brls::Application::contentHeight) : 1.0f;
+                float scaleX = (m_viewWidth > 0) ? (m_viewWidth / brls::Application::contentWidth) : 1.0f;
 
                 if (rotation == 0) {
                     scrollDelta = rawDy * scaleY;
@@ -231,8 +231,8 @@ void WebtoonScrollView::setupGestures() {
                 // pinch can't accidentally trigger resetZoom
                 m_lastTapTime = std::chrono::steady_clock::now() - std::chrono::seconds(1);
                 // Convert physical pinch center to view coords
-                float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
-                float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                float scaleX = (m_viewWidth > 0) ? (m_viewWidth / brls::Application::contentWidth) : 1.0f;
+                float scaleY = (m_viewHeight > 0) ? (m_viewHeight / brls::Application::contentHeight) : 1.0f;
                 m_initialPinchCenter = {status.center.x * scaleX, status.center.y * scaleY};
                 m_scrollVelocity = 0.0f;
             } else if (status.state == brls::GestureState::STAY) {
@@ -241,8 +241,8 @@ void WebtoonScrollView::setupGestures() {
 
                 if (std::abs(newZoom - m_zoomLevel) > 0.01f) {
                     // Convert current pinch center to view coords
-                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / 960.0f) : 1.0f;
-                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / 544.0f) : 1.0f;
+                    float scaleX = (m_viewWidth > 0) ? (m_viewWidth / brls::Application::contentWidth) : 1.0f;
+                    float scaleY = (m_viewHeight > 0) ? (m_viewHeight / brls::Application::contentHeight) : 1.0f;
                     brls::Point currentCenter = {status.center.x * scaleX, status.center.y * scaleY};
 
                     // Focal-point zoom formula:
@@ -468,9 +468,9 @@ void WebtoonScrollView::setPages(const std::vector<Page>& pages, float screenWid
     m_viewWidth = screenWidth;
     // m_viewHeight will be updated from actual view dimensions in draw().
     // Use a reasonable default until then; the draw() dimensions (~726 internal)
-    // differ from the physical screen (544) due to borealis DPI scaling.
+    // differ from the physical screen due to borealis DPI scaling.
     if (m_viewHeight <= 0.0f) {
-        m_viewHeight = screenWidth * (544.0f / 960.0f);  // Maintain screen aspect ratio
+        m_viewHeight = screenWidth * (brls::Application::contentHeight / brls::Application::contentWidth);
     }
 
     // Calculate available width after padding
@@ -1605,7 +1605,7 @@ void WebtoonScrollView::draw(NVGcontext* vg, float x, float y, float width, floa
 
     // Draw perf overlay on top
     nvgResetScissor(vg);
-    PerfOverlay::getInstance().draw(vg, 960.0f, 544.0f);
+    PerfOverlay::getInstance().draw(vg, brls::Application::contentWidth, brls::Application::contentHeight);
 
     // Call onFrame for momentum updates
     onFrame();

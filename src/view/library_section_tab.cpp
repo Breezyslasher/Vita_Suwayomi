@@ -421,8 +421,8 @@ LibrarySectionTab::LibrarySectionTab() {
     m_categoryOverlay->setAxis(brls::Axis::COLUMN);
     m_categoryOverlay->setJustifyContent(brls::JustifyContent::CENTER);
     m_categoryOverlay->setAlignItems(brls::AlignItems::CENTER);
-    m_categoryOverlay->setWidth(960);
-    m_categoryOverlay->setHeight(544);
+    m_categoryOverlay->setWidth(brls::Application::contentWidth);
+    m_categoryOverlay->setHeight(brls::Application::contentHeight);
     m_categoryOverlay->setPositionType(brls::PositionType::ABSOLUTE);
     m_categoryOverlay->setPositionTop(0);
     m_categoryOverlay->setPositionLeft(0);
