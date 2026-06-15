@@ -190,7 +190,7 @@ struct AppSettings {
     int64_t totalReadingTime = 0;     // Total reading time in seconds (estimated)
 
     // Download Settings
-    DownloadMode downloadMode = DownloadMode::SERVER_ONLY;  // Where to download chapters
+    DownloadMode downloadMode = DownloadMode::BOTH;  // Where to download chapters
     DownloadQuality downloadQuality = DownloadQuality::ORIGINAL;  // Image quality for local downloads
     bool autoDownloadChapters = false;
     bool deleteAfterRead = false;
@@ -199,7 +199,7 @@ struct AppSettings {
 
     // Source/Browse Settings
     std::set<std::string> enabledSourceLanguages;  // Empty = all languages, otherwise filter by these (e.g. "en", "multi")
-    bool showNsfwSources = false;
+    bool showNsfwSources = true;
 
     // Source Tags (user-assigned labels for filtering)
     std::map<std::string, std::set<std::string>> sourceTags;  // sourceId -> set of tag names
