@@ -1295,6 +1295,8 @@ void SettingsTab::createSyncYomiSection() {
     descLabel->setTextColor(Application::getInstance().getSubtitleColor());
     m_contentBox->addView(descLabel);
 
+    auto alive = m_alive;
+
     // Enable/disable toggle
     auto* enableToggle = new brls::BooleanCell();
     enableToggle->init("Enable SyncYomi", settings.syncYomiEnabled, [alive](bool value) {
