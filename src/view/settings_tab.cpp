@@ -1295,30 +1295,6 @@ void SettingsTab::createSyncYomiSection() {
     descLabel->setTextColor(Application::getInstance().getSubtitleColor());
     m_contentBox->addView(descLabel);
 
-    // Fetch current server-side settings
-    auto alive = m_alive;
-    vitasuwayomi::asyncRun([alive]() {
-        SuwayomiClient& client = SuwayomiClient::getInstance();
-        AppSettings& s = Application::getInstance().getSettings();
-
-        bool enabled = false;
-        std::string host, apiKey;
-        bool dataManga = true, dataChapters = true, dataTracking = true;
-        bool dataHistory = true, dataCategories = true;
-
-        if (client.fetchSyncYomiSettings(enabled, host, apiKey,
-                dataManga, dataChapters, dataTracking, dataHistory, dataCategories)) {
-            s.syncYomiEnabled = enabled;
-            s.syncYomiHost = host;
-            s.syncYomiApiKey = apiKey;
-            s.syncDataManga = dataManga;
-            s.syncDataChapters = dataChapters;
-            s.syncDataTracking = dataTracking;
-            s.syncDataHistory = dataHistory;
-            s.syncDataCategories = dataCategories;
-        }
-    });
-
     // Enable/disable toggle
     auto* enableToggle = new brls::BooleanCell();
     enableToggle->init("Enable SyncYomi", settings.syncYomiEnabled, [alive](bool value) {
@@ -1488,6 +1464,47 @@ void SettingsTab::createSyncYomiSection() {
         return true;
     });
     m_contentBox->addView(syncNowCell);
+
+    // Fetch current server-side settings and update all cells
+    vitasuwayomi::asyncRun([alive, enableToggle, hostCell, apiKeyCell,
+                            syncMangaToggle, syncChaptersToggle, syncTrackingToggle,
+                            syncHistoryToggle, syncCategoriesToggle]() {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        bool enabled = false;
+        std::string host, apiKey;
+        bool dataManga = true, dataChapters = true, dataTracking = true;
+        bool dataHistory = true, dataCategories = true;
+
+        if (client.fetchSyncYomiSettings(enabled, host, apiKey,
+                dataManga, dataChapters, dataTracking, dataHistory, dataCategories)) {
+            AppSettings& s = Application::getInstance().getSettings();
+            s.syncYomiEnabled = enabled;
+            s.syncYomiHost = host;
+            s.syncYomiApiKey = apiKey;
+            s.syncDataManga = dataManga;
+            s.syncDataChapters = dataChapters;
+            s.syncDataTracking = dataTracking;
+            s.syncDataHistory = dataHistory;
+            s.syncDataCategories = dataCategories;
+
+            brls::sync([alive, enabled, host, apiKey, dataManga, dataChapters,
+                        dataTracking, dataHistory, dataCategories,
+                        enableToggle, hostCell, apiKeyCell,
+                        syncMangaToggle, syncChaptersToggle, syncTrackingToggle,
+                        syncHistoryToggle, syncCategoriesToggle]() {
+                if (!*alive) return;
+                enableToggle->setOn(enabled, false);
+                hostCell->setDetailText(host.empty() ? "Not configured" : host);
+                apiKeyCell->setDetailText(apiKey.empty() ? "Not set" : "••••••••");
+                syncMangaToggle->setOn(dataManga, false);
+                syncChaptersToggle->setOn(dataChapters, false);
+                syncTrackingToggle->setOn(dataTracking, false);
+                syncHistoryToggle->setOn(dataHistory, false);
+                syncCategoriesToggle->setOn(dataCategories, false);
+            });
+        }
+    });
 }
 
 void SettingsTab::updateLanguageFilterCellText() {
