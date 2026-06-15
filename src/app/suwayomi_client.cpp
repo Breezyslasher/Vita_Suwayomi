@@ -2019,7 +2019,7 @@ bool SuwayomiClient::fetchMangaWithChaptersGraphQL(int mangaId, Manga& manga, st
     // If manga is not initialized (missing genre/status/chapters), the server hasn't
     // scraped the source yet. Trigger fetchManga + fetchChapters mutations to initialize,
     // then re-query both manga details and chapters.
-    bool needsRefresh = (chapters.empty() || !manga.initialized)
+    bool needsRefresh = (chapters.empty() || manga.genre.empty() || manga.status == MangaStatus::UNKNOWN)
                         && manga.id > 0;
     if (needsRefresh) {
         brls::Logger::info("GraphQL combined: manga {} needs refresh (chapters={}, genres={}, status={})",

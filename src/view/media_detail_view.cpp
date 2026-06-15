@@ -1240,9 +1240,8 @@ void MangaDetailView::loadDetails() {
         }
     }
 
-    // Fetch full details when description or status are missing (common for non-library books from browse/search)
-    // Don't check genre.empty() — some manga legitimately have no genres/tags on the server
-    bool needsDetailFetch = m_manga.description.empty() || m_manga.status == MangaStatus::UNKNOWN;
+    // Fetch full details when description, genre, or status are missing (common for non-library books from browse/search)
+    bool needsDetailFetch = m_manga.description.empty() || m_manga.genre.empty() || m_manga.status == MangaStatus::UNKNOWN;
     if (needsDetailFetch && Application::getInstance().isConnected()) {
         // Use combined query to fetch manga details + chapters in one request
         brls::Logger::info("MangaDetailView: Using combined query for details + chapters");
@@ -1455,7 +1454,7 @@ void MangaDetailView::loadDetails() {
             }
         });
     } else {
-        // All details already available - just load chapters
+        // All details (description, genre, status) already available - just load chapters
         loadChapters();
     }
 }
