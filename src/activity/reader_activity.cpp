@@ -517,8 +517,8 @@ void ReaderActivity::onContentAvailable() {
                         // Convert physical touch delta to view coords, then divide by zoom
                         // since the offset is in pre-scale space (applied before nvgScale).
                         // Without /zoom, panning feels too fast at higher zoom levels.
-                        float scaleX = (pageImage ? pageImage->getWidth() : 960.0f) / 960.0f;
-                        float scaleY = (pageImage ? pageImage->getHeight() : 544.0f) / 544.0f;
+                        float scaleX = (pageImage ? pageImage->getWidth() : brls::Application::contentWidth) / brls::Application::contentWidth;
+                        float scaleY = (pageImage ? pageImage->getHeight() : brls::Application::contentHeight) / brls::Application::contentHeight;
                         brls::Point newOffset = {
                             m_zoomOffset.x + dx * scaleX / m_zoomLevel,
                             m_zoomOffset.y + dy * scaleY / m_zoomLevel
@@ -549,7 +549,7 @@ void ReaderActivity::onContentAvailable() {
                         // Scale touch delta from physical screen coords to view coords
                         // for 1:1 finger-to-page tracking. Touch is in physical pixels
                         // (960x544) but NanoVG views use internal coords (~1280x726).
-                        float physScreen = useVerticalSwipe ? 544.0f : 960.0f;
+                        float physScreen = useVerticalSwipe ? brls::Application::contentHeight : brls::Application::contentWidth;
                         auto [svW, svH] = getSwipeViewSize();
                         float viewSize = useVerticalSwipe ? svH : svW;
                         float scaledDelta = rawDelta * (viewSize / physScreen);
@@ -798,7 +798,7 @@ void ReaderActivity::onContentAvailable() {
                         m_isSwipeAnimating = true;
 
                         // Scale touch delta from physical screen coords to view coords
-                        float physScreen = useVerticalSwipe ? 544.0f : 960.0f;
+                        float physScreen = useVerticalSwipe ? brls::Application::contentHeight : brls::Application::contentWidth;
                         auto [svW, svH] = getSwipeViewSize();
                         float viewSize = useVerticalSwipe ? svH : svW;
                         float scaledDelta = rawDelta * (viewSize / physScreen);
@@ -1499,7 +1499,7 @@ void ReaderActivity::loadPages() {
                 // Use actual view width (internal rendering coords, ~1280) rather than
                 // physical screen width (960) to avoid coordinate system mismatch.
                 float viewW = webtoonScroll->getWidth();
-                if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
+                if (viewW <= 0) viewW = container ? container->getWidth() : brls::Application::contentWidth;
                 webtoonScroll->setPages(m_pages, viewW, m_currentPage);
 
                 // Build chapter-boundary map so progress saves to the right chapter
@@ -1947,7 +1947,7 @@ void ReaderActivity::nextChapter() {
             if (m_continuousScrollMode && webtoonScroll) {
                 // Update webtoon scroll view with new pages and scroll to start
                 float viewW = webtoonScroll->getWidth();
-                if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
+                if (viewW <= 0) viewW = container ? container->getWidth() : brls::Application::contentWidth;
                 webtoonScroll->setPages(m_pages, viewW, m_currentPage);
                 initWebtoonSegments();
                 setupWebtoonTransitionText();
@@ -2020,7 +2020,7 @@ void ReaderActivity::previousChapter() {
             // Handle webtoon mode vs single-page mode
             if (m_continuousScrollMode && webtoonScroll) {
                 float viewW = webtoonScroll->getWidth();
-                if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
+                if (viewW <= 0) viewW = container ? container->getWidth() : brls::Application::contentWidth;
                 // Pass m_currentPage as startPage so the scroll position and
                 // image loading begin at the target page, avoiding a visible
                 // snap from position 0 to the end of the chapter.
@@ -2466,14 +2466,16 @@ int ReaderActivity::getTapZone(brls::Point position) const {
     //   270°: user's left = high Y, right = low Y   (screen height 544, inverted)
     float normalized;
     int rotation = static_cast<int>(m_settings.rotation);
+    float screenW = brls::Application::contentWidth;
+    float screenH = brls::Application::contentHeight;
     if (rotation == 90) {
-        normalized = position.y / 544.0f;
+        normalized = position.y / screenH;
     } else if (rotation == 270) {
-        normalized = 1.0f - (position.y / 544.0f);
+        normalized = 1.0f - (position.y / screenH);
     } else if (rotation == 180) {
-        normalized = 1.0f - (position.x / 960.0f);
+        normalized = 1.0f - (position.x / screenW);
     } else {
-        normalized = position.x / 960.0f;
+        normalized = position.x / screenW;
     }
 
     if (normalized < 1.0f / 3.0f) return -1;  // left zone
@@ -3441,8 +3443,8 @@ std::pair<float, float> ReaderActivity::getSwipeViewSize() {
         w = transitionBox->getWidth();
         h = transitionBox->getHeight();
     }
-    if (w <= 0) w = 960.0f;
-    if (h <= 0) h = 544.0f;
+    if (w <= 0) w = brls::Application::contentWidth;
+    if (h <= 0) h = brls::Application::contentHeight;
     return {w, h};
 }
 
@@ -4000,7 +4002,7 @@ void ReaderActivity::updateReaderMode() {
             // Load pages into the scroll view
             if (!m_pages.empty()) {
                 float viewW = webtoonScroll->getWidth();
-                if (viewW <= 0) viewW = container ? container->getWidth() : 960.0f;
+                if (viewW <= 0) viewW = container ? container->getWidth() : brls::Application::contentWidth;
                 webtoonScroll->setPages(m_pages, viewW);
                 initWebtoonSegments();
                 setupWebtoonTransitionText();

@@ -369,7 +369,7 @@ void RotatableImage::draw(NVGcontext* vg, float x, float y, float width, float h
     // Draw perf overlay on top if this is the primary reader image
     if (m_perfPrimary) {
         nvgResetScissor(vg);
-        PerfOverlay::getInstance().draw(vg, 960.0f, 544.0f);
+        PerfOverlay::getInstance().draw(vg, brls::Application::contentWidth, brls::Application::contentHeight);
     }
 }
 
