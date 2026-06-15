@@ -148,7 +148,7 @@ struct AppSettings {
     int imageRotation = 0;  // 0, 90, 180, or 270 degrees
     bool keepScreenOn = true;
     bool showPageNumber = true;
-    bool tapToNavigate = true;
+    bool tapToNavigate = false;
     bool goToEndOnPrevChapter = true;  // When going back to prev chapter, land on last page instead of first
 
     // Webtoon Settings (also applies to vertical mode)
