@@ -102,10 +102,29 @@ void WebtoonScrollView::setupGestures() {
         }));
 
     // Pan gesture for scrolling (ANY axis to support rotated views)
-    this->addGestureRecognizer(new brls::PanGestureRecognizer(
+    this->addGestureRecognizer(new brls::ScrollGestureRecognizer(
         [this](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
             // Suppress scrolling while pinch-to-zoom is active
             if (m_isPinching) return;
+
+            // Mouse scroll wheel: deltaOnly events with delta.y
+            if (status.deltaOnly) {
+                float scrollDelta = -status.delta.y;
+                float totalContentSize = getTotalContentSize();
+                bool horizontal = isHorizontalLayout();
+                float viewSize = horizontal ? m_viewWidth : m_viewHeight;
+                float minScroll = -(totalContentSize - viewSize);
+                if (minScroll > 0.0f) minScroll = 0.0f;
+
+                m_scrollY = std::max(minScroll, std::min(0.0f, m_scrollY + scrollDelta));
+                m_scrollVelocity = 0.0f;
+
+                if (!m_userHasScrolled) m_userHasScrolled = true;
+
+                updateVisibleImages();
+                updateCurrentPage();
+                return;
+            }
 
             if (status.state == brls::GestureState::START) {
                 m_isTouching = true;
