@@ -155,6 +155,7 @@ struct AppSettings {
     bool cropBorders = false;           // Auto-crop white/black borders from pages
     bool webtoonDetection = true;       // Auto-detect webtoon format (aspect ratio based)
     int webtoonSidePadding = 0;         // Side padding percentage (0-20%)
+    bool reverseMouseScroll = true;     // Reverse mouse scroll wheel direction in webtoon mode
 
     // Library Settings
     bool updateOnStart = false;

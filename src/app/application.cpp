@@ -1387,6 +1387,7 @@ bool Application::loadSettings() {
     if (m_settings.webtoonSidePadding < 0 || m_settings.webtoonSidePadding > 20) {
         m_settings.webtoonSidePadding = 0;
     }
+    m_settings.reverseMouseScroll = extractBool("reverseMouseScroll", true);
 
     // Load library settings
     m_settings.updateOnStart = extractBool("updateOnStart", false);
@@ -1888,6 +1889,7 @@ bool Application::saveSettings() {
     json += "  \"cropBorders\": " + std::string(m_settings.cropBorders ? "true" : "false") + ",\n";
     json += "  \"webtoonDetection\": " + std::string(m_settings.webtoonDetection ? "true" : "false") + ",\n";
     json += "  \"webtoonSidePadding\": " + std::to_string(m_settings.webtoonSidePadding) + ",\n";
+    json += "  \"reverseMouseScroll\": " + std::string(m_settings.reverseMouseScroll ? "true" : "false") + ",\n";
 
     // Library settings
     json += "  \"updateOnStart\": " + std::string(m_settings.updateOnStart ? "true" : "false") + ",\n";

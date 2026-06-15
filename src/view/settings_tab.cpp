@@ -1102,6 +1102,14 @@ void SettingsTab::createReaderSection() {
             Application::getInstance().saveSettings();
         });
     m_contentBox->addView(paddingSelector);
+
+    // Reverse mouse scroll
+    auto* reverseScrollToggle = new brls::BooleanCell();
+    reverseScrollToggle->init("Reverse Mouse Scroll", settings.reverseMouseScroll, [&settings](bool value) {
+        settings.reverseMouseScroll = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(reverseScrollToggle);
 }
 
 void SettingsTab::createDownloadsSection() {
