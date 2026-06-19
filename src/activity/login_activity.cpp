@@ -377,6 +377,7 @@ void LoginActivity::onConnectPressed() {
                 settings.accessToken = client.getAccessToken();
                 settings.refreshToken = client.getRefreshToken();
                 settings.sessionCookie = client.getSessionCookie();
+                settings.userLoggedOut = false;  // Successful login clears the explicit-logout flag
 
                 if (settings.localServerUrl.empty()) {
                     settings.localServerUrl = serverUrl;

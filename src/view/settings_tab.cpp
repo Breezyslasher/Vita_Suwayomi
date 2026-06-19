@@ -1841,6 +1841,8 @@ void SettingsTab::onDisconnect() {
         // Clear server connection
         Application::getInstance().setServerUrl("");
         Application::getInstance().setConnected(false);
+        // Remember the explicit disconnect so startup doesn't auto-reconnect.
+        Application::getInstance().getSettings().userLoggedOut = true;
         Application::getInstance().saveSettings();
 
         // Go back to login

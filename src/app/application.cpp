@@ -159,6 +159,20 @@ void Application::run() {
     // Initialize downloads manager
     DownloadsManager::getInstance().init();
 
+    // If no explicit serverUrl was persisted (e.g. it was never set, got
+    // cleared, or only the local/remote URLs are configured), fall back to the
+    // active local/remote URL. Otherwise startup would skip connection restore
+    // entirely and dump the user into offline mode every launch even though a
+    // server URL and saved auth are available. Skip this when the user
+    // explicitly disconnected, so Disconnect keeps them logged out.
+    if (m_serverUrl.empty() && !m_settings.userLoggedOut) {
+        std::string fallbackUrl = getActiveServerUrl();
+        if (!fallbackUrl.empty()) {
+            m_serverUrl = fallbackUrl;
+            brls::Logger::info("run: serverUrl empty, falling back to configured URL: {}", m_serverUrl);
+        }
+    }
+
     // Check if we have saved server connection
     if (!m_serverUrl.empty()) {
         // Show login screen immediately while restoring connection in background.
@@ -1532,6 +1546,7 @@ bool Application::loadSettings() {
     m_settings.remoteServerUrl = extractString("remoteServerUrl");
     m_settings.useRemoteUrl = extractBool("useRemoteUrl", false);
     m_settings.autoSwitchOnFailure = extractBool("autoSwitchOnFailure", false);
+    m_settings.userLoggedOut = extractBool("userLoggedOut", false);
     m_settings.connectionTimeout = extractInt("connectionTimeout");
     if (m_settings.connectionTimeout <= 0) m_settings.connectionTimeout = 30;
 
@@ -1969,6 +1984,7 @@ bool Application::saveSettings() {
     json += "  \"remoteServerUrl\": \"" + m_settings.remoteServerUrl + "\",\n";
     json += "  \"useRemoteUrl\": " + std::string(m_settings.useRemoteUrl ? "true" : "false") + ",\n";
     json += "  \"autoSwitchOnFailure\": " + std::string(m_settings.autoSwitchOnFailure ? "true" : "false") + ",\n";
+    json += "  \"userLoggedOut\": " + std::string(m_settings.userLoggedOut ? "true" : "false") + ",\n";
     json += "  \"connectionTimeout\": " + std::to_string(m_settings.connectionTimeout) + ",\n";
 
     // Display settings

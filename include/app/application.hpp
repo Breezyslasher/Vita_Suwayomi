@@ -212,6 +212,7 @@ struct AppSettings {
     std::string remoteServerUrl;       // Remote/external URL (e.g., https://myserver.com:4567)
     bool useRemoteUrl = false;         // true = use remote URL, false = use local URL
     bool autoSwitchOnFailure = false;  // Auto-switch to alternate URL if connection fails
+    bool userLoggedOut = false;        // true = user explicitly disconnected; suppress auto-reconnect on launch
     int connectionTimeout = 30;        // seconds
 
     // Authentication Settings
