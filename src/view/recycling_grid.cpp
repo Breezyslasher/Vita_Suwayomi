@@ -263,6 +263,7 @@ void RecyclingGrid::appendItems(const std::vector<Manga>& newItems) {
                                static_cast<int>((savedScrollY + viewH) / rowH) + 2);
 
         for (int i = oldRowCount; i < static_cast<int>(m_rows.size()); i++) {
+            if (!m_rows[i]) continue;
             brls::Visibility vis = (i >= firstVis && i < lastVis)
                 ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE;
             m_rows[i]->setVisibility(vis);
@@ -730,6 +731,7 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             } else {
                 // First call: set all visibility in one pass
                 for (int i = 0; i < static_cast<int>(m_rows.size()); i++) {
+                    if (!m_rows[i]) continue;
                     brls::Visibility desired = (i >= firstVisible && i < lastVisible)
                         ? brls::Visibility::VISIBLE : brls::Visibility::INVISIBLE;
                     m_rows[i]->setVisibility(desired);
