@@ -1120,7 +1120,9 @@ brls::Box* DownloadsTab::createLocalRow(int mangaId, int chapterIndex, const std
                 m_currentFocusedIcon = nullptr;
             }
         }
-        xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
+        if (xButtonIcon) {
+            xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
+        }
         m_currentFocusedIcon = xButtonIcon;
     });
 
@@ -1527,7 +1529,9 @@ brls::Box* DownloadsTab::createServerRow(int chapterId, int mangaId, const std::
                 m_currentFocusedIcon = nullptr;
             }
         }
-        xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
+        if (xButtonIcon) {
+            xButtonIcon->setVisibility(brls::Visibility::VISIBLE);
+        }
         m_currentFocusedIcon = xButtonIcon;
     });
 

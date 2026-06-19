@@ -239,7 +239,9 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
             if (prev && prev != xIcon) {
                 prev->setVisibility(brls::Visibility::INVISIBLE);
             }
-            xIcon->setVisibility(brls::Visibility::VISIBLE);
+            if (xIcon) {
+                xIcon->setVisibility(brls::Visibility::VISIBLE);
+            }
             v->setCurrentFocusedIcon(xIcon);
         });
     }
@@ -315,7 +317,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
         std::string mangaTitle = m_view->m_manga.title;
 
         cell->addGestureRecognizer(new brls::PanGestureRecognizer(
-            [view, cell, mangaId, mangaTitle](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
+            [view, cell, mangaId, mangaTitle, aliveWeakForBtn](brls::PanGestureStatus status, brls::Sound* soundToPlay) {
                 static brls::Point touchStart;
                 static bool isValidSwipe = false;
                 const NVGcolor originalBgColor = Application::getInstance().getRowBackground();
@@ -380,10 +382,12 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                             DownloadMode downloadMode = Application::getInstance().getSettings().downloadMode;
 
                             if (isLiveQueued || isLiveDownloading) {
-                                asyncRun([view, mangaId, curChapterIndex]() {
+                                asyncRun([view, mangaId, curChapterIndex, aliveWeakForBtn]() {
                                     DownloadsManager& dm = DownloadsManager::getInstance();
                                     if (dm.cancelChapterDownload(mangaId, curChapterIndex)) {
-                                        brls::sync([view]() {
+                                        brls::sync([view, aliveWeakForBtn]() {
+                                            auto alive = aliveWeakForBtn.lock();
+                                            if (!alive || !*alive) return;
                                             brls::Application::notify("Removed from queue");
                                             view->refreshVisibleDownloadIcons();
                                         });
@@ -391,7 +395,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                                 });
                             } else if (isLiveDownloaded || curServerDownloaded) {
                                 asyncRun([view, mangaId, curChapterId, curChapterIndex, downloadMode,
-                                          curServerDownloaded, isLiveDownloaded]() {
+                                          curServerDownloaded, isLiveDownloaded, aliveWeakForBtn]() {
                                     int serverDeleted = 0;
                                     int localDeleted = 0;
                                     if (curServerDownloaded &&
@@ -410,7 +414,9 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                                             localDeleted = 1;
                                         }
                                     }
-                                    brls::sync([view, serverDeleted, localDeleted]() {
+                                    brls::sync([view, serverDeleted, localDeleted, aliveWeakForBtn]() {
+                                        auto alive = aliveWeakForBtn.lock();
+                                        if (!alive || !*alive) return;
                                         if (serverDeleted > 0 || localDeleted > 0) {
                                             brls::Application::notify("Download deleted");
                                         }
@@ -419,7 +425,7 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                                 });
                             } else {
                                 asyncRun([view, mangaId, curChapterId, curChapterIndex, curChapterNum, mangaTitle,
-                                          curChapterName, downloadMode]() {
+                                          curChapterName, downloadMode, aliveWeakForBtn]() {
                                     SuwayomiClient& client = SuwayomiClient::getInstance();
                                     DownloadsManager& dm = DownloadsManager::getInstance();
                                     bool serverQueued = false;
@@ -434,7 +440,9 @@ void ChaptersDataSource::bindCell(ChapterCell* cell, int row) {
                                                                               mangaTitle, curChapterName, curChapterNum);
                                         if (localQueued) { dm.startDownloads(); }
                                     }
-                                    brls::sync([view, serverQueued, localQueued]() {
+                                    brls::sync([view, serverQueued, localQueued, aliveWeakForBtn]() {
+                                        auto alive = aliveWeakForBtn.lock();
+                                        if (!alive || !*alive) return;
                                         if (serverQueued || localQueued) {
                                             brls::Application::notify("Download queued");
                                         } else {
