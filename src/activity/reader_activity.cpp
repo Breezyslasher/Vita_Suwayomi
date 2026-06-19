@@ -2635,7 +2635,10 @@ void ReaderActivity::showPageError(const std::string& message) {
             asyncRun([mangaId, chapterId, mangaTitle, chapterName, downloadMode]() {
                 if (downloadMode == DownloadMode::LOCAL_ONLY || downloadMode == DownloadMode::BOTH) {
                     DownloadsManager& dm = DownloadsManager::getInstance();
-                    dm.queueChapterDownload(mangaId, chapterId, chapterId, mangaTitle, chapterName, 0.0f);
+                    dm.init();
+                    if (dm.queueChapterDownload(mangaId, chapterId, chapterId, mangaTitle, chapterName, 0.0f)) {
+                        dm.startDownloads();
+                    }
                 }
                 if (downloadMode == DownloadMode::SERVER_ONLY || downloadMode == DownloadMode::BOTH) {
                     SuwayomiClient& client = SuwayomiClient::getInstance();

@@ -299,8 +299,9 @@ void DownloadsManager::startDownloads() {
 
     brls::Logger::info("DownloadsManager: Starting downloads");
 
-    // Run downloads in background thread
-    std::thread([this]() {
+    // Run downloads in background thread (must use platform::launchThread for
+    // the larger stack that curl+mbedTLS requires on Switch)
+    platform::launchThread([this]() {
         m_downloadThreadActive.store(true);
         while (m_downloading.load()) {
             DownloadedChapter* nextChapter = nullptr;
@@ -353,7 +354,7 @@ void DownloadsManager::startDownloads() {
             downloadChapter(mangaId, *nextChapter);
         }
         m_downloadThreadActive.store(false);
-    }).detach();
+    });
 }
 
 void DownloadsManager::pauseDownloads() {

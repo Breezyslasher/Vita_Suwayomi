@@ -15,7 +15,6 @@
 #include <chrono>
 #include <ctime>
 #include <sstream>
-#include <thread>
 
 #include "platform/platform.hpp"
 
@@ -1934,7 +1933,7 @@ void SettingsTab::updateServerLabel() {
 void SettingsTab::runNetworkTest() {
     brls::Application::notify("Running network test...");
 
-    std::thread([this]() {
+    platform::launchThread([this]() {
         std::string results;
 
         // --- WiFi Check ---
@@ -2059,7 +2058,7 @@ void SettingsTab::runNetworkTest() {
             dialog->addButton("Close", []() {});
             dialog->open();
         });
-    }).detach();
+    });
 }
 
 void SettingsTab::showCategoryManagementDialog() {
