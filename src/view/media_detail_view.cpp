@@ -110,7 +110,7 @@ ChapterCell::ChapterCell() {
     xButtonIcon->setHeight(24);
     xButtonIcon->setScalingType(brls::ImageScalingType::FIT);
     xButtonIcon->setMarginLeft(8);
-    setButtonIcon(xButtonIcon, BUTTON_IMG("square_button.png"));
+    setButtonIcon(xButtonIcon, BUTTON_IMG(BUTTON_X_ICON));
     xButtonIcon->setVisibility(brls::Visibility::INVISIBLE);
     statusBox->addView(xButtonIcon);
 
@@ -1074,7 +1074,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     setButtonIcon(selectIcon, BUTTON_IMG("select_button.png"));
     setButtonIcon(rButtonIcon, BUTTON_IMG("r_button.png"));
     updateSortIcon();
-    setButtonIcon(yButtonIcon, BUTTON_IMG("triangle_button.png"));
+    setButtonIcon(yButtonIcon, BUTTON_IMG(BUTTON_Y_ICON));
     filterIcon->setImageFromFile(RESOURCE_PREFIX "icons/filter-menu-outline.png");
     setButtonIcon(startButtonIcon, BUTTON_IMG("start_button.png"));
     menuIcon->setImageFromFile(RESOURCE_PREFIX "icons/menu.png");

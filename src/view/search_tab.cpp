@@ -78,7 +78,7 @@ SearchTab::SearchTab() {
     triangleHintIcon->setWidth(16);
     triangleHintIcon->setHeight(16);
     triangleHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    setButtonIcon(triangleHintIcon, BUTTON_IMG("triangle_button.png"));
+    setButtonIcon(triangleHintIcon, BUTTON_IMG(BUTTON_Y_ICON));
     triangleHintIcon->setMarginBottom(2);
     m_filterBtnContainer->addView(triangleHintIcon);
 

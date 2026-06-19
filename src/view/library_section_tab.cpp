@@ -157,7 +157,7 @@ LibrarySectionTab::LibrarySectionTab() {
     sortHintIcon->setWidth(16);
     sortHintIcon->setHeight(16);
     sortHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    setButtonIcon(sortHintIcon, BUTTON_IMG("triangle_button.png"));
+    setButtonIcon(sortHintIcon, BUTTON_IMG(BUTTON_Y_ICON));
     sortHintIcon->setMarginBottom(2);
     sortContainer->addView(sortHintIcon);
 
@@ -242,7 +242,7 @@ LibrarySectionTab::LibrarySectionTab() {
     groupHintIcon->setWidth(16);
     groupHintIcon->setHeight(16);
     groupHintIcon->setScalingType(brls::ImageScalingType::FIT);
-    setButtonIcon(groupHintIcon, BUTTON_IMG("square_button.png"));
+    setButtonIcon(groupHintIcon, BUTTON_IMG(BUTTON_X_ICON));
     groupHintIcon->setMarginBottom(2);
     groupContainer->addView(groupHintIcon);
 

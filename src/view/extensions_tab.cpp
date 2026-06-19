@@ -756,7 +756,7 @@ ExtensionsTab::ExtensionsTab() {
     triangleButtonIcon->setWidth(16);
     triangleButtonIcon->setHeight(16);
     triangleButtonIcon->setScalingType(brls::ImageScalingType::FIT);
-    setButtonIcon(triangleButtonIcon, BUTTON_IMG("triangle_button.png"));
+    setButtonIcon(triangleButtonIcon, BUTTON_IMG(BUTTON_Y_ICON));
     triangleButtonIcon->setMarginBottom(2);
     refreshContainer->addView(triangleButtonIcon);
 
