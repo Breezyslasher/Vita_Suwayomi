@@ -887,7 +887,7 @@ void ExtensionsTab::loadExtensionsFast() {
         } else {
             bool success = client.fetchExtensionList(allExtensions);
             if (!success) {
-                Application::getInstance().setConnected(false);
+                Application::getInstance().reportConnectionFailure();
                 brls::sync([this, aliveWeak]() {
                     auto alive = aliveWeak.lock();
                     if (!alive || !*alive) return;

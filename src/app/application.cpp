@@ -2072,6 +2072,35 @@ std::string Application::getActiveServerUrl() const {
     return m_serverUrl;
 }
 
+void Application::reportConnectionFailure() {
+    // Already offline, or no server configured? Nothing to verify.
+    if (!m_isConnected || m_serverUrl.empty()) {
+        return;
+    }
+
+    // Coalesce a burst of concurrent failures into a single verification probe.
+    bool expected = false;
+    if (!m_connProbeInFlight.compare_exchange_strong(expected, true)) {
+        return;  // A probe is already running
+    }
+
+    // Verify on a background thread so we never block the caller. A single
+    // failed request is not proof the server is down — with a flaky local
+    // server, several concurrent requests can fail to connect while the server
+    // is actually fine. Only drop the app offline if a dedicated, non-concurrent
+    // probe also fails.
+    asyncRun([this]() {
+        bool reachable = SuwayomiClient::getInstance().testConnection();
+        if (reachable) {
+            brls::Logger::info("Application: Transient request failure, server still reachable - staying online");
+        } else {
+            m_isConnected = false;
+            brls::Logger::warning("Application: Connection verified lost, going offline");
+        }
+        m_connProbeInFlight = false;
+    });
+}
+
 std::string Application::getAlternateServerUrl() const {
     // Return the URL that is NOT currently active
     if (m_settings.useRemoteUrl) {

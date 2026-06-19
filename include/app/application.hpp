@@ -8,6 +8,7 @@
 #include <string>
 #include <functional>
 #include <mutex>
+#include <atomic>
 #include <set>
 #include <map>
 #include <vector>
@@ -267,6 +268,15 @@ public:
     void setServerUrl(const std::string& url) { m_serverUrl = url; }
     void setConnected(bool connected) { m_isConnected = connected; }
 
+    // Report a failed network request from a background thread. Rather than
+    // immediately dropping the whole app offline, this verifies the server is
+    // genuinely unreachable with a single lightweight probe before flipping
+    // global state. This prevents one transient failure (e.g. one of several
+    // concurrent requests to a flaky local server that can't accept a burst of
+    // connections) from knocking the entire app offline. No-op if already
+    // offline or a probe is already in flight.
+    void reportConnectionFailure();
+
     // Local/Remote URL switching
     std::string getActiveServerUrl() const;  // Returns local or remote URL based on setting
     std::string getAlternateServerUrl() const;  // Returns the URL not currently in use
@@ -397,6 +407,7 @@ private:
 
     bool m_initialized = false;
     bool m_isConnected = false;
+    std::atomic<bool> m_connProbeInFlight{false};  // Guards reportConnectionFailure() probe
     std::string m_serverUrl;
     std::string m_authUsername;
     std::string m_authPassword;

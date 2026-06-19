@@ -614,7 +614,7 @@ void SearchTab::loadSources() {
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch sources");
-            Application::getInstance().setConnected(false);
+            Application::getInstance().reportConnectionFailure();
             brls::sync([this, aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;

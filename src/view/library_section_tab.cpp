@@ -1148,8 +1148,9 @@ void LibrarySectionTab::loadCategories() {
             } else {
                 brls::Logger::warning("LibrarySectionTab: Failed to fetch categories from server");
 
-                // Mark connection as lost to prevent cascading retries
-                Application::getInstance().setConnected(false);
+                // Verify the server is actually unreachable before going offline,
+                // so one transient failure doesn't drop the whole app offline.
+                Application::getInstance().reportConnectionFailure();
 
                 brls::sync([this, aliveWeak]() {
                     auto alive = aliveWeak.lock();
@@ -1675,9 +1676,11 @@ void LibrarySectionTab::loadCategoryManga(int categoryId) {
             if (success) break;
         }
 
-        // If all retries failed, mark connection as lost
+        // If all retries failed, verify the server is truly unreachable before
+        // dropping the whole app offline (avoids false offline from a transient
+        // failure to a flaky local server).
         if (!success) {
-            Application::getInstance().setConnected(false);
+            Application::getInstance().reportConnectionFailure();
         }
 
         if (success) {
@@ -4137,7 +4140,7 @@ void LibrarySectionTab::loadAllManga() {
 
         // Fetch all library manga
         if (!client.fetchLibraryManga(allManga)) {
-            Application::getInstance().setConnected(false);
+            Application::getInstance().reportConnectionFailure();
             brls::sync([aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
@@ -4305,7 +4308,7 @@ void LibrarySectionTab::loadBySource() {
 
         // Fetch all library manga
         if (!client.fetchLibraryManga(allManga)) {
-            Application::getInstance().setConnected(false);
+            Application::getInstance().reportConnectionFailure();
             brls::sync([aliveWeak]() {
                 auto alive = aliveWeak.lock();
                 if (!alive || !*alive) return;
