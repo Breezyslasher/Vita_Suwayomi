@@ -11,6 +11,8 @@
 #include <cstring>
 #include <cstdio>
 #include <cctype>
+#include <thread>
+#include <chrono>
 
 namespace vitasuwayomi {
 
@@ -235,9 +237,39 @@ HttpResponse HttpClient::request(const HttpRequest& req) {
         }
     }
 
-    // Perform request
+    // Perform request.
+    //
+    // A burst of concurrent connections can transiently exhaust the client's
+    // socket pool (notably on Switch, where the BSD socket service has a small
+    // fixed pool), making connect() fail with CURLE_COULDNT_CONNECT even though
+    // the server is perfectly healthy. Retry connection-ESTABLISHMENT failures a
+    // few times with a short backoff. Only these errors are retried, because
+    // they guarantee the request never reached the server, so non-idempotent
+    // methods (POST/PUT/DELETE/PATCH) can never be double-applied.
     brls::Logger::debug("HTTP {} {}", req.method, req.url);
-    CURLcode res = curl_easy_perform(curl);
+    const int maxConnectAttempts = 3;
+    CURLcode res = CURLE_OK;
+    for (int attempt = 0; attempt < maxConnectAttempts; attempt++) {
+        // Discard anything a previous failed attempt may have buffered.
+        response.body.clear();
+        response.headers.clear();
+        writeData.totalSize = 0;
+
+        res = curl_easy_perform(curl);
+
+        if (res != CURLE_COULDNT_CONNECT &&
+            res != CURLE_COULDNT_RESOLVE_HOST &&
+            res != CURLE_COULDNT_RESOLVE_PROXY) {
+            break;  // Success, or a failure that isn't a transient pre-connect issue
+        }
+
+        if (attempt + 1 < maxConnectAttempts) {
+            brls::Logger::warning("HTTP connect failed ({}), retry {}/{} for {}",
+                                  curl_easy_strerror(res), attempt + 1,
+                                  maxConnectAttempts - 1, req.url);
+            std::this_thread::sleep_for(std::chrono::milliseconds(200 * (attempt + 1)));
+        }
+    }
 
     // Cleanup headers
     if (headerList) {
