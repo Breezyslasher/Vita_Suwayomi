@@ -1281,6 +1281,7 @@ void MangaDetailView::loadDetails() {
                 std::vector<int> chaptersToDownload;
                 if (autoDownload) {
                     DownloadsManager& localMgr = DownloadsManager::getInstance();
+                    localMgr.init();
                     for (const auto& ch : chapters) {
                         if (!ch.read && !ch.downloaded &&
                             !localMgr.isChapterDownloaded(combinedMangaId, ch.index)) {
@@ -1565,6 +1566,7 @@ void MangaDetailView::loadChapters() {
 
             if (autoDownload) {
                 DownloadsManager& localMgr = DownloadsManager::getInstance();
+                localMgr.init();
                 // Find unread chapters that are not yet downloaded
                 for (const auto& ch : chapters) {
                     if (!ch.read && !ch.downloaded &&
@@ -3947,6 +3949,7 @@ void MangaDetailView::downloadSelected() {
     asyncRun([mangaId, mangaTitle, chapterIds, localChapterPairs, downloadMode]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         DownloadsManager& localMgr = DownloadsManager::getInstance();
+        localMgr.init();
 
         bool serverSuccess = true;
         bool localSuccess = true;
