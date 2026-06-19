@@ -2102,17 +2102,38 @@ void Application::reportConnectionFailure() {
 
     // Verify on a background thread so we never block the caller. A single
     // failed request is not proof the server is down — with a flaky local
-    // server, several concurrent requests can fail to connect while the server
-    // is actually fine. Only drop the app offline if a dedicated, non-concurrent
-    // probe also fails.
+    // server (common on Switch where the Suwayomi server is often a phone on
+    // the same LAN), several concurrent requests can fail to connect while the
+    // server is actually fine. Wait for the request burst to settle, then probe
+    // with retries before dropping the app offline.
     asyncRun([this]() {
-        bool reachable = SuwayomiClient::getInstance().testConnection();
-        if (reachable) {
-            brls::Logger::info("Application: Transient request failure, server still reachable - staying online");
-        } else {
-            m_isConnected = false;
-            brls::Logger::warning("Application: Connection verified lost, going offline");
+        // Wait for the burst of concurrent requests to settle before probing.
+        // Without this delay the probe fires while the download thread is still
+        // saturating the server's connection limit and also fails.
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+
+        // Already went offline via another path while we waited? Done.
+        if (!m_isConnected) {
+            m_connProbeInFlight = false;
+            return;
         }
+
+        // Try up to 2 probes (immediate + 1 retry after 3s). The server may
+        // still be briefly busy when the first probe fires.
+        for (int attempt = 0; attempt < 2; attempt++) {
+            if (attempt > 0) {
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+                if (!m_isConnected) break;
+            }
+            if (SuwayomiClient::getInstance().testConnection()) {
+                brls::Logger::info("Application: Transient request failure, server still reachable - staying online");
+                m_connProbeInFlight = false;
+                return;
+            }
+        }
+
+        m_isConnected = false;
+        brls::Logger::warning("Application: Connection verified lost, going offline");
         m_connProbeInFlight = false;
     });
 }
