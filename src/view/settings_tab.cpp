@@ -548,12 +548,11 @@ void SettingsTab::createUISection() {
     // Theme selector
     m_themeSelector = new brls::SelectorCell();
     m_themeSelector->init("Theme", {
-        "System", "Light", "Dark", "Neon Vaporwave",
-        "Tachiyomi", "Catppuccin", "Nord", "Tako",
-        "Midnight Dusk", "Strawberry Daiquiri", "Green Apple", "Lavender",
-        "Matrix", "Doom", "Mocha", "Sapphire",
-        "Cloudflare", "Teal Turquoise", "Tidal Wave", "Yotsuba",
-        "Yin Yang", "Monochrome", "Cotton Candy"
+        "System", "Light", "Dark", "Tachiyomi",
+        "Neon Vaporwave", "Catppuccin", "Nord", "Tako",
+        "Midnight Dusk", "Green Apple", "Lavender",
+        "Matrix", "Mocha", "Sunset", "Aurora",
+        "Synthwave", "Ocean"
     }, static_cast<int>(settings.theme),
         [this](int index) {
             onThemeChanged(index);
