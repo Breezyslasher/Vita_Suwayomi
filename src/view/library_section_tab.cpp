@@ -2416,6 +2416,12 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
             [this, captured]() { onMangaSelected(captured); }});
     }
 
+    // Enter multi-select mode with this book (only when not already selecting).
+    if (!m_selectionMode) {
+        rows.push_back({ "checkbox.png", "Select", "", false, false,
+            [this, index]() { enterSelectionMode(index); }});
+    }
+
     // Reopening the main Options popover is the "back" target for the sub-menus.
     Manga backManga = manga;
     auto reopenMain = [this, backManga, index]() { showMangaContextMenu(backManga, index); };

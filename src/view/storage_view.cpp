@@ -124,10 +124,7 @@ void StorageView::loadStorageInfo() {
             // server-side downloads (no local files) are excluded below.
             item.sizeBytes = 0;
             std::string mangaPath = dm.getDownloadsPath() + "/manga_" + std::to_string(download.mangaId);
-            auto entries = platform::listDir(mangaPath);
-            brls::Logger::info("StorageView: scan '{}' ({} entries) for manga {} '{}'",
-                               mangaPath, entries.size(), download.mangaId, download.title);
-            for (const auto& name : entries) {
+            for (const auto& name : platform::listDir(mangaPath)) {
                 if (name.empty() || name[0] == '.') continue;
                 std::string entryPath = mangaPath + "/" + name;
                 int64_t sz = platform::fileSize(entryPath);
@@ -135,18 +132,13 @@ void StorageView::loadStorageInfo() {
                     item.sizeBytes += sz;   // a regular file (e.g. cover.jpg)
                 } else {
                     // Directory (chapter_<i>) -> sum its page files.
-                    int64_t chSize = 0;
                     for (const auto& fname : platform::listDir(entryPath)) {
                         if (fname.empty() || fname[0] == '.') continue;
                         int64_t fsz = platform::fileSize(entryPath + "/" + fname);
-                        if (fsz > 0) chSize += fsz;
+                        if (fsz > 0) item.sizeBytes += fsz;
                     }
-                    item.sizeBytes += chSize;
-                    brls::Logger::info("StorageView:   dir '{}' -> {} bytes", name, chSize);
                 }
             }
-            brls::Logger::info("StorageView: manga {} local total = {} bytes",
-                               download.mangaId, item.sizeBytes);
             if (item.sizeBytes <= 0) continue;   // nothing stored locally -> skip
 
             // Count only the chapters that are present on the device.
@@ -252,28 +244,24 @@ void StorageView::loadStorageInfo() {
                 mid->addView(barTrack);
                 rowBox->addView(mid);
 
-                // Chapters — fixed width so the growing title/bar can't squeeze
-                // or overlap it (which made the text marquee/clip).
+                // Chapters + size: size to their content and don't shrink, so
+                // they pack tightly against the right edge while the bar fills
+                // the rest (no wide blank gap, no marquee/overlap).
                 auto* chaps = new brls::Label();
                 chaps->setText(std::to_string(item.chapterCount) + " ch");
                 chaps->setFontSize(13);
                 chaps->setTextColor(svcol::muted());
                 chaps->setSingleLine(true);
                 chaps->setShrink(0.0f);
-                chaps->setWidth(72);
-                chaps->setMarginRight(14);
-                chaps->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
+                chaps->setMarginRight(16);
                 rowBox->addView(chaps);
 
-                // Size — fixed width, right-aligned.
                 auto* size = new brls::Label();
                 size->setText(formatSize(item.sizeBytes));
                 size->setFontSize(14);
                 size->setTextColor(svcol::accent());
                 size->setSingleLine(true);
                 size->setShrink(0.0f);
-                size->setWidth(96);
-                size->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
                 rowBox->addView(size);
 
                 int index = static_cast<int>(i);
