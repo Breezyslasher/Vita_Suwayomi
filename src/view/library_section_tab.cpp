@@ -8,6 +8,7 @@
 #include "view/manga_item_cell.hpp"
 #include "view/manga_detail_view.hpp"
 #include "view/tracking_search_view.hpp"
+#include "view/options_popover.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
@@ -2479,8 +2480,47 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
         mangaList.push_back(manga);
     }
 
-    // Delegate to the unified panel which has Select at top + Categories + Downloads + actions
-    showChangeCategoryDialog(mangaList, index);
+    const bool single = mangaList.size() == 1;
+    const std::string contextLine = single ? "MANGA"
+                                           : std::to_string(mangaList.size()) + " SELECTED";
+    const std::string title = single ? manga.title
+                                     : std::to_string(mangaList.size()) + " manga";
+
+    std::vector<OptionRow> rows;
+
+    // Open detail — only for a single manga.
+    if (single) {
+        Manga captured = manga;
+        rows.push_back({ "book-open-page-variant.png", "Open", "", true, false,
+            [this, captured]() { onMangaSelected(captured); }});
+    }
+
+    rows.push_back({ "download.png", "Download", "", false, false,
+        [this, mangaList]() { showDownloadSubmenu(mangaList); }});
+
+    rows.push_back({ "tag.png", "Edit Categories", "", false, false,
+        [this, mangaList, index]() { showChangeCategoryDialog(mangaList, index); }});
+
+    rows.push_back({ "checkbox_checked.png", "Mark as Read", "", false, false,
+        [this, mangaList]() { markMangaRead(mangaList); }});
+
+    rows.push_back({ "checkbox.png", "Mark as Unread", "", false, false,
+        [this, mangaList]() { markMangaUnread(mangaList); }});
+
+    if (single) {
+        Manga captured = manga;
+        rows.push_back({ "web.png", "Tracking", "", false, false,
+            [this, captured]() { openTracking(captured); }});
+        rows.push_back({ "import.png", "Migrate", "", false, false,
+            [this, captured]() { showMigrateSourceMenu(captured); }});
+    }
+
+    rows.push_back({ "hide.png", "Remove from Library", "", false, true,
+        [this, mangaList]() { removeFromLibrary(mangaList); }});
+
+    rows.push_back({ "cross.png", "Cancel", "", false, true, []() {}});
+
+    OptionsPopover::show(contextLine, title, std::move(rows));
 }
 
 void LibrarySectionTab::showDownloadSubmenu(const std::vector<Manga>& mangaList) {

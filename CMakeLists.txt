@@ -174,6 +174,7 @@ set(APP_SOURCES
     src/activity/login_activity.cpp
     src/activity/reader_activity.cpp
     src/view/library_section_tab.cpp
+    src/view/options_popover.cpp
     src/view/history_tab.cpp
     src/view/search_tab.cpp
     src/view/settings_tab.cpp
