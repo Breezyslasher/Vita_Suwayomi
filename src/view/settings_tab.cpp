@@ -3071,14 +3071,17 @@ void buildStatsDashboard(brls::Box* content, const StatsData& d,
         ringWrap->setMarginBottom(18);
         auto* ring = new RingView(compFrac, ipFrac);
         ring->setWidth(210); ring->setHeight(210);
+        ring->setAxis(brls::Axis::COLUMN);        // stack % over caption
         ring->setJustifyContent(brls::JustifyContent::CENTER);
         ring->setAlignItems(brls::AlignItems::CENTER);
         auto* pct = new brls::Label();
         pct->setText(std::to_string(pctInt) + "%");
         pct->setFontSize(40); pct->setTextColor(c::heading());
+        pct->setSingleLine(true);
         ring->addView(pct);
         auto* pcap = new brls::Label();
         pcap->setText("completed"); pcap->setFontSize(13); pcap->setTextColor(c::muted());
+        pcap->setSingleLine(true);
         ring->addView(pcap);
         ringWrap->addView(ring);
         card->addView(ringWrap);
@@ -3182,11 +3185,14 @@ void buildStatsDashboard(brls::Box* content, const StatsData& d,
             top->setAlignItems(brls::AlignItems::CENTER);
             top->setMarginBottom(6);
             auto* nm = new brls::Label();
-            nm->setText(cat.name); nm->setFontSize(14); nm->setTextColor(c::body()); nm->setGrow(1.0f);
+            nm->setText(cat.name); nm->setFontSize(14); nm->setTextColor(c::body());
+            nm->setGrow(1.0f); nm->setShrink(1.0f); nm->setSingleLine(true);
             top->addView(nm);
             auto* rt = new brls::Label();
             rt->setText(std::to_string(cat.read) + " / " + std::to_string(cat.total));
             rt->setFontSize(13); rt->setTextColor(c::muted());
+            rt->setSingleLine(true);          // never wrap the read/total count
+            rt->setMarginLeft(12);
             top->addView(rt);
             row->addView(top);
             auto* track = new brls::Box();
