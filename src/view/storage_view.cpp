@@ -118,29 +118,36 @@ void StorageView::loadStorageInfo() {
             item.mangaId = download.mangaId;
             item.mangaTitle = download.title;
             item.coverUrl = download.localCoverPath;
-            item.chapterCount = static_cast<int>(download.chapters.size());
 
-            // Prefer the server-reported size (covers server-side downloads,
-            // which have no local files). Fall back to summing local files for
-            // on-device downloads that aren't tracked server-side.
-            item.sizeBytes = download.totalBytes;
-            if (item.sizeBytes == 0) {
-                std::string mangaPath = dm.getDownloadsPath() + "/" + std::to_string(download.mangaId);
-                for (const auto& name : platform::listDir(mangaPath)) {
-                    if (name.empty() || name[0] == '.') continue;
-                    std::string entryPath = mangaPath + "/" + name;
-                    int64_t sz = platform::fileSize(entryPath);
-                    if (sz > 0) {
-                        item.sizeBytes += sz;
-                    } else {
-                        for (const auto& fname : platform::listDir(entryPath)) {
-                            if (fname.empty() || fname[0] == '.') continue;
-                            int64_t fsz = platform::fileSize(entryPath + "/" + fname);
-                            if (fsz > 0) item.sizeBytes += fsz;
-                        }
+            // Local (on-device) storage only: sum the files actually stored on
+            // the device. Storage Management reflects device usage, so
+            // server-side downloads (no local files) are excluded below.
+            item.sizeBytes = 0;
+            std::string mangaPath = dm.getDownloadsPath() + "/" + std::to_string(download.mangaId);
+            for (const auto& name : platform::listDir(mangaPath)) {
+                if (name.empty() || name[0] == '.') continue;
+                std::string entryPath = mangaPath + "/" + name;
+                int64_t sz = platform::fileSize(entryPath);
+                if (sz > 0) {
+                    item.sizeBytes += sz;
+                } else {
+                    for (const auto& fname : platform::listDir(entryPath)) {
+                        if (fname.empty() || fname[0] == '.') continue;
+                        int64_t fsz = platform::fileSize(entryPath + "/" + fname);
+                        if (fsz > 0) item.sizeBytes += fsz;
                     }
                 }
             }
+            if (item.sizeBytes <= 0) continue;   // nothing stored locally -> skip
+
+            // Count only the chapters that are present on the device.
+            int localChapters = 0;
+            for (const auto& ch : download.chapters) {
+                if (dm.isChapterDownloaded(download.mangaId, ch.chapterIndex)) localChapters++;
+            }
+            item.chapterCount = localChapters > 0 ? localChapters
+                                                  : static_cast<int>(download.chapters.size());
+
             totalSize += item.sizeBytes;
             items.push_back(item);
         }
