@@ -47,17 +47,21 @@ ExtensionCell::ExtensionCell() {
     icon->setMarginRight(12);
     leftBox->addView(icon);
 
-    // Info box
+    // Info box — grow into the available row width so titles don't wrap
+    // mid-word when there's plenty of space.
     auto* infoBox = new brls::Box();
     infoBox->setAxis(brls::Axis::COLUMN);
+    infoBox->setGrow(1.0f);
     infoBox->setShrink(1.0f);
 
     nameLabel = new brls::Label();
     nameLabel->setFontSize(14);
+    nameLabel->setSingleLine(true);
     infoBox->addView(nameLabel);
 
     detailLabel = new brls::Label();
     detailLabel->setFontSize(10);
+    detailLabel->setSingleLine(true);
     detailLabel->setTextColor(Application::getInstance().getSubtitleColor());
     infoBox->addView(detailLabel);
 
