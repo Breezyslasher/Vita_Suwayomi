@@ -3034,7 +3034,8 @@ void buildStatsDashboard(brls::Box* content, const StatsData& d,
     auto* resetPill = pill("", "Reset", c::danger(), onReset);
     resetPill->setMarginRight(10);
     header->addView(resetPill);
-    header->addView(pill("icons/refresh.png", "Sync", c::body(), onSync));
+    auto* syncPill = pill("icons/refresh.png", "Sync", c::body(), onSync);
+    header->addView(syncPill);
     content->addView(header);
 
     // ---- Body: two columns ----
@@ -3165,6 +3166,7 @@ void buildStatsDashboard(brls::Box* content, const StatsData& d,
         catScroll->setContentView(rowsBox);
         catCard->addView(catScroll);
 
+        brls::View* firstCatRow = nullptr;
         for (const auto& cat : d.cats) {
             const float pct = cat.total > 0 ? static_cast<float>(cat.read) / static_cast<float>(cat.total) : 0.0f;
             auto* row = new brls::Box();
@@ -3203,6 +3205,15 @@ void buildStatsDashboard(brls::Box* content, const StatsData& d,
             track->addView(fill);
             row->addView(track);
             rowsBox->addView(row);
+            if (!firstCatRow) firstCatRow = row;
+        }
+
+        // The inner scroll swallows UP at the top row, so route focus between
+        // the first category row and the header pills explicitly.
+        if (firstCatRow) {
+            firstCatRow->setCustomNavigationRoute(brls::FocusDirection::UP, syncPill);
+            syncPill->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstCatRow);
+            resetPill->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstCatRow);
         }
         right->addView(catCard);
     }
