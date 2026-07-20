@@ -252,19 +252,27 @@ void StorageView::loadStorageInfo() {
                 mid->addView(barTrack);
                 rowBox->addView(mid);
 
-                // Chapters
+                // Chapters — fixed width so the growing title/bar can't squeeze
+                // or overlap it (which made the text marquee/clip).
                 auto* chaps = new brls::Label();
                 chaps->setText(std::to_string(item.chapterCount) + " ch");
                 chaps->setFontSize(13);
                 chaps->setTextColor(svcol::muted());
+                chaps->setSingleLine(true);
+                chaps->setShrink(0.0f);
+                chaps->setWidth(72);
                 chaps->setMarginRight(14);
+                chaps->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
                 rowBox->addView(chaps);
 
-                // Size
+                // Size — fixed width, right-aligned.
                 auto* size = new brls::Label();
                 size->setText(formatSize(item.sizeBytes));
                 size->setFontSize(14);
                 size->setTextColor(svcol::accent());
+                size->setSingleLine(true);
+                size->setShrink(0.0f);
+                size->setWidth(96);
                 size->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
                 rowBox->addView(size);
 
