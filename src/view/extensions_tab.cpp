@@ -1362,7 +1362,7 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
                         [this, src]() { showSourcePreferencesDialog(src); }});
                 }
                 rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
-                OptionsPopover::show("EXTENSION", ext.name, std::move(rows), nullptr, 6);
+                OptionsPopover::show("EXTENSION", ext.name, std::move(rows), nullptr, 5);
             }
         });
     });
