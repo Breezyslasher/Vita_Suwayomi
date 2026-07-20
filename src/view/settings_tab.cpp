@@ -941,52 +941,76 @@ void SettingsTab::createLibrarySection() {
     });
     m_contentBox->addView(m_hideCategoriesCell);
 
-    // Grid display mode selector
-    auto* displayModeSelector = new brls::SelectorCell();
-    displayModeSelector->init("Display Mode",
-        {"Grid (Cover + Title)", "Compact Grid (Covers Only)", "List View"},
-        static_cast<int>(settings.libraryDisplayMode),
-        [&settings](int index) {
-            settings.libraryDisplayMode = static_cast<LibraryDisplayMode>(index);
+    // Grid display mode (opens the choice popover)
+    static const std::vector<std::string> kDisplayModes =
+        {"Grid (Cover + Title)", "Compact Grid (Covers Only)", "List View"};
+    auto* displayModeCell = new brls::DetailCell();
+    displayModeCell->setText("Display Mode");
+    displayModeCell->setDetailText(kDisplayModes[static_cast<int>(settings.libraryDisplayMode) % kDisplayModes.size()]);
+    displayModeCell->registerClickAction([this, displayModeCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().libraryDisplayMode);
+        showChoicePopover("Display Mode", kDisplayModes, cur, [displayModeCell](int index) {
+            Application::getInstance().getSettings().libraryDisplayMode = static_cast<LibraryDisplayMode>(index);
             Application::getInstance().saveSettings();
+            displayModeCell->setDetailText(kDisplayModes[index]);
         });
-    m_contentBox->addView(displayModeSelector);
+        return true;
+    });
+    m_contentBox->addView(displayModeCell);
 
-    // Grid size selector
-    auto* gridSizeSelector = new brls::SelectorCell();
-    gridSizeSelector->init("Grid Size",
-        {"Large (4 columns)", "Medium (6 columns)", "Small (8 columns)"},
-        static_cast<int>(settings.libraryGridSize),
-        [&settings](int index) {
-            settings.libraryGridSize = static_cast<LibraryGridSize>(index);
+    // Grid size (opens the choice popover)
+    static const std::vector<std::string> kGridSizes =
+        {"Large (4 columns)", "Medium (6 columns)", "Small (8 columns)"};
+    auto* gridSizeCell = new brls::DetailCell();
+    gridSizeCell->setText("Grid Size");
+    gridSizeCell->setDetailText(kGridSizes[static_cast<int>(settings.libraryGridSize) % kGridSizes.size()]);
+    gridSizeCell->registerClickAction([this, gridSizeCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().libraryGridSize);
+        showChoicePopover("Grid Size", kGridSizes, cur, [gridSizeCell](int index) {
+            Application::getInstance().getSettings().libraryGridSize = static_cast<LibraryGridSize>(index);
             Application::getInstance().saveSettings();
+            gridSizeCell->setDetailText(kGridSizes[index]);
         });
-    m_contentBox->addView(gridSizeSelector);
+        return true;
+    });
+    m_contentBox->addView(gridSizeCell);
 
-    // Library grouping mode selector
-    auto* groupModeSelector = new brls::SelectorCell();
-    groupModeSelector->init("Library Grouping",
-        {"By Category (Tabs)", "By Source", "No Grouping (All Manga)"},
-        static_cast<int>(settings.libraryGroupMode),
-        [&settings](int index) {
-            settings.libraryGroupMode = static_cast<LibraryGroupMode>(index);
+    // Library grouping (opens the choice popover)
+    static const std::vector<std::string> kGroupModes =
+        {"By Category (Tabs)", "By Source", "No Grouping (All Manga)"};
+    auto* groupModeCell = new brls::DetailCell();
+    groupModeCell->setText("Library Grouping");
+    groupModeCell->setDetailText(kGroupModes[static_cast<int>(settings.libraryGroupMode) % kGroupModes.size()]);
+    groupModeCell->registerClickAction([this, groupModeCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().libraryGroupMode);
+        showChoicePopover("Library Grouping", kGroupModes, cur, [groupModeCell](int index) {
+            Application::getInstance().getSettings().libraryGroupMode = static_cast<LibraryGroupMode>(index);
             Application::getInstance().saveSettings();
+            groupModeCell->setDetailText(kGroupModes[index]);
             brls::Application::notify("Library grouping updated");
         });
-    m_contentBox->addView(groupModeSelector);
+        return true;
+    });
+    m_contentBox->addView(groupModeCell);
 
-    // Default library sort mode selector
-    auto* defaultSortSelector = new brls::SelectorCell();
-    defaultSortSelector->init("Default Sort Mode",
+    // Default sort mode (opens the choice popover)
+    static const std::vector<std::string> kSortModes =
         {"A-Z", "Z-A", "Most Unread", "Least Unread", "Recently Added (Newest)",
          "Recently Added (Oldest)", "Last Read", "Date Updated (Newest)",
-         "Date Updated (Oldest)", "Total Chapters", "Downloaded Only"},
-        settings.defaultLibrarySortMode,
-        [&settings](int index) {
-            settings.defaultLibrarySortMode = index;
+         "Date Updated (Oldest)", "Total Chapters", "Downloaded Only"};
+    auto* defaultSortCell = new brls::DetailCell();
+    defaultSortCell->setText("Default Sort Mode");
+    defaultSortCell->setDetailText(kSortModes[settings.defaultLibrarySortMode % static_cast<int>(kSortModes.size())]);
+    defaultSortCell->registerClickAction([this, defaultSortCell](brls::View*) {
+        const int cur = Application::getInstance().getSettings().defaultLibrarySortMode;
+        showChoicePopover("Default Sort Mode", kSortModes, cur, [defaultSortCell](int index) {
+            Application::getInstance().getSettings().defaultLibrarySortMode = index;
             Application::getInstance().saveSettings();
+            defaultSortCell->setDetailText(kSortModes[index]);
         });
-    m_contentBox->addView(defaultSortSelector);
+        return true;
+    });
+    m_contentBox->addView(defaultSortCell);
 
     // Cache Library Data toggle
     auto* cacheDataToggle = new brls::BooleanCell();
@@ -1026,15 +1050,40 @@ void SettingsTab::createLibrarySection() {
     });
     m_contentBox->addView(updateOnStartToggle);
 
-    // Default category selector
-    m_defaultCategorySelector = new brls::SelectorCell();
-    m_defaultCategorySelector->init("Default Category",
-        {"Default (All)", "Loading..."},
-        0,
-        [](int index) {
-            // Will be updated when categories are loaded
+    // Default category (opens the choice popover; options are fetched on click)
+    m_defaultCategorySelector = new brls::DetailCell();
+    m_defaultCategorySelector->setText("Default Category");
+    m_defaultCategorySelector->setDetailText("Default (All)");
+    m_defaultCategorySelector->registerClickAction([this](brls::View*) {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Category> categories;
+        if (!client.fetchCategories(categories)) {
+            brls::Application::notify("Failed to load categories");
+            return true;
+        }
+        std::sort(categories.begin(), categories.end(),
+            [](const Category& a, const Category& b) { return a.order < b.order; });
+
+        auto names = std::make_shared<std::vector<std::string>>();
+        auto ids   = std::make_shared<std::vector<int>>();
+        names->push_back("Default (All)");
+        ids->push_back(0);
+        for (const auto& cat : categories) {
+            if (cat.mangaCount > 0) { names->push_back(cat.name); ids->push_back(cat.id); }
+        }
+
+        int cur = 0;
+        const int curId = Application::getInstance().getSettings().defaultCategoryId;
+        for (size_t i = 0; i < ids->size(); i++) if ((*ids)[i] == curId) { cur = static_cast<int>(i); break; }
+
+        showChoicePopover("Default Category", *names, cur, [this, names, ids](int index) {
+            if (index < 0 || index >= static_cast<int>(ids->size())) return;
+            Application::getInstance().getSettings().defaultCategoryId = (*ids)[index];
+            Application::getInstance().saveSettings();
+            if (m_defaultCategorySelector) m_defaultCategorySelector->setDetailText((*names)[index]);
         });
-    m_defaultCategorySelector->setDetailText("Category to show when opening library");
+        return true;
+    });
     m_contentBox->addView(m_defaultCategorySelector);
 
     // Load categories for the selector asynchronously
@@ -1071,229 +1120,53 @@ void SettingsTab::createLibrarySection() {
 }
 
 void SettingsTab::showCategoryVisibilityDialog() {
-    // Fetch categories from server
-    brls::Application::notify("Loading categories...");
-
-    // Get categories synchronously (simple approach)
     SuwayomiClient& client = SuwayomiClient::getInstance();
     std::vector<Category> categories;
-
     if (!client.fetchCategories(categories)) {
         brls::Application::notify("Failed to load categories");
         return;
     }
-
-    // Sort by order
     std::sort(categories.begin(), categories.end(),
-        [](const Category& a, const Category& b) {
-            return a.order < b.order;
-        });
+        [](const Category& a, const Category& b) { return a.order < b.order; });
 
+    // Drop stale hidden IDs (categories that no longer exist on the server).
     auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
-
-    // Clean up stale hidden IDs (categories that no longer exist on server)
     std::set<int> validIds;
     for (const auto& cat : categories) validIds.insert(cat.id);
     bool cleaned = false;
     for (auto it = hiddenIds.begin(); it != hiddenIds.end(); ) {
-        if (validIds.find(*it) == validIds.end()) {
-            it = hiddenIds.erase(it);
-            cleaned = true;
-        } else {
-            ++it;
-        }
+        if (validIds.find(*it) == validIds.end()) { it = hiddenIds.erase(it); cleaned = true; }
+        else ++it;
     }
-    if (cleaned) {
-        Application::getInstance().saveSettings();
+    if (cleaned) Application::getInstance().saveSettings();
+
+    if (categories.empty()) {
+        brls::Application::notify("No categories available");
+        return;
     }
 
-    // Create dialog box (matching Manage Categories design)
-    auto* dialogBox = new brls::Box();
-    dialogBox->setAxis(brls::Axis::COLUMN);
-    dialogBox->setWidth(550);
-    dialogBox->setHeight(450);
-    dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
-    dialogBox->setCornerRadius(12);
-
-    // Title
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText("Hidden Categories");
-    titleLabel->setFontSize(22);
-    titleLabel->setMarginBottom(10);
-    dialogBox->addView(titleLabel);
-
-    // Info label
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Tap to toggle visibility in library");
-    infoLabel->setFontSize(14);
-    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
-    infoLabel->setMarginBottom(15);
-    dialogBox->addView(infoLabel);
-
-    // Create close button early so it can be captured in lambdas
-    auto* closeBtn = new brls::Button();
-    closeBtn->setText("Done");
-    closeBtn->setMarginTop(15);
-    closeBtn->registerClickAction([this](brls::View* view) {
-        // Update the cell detail text before closing
-        if (m_hideCategoriesCell) {
-            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
-            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
-        }
-        brls::Application::popActivity();
-        return true;
-    });
-    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
-
-    // Register B button on close button
-    closeBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        if (m_hideCategoriesCell) {
-            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
-            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
-        }
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    // Scrollable category list
-    auto* scrollView = new brls::ScrollingFrame();
-    scrollView->setGrow(1.0f);
-
-    auto* catList = new brls::Box();
-    catList->setAxis(brls::Axis::COLUMN);
-
-    // Filter to only show categories with manga
-    std::vector<Category> visibleCategories;
+    // One checkable row per category: checked = visible (not hidden). Toggling in
+    // place adds/removes the category from the hidden set and updates the cell.
+    std::vector<OptionRow> rows;
     for (const auto& cat : categories) {
-        if (cat.mangaCount > 0) {
-            visibleCategories.push_back(cat);
-        }
-    }
-
-    for (size_t i = 0; i < visibleCategories.size(); i++) {
-        const auto& cat = visibleCategories[i];
-
-        auto* catRow = new brls::Box();
-        catRow->setAxis(brls::Axis::ROW);
-        catRow->setAlignItems(brls::AlignItems::CENTER);
-        catRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-        catRow->setPadding(10, 12, 10, 12);
-        catRow->setMarginBottom(6);
-        catRow->setCornerRadius(8);
-        catRow->setFocusable(true);
-
-        // Category is visible if NOT in hidden list
-        bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
-        catRow->setBackgroundColor(isVisible ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-
-        // Category info box
-        auto* infoBox = new brls::Box();
-        infoBox->setAxis(brls::Axis::COLUMN);
-        infoBox->setGrow(1.0f);
-
-        auto* nameLabel = new brls::Label();
-        std::string displayName = cat.name;
-        if (displayName.length() > 20) {
-            displayName = displayName.substr(0, 18) + "..";
-        }
-        nameLabel->setText(displayName);
-        nameLabel->setFontSize(16);
-        infoBox->addView(nameLabel);
-
-        auto* countLabel = new brls::Label();
-        countLabel->setText(std::to_string(cat.mangaCount) + " manga");
-        countLabel->setFontSize(12);
-        countLabel->setTextColor(Application::getInstance().getDimTextColor());
-        infoBox->addView(countLabel);
-
-        catRow->addView(infoBox);
-
-        // Status indicator
-        auto* statusLabel = new brls::Label();
-        statusLabel->setText(isVisible ? "Visible" : "Hidden");
-        statusLabel->setFontSize(14);
-        statusLabel->setTextColor(isVisible ? Application::getInstance().getSuccessTextColor() : nvgRGB(150, 100, 100));
-        statusLabel->setMarginRight(10);
-        catRow->addView(statusLabel);
-
-        // Store category id for toggle action
-        int catId = cat.id;
-
-        // Click to toggle visibility
-        catRow->registerClickAction([catRow, catId, statusLabel](brls::View* view) {
-            auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
-            bool currentlyHidden = (hidden.find(catId) != hidden.end());
-
-            if (currentlyHidden) {
-                // Show category (remove from hidden)
-                hidden.erase(catId);
-                catRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
-                statusLabel->setText("Visible");
-                statusLabel->setTextColor(Application::getInstance().getSuccessTextColor());
-            } else {
-                // Hide category (add to hidden)
-                hidden.insert(catId);
-                catRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-                statusLabel->setText("Hidden");
-                statusLabel->setTextColor(nvgRGB(150, 100, 100));
-            }
-
+        const int id = cat.id;
+        OptionRow row;
+        row.label     = cat.name;
+        row.checkable = true;
+        row.checked   = hiddenIds.find(id) == hiddenIds.end();
+        row.action    = [this, id]() {
+            auto& hid = Application::getInstance().getSettings().hiddenCategoryIds;
+            if (hid.find(id) == hid.end()) hid.insert(id);   // was visible -> hide
+            else                           hid.erase(id);    // was hidden  -> show
             Application::getInstance().saveSettings();
-            return true;
-        });
-        catRow->addGestureRecognizer(new brls::TapGestureRecognizer(catRow));
-
-        // Register B button on each row to close dialog
-        catRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-            if (m_hideCategoriesCell) {
-                size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
-                m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
-            }
-            brls::Application::popActivity();
-            return true;
-        }, true);  // hidden action
-
-        catList->addView(catRow);
+            if (m_hideCategoriesCell)
+                m_hideCategoriesCell->setDetailText(std::to_string(hid.size()) + " hidden");
+        };
+        rows.push_back(std::move(row));
     }
+    rows.push_back({ "back.png", "Done", "", false, false, [](){} });
 
-    // If no categories with manga
-    if (visibleCategories.empty()) {
-        auto* label = new brls::Label();
-        label->setText("No categories with manga found");
-        label->setFontSize(16);
-        label->setMarginTop(20);
-        catList->addView(label);
-    }
-
-    scrollView->setContentView(catList);
-    dialogBox->addView(scrollView);
-
-    // Add close button to dialog
-    dialogBox->addView(closeBtn);
-
-    // Register circle button to close the dialog
-    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
-        // Update the cell detail text before closing
-        if (m_hideCategoriesCell) {
-            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
-            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
-        }
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    // Set up navigation
-    auto& catChildren = catList->getChildren();
-    if (!catChildren.empty()) {
-        // Last category row -> down goes to closeBtn
-        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
-        // closeBtn -> up goes to last category
-        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
-    }
-
-    // Push as new activity
-    brls::Application::pushActivity(new brls::Activity(dialogBox));
+    OptionsPopover::show("LIBRARY", "Hidden Categories", std::move(rows), nullptr, 5);
 }
 
 void SettingsTab::createReaderSection() {
@@ -3115,53 +2988,18 @@ void SettingsTab::importBackup() {
 void SettingsTab::refreshDefaultCategorySelector() {
     if (!m_defaultCategorySelector) return;
 
-    // Fetch categories asynchronously
+    // Update the cell's shown value to the current default category's name.
+    // (The full option list is fetched when the cell is tapped.)
     SuwayomiClient& client = SuwayomiClient::getInstance();
     std::vector<Category> categories;
+    if (!client.fetchCategories(categories)) return;
 
-    if (client.fetchCategories(categories)) {
-        // Sort by order
-        std::sort(categories.begin(), categories.end(),
-            [](const Category& a, const Category& b) {
-                return a.order < b.order;
-            });
-
-        // Build category names list
-        std::vector<std::string> categoryNames;
-        std::vector<int> categoryIds;
-
-        categoryNames.push_back("Default (All)");
-        categoryIds.push_back(0);
-
-        for (const auto& cat : categories) {
-            if (cat.mangaCount > 0) {
-                categoryNames.push_back(cat.name);
-                categoryIds.push_back(cat.id);
-            }
-        }
-
-        // Find current selection index
-        int currentIndex = 0;
-        int currentId = Application::getInstance().getSettings().defaultCategoryId;
-        for (size_t i = 0; i < categoryIds.size(); i++) {
-            if (categoryIds[i] == currentId) {
-                currentIndex = static_cast<int>(i);
-                break;
-            }
-        }
-
-        // Update the selector
-        m_defaultCategorySelector->init("Default Category",
-            categoryNames,
-            currentIndex,
-            [categoryIds](int index) {
-                if (index >= 0 && index < static_cast<int>(categoryIds.size())) {
-                    Application::getInstance().getSettings().defaultCategoryId = categoryIds[index];
-                    Application::getInstance().saveSettings();
-                }
-            });
-        m_defaultCategorySelector->setDetailText("Category to show when opening library");
+    const int currentId = Application::getInstance().getSettings().defaultCategoryId;
+    std::string currentName = "Default (All)";
+    for (const auto& cat : categories) {
+        if (cat.id == currentId) { currentName = cat.name; break; }
     }
+    m_defaultCategorySelector->setDetailText(currentName);
 }
 
 void SettingsTab::checkForUpdates() {

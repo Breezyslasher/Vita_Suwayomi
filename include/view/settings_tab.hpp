@@ -102,7 +102,7 @@ private:
 
     // Library section
     brls::DetailCell* m_hideCategoriesCell = nullptr;
-    brls::SelectorCell* m_defaultCategorySelector = nullptr;
+    brls::DetailCell* m_defaultCategorySelector = nullptr;
 
     // Reader section
     brls::SelectorCell* m_readingModeSelector = nullptr;
