@@ -22,7 +22,6 @@ public:
               brls::Style style, brls::FrameContext* ctx) override;
     void refresh();
 
-private:
     void loadHistory();
     void loadMoreHistory();
     void onHistoryItemSelected(const ReadingHistoryItem& item);
@@ -32,10 +31,15 @@ private:
     std::string formatRelativeTime(int64_t timestamp);
     void rebuildHistoryList();
     void appendHistoryItems(const std::vector<ReadingHistoryItem>& items, size_t startIndex);
-    brls::Box* createHistoryItemRow(const ReadingHistoryItem& item, int index);
+    brls::Box* createHistoryItemRow(const ReadingHistoryItem& item, int displayedIndex);
+
+    // Done vs unfinished marker helper
+    static bool itemIsDone(const ReadingHistoryItem& item);
 
     // UI Components
     brls::Label* m_titleLabel = nullptr;
+    brls::Box* m_countPill = nullptr;
+    brls::Label* m_countPillLabel = nullptr;
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;
     brls::Box* m_emptyStateBox = nullptr;
