@@ -1205,6 +1205,54 @@ std::string toLower(std::string s) {
     std::transform(s.begin(), s.end(), s.begin(), ::tolower);
     return s;
 }
+
+// True when a filter differs from its default (i.e. it's an applied selection).
+bool filterActive(const SourceFilter& f) {
+    switch (f.type) {
+        case FilterType::TEXT:     return !f.textState.empty() && f.textState != f.textDefault;
+        case FilterType::CHECKBOX: return f.checkBoxState != f.checkBoxDefault;
+        case FilterType::TRISTATE: return f.triState != TriState::IGNORE;
+        case FilterType::SELECT:   return f.selectState != f.selectDefault;
+        case FilterType::SORT:     return f.sortState.index != f.sortDefault.index ||
+                                          f.sortState.ascending != f.sortDefault.ascending;
+        default:                   return false;
+    }
+}
+
+// "Name: Value" summary for a chip label (top-level, non-genre filters).
+std::string filterValueLabel(const SourceFilter& f) {
+    switch (f.type) {
+        case FilterType::TEXT:
+            return f.name + ": " + f.textState;
+        case FilterType::CHECKBOX:
+            return f.name;
+        case FilterType::TRISTATE:
+            return f.name + (f.triState == TriState::EXCLUDE ? " (excl)" : "");
+        case FilterType::SELECT:
+            if (f.selectState >= 0 && f.selectState < static_cast<int>(f.selectOptions.size()))
+                return f.name + ": " + f.selectOptions[f.selectState];
+            return f.name;
+        case FilterType::SORT:
+            if (f.sortState.index >= 0 && f.sortState.index < static_cast<int>(f.sortOptions.size()))
+                return f.name + ": " + f.sortOptions[f.sortState.index] +
+                       (f.sortState.ascending ? " ↑" : " ↓");
+            return f.name;
+        default:
+            return f.name;
+    }
+}
+
+// Reset one filter back to its default (used when a chip is removed).
+void resetFilter(SourceFilter& f) {
+    switch (f.type) {
+        case FilterType::TEXT:     f.textState = f.textDefault; break;
+        case FilterType::CHECKBOX: f.checkBoxState = f.checkBoxDefault; break;
+        case FilterType::TRISTATE: f.triState = TriState::IGNORE; break;
+        case FilterType::SELECT:   f.selectState = f.selectDefault; break;
+        case FilterType::SORT:     f.sortState = f.sortDefault; break;
+        default: break;
+    }
+}
 } // namespace
 
 int SearchTab::findGenreGroupIndex() const {
@@ -1232,28 +1280,27 @@ void SearchTab::buildGenreChipRail() {
     }
     m_genreChipsBox->clearViews();
 
-    // Collect chip descriptors: (topIndex, childIndex, name, active).
-    struct Chip { int fi; int ci; std::string name; bool active; };
+    // Collect a chip for every *applied* filter (tap one to remove it); the
+    // full filter list lives in the Filters dialog. Genre-group children show
+    // just the genre name; other filters show a "Name: Value" summary.
+    struct Chip { int fi; int ci; std::string label; };
     std::vector<Chip> chips;
 
-    // Only surface the *selected* genres as chips (tap one to remove it); the
-    // full genre list lives in the Filters dialog.
     int gi = findGenreGroupIndex();
-    if (gi >= 0) {
-        const auto& group = m_sourceFilters[gi];
-        for (size_t c = 0; c < group.filters.size(); c++) {
-            const auto& child = group.filters[c];
-            if (child.type == FilterType::TRISTATE && child.triState == TriState::INCLUDE)
-                chips.push_back({gi, static_cast<int>(c), child.name, true});
-            else if (child.type == FilterType::CHECKBOX && child.checkBoxState)
-                chips.push_back({gi, static_cast<int>(c), child.name, true});
-        }
-    } else {
-        // Fallback: selected top-level tristate filters act as genre chips.
-        for (size_t i = 0; i < m_sourceFilters.size(); i++) {
-            const auto& f = m_sourceFilters[i];
-            if (f.type == FilterType::TRISTATE && f.triState == TriState::INCLUDE)
-                chips.push_back({static_cast<int>(i), -1, f.name, true});
+    for (size_t i = 0; i < m_sourceFilters.size(); i++) {
+        const auto& f = m_sourceFilters[i];
+        if (f.type == FilterType::GROUP) {
+            bool isGenre = (static_cast<int>(i) == gi);
+            for (size_t c = 0; c < f.filters.size(); c++) {
+                const auto& child = f.filters[c];
+                if (!filterActive(child)) continue;
+                std::string label = isGenre ? child.name : (f.name + ": " + child.name);
+                if (child.type == FilterType::TRISTATE && child.triState == TriState::EXCLUDE)
+                    label += " (excl)";
+                chips.push_back({static_cast<int>(i), static_cast<int>(c), label});
+            }
+        } else if (filterActive(f)) {
+            chips.push_back({static_cast<int>(i), -1, filterValueLabel(f)});
         }
     }
 
@@ -1269,33 +1316,39 @@ void SearchTab::buildGenreChipRail() {
         chip->setJustifyContent(brls::JustifyContent::CENTER);
         chip->setHeight(34);
         chip->setPaddingLeft(14);
-        chip->setPaddingRight(14);
+        chip->setPaddingRight(12);
         chip->setCornerRadius(17);
         chip->setMarginRight(8);
         chip->setFocusable(true);
-        chip->setBackgroundColor(ch.active ? cAccent() : cChip());
+        chip->setBackgroundColor(cAccent());
 
         auto* lbl = new brls::Label();
-        lbl->setText(ch.name);
+        lbl->setText(ch.label);
         lbl->setFontSize(14);
         lbl->setSingleLine(true);
-        lbl->setTextColor(ch.active ? cAccentInk() : cBody());
+        lbl->setTextColor(cAccentInk());
+        lbl->setMarginRight(6);
         chip->addView(lbl);
+
+        // Trailing × to signal "tap to remove".
+        auto* x = new brls::Label();
+        x->setText("×");
+        x->setFontSize(16);
+        x->setTextColor(cAccentInk());
+        chip->addView(x);
 
         int fi = ch.fi, ci = ch.ci;
         chip->registerClickAction([this, fi, ci](brls::View*) {
-            // Toggle the underlying filter between IGNORE and INCLUDE.
-            SourceFilter* target = nullptr;
-            if (ci >= 0 && m_sourceFilters[fi].type == FilterType::GROUP)
-                target = &m_sourceFilters[fi].filters[ci];
-            else
-                target = &m_sourceFilters[fi];
-            if (target->type == FilterType::TRISTATE)
-                target->triState = (target->triState == TriState::INCLUDE) ? TriState::IGNORE
-                                                                           : TriState::INCLUDE;
-            else if (target->type == FilterType::CHECKBOX)
-                target->checkBoxState = !target->checkBoxState;
-            applyFilters();  // reloads page 1 + refreshes chrome on completion
+            // Removing a chip resets that filter to its default.
+            if (fi >= 0 && fi < static_cast<int>(m_sourceFilters.size())) {
+                SourceFilter& top = m_sourceFilters[fi];
+                if (ci >= 0 && top.type == FilterType::GROUP &&
+                    ci < static_cast<int>(top.filters.size()))
+                    resetFilter(top.filters[ci]);
+                else
+                    resetFilter(top);
+            }
+            applyFilters();  // reloads page 1 + refreshes chips on completion
             return true;
         });
         chip->addGestureRecognizer(new brls::TapGestureRecognizer(chip));
