@@ -811,8 +811,9 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             }
         }
 
-        // Selection indicators: an accent border + a corner checkmark on any
-        // selected cell (multi-select mode), drawn over the covers.
+        // Selection indicator: a simple outline hugging the cover, like the
+        // focus highlight but in a slightly different colour (teal-blue) so a
+        // selected cell reads distinctly from the currently-focused one.
         for (int i = startIdx; i < endIdx; i++) {
             MangaItemCell* cell = m_cells[i];
             if (!cell || !cell->isSelected()) continue;
@@ -823,29 +824,10 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             if (cw <= 0 || ch <= 0) continue;
             float coverH = ch - titleAreaH;
 
-            // Border hugging the cover.
             nvgBeginPath(vg);
             nvgRoundedRect(vg, cx + 1.5f, cy + 1.5f, cw - 3.0f, coverH - 3.0f, 4.0f);
-            nvgStrokeColor(vg, nvgRGB(100, 180, 255));
+            nvgStrokeColor(vg, nvgRGB(64, 224, 208));
             nvgStrokeWidth(vg, 3.0f);
-            nvgStroke(vg);
-
-            // Filled check badge, top-right.
-            const float r = 11.0f;
-            const float bx = cx + cw - r - 5.0f;
-            const float by = cy + r + 5.0f;
-            nvgBeginPath(vg);
-            nvgCircle(vg, bx, by, r);
-            nvgFillColor(vg, nvgRGB(100, 180, 255));
-            nvgFill(vg);
-            nvgBeginPath(vg);
-            nvgMoveTo(vg, bx - r * 0.45f, by + r * 0.02f);
-            nvgLineTo(vg, bx - r * 0.10f, by + r * 0.38f);
-            nvgLineTo(vg, bx + r * 0.50f, by - r * 0.35f);
-            nvgStrokeColor(vg, nvgRGB(13, 34, 54));
-            nvgStrokeWidth(vg, 2.4f);
-            nvgLineCap(vg, NVG_ROUND);
-            nvgLineJoin(vg, NVG_ROUND);
             nvgStroke(vg);
         }
 
