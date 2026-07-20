@@ -1334,29 +1334,38 @@ void SettingsTab::createDownloadsSection() {
     header->setTitle("Downloads");
     m_contentBox->addView(header);
 
-    // Download mode selector
-    auto* downloadModeSelector = new brls::SelectorCell();
-    downloadModeSelector->init("Download Location",
-        {"Server Only", "Local Only", "Both"},
-        static_cast<int>(settings.downloadMode),
-        [](int index) {
-            brls::Logger::info("SettingsTab: Download mode changed to {} (0=Server, 1=Local, 2=Both)", index);
+    // Download location (opens the choice popover)
+    static const std::vector<std::string> kDownloadModes = {"Server Only", "Local Only", "Both"};
+    auto* downloadModeCell = new brls::DetailCell();
+    downloadModeCell->setText("Download Location");
+    downloadModeCell->setDetailText(kDownloadModes[static_cast<int>(settings.downloadMode) % kDownloadModes.size()]);
+    downloadModeCell->registerClickAction([this, downloadModeCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().downloadMode);
+        showChoicePopover("Download Location", kDownloadModes, cur, [downloadModeCell](int index) {
             Application::getInstance().getSettings().downloadMode = static_cast<DownloadMode>(index);
             Application::getInstance().saveSettings();
+            downloadModeCell->setDetailText(kDownloadModes[index]);
         });
-    m_contentBox->addView(downloadModeSelector);
+        return true;
+    });
+    m_contentBox->addView(downloadModeCell);
 
-    // Download quality selector
-    auto* qualitySelector = new brls::SelectorCell();
-    qualitySelector->init("Download Quality",
-        {"Original", "High (1280px)", "Medium (960px)", "Low (720px)"},
-        static_cast<int>(settings.downloadQuality),
-        [](int index) {
-            brls::Logger::info("SettingsTab: Download quality changed to {}", index);
+    // Download quality (opens the choice popover)
+    static const std::vector<std::string> kQualities =
+        {"Original", "High (1280px)", "Medium (960px)", "Low (720px)"};
+    auto* qualityCell = new brls::DetailCell();
+    qualityCell->setText("Download Quality");
+    qualityCell->setDetailText(kQualities[static_cast<int>(settings.downloadQuality) % kQualities.size()]);
+    qualityCell->registerClickAction([this, qualityCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().downloadQuality);
+        showChoicePopover("Download Quality", kQualities, cur, [qualityCell](int index) {
             Application::getInstance().getSettings().downloadQuality = static_cast<DownloadQuality>(index);
             Application::getInstance().saveSettings();
+            qualityCell->setDetailText(kQualities[index]);
         });
-    m_contentBox->addView(qualitySelector);
+        return true;
+    });
+    m_contentBox->addView(qualityCell);
 
     // Auto download new chapters toggle
     auto* autoDownloadToggle = new brls::BooleanCell();
@@ -1477,23 +1486,26 @@ void SettingsTab::createBrowseSection() {
     });
     m_contentBox->addView(nsfwToggle);
 
-    // Max search history
-    auto* searchHistorySelector = new brls::SelectorCell();
-    std::vector<std::string> historyOptions = {"5", "10", "15", "20", "30", "50", "100"};
-    std::vector<int> historyValues = {5, 10, 15, 20, 30, 50, 100};
-    int currentHistoryIndex = 3; // default to 20
-    for (size_t i = 0; i < historyValues.size(); i++) {
-        if (historyValues[i] == settings.maxSearchHistory) {
-            currentHistoryIndex = static_cast<int>(i);
-            break;
-        }
-    }
-    searchHistorySelector->init("Max Search History", historyOptions, currentHistoryIndex,
-        [historyValues](int index) {
-            Application::getInstance().getSettings().maxSearchHistory = historyValues[index];
+    // Max search history (opens the choice popover)
+    static const std::vector<std::string> kHistoryOptions = {"5", "10", "15", "20", "30", "50", "100"};
+    static const int kHistoryValues[] = {5, 10, 15, 20, 30, 50, 100};
+    auto historyIndexOf = [](int v) {
+        for (int i = 0; i < static_cast<int>(kHistoryOptions.size()); i++) if (kHistoryValues[i] == v) return i;
+        return 3; // default 20
+    };
+    auto* searchHistoryCell = new brls::DetailCell();
+    searchHistoryCell->setText("Max Search History");
+    searchHistoryCell->setDetailText(kHistoryOptions[historyIndexOf(settings.maxSearchHistory)]);
+    searchHistoryCell->registerClickAction([this, historyIndexOf, searchHistoryCell](brls::View*) {
+        const int cur = historyIndexOf(Application::getInstance().getSettings().maxSearchHistory);
+        showChoicePopover("Max Search History", kHistoryOptions, cur, [searchHistoryCell](int index) {
+            Application::getInstance().getSettings().maxSearchHistory = kHistoryValues[index];
             Application::getInstance().saveSettings();
+            searchHistoryCell->setDetailText(kHistoryOptions[index]);
         });
-    m_contentBox->addView(searchHistorySelector);
+        return true;
+    });
+    m_contentBox->addView(searchHistoryCell);
 }
 
 void SettingsTab::createSyncYomiSection() {
@@ -1830,167 +1842,37 @@ void SettingsTab::showLanguageFilterDialog() {
         {"uz", "Uzbek"}
     };
 
-    // Create a scrollable dialog-like view
-    auto* dialogBox = new brls::Box();
-    dialogBox->setAxis(brls::Axis::COLUMN);
-    dialogBox->setWidth(500);
-    dialogBox->setHeight(400);
-    dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
-    dialogBox->setCornerRadius(12);
-    dialogBox->setFocusable(true);
+    if (languages.empty()) return;
 
-    // Title
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText("Select Source Languages");
-    titleLabel->setFontSize(22);
-    titleLabel->setMarginBottom(15);
-    dialogBox->addView(titleLabel);
-
-    // Info label
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Tap languages to toggle. Select 'All' to show all.");
-    infoLabel->setFontSize(14);
-    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
-    infoLabel->setMarginBottom(10);
-    dialogBox->addView(infoLabel);
-
-    // Scrollable language list
-    auto* scrollView = new brls::ScrollingFrame();
-    scrollView->setGrow(1.0f);
-
-    auto* langList = new brls::Box();
-    langList->setAxis(brls::Axis::COLUMN);
-
-    // Store all rows so we can update "All" visual state when individual languages are toggled
-    auto allRows = std::make_shared<std::vector<brls::Box*>>();
-
-    // Track first and last rows for navigation
-    brls::Box* firstLangRow = nullptr;
-    brls::Box* lastLangRow = nullptr;
-
+    // One checkable row per language: "all" is checked when no specific
+    // languages are enabled; toggling it clears the set. Others toggle their
+    // membership. Toggles apply in place and refresh the cell summary.
+    std::vector<OptionRow> rows;
     for (const auto& [code, name] : languages) {
-        bool isEnabled = (code == "all" && settings.enabledSourceLanguages.empty()) ||
-                         (code != "all" && settings.enabledSourceLanguages.count(code) > 0);
-
-        auto* langRow = new brls::Box();
-        langRow->setAxis(brls::Axis::ROW);
-        langRow->setAlignItems(brls::AlignItems::CENTER);
-        langRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-        langRow->setPadding(8, 12, 8, 12);
-        langRow->setMarginBottom(4);
-        langRow->setCornerRadius(8);
-        langRow->setBackgroundColor(isEnabled ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-        langRow->setFocusable(true);
-
-        auto* nameLabel = new brls::Label();
-        nameLabel->setText(name);
-        nameLabel->setFontSize(16);
-        langRow->addView(nameLabel);
-
-        auto* codeLabel = new brls::Label();
-        codeLabel->setText(code);
-        codeLabel->setFontSize(14);
-        codeLabel->setTextColor(Application::getInstance().getDimTextColor());
-        langRow->addView(codeLabel);
-
-        allRows->push_back(langRow);
-
-        // Track first and last rows
-        if (!firstLangRow) {
-            firstLangRow = langRow;
-        }
-        lastLangRow = langRow;
-
-        std::string langCode = code;
-        langRow->registerClickAction([langCode, langRow, allRows](brls::View* view) {
+        const std::string langCode = code;
+        OptionRow row;
+        row.label     = name;
+        row.sub       = code;
+        row.checkable = true;
+        row.checked   = (code == "all" && settings.enabledSourceLanguages.empty()) ||
+                        (code != "all" && settings.enabledSourceLanguages.count(code) > 0);
+        row.action    = [this, langCode]() {
             AppSettings& s = Application::getInstance().getSettings();
-
             if (langCode == "all") {
                 s.enabledSourceLanguages.clear();
-                brls::Application::notify("Showing all languages");
-                // Update all row visuals - "All" is enabled, others are disabled
-                for (size_t i = 0; i < allRows->size(); i++) {
-                    (*allRows)[i]->setBackgroundColor(i == 0 ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-                }
+            } else if (s.enabledSourceLanguages.count(langCode) > 0) {
+                s.enabledSourceLanguages.erase(langCode);
             } else {
-                if (s.enabledSourceLanguages.count(langCode) > 0) {
-                    s.enabledSourceLanguages.erase(langCode);
-                } else {
-                    s.enabledSourceLanguages.insert(langCode);
-                }
-
-                // Update visual state
-                bool nowEnabled = s.enabledSourceLanguages.count(langCode) > 0;
-                langRow->setBackgroundColor(nowEnabled ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-
-                // Update "All" row visual - disabled when any language is selected
-                if (!allRows->empty()) {
-                    bool allEnabled = s.enabledSourceLanguages.empty();
-                    (*allRows)[0]->setBackgroundColor(allEnabled ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-                }
+                s.enabledSourceLanguages.insert(langCode);
             }
-
             Application::getInstance().saveSettings();
-            return true;
-        });
-        langRow->addGestureRecognizer(new brls::TapGestureRecognizer(langRow));
-
-        // Register B button on each row to close dialog
-        langRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
             updateLanguageFilterCellText();
-            brls::Application::popActivity();
-            return true;
-        }, true);  // hidden action
-
-        langList->addView(langRow);
+        };
+        rows.push_back(std::move(row));
     }
+    rows.push_back({ "back.png", "Done", "", false, false, [](){} });
 
-    scrollView->setContentView(langList);
-    dialogBox->addView(scrollView);
-
-    // Close button
-    auto* closeBtn = new brls::Button();
-    closeBtn->setText("Done");
-    closeBtn->setMarginTop(15);
-    closeBtn->registerClickAction([this](brls::View* view) {
-        updateLanguageFilterCellText();
-        brls::Application::popActivity();
-        return true;
-    });
-    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
-
-    // Register B button on close button
-    closeBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        updateLanguageFilterCellText();
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    dialogBox->addView(closeBtn);
-
-    // Set up navigation routes between last language row and Done button
-    if (lastLangRow) {
-        // Last language row DOWN -> closeBtn (Done button)
-        lastLangRow->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
-        // closeBtn UP -> last language row
-        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, lastLangRow);
-    }
-
-    // Register B button on dialogBox as fallback
-    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        updateLanguageFilterCellText();
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    // Push as new activity and give focus to the first language row
-    brls::Application::pushActivity(new brls::Activity(dialogBox));
-
-    // Give focus to first language row (at top of list)
-    if (firstLangRow) {
-        brls::Application::giveFocus(firstLangRow);
-    }
+    OptionsPopover::show("BROWSE", "Source Languages", std::move(rows), nullptr, 5);
 }
 
 void SettingsTab::createAboutSection() {
