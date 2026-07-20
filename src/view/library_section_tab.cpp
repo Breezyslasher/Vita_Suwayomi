@@ -2177,130 +2177,50 @@ void LibrarySectionTab::cycleSortMode() {
 }
 
 void LibrarySectionTab::showSortMenu() {
-    std::vector<std::string> options = {
-        "Default (Settings)",
-        "A-Z",
-        "Z-A",
-        "Most Unread",
-        "Least Unread",
-        "Recently Added (Newest)",
-        "Recently Added (Oldest)",
-        "Last Read",
-        "Date Updated (Newest)",
-        "Date Updated (Oldest)",
-        "Total Chapters",
+    static const char* labels[] = {
+        "Default (Settings)", "A-Z", "Z-A", "Most Unread", "Least Unread",
+        "Recently Added (Newest)", "Recently Added (Oldest)", "Last Read",
+        "Date Updated (Newest)", "Date Updated (Oldest)", "Total Chapters",
         "Local Downloads Only"
     };
-
-    // Find current selection index for highlighting
-    int currentIndex = 0;
-    switch (m_sortMode) {
-        case LibrarySortMode::DEFAULT:
-            currentIndex = 0;
-            break;
-        case LibrarySortMode::TITLE_ASC:
-            currentIndex = 1;
-            break;
-        case LibrarySortMode::TITLE_DESC:
-            currentIndex = 2;
-            break;
-        case LibrarySortMode::UNREAD_DESC:
-            currentIndex = 3;
-            break;
-        case LibrarySortMode::UNREAD_ASC:
-            currentIndex = 4;
-            break;
-        case LibrarySortMode::RECENTLY_ADDED_DESC:
-            currentIndex = 5;
-            break;
-        case LibrarySortMode::RECENTLY_ADDED_ASC:
-            currentIndex = 6;
-            break;
-        case LibrarySortMode::LAST_READ:
-            currentIndex = 7;
-            break;
-        case LibrarySortMode::DATE_UPDATED_DESC:
-            currentIndex = 8;
-            break;
-        case LibrarySortMode::DATE_UPDATED_ASC:
-            currentIndex = 9;
-            break;
-        case LibrarySortMode::TOTAL_CHAPTERS:
-            currentIndex = 10;
-            break;
-        case LibrarySortMode::DOWNLOADED_ONLY:
-            currentIndex = 11;
-            break;
-    }
+    static const LibrarySortMode modes[] = {
+        LibrarySortMode::DEFAULT, LibrarySortMode::TITLE_ASC, LibrarySortMode::TITLE_DESC,
+        LibrarySortMode::UNREAD_DESC, LibrarySortMode::UNREAD_ASC,
+        LibrarySortMode::RECENTLY_ADDED_DESC, LibrarySortMode::RECENTLY_ADDED_ASC,
+        LibrarySortMode::LAST_READ, LibrarySortMode::DATE_UPDATED_DESC,
+        LibrarySortMode::DATE_UPDATED_ASC, LibrarySortMode::TOTAL_CHAPTERS,
+        LibrarySortMode::DOWNLOADED_ONLY
+    };
+    const int count = static_cast<int>(sizeof(modes) / sizeof(modes[0]));
 
     int categoryId = m_currentCategoryId;
 
-    auto* dropdown = new brls::Dropdown(
-        "Sort By",
-        options,
-        [this, categoryId](int selected) {
-            if (selected < 0) return; // Cancelled
+    std::vector<OptionRow> rows;
+    for (int i = 0; i < count; i++) {
+        const bool current = (m_sortMode == modes[i]);
+        LibrarySortMode mode = modes[i];
+        rows.push_back({ current ? "radio_checked.png" : "radio.png", labels[i], "", current, false,
+            [this, mode, categoryId]() {
+                // Defer so the popover fully closes first (avoids focus churn).
+                brls::sync([this, mode, categoryId]() {
+                    m_sortMode = mode;
+                    updateSortButtonText();
+                    sortMangaList();
 
-            // Defer action to next frame so dropdown fully closes first
-            // This fixes hover/focus transfer issues
-            brls::sync([this, selected, categoryId]() {
-                switch (selected) {
-                    case 0:
-                        m_sortMode = LibrarySortMode::DEFAULT;
-                        break;
-                    case 1:
-                        m_sortMode = LibrarySortMode::TITLE_ASC;
-                        break;
-                    case 2:
-                        m_sortMode = LibrarySortMode::TITLE_DESC;
-                        break;
-                    case 3:
-                        m_sortMode = LibrarySortMode::UNREAD_DESC;
-                        break;
-                    case 4:
-                        m_sortMode = LibrarySortMode::UNREAD_ASC;
-                        break;
-                    case 5:
-                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_DESC;
-                        break;
-                    case 6:
-                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_ASC;
-                        break;
-                    case 7:
-                        m_sortMode = LibrarySortMode::LAST_READ;
-                        break;
-                    case 8:
-                        m_sortMode = LibrarySortMode::DATE_UPDATED_DESC;
-                        break;
-                    case 9:
-                        m_sortMode = LibrarySortMode::DATE_UPDATED_ASC;
-                        break;
-                    case 10:
-                        m_sortMode = LibrarySortMode::TOTAL_CHAPTERS;
-                        break;
-                    case 11:
-                        m_sortMode = LibrarySortMode::DOWNLOADED_ONLY;
-                        break;
-                }
+                    // Persist per-category sort mode
+                    auto& app = Application::getInstance();
+                    if (m_sortMode == LibrarySortMode::DEFAULT) {
+                        app.getSettings().categorySortModes.erase(categoryId);
+                    } else {
+                        app.getSettings().categorySortModes[categoryId] = static_cast<int>(m_sortMode);
+                    }
+                    app.saveSettings();
+                });
+            }});
+    }
+    rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
 
-                updateSortButtonText();
-                sortMangaList();
-
-                // Persist per-category sort mode
-                auto& app = Application::getInstance();
-                if (m_sortMode == LibrarySortMode::DEFAULT) {
-                    // Remove per-category setting to use default
-                    app.getSettings().categorySortModes.erase(categoryId);
-                } else {
-                    // Save per-category sort mode
-                    app.getSettings().categorySortModes[categoryId] = static_cast<int>(m_sortMode);
-                }
-                app.saveSettings();
-            });
-        },
-        currentIndex
-    );
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+    OptionsPopover::show("LIBRARY", "Sort By", std::move(rows));
 }
 
 void LibrarySectionTab::updateSortButtonText() {
@@ -4617,29 +4537,27 @@ void LibrarySectionTab::selectSource(const std::string& sourceName) {
 }
 
 void LibrarySectionTab::showGroupModeMenu() {
-    std::vector<std::string> options = {
-        "By Category",
-        "By Source",
-        "No Grouping (All)"
-    };
+    static const char* labels[] = { "By Category", "By Source", "No Grouping (All)" };
+    const int count = static_cast<int>(sizeof(labels) / sizeof(labels[0]));
 
-    int currentMode = static_cast<int>(m_groupMode);
+    const int currentMode = static_cast<int>(m_groupMode);
 
-    brls::Dropdown* dropdown = new brls::Dropdown(
-        "Library Grouping",
-        options,
-        [this](int selected) {
-            if (selected < 0 || selected > 2) return;
-            // Defer to next frame so dropdown fully closes first
-            // This fixes crash from UI updates while dropdown is dismissing
-            brls::sync([this, selected]() {
-                setGroupMode(static_cast<LibraryGroupMode>(selected));
-            });
-        },
-        currentMode
-    );
+    std::vector<OptionRow> rows;
+    for (int i = 0; i < count; i++) {
+        const bool current = (currentMode == i);
+        int idx = i;
+        rows.push_back({ current ? "radio_checked.png" : "radio.png", labels[i], "", current, false,
+            [this, idx]() {
+                // Defer so the popover fully closes first (avoids UI churn while
+                // the activity is dismissing).
+                brls::sync([this, idx]() {
+                    setGroupMode(static_cast<LibraryGroupMode>(idx));
+                });
+            }});
+    }
+    rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
 
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+    OptionsPopover::show("LIBRARY", "Library Grouping", std::move(rows));
 }
 
 } // namespace vitasuwayomi
