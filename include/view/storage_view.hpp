@@ -28,6 +28,7 @@ public:
 
 private:
     void loadStorageInfo();
+    void rebuildTop();                 // breadcrumb + usage meter + actions + section label
     void showMangaStorageMenu(const StorageItem& item, int index);
     void deleteMangaDownloads(const StorageItem& item);
     void deleteReadChapters();
@@ -36,9 +37,7 @@ private:
     std::string formatSize(int64_t bytes);
 
     // UI Components
-    brls::Label* m_titleLabel = nullptr;
-    brls::Label* m_totalSizeLabel = nullptr;
-    brls::Label* m_cacheSizeLabel = nullptr;
+    brls::Box* m_topBox = nullptr;     // fixed header/meter/actions area (rebuilt on load)
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;
 

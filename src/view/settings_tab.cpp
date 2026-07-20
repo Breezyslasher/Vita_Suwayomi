@@ -5,6 +5,7 @@
 
 #include "view/settings_tab.hpp"
 #include "view/options_popover.hpp"
+#include "view/storage_view.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
@@ -16,11 +17,25 @@
 #include <chrono>
 #include <ctime>
 #include <sstream>
+#include <map>
 
 #include "platform/platform.hpp"
 
 #ifdef __vita__
 #include <psp2/net/netctl.h>
+#endif
+
+// Local-IP discovery on desktop Linux via getifaddrs. Android's NDK only
+// declares getifaddrs at API >= 24 (this build targets 21), and Switch/Windows/
+// Vita don't have it either — those fall back to honest "unknown" rather than
+// fabricated data.
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#define VS_HAVE_GETIFADDRS 1
 #endif
 
 namespace vitasuwayomi {
@@ -1995,135 +2010,440 @@ void SettingsTab::updateServerLabel() {
     }
 }
 
-void SettingsTab::runNetworkTest() {
-    brls::Application::notify("Running network test...");
+namespace {
 
-    platform::launchThread([this]() {
-        std::string results;
+// Fixed dark palette for the Network Test dialog (per the design spec).
+namespace ntcol {
+    inline NVGcolor scrim()      { return nvgRGBA(10, 9, 14, 140); }
+    inline NVGcolor panel()      { return nvgRGB(28, 28, 31); }
+    inline NVGcolor border()     { return nvgRGBA(255, 255, 255, 20); }
+    inline NVGcolor success()    { return nvgRGB(78, 204, 163); }
+    inline NVGcolor danger()     { return nvgRGB(217, 107, 107); }
+    inline NVGcolor accent()     { return nvgRGB(100, 180, 255); }
+    inline NVGcolor accentInk()  { return nvgRGB(13, 34, 54); }
+    inline NVGcolor muted()      { return nvgRGB(139, 139, 147); }
+    inline NVGcolor body()       { return nvgRGB(197, 198, 208); }
+    inline NVGcolor heading()    { return nvgRGB(231, 231, 234); }
+    inline NVGcolor chipBg()     { return nvgRGB(35, 35, 38); }
+    inline NVGcolor chipBorder() { return nvgRGBA(255, 255, 255, 15); }
+    inline NVGcolor rowLine()    { return nvgRGBA(255, 255, 255, 13); }
+    inline NVGcolor okSub()      { return nvgRGB(159, 217, 197); }
+    inline NVGcolor checkInk()   { return nvgRGB(8, 19, 13); }
+    inline NVGcolor bannerOk()   { return nvgRGBA(78, 204, 163, 28); }
+    inline NVGcolor bannerBad()  { return nvgRGBA(217, 107, 107, 28); }
+}
 
-        // --- WiFi Check ---
-        bool wifiConnected = false;
-        std::string ipAddress = "-";
-        std::string dnsServer = "-";
-        int wifiLevel = 0;
+// Check / X glyph drawn with nanovg (the bundled font has no vector check mark).
+enum class NtGlyph { Check, Cross };
+class NtGlyphIcon : public brls::Box {
+public:
+    NtGlyphIcon(NtGlyph g, NVGcolor color) : m_glyph(g), m_color(color) {}
+    void draw(NVGcontext* vg, float x, float y, float w, float h,
+              brls::Style style, brls::FrameContext* ctx) override {
+        brls::Box::draw(vg, x, y, w, h, style, ctx);
+        const float s  = (w < h) ? w : h;
+        const float cx = x + w * 0.5f, cy = y + h * 0.5f;
+        nvgBeginPath(vg);
+        nvgStrokeColor(vg, m_color);
+        nvgStrokeWidth(vg, s * 0.12f);
+        nvgLineCap(vg, NVG_ROUND);
+        nvgLineJoin(vg, NVG_ROUND);
+        if (m_glyph == NtGlyph::Check) {
+            nvgMoveTo(vg, cx - s * 0.24f, cy + s * 0.02f);
+            nvgLineTo(vg, cx - s * 0.06f, cy + s * 0.20f);
+            nvgLineTo(vg, cx + s * 0.26f, cy - s * 0.18f);
+        } else {
+            nvgMoveTo(vg, cx - s * 0.20f, cy - s * 0.20f);
+            nvgLineTo(vg, cx + s * 0.20f, cy + s * 0.20f);
+            nvgMoveTo(vg, cx + s * 0.20f, cy - s * 0.20f);
+            nvgLineTo(vg, cx - s * 0.20f, cy + s * 0.20f);
+        }
+        nvgStroke(vg);
+    }
+private:
+    NtGlyph  m_glyph;
+    NVGcolor m_color;
+};
 
-#ifdef __vita__
-        SceNetCtlInfo netInfo;
-        if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_IP_ADDRESS, &netInfo) >= 0) {
-            wifiConnected = true;
-            ipAddress = std::string(netInfo.ip_address);
+// Translucent host that keeps its render/run closures alive for the dialog's
+// lifetime and flags the alive guard false on teardown.
+class NtActivity : public brls::Activity {
+public:
+    NtActivity(brls::Box* content, std::shared_ptr<bool> alive,
+               std::vector<std::shared_ptr<void>> keep)
+        : brls::Activity(content), m_alive(std::move(alive)), m_keep(std::move(keep)) {}
+    bool isTranslucent() override { return true; }
+    ~NtActivity() override { if (m_alive) *m_alive = false; }
+private:
+    std::shared_ptr<bool> m_alive;
+    std::vector<std::shared_ptr<void>> m_keep;
+};
+
+struct NetTestResult {
+    bool wifiConnected = false;
+    std::string ip = "-", dns = "-";
+    int  wifiSignal = -1;   // -1 = unknown (not derivable on this platform)
+    bool internetSkipped = false, internetOk = false;
+    long internetMs = 0;
+    bool serverConfigured = false, serverOk = false;
+    long serverMs = 0;
+    std::string serverUrl, serverName, serverVersion;
+    std::string testedAt;
+};
+
+// Runs the WiFi / Internet / Server checks (blocking; call off the UI thread).
+NetTestResult gatherNetTest() {
+    using namespace std::chrono;
+    NetTestResult r;
+
+    // --- Local network details (only where the platform can report them) ---
+#if defined(__vita__)
+    // Vita: SceNetCtl gives real IP, signal % and primary DNS.
+    SceNetCtlInfo netInfo;
+    if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_IP_ADDRESS, &netInfo) >= 0) {
+        r.wifiConnected = true;
+        r.ip = std::string(netInfo.ip_address);
+    }
+    if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_RSSI_PERCENTAGE, &netInfo) >= 0) {
+        r.wifiSignal = netInfo.rssi_percentage;
+    }
+    SceNetCtlInfo dnsInfo {};
+    if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_PRIMARY_DNS, &dnsInfo) >= 0) {
+        r.dns = std::string(dnsInfo.primary_dns);
+    }
+#elif defined(VS_HAVE_GETIFADDRS)
+    // Desktop Linux: first non-loopback IPv4 via getifaddrs. Signal and DNS
+    // aren't portably available here, so they stay "unknown".
+    struct ifaddrs* ifap = nullptr;
+    if (getifaddrs(&ifap) == 0) {
+        for (struct ifaddrs* ifa = ifap; ifa != nullptr; ifa = ifa->ifa_next) {
+            if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
+            if (ifa->ifa_flags & IFF_LOOPBACK) continue;
+            char buf[INET_ADDRSTRLEN] = {0};
+            auto* sin = reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
+            if (inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf))) {
+                r.ip = buf;
+                r.wifiConnected = true;
+                break;
+            }
         }
-        if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_RSSI_PERCENTAGE, &netInfo) >= 0) {
-            wifiLevel = netInfo.rssi_percentage;
-        }
-        SceNetCtlInfo dnsInfo {};
-        if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_PRIMARY_DNS, &dnsInfo) >= 0) {
-            dnsServer = std::string(dnsInfo.primary_dns);
-        }
+        freeifaddrs(ifap);
+    }
 #else
-        // Desktop stub: assume connected
-        wifiConnected = true;
-        ipAddress = "127.0.0.1";
-        dnsServer = "8.8.8.8";
-        wifiLevel = 100;
+    // Switch / Windows / other: no portable local-network probe here. Leave the
+    // details "unknown"; connectivity is inferred from the internet check below.
 #endif
 
-        results += "-- WiFi --\n";
-        if (wifiConnected) {
-            results += "Status: Connected\n";
-            results += "IP: " + ipAddress + "\n";
-            results += "DNS: " + dnsServer + "\n";
-            results += "Signal: " + std::to_string(wifiLevel) + "%\n";
-        } else {
-            results += "Status: Not Connected\n";
-        }
+    // Internet reachability — always run (never gate on a possibly-unknown WiFi
+    // state), so we report real connectivity on every platform.
+    {
+        HttpClient http;
+        http.setTimeout(10);
+        auto s = steady_clock::now();
+        HttpResponse resp = http.get("http://connectivitycheck.gstatic.com/generate_204");
+        auto e = steady_clock::now();
+        r.internetMs = static_cast<long>(duration_cast<milliseconds>(e - s).count());
+        r.internetOk = resp.success && (resp.statusCode == 204 || resp.statusCode == 200);
+    }
+    // If we couldn't read a local IP but the internet is reachable, the link is
+    // clearly up — reflect that instead of claiming "not connected".
+    if (!r.wifiConnected && r.internetOk) r.wifiConnected = true;
 
-        // --- Internet Check (DNS resolve + HTTP) ---
-        results += "\n-- Internet --\n";
-        if (wifiConnected) {
-            HttpClient http;
-            http.setTimeout(10);
-            auto start = std::chrono::steady_clock::now();
-            HttpResponse resp = http.get("http://connectivitycheck.gstatic.com/generate_204");
-            auto end = std::chrono::steady_clock::now();
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    Application& app = Application::getInstance();
+    std::string url = app.getServerUrl();
+    if (url.empty()) url = app.getActiveServerUrl();
+    if (!url.empty()) {
+        r.serverConfigured = true;
+        r.serverUrl = url;
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        ServerInfo info;
+        auto s = steady_clock::now();
+        bool ok = client.fetchServerInfo(info);
+        auto e = steady_clock::now();
+        r.serverMs = static_cast<long>(duration_cast<milliseconds>(e - s).count());
+        r.serverOk = ok;
+        if (ok) { r.serverName = info.name; r.serverVersion = info.version; }
+    }
 
-            if (resp.success && (resp.statusCode == 204 || resp.statusCode == 200)) {
-                results += "Status: Reachable (" + std::to_string(ms) + "ms)\n";
-            } else {
-                results += "Status: Unreachable\n";
-                if (!resp.error.empty())
-                    results += "Error: " + resp.error + "\n";
-            }
-        } else {
-            results += "Skipped (no WiFi)\n";
-        }
+    std::time_t t = std::time(nullptr);
+    std::tm tmv {};
+#ifdef _WIN32
+    localtime_s(&tmv, &t);
+#else
+    localtime_r(&t, &tmv);
+#endif
+    char buf[16];
+    std::strftime(buf, sizeof(buf), "%H:%M:%S", &tmv);
+    r.testedAt = buf;
+    return r;
+}
 
-        // --- Server Check ---
-        results += "\n-- Server --\n";
-        Application& app = Application::getInstance();
-        std::string serverUrl = app.getServerUrl();
-        if (serverUrl.empty()) serverUrl = app.getActiveServerUrl();
+// Renders the verdict banner + chips + detail grid + footer into `panel`
+// (clearing it first, so "Run again" repopulates in place).
+void buildNetTestPanel(brls::Box* panel, const NetTestResult& r,
+                       std::function<void()> onRunAgain, std::function<void()> onClose) {
+    namespace c = ntcol;
+    panel->clearViews();
 
-        if (serverUrl.empty()) {
-            results += "No server URL configured.\n";
-        } else {
-            results += "URL: " + serverUrl + "\n";
+    const bool ok = r.serverOk;
+    const NVGcolor mark = ok ? c::success() : c::danger();
 
-            SuwayomiClient& client = SuwayomiClient::getInstance();
-            ServerInfo info;
+    // ---- Verdict banner ----
+    auto* banner = new brls::Box();
+    banner->setAxis(brls::Axis::ROW);
+    banner->setAlignItems(brls::AlignItems::CENTER);
+    banner->setPaddingTop(26); banner->setPaddingBottom(26);
+    banner->setPaddingLeft(28); banner->setPaddingRight(28);
+    banner->setCornerRadius(16);
+    banner->setBackgroundColor(ok ? c::bannerOk() : c::bannerBad());
 
-            auto start = std::chrono::steady_clock::now();
-            bool ok = client.fetchServerInfo(info);
-            auto end = std::chrono::steady_clock::now();
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    auto* circle = new brls::Box();
+    circle->setWidth(48); circle->setHeight(48);
+    circle->setCornerRadius(24);
+    circle->setJustifyContent(brls::JustifyContent::CENTER);
+    circle->setAlignItems(brls::AlignItems::CENTER);
+    circle->setBackgroundColor(mark);
+    circle->setMarginRight(16);
+    auto* glyph = new NtGlyphIcon(ok ? NtGlyph::Check : NtGlyph::Cross,
+                                  ok ? c::checkInk() : nvgRGB(255, 255, 255));
+    glyph->setWidth(28); glyph->setHeight(28);
+    circle->addView(glyph);
+    banner->addView(circle);
 
-            if (ok) {
-                results += "Status: Connected (" + std::to_string(ms) + "ms)\n";
-                results += "Server: " + info.name + " v" + info.version + "\n";
-                results += "Build: " + info.buildType + "\n";
-            } else {
-                results += "Status: Failed (" + std::to_string(ms) + "ms)\n";
-                results += "Could not reach server.\n";
-            }
-        }
+    auto* bcol = new brls::Box();
+    bcol->setAxis(brls::Axis::COLUMN);
+    bcol->setGrow(1.0f);
+    auto* btitle = new brls::Label();
+    btitle->setText(ok ? "Connected & healthy" : "Can't reach server");
+    btitle->setFontSize(19);
+    btitle->setTextColor(c::heading());
+    bcol->addView(btitle);
+    auto* bsub = new brls::Label();
+    std::string sub;
+    if (ok)                                   sub = "Server responded in " + std::to_string(r.serverMs) + "ms over Wi-Fi";
+    else if (!r.wifiConnected)                sub = "Wi-Fi not connected";
+    else if (!r.serverConfigured)             sub = "No server configured";
+    else if (!r.internetOk && !r.internetSkipped) sub = "No internet connection";
+    else                                      sub = "Server unreachable";
+    bsub->setText(sub);
+    bsub->setFontSize(13);
+    bsub->setTextColor(ok ? c::okSub() : c::danger());
+    bsub->setMarginTop(3);
+    bcol->addView(bsub);
+    banner->addView(bcol);
+    panel->addView(banner);
 
-        // Show results in a brls::Dialog (proper overlay, no page transition)
-        brls::sync([results]() {
-            brls::Dialog* dialog = new brls::Dialog("Network Test Results");
-            dialog->setCancelable(true);
+    // ---- Three chips ----
+    auto* chips = new brls::Box();
+    chips->setAxis(brls::Axis::ROW);
+    chips->setPaddingTop(18); chips->setPaddingBottom(18);
+    chips->setPaddingLeft(22); chips->setPaddingRight(22);
+    auto addChip = [&](const std::string& label, bool dotOk,
+                       const std::string& value, const std::string& caption, bool last) {
+        auto* chip = new brls::Box();
+        chip->setAxis(brls::Axis::COLUMN);
+        chip->setGrow(1.0f);
+        chip->setBackgroundColor(c::chipBg());
+        chip->setBorderColor(c::chipBorder());
+        chip->setBorderThickness(1.0f);
+        chip->setCornerRadius(12);
+        chip->setPaddingTop(13); chip->setPaddingBottom(13);
+        chip->setPaddingLeft(14); chip->setPaddingRight(14);
+        if (!last) chip->setMarginRight(10);
 
-            auto* contentBox = new brls::Box();
-            contentBox->setAxis(brls::Axis::COLUMN);
-            contentBox->setPadding(16);
+        auto* top = new brls::Box();
+        top->setAxis(brls::Axis::ROW);
+        top->setAlignItems(brls::AlignItems::CENTER);
+        auto* dot = new brls::Box();
+        dot->setWidth(8); dot->setHeight(8); dot->setCornerRadius(4);
+        dot->setBackgroundColor(dotOk ? c::success() : c::danger());
+        dot->setMarginRight(7);
+        top->addView(dot);
+        auto* lbl = new brls::Label();
+        lbl->setText(label); lbl->setFontSize(12); lbl->setTextColor(c::muted());
+        top->addView(lbl);
+        chip->addView(top);
 
-            // Split results by newline and add each as a separate label
-            std::istringstream stream(results);
-            std::string line;
-            while (std::getline(stream, line)) {
-                auto* label = new brls::Label();
-                if (line.empty()) {
-                    label->setText(" ");
-                    label->setFontSize(8);
-                } else if (line.find("--") == 0) {
-                    label->setText(line);
-                    label->setFontSize(16);
-                    label->setTextColor(Application::getInstance().getHeaderTextColor());
-                    label->setMarginTop(5);
-                } else {
-                    label->setText(line);
-                    label->setFontSize(15);
-                    label->setTextColor(nvgRGB(200, 200, 200));
-                }
-                label->setMarginBottom(2);
-                contentBox->addView(label);
-            }
+        auto* val = new brls::Label();
+        val->setText(value); val->setFontSize(19); val->setTextColor(c::heading());
+        val->setMarginTop(6);
+        chip->addView(val);
+        auto* cap = new brls::Label();
+        cap->setText(caption); cap->setFontSize(12); cap->setTextColor(c::muted());
+        cap->setMarginTop(2);
+        chip->addView(cap);
+        chips->addView(chip);
+    };
+    // WiFi chip: show the signal % where the platform reports it, otherwise a
+    // plain link-up / down state rather than a fabricated percentage.
+    if (r.wifiSignal >= 0) {
+        addChip("WIFI", r.wifiConnected, std::to_string(r.wifiSignal) + "%", "Signal strength", false);
+    } else {
+        addChip("WIFI", r.wifiConnected, r.wifiConnected ? "Up" : "Down",
+                r.wifiConnected ? "Connected" : "No link", false);
+    }
+    addChip("INTERNET", r.internetOk,
+            r.internetSkipped ? "—" : std::to_string(r.internetMs) + "ms",
+            r.internetSkipped ? "Skipped" : "Reachable", false);
+    addChip("SERVER", r.serverOk,
+            r.serverConfigured ? std::to_string(r.serverMs) + "ms" : "—",
+            "Handshake", true);
+    panel->addView(chips);
 
-            dialog->addView(contentBox);
-            dialog->addButton("Close", []() {});
-            dialog->open();
+    // ---- Detail grid ----
+    auto* grid = new brls::Box();
+    grid->setAxis(brls::Axis::COLUMN);
+    grid->setPaddingTop(14); grid->setPaddingBottom(14);
+    grid->setPaddingLeft(26); grid->setPaddingRight(26);
+    auto addRow = [&](const std::string& key, const std::string& value) {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setPaddingTop(9); row->setPaddingBottom(9);
+        auto* k = new brls::Label();
+        k->setText(key); k->setFontSize(13); k->setTextColor(c::muted()); k->setWidth(150);
+        row->addView(k);
+        auto* v = new brls::Label();
+        v->setText(value); v->setFontSize(13); v->setTextColor(c::body()); v->setGrow(1.0f);
+        row->addView(v);
+        grid->addView(row);
+        auto* line = new brls::Box();
+        line->setHeight(1);
+        line->setAlignSelf(brls::AlignSelf::STRETCH);
+        line->setBackgroundColor(c::rowLine());
+        grid->addView(line);
+    };
+    addRow("Local IP", (r.ip == "-") ? "Unknown" : r.ip);
+    if (r.dns != "-") addRow("DNS", r.dns);   // hide when the platform can't report it
+    addRow("Server URL", r.serverConfigured ? r.serverUrl : "Not configured");
+    addRow("Server", (r.serverOk && !r.serverName.empty())
+                         ? (r.serverName + " v" + r.serverVersion) : "-");
+    addRow("Tested", r.testedAt);
+    panel->addView(grid);
+
+    // ---- Footer ----
+    auto* footer = new brls::Box();
+    footer->setAxis(brls::Axis::ROW);
+    footer->setAlignItems(brls::AlignItems::CENTER);
+    footer->setPaddingTop(14); footer->setPaddingBottom(14);
+    footer->setPaddingLeft(22); footer->setPaddingRight(22);
+
+    auto* again = new brls::Box();
+    again->setWidth(52); again->setHeight(44);
+    again->setCornerRadius(11);
+    again->setJustifyContent(brls::JustifyContent::CENTER);
+    again->setAlignItems(brls::AlignItems::CENTER);
+    again->setBackgroundColor(c::chipBg());
+    again->setBorderColor(c::chipBorder());
+    again->setBorderThickness(1.0f);
+    again->setHighlightCornerRadius(11);
+    again->setHideHighlightBackground(true);   // keep the fill visible when focused
+    again->setFocusable(true);
+    again->setMarginRight(10);
+    auto* refreshImg = new brls::Image();
+    refreshImg->setWidth(22); refreshImg->setHeight(22);
+    refreshImg->setScalingType(brls::ImageScalingType::FIT);
+    refreshImg->setImageFromRes("icons/refresh.png");
+    again->addView(refreshImg);
+    again->registerClickAction([onRunAgain](brls::View*) { if (onRunAgain) onRunAgain(); return true; });
+    again->addGestureRecognizer(new brls::TapGestureRecognizer(again));
+    footer->addView(again);
+
+    auto* close = new brls::Box();
+    close->setHeight(44);
+    close->setGrow(1.0f);
+    close->setCornerRadius(11);
+    close->setJustifyContent(brls::JustifyContent::CENTER);
+    close->setAlignItems(brls::AlignItems::CENTER);
+    close->setBackgroundColor(c::accent());
+    close->setHighlightCornerRadius(11);
+    close->setHideHighlightBackground(true);   // keep the accent fill visible when focused
+    close->setFocusable(true);
+    auto* closeLbl = new brls::Label();
+    closeLbl->setText("Close");
+    closeLbl->setFontSize(14);
+    closeLbl->setTextColor(c::accentInk());
+    close->addView(closeLbl);
+    close->registerClickAction([onClose](brls::View*) { if (onClose) onClose(); return true; });
+    close->addGestureRecognizer(new brls::TapGestureRecognizer(close));
+    footer->addView(close);
+    panel->addView(footer);
+
+    brls::Application::giveFocus(close);
+}
+
+} // namespace
+
+void SettingsTab::runNetworkTest() {
+    // Dialog shell (scrim + panel); "Run again" repopulates the panel in place.
+    auto* scrim = new brls::Box();
+    scrim->setAxis(brls::Axis::COLUMN);
+    scrim->setWidthPercentage(100.0f);
+    scrim->setHeightPercentage(100.0f);
+    scrim->setJustifyContent(brls::JustifyContent::CENTER);
+    scrim->setAlignItems(brls::AlignItems::CENTER);
+    scrim->setBackgroundColor(ntcol::scrim());
+
+    auto* panel = new brls::Box();
+    panel->setAxis(brls::Axis::COLUMN);
+    float panelW = 520.0f;
+    const float sw = brls::Application::contentWidth;
+    if (panelW + 80.0f > sw) panelW = sw - 80.0f;
+    panel->setWidth(panelW);
+    panel->setBackgroundColor(ntcol::panel());
+    panel->setBorderColor(ntcol::border());
+    panel->setBorderThickness(1.0f);
+    panel->setCornerRadius(16);
+    panel->setShadowType(brls::ShadowType::GENERIC);
+    scrim->addView(panel);
+
+    auto dialogAlive = std::make_shared<bool>(true);
+    scrim->addGestureRecognizer(new brls::TapGestureRecognizer(scrim,
+        []() { brls::Application::popActivity(); }));
+    scrim->registerAction("Back", brls::ControllerButton::BUTTON_B,
+        [](brls::View*) { brls::Application::popActivity(); return true; });
+
+    auto render  = std::make_shared<std::function<void(const NetTestResult&)>>();
+    auto runTest = std::make_shared<std::function<void()>>();
+    std::weak_ptr<std::function<void()>> runTestWeak = runTest;
+
+    *render = [panel, runTestWeak](const NetTestResult& r) {
+        buildNetTestPanel(panel, r,
+            // Defer the re-run: Run-again's click handler lives on the button
+            // that clearViews() would destroy, so run it on the next frame
+            // instead of tearing the panel down mid-click (was a use-after-free).
+            [runTestWeak]() {
+                brls::sync([runTestWeak]() { if (auto rt = runTestWeak.lock()) (*rt)(); });
+            },
+            []() { brls::Application::popActivity(); });
+    };
+
+    *runTest = [panel, render, dialogAlive]() {
+        panel->clearViews();
+        auto* loading = new brls::Label();
+        loading->setText("Running network test…");
+        loading->setFontSize(15);
+        loading->setTextColor(ntcol::body());
+        loading->setMarginTop(30); loading->setMarginBottom(30);
+        loading->setMarginLeft(28); loading->setMarginRight(28);
+        loading->setFocusable(true);
+        panel->addView(loading);
+        // clearViews() above destroyed the focused button; hold focus on the
+        // loading label so currentFocus isn't a dangling pointer during the
+        // async wait (that was the Retry crash).
+        brls::Application::giveFocus(loading);
+
+        platform::launchThread([render, dialogAlive]() {
+            NetTestResult r = gatherNetTest();
+            brls::sync([render, dialogAlive, r]() {
+                if (!*dialogAlive) return;
+                (*render)(r);
+            });
         });
-    });
+    };
+
+    brls::Application::pushActivity(new NtActivity(scrim, dialogAlive, {render, runTest}));
+    (*runTest)();
 }
 
 void SettingsTab::showCategoryManagementDialog() {
@@ -2543,226 +2863,444 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
 }
 
 void SettingsTab::showStorageManagement() {
-    // Push storage management view
-    brls::Application::notify("Opening storage management...");
-
-    // Create storage view inline (since we may not have the full view ready)
-    auto* storageBox = new brls::Box();
-    storageBox->setAxis(brls::Axis::COLUMN);
-    storageBox->setPadding(20);
-    storageBox->setGrow(1.0f);
-
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText("Storage Management");
-    titleLabel->setFontSize(24);
-    titleLabel->setMarginBottom(20);
-    storageBox->addView(titleLabel);
-
-    // Get downloads info
-    auto downloads = DownloadsManager::getInstance().getDownloads();
-    int64_t totalSize = 0;
-
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Downloaded manga: " + std::to_string(downloads.size()));
-    infoLabel->setFontSize(18);
-    infoLabel->setMarginBottom(10);
-    storageBox->addView(infoLabel);
-
-    // Clear all button
-    auto* clearBtn = new brls::Button();
-    clearBtn->setText("Clear All Downloads");
-    clearBtn->setMarginTop(20);
-    clearBtn->registerClickAction([](brls::View* view) {
-        std::vector<OptionRow> rows;
-        rows.push_back({ "cross.png", "Delete", "", true, true, []() {
-            auto downloads = DownloadsManager::getInstance().getDownloads();
-            for (const auto& item : downloads) {
-                DownloadsManager::getInstance().deleteMangaDownload(item.mangaId);
-            }
-            brls::Application::notify("All downloads deleted");
-            brls::Application::popActivity();
-        } });
-        rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
-        OptionsPopover::show("CONFIRM", "Delete all downloaded content?", std::move(rows));
-        return true;
-    });
-    clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn));
-    // Register circle button on clearBtn
-    clearBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    storageBox->addView(clearBtn);
-
-    // Back button
-    auto* backBtn = new brls::Button();
-    backBtn->setText("Back");
-    backBtn->setMarginTop(20);
-    backBtn->registerClickAction([](brls::View* view) {
-        brls::Application::popActivity();
-        return true;
-    });
-    backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
-    // Register circle button on backBtn
-    backBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    storageBox->addView(backBtn);
-
-    // Register circle button on storageBox as fallback
-    storageBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    brls::Application::pushActivity(new brls::Activity(storageBox));
+    brls::Application::pushActivity(new brls::Activity(new StorageView()));
 }
 
+namespace {
+
+// Fixed dark palette for the Statistics dashboard (per the design spec).
+namespace stcol {
+    inline NVGcolor page()       { return nvgRGB(18, 18, 20); }
+    inline NVGcolor panel()      { return nvgRGB(28, 28, 31); }
+    inline NVGcolor borderCard() { return nvgRGBA(255, 255, 255, 15); }
+    inline NVGcolor border()     { return nvgRGBA(255, 255, 255, 20); }
+    inline NVGcolor accent()     { return nvgRGB(100, 180, 255); }
+    inline NVGcolor success()    { return nvgRGB(78, 204, 163); }
+    inline NVGcolor warning()    { return nvgRGB(255, 152, 0); }
+    inline NVGcolor muted()      { return nvgRGB(139, 139, 147); }
+    inline NVGcolor body()       { return nvgRGB(197, 198, 208); }
+    inline NVGcolor heading()    { return nvgRGB(231, 231, 234); }
+    inline NVGcolor chip()       { return nvgRGB(35, 35, 38); }
+    inline NVGcolor empty()      { return nvgRGB(42, 42, 46); }
+    inline NVGcolor emptyBar()   { return nvgRGB(58, 58, 64); }
+    inline NVGcolor danger()     { return nvgRGB(217, 107, 107); }
+}
+
+// Donut completion ring drawn with nanovg arcs (borealis boxes can't do conic
+// gradients). Center labels are ordinary children drawn on top.
+class RingView : public brls::Box {
+public:
+    RingView(float completedFrac, float inProgressFrac)
+        : m_comp(completedFrac), m_ip(inProgressFrac) {}
+    void draw(NVGcontext* vg, float x, float y, float w, float h,
+              brls::Style style, brls::FrameContext* ctx) override {
+        const float cx = x + w * 0.5f, cy = y + h * 0.5f;
+        const float outer = (w < h ? w : h) * 0.5f;
+        const float thick = outer * 0.285f;
+        const float rad = outer - thick * 0.5f;
+        auto arc = [&](float f0, float f1, NVGcolor col) {
+            if (f1 <= f0) return;
+            const float a0 = -1.5707963f + f0 * 6.2831853f;
+            const float a1 = -1.5707963f + f1 * 6.2831853f;
+            nvgBeginPath(vg);
+            nvgArc(vg, cx, cy, rad, a0, a1, NVG_CW);
+            nvgStrokeColor(vg, col);
+            nvgStrokeWidth(vg, thick);
+            nvgLineCap(vg, NVG_BUTT);
+            nvgStroke(vg);
+        };
+        float comp = m_comp < 0 ? 0 : (m_comp > 1 ? 1 : m_comp);
+        float ip   = m_ip   < 0 ? 0 : m_ip;
+        if (comp + ip > 1.0f) ip = 1.0f - comp;
+        arc(0.0f, 1.0f, stcol::empty());          // not-started backdrop
+        arc(0.0f, comp, stcol::success());         // completed
+        arc(comp, comp + ip, stcol::accent());     // in-progress
+        brls::Box::draw(vg, x, y, w, h, style, ctx);
+    }
+private:
+    float m_comp, m_ip;
+};
+
+class StatsActivity : public brls::Activity {
+public:
+    StatsActivity(brls::Box* content, std::shared_ptr<bool> alive,
+                  std::vector<std::shared_ptr<void>> keep)
+        : brls::Activity(content), m_alive(std::move(alive)), m_keep(std::move(keep)) {}
+    ~StatsActivity() override { if (m_alive) *m_alive = false; }
+private:
+    std::shared_ptr<bool> m_alive;
+    std::vector<std::shared_ptr<void>> m_keep;
+};
+
+struct StatCat { std::string name; int read = 0; int total = 0; };
+struct StatsData {
+    int chaptersRead = 0, mangaCompleted = 0, unreadRemaining = 0;
+    int libSize = 0, completed = 0, inProgress = 0, notStarted = 0;
+    std::vector<StatCat> cats;
+    bool haveLibrary = false;   // library couldn't be read -> hide derived pieces
+};
+
+// Reads persisted counters plus library-derived aggregates (blocking; off UI).
+StatsData gatherStats() {
+    StatsData d;
+    AppSettings& s = Application::getInstance().getSettings();
+    d.chaptersRead   = s.totalChaptersRead;
+    d.mangaCompleted = s.totalMangaCompleted;
+
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::vector<Manga> lib;
+    if (client.fetchLibraryManga(lib)) {
+        d.haveLibrary = true;
+        d.libSize = static_cast<int>(lib.size());
+        std::map<int, StatCat> catMap;
+        for (const auto& m : lib) {
+            const int total = m.chapterCount;
+            int read = total - m.unreadCount;
+            if (read < 0) read = 0;
+            d.unreadRemaining += m.unreadCount;
+            if (total > 0 && m.unreadCount == 0) d.completed++;
+            else if (read > 0)                   d.inProgress++;
+            else                                 d.notStarted++;
+            for (int cid : m.categoryIds) {
+                auto& cs = catMap[cid];
+                cs.read  += read;
+                cs.total += total;
+            }
+        }
+        std::vector<Category> cats;
+        if (client.fetchCategories(cats)) {
+            std::sort(cats.begin(), cats.end(),
+                [](const Category& a, const Category& b) { return a.order < b.order; });
+            for (const auto& cat : cats) {
+                auto it = catMap.find(cat.id);
+                if (it != catMap.end() && it->second.total > 0) {
+                    StatCat sc = it->second;
+                    sc.name = cat.name;
+                    d.cats.push_back(sc);
+                }
+            }
+        }
+    }
+    return d;
+}
+
+void buildStatsDashboard(brls::Box* content, const StatsData& d,
+                         std::function<void()> onSync, std::function<void()> onReset) {
+    namespace c = stcol;
+    content->clearViews();
+    content->setPaddingTop(20); content->setPaddingBottom(26);
+    content->setPaddingLeft(40); content->setPaddingRight(40);
+
+    auto pill = [&](const std::string& iconRes, const std::string& text, NVGcolor textColor,
+                    std::function<void()> onClick) {
+        auto* p = new brls::Box();
+        p->setAxis(brls::Axis::ROW);
+        p->setAlignItems(brls::AlignItems::CENTER);
+        p->setHeight(34);
+        p->setCornerRadius(11);
+        p->setPaddingLeft(iconRes.empty() ? 14 : 12);
+        p->setPaddingRight(14);
+        p->setBackgroundColor(c::chip());
+        p->setBorderColor(c::border());
+        p->setBorderThickness(1.0f);
+        p->setHighlightCornerRadius(11);
+        p->setHideHighlightBackground(true);
+        p->setFocusable(true);
+        if (!iconRes.empty()) {
+            auto* img = new brls::Image();
+            img->setWidth(16); img->setHeight(16);
+            img->setScalingType(brls::ImageScalingType::FIT);
+            img->setImageFromRes(iconRes);
+            img->setMarginRight(8);
+            p->addView(img);
+        }
+        auto* l = new brls::Label();
+        l->setText(text); l->setFontSize(13); l->setTextColor(textColor);
+        p->addView(l);
+        p->registerClickAction([onClick](brls::View*) { if (onClick) onClick(); return true; });
+        p->addGestureRecognizer(new brls::TapGestureRecognizer(p));
+        return p;
+    };
+
+    // ---- Header: breadcrumb + reset + sync ----
+    auto* header = new brls::Box();
+    header->setAxis(brls::Axis::ROW);
+    header->setAlignItems(brls::AlignItems::CENTER);
+    header->setMarginBottom(22);
+    auto* crumb = new brls::Label();
+    crumb->setText("Settings  ›  Reading Statistics");
+    crumb->setFontSize(22); crumb->setTextColor(c::heading()); crumb->setGrow(1.0f);
+    header->addView(crumb);
+    auto* resetPill = pill("", "Reset", c::danger(), onReset);
+    resetPill->setMarginRight(10);
+    header->addView(resetPill);
+    auto* syncPill = pill("icons/refresh.png", "Sync", c::body(), onSync);
+    header->addView(syncPill);
+    content->addView(header);
+
+    // ---- Body: two columns ----
+    auto* bodyRow = new brls::Box();
+    bodyRow->setAxis(brls::Axis::ROW);
+    bodyRow->setAlignItems(brls::AlignItems::STRETCH);
+    bodyRow->setGrow(1.0f);   // fill the space below the header
+
+    // Left: completion ring card
+    if (d.haveLibrary && d.libSize > 0) {
+        auto* card = new brls::Box();
+        card->setAxis(brls::Axis::COLUMN);
+        card->setWidth(330);
+        card->setMarginRight(26);
+        card->setBackgroundColor(c::panel());
+        card->setBorderColor(c::borderCard());
+        card->setBorderThickness(1.0f);
+        card->setCornerRadius(16);
+        card->setPadding(26);
+
+        auto* lbl = new brls::Label();
+        lbl->setText("LIBRARY COMPLETION");
+        lbl->setFontSize(14); lbl->setTextColor(c::muted()); lbl->setMarginBottom(16);
+        card->addView(lbl);
+
+        const float compFrac = static_cast<float>(d.completed) / static_cast<float>(d.libSize);
+        const float ipFrac   = static_cast<float>(d.inProgress) / static_cast<float>(d.libSize);
+        const int pctInt = (d.completed * 100 + d.libSize / 2) / d.libSize;
+
+        auto* ringWrap = new brls::Box();
+        ringWrap->setJustifyContent(brls::JustifyContent::CENTER);
+        ringWrap->setAlignItems(brls::AlignItems::CENTER);
+        ringWrap->setMarginBottom(18);
+        auto* ring = new RingView(compFrac, ipFrac);
+        ring->setWidth(210); ring->setHeight(210);
+        ring->setJustifyContent(brls::JustifyContent::CENTER);
+        ring->setAlignItems(brls::AlignItems::CENTER);
+        auto* pct = new brls::Label();
+        pct->setText(std::to_string(pctInt) + "%");
+        pct->setFontSize(40); pct->setTextColor(c::heading());
+        ring->addView(pct);
+        auto* pcap = new brls::Label();
+        pcap->setText("completed"); pcap->setFontSize(13); pcap->setTextColor(c::muted());
+        ring->addView(pcap);
+        ringWrap->addView(ring);
+        card->addView(ringWrap);
+
+        auto legend = [&](NVGcolor swatch, const std::string& label, int count) {
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            row->setMarginTop(8);
+            auto* dot = new brls::Box();
+            dot->setWidth(12); dot->setHeight(12); dot->setCornerRadius(3);
+            dot->setBackgroundColor(swatch); dot->setMarginRight(10);
+            row->addView(dot);
+            auto* l = new brls::Label();
+            l->setText(label); l->setFontSize(13); l->setTextColor(c::body()); l->setGrow(1.0f);
+            row->addView(l);
+            auto* cnt = new brls::Label();
+            cnt->setText(std::to_string(count)); cnt->setFontSize(13); cnt->setTextColor(c::heading());
+            row->addView(cnt);
+            card->addView(row);
+        };
+        legend(c::success(), "Completed", d.completed);
+        legend(c::accent(),  "In progress", d.inProgress);
+        legend(c::empty(),   "Not started", d.notStarted);
+        bodyRow->addView(card);
+    }
+
+    // Right: headline numbers + categories
+    auto* right = new brls::Box();
+    right->setAxis(brls::Axis::COLUMN);
+    right->setGrow(1.0f);
+
+    auto* statRow = new brls::Box();
+    statRow->setAxis(brls::Axis::ROW);
+    statRow->setMarginBottom(20);
+    auto statCard = [&](const std::string& num, NVGcolor col, const std::string& cap, bool last) {
+        auto* card = new brls::Box();
+        card->setAxis(brls::Axis::COLUMN);
+        card->setGrow(1.0f);
+        card->setBackgroundColor(c::panel());
+        card->setBorderColor(c::borderCard());
+        card->setBorderThickness(1.0f);
+        card->setCornerRadius(13);
+        card->setPaddingTop(18); card->setPaddingBottom(18);
+        card->setPaddingLeft(20); card->setPaddingRight(20);
+        if (!last) card->setMarginRight(16);
+        auto* n = new brls::Label();
+        n->setText(num); n->setFontSize(34); n->setTextColor(col);
+        card->addView(n);
+        auto* cp = new brls::Label();
+        cp->setText(cap); cp->setFontSize(13); cp->setTextColor(c::muted()); cp->setMarginTop(4);
+        card->addView(cp);
+        statRow->addView(card);
+    };
+    statCard(std::to_string(d.chaptersRead), c::accent(), "Chapters read", false);
+    statCard(std::to_string(d.mangaCompleted), c::success(),
+             "Manga completed", !d.haveLibrary);
+    if (d.haveLibrary)
+        statCard(std::to_string(d.unreadRemaining), c::warning(), "Unread remaining", true);
+    right->addView(statRow);
+
+    if (d.haveLibrary && !d.cats.empty()) {
+        auto* catCard = new brls::Box();
+        catCard->setAxis(brls::Axis::COLUMN);
+        catCard->setGrow(1.0f);                 // fill the right column's remaining height
+        catCard->setBackgroundColor(c::panel());
+        catCard->setBorderColor(c::borderCard());
+        catCard->setBorderThickness(1.0f);
+        catCard->setCornerRadius(14);
+        catCard->setPaddingTop(20); catCard->setPaddingBottom(20);
+        catCard->setPaddingLeft(24); catCard->setPaddingRight(24);
+        auto* ct = new brls::Label();
+        ct->setText("Progress by category");
+        ct->setFontSize(15); ct->setTextColor(c::heading()); ct->setMarginBottom(14);
+        catCard->addView(ct);
+
+        // Scroll the category list within its own card (D-pad focuses the rows)
+        // rather than scrolling the whole page.
+        auto* catScroll = new brls::ScrollingFrame();
+        catScroll->setGrow(1.0f);
+        catScroll->setFocusable(false);
+        auto* rowsBox = new brls::Box();
+        rowsBox->setAxis(brls::Axis::COLUMN);
+        rowsBox->setAlignItems(brls::AlignItems::STRETCH);
+        catScroll->setContentView(rowsBox);
+        catCard->addView(catScroll);
+
+        brls::View* firstCatRow = nullptr;
+        for (const auto& cat : d.cats) {
+            const float pct = cat.total > 0 ? static_cast<float>(cat.read) / static_cast<float>(cat.total) : 0.0f;
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::COLUMN);
+            row->setMarginBottom(10);
+            row->setPaddingTop(6); row->setPaddingBottom(6);
+            row->setPaddingLeft(8); row->setPaddingRight(8);
+            row->setCornerRadius(8);
+            row->setHighlightCornerRadius(8);
+            row->setFocusable(true);
+            auto* top = new brls::Box();
+            top->setAxis(brls::Axis::ROW);
+            top->setAlignItems(brls::AlignItems::CENTER);
+            top->setMarginBottom(6);
+            auto* nm = new brls::Label();
+            nm->setText(cat.name); nm->setFontSize(14); nm->setTextColor(c::body()); nm->setGrow(1.0f);
+            top->addView(nm);
+            auto* rt = new brls::Label();
+            rt->setText(std::to_string(cat.read) + " / " + std::to_string(cat.total));
+            rt->setFontSize(13); rt->setTextColor(c::muted());
+            top->addView(rt);
+            row->addView(top);
+            auto* track = new brls::Box();
+            track->setHeight(9); track->setCornerRadius(4);
+            track->setAlignSelf(brls::AlignSelf::STRETCH);
+            track->setBackgroundColor(c::chip());
+            auto* fill = new brls::Box();
+            fill->setHeight(9); fill->setCornerRadius(4);
+            const NVGcolor fc = pct >= 1.0f ? c::success()
+                              : pct >= 0.1f ? c::accent()
+                              : pct >  0.0f ? c::warning() : c::emptyBar();
+            fill->setBackgroundColor(fc);
+            float wp = pct * 100.0f;
+            if (wp < 0.0f) wp = 0.0f; if (wp > 100.0f) wp = 100.0f;
+            fill->setWidthPercentage(wp);
+            track->addView(fill);
+            row->addView(track);
+            rowsBox->addView(row);
+            if (!firstCatRow) firstCatRow = row;
+        }
+
+        // The inner scroll swallows UP at the top row, so route focus between
+        // the first category row and the header pills explicitly.
+        if (firstCatRow) {
+            firstCatRow->setCustomNavigationRoute(brls::FocusDirection::UP, syncPill);
+            syncPill->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstCatRow);
+            resetPill->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstCatRow);
+        }
+        right->addView(catCard);
+    }
+
+    bodyRow->addView(right);
+    content->addView(bodyRow);
+
+    brls::Application::giveFocus(header);
+}
+
+} // namespace
+
 void SettingsTab::showStatisticsView() {
-    // Sync stats from server first
-    Application::getInstance().syncStatisticsFromServer();
+    auto* page = new brls::Box();
+    page->setAxis(brls::Axis::COLUMN);
+    page->setGrow(1.0f);
+    page->setBackgroundColor(stcol::page());
 
-    Application& app = Application::getInstance();
-    AppSettings& settings = app.getSettings();
+    // The page itself does not scroll; only the category list inside the
+    // dashboard scrolls (see buildStatsDashboard), so the ring + headline
+    // numbers stay put.
+    auto* content = new brls::Box();
+    content->setAxis(brls::Axis::COLUMN);
+    content->setAlignItems(brls::AlignItems::STRETCH);
+    content->setGrow(1.0f);
+    page->addView(content);
 
-    auto* statsBox = new brls::Box();
-    statsBox->setAxis(brls::Axis::COLUMN);
-    statsBox->setPadding(20);
-    statsBox->setGrow(1.0f);
+    auto alive = std::make_shared<bool>(true);
+    page->registerAction("Back", brls::ControllerButton::BUTTON_B,
+        [](brls::View*) { brls::Application::popActivity(); return true; });
 
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText("Reading Statistics");
-    titleLabel->setFontSize(24);
-    titleLabel->setMarginBottom(10);
-    statsBox->addView(titleLabel);
+    auto render  = std::make_shared<std::function<void(const StatsData&)>>();
+    auto runSync = std::make_shared<std::function<void()>>();
+    std::weak_ptr<std::function<void()>> runSyncWeak = runSync;
 
-    // Info label
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Synced from server and local reading");
-    infoLabel->setFontSize(14);
-    infoLabel->setTextColor(Application::getInstance().getDimTextColor());
-    infoLabel->setMarginBottom(15);
-    statsBox->addView(infoLabel);
+    *render = [content, runSyncWeak](const StatsData& d) {
+        buildStatsDashboard(content, d,
+            // Defer: Sync's click handler lives on the pill that clearViews()
+            // destroys, so run it next frame rather than mid-click.
+            [runSyncWeak]() {
+                brls::sync([runSyncWeak]() { if (auto r = runSyncWeak.lock()) (*r)(); });
+            },
+            []() {
+                std::vector<OptionRow> rows;
+                rows.push_back({ "cross.png", "Reset", "", true, true, []() {
+                    AppSettings& s = Application::getInstance().getSettings();
+                    s.totalChaptersRead = 0;
+                    s.totalMangaCompleted = 0;
+                    s.currentStreak = 0;
+                    s.longestStreak = 0;
+                    s.totalReadingTime = 0;
+                    s.lastReadDate = 0;
+                    Application::getInstance().saveSettings();
+                    brls::Application::notify("Statistics reset");
+                    brls::Application::popActivity();
+                }});
+                rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+                OptionsPopover::show("CONFIRM", "Reset all reading statistics?", std::move(rows));
+            });
+    };
 
-    // Total chapters read
-    auto* chaptersLabel = new brls::Label();
-    chaptersLabel->setText("Chapters Read: " + std::to_string(settings.totalChaptersRead));
-    chaptersLabel->setFontSize(18);
-    chaptersLabel->setMarginBottom(10);
-    statsBox->addView(chaptersLabel);
+    *runSync = [content, render, alive]() {
+        content->clearViews();
+        auto* loading = new brls::Label();
+        loading->setText("Loading statistics…");
+        loading->setFontSize(15);
+        loading->setTextColor(stcol::body());
+        loading->setMarginTop(40); loading->setMarginLeft(40);
+        loading->setFocusable(true);
+        content->addView(loading);
+        // Hold focus on the loading label: clearViews() just destroyed the
+        // focused Sync pill, so leaving currentFocus dangling during the async
+        // load would crash on the next frame.
+        brls::Application::giveFocus(loading);
 
-    // Manga completed
-    auto* completedLabel = new brls::Label();
-    completedLabel->setText("Manga Completed: " + std::to_string(settings.totalMangaCompleted));
-    completedLabel->setFontSize(18);
-    completedLabel->setMarginBottom(10);
-    statsBox->addView(completedLabel);
-
-    // Reading streak
-    auto* streakLabel = new brls::Label();
-    streakLabel->setText("Current Streak: " + std::to_string(settings.currentStreak) + " days");
-    streakLabel->setFontSize(18);
-    streakLabel->setMarginBottom(10);
-    statsBox->addView(streakLabel);
-
-    // Longest streak
-    auto* longestLabel = new brls::Label();
-    longestLabel->setText("Longest Streak: " + std::to_string(settings.longestStreak) + " days");
-    longestLabel->setFontSize(18);
-    longestLabel->setMarginBottom(10);
-    statsBox->addView(longestLabel);
-
-    // Reading time note
-    auto* timeNoteLabel = new brls::Label();
-    timeNoteLabel->setText("Note: Reading time tracking is local only");
-    timeNoteLabel->setFontSize(14);
-    timeNoteLabel->setTextColor(Application::getInstance().getDimTextColor());
-    timeNoteLabel->setMarginBottom(5);
-    statsBox->addView(timeNoteLabel);
-
-    // Reading time
-    int hours = static_cast<int>(settings.totalReadingTime / 3600);
-    int minutes = static_cast<int>((settings.totalReadingTime % 3600) / 60);
-    auto* timeLabel = new brls::Label();
-    timeLabel->setText("Total Reading Time: " + std::to_string(hours) + "h " + std::to_string(minutes) + "m");
-    timeLabel->setFontSize(18);
-    timeLabel->setMarginBottom(20);
-    statsBox->addView(timeLabel);
-
-    // Sync from Server button
-    auto* syncBtn = new brls::Button();
-    syncBtn->setText("Sync from Server");
-    syncBtn->registerClickAction([chaptersLabel, completedLabel](brls::View* view) {
-        brls::Application::notify("Syncing statistics...");
         Application::getInstance().syncStatisticsFromServer();
-        AppSettings& s = Application::getInstance().getSettings();
-        chaptersLabel->setText("Chapters Read: " + std::to_string(s.totalChaptersRead));
-        completedLabel->setText("Manga Completed: " + std::to_string(s.totalMangaCompleted));
-        brls::Application::notify("Statistics synced");
-        return true;
-    });
-    syncBtn->addGestureRecognizer(new brls::TapGestureRecognizer(syncBtn));
-    // Register circle button on syncBtn
-    syncBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    statsBox->addView(syncBtn);
+        platform::launchThread([render, alive]() {
+            StatsData d = gatherStats();
+            brls::sync([render, alive, d]() {
+                if (!*alive) return;
+                (*render)(d);
+            });
+        });
+    };
 
-    // Reset button
-    auto* resetBtn = new brls::Button();
-    resetBtn->setText("Reset Statistics");
-    resetBtn->setMarginTop(10);
-    resetBtn->registerClickAction([](brls::View* view) {
-        std::vector<OptionRow> rows;
-        rows.push_back({ "cross.png", "Reset", "", true, true, []() {
-            AppSettings& s = Application::getInstance().getSettings();
-            s.totalChaptersRead = 0;
-            s.totalMangaCompleted = 0;
-            s.currentStreak = 0;
-            s.longestStreak = 0;
-            s.totalReadingTime = 0;
-            s.lastReadDate = 0;
-            Application::getInstance().saveSettings();
-            brls::Application::notify("Statistics reset");
-            brls::Application::popActivity();
-        } });
-        rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
-        OptionsPopover::show("CONFIRM", "Reset all reading statistics?", std::move(rows));
-        return true;
-    });
-    resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
-    // Register circle button on resetBtn
-    resetBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    statsBox->addView(resetBtn);
-
-    // Back button
-    auto* backBtn = new brls::Button();
-    backBtn->setText("Back");
-    backBtn->setMarginTop(20);
-    backBtn->registerClickAction([](brls::View* view) {
-        brls::Application::popActivity();
-        return true;
-    });
-    backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
-    // Register circle button on backBtn
-    backBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    statsBox->addView(backBtn);
-
-    // Register circle button on statsBox as fallback
-    statsBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    brls::Application::pushActivity(new brls::Activity(statsBox));
+    brls::Application::pushActivity(new StatsActivity(page, alive, {render, runSync}));
+    (*runSync)();
 }
 
 void SettingsTab::createBackupSection() {
