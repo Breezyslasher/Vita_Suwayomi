@@ -175,6 +175,15 @@ SettingsTab::SettingsTab() {
         auto* row = makeRailRow(secs[i].icon, secs[i].name, i);
         m_railBox->addView(row);
         m_railRows.push_back(row);
+
+        // Deterministically route RIGHT from the rail row into this section's
+        // first focusable cell. Relying only on the detail pane's default-focus
+        // chain left some (taller) sections unreachable with RIGHT; a fixed
+        // route makes every section enterable. The cell persists for the tab's
+        // lifetime (only the section box is ever detached, never freed early).
+        if (brls::View* firstCell = box->getDefaultFocus()) {
+            row->setCustomNavigationRoute(brls::FocusDirection::RIGHT, firstCell);
+        }
     }
 
     // Version readout at the bottom of the rail (non-focusable), in place of a
