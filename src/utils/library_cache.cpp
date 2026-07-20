@@ -453,6 +453,16 @@ void LibraryCache::clearAllCache() {
     clearLibraryCache();
     clearCoverCache();
     clearPageCache();
+
+    // Also clear the manga-details cache and the categories index so the whole
+    // cache is emptied (matches the size reported by getCacheSize()).
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::string detailsDir = getMangaDetailsCacheDir();
+    for (const auto& name : platform::listDir(detailsDir)) {
+        if (name.empty() || name[0] == '.') continue;
+        platform::deleteFile(detailsDir + "/" + name);
+    }
+    platform::deleteFile(getCategoriesFilePath());
 }
 
 void LibraryCache::clearLibraryCache() {
@@ -481,16 +491,22 @@ void LibraryCache::clearCoverCache() {
     brls::Logger::info("LibraryCache: Cover cache cleared");
 }
 
-size_t LibraryCache::getCacheSize() {
+static size_t sumDirRecursive(const std::string& dir) {
     size_t total = 0;
-    std::string coverDir = getCoverCacheDir();
-
-    for (const auto& name : platform::listDir(coverDir)) {
-        int64_t sz = platform::fileSize(coverDir + "/" + name);
-        if (sz > 0) total += static_cast<size_t>(sz);
+    for (const auto& name : platform::listDir(dir)) {
+        if (name.empty() || name[0] == '.') continue;
+        std::string p = dir + "/" + name;
+        int64_t sz = platform::fileSize(p);
+        if (sz > 0) total += static_cast<size_t>(sz);   // regular file
+        else        total += sumDirRecursive(p);         // directory -> recurse
     }
-
     return total;
+}
+
+size_t LibraryCache::getCacheSize() {
+    // Whole cache footprint: covers/, pages/, manga_details/ and the *.txt index
+    // files (previously only covers/ was counted, undercounting the real size).
+    return sumDirRecursive(getCacheDir());
 }
 
 // Helper to escape special characters for serialization
