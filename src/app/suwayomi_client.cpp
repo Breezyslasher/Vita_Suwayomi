@@ -1625,38 +1625,10 @@ bool SuwayomiClient::fetchMangaMeta(int mangaId, std::map<std::string, std::stri
         return true;
     }
 
-    // REST fallback: GET /api/v1/manga/{id}/meta
-    brls::Logger::info("GraphQL failed for fetchMangaMeta, falling back to REST...");
-    HttpClient client = createHttpClient();
-    HttpResponse httpResp = client.get(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta"));
-
-    if (!httpResp.success || httpResp.body.empty()) {
-        brls::Logger::warning("REST fallback also failed for manga meta");
-        return false;
-    }
-
-    // Parse REST response (array of {key, value} objects)
-    std::string response = httpResp.body;
-    meta.clear();
-    size_t pos = 0;
-    while ((pos = response.find("\"key\"", pos)) != std::string::npos) {
-        size_t keyStart = response.find("\"", pos + 5) + 1;
-        size_t keyEnd = response.find("\"", keyStart);
-        std::string key = response.substr(keyStart, keyEnd - keyStart);
-
-        size_t valueStart = response.find("\"value\"", keyEnd);
-        if (valueStart != std::string::npos) {
-            valueStart = response.find("\"", valueStart + 7) + 1;
-            size_t valueEnd = response.find("\"", valueStart);
-            std::string value = response.substr(valueStart, valueEnd - valueStart);
-            meta[key] = value;
-            pos = valueEnd + 1;
-        } else {
-            break;
-        }
-    }
-
-    return true;
+    // No REST fallback: the server exposes manga meta only over GraphQL (there
+    // is no GET /manga/{id}/meta route), so a failed GraphQL fetch is terminal.
+    brls::Logger::warning("fetchMangaMeta: GraphQL failed and no REST meta endpoint exists");
+    return false;
 }
 
 bool SuwayomiClient::setMangaMeta(int mangaId, const std::string& key, const std::string& value) {
@@ -1665,19 +1637,19 @@ bool SuwayomiClient::setMangaMeta(int mangaId, const std::string& key, const std
         return true;
     }
 
-    // REST fallback: PATCH /api/v1/manga/{id}/meta
+    // REST fallback: PATCH /api/v1/manga/{id}/meta — the server reads `key` and
+    // `value` as form params (not JSON).
     brls::Logger::info("GraphQL failed for setMangaMeta, falling back to REST...");
     HttpClient client = createHttpClient();
-    client.setDefaultHeader("Content-Type", "application/json");
 
-    std::string body = "{\"key\":\"" + key + "\",\"value\":\"" + value + "\"}";
+    std::string body = "key=" + vitasuwayomi::HttpClient::urlEncode(key) +
+                       "&value=" + vitasuwayomi::HttpClient::urlEncode(value);
 
-    // Use request() with PATCH method since HttpClient doesn't have patch()
     HttpRequest req;
-    req.url = buildApiUrl("manga/" + std::to_string(mangaId) + "/meta");
+    req.url = buildApiUrl("/manga/" + std::to_string(mangaId) + "/meta");
     req.method = "PATCH";
     req.body = body;
-    req.headers["Content-Type"] = "application/json";
+    req.headers["Content-Type"] = "application/x-www-form-urlencoded";
 
     HttpResponse httpResp = client.request(req);
     return httpResp.success;
@@ -1689,12 +1661,10 @@ bool SuwayomiClient::deleteMangaMeta(int mangaId, const std::string& key) {
         return true;
     }
 
-    // REST fallback: DELETE /api/v1/manga/{id}/meta/{key}
-    brls::Logger::info("GraphQL failed for deleteMangaMeta, falling back to REST...");
-    HttpClient client = createHttpClient();
-    HttpResponse httpResp = client.del(buildApiUrl("manga/" + std::to_string(mangaId) + "/meta/" + key));
-
-    return httpResp.success;
+    // No REST fallback: there is no DELETE meta route; meta deletion is GraphQL
+    // only, so a failed GraphQL call is terminal.
+    brls::Logger::warning("deleteMangaMeta: GraphQL failed and no REST meta endpoint exists");
+    return false;
 }
 
 bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga>& manga) {
@@ -3760,8 +3730,8 @@ bool SuwayomiClient::fetchPopularManga(int64_t sourceId, int page,
     brls::Logger::info("GraphQL failed for popular manga, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
-    // Use query parameter format like Kodi addon: /source/{id}/popular?pageNum={page}
-    std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/popular?pageNum=" + std::to_string(page));
+    // Server takes the page number as a path segment: /source/{id}/popular/{page}
+    std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/popular/" + std::to_string(page));
     brls::Logger::debug("Fetching popular manga from: {}", url);
     vitasuwayomi::HttpResponse response = http.get(url);
 
@@ -3799,8 +3769,8 @@ bool SuwayomiClient::fetchLatestManga(int64_t sourceId, int page,
     brls::Logger::info("GraphQL failed for latest manga, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
-    // Use query parameter format like Kodi addon: /source/{id}/latest?pageNum={page}
-    std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/latest?pageNum=" + std::to_string(page));
+    // Server takes the page number as a path segment: /source/{id}/latest/{page}
+    std::string url = buildApiUrl("/source/" + std::to_string(sourceId) + "/latest/" + std::to_string(page));
     brls::Logger::debug("Fetching latest manga from: {}", url);
     vitasuwayomi::HttpResponse response = http.get(url);
 
@@ -4037,19 +4007,19 @@ bool SuwayomiClient::fetchChapter(int mangaId, int chapterIndex, Chapter& chapte
 
 bool SuwayomiClient::updateChapter(int mangaId, int chapterIndex, bool read, bool bookmarked) {
     vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/manga/" + std::to_string(mangaId) +
                                    "/chapter/" + std::to_string(chapterIndex));
 
-    std::string body = "{\"read\":" + std::string(read ? "true" : "false") +
-                       ",\"bookmarked\":" + std::string(bookmarked ? "true" : "false") + "}";
+    // Server reads read/bookmarked as form params (not JSON).
+    std::string body = std::string("read=") + (read ? "true" : "false") +
+                       "&bookmarked=" + (bookmarked ? "true" : "false");
 
     vitasuwayomi::HttpRequest req;
     req.url = url;
     req.method = "PATCH";
     req.body = body;
-    req.headers["Content-Type"] = "application/json";
+    req.headers["Content-Type"] = "application/x-www-form-urlencoded";
 
     vitasuwayomi::HttpResponse response = http.request(req);
     return response.success && response.statusCode == 200;
@@ -4194,24 +4164,11 @@ bool SuwayomiClient::updateChapterProgress(int mangaId, int chapterId, int lastP
         return true;
     }
 
-    // REST fallback - uses /chapter/{id} endpoint with chapter ID
-    brls::Logger::info("GraphQL failed for chapter progress, trying REST...");
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
-
-    // Use the chapter ID endpoint directly
-    std::string url = buildApiUrl("/chapter/" + std::to_string(chapterId));
-
-    std::string body = "{\"lastPageRead\":" + std::to_string(lastPageRead) + "}";
-
-    vitasuwayomi::HttpRequest req;
-    req.url = url;
-    req.method = "PATCH";
-    req.body = body;
-    req.headers["Content-Type"] = "application/json";
-
-    vitasuwayomi::HttpResponse response = http.request(req);
-    return response.success && response.statusCode == 200;
+    // No usable REST fallback: the server's progress route is keyed by
+    // /manga/{mangaId}/chapter/{chapterIndex}, but only the global chapterId is
+    // available here, so chapter progress is GraphQL-only.
+    brls::Logger::warning("updateChapterProgress: GraphQL failed; no REST route keyed by chapterId");
+    return false;
 }
 
 // ============================================================================
@@ -4230,30 +4187,11 @@ bool SuwayomiClient::fetchChapterPages(int mangaId, int chapterId, std::vector<P
         return true;
     }
 
-    // REST fallback - use chapter ID in URL
-    brls::Logger::info("GraphQL failed for chapter pages, trying REST...");
-    vitasuwayomi::HttpClient http = createHttpClient();
-
-    std::string url = buildApiUrl("/chapter/" + std::to_string(chapterId));
-    vitasuwayomi::HttpResponse response = http.get(url);
-
-    if (!response.success || response.statusCode != 200) {
-        brls::Logger::error("Failed to fetch chapter pages: {}", response.error);
-        return false;
-    }
-
-    pages.clear();
-    int pageCount = extractJsonInt(response.body, "pageCount");
-
-    for (int i = 0; i < pageCount; i++) {
-        Page page;
-        page.index = i;
-        page.imageUrl = getPageImageUrl(chapterId, i);
-        pages.push_back(page);
-    }
-
-    brls::Logger::debug("Chapter {} has {} pages", chapterId, pageCount);
-    return true;
+    // No usable REST fallback: the server's chapter/page routes are keyed by
+    // /manga/{mangaId}/chapter/{chapterIndex}, but only the global chapterId is
+    // available here, so page listing is GraphQL-only.
+    brls::Logger::warning("fetchChapterPages: GraphQL failed; no REST route keyed by chapterId");
+    return false;
 }
 
 std::string SuwayomiClient::getPageImageUrl(int chapterId, int pageIndex) {
@@ -4299,13 +4237,13 @@ bool SuwayomiClient::createCategory(const std::string& name) {
         return true;
     }
 
-    // REST fallback
+    // REST fallback — server reads `name` as a form param (not JSON).
     brls::Logger::info("GraphQL failed for createCategory, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
+    http.setDefaultHeader("Content-Type", "application/x-www-form-urlencoded");
 
     std::string url = buildApiUrl("/category");
-    std::string body = "{\"name\":\"" + name + "\"}";
+    std::string body = "name=" + vitasuwayomi::HttpClient::urlEncode(name);
 
     vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
@@ -4333,47 +4271,35 @@ bool SuwayomiClient::updateCategory(int categoryId, const std::string& name, boo
         return true;
     }
 
-    // REST fallback
+    // REST fallback — server reads name/default as form params (not JSON).
     brls::Logger::info("GraphQL failed for updateCategory, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
 
     std::string url = buildApiUrl("/category/" + std::to_string(categoryId));
-    std::string body = "{\"name\":\"" + name + "\",\"default\":" +
-                       std::string(isDefault ? "true" : "false") + "}";
+    std::string body = "name=" + vitasuwayomi::HttpClient::urlEncode(name) +
+                       "&default=" + std::string(isDefault ? "true" : "false");
 
     vitasuwayomi::HttpRequest req;
     req.url = url;
     req.method = "PATCH";
     req.body = body;
-    req.headers["Content-Type"] = "application/json";
+    req.headers["Content-Type"] = "application/x-www-form-urlencoded";
 
     vitasuwayomi::HttpResponse response = http.request(req);
     return response.success && response.statusCode == 200;
 }
 
 bool SuwayomiClient::reorderCategories(const std::vector<int>& categoryIds) {
-    vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
-
-    std::string url = buildApiUrl("/category/reorder");
-
-    std::string idList;
+    // GraphQL primary: set each category's position to its index in the desired
+    // order. The REST /category/reorder route only accepts a single {from,to}
+    // move (form params), so a whole-array reorder can't be sent in one call.
+    bool allOk = true;
     for (size_t i = 0; i < categoryIds.size(); i++) {
-        if (i > 0) idList += ",";
-        idList += std::to_string(categoryIds[i]);
+        if (!updateCategoryOrderGraphQL(categoryIds[i], static_cast<int>(i))) {
+            allOk = false;
+        }
     }
-
-    std::string body = "{\"categoryIds\":[" + idList + "]}";
-
-    vitasuwayomi::HttpRequest req;
-    req.url = url;
-    req.method = "PATCH";
-    req.body = body;
-    req.headers["Content-Type"] = "application/json";
-
-    vitasuwayomi::HttpResponse response = http.request(req);
-    return response.success && response.statusCode == 200;
+    return allOk;
 }
 
 bool SuwayomiClient::moveCategoryOrder(int categoryId, int newPosition) {
@@ -4804,23 +4730,28 @@ bool SuwayomiClient::deleteChapterDownloads(const std::vector<int>& chapterIds, 
     // REST fallback
     brls::Logger::info("SuwayomiClient: GraphQL batch dequeue failed, falling back to REST...");
 
-    // If we have mangaId and chapterIndexes for REST fallback
-    if (mangaId > 0 && !chapterIndexes.empty()) {
+    // REST fallback: DELETE /download/batch. The server decodes a flat
+    // { "chapterIds": [<int>, ...] } body (global chapter IDs), and the body
+    // must actually be sent on the DELETE.
+    (void)mangaId;
+    (void)chapterIndexes;
+    if (!chapterIds.empty()) {
         vitasuwayomi::HttpClient http = createHttpClient();
-        http.setDefaultHeader("Content-Type", "application/json");
 
-        std::string url = buildApiUrl("/download/batch");
-
-        std::string chapterList;
-        for (size_t i = 0; i < chapterIndexes.size(); i++) {
-            if (i > 0) chapterList += ",";
-            chapterList += "{\"mangaId\":" + std::to_string(mangaId) +
-                           ",\"chapterIndex\":" + std::to_string(chapterIndexes[i]) + "}";
+        std::string idList;
+        for (size_t i = 0; i < chapterIds.size(); i++) {
+            if (i > 0) idList += ",";
+            idList += std::to_string(chapterIds[i]);
         }
+        std::string body = "{\"chapterIds\":[" + idList + "]}";
 
-        std::string body = "{\"chapterIds\":[" + chapterList + "]}";
-        vitasuwayomi::HttpResponse response = http.del(url);
+        vitasuwayomi::HttpRequest req;
+        req.url = buildApiUrl("/download/batch");
+        req.method = "DELETE";
+        req.body = body;
+        req.headers["Content-Type"] = "application/json";
 
+        vitasuwayomi::HttpResponse response = http.request(req);
         return response.success && response.statusCode == 200;
     }
 

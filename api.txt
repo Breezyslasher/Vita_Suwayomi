@@ -2230,7 +2230,7 @@ subscription WebUIUpdateStatusChange {
 #  - Refresh manga / fetch chapters: migrated deprecated `fetchManga` /
 #    `fetchChapters` to `fetchMangaAndChapters(input:{id,fetchManga,fetchChapters})`.
 #
-# REST fallback (high-impact fixes applied):
+# REST fallback (fixes applied):
 #  - POST /update/fetch: send form param `categoryId=<id>` (not JSON) — JSON was
 #    ignored, so the server updated ALL categories instead of the target one.
 #  - GET  /update/summary: response is { categoryStatusMap, mangaStatusMap,
@@ -2238,16 +2238,19 @@ subscription WebUIUpdateStatusChange {
 #    progress (old pendingJobs/runningJobs/isRunning fields do not exist).
 #  - POST /manga/{id}/chapter/batch: change field is `isRead` (not `read`).
 #  - GET  /category/{id}: returns the category's manga (no `/manga` suffix).
+#  - Form params (not JSON) now sent for: PATCH /manga/{id}/meta (key,value),
+#    PATCH /manga/{id}/chapter/{index} (read,bookmarked),
+#    POST /category (name), PATCH /category/{id} (name,default).
+#  - PATCH /category/reorder can't take an id array; whole-array reorder now goes
+#    through the GraphQL updateCategoryOrder (position per category) instead.
+#  - Source popular/latest take the page in the PATH: /source/{id}/popular/{page},
+#    /source/{id}/latest/{page} (was ?pageNum=).
+#  - DELETE /download/batch: sends a flat { "chapterIds": [<int>...] } body via a
+#    real DELETE-with-body request.
 #
-# REST fallback (KNOWN-STILL-BROKEN — not yet fixed; GraphQL primary covers these):
-#  - Server reads FORM params, not JSON, for: PATCH /manga/{id}/meta (key,value),
-#    PATCH /manga/{id}/chapter/{index} (read,bookmarked,lastPageRead),
-#    POST /category (name), PATCH /category/{id} (name,default,...),
-#    PATCH /category/reorder (from,to — single move, not an id array).
-#  - No REST route for: GET/DELETE /manga/{id}/meta (GraphQL only),
-#    PATCH /chapter/{id} progress, GET /chapter/{id} pages.
-#  - Path drift: chapter page image is
-#    /manga/{mangaId}/chapter/{chapterIndex}/page/{index} (not /chapter/{id}/...);
-#    source popular/latest take pageNum in the PATH: /source/{id}/popular/{page}.
-#  - DELETE /download/batch expects body { "chapterIds": [<int>...] } (flat ints)
-#    and the body must actually be sent on the DELETE.
+# GraphQL-only (no usable REST fallback; a failed GraphQL call is terminal):
+#  - Manga meta: no GET/DELETE meta REST route exists; fetch/delete meta are
+#    GraphQL only (PATCH set-meta over REST is form-encoded as above).
+#  - Chapter progress + chapter page listing: the REST routes are keyed by
+#    /manga/{mangaId}/chapter/{chapterIndex}, but only the global chapterId is
+#    available at those call sites, so these are GraphQL only.
