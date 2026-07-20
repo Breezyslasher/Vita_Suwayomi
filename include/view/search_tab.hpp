@@ -126,21 +126,13 @@ private:
     bool m_filtersActive = false;  // True when user has applied filters
     std::set<int> m_collapsedGroups;  // Indices of collapsed groups in filter dialog
 
-    // Browse chrome: genre chip rail + active-filter bar (source-browser 2b).
+    // Browse chrome: a rail of the currently-selected genre chips (2b).
     brls::Box* m_genreRail = nullptr;        // horizontal chip rail (HScrollingFrame host)
     brls::Box* m_genreChipsBox = nullptr;    // ROW box of genre chips
-    brls::Box* m_activeFilterBar = nullptr;  // token bar, shown only when filters active
     void buildGenreChipRail();
-    void buildActiveFilterBar();
-    void updateBrowseChrome();               // show/hide + rebuild the two above
+    void updateBrowseChrome();               // show/hide + rebuild the rail
     // Locate the genre-like GROUP filter (Genre/Tags/…); -1 if none.
     int findGenreGroupIndex() const;
-    // Reset a single top-level filter (or a group child) to its default.
-    void resetSingleFilter(int filterIndex, int childIndex);
-    // True if a filter differs from its default (i.e. contributes a token).
-    static bool filterIsActive(const SourceFilter& f);
-    // Human token like "Genre: Action" / "Sort: Latest"; empty if inactive.
-    std::string formatFilterToken(const SourceFilter& f) const;
 
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;
