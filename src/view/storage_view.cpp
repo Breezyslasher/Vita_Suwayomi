@@ -124,20 +124,29 @@ void StorageView::loadStorageInfo() {
             // server-side downloads (no local files) are excluded below.
             item.sizeBytes = 0;
             std::string mangaPath = dm.getDownloadsPath() + "/manga_" + std::to_string(download.mangaId);
-            for (const auto& name : platform::listDir(mangaPath)) {
+            auto entries = platform::listDir(mangaPath);
+            brls::Logger::info("StorageView: scan '{}' ({} entries) for manga {} '{}'",
+                               mangaPath, entries.size(), download.mangaId, download.title);
+            for (const auto& name : entries) {
                 if (name.empty() || name[0] == '.') continue;
                 std::string entryPath = mangaPath + "/" + name;
                 int64_t sz = platform::fileSize(entryPath);
                 if (sz > 0) {
-                    item.sizeBytes += sz;
+                    item.sizeBytes += sz;   // a regular file (e.g. cover.jpg)
                 } else {
+                    // Directory (chapter_<i>) -> sum its page files.
+                    int64_t chSize = 0;
                     for (const auto& fname : platform::listDir(entryPath)) {
                         if (fname.empty() || fname[0] == '.') continue;
                         int64_t fsz = platform::fileSize(entryPath + "/" + fname);
-                        if (fsz > 0) item.sizeBytes += fsz;
+                        if (fsz > 0) chSize += fsz;
                     }
+                    item.sizeBytes += chSize;
+                    brls::Logger::info("StorageView:   dir '{}' -> {} bytes", name, chSize);
                 }
             }
+            brls::Logger::info("StorageView: manga {} local total = {} bytes",
+                               download.mangaId, item.sizeBytes);
             if (item.sizeBytes <= 0) continue;   // nothing stored locally -> skip
 
             // Count only the chapters that are present on the device.
