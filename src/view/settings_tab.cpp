@@ -16,6 +16,7 @@
 #include <chrono>
 #include <ctime>
 #include <sstream>
+#include <map>
 
 #include "platform/platform.hpp"
 
@@ -2924,150 +2925,402 @@ void SettingsTab::showStorageManagement() {
     brls::Application::pushActivity(new brls::Activity(storageBox));
 }
 
+namespace {
+
+// Fixed dark palette for the Statistics dashboard (per the design spec).
+namespace stcol {
+    inline NVGcolor page()       { return nvgRGB(18, 18, 20); }
+    inline NVGcolor panel()      { return nvgRGB(28, 28, 31); }
+    inline NVGcolor borderCard() { return nvgRGBA(255, 255, 255, 15); }
+    inline NVGcolor border()     { return nvgRGBA(255, 255, 255, 20); }
+    inline NVGcolor accent()     { return nvgRGB(100, 180, 255); }
+    inline NVGcolor success()    { return nvgRGB(78, 204, 163); }
+    inline NVGcolor warning()    { return nvgRGB(255, 152, 0); }
+    inline NVGcolor muted()      { return nvgRGB(139, 139, 147); }
+    inline NVGcolor body()       { return nvgRGB(197, 198, 208); }
+    inline NVGcolor heading()    { return nvgRGB(231, 231, 234); }
+    inline NVGcolor chip()       { return nvgRGB(35, 35, 38); }
+    inline NVGcolor empty()      { return nvgRGB(42, 42, 46); }
+    inline NVGcolor emptyBar()   { return nvgRGB(58, 58, 64); }
+    inline NVGcolor danger()     { return nvgRGB(217, 107, 107); }
+}
+
+// Donut completion ring drawn with nanovg arcs (borealis boxes can't do conic
+// gradients). Center labels are ordinary children drawn on top.
+class RingView : public brls::Box {
+public:
+    RingView(float completedFrac, float inProgressFrac)
+        : m_comp(completedFrac), m_ip(inProgressFrac) {}
+    void draw(NVGcontext* vg, float x, float y, float w, float h,
+              brls::Style style, brls::FrameContext* ctx) override {
+        const float cx = x + w * 0.5f, cy = y + h * 0.5f;
+        const float outer = (w < h ? w : h) * 0.5f;
+        const float thick = outer * 0.285f;
+        const float rad = outer - thick * 0.5f;
+        auto arc = [&](float f0, float f1, NVGcolor col) {
+            if (f1 <= f0) return;
+            const float a0 = -1.5707963f + f0 * 6.2831853f;
+            const float a1 = -1.5707963f + f1 * 6.2831853f;
+            nvgBeginPath(vg);
+            nvgArc(vg, cx, cy, rad, a0, a1, NVG_CW);
+            nvgStrokeColor(vg, col);
+            nvgStrokeWidth(vg, thick);
+            nvgLineCap(vg, NVG_BUTT);
+            nvgStroke(vg);
+        };
+        float comp = m_comp < 0 ? 0 : (m_comp > 1 ? 1 : m_comp);
+        float ip   = m_ip   < 0 ? 0 : m_ip;
+        if (comp + ip > 1.0f) ip = 1.0f - comp;
+        arc(0.0f, 1.0f, stcol::empty());          // not-started backdrop
+        arc(0.0f, comp, stcol::success());         // completed
+        arc(comp, comp + ip, stcol::accent());     // in-progress
+        brls::Box::draw(vg, x, y, w, h, style, ctx);
+    }
+private:
+    float m_comp, m_ip;
+};
+
+class StatsActivity : public brls::Activity {
+public:
+    StatsActivity(brls::Box* content, std::shared_ptr<bool> alive,
+                  std::vector<std::shared_ptr<void>> keep)
+        : brls::Activity(content), m_alive(std::move(alive)), m_keep(std::move(keep)) {}
+    ~StatsActivity() override { if (m_alive) *m_alive = false; }
+private:
+    std::shared_ptr<bool> m_alive;
+    std::vector<std::shared_ptr<void>> m_keep;
+};
+
+struct StatCat { std::string name; int read = 0; int total = 0; };
+struct StatsData {
+    int chaptersRead = 0, mangaCompleted = 0, unreadRemaining = 0;
+    int libSize = 0, completed = 0, inProgress = 0, notStarted = 0;
+    std::vector<StatCat> cats;
+    bool haveLibrary = false;   // library couldn't be read -> hide derived pieces
+};
+
+// Reads persisted counters plus library-derived aggregates (blocking; off UI).
+StatsData gatherStats() {
+    StatsData d;
+    AppSettings& s = Application::getInstance().getSettings();
+    d.chaptersRead   = s.totalChaptersRead;
+    d.mangaCompleted = s.totalMangaCompleted;
+
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+    std::vector<Manga> lib;
+    if (client.fetchLibraryManga(lib)) {
+        d.haveLibrary = true;
+        d.libSize = static_cast<int>(lib.size());
+        std::map<int, StatCat> catMap;
+        for (const auto& m : lib) {
+            const int total = m.chapterCount;
+            int read = total - m.unreadCount;
+            if (read < 0) read = 0;
+            d.unreadRemaining += m.unreadCount;
+            if (total > 0 && m.unreadCount == 0) d.completed++;
+            else if (read > 0)                   d.inProgress++;
+            else                                 d.notStarted++;
+            for (int cid : m.categoryIds) {
+                auto& cs = catMap[cid];
+                cs.read  += read;
+                cs.total += total;
+            }
+        }
+        std::vector<Category> cats;
+        if (client.fetchCategories(cats)) {
+            std::sort(cats.begin(), cats.end(),
+                [](const Category& a, const Category& b) { return a.order < b.order; });
+            for (const auto& cat : cats) {
+                auto it = catMap.find(cat.id);
+                if (it != catMap.end() && it->second.total > 0) {
+                    StatCat sc = it->second;
+                    sc.name = cat.name;
+                    d.cats.push_back(sc);
+                }
+            }
+        }
+    }
+    return d;
+}
+
+void buildStatsDashboard(brls::Box* content, const StatsData& d,
+                         std::function<void()> onSync, std::function<void()> onReset) {
+    namespace c = stcol;
+    content->clearViews();
+    content->setPaddingTop(20); content->setPaddingBottom(26);
+    content->setPaddingLeft(40); content->setPaddingRight(40);
+
+    auto pill = [&](const std::string& iconRes, const std::string& text, NVGcolor textColor,
+                    std::function<void()> onClick) {
+        auto* p = new brls::Box();
+        p->setAxis(brls::Axis::ROW);
+        p->setAlignItems(brls::AlignItems::CENTER);
+        p->setHeight(34);
+        p->setCornerRadius(11);
+        p->setPaddingLeft(iconRes.empty() ? 14 : 12);
+        p->setPaddingRight(14);
+        p->setBackgroundColor(c::chip());
+        p->setBorderColor(c::border());
+        p->setBorderThickness(1.0f);
+        p->setHighlightCornerRadius(11);
+        p->setHideHighlightBackground(true);
+        p->setFocusable(true);
+        if (!iconRes.empty()) {
+            auto* img = new brls::Image();
+            img->setWidth(16); img->setHeight(16);
+            img->setScalingType(brls::ImageScalingType::FIT);
+            img->setImageFromRes(iconRes);
+            img->setMarginRight(8);
+            p->addView(img);
+        }
+        auto* l = new brls::Label();
+        l->setText(text); l->setFontSize(13); l->setTextColor(textColor);
+        p->addView(l);
+        p->registerClickAction([onClick](brls::View*) { if (onClick) onClick(); return true; });
+        p->addGestureRecognizer(new brls::TapGestureRecognizer(p));
+        return p;
+    };
+
+    // ---- Header: breadcrumb + reset + sync ----
+    auto* header = new brls::Box();
+    header->setAxis(brls::Axis::ROW);
+    header->setAlignItems(brls::AlignItems::CENTER);
+    header->setMarginBottom(22);
+    auto* crumb = new brls::Label();
+    crumb->setText("Settings  ›  Reading Statistics");
+    crumb->setFontSize(22); crumb->setTextColor(c::heading()); crumb->setGrow(1.0f);
+    header->addView(crumb);
+    auto* resetPill = pill("", "Reset", c::danger(), onReset);
+    resetPill->setMarginRight(10);
+    header->addView(resetPill);
+    header->addView(pill("icons/refresh.png", "Sync", c::body(), onSync));
+    content->addView(header);
+
+    // ---- Body: two columns ----
+    auto* bodyRow = new brls::Box();
+    bodyRow->setAxis(brls::Axis::ROW);
+    bodyRow->setAlignItems(brls::AlignItems::FLEX_START);
+
+    // Left: completion ring card
+    if (d.haveLibrary && d.libSize > 0) {
+        auto* card = new brls::Box();
+        card->setAxis(brls::Axis::COLUMN);
+        card->setWidth(330);
+        card->setMarginRight(26);
+        card->setBackgroundColor(c::panel());
+        card->setBorderColor(c::borderCard());
+        card->setBorderThickness(1.0f);
+        card->setCornerRadius(16);
+        card->setPadding(26);
+
+        auto* lbl = new brls::Label();
+        lbl->setText("LIBRARY COMPLETION");
+        lbl->setFontSize(14); lbl->setTextColor(c::muted()); lbl->setMarginBottom(16);
+        card->addView(lbl);
+
+        const float compFrac = static_cast<float>(d.completed) / static_cast<float>(d.libSize);
+        const float ipFrac   = static_cast<float>(d.inProgress) / static_cast<float>(d.libSize);
+        const int pctInt = (d.completed * 100 + d.libSize / 2) / d.libSize;
+
+        auto* ringWrap = new brls::Box();
+        ringWrap->setJustifyContent(brls::JustifyContent::CENTER);
+        ringWrap->setAlignItems(brls::AlignItems::CENTER);
+        ringWrap->setMarginBottom(18);
+        auto* ring = new RingView(compFrac, ipFrac);
+        ring->setWidth(210); ring->setHeight(210);
+        ring->setJustifyContent(brls::JustifyContent::CENTER);
+        ring->setAlignItems(brls::AlignItems::CENTER);
+        auto* pct = new brls::Label();
+        pct->setText(std::to_string(pctInt) + "%");
+        pct->setFontSize(40); pct->setTextColor(c::heading());
+        ring->addView(pct);
+        auto* pcap = new brls::Label();
+        pcap->setText("completed"); pcap->setFontSize(13); pcap->setTextColor(c::muted());
+        ring->addView(pcap);
+        ringWrap->addView(ring);
+        card->addView(ringWrap);
+
+        auto legend = [&](NVGcolor swatch, const std::string& label, int count) {
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            row->setMarginTop(8);
+            auto* dot = new brls::Box();
+            dot->setWidth(12); dot->setHeight(12); dot->setCornerRadius(3);
+            dot->setBackgroundColor(swatch); dot->setMarginRight(10);
+            row->addView(dot);
+            auto* l = new brls::Label();
+            l->setText(label); l->setFontSize(13); l->setTextColor(c::body()); l->setGrow(1.0f);
+            row->addView(l);
+            auto* cnt = new brls::Label();
+            cnt->setText(std::to_string(count)); cnt->setFontSize(13); cnt->setTextColor(c::heading());
+            row->addView(cnt);
+            card->addView(row);
+        };
+        legend(c::success(), "Completed", d.completed);
+        legend(c::accent(),  "In progress", d.inProgress);
+        legend(c::empty(),   "Not started", d.notStarted);
+        bodyRow->addView(card);
+    }
+
+    // Right: headline numbers + categories
+    auto* right = new brls::Box();
+    right->setAxis(brls::Axis::COLUMN);
+    right->setGrow(1.0f);
+
+    auto* statRow = new brls::Box();
+    statRow->setAxis(brls::Axis::ROW);
+    statRow->setMarginBottom(20);
+    auto statCard = [&](const std::string& num, NVGcolor col, const std::string& cap, bool last) {
+        auto* card = new brls::Box();
+        card->setAxis(brls::Axis::COLUMN);
+        card->setGrow(1.0f);
+        card->setBackgroundColor(c::panel());
+        card->setBorderColor(c::borderCard());
+        card->setBorderThickness(1.0f);
+        card->setCornerRadius(13);
+        card->setPaddingTop(18); card->setPaddingBottom(18);
+        card->setPaddingLeft(20); card->setPaddingRight(20);
+        if (!last) card->setMarginRight(16);
+        auto* n = new brls::Label();
+        n->setText(num); n->setFontSize(34); n->setTextColor(col);
+        card->addView(n);
+        auto* cp = new brls::Label();
+        cp->setText(cap); cp->setFontSize(13); cp->setTextColor(c::muted()); cp->setMarginTop(4);
+        card->addView(cp);
+        statRow->addView(card);
+    };
+    statCard(std::to_string(d.chaptersRead), c::accent(), "Chapters read", false);
+    statCard(std::to_string(d.mangaCompleted), c::success(),
+             "Manga completed", !d.haveLibrary);
+    if (d.haveLibrary)
+        statCard(std::to_string(d.unreadRemaining), c::warning(), "Unread remaining", true);
+    right->addView(statRow);
+
+    if (d.haveLibrary && !d.cats.empty()) {
+        auto* catCard = new brls::Box();
+        catCard->setAxis(brls::Axis::COLUMN);
+        catCard->setBackgroundColor(c::panel());
+        catCard->setBorderColor(c::borderCard());
+        catCard->setBorderThickness(1.0f);
+        catCard->setCornerRadius(14);
+        catCard->setPaddingTop(20); catCard->setPaddingBottom(20);
+        catCard->setPaddingLeft(24); catCard->setPaddingRight(24);
+        auto* ct = new brls::Label();
+        ct->setText("Progress by category");
+        ct->setFontSize(15); ct->setTextColor(c::heading()); ct->setMarginBottom(14);
+        catCard->addView(ct);
+        for (const auto& cat : d.cats) {
+            const float pct = cat.total > 0 ? static_cast<float>(cat.read) / static_cast<float>(cat.total) : 0.0f;
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::COLUMN);
+            row->setMarginBottom(14);
+            auto* top = new brls::Box();
+            top->setAxis(brls::Axis::ROW);
+            top->setAlignItems(brls::AlignItems::CENTER);
+            top->setMarginBottom(6);
+            auto* nm = new brls::Label();
+            nm->setText(cat.name); nm->setFontSize(14); nm->setTextColor(c::body()); nm->setGrow(1.0f);
+            top->addView(nm);
+            auto* rt = new brls::Label();
+            rt->setText(std::to_string(cat.read) + " / " + std::to_string(cat.total));
+            rt->setFontSize(13); rt->setTextColor(c::muted());
+            top->addView(rt);
+            row->addView(top);
+            auto* track = new brls::Box();
+            track->setHeight(9); track->setCornerRadius(4);
+            track->setAlignSelf(brls::AlignSelf::STRETCH);
+            track->setBackgroundColor(c::chip());
+            auto* fill = new brls::Box();
+            fill->setHeight(9); fill->setCornerRadius(4);
+            const NVGcolor fc = pct >= 1.0f ? c::success()
+                              : pct >= 0.1f ? c::accent()
+                              : pct >  0.0f ? c::warning() : c::emptyBar();
+            fill->setBackgroundColor(fc);
+            float wp = pct * 100.0f;
+            if (wp < 0.0f) wp = 0.0f; if (wp > 100.0f) wp = 100.0f;
+            fill->setWidthPercentage(wp);
+            track->addView(fill);
+            row->addView(track);
+            catCard->addView(row);
+        }
+        right->addView(catCard);
+    }
+
+    bodyRow->addView(right);
+    content->addView(bodyRow);
+
+    brls::Application::giveFocus(header);
+}
+
+} // namespace
+
 void SettingsTab::showStatisticsView() {
-    // Sync stats from server first
-    Application::getInstance().syncStatisticsFromServer();
+    auto* page = new brls::Box();
+    page->setAxis(brls::Axis::COLUMN);
+    page->setGrow(1.0f);
+    page->setBackgroundColor(stcol::page());
 
-    Application& app = Application::getInstance();
-    AppSettings& settings = app.getSettings();
+    auto* scroll = new brls::ScrollingFrame();
+    scroll->setGrow(1.0f);
+    scroll->setFocusable(false);
+    auto* content = new brls::Box();
+    content->setAxis(brls::Axis::COLUMN);
+    content->setAlignItems(brls::AlignItems::STRETCH);
+    scroll->setContentView(content);
+    page->addView(scroll);
 
-    auto* statsBox = new brls::Box();
-    statsBox->setAxis(brls::Axis::COLUMN);
-    statsBox->setPadding(20);
-    statsBox->setGrow(1.0f);
+    auto alive = std::make_shared<bool>(true);
+    page->registerAction("Back", brls::ControllerButton::BUTTON_B,
+        [](brls::View*) { brls::Application::popActivity(); return true; });
 
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText("Reading Statistics");
-    titleLabel->setFontSize(24);
-    titleLabel->setMarginBottom(10);
-    statsBox->addView(titleLabel);
+    auto render  = std::make_shared<std::function<void(const StatsData&)>>();
+    auto runSync = std::make_shared<std::function<void()>>();
+    std::weak_ptr<std::function<void()>> runSyncWeak = runSync;
 
-    // Info label
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Synced from server and local reading");
-    infoLabel->setFontSize(14);
-    infoLabel->setTextColor(Application::getInstance().getDimTextColor());
-    infoLabel->setMarginBottom(15);
-    statsBox->addView(infoLabel);
+    *render = [content, runSyncWeak](const StatsData& d) {
+        buildStatsDashboard(content, d,
+            [runSyncWeak]() { if (auto r = runSyncWeak.lock()) (*r)(); },
+            []() {
+                std::vector<OptionRow> rows;
+                rows.push_back({ "cross.png", "Reset", "", true, true, []() {
+                    AppSettings& s = Application::getInstance().getSettings();
+                    s.totalChaptersRead = 0;
+                    s.totalMangaCompleted = 0;
+                    s.currentStreak = 0;
+                    s.longestStreak = 0;
+                    s.totalReadingTime = 0;
+                    s.lastReadDate = 0;
+                    Application::getInstance().saveSettings();
+                    brls::Application::notify("Statistics reset");
+                    brls::Application::popActivity();
+                }});
+                rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+                OptionsPopover::show("CONFIRM", "Reset all reading statistics?", std::move(rows));
+            });
+    };
 
-    // Total chapters read
-    auto* chaptersLabel = new brls::Label();
-    chaptersLabel->setText("Chapters Read: " + std::to_string(settings.totalChaptersRead));
-    chaptersLabel->setFontSize(18);
-    chaptersLabel->setMarginBottom(10);
-    statsBox->addView(chaptersLabel);
+    *runSync = [content, render, alive]() {
+        content->clearViews();
+        auto* loading = new brls::Label();
+        loading->setText("Loading statistics…");
+        loading->setFontSize(15);
+        loading->setTextColor(stcol::body());
+        loading->setMarginTop(40); loading->setMarginLeft(40);
+        content->addView(loading);
 
-    // Manga completed
-    auto* completedLabel = new brls::Label();
-    completedLabel->setText("Manga Completed: " + std::to_string(settings.totalMangaCompleted));
-    completedLabel->setFontSize(18);
-    completedLabel->setMarginBottom(10);
-    statsBox->addView(completedLabel);
-
-    // Reading streak
-    auto* streakLabel = new brls::Label();
-    streakLabel->setText("Current Streak: " + std::to_string(settings.currentStreak) + " days");
-    streakLabel->setFontSize(18);
-    streakLabel->setMarginBottom(10);
-    statsBox->addView(streakLabel);
-
-    // Longest streak
-    auto* longestLabel = new brls::Label();
-    longestLabel->setText("Longest Streak: " + std::to_string(settings.longestStreak) + " days");
-    longestLabel->setFontSize(18);
-    longestLabel->setMarginBottom(10);
-    statsBox->addView(longestLabel);
-
-    // Reading time note
-    auto* timeNoteLabel = new brls::Label();
-    timeNoteLabel->setText("Note: Reading time tracking is local only");
-    timeNoteLabel->setFontSize(14);
-    timeNoteLabel->setTextColor(Application::getInstance().getDimTextColor());
-    timeNoteLabel->setMarginBottom(5);
-    statsBox->addView(timeNoteLabel);
-
-    // Reading time
-    int hours = static_cast<int>(settings.totalReadingTime / 3600);
-    int minutes = static_cast<int>((settings.totalReadingTime % 3600) / 60);
-    auto* timeLabel = new brls::Label();
-    timeLabel->setText("Total Reading Time: " + std::to_string(hours) + "h " + std::to_string(minutes) + "m");
-    timeLabel->setFontSize(18);
-    timeLabel->setMarginBottom(20);
-    statsBox->addView(timeLabel);
-
-    // Sync from Server button
-    auto* syncBtn = new brls::Button();
-    syncBtn->setText("Sync from Server");
-    syncBtn->registerClickAction([chaptersLabel, completedLabel](brls::View* view) {
-        brls::Application::notify("Syncing statistics...");
         Application::getInstance().syncStatisticsFromServer();
-        AppSettings& s = Application::getInstance().getSettings();
-        chaptersLabel->setText("Chapters Read: " + std::to_string(s.totalChaptersRead));
-        completedLabel->setText("Manga Completed: " + std::to_string(s.totalMangaCompleted));
-        brls::Application::notify("Statistics synced");
-        return true;
-    });
-    syncBtn->addGestureRecognizer(new brls::TapGestureRecognizer(syncBtn));
-    // Register circle button on syncBtn
-    syncBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    statsBox->addView(syncBtn);
+        platform::launchThread([render, alive]() {
+            StatsData d = gatherStats();
+            brls::sync([render, alive, d]() {
+                if (!*alive) return;
+                (*render)(d);
+            });
+        });
+    };
 
-    // Reset button
-    auto* resetBtn = new brls::Button();
-    resetBtn->setText("Reset Statistics");
-    resetBtn->setMarginTop(10);
-    resetBtn->registerClickAction([](brls::View* view) {
-        std::vector<OptionRow> rows;
-        rows.push_back({ "cross.png", "Reset", "", true, true, []() {
-            AppSettings& s = Application::getInstance().getSettings();
-            s.totalChaptersRead = 0;
-            s.totalMangaCompleted = 0;
-            s.currentStreak = 0;
-            s.longestStreak = 0;
-            s.totalReadingTime = 0;
-            s.lastReadDate = 0;
-            Application::getInstance().saveSettings();
-            brls::Application::notify("Statistics reset");
-            brls::Application::popActivity();
-        } });
-        rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
-        OptionsPopover::show("CONFIRM", "Reset all reading statistics?", std::move(rows));
-        return true;
-    });
-    resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
-    // Register circle button on resetBtn
-    resetBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    statsBox->addView(resetBtn);
-
-    // Back button
-    auto* backBtn = new brls::Button();
-    backBtn->setText("Back");
-    backBtn->setMarginTop(20);
-    backBtn->registerClickAction([](brls::View* view) {
-        brls::Application::popActivity();
-        return true;
-    });
-    backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
-    // Register circle button on backBtn
-    backBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    statsBox->addView(backBtn);
-
-    // Register circle button on statsBox as fallback
-    statsBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    brls::Application::pushActivity(new brls::Activity(statsBox));
+    brls::Application::pushActivity(new StatsActivity(page, alive, {render, runSync}));
+    (*runSync)();
 }
 
 void SettingsTab::createBackupSection() {
