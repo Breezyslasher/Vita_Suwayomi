@@ -1,9 +1,14 @@
 /**
  * VitaSuwayomi - History Tab implementation
- * Shows chronological reading history with date/time and quick resume
+ *
+ * Direction B: a dense, day-grouped reading-history list with client-side
+ * quick filters (All / This week / Unfinished) and done/unfinished markers.
+ * The per-item menu is homed on the shared OptionsPopover for visual
+ * consistency with the rest of the app.
  */
 
 #include "view/history_tab.hpp"
+#include "view/options_popover.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
@@ -15,6 +20,66 @@
 
 namespace vitasuwayomi {
 
+namespace {
+
+// Direction B palette (see the handoff). Kept local so the tab owns its look.
+namespace hc {
+    inline NVGcolor accent()   { return nvgRGB(0x64, 0xB4, 0xFF); }  // #64B4FF
+    inline NVGcolor accentInk(){ return nvgRGB(0x0d, 0x22, 0x36); }  // #0d2236
+    inline NVGcolor success()  { return nvgRGB(0x4E, 0xCC, 0xA3); }  // #4ECCA3
+    inline NVGcolor muted()    { return nvgRGB(0x8b, 0x8b, 0x93); }  // #8b8b93
+    inline NVGcolor body()     { return nvgRGB(0xC5, 0xC6, 0xD0); }  // #C5C6D0
+    inline NVGcolor heading()  { return nvgRGB(0xE7, 0xE7, 0xEA); }  // #E7E7EA
+    inline NVGcolor chipIdle()  { return nvgRGB(0x26, 0x26, 0x2a); }
+}
+
+// Small nanovg-drawn trailing marker: a check (done) or a right-pointing play
+// triangle (unfinished). Avoids needing tinted PNGs.
+class HistMarker : public brls::Box {
+public:
+    HistMarker(bool done, NVGcolor color) : m_done(done), m_color(color) {}
+    void draw(NVGcontext* vg, float x, float y, float w, float h,
+              brls::Style style, brls::FrameContext* ctx) override {
+        brls::Box::draw(vg, x, y, w, h, style, ctx);
+        const float s  = (w < h) ? w : h;
+        const float cx = x + w * 0.5f, cy = y + h * 0.5f;
+        if (m_done) {
+            nvgBeginPath(vg);
+            nvgStrokeColor(vg, m_color);
+            nvgStrokeWidth(vg, s * 0.12f);
+            nvgLineCap(vg, NVG_ROUND);
+            nvgLineJoin(vg, NVG_ROUND);
+            nvgMoveTo(vg, cx - s * 0.26f, cy + s * 0.02f);
+            nvgLineTo(vg, cx - s * 0.06f, cy + s * 0.22f);
+            nvgLineTo(vg, cx + s * 0.28f, cy - s * 0.20f);
+            nvgStroke(vg);
+        } else {
+            // Filled play triangle pointing right.
+            nvgBeginPath(vg);
+            nvgMoveTo(vg, cx - s * 0.20f, cy - s * 0.26f);
+            nvgLineTo(vg, cx + s * 0.28f, cy);
+            nvgLineTo(vg, cx - s * 0.20f, cy + s * 0.26f);
+            nvgClosePath(vg);
+            nvgFillColor(vg, m_color);
+            nvgFill(vg);
+        }
+    }
+private:
+    bool     m_done;
+    NVGcolor m_color;
+};
+
+// Is a (ms or s) timestamp within the last `days` days?
+bool withinDays(int64_t timestamp, int days) {
+    if (timestamp <= 0) return false;
+    time_t t = (timestamp > 100000000000LL) ? static_cast<time_t>(timestamp / 1000)
+                                             : static_cast<time_t>(timestamp);
+    time_t now = std::time(nullptr);
+    return (now - t) < static_cast<int64_t>(days) * 86400;
+}
+
+} // namespace
+
 HistoryTab::HistoryTab() {
     m_alive = std::make_shared<bool>(true);
 
@@ -24,19 +89,42 @@ HistoryTab::HistoryTab() {
     this->setPadding(20);
     this->setGrow(1.0f);
 
-    // Header row with title and buttons
+    // Header row with title, count pill and refresh button
     auto* headerRow = new brls::Box();
     headerRow->setAxis(brls::Axis::ROW);
     headerRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
     headerRow->setAlignItems(brls::AlignItems::CENTER);
-    headerRow->setMarginBottom(15);
+    headerRow->setMarginBottom(12);
 
-    // Title
+    // Title + count pill (left)
+    auto* titleGroup = new brls::Box();
+    titleGroup->setAxis(brls::Axis::ROW);
+    titleGroup->setAlignItems(brls::AlignItems::CENTER);
+    titleGroup->setGrow(1.0f);
+
     m_titleLabel = new brls::Label();
     m_titleLabel->setText("Reading History");
     m_titleLabel->setFontSize(28);
-    m_titleLabel->setGrow(1.0f);
-    headerRow->addView(m_titleLabel);
+    titleGroup->addView(m_titleLabel);
+
+    m_countPill = new brls::Box();
+    m_countPill->setAxis(brls::Axis::ROW);
+    m_countPill->setJustifyContent(brls::JustifyContent::CENTER);
+    m_countPill->setAlignItems(brls::AlignItems::CENTER);
+    m_countPill->setHeight(24);
+    m_countPill->setCornerRadius(12);
+    m_countPill->setPaddingLeft(10);
+    m_countPill->setPaddingRight(10);
+    m_countPill->setMarginLeft(10);
+    m_countPill->setBackgroundColor(hc::chipIdle());
+    m_countPillLabel = new brls::Label();
+    m_countPillLabel->setText("0");
+    m_countPillLabel->setFontSize(13);
+    m_countPillLabel->setTextColor(hc::body());
+    m_countPill->addView(m_countPillLabel);
+    titleGroup->addView(m_countPill);
+
+    headerRow->addView(titleGroup);
 
     // Refresh button with triangle hint
     auto* refreshContainer = new brls::Box();
@@ -74,6 +162,45 @@ HistoryTab::HistoryTab() {
 
     headerRow->addView(refreshContainer);
     this->addView(headerRow);
+
+    // Filter chips row (All / This week / Unfinished)
+    auto* chipsRow = new brls::Box();
+    chipsRow->setAxis(brls::Axis::ROW);
+    chipsRow->setAlignItems(brls::AlignItems::CENTER);
+    chipsRow->setMarginBottom(12);
+
+    const char* chipText[3] = {"All", "This week", "Unfinished"};
+    for (int i = 0; i < 3; i++) {
+        auto* chip = new brls::Box();
+        chip->setAxis(brls::Axis::ROW);
+        chip->setJustifyContent(brls::JustifyContent::CENTER);
+        chip->setAlignItems(brls::AlignItems::CENTER);
+        chip->setHeight(34);
+        chip->setPaddingLeft(14);
+        chip->setPaddingRight(14);
+        chip->setCornerRadius(17);
+        chip->setMarginRight(8);
+        chip->setFocusable(true);
+        chip->setBackgroundColor(hc::chipIdle());
+
+        auto* lbl = new brls::Label();
+        lbl->setText(chipText[i]);
+        lbl->setFontSize(14);
+        lbl->setTextColor(hc::muted());
+        chip->addView(lbl);
+
+        chip->registerClickAction([this, i](brls::View*) {
+            setFilter(static_cast<Filter>(i));
+            return true;
+        });
+        chip->addGestureRecognizer(new brls::TapGestureRecognizer(chip));
+
+        chipsRow->addView(chip);
+        m_chips[i] = chip;
+        m_chipLabels[i] = lbl;
+    }
+    this->addView(chipsRow);
+    refreshChipStyles();
 
     // Scrollable content
     m_scrollView = new brls::ScrollingFrame();
@@ -161,9 +288,8 @@ void HistoryTab::draw(NVGcontext* vg, float x, float y, float width, float heigh
         }
 
         // Visibility culling: hide off-screen rows so borealis skips their
-        // entire View::frame() call tree (~7 child views per row, each doing
-        // nvgSave/drawBackground/draw/nvgRestore).  INVISIBLE keeps layout
-        // space but skips all NVG work (no yoga invalidation either).
+        // entire View::frame() call tree.  INVISIBLE keeps layout space but
+        // skips all NVG work (no yoga invalidation either).
         float viewportH = m_scrollView->getHeight();
         float svTop     = m_scrollView->getY();
         float svBot     = svTop + viewportH;
@@ -220,6 +346,44 @@ void HistoryTab::refresh() {
     loadHistory();
 }
 
+bool HistoryTab::itemIsDone(const ReadingHistoryItem& item) {
+    return item.pageCount > 0 && (item.lastPageRead + 1) >= item.pageCount;
+}
+
+std::vector<ReadingHistoryItem> HistoryTab::visibleItems() const {
+    if (m_filter == Filter::All) return m_historyItems;
+
+    std::vector<ReadingHistoryItem> out;
+    out.reserve(m_historyItems.size());
+    for (const auto& it : m_historyItems) {
+        if (m_filter == Filter::ThisWeek) {
+            if (withinDays(it.lastReadAt, 7)) out.push_back(it);
+        } else { // Unfinished
+            if (!itemIsDone(it)) out.push_back(it);
+        }
+    }
+    return out;
+}
+
+void HistoryTab::refreshChipStyles() {
+    for (int i = 0; i < 3; i++) {
+        if (!m_chips[i]) continue;
+        bool active = (static_cast<int>(m_filter) == i);
+        m_chips[i]->setBackgroundColor(active ? hc::accent() : hc::chipIdle());
+        if (m_chipLabels[i])
+            m_chipLabels[i]->setTextColor(active ? hc::accentInk() : hc::muted());
+    }
+}
+
+void HistoryTab::setFilter(Filter f) {
+    if (m_filter == f) return;
+    m_filter = f;
+    refreshChipStyles();
+    // Client-side only: no new network calls. Rebuild from the filtered view.
+    m_focusIndexAfterRebuild = -1;
+    rebuildHistoryList();
+}
+
 void HistoryTab::loadHistory() {
     brls::Logger::debug("HistoryTab: Loading history...");
 
@@ -227,7 +391,8 @@ void HistoryTab::loadHistory() {
     m_loadingLabel->setVisibility(brls::Visibility::VISIBLE);
     m_scrollView->setVisibility(brls::Visibility::GONE);
     m_emptyStateBox->setVisibility(brls::Visibility::GONE);
-    m_titleLabel->setText("Reading History (Loading...)");
+    m_titleLabel->setText("Reading History");
+    if (m_countPillLabel) m_countPillLabel->setText("...");
 
     std::weak_ptr<bool> aliveWeak = m_alive;
 
@@ -250,6 +415,7 @@ void HistoryTab::loadHistory() {
                 m_scrollView->setVisibility(brls::Visibility::GONE);
                 m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
                 m_titleLabel->setText("Reading History");
+                if (m_countPillLabel) m_countPillLabel->setText("0");
                 brls::Application::notify("Failed to load history - check connection");
                 return;
             }
@@ -268,32 +434,39 @@ void HistoryTab::loadMoreHistory() {
 
     brls::Logger::debug("HistoryTab: Loading more history from offset {}...", m_currentOffset);
 
-    // Remember the index of first new item (current list size)
-    size_t firstNewItemIndex = m_historyItems.size();
+    // Remember the number of rows currently displayed so the incremental
+    // append (All filter) knows where the new rows begin.
+    size_t firstNewDisplayedIndex = m_itemRows.size();
 
     std::weak_ptr<bool> aliveWeak = m_alive;
     int offset = m_currentOffset;  // Capture by value for safe background access
 
-    asyncRun([this, aliveWeak, firstNewItemIndex, offset]() {
+    asyncRun([this, aliveWeak, firstNewDisplayedIndex, offset]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         std::vector<ReadingHistoryItem> moreHistory;
 
         bool success = client.fetchReadingHistory(offset, ITEMS_PER_PAGE, moreHistory);
 
-        brls::sync([this, moreHistory, success, aliveWeak, firstNewItemIndex]() {
+        brls::sync([this, moreHistory, success, aliveWeak, firstNewDisplayedIndex]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
 
             if (success && !moreHistory.empty()) {
-                // Append to existing items in data model
+                // Append to existing items in the data model
                 for (const auto& item : moreHistory) {
                     m_historyItems.push_back(item);
                 }
                 m_currentOffset += static_cast<int>(moreHistory.size());
                 m_hasMoreItems = (moreHistory.size() >= ITEMS_PER_PAGE);
 
-                // Incrementally append items to UI (no rebuild needed)
-                appendHistoryItems(moreHistory, firstNewItemIndex);
+                if (m_filter == Filter::All) {
+                    // Fast path: incrementally append the new rows.
+                    appendHistoryItems(moreHistory, firstNewDisplayedIndex);
+                } else {
+                    // Filtered view: rebuild from the filtered set (small).
+                    m_focusIndexAfterRebuild = static_cast<int>(firstNewDisplayedIndex);
+                    rebuildHistoryList();
+                }
             } else {
                 m_hasMoreItems = false;
             }
@@ -308,7 +481,12 @@ void HistoryTab::rebuildHistoryList() {
     m_contentBox->clearViews();
     m_itemRows.clear();
 
-    if (m_historyItems.empty()) {
+    std::vector<ReadingHistoryItem> items = visibleItems();
+
+    if (m_countPillLabel)
+        m_countPillLabel->setText(std::to_string(items.size()));
+
+    if (items.empty()) {
         m_scrollView->setVisibility(brls::Visibility::GONE);
         m_emptyStateBox->setVisibility(brls::Visibility::VISIBLE);
         m_titleLabel->setText("Reading History");
@@ -318,51 +496,71 @@ void HistoryTab::rebuildHistoryList() {
 
     m_scrollView->setVisibility(brls::Visibility::VISIBLE);
     m_emptyStateBox->setVisibility(brls::Visibility::GONE);
-    m_titleLabel->setText("Reading History (" + std::to_string(m_historyItems.size()) + ")");
+    m_titleLabel->setText("Reading History");
 
     // Group by date
     std::string lastDate;
-    for (size_t i = 0; i < m_historyItems.size(); i++) {
-        const auto& item = m_historyItems[i];
+    for (size_t i = 0; i < items.size(); i++) {
+        const auto& item = items[i];
 
-        // Date header
+        // Date header with a per-group count
         std::string dateStr = formatTimestamp(item.lastReadAt);
         if (dateStr != lastDate) {
             lastDate = dateStr;
 
+            // Count how many consecutive items share this date.
+            int groupCount = 0;
+            for (size_t j = i; j < items.size() &&
+                 formatTimestamp(items[j].lastReadAt) == dateStr; j++) {
+                groupCount++;
+            }
+
+            auto* header = new brls::Box();
+            header->setAxis(brls::Axis::ROW);
+            header->setAlignItems(brls::AlignItems::CENTER);
+            header->setMarginTop(i > 0 ? 18 : 4);
+            header->setMarginBottom(8);
+
             auto* dateHeader = new brls::Label();
             dateHeader->setText(dateStr);
-            dateHeader->setFontSize(16);
-            dateHeader->setTextColor(Application::getInstance().getTealColor());  // Teal
-            dateHeader->setMarginTop(i > 0 ? 20 : 5);
-            dateHeader->setMarginBottom(8);
-            m_contentBox->addView(dateHeader);
+            dateHeader->setFontSize(15);
+            dateHeader->setTextColor(Application::getInstance().getTealColor());
+            header->addView(dateHeader);
+
+            auto* groupCountLabel = new brls::Label();
+            groupCountLabel->setText(std::to_string(groupCount));
+            groupCountLabel->setFontSize(12);
+            groupCountLabel->setTextColor(hc::muted());
+            groupCountLabel->setMarginLeft(8);
+            header->addView(groupCountLabel);
+
+            m_contentBox->addView(header);
         }
 
-        // Create history item row using helper
         auto* itemRow = createHistoryItemRow(item, static_cast<int>(i));
         m_contentBox->addView(itemRow);
         m_itemRows.push_back(itemRow);
     }
 
-    // Set up navigation between refresh button and first history item
-    if (!m_itemRows.empty() && m_refreshBtn) {
-        // First item UP -> refresh button
-        m_itemRows[0]->setCustomNavigationRoute(brls::FocusDirection::UP, m_refreshBtn);
-        // Refresh button DOWN -> first item
-        m_refreshBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_itemRows[0]);
+    // Navigation between chips/refresh and the first history item
+    if (!m_itemRows.empty()) {
+        m_itemRows[0]->setCustomNavigationRoute(brls::FocusDirection::UP, m_chips[0]);
+        for (int i = 0; i < 3; i++)
+            if (m_chips[i])
+                m_chips[i]->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_itemRows[0]);
+        if (m_refreshBtn)
+            m_refreshBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_itemRows[0]);
     }
 
-    // Focus on first new item after load more, or first item after initial load
+    // Focus on first new item after load-more, or first item after initial load
     if (m_focusIndexAfterRebuild >= 0 && m_focusIndexAfterRebuild < static_cast<int>(m_itemRows.size())) {
         brls::Application::giveFocus(m_itemRows[m_focusIndexAfterRebuild]);
         m_focusIndexAfterRebuild = -1;
     } else if (!m_itemRows.empty() && m_focusIndexAfterRebuild == -1) {
-        // Initial load - focus on first item
         brls::Application::giveFocus(m_itemRows[0]);
     }
 
-    brls::Logger::info("HistoryTab: Displayed {} history items", m_historyItems.size());
+    brls::Logger::info("HistoryTab: Displayed {} history items", m_itemRows.size());
 }
 
 void HistoryTab::onHistoryItemSelected(const ReadingHistoryItem& item) {
@@ -378,36 +576,37 @@ void HistoryTab::onHistoryItemSelected(const ReadingHistoryItem& item) {
     );
 }
 
-void HistoryTab::showHistoryItemMenu(const ReadingHistoryItem& item, int index) {
-    std::vector<std::string> options = {
-        "Continue Reading",
-        "View Manga Details",
-        "Mark as Unread"
+void HistoryTab::showHistoryItemMenu(const ReadingHistoryItem& item, int /*index*/) {
+    std::string sub = "Ch. " + std::to_string(static_cast<int>(item.chapterNumber)) +
+                      " · page " + std::to_string(item.lastPageRead + 1);
+    if (item.pageCount > 0) sub += " / " + std::to_string(item.pageCount);
+
+    std::vector<OptionRow> rows;
+
+    OptionRow cont;
+    cont.icon    = "book-open-page-variant.png";
+    cont.label   = "Continue reading";
+    cont.sub     = "p. " + std::to_string(item.lastPageRead + 1);
+    cont.primary = true;
+    cont.action  = [this, item]() { onHistoryItemSelected(item); };
+    rows.push_back(cont);
+
+    OptionRow details;
+    details.icon   = "book-multiple.png";
+    details.label  = "View manga details";
+    details.action = [item]() {
+        Application::getInstance().pushMangaDetailView(item.mangaId);
     };
+    rows.push_back(details);
 
-    auto* dropdown = new brls::Dropdown(
-        item.mangaTitle,
-        options,
-        [this, item](int selected) {
-            if (selected < 0) return;
+    OptionRow unread;
+    unread.icon   = "cross.png";  // drawn as a crisp MDI vector glyph
+    unread.label  = "Mark as unread";
+    unread.danger = true;
+    unread.action = [this, item]() { markChapterUnread(item); };
+    rows.push_back(unread);
 
-            brls::sync([this, item, selected, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-                auto a = aliveWeak.lock(); if (!a || !*a) return;
-                switch (selected) {
-                    case 0:  // Continue Reading
-                        onHistoryItemSelected(item);
-                        break;
-                    case 1:  // View Manga Details
-                        Application::getInstance().pushMangaDetailView(item.mangaId);
-                        break;
-                    case 2:  // Mark as Unread
-                        markChapterUnread(item);
-                        break;
-                }
-            });
-        }
-    );
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+    OptionsPopover::show("HISTORY", item.mangaTitle, std::move(rows));
 }
 
 void HistoryTab::markChapterUnread(const ReadingHistoryItem& item) {
@@ -426,6 +625,9 @@ void HistoryTab::markChapterUnread(const ReadingHistoryItem& item) {
             if (!alive || !*alive) return;
 
             if (success) {
+                // Move focus off any row before the rebuild destroys it.
+                if (m_refreshBtn) brls::Application::giveFocus(m_refreshBtn);
+
                 // Remove from local list
                 for (auto it = m_historyItems.begin(); it != m_historyItems.end(); ++it) {
                     if (it->chapterId == item.chapterId) {
@@ -520,26 +722,27 @@ std::string HistoryTab::formatRelativeTime(int64_t timestamp) {
     }
 }
 
-brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int index) {
+brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int displayedIndex) {
+    const bool done = itemIsDone(item);
+
     auto* itemRow = new brls::Box();
     itemRow->setAxis(brls::Axis::ROW);
     itemRow->setAlignItems(brls::AlignItems::CENTER);
-    itemRow->setPadding(10);
+    itemRow->setPadding(9);
     itemRow->setMarginBottom(6);
-    itemRow->setCornerRadius(8);
+    itemRow->setCornerRadius(10);
     itemRow->setBackgroundColor(Application::getInstance().getRowBackground());
     itemRow->setFocusable(true);
-    itemRow->setHeight(80);
+    itemRow->setHeight(72);
 
-    // Cover image
+    // Cover image (38x54)
     auto* coverImage = new brls::Image();
-    coverImage->setWidth(50);
-    coverImage->setHeight(70);
+    coverImage->setWidth(38);
+    coverImage->setHeight(54);
     coverImage->setCornerRadius(4);
     coverImage->setScalingType(brls::ImageScalingType::FILL);
     coverImage->setMarginRight(12);
 
-    // Load cover
     if (!item.mangaThumbnail.empty()) {
         std::string url = item.mangaThumbnail;
         if (url[0] == '/') {
@@ -549,55 +752,69 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
     }
     itemRow->addView(coverImage);
 
-    // Info column
+    // Info column (title + chapter)
     auto* infoBox = new brls::Box();
     infoBox->setAxis(brls::Axis::COLUMN);
     infoBox->setGrow(1.0f);
     infoBox->setJustifyContent(brls::JustifyContent::CENTER);
 
-    // Manga title
     auto* titleLabel = new brls::Label();
     std::string title = item.mangaTitle;
-    if (title.length() > 35) {
-        title = title.substr(0, 33) + "..";
+    if (title.length() > 38) {
+        title = title.substr(0, 36) + "..";
     }
     titleLabel->setText(title);
-    titleLabel->setFontSize(15);
-    titleLabel->setTextColor(nvgRGB(255, 255, 255));
+    titleLabel->setFontSize(14.5f);
+    titleLabel->setTextColor(hc::heading());
+    titleLabel->setSingleLine(true);
     infoBox->addView(titleLabel);
 
-    // Chapter info
     auto* chapterLabel = new brls::Label();
     std::string chapterText = item.chapterName;
     if (chapterText.empty()) {
         chapterText = "Chapter " + std::to_string(static_cast<int>(item.chapterNumber));
     }
     chapterLabel->setText(chapterText);
-    chapterLabel->setFontSize(13);
-    chapterLabel->setTextColor(Application::getInstance().getSubtitleColor());
+    chapterLabel->setFontSize(12.5f);
+    chapterLabel->setTextColor(hc::muted());
+    chapterLabel->setSingleLine(true);
+    chapterLabel->setMarginTop(2);
     infoBox->addView(chapterLabel);
-
-    // Progress and time
-    auto* progressLabel = new brls::Label();
-    std::string progressText = "Page " + std::to_string(item.lastPageRead + 1);
-    if (item.pageCount > 0) {
-        progressText += "/" + std::to_string(item.pageCount);
-    }
-    progressText += " - " + formatRelativeTime(item.lastReadAt);
-    progressLabel->setText(progressText);
-    progressLabel->setFontSize(11);
-    progressLabel->setTextColor(Application::getInstance().getDimTextColor());
-    infoBox->addView(progressLabel);
 
     itemRow->addView(infoBox);
 
-    // Resume button/indicator
-    auto* resumeLabel = new brls::Label();
-    resumeLabel->setText(">");
-    resumeLabel->setFontSize(20);
-    resumeLabel->setTextColor(Application::getInstance().getTealColor());
-    resumeLabel->setMarginLeft(10);
-    itemRow->addView(resumeLabel);
+    // Right column: page (done->success else body) over relative time (dim)
+    auto* rightBox = new brls::Box();
+    rightBox->setAxis(brls::Axis::COLUMN);
+    rightBox->setAlignItems(brls::AlignItems::FLEX_END);
+    rightBox->setJustifyContent(brls::JustifyContent::CENTER);
+    rightBox->setMarginLeft(8);
+
+    auto* pageLabel = new brls::Label();
+    std::string pageText = "p. " + std::to_string(item.lastPageRead + 1);
+    if (item.pageCount > 0) pageText += " / " + std::to_string(item.pageCount);
+    pageLabel->setText(pageText);
+    pageLabel->setFontSize(13);
+    pageLabel->setTextColor(done ? hc::success() : hc::body());
+    pageLabel->setSingleLine(true);
+    rightBox->addView(pageLabel);
+
+    auto* timeLabel = new brls::Label();
+    timeLabel->setText(formatRelativeTime(item.lastReadAt));
+    timeLabel->setFontSize(12);
+    timeLabel->setTextColor(Application::getInstance().getDimTextColor());
+    timeLabel->setSingleLine(true);
+    timeLabel->setMarginTop(2);
+    rightBox->addView(timeLabel);
+
+    itemRow->addView(rightBox);
+
+    // Trailing marker: check (done) or play (unfinished)
+    auto* marker = new HistMarker(done, done ? hc::success() : hc::accent());
+    marker->setWidth(22);
+    marker->setHeight(22);
+    marker->setMarginLeft(12);
+    itemRow->addView(marker);
 
     // Click to resume reading
     ReadingHistoryItem capturedItem = item;
@@ -607,17 +824,19 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
     });
     itemRow->addGestureRecognizer(new brls::TapGestureRecognizer(itemRow));
 
-    // Start button for menu
-    itemRow->registerAction("Menu", brls::ControllerButton::BUTTON_START, [this, capturedItem, index](brls::View*) {
-        showHistoryItemMenu(capturedItem, index);
+    // Start button opens the OptionsPopover menu
+    itemRow->registerAction("Menu", brls::ControllerButton::BUTTON_START,
+                            [this, capturedItem, displayedIndex](brls::View*) {
+        showHistoryItemMenu(capturedItem, displayedIndex);
         return true;
     });
 
-    // Infinite scroll: auto-load more when focus nears the end of the list
-    itemRow->getFocusEvent()->subscribe([this, index](brls::View*) {
+    // Infinite scroll: auto-load more when focus nears the end of the displayed
+    // list (based on displayed position so it works under every filter).
+    itemRow->getFocusEvent()->subscribe([this, displayedIndex](brls::View*) {
         if (m_hasMoreItems && !m_isLoadingMore) {
-            int threshold = 5;
-            if (index >= static_cast<int>(m_historyItems.size()) - threshold) {
+            const int threshold = 5;
+            if (displayedIndex >= static_cast<int>(m_itemRows.size()) - threshold) {
                 m_isLoadingMore = true;
                 loadMoreHistory();
             }
@@ -630,46 +849,65 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
 void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items, size_t startIndex) {
     if (items.empty()) return;
 
-    // Get the last date from existing items to check if we need date headers
+    // Derive the last shown date from the previous last displayed item so we
+    // only add a new date header when the date actually changes.
     std::string lastDate;
-    if (!m_historyItems.empty() && startIndex > 0) {
+    if (startIndex > 0 && startIndex <= m_historyItems.size()) {
+        // Under the All filter displayed index == raw index.
         lastDate = formatTimestamp(m_historyItems[startIndex - 1].lastReadAt);
     }
 
-    // Add the new items
     for (size_t i = 0; i < items.size(); i++) {
         const auto& item = items[i];
-        size_t globalIndex = startIndex + i;
+        size_t displayedIndex = startIndex + i;
 
-        // Date header if date changed
         std::string dateStr = formatTimestamp(item.lastReadAt);
         if (dateStr != lastDate) {
             lastDate = dateStr;
 
+            auto* header = new brls::Box();
+            header->setAxis(brls::Axis::ROW);
+            header->setAlignItems(brls::AlignItems::CENTER);
+            header->setMarginTop(displayedIndex > 0 ? 18 : 4);
+            header->setMarginBottom(8);
+
             auto* dateHeader = new brls::Label();
             dateHeader->setText(dateStr);
-            dateHeader->setFontSize(16);
-            dateHeader->setTextColor(Application::getInstance().getTealColor());  // Teal
-            dateHeader->setMarginTop(globalIndex > 0 ? 20 : 5);
-            dateHeader->setMarginBottom(8);
-            m_contentBox->addView(dateHeader);
+            dateHeader->setFontSize(15);
+            dateHeader->setTextColor(Application::getInstance().getTealColor());
+            header->addView(dateHeader);
+
+            // Count remaining new items that share this date.
+            int groupCount = 0;
+            for (size_t j = i; j < items.size() &&
+                 formatTimestamp(items[j].lastReadAt) == dateStr; j++) {
+                groupCount++;
+            }
+            auto* groupCountLabel = new brls::Label();
+            groupCountLabel->setText(std::to_string(groupCount));
+            groupCountLabel->setFontSize(12);
+            groupCountLabel->setTextColor(hc::muted());
+            groupCountLabel->setMarginLeft(8);
+            header->addView(groupCountLabel);
+
+            m_contentBox->addView(header);
         }
 
-        // Create the item row
-        auto* itemRow = createHistoryItemRow(item, static_cast<int>(globalIndex));
+        auto* itemRow = createHistoryItemRow(item, static_cast<int>(displayedIndex));
         m_contentBox->addView(itemRow);
         m_itemRows.push_back(itemRow);
     }
 
-    // Update title with new count
-    m_titleLabel->setText("Reading History (" + std::to_string(m_historyItems.size()) + ")");
+    // Update the count pill with the new displayed total
+    if (m_countPillLabel)
+        m_countPillLabel->setText(std::to_string(m_itemRows.size()));
 
     // Focus on first newly added item
-    if (!items.empty() && startIndex < m_itemRows.size()) {
+    if (startIndex < m_itemRows.size()) {
         brls::Application::giveFocus(m_itemRows[startIndex]);
     }
 
-    brls::Logger::info("HistoryTab: Appended {} items, now have {} total", items.size(), m_historyItems.size());
+    brls::Logger::info("HistoryTab: Appended {} items, now showing {} rows", items.size(), m_itemRows.size());
 }
 
 } // namespace vitasuwayomi

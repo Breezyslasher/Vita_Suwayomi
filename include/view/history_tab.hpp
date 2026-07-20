@@ -22,7 +22,9 @@ public:
               brls::Style style, brls::FrameContext* ctx) override;
     void refresh();
 
-private:
+    // Client-side quick filters (see the History Tab redesign handoff).
+    enum class Filter { All, ThisWeek, Unfinished };
+
     void loadHistory();
     void loadMoreHistory();
     void onHistoryItemSelected(const ReadingHistoryItem& item);
@@ -32,10 +34,18 @@ private:
     std::string formatRelativeTime(int64_t timestamp);
     void rebuildHistoryList();
     void appendHistoryItems(const std::vector<ReadingHistoryItem>& items, size_t startIndex);
-    brls::Box* createHistoryItemRow(const ReadingHistoryItem& item, int index);
+    brls::Box* createHistoryItemRow(const ReadingHistoryItem& item, int displayedIndex);
+
+    // Filtering helpers
+    void setFilter(Filter f);
+    void refreshChipStyles();
+    std::vector<ReadingHistoryItem> visibleItems() const;
+    static bool itemIsDone(const ReadingHistoryItem& item);
 
     // UI Components
     brls::Label* m_titleLabel = nullptr;
+    brls::Box* m_countPill = nullptr;
+    brls::Label* m_countPillLabel = nullptr;
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;
     brls::Box* m_emptyStateBox = nullptr;
@@ -44,6 +54,11 @@ private:
     brls::Button* m_refreshBtn = nullptr;
     std::vector<brls::Box*> m_itemRows;
     int m_focusIndexAfterRebuild = -1;
+
+    // Filter chips (All / This week / Unfinished)
+    brls::Box* m_chips[3] = {nullptr, nullptr, nullptr};
+    brls::Label* m_chipLabels[3] = {nullptr, nullptr, nullptr};
+    Filter m_filter = Filter::All;
 
     // Data
     std::vector<ReadingHistoryItem> m_historyItems;
