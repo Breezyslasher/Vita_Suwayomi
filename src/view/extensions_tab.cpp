@@ -1354,43 +1354,15 @@ void ExtensionsTab::showSourceSettings(const Extension& ext) {
             if (sources.size() == 1) {
                 showSourcePreferencesDialog(sources[0]);
             } else {
-                // Show source selection dialog
-                auto* dialog = new brls::Dialog("Select Source");
-                dialog->setCancelable(false);  // Prevent exit dialog from appearing
-
-                auto* list = new brls::Box();
-                list->setAxis(brls::Axis::COLUMN);
-                list->setPadding(10, 15, 10, 15);
-
+                // Source picker as the new popover; picking one opens its settings.
+                std::vector<OptionRow> rows;
                 for (const auto& source : sources) {
-                    auto* item = new brls::Box();
-                    item->setAxis(brls::Axis::ROW);
-                    item->setFocusable(true);
-                    item->setPadding(10, 10, 10, 10);
-                    item->setMarginBottom(5);
-                    item->setCornerRadius(4);
-                    item->setBackgroundColor(Application::getInstance().getCardBackground());
-
-                    auto* label = new brls::Label();
-                    label->setText(source.name);
-                    label->setFontSize(14);
-                    item->addView(label);
-
-                    item->registerClickAction([this, dialog, source](brls::View*) {
-                        dialog->dismiss();
-                        brls::sync([this, source]() {
-                            showSourcePreferencesDialog(source);
-                        });
-                        return true;
-                    });
-                    item->addGestureRecognizer(new brls::TapGestureRecognizer(item));
-
-                    list->addView(item);
+                    Source src = source;
+                    rows.push_back({ "web.png", source.name, "", false, false,
+                        [this, src]() { showSourcePreferencesDialog(src); }});
                 }
-
-                dialog->addView(list);
-                dialog->addButton("Cancel", []() {});
-                dialog->open();
+                rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
+                OptionsPopover::show("EXTENSION", ext.name, std::move(rows), nullptr, 6);
             }
         });
     });
