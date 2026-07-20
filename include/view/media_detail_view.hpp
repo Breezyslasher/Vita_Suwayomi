@@ -111,6 +111,7 @@ private:
     void hideCategoryPanel();
     bool isFocusInCategoryPanel(brls::View* view) const;
     void showMangaMenu();
+    void showChapterFilterMenu();
 
     // Chapter actions
     void markAllRead();
