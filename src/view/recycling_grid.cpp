@@ -811,6 +811,26 @@ void RecyclingGrid::draw(NVGcontext* vg, float x, float y, float width, float he
             }
         }
 
+        // Selection indicator: a simple outline hugging the cover, like the
+        // focus highlight but in a slightly different colour (teal-blue) so a
+        // selected cell reads distinctly from the currently-focused one.
+        for (int i = startIdx; i < endIdx; i++) {
+            MangaItemCell* cell = m_cells[i];
+            if (!cell || !cell->isSelected()) continue;
+            float cx = cell->getDrawX();
+            float cy = cell->getDrawY();
+            float cw = cell->getDrawW();
+            float ch = cell->getDrawH();
+            if (cw <= 0 || ch <= 0) continue;
+            float coverH = ch - titleAreaH;
+
+            nvgBeginPath(vg);
+            nvgRoundedRect(vg, cx + 1.5f, cy + 1.5f, cw - 3.0f, coverH - 3.0f, 4.0f);
+            nvgStrokeColor(vg, nvgRGB(64, 224, 208));
+            nvgStrokeWidth(vg, 3.0f);
+            nvgStroke(vg);
+        }
+
         // Pass 2: badge backgrounds + all text, batched so consecutive text
         // draws share the same fragment program and font atlas texture.
         if (drawBadges || drawTitles) {

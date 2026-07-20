@@ -56,8 +56,8 @@ public:
     void setPressed(bool pressed);
     bool isPressed() const { return m_pressed; }
 
-    void setSelected(bool) {}
-    bool isSelected() const { return false; }
+    void setSelected(bool sel) { m_selected = sel; }
+    bool isSelected() const { return m_selected; }
 
     static brls::View* create() { return new MangaItemCell(); }
     static void setTitlesEnabled(bool) {}
@@ -72,6 +72,7 @@ private:
     float m_drawW = 0;
     float m_drawH = 0;
     bool m_pressed = false;
+    bool m_selected = false;
     bool m_compact = false;
     bool m_listMode = false;
     bool m_thumbnailLoaded = false;
