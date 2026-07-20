@@ -42,6 +42,12 @@ private:
     void        showSection(int sectionId);
     void        paintRailRowSelection();
 
+    // Radio-style single-choice popover (Options popover with one row per option).
+    void        showChoicePopover(const std::string& title,
+                                  const std::vector<std::string>& options,
+                                  int currentIndex,
+                                  std::function<void(int)> onSelect);
+
     void onDisconnect();
     void showLanguageFilterDialog();
     void updateLanguageFilterCellText();

@@ -4,6 +4,7 @@
  */
 
 #include "view/settings_tab.hpp"
+#include "view/options_popover.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
@@ -347,6 +348,22 @@ void SettingsTab::willDisappear(bool resetState) {
     if (m_alive) *m_alive = false;
 }
 
+void SettingsTab::showChoicePopover(const std::string& title,
+                                    const std::vector<std::string>& options,
+                                    int currentIndex,
+                                    std::function<void(int)> onSelect) {
+    std::vector<OptionRow> rows;
+    for (int i = 0; i < static_cast<int>(options.size()); i++) {
+        const bool cur = (i == currentIndex);
+        const int idx = i;
+        rows.push_back({ cur ? "radio_checked.png" : "radio.png", options[i], "", cur, false,
+            [onSelect, idx]() { if (onSelect) onSelect(idx); }});
+    }
+    rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
+    // Show 5 rows then scroll (matches the Sort By menu; the theme list is long).
+    OptionsPopover::show("SETTING", title, std::move(rows), nullptr, 5);
+}
+
 void SettingsTab::addSectionSeparator() {
     auto* separator = new brls::Box();
     separator->setHeight(1);
@@ -409,22 +426,27 @@ void SettingsTab::createAccountSection() {
     });
     m_contentBox->addView(remoteUrlCell);
 
-    // Toggle between local and remote
-    m_urlModeSelector = new brls::SelectorCell();
-    std::vector<std::string> urlModes = {"Local", "Remote"};
-    int currentMode = settings.useRemoteUrl ? 1 : 0;
-    m_urlModeSelector->init("Active Connection", urlModes, currentMode,
-        [this](int index) {
-            Application& app = Application::getInstance();
-            if (index == 0) {
-                app.switchToLocalUrl();
-            } else {
-                app.switchToRemoteUrl();
-            }
-            updateServerLabel();
-            brls::Application::notify(index == 0 ? "Switched to Local URL" : "Switched to Remote URL");
-        });
-    m_contentBox->addView(m_urlModeSelector);
+    // Toggle between local and remote (opens the choice popover)
+    auto* connCell = new brls::DetailCell();
+    connCell->setText("Active Connection");
+    connCell->setDetailText(settings.useRemoteUrl ? "Remote" : "Local");
+    connCell->registerClickAction([this, connCell](brls::View*) {
+        const int cur = Application::getInstance().getSettings().useRemoteUrl ? 1 : 0;
+        showChoicePopover("Active Connection", {"Local", "Remote"}, cur,
+            [this, connCell](int index) {
+                Application& app = Application::getInstance();
+                if (index == 0) {
+                    app.switchToLocalUrl();
+                } else {
+                    app.switchToRemoteUrl();
+                }
+                updateServerLabel();
+                connCell->setDetailText(index == 0 ? "Local" : "Remote");
+                brls::Application::notify(index == 0 ? "Switched to Local URL" : "Switched to Remote URL");
+            });
+        return true;
+    });
+    m_contentBox->addView(connCell);
 
     // Auto-switch on failure toggle
     auto* autoSwitchToggle = new brls::BooleanCell();
@@ -436,22 +458,28 @@ void SettingsTab::createAccountSection() {
         });
     m_contentBox->addView(autoSwitchToggle);
 
-    // Connection timeout selector
-    auto* timeoutSelector = new brls::SelectorCell();
-    int timeoutIndex = 1; // default to 30s
-    if (settings.connectionTimeout <= 10) timeoutIndex = 0;
-    else if (settings.connectionTimeout <= 30) timeoutIndex = 1;
-    else if (settings.connectionTimeout <= 60) timeoutIndex = 2;
-    else timeoutIndex = 3;
-    timeoutSelector->init("Connection Timeout",
-        {"10 seconds", "30 seconds", "60 seconds", "120 seconds"},
-        timeoutIndex,
-        [](int index) {
-            int timeouts[] = {10, 30, 60, 120};
-            Application::getInstance().getSettings().connectionTimeout = timeouts[index];
-            Application::getInstance().saveSettings();
-        });
-    m_contentBox->addView(timeoutSelector);
+    // Connection timeout (opens the choice popover)
+    auto* timeoutCell = new brls::DetailCell();
+    timeoutCell->setText("Connection Timeout");
+    timeoutCell->setDetailText(std::to_string(settings.connectionTimeout) + " seconds");
+    timeoutCell->registerClickAction([this, timeoutCell](brls::View*) {
+        AppSettings& s = Application::getInstance().getSettings();
+        int timeoutIndex = 1; // default to 30s
+        if (s.connectionTimeout <= 10) timeoutIndex = 0;
+        else if (s.connectionTimeout <= 30) timeoutIndex = 1;
+        else if (s.connectionTimeout <= 60) timeoutIndex = 2;
+        else timeoutIndex = 3;
+        showChoicePopover("Connection Timeout",
+            {"10 seconds", "30 seconds", "60 seconds", "120 seconds"}, timeoutIndex,
+            [timeoutCell](int index) {
+                int timeouts[] = {10, 30, 60, 120};
+                Application::getInstance().getSettings().connectionTimeout = timeouts[index];
+                Application::getInstance().saveSettings();
+                timeoutCell->setDetailText(std::to_string(timeouts[index]) + " seconds");
+            });
+        return true;
+    });
+    m_contentBox->addView(timeoutCell);
 
     // Network Test button
     auto* networkTestCell = new brls::DetailCell();
@@ -743,70 +771,81 @@ void SettingsTab::createTrackingSection() {
                     options.push_back(label);
                 }
 
-                auto* dropdown = new brls::Dropdown(
-                    "Tracker Accounts", options,
-                    [this, trackers](int selected) {
-                        if (selected < 0 || selected >= static_cast<int>(trackers.size())) return;
-                        const Tracker& tracker = trackers[selected];
+                std::function<void(int)> onTrackerSelected = [this, trackers](int selected) {
+                    if (selected < 0 || selected >= static_cast<int>(trackers.size())) return;
+                    const Tracker& tracker = trackers[selected];
 
-                        brls::sync([this, tracker]() {
-                            if (tracker.isLoggedIn) {
-                                // Already logged in — offer logout
-                                std::vector<std::string> actions = {"Logout", "Cancel"};
-                                auto* actionDropdown = new brls::Dropdown(
-                                    tracker.name + " (Logged in)", actions,
-                                    [this, tracker](int action) {
-                                        if (action == 0) {
-                                            // Logout
-                                            int trackerId = tracker.id;
-                                            std::string trackerName = tracker.name;
-                                            asyncRun([trackerId, trackerName]() {
-                                                bool ok = SuwayomiClient::getInstance().logoutTracker(trackerId);
+                    brls::sync([this, tracker]() {
+                        if (tracker.isLoggedIn) {
+                            // Already logged in — offer logout
+                            std::vector<std::string> actions = {"Logout", "Cancel"};
+                            std::function<void(int)> onAction = [this, tracker](int action) {
+                                if (action == 0) {
+                                    // Logout
+                                    int trackerId = tracker.id;
+                                    std::string trackerName = tracker.name;
+                                    asyncRun([trackerId, trackerName]() {
+                                        bool ok = SuwayomiClient::getInstance().logoutTracker(trackerId);
+                                        brls::sync([ok, trackerName]() {
+                                            if (ok) {
+                                                brls::Application::notify("Logged out of " + trackerName);
+                                            } else {
+                                                brls::Application::notify("Failed to log out of " + trackerName);
+                                            }
+                                        });
+                                    });
+                                }
+                            };
+                            std::vector<OptionRow> actionRows;
+                            for (size_t i = 0; i < actions.size(); i++) {
+                                bool sel = (i == 0);
+                                actionRows.push_back({ sel ? "radio_checked.png" : "radio.png", actions[i], "", sel, false,
+                                    [onAction, i]() { onAction(static_cast<int>(i)); } });
+                            }
+                            actionRows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+                            OptionsPopover::show("TRACKER", tracker.name + " (Logged in)", std::move(actionRows));
+                        } else {
+                            // Not logged in — show credential login dialog
+                            // MangaUpdates uses username/password, others use OAuth
+                            // On PS Vita we can only do credential-based login
+                            int trackerId = tracker.id;
+                            std::string trackerName = tracker.name;
+
+                            brls::Application::getImeManager()->openForText(
+                                [this, trackerId, trackerName](std::string username) {
+                                    if (username.empty()) return;
+
+                                    brls::Application::getImeManager()->openForText(
+                                        [trackerId, trackerName, username](std::string password) {
+                                            if (password.empty()) return;
+
+                                            asyncRun([trackerId, trackerName, username, password]() {
+                                                bool ok = SuwayomiClient::getInstance()
+                                                    .loginTrackerCredentials(trackerId, username, password);
                                                 brls::sync([ok, trackerName]() {
                                                     if (ok) {
-                                                        brls::Application::notify("Logged out of " + trackerName);
+                                                        brls::Application::notify("Logged in to " + trackerName);
                                                     } else {
-                                                        brls::Application::notify("Failed to log out of " + trackerName);
+                                                        brls::Application::notify("Login failed for " + trackerName);
                                                     }
                                                 });
                                             });
-                                        }
-                                    }, 0);
-                                brls::Application::pushActivity(new brls::Activity(actionDropdown));
-                            } else {
-                                // Not logged in — show credential login dialog
-                                // MangaUpdates uses username/password, others use OAuth
-                                // On PS Vita we can only do credential-based login
-                                int trackerId = tracker.id;
-                                std::string trackerName = tracker.name;
+                                        },
+                                        "Password", "", 256, "");
+                                },
+                                "Username", "", 256, "");
+                        }
+                    });
+                };
 
-                                brls::Application::getImeManager()->openForText(
-                                    [this, trackerId, trackerName](std::string username) {
-                                        if (username.empty()) return;
-
-                                        brls::Application::getImeManager()->openForText(
-                                            [trackerId, trackerName, username](std::string password) {
-                                                if (password.empty()) return;
-
-                                                asyncRun([trackerId, trackerName, username, password]() {
-                                                    bool ok = SuwayomiClient::getInstance()
-                                                        .loginTrackerCredentials(trackerId, username, password);
-                                                    brls::sync([ok, trackerName]() {
-                                                        if (ok) {
-                                                            brls::Application::notify("Logged in to " + trackerName);
-                                                        } else {
-                                                            brls::Application::notify("Login failed for " + trackerName);
-                                                        }
-                                                    });
-                                                });
-                                            },
-                                            "Password", "", 256, "");
-                                    },
-                                    "Username", "", 256, "");
-                            }
-                        });
-                    }, 0);
-                brls::Application::pushActivity(new brls::Activity(dropdown));
+                std::vector<OptionRow> rows;
+                for (size_t i = 0; i < options.size(); i++) {
+                    bool sel = (i == 0);
+                    rows.push_back({ sel ? "radio_checked.png" : "radio.png", options[i], "", sel, false,
+                        [onTrackerSelected, i]() { onTrackerSelected(static_cast<int>(i)); } });
+                }
+                rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+                OptionsPopover::show("TRACKING", "Tracker Accounts", std::move(rows));
             });
         });
         return true;
@@ -823,19 +862,30 @@ void SettingsTab::createUISection() {
     header->setTitle("User Interface");
     m_contentBox->addView(header);
 
-    // Theme selector
-    m_themeSelector = new brls::SelectorCell();
-    m_themeSelector->init("Theme", {
+    // Theme selector (opens the choice popover)
+    static const std::vector<std::string> kThemeNames = {
         "System", "Light", "Dark", "Tachiyomi",
         "Neon Vaporwave", "Catppuccin", "Nord", "Tako",
         "Midnight Dusk", "Green Apple", "Lavender",
         "Matrix", "Mocha", "Sunset", "Aurora",
         "Synthwave", "Ocean"
-    }, static_cast<int>(settings.theme),
-        [this](int index) {
-            onThemeChanged(index);
-        });
-    m_contentBox->addView(m_themeSelector);
+    };
+    auto themeName = [](int i) -> std::string {
+        return (i >= 0 && i < static_cast<int>(kThemeNames.size())) ? kThemeNames[i] : "System";
+    };
+    auto* themeCell = new brls::DetailCell();
+    themeCell->setText("Theme");
+    themeCell->setDetailText(themeName(static_cast<int>(settings.theme)));
+    themeCell->registerClickAction([this, themeCell, themeName](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().theme);
+        showChoicePopover("Theme", kThemeNames, cur,
+            [this, themeCell, themeName](int index) {
+                onThemeChanged(index);
+                themeCell->setDetailText(themeName(index));
+            });
+        return true;
+    });
+    m_contentBox->addView(themeCell);
 
     // Debug logging toggle
     m_debugLogToggle = new brls::BooleanCell();
@@ -1008,17 +1058,13 @@ void SettingsTab::createLibrarySection() {
     clearCacheCell->setText("Clear Cache");
     clearCacheCell->setDetailText("Delete cached data and images");
     clearCacheCell->registerClickAction([](brls::View* view) {
-        brls::Dialog* dialog = new brls::Dialog("Clear all cached data?");
-        dialog->setCancelable(true);  // Allow back button to close dialog
-
-        dialog->addButton("Cancel", []() {});
-
-        dialog->addButton("Clear", []() {
+        std::vector<OptionRow> rows;
+        rows.push_back({ "cross.png", "Clear", "", true, true, []() {
             LibraryCache::getInstance().clearAllCache();
             brls::Application::notify("Cache cleared");
-        });
-
-        dialog->open();
+        } });
+        rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+        OptionsPopover::show("CONFIRM", "Clear all cached data?", std::move(rows));
         return true;
     });
     m_contentBox->addView(clearCacheCell);
@@ -1484,12 +1530,8 @@ void SettingsTab::createDownloadsSection() {
     auto downloads = DownloadsManager::getInstance().getDownloads();
     m_clearDownloadsCell->setDetailText(std::to_string(downloads.size()) + " manga");
     m_clearDownloadsCell->registerClickAction([this](brls::View* view) {
-        brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
-        dialog->setCancelable(true);  // Allow back button to close dialog
-
-        dialog->addButton("Cancel", []() {});
-
-        dialog->addButton("Delete All", [this]() {
+        std::vector<OptionRow> rows;
+        rows.push_back({ "cross.png", "Delete All", "", true, true, [this]() {
             auto downloads = DownloadsManager::getInstance().getDownloads();
             for (const auto& item : downloads) {
                 DownloadsManager::getInstance().deleteMangaDownload(item.mangaId);
@@ -1498,9 +1540,9 @@ void SettingsTab::createDownloadsSection() {
                 m_clearDownloadsCell->setDetailText("0 manga");
             }
             brls::Application::notify("All downloads deleted");
-        });
-
-        dialog->open();
+        } });
+        rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+        OptionsPopover::show("CONFIRM", "Delete all downloaded content?", std::move(rows));
         return true;
     });
     m_contentBox->addView(m_clearDownloadsCell);
@@ -2109,12 +2151,8 @@ void SettingsTab::createAboutSection() {
 }
 
 void SettingsTab::onDisconnect() {
-    brls::Dialog* dialog = new brls::Dialog("Disconnect from server?");
-    dialog->setCancelable(true);  // Allow back button to close dialog
-
-    dialog->addButton("Cancel", []() {});
-
-    dialog->addButton("Disconnect", [this]() {
+    std::vector<OptionRow> rows;
+    rows.push_back({ "cross.png", "Disconnect", "", true, true, [this]() {
         // Clear server connection
         Application::getInstance().setServerUrl("");
         Application::getInstance().setConnected(false);
@@ -2122,9 +2160,9 @@ void SettingsTab::onDisconnect() {
 
         // Go back to login
         Application::getInstance().pushLoginActivity();
-    });
-
-    dialog->open();
+    } });
+    rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+    OptionsPopover::show("CONFIRM", "Disconnect from server?", std::move(rows));
 }
 
 void SettingsTab::onThemeChanged(int index) {
@@ -2139,61 +2177,38 @@ void SettingsTab::onThemeChanged(int index) {
 void SettingsTab::showUrlInputDialog(const std::string& title, const std::string& hint,
                                       const std::string& currentValue,
                                       std::function<void(const std::string&)> callback) {
-    // Create a simple input dialog for URL entry
-    brls::Dialog* dialog = new brls::Dialog(title);
-    dialog->setCancelable(true);  // Allow back button to close dialog
+    std::vector<OptionRow> rows;
 
-    // Input field container
-    auto* inputBox = new brls::Box();
-    inputBox->setAxis(brls::Axis::COLUMN);
-    inputBox->setPadding(16);
-
-    // Hint/description text
-    auto* hintLabel = new brls::Label();
-    hintLabel->setText(hint);
-    hintLabel->setFontSize(14);
-    hintLabel->setTextColor(Application::getInstance().getSubtitleColor());
-    hintLabel->setMarginBottom(12);
-    inputBox->addView(hintLabel);
-
-    // Current value display
-    auto* currentLabel = new brls::Label();
-    currentLabel->setText(currentValue.empty() ? "(not set)" : currentValue);
-    currentLabel->setFontSize(16);
-    inputBox->addView(currentLabel);
-
-    dialog->addView(inputBox);
-
-    // Close button - just close without changes (empty lambda, dialog auto-closes)
-    dialog->addButton("Close", []() {});
-
-    // Use the current value or prompt for new one via keyboard
-    dialog->addButton("Edit", [callback, currentValue]() {
-        // Open on-screen keyboard for input (dialog auto-closes before this runs)
-        brls::Application::getImeManager()->openForText([callback](std::string text) {
-            // Validate URL format
-            if (!text.empty()) {
-                // Remove trailing slashes
-                while (!text.empty() && text.back() == '/') {
-                    text.pop_back();
+    // Edit — open the on-screen keyboard to enter a new URL. The current value
+    // (if any) is shown as the row's trailing sub-value.
+    rows.push_back({ "web.png", "Edit", currentValue.empty() ? "" : currentValue, true, false,
+        [callback, currentValue]() {
+            // Open on-screen keyboard for input (popover fades before this runs)
+            brls::Application::getImeManager()->openForText([callback](std::string text) {
+                // Validate URL format
+                if (!text.empty()) {
+                    // Remove trailing slashes
+                    while (!text.empty() && text.back() == '/') {
+                        text.pop_back();
+                    }
+                    // Basic URL validation - should start with http:// or https://
+                    if (text.find("http://") != 0 && text.find("https://") != 0) {
+                        brls::Application::notify("URL must start with http:// or https://");
+                        return;
+                    }
                 }
-                // Basic URL validation - should start with http:// or https://
-                if (text.find("http://") != 0 && text.find("https://") != 0) {
-                    brls::Application::notify("URL must start with http:// or https://");
-                    return;
-                }
-            }
-            callback(text);
-        }, "Enter Server URL", "", 256, currentValue, 0);
-    });
+                callback(text);
+            }, "Enter Server URL", "", 256, currentValue, 0);
+        } });
 
-    dialog->addButton("Clear", [callback]() {
-        // Dialog auto-closes before this runs
+    rows.push_back({ "cross.png", "Clear", "", false, true, [callback]() {
         callback("");
         brls::Application::notify("URL cleared");
-    });
+    } });
 
-    dialog->open();
+    rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+
+    OptionsPopover::show("", title, std::move(rows));
 }
 
 void SettingsTab::updateServerLabel() {
@@ -2661,34 +2676,9 @@ void SettingsTab::showCategoryManagementDialog() {
 }
 
 void SettingsTab::showCreateCategoryDialog() {
-    brls::Dialog* dialog = new brls::Dialog("Create New Category");
-    dialog->setCancelable(true);  // Allow back button to close dialog
-
-    auto* contentBox = new brls::Box();
-    contentBox->setAxis(brls::Axis::COLUMN);
-    contentBox->setPadding(20);
-    contentBox->setWidth(400);
-
-    auto* inputLabel = new brls::Label();
-    inputLabel->setText("Enter category name:");
-    inputLabel->setFontSize(16);
-    inputLabel->setMarginBottom(10);
-    contentBox->addView(inputLabel);
-
-    // Note: Borealis doesn't have a native text input, so we'll use a workaround
-    // with the software keyboard or a preset name approach
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Press A to open keyboard");
-    infoLabel->setFontSize(14);
-    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
-    contentBox->addView(infoLabel);
-
-    dialog->addView(contentBox);
-
-    dialog->addButton("Cancel", []() {});
-
-    dialog->addButton("Create", []() {
-        // Open software keyboard for input (dialog auto-closes before this runs)
+    std::vector<OptionRow> rows;
+    rows.push_back({ "tag.png", "Enter Name", "", true, false, []() {
+        // Open software keyboard for input (popover fades before this runs)
         brls::Application::getImeManager()->openForText([](std::string text) {
             if (text.empty()) {
                 brls::Application::notify("Category name cannot be empty");
@@ -2702,38 +2692,18 @@ void SettingsTab::showCreateCategoryDialog() {
                 brls::Application::notify("Failed to create category");
             }
         }, "Enter category name", "", 50, "", 0);
-    });
-
-    dialog->open();
+    } });
+    rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+    OptionsPopover::show("CATEGORY", "Create New Category", std::move(rows));
 }
 
 void SettingsTab::showEditCategoryDialog(const Category& category) {
-    brls::Dialog* dialog = new brls::Dialog("Edit Category: " + category.name);
-    dialog->setCancelable(true);  // Allow back button to close dialog
-
-    auto* contentBox = new brls::Box();
-    contentBox->setAxis(brls::Axis::COLUMN);
-    contentBox->setPadding(20);
-    contentBox->setWidth(400);
-
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Press 'Rename' to change the name");
-    infoLabel->setFontSize(14);
-    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
-    contentBox->addView(infoLabel);
-
-    dialog->addView(contentBox);
-
     int catId = category.id;
     bool isDefault = category.isDefault;
     std::string catName = category.name;
 
-    dialog->addButton("Cancel", [this]() {
-        // Re-open category management dialog
-        showCategoryManagementDialog();
-    });
-
-    dialog->addButton("Rename", [this, catId, isDefault, catName]() {
+    std::vector<OptionRow> rows;
+    rows.push_back({ "tag.png", "Enter Name", "", true, false, [this, catId, isDefault, catName]() {
         brls::Application::getImeManager()->openForText([this, catId, isDefault](std::string text) {
             if (text.empty()) {
                 brls::Application::notify("Category name cannot be empty");
@@ -2749,9 +2719,12 @@ void SettingsTab::showEditCategoryDialog(const Category& category) {
                 brls::Application::notify("Failed to rename category");
             }
         }, "Enter new category name", "", 50, catName, 0);
-    });
-
-    dialog->open();
+    } });
+    rows.push_back({ "back.png", "Cancel", "", false, true, [this]() {
+        // Re-open category management dialog
+        showCategoryManagementDialog();
+    } });
+    OptionsPopover::show("CATEGORY", "Edit Category: " + category.name, std::move(rows));
 }
 
 void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
@@ -2759,17 +2732,10 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
                          "This will remove " + std::to_string(category.mangaCount) +
                          " manga from this category.\nThe manga will remain in your library.";
 
-    brls::Dialog* dialog = new brls::Dialog(message);
-    dialog->setCancelable(true);  // Allow back button to close dialog
-
     int catId = category.id;
 
-    dialog->addButton("Cancel", [this]() {
-        // Re-open category management dialog
-        showCategoryManagementDialog();
-    });
-
-    dialog->addButton("Delete", [this, catId]() {
+    std::vector<OptionRow> rows;
+    rows.push_back({ "cross.png", "Delete", "", true, true, [this, catId]() {
         SuwayomiClient& client = SuwayomiClient::getInstance();
         if (client.deleteCategory(catId)) {
             // Clean up hidden category reference
@@ -2795,9 +2761,12 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
             brls::Application::notify("Failed to delete category");
             showCategoryManagementDialog();
         }
-    });
-
-    dialog->open();
+    } });
+    rows.push_back({ "back.png", "Cancel", "", false, true, [this]() {
+        // Re-open category management dialog
+        showCategoryManagementDialog();
+    } });
+    OptionsPopover::show("CONFIRM", message, std::move(rows));
 }
 
 void SettingsTab::showStorageManagement() {
@@ -2831,18 +2800,17 @@ void SettingsTab::showStorageManagement() {
     clearBtn->setText("Clear All Downloads");
     clearBtn->setMarginTop(20);
     clearBtn->registerClickAction([](brls::View* view) {
-        brls::Dialog* dialog = new brls::Dialog("Delete all downloaded content?");
-        dialog->setCancelable(true);  // Allow B button to close dialog
-        dialog->addButton("Cancel", []() {});
-        dialog->addButton("Delete", []() {
+        std::vector<OptionRow> rows;
+        rows.push_back({ "cross.png", "Delete", "", true, true, []() {
             auto downloads = DownloadsManager::getInstance().getDownloads();
             for (const auto& item : downloads) {
                 DownloadsManager::getInstance().deleteMangaDownload(item.mangaId);
             }
             brls::Application::notify("All downloads deleted");
             brls::Application::popActivity();
-        });
-        dialog->open();
+        } });
+        rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+        OptionsPopover::show("CONFIRM", "Delete all downloaded content?", std::move(rows));
         return true;
     });
     clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn));
@@ -2974,10 +2942,8 @@ void SettingsTab::showStatisticsView() {
     resetBtn->setText("Reset Statistics");
     resetBtn->setMarginTop(10);
     resetBtn->registerClickAction([](brls::View* view) {
-        brls::Dialog* dialog = new brls::Dialog("Reset all reading statistics?");
-        dialog->setCancelable(true);  // Allow back button to close dialog
-        dialog->addButton("Cancel", []() {});
-        dialog->addButton("Reset", []() {
+        std::vector<OptionRow> rows;
+        rows.push_back({ "cross.png", "Reset", "", true, true, []() {
             AppSettings& s = Application::getInstance().getSettings();
             s.totalChaptersRead = 0;
             s.totalMangaCompleted = 0;
@@ -2988,8 +2954,9 @@ void SettingsTab::showStatisticsView() {
             Application::getInstance().saveSettings();
             brls::Application::notify("Statistics reset");
             brls::Application::popActivity();
-        });
-        dialog->open();
+        } });
+        rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
+        OptionsPopover::show("CONFIRM", "Reset all reading statistics?", std::move(rows));
         return true;
     });
     resetBtn->addGestureRecognizer(new brls::TapGestureRecognizer(resetBtn));
@@ -3110,12 +3077,8 @@ void SettingsTab::exportBackup() {
 }
 
 void SettingsTab::importBackup() {
-    brls::Dialog* dialog = new brls::Dialog("Import backup?\n\nThis will restore your library and settings from the most recent backup file.");
-    dialog->setCancelable(true);  // Allow back button to close dialog
-
-    dialog->addButton("Cancel", []() {});
-
-    dialog->addButton("Import", []() {
+    std::vector<OptionRow> rows;
+    rows.push_back({ "import.png", "Import", "Restore most recent backup", true, false, []() {
         brls::Application::notify("Importing backup...");
 
         SuwayomiClient& client = SuwayomiClient::getInstance();
@@ -3143,9 +3106,10 @@ void SettingsTab::importBackup() {
         } else {
             brls::Application::notify("Failed to import backup");
         }
-    });
+    }});
+    rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
 
-    dialog->open();
+    OptionsPopover::show("CONFIRM", "Import backup?", std::move(rows));
 }
 
 void SettingsTab::refreshDefaultCategorySelector() {
