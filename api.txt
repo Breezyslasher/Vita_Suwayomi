@@ -673,8 +673,9 @@ query GetManga($mangaId: Int!) {
 # )
 
 # Refresh Manga (Fetch latest from source)
+# Note: fetchManga is deprecated; use fetchMangaAndChapters with fetchChapters:false.
 mutation RefreshManga($mangaId: Int!) {
-    fetchManga(input: { id: $mangaId }) {
+    fetchMangaAndChapters(input: { id: $mangaId, fetchManga: true, fetchChapters: false }) {
         manga {
             id
             title
@@ -799,8 +800,9 @@ query GetChapters($mangaId: Int!) {
 # )
 
 # Fetch Chapters from Source (refresh chapter list)
+# Note: fetchChapters is deprecated; use fetchMangaAndChapters with fetchManga:false.
 mutation FetchChapters($mangaId: Int!) {
-    fetchChapters(input: { mangaId: $mangaId }) {
+    fetchMangaAndChapters(input: { id: $mangaId, fetchManga: false, fetchChapters: true }) {
         chapters {
             id
             name
@@ -2212,3 +2214,40 @@ subscription WebUIUpdateStatusChange {
 # Connect to: ws://{serverUrl}/api/graphql
 # Protocol: graphql-transport-ws
 # Send connection_init, then subscribe messages
+
+# ============================================================================
+# API AUDIT NOTES (client vs current Suwayomi-Server)
+# ============================================================================
+# GraphQL is the PRIMARY API; the /api/v1 REST calls are only a fallback.
+# The GraphQL operations above were audited against the current server schema
+# and are correct. Fixes applied to the client this pass:
+#
+# GraphQL (primary):
+#  - Source filters: removed nonexistent SelectFilter.displayValues (server
+#    SelectFilter only has name/values/default; display strings are in values).
+#  - Library list / chapters list: migrated deprecated `orderBy`/`orderByType`
+#    to `order: [{ by, byType }]`.
+#  - Refresh manga / fetch chapters: migrated deprecated `fetchManga` /
+#    `fetchChapters` to `fetchMangaAndChapters(input:{id,fetchManga,fetchChapters})`.
+#
+# REST fallback (high-impact fixes applied):
+#  - POST /update/fetch: send form param `categoryId=<id>` (not JSON) — JSON was
+#    ignored, so the server updated ALL categories instead of the target one.
+#  - GET  /update/summary: response is { categoryStatusMap, mangaStatusMap,
+#    running }; read `running` and count mangaStatusMap.PENDING / .RUNNING for
+#    progress (old pendingJobs/runningJobs/isRunning fields do not exist).
+#  - POST /manga/{id}/chapter/batch: change field is `isRead` (not `read`).
+#  - GET  /category/{id}: returns the category's manga (no `/manga` suffix).
+#
+# REST fallback (KNOWN-STILL-BROKEN — not yet fixed; GraphQL primary covers these):
+#  - Server reads FORM params, not JSON, for: PATCH /manga/{id}/meta (key,value),
+#    PATCH /manga/{id}/chapter/{index} (read,bookmarked,lastPageRead),
+#    POST /category (name), PATCH /category/{id} (name,default,...),
+#    PATCH /category/reorder (from,to — single move, not an id array).
+#  - No REST route for: GET/DELETE /manga/{id}/meta (GraphQL only),
+#    PATCH /chapter/{id} progress, GET /chapter/{id} pages.
+#  - Path drift: chapter page image is
+#    /manga/{mangaId}/chapter/{chapterIndex}/page/{index} (not /chapter/{id}/...);
+#    source popular/latest take pageNum in the PATH: /source/{id}/popular/{page}.
+#  - DELETE /download/batch expects body { "chapterIds": [<int>...] } (flat ints)
+#    and the body must actually be sent on the DELETE.

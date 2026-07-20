@@ -967,7 +967,7 @@ bool SuwayomiClient::fetchLibraryMangaGraphQL(std::vector<Manga>& manga) {
             mangas(
                 condition: { inLibrary: true }
                 first: 500
-                orderBy: TITLE
+                order: [{ by: TITLE }]
             ) {
                 nodes {
                     id
@@ -1066,8 +1066,7 @@ bool SuwayomiClient::fetchChaptersGraphQL(int mangaId, std::vector<Chapter>& cha
             chapters(
                 condition: { mangaId: $mangaId }
                 first: 1000
-                orderBy: SOURCE_ORDER
-                orderByType: DESC
+                order: [{ by: SOURCE_ORDER, byType: DESC }]
             ) {
                 nodes {
                     id
@@ -1152,7 +1151,7 @@ bool SuwayomiClient::fetchMangaGraphQL(int mangaId, Manga& manga) {
 bool SuwayomiClient::refreshMangaGraphQL(int mangaId) {
     const char* query = R"(
         mutation RefreshManga($id: Int!) {
-            fetchManga(input: { id: $id }) {
+            fetchMangaAndChapters(input: { id: $id, fetchManga: true, fetchChapters: false }) {
                 manga {
                     id
                     initialized
@@ -1170,7 +1169,7 @@ bool SuwayomiClient::refreshMangaGraphQL(int mangaId) {
 bool SuwayomiClient::refreshChaptersGraphQL(int mangaId) {
     const char* query = R"(
         mutation FetchChapters($mangaId: Int!) {
-            fetchChapters(input: { mangaId: $mangaId }) {
+            fetchMangaAndChapters(input: { id: $mangaId, fetchManga: false, fetchChapters: true }) {
                 chapters {
                     id
                 }
@@ -1186,7 +1185,7 @@ bool SuwayomiClient::refreshChaptersGraphQL(int mangaId) {
         return false;
     }
     // Check for successful response
-    bool success = response.find("\"fetchChapters\"") != std::string::npos;
+    bool success = response.find("\"fetchMangaAndChapters\"") != std::string::npos;
     brls::Logger::info("GraphQL: fetchChapters mutation for manga {} {}", mangaId, success ? "succeeded" : "failed");
     return success;
 }
@@ -1985,8 +1984,7 @@ bool SuwayomiClient::fetchMangaWithChaptersGraphQL(int mangaId, Manga& manga, st
             chapters(
                 condition: { mangaId: $mangaId }
                 first: 1000
-                orderBy: SOURCE_ORDER
-                orderByType: DESC
+                order: [{ by: SOURCE_ORDER, byType: DESC }]
             ) {
                 nodes {
                     id
@@ -4093,7 +4091,7 @@ bool SuwayomiClient::markChaptersRead(int mangaId, const std::vector<int>& chapt
         indexList += std::to_string(chapterIndexes[i]);
     }
 
-    std::string body = "{\"chapterIndexes\":[" + indexList + "],\"change\":{\"read\":true}}";
+    std::string body = "{\"chapterIndexes\":[" + indexList + "],\"change\":{\"isRead\":true}}";
 
     vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
@@ -4111,7 +4109,7 @@ bool SuwayomiClient::markChaptersUnread(int mangaId, const std::vector<int>& cha
         indexList += std::to_string(chapterIndexes[i]);
     }
 
-    std::string body = "{\"chapterIndexes\":[" + indexList + "],\"change\":{\"read\":false}}";
+    std::string body = "{\"chapterIndexes\":[" + indexList + "],\"change\":{\"isRead\":false}}";
 
     vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
@@ -4462,7 +4460,8 @@ bool SuwayomiClient::fetchCategoryManga(int categoryId, std::vector<Manga>& mang
     brls::Logger::info("GraphQL failed for category manga, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
 
-    std::string url = buildApiUrl("/category/" + std::to_string(categoryId) + "/manga");
+    // Server returns the category's manga at /category/{id} (no /manga suffix).
+    std::string url = buildApiUrl("/category/" + std::to_string(categoryId));
     brls::Logger::debug("Fetching category manga from: {}", url);
     vitasuwayomi::HttpResponse response = http.get(url);
 
@@ -4527,10 +4526,12 @@ bool SuwayomiClient::triggerLibraryUpdate(int categoryId) {
     // REST fallback
     brls::Logger::info("GraphQL failed for triggerCategoryUpdate, falling back to REST...");
     vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
+    // Server reads categoryId as a form param, not JSON — JSON would be ignored
+    // and the server would update ALL categories instead of the target one.
+    http.setDefaultHeader("Content-Type", "application/x-www-form-urlencoded");
 
     std::string url = buildApiUrl("/update/fetch");
-    std::string body = "{\"categoryId\":" + std::to_string(categoryId) + "}";
+    std::string body = "categoryId=" + std::to_string(categoryId);
 
     vitasuwayomi::HttpResponse response = http.post(url, body);
     return response.success && response.statusCode == 200;
@@ -4576,11 +4577,12 @@ bool SuwayomiClient::triggerLibraryUpdate(const std::vector<int>& categoryIds) {
     brls::Logger::info("GraphQL failed for multi-category update, falling back to REST...");
     bool anySuccess = false;
     vitasuwayomi::HttpClient http = createHttpClient();
-    http.setDefaultHeader("Content-Type", "application/json");
+    // categoryId is a form param on the server, not JSON.
+    http.setDefaultHeader("Content-Type", "application/x-www-form-urlencoded");
     std::string url = buildApiUrl("/update/fetch");
 
     for (int catId : categoryIds) {
-        std::string body = "{\"categoryId\":" + std::to_string(catId) + "}";
+        std::string body = "categoryId=" + std::to_string(catId);
         vitasuwayomi::HttpResponse resp = http.post(url, body);
         if (resp.success && resp.statusCode == 200) {
             anySuccess = true;
@@ -5742,9 +5744,21 @@ bool SuwayomiClient::fetchUpdateSummary(int& pendingUpdates, int& runningJobs, b
         return false;
     }
 
-    pendingUpdates = extractJsonInt(response.body, "pendingJobs");
-    runningJobs = extractJsonInt(response.body, "runningJobs");
-    isUpdating = extractJsonBool(response.body, "isRunning");
+    // Server returns UpdateStatus as { categoryStatusMap, mangaStatusMap, running }.
+    // The old pendingJobs/runningJobs/isRunning fields no longer exist; derive the
+    // active-job counts from mangaStatusMap (keyed by JobStatus: PENDING/RUNNING/
+    // COMPLETE/FAILED) and read the boolean "running" flag.
+    isUpdating = extractJsonBool(response.body, "running");
+
+    pendingUpdates = 0;
+    runningJobs = 0;
+    std::string mangaStatusMap = extractJsonObject(response.body, "mangaStatusMap");
+    if (!mangaStatusMap.empty()) {
+        std::string pendingArr = extractJsonArray(mangaStatusMap, "PENDING");
+        std::string runningArr = extractJsonArray(mangaStatusMap, "RUNNING");
+        if (!pendingArr.empty()) pendingUpdates = static_cast<int>(splitJsonArray(pendingArr).size());
+        if (!runningArr.empty()) runningJobs = static_cast<int>(splitJsonArray(runningArr).size());
+    }
 
     return true;
 }
