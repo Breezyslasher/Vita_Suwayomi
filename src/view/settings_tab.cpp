@@ -348,6 +348,22 @@ void SettingsTab::willDisappear(bool resetState) {
     if (m_alive) *m_alive = false;
 }
 
+void SettingsTab::showChoicePopover(const std::string& title,
+                                    const std::vector<std::string>& options,
+                                    int currentIndex,
+                                    std::function<void(int)> onSelect) {
+    std::vector<OptionRow> rows;
+    for (int i = 0; i < static_cast<int>(options.size()); i++) {
+        const bool cur = (i == currentIndex);
+        const int idx = i;
+        rows.push_back({ cur ? "radio_checked.png" : "radio.png", options[i], "", cur, false,
+            [onSelect, idx]() { if (onSelect) onSelect(idx); }});
+    }
+    rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
+    // Show 5 rows then scroll (matches the Sort By menu; the theme list is long).
+    OptionsPopover::show("SETTING", title, std::move(rows), nullptr, 5);
+}
+
 void SettingsTab::addSectionSeparator() {
     auto* separator = new brls::Box();
     separator->setHeight(1);
@@ -410,22 +426,27 @@ void SettingsTab::createAccountSection() {
     });
     m_contentBox->addView(remoteUrlCell);
 
-    // Toggle between local and remote
-    m_urlModeSelector = new brls::SelectorCell();
-    std::vector<std::string> urlModes = {"Local", "Remote"};
-    int currentMode = settings.useRemoteUrl ? 1 : 0;
-    m_urlModeSelector->init("Active Connection", urlModes, currentMode,
-        [this](int index) {
-            Application& app = Application::getInstance();
-            if (index == 0) {
-                app.switchToLocalUrl();
-            } else {
-                app.switchToRemoteUrl();
-            }
-            updateServerLabel();
-            brls::Application::notify(index == 0 ? "Switched to Local URL" : "Switched to Remote URL");
-        });
-    m_contentBox->addView(m_urlModeSelector);
+    // Toggle between local and remote (opens the choice popover)
+    auto* connCell = new brls::DetailCell();
+    connCell->setText("Active Connection");
+    connCell->setDetailText(settings.useRemoteUrl ? "Remote" : "Local");
+    connCell->registerClickAction([this, connCell](brls::View*) {
+        const int cur = Application::getInstance().getSettings().useRemoteUrl ? 1 : 0;
+        showChoicePopover("Active Connection", {"Local", "Remote"}, cur,
+            [this, connCell](int index) {
+                Application& app = Application::getInstance();
+                if (index == 0) {
+                    app.switchToLocalUrl();
+                } else {
+                    app.switchToRemoteUrl();
+                }
+                updateServerLabel();
+                connCell->setDetailText(index == 0 ? "Local" : "Remote");
+                brls::Application::notify(index == 0 ? "Switched to Local URL" : "Switched to Remote URL");
+            });
+        return true;
+    });
+    m_contentBox->addView(connCell);
 
     // Auto-switch on failure toggle
     auto* autoSwitchToggle = new brls::BooleanCell();
@@ -437,22 +458,28 @@ void SettingsTab::createAccountSection() {
         });
     m_contentBox->addView(autoSwitchToggle);
 
-    // Connection timeout selector
-    auto* timeoutSelector = new brls::SelectorCell();
-    int timeoutIndex = 1; // default to 30s
-    if (settings.connectionTimeout <= 10) timeoutIndex = 0;
-    else if (settings.connectionTimeout <= 30) timeoutIndex = 1;
-    else if (settings.connectionTimeout <= 60) timeoutIndex = 2;
-    else timeoutIndex = 3;
-    timeoutSelector->init("Connection Timeout",
-        {"10 seconds", "30 seconds", "60 seconds", "120 seconds"},
-        timeoutIndex,
-        [](int index) {
-            int timeouts[] = {10, 30, 60, 120};
-            Application::getInstance().getSettings().connectionTimeout = timeouts[index];
-            Application::getInstance().saveSettings();
-        });
-    m_contentBox->addView(timeoutSelector);
+    // Connection timeout (opens the choice popover)
+    auto* timeoutCell = new brls::DetailCell();
+    timeoutCell->setText("Connection Timeout");
+    timeoutCell->setDetailText(std::to_string(settings.connectionTimeout) + " seconds");
+    timeoutCell->registerClickAction([this, timeoutCell](brls::View*) {
+        AppSettings& s = Application::getInstance().getSettings();
+        int timeoutIndex = 1; // default to 30s
+        if (s.connectionTimeout <= 10) timeoutIndex = 0;
+        else if (s.connectionTimeout <= 30) timeoutIndex = 1;
+        else if (s.connectionTimeout <= 60) timeoutIndex = 2;
+        else timeoutIndex = 3;
+        showChoicePopover("Connection Timeout",
+            {"10 seconds", "30 seconds", "60 seconds", "120 seconds"}, timeoutIndex,
+            [timeoutCell](int index) {
+                int timeouts[] = {10, 30, 60, 120};
+                Application::getInstance().getSettings().connectionTimeout = timeouts[index];
+                Application::getInstance().saveSettings();
+                timeoutCell->setDetailText(std::to_string(timeouts[index]) + " seconds");
+            });
+        return true;
+    });
+    m_contentBox->addView(timeoutCell);
 
     // Network Test button
     auto* networkTestCell = new brls::DetailCell();
@@ -835,19 +862,30 @@ void SettingsTab::createUISection() {
     header->setTitle("User Interface");
     m_contentBox->addView(header);
 
-    // Theme selector
-    m_themeSelector = new brls::SelectorCell();
-    m_themeSelector->init("Theme", {
+    // Theme selector (opens the choice popover)
+    static const std::vector<std::string> kThemeNames = {
         "System", "Light", "Dark", "Tachiyomi",
         "Neon Vaporwave", "Catppuccin", "Nord", "Tako",
         "Midnight Dusk", "Green Apple", "Lavender",
         "Matrix", "Mocha", "Sunset", "Aurora",
         "Synthwave", "Ocean"
-    }, static_cast<int>(settings.theme),
-        [this](int index) {
-            onThemeChanged(index);
-        });
-    m_contentBox->addView(m_themeSelector);
+    };
+    auto themeName = [](int i) -> std::string {
+        return (i >= 0 && i < static_cast<int>(kThemeNames.size())) ? kThemeNames[i] : "System";
+    };
+    auto* themeCell = new brls::DetailCell();
+    themeCell->setText("Theme");
+    themeCell->setDetailText(themeName(static_cast<int>(settings.theme)));
+    themeCell->registerClickAction([this, themeCell, themeName](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().theme);
+        showChoicePopover("Theme", kThemeNames, cur,
+            [this, themeCell, themeName](int index) {
+                onThemeChanged(index);
+                themeCell->setDetailText(themeName(index));
+            });
+        return true;
+    });
+    m_contentBox->addView(themeCell);
 
     // Debug logging toggle
     m_debugLogToggle = new brls::BooleanCell();
