@@ -23,6 +23,16 @@
 #include <psp2/net/netctl.h>
 #endif
 
+// Local-IP discovery on POSIX desktop/Android (Switch/Windows/Vita don't have
+// getifaddrs; they fall back to honest "unknown" rather than fabricated data).
+#if defined(__linux__) || defined(__ANDROID__)
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#endif
+
 namespace vitasuwayomi {
 
 // Fixed neutral-dark palette for the settings shell (rail + detail chrome),
@@ -2067,7 +2077,7 @@ private:
 struct NetTestResult {
     bool wifiConnected = false;
     std::string ip = "-", dns = "-";
-    int  wifiLevel = 0;
+    int  wifiSignal = -1;   // -1 = unknown (not derivable on this platform)
     bool internetSkipped = false, internetOk = false;
     long internetMs = 0;
     bool serverConfigured = false, serverOk = false;
@@ -2081,27 +2091,47 @@ NetTestResult gatherNetTest() {
     using namespace std::chrono;
     NetTestResult r;
 
-#ifdef __vita__
+    // --- Local network details (only where the platform can report them) ---
+#if defined(__vita__)
+    // Vita: SceNetCtl gives real IP, signal % and primary DNS.
     SceNetCtlInfo netInfo;
     if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_IP_ADDRESS, &netInfo) >= 0) {
         r.wifiConnected = true;
         r.ip = std::string(netInfo.ip_address);
     }
     if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_RSSI_PERCENTAGE, &netInfo) >= 0) {
-        r.wifiLevel = netInfo.rssi_percentage;
+        r.wifiSignal = netInfo.rssi_percentage;
     }
     SceNetCtlInfo dnsInfo {};
     if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_PRIMARY_DNS, &dnsInfo) >= 0) {
         r.dns = std::string(dnsInfo.primary_dns);
     }
+#elif defined(__linux__) || defined(__ANDROID__)
+    // Desktop Linux / Android: first non-loopback IPv4 via getifaddrs. Signal
+    // and DNS aren't portably available here, so they stay "unknown".
+    struct ifaddrs* ifap = nullptr;
+    if (getifaddrs(&ifap) == 0) {
+        for (struct ifaddrs* ifa = ifap; ifa != nullptr; ifa = ifa->ifa_next) {
+            if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
+            if (ifa->ifa_flags & IFF_LOOPBACK) continue;
+            char buf[INET_ADDRSTRLEN] = {0};
+            auto* sin = reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
+            if (inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf))) {
+                r.ip = buf;
+                r.wifiConnected = true;
+                break;
+            }
+        }
+        freeifaddrs(ifap);
+    }
 #else
-    r.wifiConnected = true;
-    r.ip = "127.0.0.1";
-    r.dns = "8.8.8.8";
-    r.wifiLevel = 100;
+    // Switch / Windows / other: no portable local-network probe here. Leave the
+    // details "unknown"; connectivity is inferred from the internet check below.
 #endif
 
-    if (r.wifiConnected) {
+    // Internet reachability — always run (never gate on a possibly-unknown WiFi
+    // state), so we report real connectivity on every platform.
+    {
         HttpClient http;
         http.setTimeout(10);
         auto s = steady_clock::now();
@@ -2109,9 +2139,10 @@ NetTestResult gatherNetTest() {
         auto e = steady_clock::now();
         r.internetMs = static_cast<long>(duration_cast<milliseconds>(e - s).count());
         r.internetOk = resp.success && (resp.statusCode == 204 || resp.statusCode == 200);
-    } else {
-        r.internetSkipped = true;
     }
+    // If we couldn't read a local IP but the internet is reachable, the link is
+    // clearly up — reflect that instead of claiming "not connected".
+    if (!r.wifiConnected && r.internetOk) r.wifiConnected = true;
 
     Application& app = Application::getInstance();
     std::string url = app.getServerUrl();
@@ -2238,7 +2269,14 @@ void buildNetTestPanel(brls::Box* panel, const NetTestResult& r,
         chip->addView(cap);
         chips->addView(chip);
     };
-    addChip("WIFI", r.wifiConnected, std::to_string(r.wifiLevel) + "%", "Signal strength", false);
+    // WiFi chip: show the signal % where the platform reports it, otherwise a
+    // plain link-up / down state rather than a fabricated percentage.
+    if (r.wifiSignal >= 0) {
+        addChip("WIFI", r.wifiConnected, std::to_string(r.wifiSignal) + "%", "Signal strength", false);
+    } else {
+        addChip("WIFI", r.wifiConnected, r.wifiConnected ? "Up" : "Down",
+                r.wifiConnected ? "Connected" : "No link", false);
+    }
     addChip("INTERNET", r.internetOk,
             r.internetSkipped ? "—" : std::to_string(r.internetMs) + "ms",
             r.internetSkipped ? "Skipped" : "Reachable", false);
@@ -2270,8 +2308,8 @@ void buildNetTestPanel(brls::Box* panel, const NetTestResult& r,
         line->setBackgroundColor(c::rowLine());
         grid->addView(line);
     };
-    addRow("WiFi IP", r.ip);
-    addRow("DNS", r.dns);
+    addRow("Local IP", (r.ip == "-") ? "Unknown" : r.ip);
+    if (r.dns != "-") addRow("DNS", r.dns);   // hide when the platform can't report it
     addRow("Server URL", r.serverConfigured ? r.serverUrl : "Not configured");
     addRow("Server", (r.serverOk && !r.serverName.empty())
                          ? (r.serverName + " v" + r.serverVersion) : "-");
@@ -2294,6 +2332,7 @@ void buildNetTestPanel(brls::Box* panel, const NetTestResult& r,
     again->setBorderColor(c::chipBorder());
     again->setBorderThickness(1.0f);
     again->setHighlightCornerRadius(11);
+    again->setHideHighlightBackground(true);   // keep the fill visible when focused
     again->setFocusable(true);
     again->setMarginRight(10);
     auto* refreshImg = new brls::Image();
@@ -2313,6 +2352,7 @@ void buildNetTestPanel(brls::Box* panel, const NetTestResult& r,
     close->setAlignItems(brls::AlignItems::CENTER);
     close->setBackgroundColor(c::accent());
     close->setHighlightCornerRadius(11);
+    close->setHideHighlightBackground(true);   // keep the accent fill visible when focused
     close->setFocusable(true);
     auto* closeLbl = new brls::Label();
     closeLbl->setText("Close");
