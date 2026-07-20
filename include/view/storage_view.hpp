@@ -38,6 +38,7 @@ private:
 
     // UI Components
     brls::Box* m_topBox = nullptr;     // fixed header/meter/actions area (rebuilt on load)
+    brls::View* m_firstAction = nullptr; // first quick-action cell (UP target from the list)
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;
 

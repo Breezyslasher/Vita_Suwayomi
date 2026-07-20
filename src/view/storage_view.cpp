@@ -120,19 +120,24 @@ void StorageView::loadStorageInfo() {
             item.coverUrl = download.localCoverPath;
             item.chapterCount = static_cast<int>(download.chapters.size());
 
-            item.sizeBytes = 0;
-            std::string mangaPath = dm.getDownloadsPath() + "/" + std::to_string(download.mangaId);
-            for (const auto& name : platform::listDir(mangaPath)) {
-                if (name.empty() || name[0] == '.') continue;
-                std::string entryPath = mangaPath + "/" + name;
-                int64_t sz = platform::fileSize(entryPath);
-                if (sz > 0) {
-                    item.sizeBytes += sz;
-                } else {
-                    for (const auto& fname : platform::listDir(entryPath)) {
-                        if (fname.empty() || fname[0] == '.') continue;
-                        int64_t fsz = platform::fileSize(entryPath + "/" + fname);
-                        if (fsz > 0) item.sizeBytes += fsz;
+            // Prefer the server-reported size (covers server-side downloads,
+            // which have no local files). Fall back to summing local files for
+            // on-device downloads that aren't tracked server-side.
+            item.sizeBytes = download.totalBytes;
+            if (item.sizeBytes == 0) {
+                std::string mangaPath = dm.getDownloadsPath() + "/" + std::to_string(download.mangaId);
+                for (const auto& name : platform::listDir(mangaPath)) {
+                    if (name.empty() || name[0] == '.') continue;
+                    std::string entryPath = mangaPath + "/" + name;
+                    int64_t sz = platform::fileSize(entryPath);
+                    if (sz > 0) {
+                        item.sizeBytes += sz;
+                    } else {
+                        for (const auto& fname : platform::listDir(entryPath)) {
+                            if (fname.empty() || fname[0] == '.') continue;
+                            int64_t fsz = platform::fileSize(entryPath + "/" + fname);
+                            if (fsz > 0) item.sizeBytes += fsz;
+                        }
                     }
                 }
             }
@@ -197,7 +202,8 @@ void StorageView::loadStorageInfo() {
                 cover->setCornerRadius(4);
                 cover->setScalingType(brls::ImageScalingType::FIT);
                 cover->setMarginRight(12);
-                if (!item.coverUrl.empty()) cover->setImageFromFile(item.coverUrl);
+                std::string coverUrl = SuwayomiClient::getInstance().getMangaThumbnailUrl(item.mangaId);
+                if (!coverUrl.empty()) ImageLoader::loadAsync(coverUrl, nullptr, cover, m_alive);
                 rowBox->addView(cover);
 
                 // Title + proportional size bar
@@ -255,6 +261,13 @@ void StorageView::loadStorageInfo() {
                 rowBox->addGestureRecognizer(new brls::TapGestureRecognizer(rowBox));
                 m_contentBox->addView(rowBox);
                 if (!firstRow) firstRow = rowBox;
+            }
+
+            // Route UP from the first list row to the quick-action buttons (the
+            // scroll frame otherwise swallows UP at the top row).
+            if (firstRow && m_firstAction) {
+                firstRow->setCustomNavigationRoute(brls::FocusDirection::UP, m_firstAction);
+                m_firstAction->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstRow);
             }
 
             // The loading placeholder we were focused on is gone now; move focus
@@ -345,7 +358,7 @@ void StorageView::rebuildTop() {
     actions->setAxis(brls::Axis::ROW);
     actions->setMarginBottom(18);
     auto action = [&](const std::string& icon, const std::string& label, bool danger,
-                      bool last, std::function<void()> onClick) {
+                      bool last, std::function<void()> onClick) -> brls::Box* {
         auto* cell = new brls::Box();
         cell->setAxis(brls::Axis::ROW);
         cell->setAlignItems(brls::AlignItems::CENTER);
@@ -372,10 +385,11 @@ void StorageView::rebuildTop() {
         cell->registerClickAction([onClick](brls::View*) { if (onClick) onClick(); return true; });
         cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
         actions->addView(cell);
+        return cell;
     };
-    action("checkbox_checked.png", "Clean read chapters", false, false, [this]() { deleteReadChapters(); });
-    action("refresh.png", "Clear cache " + formatSize(m_cacheSize), false, false, [this]() { clearCache(); });
-    action("cross.png", "Clear all", true, true, [this]() { clearAllDownloads(); });
+    m_firstAction = action("check.png", "Clean read chapters", false, false, [this]() { deleteReadChapters(); });
+    action("delete.png", "Clear cache " + formatSize(m_cacheSize), false, false, [this]() { clearCache(); });
+    action("delete.png", "Clear all", true, true, [this]() { clearAllDownloads(); });
     m_topBox->addView(actions);
 
     // ---- Section label ----
