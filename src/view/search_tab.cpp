@@ -1301,22 +1301,24 @@ void SearchTab::buildGenreChipRail() {
     struct Chip { int fi; int ci; std::string name; bool active; };
     std::vector<Chip> chips;
 
+    // Only surface the *selected* genres as chips (tap one to remove it); the
+    // full genre list lives in the Filters dialog.
     int gi = findGenreGroupIndex();
     if (gi >= 0) {
         const auto& group = m_sourceFilters[gi];
         for (size_t c = 0; c < group.filters.size(); c++) {
             const auto& child = group.filters[c];
-            if (child.type == FilterType::TRISTATE)
-                chips.push_back({gi, static_cast<int>(c), child.name, child.triState == TriState::INCLUDE});
-            else if (child.type == FilterType::CHECKBOX)
-                chips.push_back({gi, static_cast<int>(c), child.name, child.checkBoxState});
+            if (child.type == FilterType::TRISTATE && child.triState == TriState::INCLUDE)
+                chips.push_back({gi, static_cast<int>(c), child.name, true});
+            else if (child.type == FilterType::CHECKBOX && child.checkBoxState)
+                chips.push_back({gi, static_cast<int>(c), child.name, true});
         }
     } else {
-        // Fallback: top-level tristate filters act as genre chips.
+        // Fallback: selected top-level tristate filters act as genre chips.
         for (size_t i = 0; i < m_sourceFilters.size(); i++) {
             const auto& f = m_sourceFilters[i];
-            if (f.type == FilterType::TRISTATE)
-                chips.push_back({static_cast<int>(i), -1, f.name, f.triState == TriState::INCLUDE});
+            if (f.type == FilterType::TRISTATE && f.triState == TriState::INCLUDE)
+                chips.push_back({static_cast<int>(i), -1, f.name, true});
         }
     }
 
