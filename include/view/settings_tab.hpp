@@ -105,9 +105,9 @@ private:
     brls::DetailCell* m_defaultCategorySelector = nullptr;
 
     // Reader section
-    brls::SelectorCell* m_readingModeSelector = nullptr;
-    brls::SelectorCell* m_pageScaleModeSelector = nullptr;
-    brls::SelectorCell* m_readerBgSelector = nullptr;
+    brls::DetailCell* m_readingModeSelector = nullptr;
+    brls::DetailCell* m_pageScaleModeSelector = nullptr;
+    brls::DetailCell* m_readerBgSelector = nullptr;
 
     // Downloads section
     brls::DetailCell* m_clearDownloadsCell = nullptr;

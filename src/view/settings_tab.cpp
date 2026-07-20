@@ -1178,60 +1178,73 @@ void SettingsTab::createReaderSection() {
     header->setTitle("Reader (Defaults)");
     m_contentBox->addView(header);
 
-    // Reading mode selector
-    m_readingModeSelector = new brls::SelectorCell();
-    m_readingModeSelector->init("Reading Mode",
-        {"Left to Right", "Right to Left (Manga)", "Vertical", "Webtoon"},
-        static_cast<int>(settings.readingMode),
-        [&settings](int index) {
-            settings.readingMode = static_cast<ReadingMode>(index);
+    // Reading mode (opens the choice popover)
+    static const std::vector<std::string> kReadingModes =
+        {"Left to Right", "Right to Left (Manga)", "Vertical", "Webtoon"};
+    m_readingModeSelector = new brls::DetailCell();
+    m_readingModeSelector->setText("Reading Mode");
+    m_readingModeSelector->setDetailText(kReadingModes[static_cast<int>(settings.readingMode) % kReadingModes.size()]);
+    m_readingModeSelector->registerClickAction([this](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().readingMode);
+        showChoicePopover("Reading Mode", kReadingModes, cur, [this](int index) {
+            Application::getInstance().getSettings().readingMode = static_cast<ReadingMode>(index);
             Application::getInstance().saveSettings();
+            if (m_readingModeSelector) m_readingModeSelector->setDetailText(kReadingModes[index]);
         });
+        return true;
+    });
     m_contentBox->addView(m_readingModeSelector);
 
-    // Page scale mode selector
-    m_pageScaleModeSelector = new brls::SelectorCell();
-    m_pageScaleModeSelector->init("Page Scale",
-        {"Fit Screen", "Fit Width", "Fit Height", "Original Size (1:1)"},
-        static_cast<int>(settings.pageScaleMode),
-        [&settings](int index) {
-            settings.pageScaleMode = static_cast<PageScaleMode>(index);
+    // Page scale (opens the choice popover)
+    static const std::vector<std::string> kPageScales =
+        {"Fit Screen", "Fit Width", "Fit Height", "Original Size (1:1)"};
+    m_pageScaleModeSelector = new brls::DetailCell();
+    m_pageScaleModeSelector->setText("Page Scale");
+    m_pageScaleModeSelector->setDetailText(kPageScales[static_cast<int>(settings.pageScaleMode) % kPageScales.size()]);
+    m_pageScaleModeSelector->registerClickAction([this](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().pageScaleMode);
+        showChoicePopover("Page Scale", kPageScales, cur, [this](int index) {
+            Application::getInstance().getSettings().pageScaleMode = static_cast<PageScaleMode>(index);
             Application::getInstance().saveSettings();
+            if (m_pageScaleModeSelector) m_pageScaleModeSelector->setDetailText(kPageScales[index]);
         });
+        return true;
+    });
     m_contentBox->addView(m_pageScaleModeSelector);
 
-    // Image rotation selector (default for new manga)
-    int rotationIndex = 0;
-    switch (settings.imageRotation) {
-        case 0: rotationIndex = 0; break;
-        case 90: rotationIndex = 1; break;
-        case 180: rotationIndex = 2; break;
-        case 270: rotationIndex = 3; break;
-    }
-    auto* rotationSelector = new brls::SelectorCell();
-    rotationSelector->init("Default Rotation",
-        {"0° (Normal)", "90° (Clockwise)", "180° (Upside Down)", "270° (Counter-Clockwise)"},
-        rotationIndex,
-        [&settings](int index) {
-            switch (index) {
-                case 0: settings.imageRotation = 0; break;
-                case 1: settings.imageRotation = 90; break;
-                case 2: settings.imageRotation = 180; break;
-                case 3: settings.imageRotation = 270; break;
-            }
+    // Default rotation (opens the choice popover)
+    static const std::vector<std::string> kRotations =
+        {"0° (Normal)", "90° (Clockwise)", "180° (Upside Down)", "270° (Counter-Clockwise)"};
+    static const int kRotationValues[] = {0, 90, 180, 270};
+    auto rotationIndexOf = [](int deg) { for (int i = 0; i < 4; i++) if (kRotationValues[i] == deg) return i; return 0; };
+    auto* rotationCell = new brls::DetailCell();
+    rotationCell->setText("Default Rotation");
+    rotationCell->setDetailText(kRotations[rotationIndexOf(settings.imageRotation)]);
+    rotationCell->registerClickAction([this, rotationIndexOf, rotationCell](brls::View*) {
+        const int cur = rotationIndexOf(Application::getInstance().getSettings().imageRotation);
+        showChoicePopover("Default Rotation", kRotations, cur, [rotationCell](int index) {
+            Application::getInstance().getSettings().imageRotation = kRotationValues[index];
             Application::getInstance().saveSettings();
+            rotationCell->setDetailText(kRotations[index]);
         });
-    m_contentBox->addView(rotationSelector);
+        return true;
+    });
+    m_contentBox->addView(rotationCell);
 
-    // Reader background selector
-    m_readerBgSelector = new brls::SelectorCell();
-    m_readerBgSelector->init("Background",
-        {"Black", "White", "Gray"},
-        static_cast<int>(settings.readerBackground),
-        [&settings](int index) {
-            settings.readerBackground = static_cast<ReaderBackground>(index);
+    // Reader background (opens the choice popover)
+    static const std::vector<std::string> kReaderBgs = {"Black", "White", "Gray"};
+    m_readerBgSelector = new brls::DetailCell();
+    m_readerBgSelector->setText("Background");
+    m_readerBgSelector->setDetailText(kReaderBgs[static_cast<int>(settings.readerBackground) % kReaderBgs.size()]);
+    m_readerBgSelector->registerClickAction([this](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().readerBackground);
+        showChoicePopover("Background", kReaderBgs, cur, [this](int index) {
+            Application::getInstance().getSettings().readerBackground = static_cast<ReaderBackground>(index);
             Application::getInstance().saveSettings();
+            if (m_readerBgSelector) m_readerBgSelector->setDetailText(kReaderBgs[index]);
         });
+        return true;
+    });
     m_contentBox->addView(m_readerBgSelector);
 
     // Keep screen on toggle
@@ -1288,15 +1301,20 @@ void SettingsTab::createReaderSection() {
     m_contentBox->addView(webtoonDetectToggle);
 
     // Side padding selector
-    auto* paddingSelector = new brls::SelectorCell();
-    paddingSelector->init("Side Padding",
-        {"None", "5%", "10%", "15%", "20%"},
-        settings.webtoonSidePadding / 5,
-        [&settings](int index) {
-            settings.webtoonSidePadding = index * 5;
+    static const std::vector<std::string> kSidePaddings = {"None", "5%", "10%", "15%", "20%"};
+    auto* paddingCell = new brls::DetailCell();
+    paddingCell->setText("Side Padding");
+    paddingCell->setDetailText(kSidePaddings[(settings.webtoonSidePadding / 5) % static_cast<int>(kSidePaddings.size())]);
+    paddingCell->registerClickAction([this, paddingCell](brls::View*) {
+        const int cur = Application::getInstance().getSettings().webtoonSidePadding / 5;
+        showChoicePopover("Side Padding", kSidePaddings, cur, [paddingCell](int index) {
+            Application::getInstance().getSettings().webtoonSidePadding = index * 5;
             Application::getInstance().saveSettings();
+            paddingCell->setDetailText(kSidePaddings[index]);
         });
-    m_contentBox->addView(paddingSelector);
+        return true;
+    });
+    m_contentBox->addView(paddingCell);
 
     // Reverse mouse scroll
     auto* reverseScrollToggle = new brls::BooleanCell();
