@@ -3107,7 +3107,8 @@ void buildStatsDashboard(brls::Box* content, const StatsData& d,
     // ---- Body: two columns ----
     auto* bodyRow = new brls::Box();
     bodyRow->setAxis(brls::Axis::ROW);
-    bodyRow->setAlignItems(brls::AlignItems::FLEX_START);
+    bodyRow->setAlignItems(brls::AlignItems::STRETCH);
+    bodyRow->setGrow(1.0f);   // fill the space below the header
 
     // Left: completion ring card
     if (d.haveLibrary && d.libSize > 0) {
@@ -3208,6 +3209,7 @@ void buildStatsDashboard(brls::Box* content, const StatsData& d,
     if (d.haveLibrary && !d.cats.empty()) {
         auto* catCard = new brls::Box();
         catCard->setAxis(brls::Axis::COLUMN);
+        catCard->setGrow(1.0f);                 // fill the right column's remaining height
         catCard->setBackgroundColor(c::panel());
         catCard->setBorderColor(c::borderCard());
         catCard->setBorderThickness(1.0f);
@@ -3218,11 +3220,28 @@ void buildStatsDashboard(brls::Box* content, const StatsData& d,
         ct->setText("Progress by category");
         ct->setFontSize(15); ct->setTextColor(c::heading()); ct->setMarginBottom(14);
         catCard->addView(ct);
+
+        // Scroll the category list within its own card (D-pad focuses the rows)
+        // rather than scrolling the whole page.
+        auto* catScroll = new brls::ScrollingFrame();
+        catScroll->setGrow(1.0f);
+        catScroll->setFocusable(false);
+        auto* rowsBox = new brls::Box();
+        rowsBox->setAxis(brls::Axis::COLUMN);
+        rowsBox->setAlignItems(brls::AlignItems::STRETCH);
+        catScroll->setContentView(rowsBox);
+        catCard->addView(catScroll);
+
         for (const auto& cat : d.cats) {
             const float pct = cat.total > 0 ? static_cast<float>(cat.read) / static_cast<float>(cat.total) : 0.0f;
             auto* row = new brls::Box();
             row->setAxis(brls::Axis::COLUMN);
-            row->setMarginBottom(14);
+            row->setMarginBottom(10);
+            row->setPaddingTop(6); row->setPaddingBottom(6);
+            row->setPaddingLeft(8); row->setPaddingRight(8);
+            row->setCornerRadius(8);
+            row->setHighlightCornerRadius(8);
+            row->setFocusable(true);
             auto* top = new brls::Box();
             top->setAxis(brls::Axis::ROW);
             top->setAlignItems(brls::AlignItems::CENTER);
@@ -3250,7 +3269,7 @@ void buildStatsDashboard(brls::Box* content, const StatsData& d,
             fill->setWidthPercentage(wp);
             track->addView(fill);
             row->addView(track);
-            catCard->addView(row);
+            rowsBox->addView(row);
         }
         right->addView(catCard);
     }
@@ -3269,14 +3288,14 @@ void SettingsTab::showStatisticsView() {
     page->setGrow(1.0f);
     page->setBackgroundColor(stcol::page());
 
-    auto* scroll = new brls::ScrollingFrame();
-    scroll->setGrow(1.0f);
-    scroll->setFocusable(false);
+    // The page itself does not scroll; only the category list inside the
+    // dashboard scrolls (see buildStatsDashboard), so the ring + headline
+    // numbers stay put.
     auto* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
     content->setAlignItems(brls::AlignItems::STRETCH);
-    scroll->setContentView(content);
-    page->addView(scroll);
+    content->setGrow(1.0f);
+    page->addView(content);
 
     auto alive = std::make_shared<bool>(true);
     page->registerAction("Back", brls::ControllerButton::BUTTON_B,
