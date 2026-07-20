@@ -420,6 +420,28 @@ SearchTab::SearchTab() {
             break;
     }
 
+    // Genre chip rail (horizontal, above the grid; hidden until a source with
+    // genre filters is open).
+    m_genreRail = new brls::HScrollingFrame();
+    m_genreRail->setHeight(46);
+    m_genreRail->setMarginBottom(6);
+    m_genreRail->setVisibility(brls::Visibility::GONE);
+    m_genreChipsBox = new brls::Box();
+    m_genreChipsBox->setAxis(brls::Axis::ROW);
+    m_genreChipsBox->setAlignItems(brls::AlignItems::CENTER);
+    static_cast<brls::HScrollingFrame*>(m_genreRail)->setContentView(m_genreChipsBox);
+    m_mainContent->addView(m_genreRail);
+
+    // Active-filter bar (tokens + Clear all; only visible when filters active).
+    m_activeFilterBar = new brls::Box();
+    m_activeFilterBar->setAxis(brls::Axis::ROW);
+    m_activeFilterBar->setAlignItems(brls::AlignItems::CENTER);
+    m_activeFilterBar->setPadding(6, 10, 6, 10);
+    m_activeFilterBar->setCornerRadius(12);
+    m_activeFilterBar->setMarginBottom(8);
+    m_activeFilterBar->setVisibility(brls::Visibility::GONE);
+    m_mainContent->addView(m_activeFilterBar);
+
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
@@ -783,6 +805,9 @@ void SearchTab::showSources() {
     m_titleLabel->setText("Browse");
     m_searchLabel->setVisibility(brls::Visibility::GONE);
 
+    // Hide the source-browser chrome (genre rail + active-filter bar).
+    updateBrowseChrome();
+
     // Filter sources by language and tags
     filterSourcesByLanguage();
     m_resultsLabel->setText(std::to_string(m_filteredSources.size()) + " sources");
@@ -1071,6 +1096,7 @@ void SearchTab::loadSourceFilters() {
                 m_sourceFilters = filters;
                 m_filtersLoaded = true;
                 brls::Logger::info("Loaded {} filters for source", filters.size());
+                updateBrowseChrome();  // populate the genre chip rail now filters exist
             });
         } else {
             brls::Logger::warning("Failed to load source filters");
@@ -1157,6 +1183,7 @@ void SearchTab::applyFilters() {
                 if (!manga.empty()) {
                     m_contentGrid->focusIndex(0);
                 }
+                updateBrowseChrome();
             });
         } else {
             brls::sync([this, gen, aliveWeak]() {
@@ -1169,6 +1196,312 @@ void SearchTab::applyFilters() {
             });
         }
     });
+}
+
+// ============================================================================
+// Browse chrome: genre chip rail + active-filter bar (source-browser 2b)
+// ============================================================================
+
+namespace {
+// Handoff palette.
+inline NVGcolor cAccent()    { return nvgRGB(0x64, 0xB4, 0xFF); }
+inline NVGcolor cAccentInk() { return nvgRGB(0x0d, 0x22, 0x36); }
+inline NVGcolor cDanger()    { return nvgRGB(0xd9, 0x6b, 0x6b); }
+inline NVGcolor cMuted()     { return nvgRGB(0x8b, 0x8b, 0x93); }
+inline NVGcolor cBody()      { return nvgRGB(0xC5, 0xC6, 0xD0); }
+inline NVGcolor cChip()      { return nvgRGB(0x23, 0x23, 0x26); }
+
+std::string toLower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+    return s;
+}
+} // namespace
+
+bool SearchTab::filterIsActive(const SourceFilter& f) {
+    switch (f.type) {
+        case FilterType::TEXT:     return !f.textState.empty() && f.textState != f.textDefault;
+        case FilterType::CHECKBOX: return f.checkBoxState != f.checkBoxDefault;
+        case FilterType::TRISTATE: return f.triState != TriState::IGNORE;
+        case FilterType::SELECT:   return f.selectState != f.selectDefault;
+        case FilterType::SORT:     return f.sortState.index != f.sortDefault.index ||
+                                          f.sortState.ascending != f.sortDefault.ascending;
+        default:                   return false;
+    }
+}
+
+std::string SearchTab::formatFilterToken(const SourceFilter& f) const {
+    switch (f.type) {
+        case FilterType::TEXT:
+            return f.name + ": " + f.textState;
+        case FilterType::CHECKBOX:
+            return f.name;
+        case FilterType::TRISTATE:
+            return f.name + (f.triState == TriState::EXCLUDE ? " (excl)" : "");
+        case FilterType::SELECT:
+            if (f.selectState >= 0 && f.selectState < static_cast<int>(f.selectOptions.size()))
+                return f.name + ": " + f.selectOptions[f.selectState];
+            return f.name;
+        case FilterType::SORT:
+            if (f.sortState.index >= 0 && f.sortState.index < static_cast<int>(f.sortOptions.size()))
+                return f.name + ": " + f.sortOptions[f.sortState.index] +
+                       (f.sortState.ascending ? " ↑" : " ↓");
+            return f.name;
+        default:
+            return f.name;
+    }
+}
+
+int SearchTab::findGenreGroupIndex() const {
+    for (size_t i = 0; i < m_sourceFilters.size(); i++) {
+        const auto& f = m_sourceFilters[i];
+        if (f.type != FilterType::GROUP) continue;
+        std::string n = toLower(f.name);
+        if (n.find("genre") == std::string::npos && n.find("tag") == std::string::npos &&
+            n.find("categor") == std::string::npos)
+            continue;
+        for (const auto& c : f.filters)
+            if (c.type == FilterType::TRISTATE || c.type == FilterType::CHECKBOX)
+                return static_cast<int>(i);
+    }
+    return -1;
+}
+
+void SearchTab::resetSingleFilter(int filterIndex, int childIndex) {
+    if (filterIndex < 0 || filterIndex >= static_cast<int>(m_sourceFilters.size())) return;
+    auto resetOne = [](SourceFilter& f) {
+        switch (f.type) {
+            case FilterType::TEXT:     f.textState = f.textDefault; break;
+            case FilterType::CHECKBOX: f.checkBoxState = f.checkBoxDefault; break;
+            case FilterType::TRISTATE: f.triState = TriState::IGNORE; break;
+            case FilterType::SELECT:   f.selectState = f.selectDefault; break;
+            case FilterType::SORT:     f.sortState = f.sortDefault; break;
+            default: break;
+        }
+    };
+    SourceFilter& top = m_sourceFilters[filterIndex];
+    if (childIndex >= 0 && top.type == FilterType::GROUP &&
+        childIndex < static_cast<int>(top.filters.size())) {
+        resetOne(top.filters[childIndex]);
+    } else {
+        resetOne(top);
+    }
+}
+
+void SearchTab::buildGenreChipRail() {
+    if (!m_genreRail || !m_genreChipsBox) return;
+
+    // If focus is currently on a chip, move it to the grid before we rebuild.
+    brls::View* focused = brls::Application::getCurrentFocus();
+    for (brls::View* v = focused; v; v = v->getParent()) {
+        if (v == m_genreRail) { if (m_contentGrid) brls::Application::giveFocus(m_contentGrid); break; }
+    }
+    m_genreChipsBox->clearViews();
+
+    // Collect chip descriptors: (topIndex, childIndex, name, active).
+    struct Chip { int fi; int ci; std::string name; bool active; };
+    std::vector<Chip> chips;
+
+    int gi = findGenreGroupIndex();
+    if (gi >= 0) {
+        const auto& group = m_sourceFilters[gi];
+        for (size_t c = 0; c < group.filters.size(); c++) {
+            const auto& child = group.filters[c];
+            if (child.type == FilterType::TRISTATE)
+                chips.push_back({gi, static_cast<int>(c), child.name, child.triState == TriState::INCLUDE});
+            else if (child.type == FilterType::CHECKBOX)
+                chips.push_back({gi, static_cast<int>(c), child.name, child.checkBoxState});
+        }
+    } else {
+        // Fallback: top-level tristate filters act as genre chips.
+        for (size_t i = 0; i < m_sourceFilters.size(); i++) {
+            const auto& f = m_sourceFilters[i];
+            if (f.type == FilterType::TRISTATE)
+                chips.push_back({static_cast<int>(i), -1, f.name, f.triState == TriState::INCLUDE});
+        }
+    }
+
+    if (chips.empty()) {
+        m_genreRail->setVisibility(brls::Visibility::GONE);
+        return;
+    }
+
+    for (const auto& ch : chips) {
+        auto* chip = new brls::Box();
+        chip->setAxis(brls::Axis::ROW);
+        chip->setAlignItems(brls::AlignItems::CENTER);
+        chip->setJustifyContent(brls::JustifyContent::CENTER);
+        chip->setHeight(34);
+        chip->setPaddingLeft(14);
+        chip->setPaddingRight(14);
+        chip->setCornerRadius(17);
+        chip->setMarginRight(8);
+        chip->setFocusable(true);
+        chip->setBackgroundColor(ch.active ? cAccent() : cChip());
+
+        auto* lbl = new brls::Label();
+        lbl->setText(ch.name);
+        lbl->setFontSize(14);
+        lbl->setSingleLine(true);
+        lbl->setTextColor(ch.active ? cAccentInk() : cBody());
+        chip->addView(lbl);
+
+        int fi = ch.fi, ci = ch.ci;
+        chip->registerClickAction([this, fi, ci](brls::View*) {
+            // Toggle the underlying filter between IGNORE and INCLUDE.
+            SourceFilter* target = nullptr;
+            if (ci >= 0 && m_sourceFilters[fi].type == FilterType::GROUP)
+                target = &m_sourceFilters[fi].filters[ci];
+            else
+                target = &m_sourceFilters[fi];
+            if (target->type == FilterType::TRISTATE)
+                target->triState = (target->triState == TriState::INCLUDE) ? TriState::IGNORE
+                                                                           : TriState::INCLUDE;
+            else if (target->type == FilterType::CHECKBOX)
+                target->checkBoxState = !target->checkBoxState;
+            applyFilters();  // reloads page 1 + refreshes chrome on completion
+            return true;
+        });
+        chip->addGestureRecognizer(new brls::TapGestureRecognizer(chip));
+        m_genreChipsBox->addView(chip);
+    }
+
+    m_genreRail->setVisibility(brls::Visibility::VISIBLE);
+}
+
+void SearchTab::buildActiveFilterBar() {
+    if (!m_activeFilterBar) return;
+
+    // Move focus out of the bar before rebuilding it.
+    brls::View* focused = brls::Application::getCurrentFocus();
+    for (brls::View* v = focused; v; v = v->getParent()) {
+        if (v == m_activeFilterBar) { if (m_contentGrid) brls::Application::giveFocus(m_contentGrid); break; }
+    }
+    m_activeFilterBar->clearViews();
+
+    // Token descriptors: (topIndex, childIndex, label).
+    struct Token { int fi; int ci; std::string label; };
+    std::vector<Token> tokens;
+    for (size_t i = 0; i < m_sourceFilters.size(); i++) {
+        const auto& f = m_sourceFilters[i];
+        if (f.type == FilterType::GROUP) {
+            for (size_t c = 0; c < f.filters.size(); c++) {
+                const auto& child = f.filters[c];
+                if (filterIsActive(child)) {
+                    std::string label = f.name + ": " + child.name;
+                    if (child.type == FilterType::TRISTATE && child.triState == TriState::EXCLUDE)
+                        label += " (excl)";
+                    tokens.push_back({static_cast<int>(i), static_cast<int>(c), label});
+                }
+            }
+        } else if (filterIsActive(f)) {
+            tokens.push_back({static_cast<int>(i), -1, formatFilterToken(f)});
+        }
+    }
+
+    if (tokens.empty()) {
+        // Nothing differs from defaults anymore — treat as unfiltered.
+        m_filtersActive = false;
+        m_activeFilterBar->setVisibility(brls::Visibility::GONE);
+        return;
+    }
+
+    m_activeFilterBar->setBackgroundColor(nvgRGBA(100, 180, 255, 20));  // tinted strip
+
+    // Leading "Filters N" label.
+    auto* lead = new brls::Label();
+    lead->setText("Filters " + std::to_string(tokens.size()));
+    lead->setFontSize(13);
+    lead->setSingleLine(true);
+    lead->setTextColor(cAccent());
+    lead->setMarginRight(10);
+    m_activeFilterBar->addView(lead);
+
+    // One removable token per active filter.
+    for (const auto& tk : tokens) {
+        auto* token = new brls::Box();
+        token->setAxis(brls::Axis::ROW);
+        token->setAlignItems(brls::AlignItems::CENTER);
+        token->setHeight(30);
+        token->setPaddingLeft(10);
+        token->setPaddingRight(8);
+        token->setCornerRadius(15);
+        token->setMarginRight(8);
+        token->setFocusable(true);
+        token->setBackgroundColor(cChip());
+
+        auto* lbl = new brls::Label();
+        lbl->setText(tk.label);
+        lbl->setFontSize(13);
+        lbl->setSingleLine(true);
+        lbl->setTextColor(cBody());
+        lbl->setMarginRight(6);
+        token->addView(lbl);
+
+        auto* x = new brls::Label();
+        x->setText("×");  // ×
+        x->setFontSize(16);
+        x->setTextColor(cMuted());
+        token->addView(x);
+
+        int fi = tk.fi, ci = tk.ci;
+        token->registerClickAction([this, fi, ci](brls::View*) {
+            resetSingleFilter(fi, ci);
+            applyFilters();  // recomputes results + chrome (bar hides if none left)
+            return true;
+        });
+        token->addGestureRecognizer(new brls::TapGestureRecognizer(token));
+        m_activeFilterBar->addView(token);
+    }
+
+    // Trailing "Clear all".
+    auto* clearBtn = new brls::Box();
+    clearBtn->setAxis(brls::Axis::ROW);
+    clearBtn->setAlignItems(brls::AlignItems::CENTER);
+    clearBtn->setJustifyContent(brls::JustifyContent::CENTER);
+    clearBtn->setHeight(30);
+    clearBtn->setPaddingLeft(12);
+    clearBtn->setPaddingRight(12);
+    clearBtn->setCornerRadius(15);
+    clearBtn->setFocusable(true);
+    clearBtn->setBackgroundColor(cChip());
+    auto* clearLbl = new brls::Label();
+    clearLbl->setText("Clear all");
+    clearLbl->setFontSize(13);
+    clearLbl->setSingleLine(true);
+    clearLbl->setTextColor(cDanger());
+    clearBtn->addView(clearLbl);
+    clearBtn->registerClickAction([this](brls::View*) {
+        resetFilters();  // sets m_filtersActive = false
+        // Return to the unfiltered popular list for this source.
+        m_filtersActive = false;
+        m_browseMode = BrowseMode::POPULAR;
+        loadPopularManga(m_currentSourceId);
+        updateModeButtons();
+        updateBrowseChrome();
+        return true;
+    });
+    clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn));
+    m_activeFilterBar->addView(clearBtn);
+
+    m_activeFilterBar->setVisibility(brls::Visibility::VISIBLE);
+}
+
+void SearchTab::updateBrowseChrome() {
+    bool inSourceBrowse = (m_currentSourceId != 0) &&
+                          (m_browseMode == BrowseMode::POPULAR || m_browseMode == BrowseMode::LATEST);
+    if (!inSourceBrowse) {
+        if (m_genreRail) m_genreRail->setVisibility(brls::Visibility::GONE);
+        if (m_activeFilterBar) m_activeFilterBar->setVisibility(brls::Visibility::GONE);
+        return;
+    }
+
+    buildGenreChipRail();  // shows/hides the rail itself based on chip count
+
+    if (m_filtersActive) {
+        buildActiveFilterBar();  // shows/hides based on token count
+    } else if (m_activeFilterBar) {
+        m_activeFilterBar->setVisibility(brls::Visibility::GONE);
+    }
 }
 
 void SearchTab::hideFilterPanel() {
@@ -2331,6 +2664,7 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
                 if (!manga.empty()) {
                     m_contentGrid->focusIndex(0);
                 }
+                updateBrowseChrome();
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch popular manga");
@@ -2377,6 +2711,7 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
                 if (!manga.empty()) {
                     m_contentGrid->focusIndex(0);
                 }
+                updateBrowseChrome();
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch latest manga");
