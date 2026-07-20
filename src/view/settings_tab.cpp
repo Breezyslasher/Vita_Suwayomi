@@ -314,6 +314,11 @@ void SettingsTab::showSection(int sectionId) {
         m_detailContent->setLastFocusedView(target);
         m_detailScroll->setLastFocusedView(m_detailContent);
         m_detailContainer->setLastFocusedView(m_detailScroll);
+
+        // Reset the shared detail scroll to the top; otherwise a new (often
+        // shorter) section inherits the previous section's scroll offset and
+        // renders clipped past its top until the user scrolls back up.
+        m_detailScroll->setContentOffsetY(0.0f, false);
     }
 
     if (sectionId < static_cast<int>(m_sectionNames.size()))
