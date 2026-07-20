@@ -172,6 +172,8 @@ private:
     void uninstallExtension(const Extension& ext);
     void showSourceSettings(const Extension& ext);
     void showSourcePreferencesDialog(const Source& source);
+    void showSourcePreferencesMenu(const Source& source,
+                                   std::shared_ptr<std::vector<SourcePreference>> prefs);
 
     // Helpers
     void showError(const std::string& message);

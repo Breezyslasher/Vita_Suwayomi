@@ -627,44 +627,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     // Register Y button for chapter filter
     this->registerAction("Filter", brls::ControllerButton::BUTTON_Y, [this](brls::View* view) {
-        // Chapter filters as checkable rows that toggle in place and refresh the
-        // list live, plus Clear Filters and Cancel.
-        std::vector<OptionRow> rows;
-
-        OptionRow rDown;
-        rDown.label     = "Downloaded";
-        rDown.checkable = true;
-        rDown.checked   = m_filterDownloaded;
-        rDown.action    = [this]() { m_filterDownloaded = !m_filterDownloaded; populateChaptersList(); };
-        rows.push_back(std::move(rDown));
-
-        OptionRow rUnread;
-        rUnread.label     = "Unread";
-        rUnread.checkable = true;
-        rUnread.checked   = m_filterUnread;
-        rUnread.action    = [this]() { m_filterUnread = !m_filterUnread; populateChaptersList(); };
-        rows.push_back(std::move(rUnread));
-
-        OptionRow rBook;
-        rBook.label     = "Bookmarked";
-        rBook.checkable = true;
-        rBook.checked   = m_filterBookmarked;
-        rBook.action    = [this]() { m_filterBookmarked = !m_filterBookmarked; populateChaptersList(); };
-        rows.push_back(std::move(rBook));
-
-        rows.push_back({ "cross.png", "Clear Filters", "", false, true,
-            [this]() {
-                m_filterDownloaded = false;
-                m_filterUnread = false;
-                m_filterBookmarked = false;
-                m_filterScanlator.clear();
-                brls::Application::notify("Filters cleared");
-                populateChaptersList();
-            }});
-
-        rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
-
-        OptionsPopover::show("CHAPTERS", "Filter", std::move(rows));
+        showChapterFilterMenu();
         return true;
     });
 
@@ -964,36 +927,7 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     m_filterBtn->addView(filterIcon);
 
     m_filterBtn->registerClickAction([this](brls::View* view) {
-        // Show filter options dialog
-        std::vector<std::string> options = {"Toggle Downloaded", "Toggle Unread", "Toggle Bookmarked", "Clear Filters"};
-        brls::Dropdown* dropdown = new brls::Dropdown(
-            "Chapter Filters", options,
-            [this](int selected) {
-                if (selected < 0) return;
-                switch (selected) {
-                    case 0:
-                        m_filterDownloaded = !m_filterDownloaded;
-                        brls::Application::notify(m_filterDownloaded ? "Filtering: Downloaded" : "Filter removed");
-                        break;
-                    case 1:
-                        m_filterUnread = !m_filterUnread;
-                        brls::Application::notify(m_filterUnread ? "Filtering: Unread" : "Filter removed");
-                        break;
-                    case 2:
-                        m_filterBookmarked = !m_filterBookmarked;
-                        brls::Application::notify(m_filterBookmarked ? "Filtering: Bookmarked" : "Filter removed");
-                        break;
-                    case 3:
-                        m_filterDownloaded = false;
-                        m_filterUnread = false;
-                        m_filterBookmarked = false;
-                        m_filterScanlator.clear();
-                        brls::Application::notify("Filters cleared");
-                        break;
-                }
-                populateChaptersList();
-            }, 0);
-        brls::Application::pushActivity(new brls::Activity(dropdown));
+        showChapterFilterMenu();
         return true;
     });
     m_filterBtn->addGestureRecognizer(new brls::TapGestureRecognizer(m_filterBtn));
@@ -1869,6 +1803,48 @@ void MangaDetailView::setupChapterNavigation() {
     if (m_filterBtn) m_filterBtn->getFocusEvent()->subscribe(hideChapterIcon);
     if (m_menuBtn) m_menuBtn->getFocusEvent()->subscribe(hideChapterIcon);
     if (m_selectBtn) m_selectBtn->getFocusEvent()->subscribe(hideChapterIcon);
+}
+
+void MangaDetailView::showChapterFilterMenu() {
+    // Chapter filters as checkable rows that toggle in place and refresh the
+    // list live, plus Clear Filters and Cancel. Shared by the Y button and the
+    // on-screen filter button.
+    std::vector<OptionRow> rows;
+
+    OptionRow rDown;
+    rDown.label     = "Downloaded";
+    rDown.checkable = true;
+    rDown.checked   = m_filterDownloaded;
+    rDown.action    = [this]() { m_filterDownloaded = !m_filterDownloaded; populateChaptersList(); };
+    rows.push_back(std::move(rDown));
+
+    OptionRow rUnread;
+    rUnread.label     = "Unread";
+    rUnread.checkable = true;
+    rUnread.checked   = m_filterUnread;
+    rUnread.action    = [this]() { m_filterUnread = !m_filterUnread; populateChaptersList(); };
+    rows.push_back(std::move(rUnread));
+
+    OptionRow rBook;
+    rBook.label     = "Bookmarked";
+    rBook.checkable = true;
+    rBook.checked   = m_filterBookmarked;
+    rBook.action    = [this]() { m_filterBookmarked = !m_filterBookmarked; populateChaptersList(); };
+    rows.push_back(std::move(rBook));
+
+    rows.push_back({ "cross.png", "Clear Filters", "", false, true,
+        [this]() {
+            m_filterDownloaded = false;
+            m_filterUnread = false;
+            m_filterBookmarked = false;
+            m_filterScanlator.clear();
+            brls::Application::notify("Filters cleared");
+            populateChaptersList();
+        }});
+
+    rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
+
+    OptionsPopover::show("CHAPTERS", "Filter", std::move(rows));
 }
 
 void MangaDetailView::showMangaMenu() {

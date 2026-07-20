@@ -5,6 +5,7 @@
  */
 
 #include "view/extensions_tab.hpp"
+#include "view/options_popover.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/application.hpp"
 #include "utils/image_loader.hpp"
@@ -1422,178 +1423,129 @@ void ExtensionsTab::showSourcePreferencesDialog(const Source& source) {
             return;
         }
 
-        brls::sync([this, source, prefs, aliveWeak]() {
+        auto prefsPtr = std::make_shared<std::vector<SourcePreference>>(prefs);
+        brls::sync([this, source, prefsPtr, aliveWeak]() {
             auto alive = aliveWeak.lock();
             if (!alive || !*alive) return;
-            auto* dialog = new brls::Dialog(source.name + " Settings");
-            dialog->setCancelable(false);  // Prevent exit dialog from appearing
-
-            auto* scrollFrame = new brls::ScrollingFrame();
-            scrollFrame->setHeight(400);
-
-            auto* list = new brls::Box();
-            list->setAxis(brls::Axis::COLUMN);
-            list->setPadding(10, 15, 10, 15);
-
-            for (int prefIdx = 0; prefIdx < static_cast<int>(prefs.size()); prefIdx++) {
-                const auto& pref = prefs[prefIdx];
-                if (!pref.visible) continue;
-
-                auto* prefBox = new brls::Box();
-                prefBox->setAxis(brls::Axis::COLUMN);
-                prefBox->setMarginBottom(15);
-
-                auto* titleLabel = new brls::Label();
-                titleLabel->setText(pref.title.empty() ? pref.key : pref.title);
-                titleLabel->setFontSize(14);
-                prefBox->addView(titleLabel);
-
-                if (!pref.summary.empty()) {
-                    auto* summaryLabel = new brls::Label();
-                    summaryLabel->setText(pref.summary);
-                    summaryLabel->setFontSize(11);
-                    summaryLabel->setTextColor(Application::getInstance().getSubtitleColor());
-                    prefBox->addView(summaryLabel);
-                }
-
-                // Value display (interactive)
-                auto* valueBox = new brls::Box();
-                valueBox->setAxis(brls::Axis::ROW);
-                valueBox->setFocusable(true);
-                valueBox->setPadding(8, 10, 8, 10);
-                valueBox->setMarginTop(5);
-                valueBox->setCornerRadius(4);
-                valueBox->setBackgroundColor(Application::getInstance().getCardBackground());
-
-                auto* valueLabel = new brls::Label();
-                valueLabel->setFontSize(13);
-
-                if (pref.type == SourcePreferenceType::CHECKBOX || pref.type == SourcePreferenceType::SWITCH_TOGGLE) {
-                    valueLabel->setText(pref.currentValue ? "Enabled" : "Disabled");
-
-                    // Toggle on click
-                    valueBox->registerClickAction([this, source, prefIdx, pref, valueLabel](brls::View*) {
-                        bool newValue = !pref.currentValue;
-                        SourcePreferenceChange change;
-                        change.position = prefIdx;
-                        if (pref.type == SourcePreferenceType::SWITCH_TOGGLE) {
-                            change.switchState = newValue;
-                        } else {
-                            change.checkBoxState = newValue;
-                        }
-
-                        brls::async([this, source, change, newValue, valueLabel, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-                            SuwayomiClient& client = SuwayomiClient::getInstance();
-                            bool success = client.updateSourcePreference(source.id, change);
-                            brls::sync([success, newValue, valueLabel, aliveWeak]() {
-                                auto alive = aliveWeak.lock();
-                                if (!alive || !*alive) return;
-                                if (success) {
-                                    valueLabel->setText(newValue ? "Enabled" : "Disabled");
-                                } else {
-                                    brls::Application::notify("Failed to update setting");
-                                }
-                            });
-                        });
-                        return true;
-                    });
-                } else if (pref.type == SourcePreferenceType::LIST) {
-                    // Show selected entry display name if available
-                    std::string displayValue = pref.selectedValue;
-                    for (size_t i = 0; i < pref.entryValues.size(); i++) {
-                        if (pref.entryValues[i] == pref.selectedValue && i < pref.entries.size()) {
-                            displayValue = pref.entries[i];
-                            break;
-                        }
-                    }
-                    valueLabel->setText(displayValue);
-
-                    // Show dropdown on click
-                    valueBox->registerClickAction([this, source, prefIdx, pref, valueLabel](brls::View*) {
-                        if (pref.entries.empty()) return true;
-
-                        // Find current selection index
-                        int currentIdx = 0;
-                        for (size_t i = 0; i < pref.entryValues.size(); i++) {
-                            if (pref.entryValues[i] == pref.selectedValue) {
-                                currentIdx = static_cast<int>(i);
-                                break;
-                            }
-                        }
-
-                        brls::Dropdown* dropdown = new brls::Dropdown(
-                            pref.title.empty() ? pref.key : pref.title, pref.entries,
-                            [this, source, prefIdx, pref, valueLabel](int selected) {
-                                if (selected < 0 || selected >= static_cast<int>(pref.entryValues.size())) return;
-
-                                std::string selectedVal = pref.entryValues[selected];
-                                std::string displayName = pref.entries[selected];
-
-                                SourcePreferenceChange change;
-                                change.position = prefIdx;
-                                change.listState = selectedVal;
-
-                                brls::async([this, source, change, displayName, valueLabel, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-                                    SuwayomiClient& client = SuwayomiClient::getInstance();
-                                    bool success = client.updateSourcePreference(source.id, change);
-                                    brls::sync([success, displayName, valueLabel, aliveWeak]() {
-                                        auto alive = aliveWeak.lock();
-                                        if (!alive || !*alive) return;
-                                        if (success) {
-                                            valueLabel->setText(displayName);
-                                        } else {
-                                            brls::Application::notify("Failed to update setting");
-                                        }
-                                    });
-                                });
-                            }, currentIdx);
-                        brls::Application::pushActivity(new brls::Activity(dropdown));
-                        return true;
-                    });
-                } else if (pref.type == SourcePreferenceType::EDIT_TEXT) {
-                    valueLabel->setText(pref.currentText.empty() ? "(empty)" : pref.currentText);
-
-                    // Open IME on click
-                    valueBox->registerClickAction([this, source, prefIdx, pref, valueLabel](brls::View*) {
-                        brls::Application::getImeManager()->openForText([this, source, prefIdx, pref, valueLabel](std::string text) {
-                            SourcePreferenceChange change;
-                            change.position = prefIdx;
-                            change.editTextState = text;
-
-                            brls::async([this, source, change, text, valueLabel, aliveWeak = std::weak_ptr<bool>(m_alive)]() {
-                                SuwayomiClient& client = SuwayomiClient::getInstance();
-                                bool success = client.updateSourcePreference(source.id, change);
-                                brls::sync([success, text, valueLabel, aliveWeak]() {
-                                    auto alive = aliveWeak.lock();
-                                    if (!alive || !*alive) return;
-                                    if (success) {
-                                        valueLabel->setText(text.empty() ? "(empty)" : text);
-                                    } else {
-                                        brls::Application::notify("Failed to update setting");
-                                    }
-                                });
-                            });
-                        }, pref.dialogTitle.empty() ? pref.title : pref.dialogTitle,
-                           pref.dialogMessage, 256, pref.currentText);
-                        return true;
-                    });
-                } else {
-                    valueLabel->setText(pref.key);
-                }
-
-                valueBox->addView(valueLabel);
-                valueBox->addGestureRecognizer(new brls::TapGestureRecognizer(valueBox));
-
-                prefBox->addView(valueBox);
-                list->addView(prefBox);
-            }
-
-            scrollFrame->setContentView(list);
-            dialog->addView(scrollFrame);
-            dialog->addButton("Close", []() {});
-            dialog->open();
+            showSourcePreferencesMenu(source, prefsPtr);
         });
     });
+}
+
+void ExtensionsTab::showSourcePreferencesMenu(const Source& source,
+                                              std::shared_ptr<std::vector<SourcePreference>> prefs) {
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    Source src = source;
+    // Reopening the menu is both the "back" target for sub-menus and the way
+    // list/edit changes refresh the displayed value.
+    auto reopen = [this, src, prefs]() { showSourcePreferencesMenu(src, prefs); };
+
+    auto applyChange = [this, src, aliveWeak](SourcePreferenceChange change) {
+        brls::async([this, src, change, aliveWeak]() {
+            SuwayomiClient& client = SuwayomiClient::getInstance();
+            bool ok = client.updateSourcePreference(src.id, change);
+            if (!ok) {
+                brls::sync([aliveWeak]() {
+                    auto a = aliveWeak.lock();
+                    if (!a || !*a) return;
+                    brls::Application::notify("Failed to update setting");
+                });
+            }
+        });
+    };
+
+    std::vector<OptionRow> rows;
+    for (int prefIdx = 0; prefIdx < static_cast<int>(prefs->size()); prefIdx++) {
+        const SourcePreference& pref = (*prefs)[prefIdx];
+        if (!pref.visible) continue;
+        const std::string label = pref.title.empty() ? pref.key : pref.title;
+
+        if (pref.type == SourcePreferenceType::SWITCH_TOGGLE ||
+            pref.type == SourcePreferenceType::CHECKBOX) {
+            const bool isSwitch = pref.type == SourcePreferenceType::SWITCH_TOGGLE;
+            auto cur = std::make_shared<bool>(pref.currentValue);
+            OptionRow row;
+            row.label     = label;
+            row.checkable = true;
+            row.checked   = pref.currentValue;
+            row.action    = [applyChange, prefs, prefIdx, isSwitch, cur]() {
+                *cur = !*cur;
+                (*prefs)[prefIdx].currentValue = *cur;   // keep local state in sync
+                SourcePreferenceChange change;
+                change.position = prefIdx;
+                if (isSwitch) { change.switchState = *cur;   change.hasSwitchState = true; }
+                else          { change.checkBoxState = *cur; change.hasCheckBoxState = true; }
+                applyChange(change);
+            };
+            rows.push_back(std::move(row));
+
+        } else if (pref.type == SourcePreferenceType::LIST) {
+            std::string disp = pref.selectedValue;
+            for (size_t i = 0; i < pref.entryValues.size(); i++) {
+                if (pref.entryValues[i] == pref.selectedValue && i < pref.entries.size()) {
+                    disp = pref.entries[i];
+                    break;
+                }
+            }
+            OptionRow row;
+            row.label = label;
+            row.sub   = disp;
+            SourcePreference p = pref;
+            row.action = [applyChange, reopen, prefs, prefIdx, p]() {
+                std::vector<OptionRow> sub;
+                for (size_t i = 0; i < p.entries.size(); i++) {
+                    const bool cur = (i < p.entryValues.size() && p.entryValues[i] == p.selectedValue);
+                    std::string val = (i < p.entryValues.size()) ? p.entryValues[i] : std::string();
+                    sub.push_back({ cur ? "radio_checked.png" : "radio.png", p.entries[i], "", cur, false,
+                        [applyChange, reopen, prefs, prefIdx, val]() {
+                            (*prefs)[prefIdx].selectedValue = val;
+                            SourcePreferenceChange change;
+                            change.position = prefIdx;
+                            change.listState = val;
+                            change.hasListState = true;
+                            applyChange(change);
+                            reopen();
+                        }});
+                }
+                sub.push_back({ "back.png", "Cancel", "", false, true, [reopen]() { reopen(); }});
+                OptionsPopover::show("SETTING", p.title.empty() ? p.key : p.title,
+                                     std::move(sub), reopen, 6);
+            };
+            rows.push_back(std::move(row));
+
+        } else if (pref.type == SourcePreferenceType::EDIT_TEXT) {
+            OptionRow row;
+            row.label = label;
+            row.sub   = pref.currentText.empty() ? "(empty)" : pref.currentText;
+            SourcePreference p = pref;
+            row.action = [applyChange, reopen, prefs, prefIdx, p]() {
+                brls::Application::getImeManager()->openForText(
+                    [applyChange, reopen, prefs, prefIdx](std::string text) {
+                        (*prefs)[prefIdx].currentText = text;
+                        SourcePreferenceChange change;
+                        change.position = prefIdx;
+                        change.editTextState = text;
+                        change.hasEditTextState = true;
+                        applyChange(change);
+                        reopen();
+                    },
+                    p.dialogTitle.empty() ? p.title : p.dialogTitle,
+                    p.dialogMessage, 256, p.currentText);
+            };
+            rows.push_back(std::move(row));
+
+        } else {
+            // MULTI_SELECT_LIST / unknown: show value read-only for now.
+            OptionRow row;
+            row.label  = label;
+            row.action = []() {};
+            rows.push_back(std::move(row));
+        }
+    }
+
+    rows.push_back({ "back.png", "Close", "", false, true, []() {}});
+
+    OptionsPopover::show("SOURCE", source.name, std::move(rows), nullptr, 6);
 }
 
 // ============================================================================
