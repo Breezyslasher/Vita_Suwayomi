@@ -8,6 +8,7 @@
 
 #include <borealis.hpp>
 #include <memory>
+#include <functional>
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "view/recycling_grid.hpp"
@@ -74,6 +75,10 @@ private:
     void showMangaContextMenu(const Manga& manga, int index);
     void showDownloadSubmenu(const std::vector<Manga>& mangaList);
     void showChangeCategoryDialog(const std::vector<Manga>& mangaList, int focusedIndex = -1);
+    // New-design sub-popovers opened from the Options popover (replace the old
+    // inline panels that showDownloadSubmenu / showChangeCategoryDialog raise).
+    void showDownloadPopover(const std::vector<Manga>& mangaList, std::function<void()> onBack = nullptr);
+    void showCategoriesPopover(const std::vector<Manga>& mangaList, std::function<void()> onBack = nullptr);
     void hideCategoryPanel();
     bool isFocusInCategoryPanel(brls::View* view) const;
     void showMigrateSourceMenu(const Manga& manga);

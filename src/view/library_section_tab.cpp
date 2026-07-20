@@ -8,6 +8,7 @@
 #include "view/manga_item_cell.hpp"
 #include "view/manga_detail_view.hpp"
 #include "view/tracking_search_view.hpp"
+#include "view/options_popover.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
@@ -2176,130 +2177,51 @@ void LibrarySectionTab::cycleSortMode() {
 }
 
 void LibrarySectionTab::showSortMenu() {
-    std::vector<std::string> options = {
-        "Default (Settings)",
-        "A-Z",
-        "Z-A",
-        "Most Unread",
-        "Least Unread",
-        "Recently Added (Newest)",
-        "Recently Added (Oldest)",
-        "Last Read",
-        "Date Updated (Newest)",
-        "Date Updated (Oldest)",
-        "Total Chapters",
+    static const char* labels[] = {
+        "Default (Settings)", "A-Z", "Z-A", "Most Unread", "Least Unread",
+        "Recently Added (Newest)", "Recently Added (Oldest)", "Last Read",
+        "Date Updated (Newest)", "Date Updated (Oldest)", "Total Chapters",
         "Local Downloads Only"
     };
-
-    // Find current selection index for highlighting
-    int currentIndex = 0;
-    switch (m_sortMode) {
-        case LibrarySortMode::DEFAULT:
-            currentIndex = 0;
-            break;
-        case LibrarySortMode::TITLE_ASC:
-            currentIndex = 1;
-            break;
-        case LibrarySortMode::TITLE_DESC:
-            currentIndex = 2;
-            break;
-        case LibrarySortMode::UNREAD_DESC:
-            currentIndex = 3;
-            break;
-        case LibrarySortMode::UNREAD_ASC:
-            currentIndex = 4;
-            break;
-        case LibrarySortMode::RECENTLY_ADDED_DESC:
-            currentIndex = 5;
-            break;
-        case LibrarySortMode::RECENTLY_ADDED_ASC:
-            currentIndex = 6;
-            break;
-        case LibrarySortMode::LAST_READ:
-            currentIndex = 7;
-            break;
-        case LibrarySortMode::DATE_UPDATED_DESC:
-            currentIndex = 8;
-            break;
-        case LibrarySortMode::DATE_UPDATED_ASC:
-            currentIndex = 9;
-            break;
-        case LibrarySortMode::TOTAL_CHAPTERS:
-            currentIndex = 10;
-            break;
-        case LibrarySortMode::DOWNLOADED_ONLY:
-            currentIndex = 11;
-            break;
-    }
+    static const LibrarySortMode modes[] = {
+        LibrarySortMode::DEFAULT, LibrarySortMode::TITLE_ASC, LibrarySortMode::TITLE_DESC,
+        LibrarySortMode::UNREAD_DESC, LibrarySortMode::UNREAD_ASC,
+        LibrarySortMode::RECENTLY_ADDED_DESC, LibrarySortMode::RECENTLY_ADDED_ASC,
+        LibrarySortMode::LAST_READ, LibrarySortMode::DATE_UPDATED_DESC,
+        LibrarySortMode::DATE_UPDATED_ASC, LibrarySortMode::TOTAL_CHAPTERS,
+        LibrarySortMode::DOWNLOADED_ONLY
+    };
+    const int count = static_cast<int>(sizeof(modes) / sizeof(modes[0]));
 
     int categoryId = m_currentCategoryId;
 
-    auto* dropdown = new brls::Dropdown(
-        "Sort By",
-        options,
-        [this, categoryId](int selected) {
-            if (selected < 0) return; // Cancelled
+    std::vector<OptionRow> rows;
+    for (int i = 0; i < count; i++) {
+        const bool current = (m_sortMode == modes[i]);
+        LibrarySortMode mode = modes[i];
+        rows.push_back({ current ? "radio_checked.png" : "radio.png", labels[i], "", current, false,
+            [this, mode, categoryId]() {
+                // Defer so the popover fully closes first (avoids focus churn).
+                brls::sync([this, mode, categoryId]() {
+                    m_sortMode = mode;
+                    updateSortButtonText();
+                    sortMangaList();
 
-            // Defer action to next frame so dropdown fully closes first
-            // This fixes hover/focus transfer issues
-            brls::sync([this, selected, categoryId]() {
-                switch (selected) {
-                    case 0:
-                        m_sortMode = LibrarySortMode::DEFAULT;
-                        break;
-                    case 1:
-                        m_sortMode = LibrarySortMode::TITLE_ASC;
-                        break;
-                    case 2:
-                        m_sortMode = LibrarySortMode::TITLE_DESC;
-                        break;
-                    case 3:
-                        m_sortMode = LibrarySortMode::UNREAD_DESC;
-                        break;
-                    case 4:
-                        m_sortMode = LibrarySortMode::UNREAD_ASC;
-                        break;
-                    case 5:
-                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_DESC;
-                        break;
-                    case 6:
-                        m_sortMode = LibrarySortMode::RECENTLY_ADDED_ASC;
-                        break;
-                    case 7:
-                        m_sortMode = LibrarySortMode::LAST_READ;
-                        break;
-                    case 8:
-                        m_sortMode = LibrarySortMode::DATE_UPDATED_DESC;
-                        break;
-                    case 9:
-                        m_sortMode = LibrarySortMode::DATE_UPDATED_ASC;
-                        break;
-                    case 10:
-                        m_sortMode = LibrarySortMode::TOTAL_CHAPTERS;
-                        break;
-                    case 11:
-                        m_sortMode = LibrarySortMode::DOWNLOADED_ONLY;
-                        break;
-                }
+                    // Persist per-category sort mode
+                    auto& app = Application::getInstance();
+                    if (m_sortMode == LibrarySortMode::DEFAULT) {
+                        app.getSettings().categorySortModes.erase(categoryId);
+                    } else {
+                        app.getSettings().categorySortModes[categoryId] = static_cast<int>(m_sortMode);
+                    }
+                    app.saveSettings();
+                });
+            }});
+    }
+    rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
 
-                updateSortButtonText();
-                sortMangaList();
-
-                // Persist per-category sort mode
-                auto& app = Application::getInstance();
-                if (m_sortMode == LibrarySortMode::DEFAULT) {
-                    // Remove per-category setting to use default
-                    app.getSettings().categorySortModes.erase(categoryId);
-                } else {
-                    // Save per-category sort mode
-                    app.getSettings().categorySortModes[categoryId] = static_cast<int>(m_sortMode);
-                }
-                app.saveSettings();
-            });
-        },
-        currentIndex
-    );
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+    // Show 5 rows, then scroll the rest.
+    OptionsPopover::show("LIBRARY", "Sort By", std::move(rows), nullptr, 5);
 }
 
 void LibrarySectionTab::updateSortButtonText() {
@@ -2479,8 +2401,159 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
         mangaList.push_back(manga);
     }
 
-    // Delegate to the unified panel which has Select at top + Categories + Downloads + actions
-    showChangeCategoryDialog(mangaList, index);
+    const bool single = mangaList.size() == 1;
+    const std::string contextLine = single ? "MANGA"
+                                           : std::to_string(mangaList.size()) + " SELECTED";
+    const std::string title = single ? manga.title
+                                     : std::to_string(mangaList.size()) + " manga";
+
+    std::vector<OptionRow> rows;
+
+    // Open detail — only for a single manga.
+    if (single) {
+        Manga captured = manga;
+        rows.push_back({ "book-open-page-variant.png", "Open", "", true, false,
+            [this, captured]() { onMangaSelected(captured); }});
+    }
+
+    // Reopening the main Options popover is the "back" target for the sub-menus.
+    Manga backManga = manga;
+    auto reopenMain = [this, backManga, index]() { showMangaContextMenu(backManga, index); };
+
+    rows.push_back({ "download.png", "Download", "", false, false,
+        [this, mangaList, reopenMain]() { showDownloadPopover(mangaList, reopenMain); }});
+
+    rows.push_back({ "tag.png", "Edit Categories", "", false, false,
+        [this, mangaList, reopenMain]() { showCategoriesPopover(mangaList, reopenMain); }});
+
+    rows.push_back({ "checkbox_checked.png", "Mark as Read", "", false, false,
+        [this, mangaList]() { markMangaRead(mangaList); }});
+
+    rows.push_back({ "checkbox.png", "Mark as Unread", "", false, false,
+        [this, mangaList]() { markMangaUnread(mangaList); }});
+
+    if (single) {
+        Manga captured = manga;
+        rows.push_back({ "web.png", "Tracking", "", false, false,
+            [this, captured]() { openTracking(captured); }});
+        rows.push_back({ "import.png", "Migrate", "", false, false,
+            [this, captured]() { showMigrateSourceMenu(captured); }});
+    }
+
+    rows.push_back({ "hide.png", "Remove from Library", "", false, true,
+        [this, mangaList]() { removeFromLibrary(mangaList); }});
+
+    rows.push_back({ "cross.png", "Cancel", "", false, true, []() {}});
+
+    OptionsPopover::show(contextLine, title, std::move(rows));
+}
+
+void LibrarySectionTab::showDownloadPopover(const std::vector<Manga>& mangaList,
+                                            std::function<void()> onBack) {
+    if (mangaList.empty()) return;
+
+    const bool single = mangaList.size() == 1;
+    const std::string title = single ? mangaList[0].title
+                                     : std::to_string(mangaList.size()) + " manga";
+
+    struct Opt { const char* label; const char* mode; };
+    static const Opt opts[] = {
+        {"All Chapters", "all"}, {"Unread Chapters", "unread"}, {"Next Chapter", "next1"},
+        {"Next 5 Chapters", "next5"}, {"Next 10 Chapters", "next10"}, {"Next 25 Chapters", "next25"}
+    };
+
+    std::vector<OptionRow> rows;
+    bool first = true;
+    for (const auto& o : opts) {
+        std::string mode = o.mode;
+        rows.push_back({ "download.png", o.label, "", first, false,
+            [this, mangaList, mode]() { downloadChapters(mangaList, mode); }});
+        first = false;
+    }
+    // Cancel returns to the parent Options menu when there is one.
+    rows.push_back({ "back.png", "Cancel", "", false, true,
+        [onBack]() { if (onBack) onBack(); }});
+
+    OptionsPopover::show("DOWNLOAD", title, std::move(rows), onBack);
+}
+
+void LibrarySectionTab::showCategoriesPopover(const std::vector<Manga>& mangaList,
+                                              std::function<void()> onBack) {
+    if (mangaList.empty()) return;
+    if (m_categories.empty()) {
+        brls::Application::notify("No categories available");
+        return;
+    }
+
+    // Filter out hidden categories, matching the old dialog.
+    const auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
+    auto visible = std::make_shared<std::vector<Category>>();
+    for (const auto& cat : m_categories) {
+        if (hiddenIds.find(cat.id) == hiddenIds.end()) visible->push_back(cat);
+    }
+    if (visible->empty()) {
+        brls::Application::notify("No visible categories available");
+        return;
+    }
+
+    // Seed the checked set from the union of the manga's current categories.
+    auto selected = std::make_shared<std::set<int>>();
+    for (const auto& m : mangaList) {
+        for (int id : m.categoryIds) selected->insert(id);
+    }
+
+    std::vector<Manga> capturedList = mangaList;
+    const std::string title = mangaList.size() == 1 ? mangaList[0].title
+                                    : std::to_string(mangaList.size()) + " manga";
+
+    std::vector<OptionRow> rows;
+
+    // Category rows toggle in place — the checkbox flips and `selected` updates
+    // without dismissing the popover (checkable = true).
+    for (const auto& cat : *visible) {
+        int id = cat.id;
+        OptionRow row;
+        row.label     = cat.name;
+        row.checkable = true;
+        row.checked   = selected->count(id) > 0;
+        row.action    = [selected, id]() {
+            if (selected->count(id)) selected->erase(id);
+            else                     selected->insert(id);
+        };
+        rows.push_back(std::move(row));
+    }
+
+    rows.push_back({ "checkbox_checked.png", "Apply", "", true, false,
+        [this, capturedList, selected]() {
+            std::vector<int> newCatIds(selected->begin(), selected->end());
+            if (newCatIds.empty()) {
+                brls::Application::notify("Select at least one category");
+                return;
+            }
+            std::weak_ptr<bool> aliveWeak = m_alive;
+            std::vector<Manga> asyncList = capturedList;
+            brls::Application::notify("Updating categories...");
+            asyncRun([this, asyncList, newCatIds, aliveWeak]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                int successCount = 0;
+                for (const auto& manga : asyncList) {
+                    if (client.setMangaCategories(manga.id, newCatIds)) successCount++;
+                }
+                brls::sync([this, successCount, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    brls::Application::notify("Updated " + std::to_string(successCount) + " manga");
+                    if (m_selectionMode) exitSelectionMode();
+                    refresh();
+                });
+            });
+        }});
+
+    // Cancel returns to the parent Options menu when there is one.
+    rows.push_back({ "back.png", "Cancel", "", false, true,
+        [onBack]() { if (onBack) onBack(); }});
+
+    OptionsPopover::show("CATEGORIES", title, std::move(rows), onBack);
 }
 
 void LibrarySectionTab::showDownloadSubmenu(const std::vector<Manga>& mangaList) {
@@ -4465,29 +4538,27 @@ void LibrarySectionTab::selectSource(const std::string& sourceName) {
 }
 
 void LibrarySectionTab::showGroupModeMenu() {
-    std::vector<std::string> options = {
-        "By Category",
-        "By Source",
-        "No Grouping (All)"
-    };
+    static const char* labels[] = { "By Category", "By Source", "No Grouping (All)" };
+    const int count = static_cast<int>(sizeof(labels) / sizeof(labels[0]));
 
-    int currentMode = static_cast<int>(m_groupMode);
+    const int currentMode = static_cast<int>(m_groupMode);
 
-    brls::Dropdown* dropdown = new brls::Dropdown(
-        "Library Grouping",
-        options,
-        [this](int selected) {
-            if (selected < 0 || selected > 2) return;
-            // Defer to next frame so dropdown fully closes first
-            // This fixes crash from UI updates while dropdown is dismissing
-            brls::sync([this, selected]() {
-                setGroupMode(static_cast<LibraryGroupMode>(selected));
-            });
-        },
-        currentMode
-    );
+    std::vector<OptionRow> rows;
+    for (int i = 0; i < count; i++) {
+        const bool current = (currentMode == i);
+        int idx = i;
+        rows.push_back({ current ? "radio_checked.png" : "radio.png", labels[i], "", current, false,
+            [this, idx]() {
+                // Defer so the popover fully closes first (avoids UI churn while
+                // the activity is dismissing).
+                brls::sync([this, idx]() {
+                    setGroupMode(static_cast<LibraryGroupMode>(idx));
+                });
+            }});
+    }
+    rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
 
-    brls::Application::pushActivity(new brls::Activity(dropdown));
+    OptionsPopover::show("LIBRARY", "Library Grouping", std::move(rows));
 }
 
 } // namespace vitasuwayomi
