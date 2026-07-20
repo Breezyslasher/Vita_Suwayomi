@@ -2220,7 +2220,8 @@ void LibrarySectionTab::showSortMenu() {
     }
     rows.push_back({ "back.png", "Cancel", "", false, true, []() {}});
 
-    OptionsPopover::show("LIBRARY", "Sort By", std::move(rows));
+    // Show 5 rows, then scroll the rest.
+    OptionsPopover::show("LIBRARY", "Sort By", std::move(rows), nullptr, 5);
 }
 
 void LibrarySectionTab::updateSortButtonText() {

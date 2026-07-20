@@ -107,7 +107,8 @@ private:
 void OptionsPopover::show(const std::string& contextLine,
                           const std::string& title,
                           std::vector<OptionRow> rows,
-                          std::function<void()> onBack) {
+                          std::function<void()> onBack,
+                          int maxVisibleRows) {
     namespace pc = popcol;
 
     // A middot (·) in the context line marks a "gold" case (e.g. "Ch. 12 · …");
@@ -176,18 +177,25 @@ void OptionsPopover::show(const std::string& contextLine,
     divider->setMarginBottom(6.0f);
     panel->addView(divider);
 
-    // Only a genuinely long menu scrolls; short menus add rows straight to the
-    // panel and render centered.
+    // Rows scroll when they don't fit: either past the screen-derived space, or
+    // past an explicit maxVisibleRows cap (e.g. the Sort menu shows 5, scrolls
+    // the rest). Short menus add rows straight to the panel and render centered.
     brls::Box* rowsParent = panel;
     {
+        const float rowH = 44.0f;
         const float availForRows = screenH - 2.0f * kMargin - 90.0f;
-        const float wantRows = static_cast<float>(rows.size()) * 44.0f;
-        if (wantRows > availForRows && availForRows > 132.0f) {
+        float capHeight = availForRows;
+        if (maxVisibleRows > 0) {
+            const float capped = static_cast<float>(maxVisibleRows) * rowH;
+            if (capped < capHeight) capHeight = capped;
+        }
+        const float wantRows = static_cast<float>(rows.size()) * rowH;
+        if (wantRows > capHeight && capHeight > 132.0f) {
             auto* rowsBox = new brls::Box();
             rowsBox->setAxis(brls::Axis::COLUMN);
             auto* scrollFrame = new brls::ScrollingFrame();
             scrollFrame->setContentView(rowsBox);
-            scrollFrame->setHeight(availForRows);
+            scrollFrame->setHeight(capHeight);
             panel->addView(scrollFrame);
             rowsParent = rowsBox;
         }

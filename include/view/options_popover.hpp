@@ -44,10 +44,13 @@ public:
     //   onBack      — if set, the B button dismisses this popover and then runs
     //                 onBack (e.g. reopen the parent menu); otherwise B just
     //                 closes the popover.
+    //   maxVisibleRows — if > 0, cap the visible height to this many rows and
+    //                 scroll the rest (e.g. 5). 0 = fit to screen (default).
     static void show(const std::string& contextLine,
                      const std::string& title,
                      std::vector<OptionRow> rows,
-                     std::function<void()> onBack = nullptr);
+                     std::function<void()> onBack = nullptr,
+                     int maxVisibleRows = 0);
 };
 
 } // namespace vitasuwayomi
