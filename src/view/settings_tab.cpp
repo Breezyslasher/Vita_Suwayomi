@@ -5,6 +5,7 @@
 
 #include "view/settings_tab.hpp"
 #include "view/options_popover.hpp"
+#include "view/storage_view.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
 #include "app/downloads_manager.hpp"
@@ -2425,7 +2426,12 @@ void SettingsTab::runNetworkTest() {
         loading->setTextColor(ntcol::body());
         loading->setMarginTop(30); loading->setMarginBottom(30);
         loading->setMarginLeft(28); loading->setMarginRight(28);
+        loading->setFocusable(true);
         panel->addView(loading);
+        // clearViews() above destroyed the focused button; hold focus on the
+        // loading label so currentFocus isn't a dangling pointer during the
+        // async wait (that was the Retry crash).
+        brls::Application::giveFocus(loading);
 
         platform::launchThread([render, dialogAlive]() {
             NetTestResult r = gatherNetTest();
@@ -2857,80 +2863,7 @@ void SettingsTab::showDeleteCategoryConfirmation(const Category& category) {
 }
 
 void SettingsTab::showStorageManagement() {
-    // Push storage management view
-    brls::Application::notify("Opening storage management...");
-
-    // Create storage view inline (since we may not have the full view ready)
-    auto* storageBox = new brls::Box();
-    storageBox->setAxis(brls::Axis::COLUMN);
-    storageBox->setPadding(20);
-    storageBox->setGrow(1.0f);
-
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText("Storage Management");
-    titleLabel->setFontSize(24);
-    titleLabel->setMarginBottom(20);
-    storageBox->addView(titleLabel);
-
-    // Get downloads info
-    auto downloads = DownloadsManager::getInstance().getDownloads();
-    int64_t totalSize = 0;
-
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Downloaded manga: " + std::to_string(downloads.size()));
-    infoLabel->setFontSize(18);
-    infoLabel->setMarginBottom(10);
-    storageBox->addView(infoLabel);
-
-    // Clear all button
-    auto* clearBtn = new brls::Button();
-    clearBtn->setText("Clear All Downloads");
-    clearBtn->setMarginTop(20);
-    clearBtn->registerClickAction([](brls::View* view) {
-        std::vector<OptionRow> rows;
-        rows.push_back({ "cross.png", "Delete", "", true, true, []() {
-            auto downloads = DownloadsManager::getInstance().getDownloads();
-            for (const auto& item : downloads) {
-                DownloadsManager::getInstance().deleteMangaDownload(item.mangaId);
-            }
-            brls::Application::notify("All downloads deleted");
-            brls::Application::popActivity();
-        } });
-        rows.push_back({ "back.png", "Cancel", "", false, true, [](){} });
-        OptionsPopover::show("CONFIRM", "Delete all downloaded content?", std::move(rows));
-        return true;
-    });
-    clearBtn->addGestureRecognizer(new brls::TapGestureRecognizer(clearBtn));
-    // Register circle button on clearBtn
-    clearBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    storageBox->addView(clearBtn);
-
-    // Back button
-    auto* backBtn = new brls::Button();
-    backBtn->setText("Back");
-    backBtn->setMarginTop(20);
-    backBtn->registerClickAction([](brls::View* view) {
-        brls::Application::popActivity();
-        return true;
-    });
-    backBtn->addGestureRecognizer(new brls::TapGestureRecognizer(backBtn));
-    // Register circle button on backBtn
-    backBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-    storageBox->addView(backBtn);
-
-    // Register circle button on storageBox as fallback
-    storageBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [](brls::View*) {
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    brls::Application::pushActivity(new brls::Activity(storageBox));
+    brls::Application::pushActivity(new brls::Activity(new StorageView()));
 }
 
 namespace {
@@ -3338,7 +3271,12 @@ void SettingsTab::showStatisticsView() {
         loading->setFontSize(15);
         loading->setTextColor(stcol::body());
         loading->setMarginTop(40); loading->setMarginLeft(40);
+        loading->setFocusable(true);
         content->addView(loading);
+        // Hold focus on the loading label: clearViews() just destroyed the
+        // focused Sync pill, so leaving currentFocus dangling during the async
+        // load would crash on the next frame.
+        brls::Application::giveFocus(loading);
 
         Application::getInstance().syncStatisticsFromServer();
         platform::launchThread([render, alive]() {

@@ -91,6 +91,19 @@ void StorageView::refresh() {
 void StorageView::loadStorageInfo() {
     if (m_loaded) return;
 
+    // Hold focus on a placeholder while loading: refresh() cleared the list and
+    // destroyed the focused row, so currentFocus would otherwise dangle during
+    // the async scan and crash on the next frame.
+    m_contentBox->clearViews();
+    auto* loading = new brls::Label();
+    loading->setText("Loading…");
+    loading->setFontSize(15);
+    loading->setTextColor(svcol::muted());
+    loading->setMarginTop(20);
+    loading->setFocusable(true);
+    m_contentBox->addView(loading);
+    brls::Application::giveFocus(loading);
+
     std::weak_ptr<bool> aliveWeak = m_alive;
 
     asyncRun([this, aliveWeak]() {
@@ -151,13 +164,16 @@ void StorageView::loadStorageInfo() {
                 empty->setFontSize(15);
                 empty->setTextColor(svcol::muted());
                 empty->setMarginTop(20);
+                empty->setFocusable(true);
                 m_contentBox->addView(empty);
+                brls::Application::giveFocus(empty);   // don't leave the destroyed loader focused
                 return;
             }
 
             int64_t maxSize = m_storageItems.front().sizeBytes;
             if (maxSize <= 0) maxSize = 1;
 
+            brls::View* firstRow = nullptr;
             for (size_t i = 0; i < m_storageItems.size(); i++) {
                 const auto& item = m_storageItems[i];
 
@@ -238,7 +254,12 @@ void StorageView::loadStorageInfo() {
                 });
                 rowBox->addGestureRecognizer(new brls::TapGestureRecognizer(rowBox));
                 m_contentBox->addView(rowBox);
+                if (!firstRow) firstRow = rowBox;
             }
+
+            // The loading placeholder we were focused on is gone now; move focus
+            // to the first row so currentFocus stays valid.
+            if (firstRow) brls::Application::giveFocus(firstRow);
         });
     });
 }
