@@ -238,9 +238,31 @@ vitasuwayomi::HttpClient SuwayomiClient::createHttpClient() {
 // JSON parsing helpers
 // ============================================================================
 
+// Find the quoted key token "<key>" within json[begin,end) and return the byte
+// offset of its opening quote, or std::string::npos. Uses memchr+memcmp instead
+// of std::string::find(substring) — far faster on large payloads, and avoids the
+// per-call "\"" + key + "\"" allocation.
+static size_t findJsonKey(const std::string& json, const std::string& key,
+                          size_t begin = 0, size_t end = std::string::npos) {
+    const char* d = json.data();
+    const size_t n = (end == std::string::npos) ? json.size() : std::min(end, json.size());
+    const size_t klen = key.size();
+    size_t p = begin;
+    while (p < n) {
+        const void* q = memchr(d + p, '"', n - p);
+        if (!q) return std::string::npos;
+        size_t qi = static_cast<size_t>(static_cast<const char*>(q) - d);
+        if (qi + 1 + klen < n && d[qi + 1 + klen] == '"' &&
+            memcmp(d + qi + 1, key.data(), klen) == 0) {
+            return qi;              // opening quote of "<key>"
+        }
+        p = qi + 1;
+    }
+    return std::string::npos;
+}
+
 std::string SuwayomiClient::extractJsonValue(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    size_t keyPos = json.find(searchKey);
+    size_t keyPos = findJsonKey(json, key);
     if (keyPos == std::string::npos) return "";
 
     size_t colonPos = json.find(':', keyPos);
@@ -300,11 +322,10 @@ int64_t SuwayomiClient::extractJsonInt64(const std::string& json, const std::str
 }
 
 std::string SuwayomiClient::extractJsonArray(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    size_t keyPos = json.find(searchKey);
+    size_t keyPos = findJsonKey(json, key);
     if (keyPos == std::string::npos) return "";
 
-    size_t colonPos = json.find(':', keyPos + searchKey.length());
+    size_t colonPos = json.find(':', keyPos + key.size() + 2);
     if (colonPos == std::string::npos) return "";
 
     size_t arrStart = json.find('[', colonPos);
@@ -336,11 +357,10 @@ std::string SuwayomiClient::extractJsonArray(const std::string& json, const std:
 }
 
 std::string SuwayomiClient::extractJsonObject(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    size_t keyPos = json.find(searchKey);
+    size_t keyPos = findJsonKey(json, key);
     if (keyPos == std::string::npos) return "";
 
-    size_t colonPos = json.find(':', keyPos + searchKey.length());
+    size_t colonPos = json.find(':', keyPos + key.size() + 2);
     if (colonPos == std::string::npos) return "";
 
     size_t objStart = json.find('{', colonPos);
