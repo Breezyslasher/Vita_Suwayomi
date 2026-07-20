@@ -24,52 +24,306 @@
 
 namespace vitasuwayomi {
 
+// Fixed neutral-dark palette for the settings shell (rail + detail chrome),
+// mirroring the sibling project's two-pane settings look. The individual
+// setting rows below stay as the app's themed borealis cells.
+namespace {
+namespace tok {
+    inline NVGcolor bg()       { return nvgRGB(45, 45, 45); }
+    inline NVGcolor railBg()   { return nvgRGB(50, 50, 50); }
+    inline NVGcolor raised()   { return nvgRGB(60, 60, 72); }
+    inline NVGcolor hairline() { return nvgRGB(67, 67, 74); }
+    inline NVGcolor text()     { return nvgRGB(255, 255, 255); }
+    inline NVGcolor muted()    { return nvgRGB(163, 163, 163); }
+    inline NVGcolor accent()   { return nvgRGB(0xE5, 0xA0, 0x0D); }
+}
+
+float railWidthForViewport() {
+    const float w = brls::Application::contentWidth;
+    if (w >= 1280.0f) return 280.0f;
+    if (w >= 1024.0f) return 240.0f;
+    if (w >= 800.0f)  return 220.0f;
+    if (w >= 560.0f)  return 180.0f;
+    return 160.0f;
+}
+} // namespace
+
 SettingsTab::SettingsTab() {
     m_alive = std::make_shared<bool>(true);
 
-    this->setAxis(brls::Axis::COLUMN);
+    this->setAxis(brls::Axis::ROW);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
     this->setGrow(1.0f);
+    this->setBackgroundColor(tok::bg());
 
-    // Create scrolling container
-    m_scrollView = new brls::ScrollingFrame();
-    m_scrollView->setGrow(1.0f);
+    // ---- Left rail ----------------------------------------------------
+    m_railContainer = new brls::Box();
+    m_railContainer->setAxis(brls::Axis::COLUMN);
+    m_railContainer->setAlignItems(brls::AlignItems::STRETCH);
+    m_railContainer->setWidth(railWidthForViewport());
+    m_railContainer->setBackgroundColor(tok::railBg());
 
-    m_contentBox = new brls::Box();
-    m_contentBox->setAxis(brls::Axis::COLUMN);
-    m_contentBox->setPadding(20);
-    m_contentBox->setGrow(1.0f);
+    auto* railHeader = new brls::Box();
+    railHeader->setAxis(brls::Axis::COLUMN);
+    railHeader->setPaddingLeft(18);
+    railHeader->setPaddingRight(14);
+    railHeader->setPaddingTop(18);
+    railHeader->setPaddingBottom(14);
 
-    // Create all sections with visual separators
-    createAccountSection();
-    addSectionSeparator();
-    createTrackingSection();
-    addSectionSeparator();
-    createUISection();
-    addSectionSeparator();
-    createLibrarySection();
-    addSectionSeparator();
-    createReaderSection();
-    addSectionSeparator();
-    createDownloadsSection();
-    addSectionSeparator();
-    createBrowseSection();
-    addSectionSeparator();
-    createSyncYomiSection();
-    addSectionSeparator();
-    createStatisticsSection();
-    addSectionSeparator();
-    createBackupSection();
-    addSectionSeparator();
-    createAboutSection();
+    auto* railTitle = new brls::Label();
+    railTitle->setText("Settings");
+    railTitle->setFontSize(22);
+    railTitle->setTextColor(tok::text());
+    railHeader->addView(railTitle);
 
-    m_scrollView->setContentView(m_contentBox);
-    this->addView(m_scrollView);
+    auto* railHairline = new brls::Box();
+    railHairline->setHeight(1);
+    railHairline->setMarginTop(12);
+    railHairline->setBackgroundColor(tok::hairline());
+    railHeader->addView(railHairline);
+    m_railContainer->addView(railHeader);
+
+    m_railScroll = new brls::ScrollingFrame();
+    m_railScroll->setGrow(1.0f);
+    m_railScroll->setFocusable(false);
+    m_railBox = new brls::Box();
+    m_railBox->setAxis(brls::Axis::COLUMN);
+    m_railBox->setAlignItems(brls::AlignItems::STRETCH);
+    m_railBox->setPaddingTop(6);
+    m_railBox->setPaddingBottom(6);
+    m_railScroll->setContentView(m_railBox);
+    m_railContainer->addView(m_railScroll);
+
+    // ---- Right detail -------------------------------------------------
+    m_detailContainer = new brls::Box();
+    m_detailContainer->setAxis(brls::Axis::COLUMN);
+    m_detailContainer->setAlignItems(brls::AlignItems::STRETCH);
+    m_detailContainer->setGrow(1.0f);
+    m_detailContainer->setPaddingLeft(24);
+    m_detailContainer->setPaddingRight(24);
+    m_detailContainer->setPaddingTop(20);
+    m_detailContainer->setPaddingBottom(12);
+
+    auto* detailHeader = new brls::Box();
+    detailHeader->setAxis(brls::Axis::ROW);
+    detailHeader->setAlignItems(brls::AlignItems::CENTER);
+    detailHeader->setMarginBottom(14);
+
+    auto* headerTextCol = new brls::Box();
+    headerTextCol->setAxis(brls::Axis::COLUMN);
+    headerTextCol->setGrow(1.0f);
+    m_detailTitle = new brls::Label();
+    m_detailTitle->setFontSize(26);
+    m_detailTitle->setTextColor(tok::text());
+    headerTextCol->addView(m_detailTitle);
+    m_detailSubtitle = new brls::Label();
+    m_detailSubtitle->setFontSize(13);
+    m_detailSubtitle->setTextColor(tok::muted());
+    m_detailSubtitle->setMarginTop(3);
+    headerTextCol->addView(m_detailSubtitle);
+    detailHeader->addView(headerTextCol);
+    m_detailContainer->addView(detailHeader);
+
+    auto* detailHairline = new brls::Box();
+    detailHairline->setHeight(1);
+    detailHairline->setMarginBottom(10);
+    detailHairline->setBackgroundColor(tok::hairline());
+    m_detailContainer->addView(detailHairline);
+
+    m_detailScroll = new brls::ScrollingFrame();
+    m_detailScroll->setGrow(1.0f);
+    m_detailScroll->setFocusable(false);
+    m_detailContent = new brls::Box();
+    m_detailContent->setAxis(brls::Axis::COLUMN);
+    m_detailContent->setAlignItems(brls::AlignItems::STRETCH);
+    m_detailScroll->setContentView(m_detailContent);
+    m_detailContainer->addView(m_detailScroll);
+
+    this->addView(m_railContainer);
+    this->addView(m_detailContainer);
+
+    // ---- Sections: build each into its own detached box ---------------
+    struct Sec {
+        const char* name;
+        const char* subtitle;
+        const char* icon;
+        void (SettingsTab::*build)();
+    };
+    const Sec secs[] = {
+        {"Server",     "Connection & authentication", "web.png",                    &SettingsTab::createAccountSection},
+        {"Tracking",   "AniList, MyAnimeList & more",  "star.png",                   &SettingsTab::createTrackingSection},
+        {"Appearance", "Theme & interface",            "show.png",                   &SettingsTab::createUISection},
+        {"Library",    "Categories, updates, badges",  "book-multiple.png",          &SettingsTab::createLibrarySection},
+        {"Reader",     "Reading mode & defaults",      "book-open-page-variant.png", &SettingsTab::createReaderSection},
+        {"Downloads",  "Storage & quality",            "download.png",               &SettingsTab::createDownloadsSection},
+        {"Browse",     "Sources & languages",          "search.png",                 &SettingsTab::createBrowseSection},
+        {"Sync",       "SyncYomi",                     "refresh.png",                &SettingsTab::createSyncYomiSection},
+        {"Backup",     "Export & restore",             "import.png",                 &SettingsTab::createBackupSection},
+        {"Statistics", "Reading statistics",           "history.png",                &SettingsTab::createStatisticsSection},
+    };
+    const int count = static_cast<int>(sizeof(secs) / sizeof(secs[0]));
+
+    for (int i = 0; i < count; i++) {
+        auto* box = makeSectionBox();
+        m_contentBox = box;                 // redirect the builders' addView target
+        (this->*secs[i].build)();
+        m_sectionBoxes.push_back(box);      // kept detached; attached on demand
+        m_sectionNames.push_back(secs[i].name);
+        m_sectionSubtitles.push_back(secs[i].subtitle);
+
+        auto* row = makeRailRow(secs[i].icon, secs[i].name, i);
+        m_railBox->addView(row);
+        m_railRows.push_back(row);
+    }
+
+    // Version readout at the bottom of the rail (non-focusable), in place of a
+    // dedicated About section.
+    m_railBox->addView(makeRailInfoRow("options.png",
+                                       std::string("VitaSuwayomi ") + VITA_SUWAYOMI_VERSION));
+
+    showSection(0);
+}
+
+brls::Box* SettingsTab::makeSectionBox() {
+    auto* box = new brls::Box();
+    box->setAxis(brls::Axis::COLUMN);
+    box->setAlignItems(brls::AlignItems::STRETCH);
+    box->setMarginBottom(20);
+    return box;
+}
+
+brls::Box* SettingsTab::makeRailRow(const std::string& icon, const std::string& title, int sectionId) {
+    auto* row = new brls::Box();
+    row->setAxis(brls::Axis::ROW);
+    row->setAlignItems(brls::AlignItems::CENTER);
+    row->setHeight(46);
+    row->setMarginLeft(8);
+    row->setMarginRight(8);
+    row->setMarginTop(2);
+    row->setMarginBottom(2);
+    row->setCornerRadius(10);
+    row->setPaddingLeft(12);
+    row->setPaddingRight(10);
+    row->setFocusable(true);
+
+    auto* bar = new brls::Box();
+    bar->setPositionType(brls::PositionType::ABSOLUTE);
+    bar->setPositionLeft(0);
+    bar->setPositionTop(8);
+    bar->setWidth(4);
+    bar->setHeight(30);
+    bar->setCornerRadius(2);
+    bar->setBackgroundColor(tok::accent());
+    bar->setVisibility(brls::Visibility::INVISIBLE);
+    row->addView(bar);
+    m_railBars.push_back(bar);
+
+    auto* img = new brls::Image();
+    img->setWidth(20);
+    img->setHeight(20);
+    img->setScalingType(brls::ImageScalingType::FIT);
+    img->setMarginRight(12);
+    img->setImageFromRes("icons/" + icon);
+    row->addView(img);
+
+    auto* label = new brls::Label();
+    label->setText(title);
+    label->setFontSize(15);
+    label->setTextColor(tok::text());
+    label->setGrow(1.0f);
+    row->addView(label);
+
+    auto* chevron = new brls::Image();
+    chevron->setWidth(14);
+    chevron->setHeight(14);
+    chevron->setScalingType(brls::ImageScalingType::FIT);
+    chevron->setImageFromRes("icons/right.png");
+    row->addView(chevron);
+
+    row->registerClickAction([this, sectionId](brls::View*) { showSection(sectionId); return true; });
+    row->addGestureRecognizer(new brls::TapGestureRecognizer(row));
+    row->getFocusEvent()->subscribe([this, sectionId](brls::View*) {
+        if (m_activeSection != sectionId) showSection(sectionId);
+    });
+    return row;
+}
+
+brls::Box* SettingsTab::makeRailInfoRow(const std::string& icon, const std::string& title) {
+    auto* row = new brls::Box();
+    row->setAxis(brls::Axis::ROW);
+    row->setAlignItems(brls::AlignItems::CENTER);
+    row->setHeight(40);
+    row->setMarginLeft(8);
+    row->setMarginRight(8);
+    row->setMarginTop(6);
+    row->setMarginBottom(4);
+    row->setPaddingLeft(12);
+    row->setPaddingRight(10);
+    row->setFocusable(false);
+
+    auto* img = new brls::Image();
+    img->setWidth(18);
+    img->setHeight(18);
+    img->setScalingType(brls::ImageScalingType::FIT);
+    img->setMarginRight(10);
+    img->setImageFromRes("icons/" + icon);
+    row->addView(img);
+
+    auto* label = new brls::Label();
+    label->setText(title);
+    label->setFontSize(13);
+    label->setTextColor(tok::muted());
+    row->addView(label);
+    return row;
+}
+
+void SettingsTab::paintRailRowSelection() {
+    for (size_t i = 0; i < m_railRows.size(); i++) {
+        const bool active = (static_cast<int>(i) == m_activeSection);
+        m_railRows[i]->setBackgroundColor(active ? tok::raised() : nvgRGBA(0, 0, 0, 0));
+        if (i < m_railBars.size() && m_railBars[i]) {
+            m_railBars[i]->setVisibility(active ? brls::Visibility::VISIBLE
+                                                : brls::Visibility::INVISIBLE);
+        }
+    }
+}
+
+void SettingsTab::showSection(int sectionId) {
+    if (sectionId < 0 || sectionId >= static_cast<int>(m_sectionBoxes.size())) return;
+
+    brls::Box* target = m_sectionBoxes[sectionId];
+    if (m_attachedSection != target) {
+        // Detach the previous section without freeing it; only the active
+        // section is ever parented so focus/layout never walk hidden cells.
+        if (m_attachedSection) m_detailContent->removeView(m_attachedSection, false);
+        m_detailContent->addView(target);
+        m_attachedSection = target;
+
+        // Re-point the focus chain so a later RIGHT-from-rail enters the new
+        // section rather than tunnelling into the detached one.
+        m_detailContent->setLastFocusedView(target);
+        m_detailScroll->setLastFocusedView(m_detailContent);
+        m_detailContainer->setLastFocusedView(m_detailScroll);
+    }
+
+    if (sectionId < static_cast<int>(m_sectionNames.size()))
+        m_detailTitle->setText(m_sectionNames[sectionId]);
+    if (sectionId < static_cast<int>(m_sectionSubtitles.size()))
+        m_detailSubtitle->setText(m_sectionSubtitles[sectionId]);
+
+    m_activeSection = sectionId;
+    paintRailRowSelection();
 }
 
 SettingsTab::~SettingsTab() {
     if (m_alive) *m_alive = false;
+
+    // Only the attached section box is owned by the view tree; the detached
+    // ones have no parent, so free them here.
+    for (auto* box : m_sectionBoxes) {
+        if (box && box != m_attachedSection) delete box;
+    }
 }
 
 void SettingsTab::willDisappear(bool resetState) {
@@ -415,6 +669,16 @@ void SettingsTab::createAccountSection() {
         return true;
     });
     m_contentBox->addView(disconnectCell);
+
+    // Check for updates (moved here from the former About section).
+    auto* updateCell = new brls::DetailCell();
+    updateCell->setText("Check for Updates");
+    updateCell->setDetailText("Check GitHub for new releases");
+    updateCell->registerClickAction([this](brls::View*) {
+        checkForUpdates();
+        return true;
+    });
+    m_contentBox->addView(updateCell);
 }
 
 void SettingsTab::createTrackingSection() {

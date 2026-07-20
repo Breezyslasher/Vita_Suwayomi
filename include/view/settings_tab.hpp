@@ -8,6 +8,8 @@
 #include <borealis.hpp>
 #include <functional>
 #include <memory>
+#include <vector>
+#include <string>
 #include "app/suwayomi_client.hpp"
 
 namespace vitasuwayomi {
@@ -32,6 +34,13 @@ private:
     void createBackupSection();
     void createStatisticsSection();
     void createAboutSection();
+
+    // Rail + detail (two-pane) settings shell.
+    brls::Box*  makeSectionBox();
+    brls::Box*  makeRailRow(const std::string& icon, const std::string& title, int sectionId);
+    brls::Box*  makeRailInfoRow(const std::string& icon, const std::string& title);
+    void        showSection(int sectionId);
+    void        paintRailRowSelection();
 
     void onDisconnect();
     void showLanguageFilterDialog();
@@ -58,7 +67,24 @@ private:
     void downloadAndInstallUpdate(const std::string& downloadUrl, const std::string& version);
 
     brls::ScrollingFrame* m_scrollView = nullptr;
-    brls::Box* m_contentBox = nullptr;
+    brls::Box* m_contentBox = nullptr;   // redirected per-section while pre-building
+
+    // Two-pane shell.
+    brls::Box* m_railContainer = nullptr;
+    brls::ScrollingFrame* m_railScroll = nullptr;
+    brls::Box* m_railBox = nullptr;
+    brls::Box* m_detailContainer = nullptr;
+    brls::ScrollingFrame* m_detailScroll = nullptr;
+    brls::Box* m_detailContent = nullptr;
+    brls::Label* m_detailTitle = nullptr;
+    brls::Label* m_detailSubtitle = nullptr;
+    std::vector<brls::Box*> m_sectionBoxes;
+    std::vector<brls::Box*> m_railRows;
+    std::vector<brls::Box*> m_railBars;
+    std::vector<std::string> m_sectionNames;
+    std::vector<std::string> m_sectionSubtitles;
+    brls::Box* m_attachedSection = nullptr;
+    int m_activeSection = 0;
 
     // Account/Server section
     brls::Label* m_serverLabel = nullptr;
