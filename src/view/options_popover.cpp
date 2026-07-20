@@ -106,7 +106,8 @@ private:
 
 void OptionsPopover::show(const std::string& contextLine,
                           const std::string& title,
-                          std::vector<OptionRow> rows) {
+                          std::vector<OptionRow> rows,
+                          std::function<void()> onBack) {
     namespace pc = popcol;
 
     // A middot (·) in the context line marks a "gold" case (e.g. "Ch. 12 · …");
@@ -207,11 +208,20 @@ void OptionsPopover::show(const std::string& contextLine,
         rowBox->setFocusable(true);
         rowBox->setHighlightCornerRadius(9.0f);
 
-        // Leading icon. download/restart/close are drawn as exact MDI vectors
-        // (tinted to match the row); everything else uses its PNG.
+        // Leading icon. Checkable rows show a checkbox that flips in place;
+        // download/restart/close are drawn as exact MDI vectors (tinted to
+        // match the row); everything else uses its PNG.
         brls::View* iconView;
+        brls::Image* checkImg = nullptr;   // set for checkable rows so we can swap in place
         NVGcolor iconColor = pc::text();
-        if (row.icon == "download.png") {
+        if (row.checkable) {
+            auto* img = new brls::Image();
+            img->setImageFromRes(std::string("icons/") +
+                                 (row.checked ? "checkbox_checked.png" : "checkbox.png"));
+            img->setScalingType(brls::ImageScalingType::FIT);
+            iconView = img;
+            checkImg = img;
+        } else if (row.icon == "download.png") {
             iconView = new MdiGlyphIcon(MdiGlyph::Download, iconColor);
         } else if (row.icon == "refresh.png") {
             iconView = new MdiGlyphIcon(MdiGlyph::Restart, iconColor);
@@ -250,14 +260,29 @@ void OptionsPopover::show(const std::string& contextLine,
             rowBox->addView(sub);
         }
 
-        // Activate: fade the popover out first, then run the action.
+        // Activate. Checkable rows flip their checkbox and run the action in
+        // place (no dismiss). Other rows fade the popover out, then run.
         auto act = row.action;
-        auto onActivate = [act](brls::View*) -> bool {
-            brls::Application::popActivity(brls::TransitionAnimation::FADE,
-                [act]() { if (act) act(); });
-            return true;
-        };
-        rowBox->registerClickAction(onActivate);
+        if (row.checkable) {
+            auto checkedState = std::make_shared<bool>(row.checked);
+            auto onToggle = [act, checkImg, checkedState](brls::View*) -> bool {
+                *checkedState = !*checkedState;
+                if (checkImg) {
+                    checkImg->setImageFromRes(std::string("icons/") +
+                        (*checkedState ? "checkbox_checked.png" : "checkbox.png"));
+                }
+                if (act) act();
+                return true;
+            };
+            rowBox->registerClickAction(onToggle);
+        } else {
+            auto onActivate = [act](brls::View*) -> bool {
+                brls::Application::popActivity(brls::TransitionAnimation::FADE,
+                    [act]() { if (act) act(); });
+                return true;
+            };
+            rowBox->registerClickAction(onActivate);
+        }
         rowBox->addGestureRecognizer(new brls::TapGestureRecognizer(rowBox));
 
         rowsParent->addView(rowBox);
@@ -268,8 +293,17 @@ void OptionsPopover::show(const std::string& contextLine,
 
     scrim->addView(panel);
 
+    // B dismisses; if a back handler was given, run it after the pop so B
+    // returns to the parent menu instead of closing outright.
     scrim->registerAction("Back", brls::ControllerButton::BUTTON_B,
-        [](brls::View*) { brls::Application::popActivity(); return true; });
+        [onBack](brls::View*) {
+            if (onBack) {
+                brls::Application::popActivity(brls::TransitionAnimation::FADE, onBack);
+            } else {
+                brls::Application::popActivity();
+            }
+            return true;
+        });
 
     brls::Application::pushActivity(new PopoverActivity(scrim));
     if (defaultFocus) brls::Application::giveFocus(defaultFocus);

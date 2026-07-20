@@ -25,7 +25,13 @@ struct OptionRow {
     std::string sub;              // optional trailing mono sub-value
     bool primary = false;         // receives default focus
     bool danger  = false;         // muted label color (destructive/cancel)
-    std::function<void()> action; // run after the popover fades out
+    std::function<void()> action; // run when activated
+
+    // Checkable rows toggle in place: activating them flips the leading
+    // checkbox and runs `action` WITHOUT dismissing the popover (used for
+    // multi-select lists such as categories). `checked` is the initial state.
+    bool checkable = false;
+    bool checked   = false;
 };
 
 class OptionsPopover {
@@ -35,9 +41,13 @@ public:
     //                 (·) makes it gold, otherwise it renders dim.
     //   title       — bold title line.
     //   rows        — the selectable rows, top to bottom.
+    //   onBack      — if set, the B button dismisses this popover and then runs
+    //                 onBack (e.g. reopen the parent menu); otherwise B just
+    //                 closes the popover.
     static void show(const std::string& contextLine,
                      const std::string& title,
-                     std::vector<OptionRow> rows);
+                     std::vector<OptionRow> rows,
+                     std::function<void()> onBack = nullptr);
 };
 
 } // namespace vitasuwayomi

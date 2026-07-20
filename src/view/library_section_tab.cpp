@@ -2495,11 +2495,15 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
             [this, captured]() { onMangaSelected(captured); }});
     }
 
+    // Reopening the main Options popover is the "back" target for the sub-menus.
+    Manga backManga = manga;
+    auto reopenMain = [this, backManga, index]() { showMangaContextMenu(backManga, index); };
+
     rows.push_back({ "download.png", "Download", "", false, false,
-        [this, mangaList]() { showDownloadPopover(mangaList); }});
+        [this, mangaList, reopenMain]() { showDownloadPopover(mangaList, reopenMain); }});
 
     rows.push_back({ "tag.png", "Edit Categories", "", false, false,
-        [this, mangaList]() { showCategoriesPopover(mangaList); }});
+        [this, mangaList, reopenMain]() { showCategoriesPopover(mangaList, reopenMain); }});
 
     rows.push_back({ "checkbox_checked.png", "Mark as Read", "", false, false,
         [this, mangaList]() { markMangaRead(mangaList); }});
@@ -2523,7 +2527,8 @@ void LibrarySectionTab::showMangaContextMenu(const Manga& manga, int index) {
     OptionsPopover::show(contextLine, title, std::move(rows));
 }
 
-void LibrarySectionTab::showDownloadPopover(const std::vector<Manga>& mangaList) {
+void LibrarySectionTab::showDownloadPopover(const std::vector<Manga>& mangaList,
+                                            std::function<void()> onBack) {
     if (mangaList.empty()) return;
 
     const bool single = mangaList.size() == 1;
@@ -2544,12 +2549,15 @@ void LibrarySectionTab::showDownloadPopover(const std::vector<Manga>& mangaList)
             [this, mangaList, mode]() { downloadChapters(mangaList, mode); }});
         first = false;
     }
-    rows.push_back({ "cross.png", "Cancel", "", false, true, []() {}});
+    // Cancel returns to the parent Options menu when there is one.
+    rows.push_back({ "back.png", "Cancel", "", false, true,
+        [onBack]() { if (onBack) onBack(); }});
 
-    OptionsPopover::show("DOWNLOAD", title, std::move(rows));
+    OptionsPopover::show("DOWNLOAD", title, std::move(rows), onBack);
 }
 
-void LibrarySectionTab::showCategoriesPopover(const std::vector<Manga>& mangaList) {
+void LibrarySectionTab::showCategoriesPopover(const std::vector<Manga>& mangaList,
+                                              std::function<void()> onBack) {
     if (mangaList.empty()) return;
     if (m_categories.empty()) {
         brls::Application::notify("No categories available");
@@ -2577,58 +2585,54 @@ void LibrarySectionTab::showCategoriesPopover(const std::vector<Manga>& mangaLis
     const std::string title = mangaList.size() == 1 ? mangaList[0].title
                                     : std::to_string(mangaList.size()) + " manga";
 
-    // Self-referential builder so toggling a category re-opens the popover with
-    // refreshed check marks. *rebuild holds only a weak ref (no permanent
-    // cycle); the currently-shown rows hold a strong ref, keeping it alive while
-    // the menu is open.
-    auto rebuild = std::make_shared<std::function<void()>>();
-    std::weak_ptr<std::function<void()>> rebuildWeak = rebuild;
-    *rebuild = [this, visible, selected, capturedList, title, rebuildWeak]() {
-        auto rb = rebuildWeak.lock();
-        std::vector<OptionRow> rows;
+    std::vector<OptionRow> rows;
 
-        for (const auto& cat : *visible) {
-            int id = cat.id;
-            bool on = selected->count(id) > 0;
-            rows.push_back({ on ? "checkbox_checked.png" : "checkbox.png", cat.name, "", false, false,
-                [this, id, selected, rb]() {
-                    if (selected->count(id)) selected->erase(id);
-                    else                     selected->insert(id);
-                    if (rb) (*rb)();
-                }});
-        }
+    // Category rows toggle in place — the checkbox flips and `selected` updates
+    // without dismissing the popover (checkable = true).
+    for (const auto& cat : *visible) {
+        int id = cat.id;
+        OptionRow row;
+        row.label     = cat.name;
+        row.checkable = true;
+        row.checked   = selected->count(id) > 0;
+        row.action    = [selected, id]() {
+            if (selected->count(id)) selected->erase(id);
+            else                     selected->insert(id);
+        };
+        rows.push_back(std::move(row));
+    }
 
-        rows.push_back({ "checkbox_checked.png", "Apply", "", true, false,
-            [this, capturedList, selected]() {
-                std::vector<int> newCatIds(selected->begin(), selected->end());
-                if (newCatIds.empty()) {
-                    brls::Application::notify("Select at least one category");
-                    return;
+    rows.push_back({ "checkbox_checked.png", "Apply", "", true, false,
+        [this, capturedList, selected]() {
+            std::vector<int> newCatIds(selected->begin(), selected->end());
+            if (newCatIds.empty()) {
+                brls::Application::notify("Select at least one category");
+                return;
+            }
+            std::weak_ptr<bool> aliveWeak = m_alive;
+            std::vector<Manga> asyncList = capturedList;
+            brls::Application::notify("Updating categories...");
+            asyncRun([this, asyncList, newCatIds, aliveWeak]() {
+                SuwayomiClient& client = SuwayomiClient::getInstance();
+                int successCount = 0;
+                for (const auto& manga : asyncList) {
+                    if (client.setMangaCategories(manga.id, newCatIds)) successCount++;
                 }
-                std::weak_ptr<bool> aliveWeak = m_alive;
-                std::vector<Manga> asyncList = capturedList;
-                brls::Application::notify("Updating categories...");
-                asyncRun([this, asyncList, newCatIds, aliveWeak]() {
-                    SuwayomiClient& client = SuwayomiClient::getInstance();
-                    int successCount = 0;
-                    for (const auto& manga : asyncList) {
-                        if (client.setMangaCategories(manga.id, newCatIds)) successCount++;
-                    }
-                    brls::sync([this, successCount, aliveWeak]() {
-                        auto alive = aliveWeak.lock();
-                        if (!alive || !*alive) return;
-                        brls::Application::notify("Updated " + std::to_string(successCount) + " manga");
-                        if (m_selectionMode) exitSelectionMode();
-                        refresh();
-                    });
+                brls::sync([this, successCount, aliveWeak]() {
+                    auto alive = aliveWeak.lock();
+                    if (!alive || !*alive) return;
+                    brls::Application::notify("Updated " + std::to_string(successCount) + " manga");
+                    if (m_selectionMode) exitSelectionMode();
+                    refresh();
                 });
-            }});
+            });
+        }});
 
-        rows.push_back({ "cross.png", "Cancel", "", false, true, []() {}});
+    // Cancel returns to the parent Options menu when there is one.
+    rows.push_back({ "back.png", "Cancel", "", false, true,
+        [onBack]() { if (onBack) onBack(); }});
 
-        OptionsPopover::show("CATEGORIES", title, std::move(rows));
-    };
-    (*rebuild)();
+    OptionsPopover::show("CATEGORIES", title, std::move(rows), onBack);
 }
 
 void LibrarySectionTab::showDownloadSubmenu(const std::vector<Manga>& mangaList) {
