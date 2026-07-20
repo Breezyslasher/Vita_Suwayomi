@@ -72,11 +72,12 @@ bool deleteFile(const std::string& path) {
 }
 
 int64_t fileSize(const std::string& path) {
+    // Regular files only; directories must report -1 so callers recurse into
+    // them instead of counting a bogus directory size.
     struct stat st;
-    if (stat(path.c_str(), &st) == 0) {
-        return st.st_size;
-    }
-    return -1;
+    if (stat(path.c_str(), &st) != 0) return -1;
+    if (!S_ISREG(st.st_mode)) return -1;
+    return static_cast<int64_t>(st.st_size);
 }
 
 bool createDir(const std::string& path) {

@@ -77,9 +77,14 @@ bool deleteFile(const std::string& path) {
 }
 
 int64_t fileSize(const std::string& path) {
-    std::ifstream f(path, std::ios::binary | std::ios::ate);
-    if (!f.good()) return -1;
-    return f.tellg();
+    // Only regular files have a meaningful size. Opening a directory with an
+    // ifstream can "succeed" and then report a garbage tellg() value, so guard
+    // against it explicitly (directories/other -> -1).
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) return -1;
+    auto sz = std::filesystem::file_size(path, ec);
+    if (ec) return -1;
+    return static_cast<int64_t>(sz);
 }
 
 bool createDir(const std::string& path) {

@@ -118,24 +118,45 @@ void StorageView::loadStorageInfo() {
             item.mangaId = download.mangaId;
             item.mangaTitle = download.title;
             item.coverUrl = download.localCoverPath;
-            item.chapterCount = static_cast<int>(download.chapters.size());
 
+            // Local (on-device) storage only: sum the files actually stored on
+            // the device. Storage Management reflects device usage, so
+            // server-side downloads (no local files) are excluded below.
             item.sizeBytes = 0;
-            std::string mangaPath = dm.getDownloadsPath() + "/" + std::to_string(download.mangaId);
-            for (const auto& name : platform::listDir(mangaPath)) {
+            std::string mangaPath = dm.getDownloadsPath() + "/manga_" + std::to_string(download.mangaId);
+            auto entries = platform::listDir(mangaPath);
+            brls::Logger::info("StorageView: scan '{}' ({} entries) for manga {} '{}'",
+                               mangaPath, entries.size(), download.mangaId, download.title);
+            for (const auto& name : entries) {
                 if (name.empty() || name[0] == '.') continue;
                 std::string entryPath = mangaPath + "/" + name;
                 int64_t sz = platform::fileSize(entryPath);
                 if (sz > 0) {
-                    item.sizeBytes += sz;
+                    item.sizeBytes += sz;   // a regular file (e.g. cover.jpg)
                 } else {
+                    // Directory (chapter_<i>) -> sum its page files.
+                    int64_t chSize = 0;
                     for (const auto& fname : platform::listDir(entryPath)) {
                         if (fname.empty() || fname[0] == '.') continue;
                         int64_t fsz = platform::fileSize(entryPath + "/" + fname);
-                        if (fsz > 0) item.sizeBytes += fsz;
+                        if (fsz > 0) chSize += fsz;
                     }
+                    item.sizeBytes += chSize;
+                    brls::Logger::info("StorageView:   dir '{}' -> {} bytes", name, chSize);
                 }
             }
+            brls::Logger::info("StorageView: manga {} local total = {} bytes",
+                               download.mangaId, item.sizeBytes);
+            if (item.sizeBytes <= 0) continue;   // nothing stored locally -> skip
+
+            // Count only the chapters that are present on the device.
+            int localChapters = 0;
+            for (const auto& ch : download.chapters) {
+                if (dm.isChapterDownloaded(download.mangaId, ch.chapterIndex)) localChapters++;
+            }
+            item.chapterCount = localChapters > 0 ? localChapters
+                                                  : static_cast<int>(download.chapters.size());
+
             totalSize += item.sizeBytes;
             items.push_back(item);
         }
@@ -197,7 +218,8 @@ void StorageView::loadStorageInfo() {
                 cover->setCornerRadius(4);
                 cover->setScalingType(brls::ImageScalingType::FIT);
                 cover->setMarginRight(12);
-                if (!item.coverUrl.empty()) cover->setImageFromFile(item.coverUrl);
+                std::string coverUrl = SuwayomiClient::getInstance().getMangaThumbnailUrl(item.mangaId);
+                if (!coverUrl.empty()) ImageLoader::loadAsync(coverUrl, nullptr, cover, m_alive);
                 rowBox->addView(cover);
 
                 // Title + proportional size bar
@@ -230,19 +252,27 @@ void StorageView::loadStorageInfo() {
                 mid->addView(barTrack);
                 rowBox->addView(mid);
 
-                // Chapters
+                // Chapters — fixed width so the growing title/bar can't squeeze
+                // or overlap it (which made the text marquee/clip).
                 auto* chaps = new brls::Label();
                 chaps->setText(std::to_string(item.chapterCount) + " ch");
                 chaps->setFontSize(13);
                 chaps->setTextColor(svcol::muted());
+                chaps->setSingleLine(true);
+                chaps->setShrink(0.0f);
+                chaps->setWidth(72);
                 chaps->setMarginRight(14);
+                chaps->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
                 rowBox->addView(chaps);
 
-                // Size
+                // Size — fixed width, right-aligned.
                 auto* size = new brls::Label();
                 size->setText(formatSize(item.sizeBytes));
                 size->setFontSize(14);
                 size->setTextColor(svcol::accent());
+                size->setSingleLine(true);
+                size->setShrink(0.0f);
+                size->setWidth(96);
                 size->setHorizontalAlign(brls::HorizontalAlign::RIGHT);
                 rowBox->addView(size);
 
@@ -255,6 +285,13 @@ void StorageView::loadStorageInfo() {
                 rowBox->addGestureRecognizer(new brls::TapGestureRecognizer(rowBox));
                 m_contentBox->addView(rowBox);
                 if (!firstRow) firstRow = rowBox;
+            }
+
+            // Route UP from the first list row to the quick-action buttons (the
+            // scroll frame otherwise swallows UP at the top row).
+            if (firstRow && m_firstAction) {
+                firstRow->setCustomNavigationRoute(brls::FocusDirection::UP, m_firstAction);
+                m_firstAction->setCustomNavigationRoute(brls::FocusDirection::DOWN, firstRow);
             }
 
             // The loading placeholder we were focused on is gone now; move focus
@@ -345,7 +382,7 @@ void StorageView::rebuildTop() {
     actions->setAxis(brls::Axis::ROW);
     actions->setMarginBottom(18);
     auto action = [&](const std::string& icon, const std::string& label, bool danger,
-                      bool last, std::function<void()> onClick) {
+                      bool last, std::function<void()> onClick) -> brls::Box* {
         auto* cell = new brls::Box();
         cell->setAxis(brls::Axis::ROW);
         cell->setAlignItems(brls::AlignItems::CENTER);
@@ -372,10 +409,11 @@ void StorageView::rebuildTop() {
         cell->registerClickAction([onClick](brls::View*) { if (onClick) onClick(); return true; });
         cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
         actions->addView(cell);
+        return cell;
     };
-    action("checkbox_checked.png", "Clean read chapters", false, false, [this]() { deleteReadChapters(); });
-    action("refresh.png", "Clear cache " + formatSize(m_cacheSize), false, false, [this]() { clearCache(); });
-    action("cross.png", "Clear all", true, true, [this]() { clearAllDownloads(); });
+    m_firstAction = action("check.png", "Clean read chapters", false, false, [this]() { deleteReadChapters(); });
+    action("delete.png", "Clear cache " + formatSize(m_cacheSize), false, false, [this]() { clearCache(); });
+    action("delete.png", "Clear all", true, true, [this]() { clearAllDownloads(); });
     m_topBox->addView(actions);
 
     // ---- Section label ----
