@@ -69,15 +69,6 @@ private:
     NVGcolor m_color;
 };
 
-// Is a (ms or s) timestamp within the last `days` days?
-bool withinDays(int64_t timestamp, int days) {
-    if (timestamp <= 0) return false;
-    time_t t = (timestamp > 100000000000LL) ? static_cast<time_t>(timestamp / 1000)
-                                             : static_cast<time_t>(timestamp);
-    time_t now = std::time(nullptr);
-    return (now - t) < static_cast<int64_t>(days) * 86400;
-}
-
 } // namespace
 
 HistoryTab::HistoryTab() {
@@ -162,45 +153,6 @@ HistoryTab::HistoryTab() {
 
     headerRow->addView(refreshContainer);
     this->addView(headerRow);
-
-    // Filter chips row (All / This week / Unfinished)
-    auto* chipsRow = new brls::Box();
-    chipsRow->setAxis(brls::Axis::ROW);
-    chipsRow->setAlignItems(brls::AlignItems::CENTER);
-    chipsRow->setMarginBottom(12);
-
-    const char* chipText[3] = {"All", "This week", "Unfinished"};
-    for (int i = 0; i < 3; i++) {
-        auto* chip = new brls::Box();
-        chip->setAxis(brls::Axis::ROW);
-        chip->setJustifyContent(brls::JustifyContent::CENTER);
-        chip->setAlignItems(brls::AlignItems::CENTER);
-        chip->setHeight(34);
-        chip->setPaddingLeft(14);
-        chip->setPaddingRight(14);
-        chip->setCornerRadius(17);
-        chip->setMarginRight(8);
-        chip->setFocusable(true);
-        chip->setBackgroundColor(hc::chipIdle());
-
-        auto* lbl = new brls::Label();
-        lbl->setText(chipText[i]);
-        lbl->setFontSize(14);
-        lbl->setTextColor(hc::muted());
-        chip->addView(lbl);
-
-        chip->registerClickAction([this, i](brls::View*) {
-            setFilter(static_cast<Filter>(i));
-            return true;
-        });
-        chip->addGestureRecognizer(new brls::TapGestureRecognizer(chip));
-
-        chipsRow->addView(chip);
-        m_chips[i] = chip;
-        m_chipLabels[i] = lbl;
-    }
-    this->addView(chipsRow);
-    refreshChipStyles();
 
     // Scrollable content
     m_scrollView = new brls::ScrollingFrame();
@@ -350,40 +302,6 @@ bool HistoryTab::itemIsDone(const ReadingHistoryItem& item) {
     return item.pageCount > 0 && (item.lastPageRead + 1) >= item.pageCount;
 }
 
-std::vector<ReadingHistoryItem> HistoryTab::visibleItems() const {
-    if (m_filter == Filter::All) return m_historyItems;
-
-    std::vector<ReadingHistoryItem> out;
-    out.reserve(m_historyItems.size());
-    for (const auto& it : m_historyItems) {
-        if (m_filter == Filter::ThisWeek) {
-            if (withinDays(it.lastReadAt, 7)) out.push_back(it);
-        } else { // Unfinished
-            if (!itemIsDone(it)) out.push_back(it);
-        }
-    }
-    return out;
-}
-
-void HistoryTab::refreshChipStyles() {
-    for (int i = 0; i < 3; i++) {
-        if (!m_chips[i]) continue;
-        bool active = (static_cast<int>(m_filter) == i);
-        m_chips[i]->setBackgroundColor(active ? hc::accent() : hc::chipIdle());
-        if (m_chipLabels[i])
-            m_chipLabels[i]->setTextColor(active ? hc::accentInk() : hc::muted());
-    }
-}
-
-void HistoryTab::setFilter(Filter f) {
-    if (m_filter == f) return;
-    m_filter = f;
-    refreshChipStyles();
-    // Client-side only: no new network calls. Rebuild from the filtered view.
-    m_focusIndexAfterRebuild = -1;
-    rebuildHistoryList();
-}
-
 void HistoryTab::loadHistory() {
     brls::Logger::debug("HistoryTab: Loading history...");
 
@@ -459,14 +377,8 @@ void HistoryTab::loadMoreHistory() {
                 m_currentOffset += static_cast<int>(moreHistory.size());
                 m_hasMoreItems = (moreHistory.size() >= ITEMS_PER_PAGE);
 
-                if (m_filter == Filter::All) {
-                    // Fast path: incrementally append the new rows.
-                    appendHistoryItems(moreHistory, firstNewDisplayedIndex);
-                } else {
-                    // Filtered view: rebuild from the filtered set (small).
-                    m_focusIndexAfterRebuild = static_cast<int>(firstNewDisplayedIndex);
-                    rebuildHistoryList();
-                }
+                // Incrementally append the new rows.
+                appendHistoryItems(moreHistory, firstNewDisplayedIndex);
             } else {
                 m_hasMoreItems = false;
             }
@@ -481,7 +393,7 @@ void HistoryTab::rebuildHistoryList() {
     m_contentBox->clearViews();
     m_itemRows.clear();
 
-    std::vector<ReadingHistoryItem> items = visibleItems();
+    const std::vector<ReadingHistoryItem>& items = m_historyItems;
 
     if (m_countPillLabel)
         m_countPillLabel->setText(std::to_string(items.size()));
@@ -542,14 +454,10 @@ void HistoryTab::rebuildHistoryList() {
         m_itemRows.push_back(itemRow);
     }
 
-    // Navigation between chips/refresh and the first history item
-    if (!m_itemRows.empty()) {
-        m_itemRows[0]->setCustomNavigationRoute(brls::FocusDirection::UP, m_chips[0]);
-        for (int i = 0; i < 3; i++)
-            if (m_chips[i])
-                m_chips[i]->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_itemRows[0]);
-        if (m_refreshBtn)
-            m_refreshBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_itemRows[0]);
+    // Navigation between the refresh button and the first history item
+    if (!m_itemRows.empty() && m_refreshBtn) {
+        m_itemRows[0]->setCustomNavigationRoute(brls::FocusDirection::UP, m_refreshBtn);
+        m_refreshBtn->setCustomNavigationRoute(brls::FocusDirection::DOWN, m_itemRows[0]);
     }
 
     // Focus on first new item after load-more, or first item after initial load
@@ -831,8 +739,7 @@ brls::Box* HistoryTab::createHistoryItemRow(const ReadingHistoryItem& item, int 
         return true;
     });
 
-    // Infinite scroll: auto-load more when focus nears the end of the displayed
-    // list (based on displayed position so it works under every filter).
+    // Infinite scroll: auto-load more when focus nears the end of the list.
     itemRow->getFocusEvent()->subscribe([this, displayedIndex](brls::View*) {
         if (m_hasMoreItems && !m_isLoadingMore) {
             const int threshold = 5;
@@ -853,7 +760,6 @@ void HistoryTab::appendHistoryItems(const std::vector<ReadingHistoryItem>& items
     // only add a new date header when the date actually changes.
     std::string lastDate;
     if (startIndex > 0 && startIndex <= m_historyItems.size()) {
-        // Under the All filter displayed index == raw index.
         lastDate = formatTimestamp(m_historyItems[startIndex - 1].lastReadAt);
     }
 
