@@ -941,52 +941,76 @@ void SettingsTab::createLibrarySection() {
     });
     m_contentBox->addView(m_hideCategoriesCell);
 
-    // Grid display mode selector
-    auto* displayModeSelector = new brls::SelectorCell();
-    displayModeSelector->init("Display Mode",
-        {"Grid (Cover + Title)", "Compact Grid (Covers Only)", "List View"},
-        static_cast<int>(settings.libraryDisplayMode),
-        [&settings](int index) {
-            settings.libraryDisplayMode = static_cast<LibraryDisplayMode>(index);
+    // Grid display mode (opens the choice popover)
+    static const std::vector<std::string> kDisplayModes =
+        {"Grid (Cover + Title)", "Compact Grid (Covers Only)", "List View"};
+    auto* displayModeCell = new brls::DetailCell();
+    displayModeCell->setText("Display Mode");
+    displayModeCell->setDetailText(kDisplayModes[static_cast<int>(settings.libraryDisplayMode) % kDisplayModes.size()]);
+    displayModeCell->registerClickAction([this, displayModeCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().libraryDisplayMode);
+        showChoicePopover("Display Mode", kDisplayModes, cur, [displayModeCell](int index) {
+            Application::getInstance().getSettings().libraryDisplayMode = static_cast<LibraryDisplayMode>(index);
             Application::getInstance().saveSettings();
+            displayModeCell->setDetailText(kDisplayModes[index]);
         });
-    m_contentBox->addView(displayModeSelector);
+        return true;
+    });
+    m_contentBox->addView(displayModeCell);
 
-    // Grid size selector
-    auto* gridSizeSelector = new brls::SelectorCell();
-    gridSizeSelector->init("Grid Size",
-        {"Large (4 columns)", "Medium (6 columns)", "Small (8 columns)"},
-        static_cast<int>(settings.libraryGridSize),
-        [&settings](int index) {
-            settings.libraryGridSize = static_cast<LibraryGridSize>(index);
+    // Grid size (opens the choice popover)
+    static const std::vector<std::string> kGridSizes =
+        {"Large (4 columns)", "Medium (6 columns)", "Small (8 columns)"};
+    auto* gridSizeCell = new brls::DetailCell();
+    gridSizeCell->setText("Grid Size");
+    gridSizeCell->setDetailText(kGridSizes[static_cast<int>(settings.libraryGridSize) % kGridSizes.size()]);
+    gridSizeCell->registerClickAction([this, gridSizeCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().libraryGridSize);
+        showChoicePopover("Grid Size", kGridSizes, cur, [gridSizeCell](int index) {
+            Application::getInstance().getSettings().libraryGridSize = static_cast<LibraryGridSize>(index);
             Application::getInstance().saveSettings();
+            gridSizeCell->setDetailText(kGridSizes[index]);
         });
-    m_contentBox->addView(gridSizeSelector);
+        return true;
+    });
+    m_contentBox->addView(gridSizeCell);
 
-    // Library grouping mode selector
-    auto* groupModeSelector = new brls::SelectorCell();
-    groupModeSelector->init("Library Grouping",
-        {"By Category (Tabs)", "By Source", "No Grouping (All Manga)"},
-        static_cast<int>(settings.libraryGroupMode),
-        [&settings](int index) {
-            settings.libraryGroupMode = static_cast<LibraryGroupMode>(index);
+    // Library grouping (opens the choice popover)
+    static const std::vector<std::string> kGroupModes =
+        {"By Category (Tabs)", "By Source", "No Grouping (All Manga)"};
+    auto* groupModeCell = new brls::DetailCell();
+    groupModeCell->setText("Library Grouping");
+    groupModeCell->setDetailText(kGroupModes[static_cast<int>(settings.libraryGroupMode) % kGroupModes.size()]);
+    groupModeCell->registerClickAction([this, groupModeCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().libraryGroupMode);
+        showChoicePopover("Library Grouping", kGroupModes, cur, [groupModeCell](int index) {
+            Application::getInstance().getSettings().libraryGroupMode = static_cast<LibraryGroupMode>(index);
             Application::getInstance().saveSettings();
+            groupModeCell->setDetailText(kGroupModes[index]);
             brls::Application::notify("Library grouping updated");
         });
-    m_contentBox->addView(groupModeSelector);
+        return true;
+    });
+    m_contentBox->addView(groupModeCell);
 
-    // Default library sort mode selector
-    auto* defaultSortSelector = new brls::SelectorCell();
-    defaultSortSelector->init("Default Sort Mode",
+    // Default sort mode (opens the choice popover)
+    static const std::vector<std::string> kSortModes =
         {"A-Z", "Z-A", "Most Unread", "Least Unread", "Recently Added (Newest)",
          "Recently Added (Oldest)", "Last Read", "Date Updated (Newest)",
-         "Date Updated (Oldest)", "Total Chapters", "Downloaded Only"},
-        settings.defaultLibrarySortMode,
-        [&settings](int index) {
-            settings.defaultLibrarySortMode = index;
+         "Date Updated (Oldest)", "Total Chapters", "Downloaded Only"};
+    auto* defaultSortCell = new brls::DetailCell();
+    defaultSortCell->setText("Default Sort Mode");
+    defaultSortCell->setDetailText(kSortModes[settings.defaultLibrarySortMode % static_cast<int>(kSortModes.size())]);
+    defaultSortCell->registerClickAction([this, defaultSortCell](brls::View*) {
+        const int cur = Application::getInstance().getSettings().defaultLibrarySortMode;
+        showChoicePopover("Default Sort Mode", kSortModes, cur, [defaultSortCell](int index) {
+            Application::getInstance().getSettings().defaultLibrarySortMode = index;
             Application::getInstance().saveSettings();
+            defaultSortCell->setDetailText(kSortModes[index]);
         });
-    m_contentBox->addView(defaultSortSelector);
+        return true;
+    });
+    m_contentBox->addView(defaultSortCell);
 
     // Cache Library Data toggle
     auto* cacheDataToggle = new brls::BooleanCell();
@@ -1026,15 +1050,40 @@ void SettingsTab::createLibrarySection() {
     });
     m_contentBox->addView(updateOnStartToggle);
 
-    // Default category selector
-    m_defaultCategorySelector = new brls::SelectorCell();
-    m_defaultCategorySelector->init("Default Category",
-        {"Default (All)", "Loading..."},
-        0,
-        [](int index) {
-            // Will be updated when categories are loaded
+    // Default category (opens the choice popover; options are fetched on click)
+    m_defaultCategorySelector = new brls::DetailCell();
+    m_defaultCategorySelector->setText("Default Category");
+    m_defaultCategorySelector->setDetailText("Default (All)");
+    m_defaultCategorySelector->registerClickAction([this](brls::View*) {
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        std::vector<Category> categories;
+        if (!client.fetchCategories(categories)) {
+            brls::Application::notify("Failed to load categories");
+            return true;
+        }
+        std::sort(categories.begin(), categories.end(),
+            [](const Category& a, const Category& b) { return a.order < b.order; });
+
+        auto names = std::make_shared<std::vector<std::string>>();
+        auto ids   = std::make_shared<std::vector<int>>();
+        names->push_back("Default (All)");
+        ids->push_back(0);
+        for (const auto& cat : categories) {
+            if (cat.mangaCount > 0) { names->push_back(cat.name); ids->push_back(cat.id); }
+        }
+
+        int cur = 0;
+        const int curId = Application::getInstance().getSettings().defaultCategoryId;
+        for (size_t i = 0; i < ids->size(); i++) if ((*ids)[i] == curId) { cur = static_cast<int>(i); break; }
+
+        showChoicePopover("Default Category", *names, cur, [this, names, ids](int index) {
+            if (index < 0 || index >= static_cast<int>(ids->size())) return;
+            Application::getInstance().getSettings().defaultCategoryId = (*ids)[index];
+            Application::getInstance().saveSettings();
+            if (m_defaultCategorySelector) m_defaultCategorySelector->setDetailText((*names)[index]);
         });
-    m_defaultCategorySelector->setDetailText("Category to show when opening library");
+        return true;
+    });
     m_contentBox->addView(m_defaultCategorySelector);
 
     // Load categories for the selector asynchronously
@@ -1071,229 +1120,53 @@ void SettingsTab::createLibrarySection() {
 }
 
 void SettingsTab::showCategoryVisibilityDialog() {
-    // Fetch categories from server
-    brls::Application::notify("Loading categories...");
-
-    // Get categories synchronously (simple approach)
     SuwayomiClient& client = SuwayomiClient::getInstance();
     std::vector<Category> categories;
-
     if (!client.fetchCategories(categories)) {
         brls::Application::notify("Failed to load categories");
         return;
     }
-
-    // Sort by order
     std::sort(categories.begin(), categories.end(),
-        [](const Category& a, const Category& b) {
-            return a.order < b.order;
-        });
+        [](const Category& a, const Category& b) { return a.order < b.order; });
 
+    // Drop stale hidden IDs (categories that no longer exist on the server).
     auto& hiddenIds = Application::getInstance().getSettings().hiddenCategoryIds;
-
-    // Clean up stale hidden IDs (categories that no longer exist on server)
     std::set<int> validIds;
     for (const auto& cat : categories) validIds.insert(cat.id);
     bool cleaned = false;
     for (auto it = hiddenIds.begin(); it != hiddenIds.end(); ) {
-        if (validIds.find(*it) == validIds.end()) {
-            it = hiddenIds.erase(it);
-            cleaned = true;
-        } else {
-            ++it;
-        }
+        if (validIds.find(*it) == validIds.end()) { it = hiddenIds.erase(it); cleaned = true; }
+        else ++it;
     }
-    if (cleaned) {
-        Application::getInstance().saveSettings();
+    if (cleaned) Application::getInstance().saveSettings();
+
+    if (categories.empty()) {
+        brls::Application::notify("No categories available");
+        return;
     }
 
-    // Create dialog box (matching Manage Categories design)
-    auto* dialogBox = new brls::Box();
-    dialogBox->setAxis(brls::Axis::COLUMN);
-    dialogBox->setWidth(550);
-    dialogBox->setHeight(450);
-    dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
-    dialogBox->setCornerRadius(12);
-
-    // Title
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText("Hidden Categories");
-    titleLabel->setFontSize(22);
-    titleLabel->setMarginBottom(10);
-    dialogBox->addView(titleLabel);
-
-    // Info label
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Tap to toggle visibility in library");
-    infoLabel->setFontSize(14);
-    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
-    infoLabel->setMarginBottom(15);
-    dialogBox->addView(infoLabel);
-
-    // Create close button early so it can be captured in lambdas
-    auto* closeBtn = new brls::Button();
-    closeBtn->setText("Done");
-    closeBtn->setMarginTop(15);
-    closeBtn->registerClickAction([this](brls::View* view) {
-        // Update the cell detail text before closing
-        if (m_hideCategoriesCell) {
-            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
-            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
-        }
-        brls::Application::popActivity();
-        return true;
-    });
-    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
-
-    // Register B button on close button
-    closeBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        if (m_hideCategoriesCell) {
-            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
-            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
-        }
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    // Scrollable category list
-    auto* scrollView = new brls::ScrollingFrame();
-    scrollView->setGrow(1.0f);
-
-    auto* catList = new brls::Box();
-    catList->setAxis(brls::Axis::COLUMN);
-
-    // Filter to only show categories with manga
-    std::vector<Category> visibleCategories;
+    // One checkable row per category: checked = visible (not hidden). Toggling in
+    // place adds/removes the category from the hidden set and updates the cell.
+    std::vector<OptionRow> rows;
     for (const auto& cat : categories) {
-        if (cat.mangaCount > 0) {
-            visibleCategories.push_back(cat);
-        }
-    }
-
-    for (size_t i = 0; i < visibleCategories.size(); i++) {
-        const auto& cat = visibleCategories[i];
-
-        auto* catRow = new brls::Box();
-        catRow->setAxis(brls::Axis::ROW);
-        catRow->setAlignItems(brls::AlignItems::CENTER);
-        catRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-        catRow->setPadding(10, 12, 10, 12);
-        catRow->setMarginBottom(6);
-        catRow->setCornerRadius(8);
-        catRow->setFocusable(true);
-
-        // Category is visible if NOT in hidden list
-        bool isVisible = (hiddenIds.find(cat.id) == hiddenIds.end());
-        catRow->setBackgroundColor(isVisible ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-
-        // Category info box
-        auto* infoBox = new brls::Box();
-        infoBox->setAxis(brls::Axis::COLUMN);
-        infoBox->setGrow(1.0f);
-
-        auto* nameLabel = new brls::Label();
-        std::string displayName = cat.name;
-        if (displayName.length() > 20) {
-            displayName = displayName.substr(0, 18) + "..";
-        }
-        nameLabel->setText(displayName);
-        nameLabel->setFontSize(16);
-        infoBox->addView(nameLabel);
-
-        auto* countLabel = new brls::Label();
-        countLabel->setText(std::to_string(cat.mangaCount) + " manga");
-        countLabel->setFontSize(12);
-        countLabel->setTextColor(Application::getInstance().getDimTextColor());
-        infoBox->addView(countLabel);
-
-        catRow->addView(infoBox);
-
-        // Status indicator
-        auto* statusLabel = new brls::Label();
-        statusLabel->setText(isVisible ? "Visible" : "Hidden");
-        statusLabel->setFontSize(14);
-        statusLabel->setTextColor(isVisible ? Application::getInstance().getSuccessTextColor() : nvgRGB(150, 100, 100));
-        statusLabel->setMarginRight(10);
-        catRow->addView(statusLabel);
-
-        // Store category id for toggle action
-        int catId = cat.id;
-
-        // Click to toggle visibility
-        catRow->registerClickAction([catRow, catId, statusLabel](brls::View* view) {
-            auto& hidden = Application::getInstance().getSettings().hiddenCategoryIds;
-            bool currentlyHidden = (hidden.find(catId) != hidden.end());
-
-            if (currentlyHidden) {
-                // Show category (remove from hidden)
-                hidden.erase(catId);
-                catRow->setBackgroundColor(Application::getInstance().getActiveRowBackground());
-                statusLabel->setText("Visible");
-                statusLabel->setTextColor(Application::getInstance().getSuccessTextColor());
-            } else {
-                // Hide category (add to hidden)
-                hidden.insert(catId);
-                catRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
-                statusLabel->setText("Hidden");
-                statusLabel->setTextColor(nvgRGB(150, 100, 100));
-            }
-
+        const int id = cat.id;
+        OptionRow row;
+        row.label     = cat.name;
+        row.checkable = true;
+        row.checked   = hiddenIds.find(id) == hiddenIds.end();
+        row.action    = [this, id]() {
+            auto& hid = Application::getInstance().getSettings().hiddenCategoryIds;
+            if (hid.find(id) == hid.end()) hid.insert(id);   // was visible -> hide
+            else                           hid.erase(id);    // was hidden  -> show
             Application::getInstance().saveSettings();
-            return true;
-        });
-        catRow->addGestureRecognizer(new brls::TapGestureRecognizer(catRow));
-
-        // Register B button on each row to close dialog
-        catRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-            if (m_hideCategoriesCell) {
-                size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
-                m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
-            }
-            brls::Application::popActivity();
-            return true;
-        }, true);  // hidden action
-
-        catList->addView(catRow);
+            if (m_hideCategoriesCell)
+                m_hideCategoriesCell->setDetailText(std::to_string(hid.size()) + " hidden");
+        };
+        rows.push_back(std::move(row));
     }
+    rows.push_back({ "back.png", "Done", "", false, false, [](){} });
 
-    // If no categories with manga
-    if (visibleCategories.empty()) {
-        auto* label = new brls::Label();
-        label->setText("No categories with manga found");
-        label->setFontSize(16);
-        label->setMarginTop(20);
-        catList->addView(label);
-    }
-
-    scrollView->setContentView(catList);
-    dialogBox->addView(scrollView);
-
-    // Add close button to dialog
-    dialogBox->addView(closeBtn);
-
-    // Register circle button to close the dialog
-    dialogBox->registerAction("Close", brls::ControllerButton::BUTTON_BACK, [this](brls::View*) {
-        // Update the cell detail text before closing
-        if (m_hideCategoriesCell) {
-            size_t hiddenCount = Application::getInstance().getSettings().hiddenCategoryIds.size();
-            m_hideCategoriesCell->setDetailText(std::to_string(hiddenCount) + " hidden");
-        }
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    // Set up navigation
-    auto& catChildren = catList->getChildren();
-    if (!catChildren.empty()) {
-        // Last category row -> down goes to closeBtn
-        catChildren.back()->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
-        // closeBtn -> up goes to last category
-        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, catChildren.back());
-    }
-
-    // Push as new activity
-    brls::Application::pushActivity(new brls::Activity(dialogBox));
+    OptionsPopover::show("LIBRARY", "Hidden Categories", std::move(rows), nullptr, 5);
 }
 
 void SettingsTab::createReaderSection() {
@@ -1305,60 +1178,73 @@ void SettingsTab::createReaderSection() {
     header->setTitle("Reader (Defaults)");
     m_contentBox->addView(header);
 
-    // Reading mode selector
-    m_readingModeSelector = new brls::SelectorCell();
-    m_readingModeSelector->init("Reading Mode",
-        {"Left to Right", "Right to Left (Manga)", "Vertical", "Webtoon"},
-        static_cast<int>(settings.readingMode),
-        [&settings](int index) {
-            settings.readingMode = static_cast<ReadingMode>(index);
+    // Reading mode (opens the choice popover)
+    static const std::vector<std::string> kReadingModes =
+        {"Left to Right", "Right to Left (Manga)", "Vertical", "Webtoon"};
+    m_readingModeSelector = new brls::DetailCell();
+    m_readingModeSelector->setText("Reading Mode");
+    m_readingModeSelector->setDetailText(kReadingModes[static_cast<int>(settings.readingMode) % kReadingModes.size()]);
+    m_readingModeSelector->registerClickAction([this](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().readingMode);
+        showChoicePopover("Reading Mode", kReadingModes, cur, [this](int index) {
+            Application::getInstance().getSettings().readingMode = static_cast<ReadingMode>(index);
             Application::getInstance().saveSettings();
+            if (m_readingModeSelector) m_readingModeSelector->setDetailText(kReadingModes[index]);
         });
+        return true;
+    });
     m_contentBox->addView(m_readingModeSelector);
 
-    // Page scale mode selector
-    m_pageScaleModeSelector = new brls::SelectorCell();
-    m_pageScaleModeSelector->init("Page Scale",
-        {"Fit Screen", "Fit Width", "Fit Height", "Original Size (1:1)"},
-        static_cast<int>(settings.pageScaleMode),
-        [&settings](int index) {
-            settings.pageScaleMode = static_cast<PageScaleMode>(index);
+    // Page scale (opens the choice popover)
+    static const std::vector<std::string> kPageScales =
+        {"Fit Screen", "Fit Width", "Fit Height", "Original Size (1:1)"};
+    m_pageScaleModeSelector = new brls::DetailCell();
+    m_pageScaleModeSelector->setText("Page Scale");
+    m_pageScaleModeSelector->setDetailText(kPageScales[static_cast<int>(settings.pageScaleMode) % kPageScales.size()]);
+    m_pageScaleModeSelector->registerClickAction([this](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().pageScaleMode);
+        showChoicePopover("Page Scale", kPageScales, cur, [this](int index) {
+            Application::getInstance().getSettings().pageScaleMode = static_cast<PageScaleMode>(index);
             Application::getInstance().saveSettings();
+            if (m_pageScaleModeSelector) m_pageScaleModeSelector->setDetailText(kPageScales[index]);
         });
+        return true;
+    });
     m_contentBox->addView(m_pageScaleModeSelector);
 
-    // Image rotation selector (default for new manga)
-    int rotationIndex = 0;
-    switch (settings.imageRotation) {
-        case 0: rotationIndex = 0; break;
-        case 90: rotationIndex = 1; break;
-        case 180: rotationIndex = 2; break;
-        case 270: rotationIndex = 3; break;
-    }
-    auto* rotationSelector = new brls::SelectorCell();
-    rotationSelector->init("Default Rotation",
-        {"0° (Normal)", "90° (Clockwise)", "180° (Upside Down)", "270° (Counter-Clockwise)"},
-        rotationIndex,
-        [&settings](int index) {
-            switch (index) {
-                case 0: settings.imageRotation = 0; break;
-                case 1: settings.imageRotation = 90; break;
-                case 2: settings.imageRotation = 180; break;
-                case 3: settings.imageRotation = 270; break;
-            }
+    // Default rotation (opens the choice popover)
+    static const std::vector<std::string> kRotations =
+        {"0° (Normal)", "90° (Clockwise)", "180° (Upside Down)", "270° (Counter-Clockwise)"};
+    static const int kRotationValues[] = {0, 90, 180, 270};
+    auto rotationIndexOf = [](int deg) { for (int i = 0; i < 4; i++) if (kRotationValues[i] == deg) return i; return 0; };
+    auto* rotationCell = new brls::DetailCell();
+    rotationCell->setText("Default Rotation");
+    rotationCell->setDetailText(kRotations[rotationIndexOf(settings.imageRotation)]);
+    rotationCell->registerClickAction([this, rotationIndexOf, rotationCell](brls::View*) {
+        const int cur = rotationIndexOf(Application::getInstance().getSettings().imageRotation);
+        showChoicePopover("Default Rotation", kRotations, cur, [rotationCell](int index) {
+            Application::getInstance().getSettings().imageRotation = kRotationValues[index];
             Application::getInstance().saveSettings();
+            rotationCell->setDetailText(kRotations[index]);
         });
-    m_contentBox->addView(rotationSelector);
+        return true;
+    });
+    m_contentBox->addView(rotationCell);
 
-    // Reader background selector
-    m_readerBgSelector = new brls::SelectorCell();
-    m_readerBgSelector->init("Background",
-        {"Black", "White", "Gray"},
-        static_cast<int>(settings.readerBackground),
-        [&settings](int index) {
-            settings.readerBackground = static_cast<ReaderBackground>(index);
+    // Reader background (opens the choice popover)
+    static const std::vector<std::string> kReaderBgs = {"Black", "White", "Gray"};
+    m_readerBgSelector = new brls::DetailCell();
+    m_readerBgSelector->setText("Background");
+    m_readerBgSelector->setDetailText(kReaderBgs[static_cast<int>(settings.readerBackground) % kReaderBgs.size()]);
+    m_readerBgSelector->registerClickAction([this](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().readerBackground);
+        showChoicePopover("Background", kReaderBgs, cur, [this](int index) {
+            Application::getInstance().getSettings().readerBackground = static_cast<ReaderBackground>(index);
             Application::getInstance().saveSettings();
+            if (m_readerBgSelector) m_readerBgSelector->setDetailText(kReaderBgs[index]);
         });
+        return true;
+    });
     m_contentBox->addView(m_readerBgSelector);
 
     // Keep screen on toggle
@@ -1415,15 +1301,20 @@ void SettingsTab::createReaderSection() {
     m_contentBox->addView(webtoonDetectToggle);
 
     // Side padding selector
-    auto* paddingSelector = new brls::SelectorCell();
-    paddingSelector->init("Side Padding",
-        {"None", "5%", "10%", "15%", "20%"},
-        settings.webtoonSidePadding / 5,
-        [&settings](int index) {
-            settings.webtoonSidePadding = index * 5;
+    static const std::vector<std::string> kSidePaddings = {"None", "5%", "10%", "15%", "20%"};
+    auto* paddingCell = new brls::DetailCell();
+    paddingCell->setText("Side Padding");
+    paddingCell->setDetailText(kSidePaddings[(settings.webtoonSidePadding / 5) % static_cast<int>(kSidePaddings.size())]);
+    paddingCell->registerClickAction([this, paddingCell](brls::View*) {
+        const int cur = Application::getInstance().getSettings().webtoonSidePadding / 5;
+        showChoicePopover("Side Padding", kSidePaddings, cur, [paddingCell](int index) {
+            Application::getInstance().getSettings().webtoonSidePadding = index * 5;
             Application::getInstance().saveSettings();
+            paddingCell->setDetailText(kSidePaddings[index]);
         });
-    m_contentBox->addView(paddingSelector);
+        return true;
+    });
+    m_contentBox->addView(paddingCell);
 
     // Reverse mouse scroll
     auto* reverseScrollToggle = new brls::BooleanCell();
@@ -1443,29 +1334,38 @@ void SettingsTab::createDownloadsSection() {
     header->setTitle("Downloads");
     m_contentBox->addView(header);
 
-    // Download mode selector
-    auto* downloadModeSelector = new brls::SelectorCell();
-    downloadModeSelector->init("Download Location",
-        {"Server Only", "Local Only", "Both"},
-        static_cast<int>(settings.downloadMode),
-        [](int index) {
-            brls::Logger::info("SettingsTab: Download mode changed to {} (0=Server, 1=Local, 2=Both)", index);
+    // Download location (opens the choice popover)
+    static const std::vector<std::string> kDownloadModes = {"Server Only", "Local Only", "Both"};
+    auto* downloadModeCell = new brls::DetailCell();
+    downloadModeCell->setText("Download Location");
+    downloadModeCell->setDetailText(kDownloadModes[static_cast<int>(settings.downloadMode) % kDownloadModes.size()]);
+    downloadModeCell->registerClickAction([this, downloadModeCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().downloadMode);
+        showChoicePopover("Download Location", kDownloadModes, cur, [downloadModeCell](int index) {
             Application::getInstance().getSettings().downloadMode = static_cast<DownloadMode>(index);
             Application::getInstance().saveSettings();
+            downloadModeCell->setDetailText(kDownloadModes[index]);
         });
-    m_contentBox->addView(downloadModeSelector);
+        return true;
+    });
+    m_contentBox->addView(downloadModeCell);
 
-    // Download quality selector
-    auto* qualitySelector = new brls::SelectorCell();
-    qualitySelector->init("Download Quality",
-        {"Original", "High (1280px)", "Medium (960px)", "Low (720px)"},
-        static_cast<int>(settings.downloadQuality),
-        [](int index) {
-            brls::Logger::info("SettingsTab: Download quality changed to {}", index);
+    // Download quality (opens the choice popover)
+    static const std::vector<std::string> kQualities =
+        {"Original", "High (1280px)", "Medium (960px)", "Low (720px)"};
+    auto* qualityCell = new brls::DetailCell();
+    qualityCell->setText("Download Quality");
+    qualityCell->setDetailText(kQualities[static_cast<int>(settings.downloadQuality) % kQualities.size()]);
+    qualityCell->registerClickAction([this, qualityCell](brls::View*) {
+        const int cur = static_cast<int>(Application::getInstance().getSettings().downloadQuality);
+        showChoicePopover("Download Quality", kQualities, cur, [qualityCell](int index) {
             Application::getInstance().getSettings().downloadQuality = static_cast<DownloadQuality>(index);
             Application::getInstance().saveSettings();
+            qualityCell->setDetailText(kQualities[index]);
         });
-    m_contentBox->addView(qualitySelector);
+        return true;
+    });
+    m_contentBox->addView(qualityCell);
 
     // Auto download new chapters toggle
     auto* autoDownloadToggle = new brls::BooleanCell();
@@ -1586,23 +1486,26 @@ void SettingsTab::createBrowseSection() {
     });
     m_contentBox->addView(nsfwToggle);
 
-    // Max search history
-    auto* searchHistorySelector = new brls::SelectorCell();
-    std::vector<std::string> historyOptions = {"5", "10", "15", "20", "30", "50", "100"};
-    std::vector<int> historyValues = {5, 10, 15, 20, 30, 50, 100};
-    int currentHistoryIndex = 3; // default to 20
-    for (size_t i = 0; i < historyValues.size(); i++) {
-        if (historyValues[i] == settings.maxSearchHistory) {
-            currentHistoryIndex = static_cast<int>(i);
-            break;
-        }
-    }
-    searchHistorySelector->init("Max Search History", historyOptions, currentHistoryIndex,
-        [historyValues](int index) {
-            Application::getInstance().getSettings().maxSearchHistory = historyValues[index];
+    // Max search history (opens the choice popover)
+    static const std::vector<std::string> kHistoryOptions = {"5", "10", "15", "20", "30", "50", "100"};
+    static const int kHistoryValues[] = {5, 10, 15, 20, 30, 50, 100};
+    auto historyIndexOf = [](int v) {
+        for (int i = 0; i < static_cast<int>(kHistoryOptions.size()); i++) if (kHistoryValues[i] == v) return i;
+        return 3; // default 20
+    };
+    auto* searchHistoryCell = new brls::DetailCell();
+    searchHistoryCell->setText("Max Search History");
+    searchHistoryCell->setDetailText(kHistoryOptions[historyIndexOf(settings.maxSearchHistory)]);
+    searchHistoryCell->registerClickAction([this, historyIndexOf, searchHistoryCell](brls::View*) {
+        const int cur = historyIndexOf(Application::getInstance().getSettings().maxSearchHistory);
+        showChoicePopover("Max Search History", kHistoryOptions, cur, [searchHistoryCell](int index) {
+            Application::getInstance().getSettings().maxSearchHistory = kHistoryValues[index];
             Application::getInstance().saveSettings();
+            searchHistoryCell->setDetailText(kHistoryOptions[index]);
         });
-    m_contentBox->addView(searchHistorySelector);
+        return true;
+    });
+    m_contentBox->addView(searchHistoryCell);
 }
 
 void SettingsTab::createSyncYomiSection() {
@@ -1939,167 +1842,37 @@ void SettingsTab::showLanguageFilterDialog() {
         {"uz", "Uzbek"}
     };
 
-    // Create a scrollable dialog-like view
-    auto* dialogBox = new brls::Box();
-    dialogBox->setAxis(brls::Axis::COLUMN);
-    dialogBox->setWidth(500);
-    dialogBox->setHeight(400);
-    dialogBox->setPadding(20);
-    dialogBox->setBackgroundColor(Application::getInstance().getDialogBackground());
-    dialogBox->setCornerRadius(12);
-    dialogBox->setFocusable(true);
+    if (languages.empty()) return;
 
-    // Title
-    auto* titleLabel = new brls::Label();
-    titleLabel->setText("Select Source Languages");
-    titleLabel->setFontSize(22);
-    titleLabel->setMarginBottom(15);
-    dialogBox->addView(titleLabel);
-
-    // Info label
-    auto* infoLabel = new brls::Label();
-    infoLabel->setText("Tap languages to toggle. Select 'All' to show all.");
-    infoLabel->setFontSize(14);
-    infoLabel->setTextColor(Application::getInstance().getSubtitleColor());
-    infoLabel->setMarginBottom(10);
-    dialogBox->addView(infoLabel);
-
-    // Scrollable language list
-    auto* scrollView = new brls::ScrollingFrame();
-    scrollView->setGrow(1.0f);
-
-    auto* langList = new brls::Box();
-    langList->setAxis(brls::Axis::COLUMN);
-
-    // Store all rows so we can update "All" visual state when individual languages are toggled
-    auto allRows = std::make_shared<std::vector<brls::Box*>>();
-
-    // Track first and last rows for navigation
-    brls::Box* firstLangRow = nullptr;
-    brls::Box* lastLangRow = nullptr;
-
+    // One checkable row per language: "all" is checked when no specific
+    // languages are enabled; toggling it clears the set. Others toggle their
+    // membership. Toggles apply in place and refresh the cell summary.
+    std::vector<OptionRow> rows;
     for (const auto& [code, name] : languages) {
-        bool isEnabled = (code == "all" && settings.enabledSourceLanguages.empty()) ||
-                         (code != "all" && settings.enabledSourceLanguages.count(code) > 0);
-
-        auto* langRow = new brls::Box();
-        langRow->setAxis(brls::Axis::ROW);
-        langRow->setAlignItems(brls::AlignItems::CENTER);
-        langRow->setJustifyContent(brls::JustifyContent::SPACE_BETWEEN);
-        langRow->setPadding(8, 12, 8, 12);
-        langRow->setMarginBottom(4);
-        langRow->setCornerRadius(8);
-        langRow->setBackgroundColor(isEnabled ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-        langRow->setFocusable(true);
-
-        auto* nameLabel = new brls::Label();
-        nameLabel->setText(name);
-        nameLabel->setFontSize(16);
-        langRow->addView(nameLabel);
-
-        auto* codeLabel = new brls::Label();
-        codeLabel->setText(code);
-        codeLabel->setFontSize(14);
-        codeLabel->setTextColor(Application::getInstance().getDimTextColor());
-        langRow->addView(codeLabel);
-
-        allRows->push_back(langRow);
-
-        // Track first and last rows
-        if (!firstLangRow) {
-            firstLangRow = langRow;
-        }
-        lastLangRow = langRow;
-
-        std::string langCode = code;
-        langRow->registerClickAction([langCode, langRow, allRows](brls::View* view) {
+        const std::string langCode = code;
+        OptionRow row;
+        row.label     = name;
+        row.sub       = code;
+        row.checkable = true;
+        row.checked   = (code == "all" && settings.enabledSourceLanguages.empty()) ||
+                        (code != "all" && settings.enabledSourceLanguages.count(code) > 0);
+        row.action    = [this, langCode]() {
             AppSettings& s = Application::getInstance().getSettings();
-
             if (langCode == "all") {
                 s.enabledSourceLanguages.clear();
-                brls::Application::notify("Showing all languages");
-                // Update all row visuals - "All" is enabled, others are disabled
-                for (size_t i = 0; i < allRows->size(); i++) {
-                    (*allRows)[i]->setBackgroundColor(i == 0 ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-                }
+            } else if (s.enabledSourceLanguages.count(langCode) > 0) {
+                s.enabledSourceLanguages.erase(langCode);
             } else {
-                if (s.enabledSourceLanguages.count(langCode) > 0) {
-                    s.enabledSourceLanguages.erase(langCode);
-                } else {
-                    s.enabledSourceLanguages.insert(langCode);
-                }
-
-                // Update visual state
-                bool nowEnabled = s.enabledSourceLanguages.count(langCode) > 0;
-                langRow->setBackgroundColor(nowEnabled ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-
-                // Update "All" row visual - disabled when any language is selected
-                if (!allRows->empty()) {
-                    bool allEnabled = s.enabledSourceLanguages.empty();
-                    (*allRows)[0]->setBackgroundColor(allEnabled ? Application::getInstance().getActiveRowBackground() : Application::getInstance().getInactiveRowBackground());
-                }
+                s.enabledSourceLanguages.insert(langCode);
             }
-
             Application::getInstance().saveSettings();
-            return true;
-        });
-        langRow->addGestureRecognizer(new brls::TapGestureRecognizer(langRow));
-
-        // Register B button on each row to close dialog
-        langRow->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
             updateLanguageFilterCellText();
-            brls::Application::popActivity();
-            return true;
-        }, true);  // hidden action
-
-        langList->addView(langRow);
+        };
+        rows.push_back(std::move(row));
     }
+    rows.push_back({ "back.png", "Done", "", false, false, [](){} });
 
-    scrollView->setContentView(langList);
-    dialogBox->addView(scrollView);
-
-    // Close button
-    auto* closeBtn = new brls::Button();
-    closeBtn->setText("Done");
-    closeBtn->setMarginTop(15);
-    closeBtn->registerClickAction([this](brls::View* view) {
-        updateLanguageFilterCellText();
-        brls::Application::popActivity();
-        return true;
-    });
-    closeBtn->addGestureRecognizer(new brls::TapGestureRecognizer(closeBtn));
-
-    // Register B button on close button
-    closeBtn->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        updateLanguageFilterCellText();
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    dialogBox->addView(closeBtn);
-
-    // Set up navigation routes between last language row and Done button
-    if (lastLangRow) {
-        // Last language row DOWN -> closeBtn (Done button)
-        lastLangRow->setCustomNavigationRoute(brls::FocusDirection::DOWN, closeBtn);
-        // closeBtn UP -> last language row
-        closeBtn->setCustomNavigationRoute(brls::FocusDirection::UP, lastLangRow);
-    }
-
-    // Register B button on dialogBox as fallback
-    dialogBox->registerAction("Back", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
-        updateLanguageFilterCellText();
-        brls::Application::popActivity();
-        return true;
-    }, true);  // hidden action
-
-    // Push as new activity and give focus to the first language row
-    brls::Application::pushActivity(new brls::Activity(dialogBox));
-
-    // Give focus to first language row (at top of list)
-    if (firstLangRow) {
-        brls::Application::giveFocus(firstLangRow);
-    }
+    OptionsPopover::show("BROWSE", "Source Languages", std::move(rows), nullptr, 5);
 }
 
 void SettingsTab::createAboutSection() {
@@ -3115,53 +2888,18 @@ void SettingsTab::importBackup() {
 void SettingsTab::refreshDefaultCategorySelector() {
     if (!m_defaultCategorySelector) return;
 
-    // Fetch categories asynchronously
+    // Update the cell's shown value to the current default category's name.
+    // (The full option list is fetched when the cell is tapped.)
     SuwayomiClient& client = SuwayomiClient::getInstance();
     std::vector<Category> categories;
+    if (!client.fetchCategories(categories)) return;
 
-    if (client.fetchCategories(categories)) {
-        // Sort by order
-        std::sort(categories.begin(), categories.end(),
-            [](const Category& a, const Category& b) {
-                return a.order < b.order;
-            });
-
-        // Build category names list
-        std::vector<std::string> categoryNames;
-        std::vector<int> categoryIds;
-
-        categoryNames.push_back("Default (All)");
-        categoryIds.push_back(0);
-
-        for (const auto& cat : categories) {
-            if (cat.mangaCount > 0) {
-                categoryNames.push_back(cat.name);
-                categoryIds.push_back(cat.id);
-            }
-        }
-
-        // Find current selection index
-        int currentIndex = 0;
-        int currentId = Application::getInstance().getSettings().defaultCategoryId;
-        for (size_t i = 0; i < categoryIds.size(); i++) {
-            if (categoryIds[i] == currentId) {
-                currentIndex = static_cast<int>(i);
-                break;
-            }
-        }
-
-        // Update the selector
-        m_defaultCategorySelector->init("Default Category",
-            categoryNames,
-            currentIndex,
-            [categoryIds](int index) {
-                if (index >= 0 && index < static_cast<int>(categoryIds.size())) {
-                    Application::getInstance().getSettings().defaultCategoryId = categoryIds[index];
-                    Application::getInstance().saveSettings();
-                }
-            });
-        m_defaultCategorySelector->setDetailText("Category to show when opening library");
+    const int currentId = Application::getInstance().getSettings().defaultCategoryId;
+    std::string currentName = "Default (All)";
+    for (const auto& cat : categories) {
+        if (cat.id == currentId) { currentName = cat.name; break; }
     }
+    m_defaultCategorySelector->setDetailText(currentName);
 }
 
 void SettingsTab::checkForUpdates() {
