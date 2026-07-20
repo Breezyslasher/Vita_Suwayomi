@@ -123,7 +123,7 @@ void StorageView::loadStorageInfo() {
             // the device. Storage Management reflects device usage, so
             // server-side downloads (no local files) are excluded below.
             item.sizeBytes = 0;
-            std::string mangaPath = dm.getDownloadsPath() + "/" + std::to_string(download.mangaId);
+            std::string mangaPath = dm.getDownloadsPath() + "/manga_" + std::to_string(download.mangaId);
             for (const auto& name : platform::listDir(mangaPath)) {
                 if (name.empty() || name[0] == '.') continue;
                 std::string entryPath = mangaPath + "/" + name;
