@@ -3410,7 +3410,7 @@ bool SuwayomiClient::fetchSourceFiltersGraphQL(int64_t sourceId, std::vector<Sou
                     ... on TextFilter { __typename name default }
                     ... on CheckBoxFilter { __typename name default }
                     ... on TriStateFilter { __typename name default }
-                    ... on SelectFilter { __typename name default values displayValues }
+                    ... on SelectFilter { __typename name default values }
                     ... on SortFilter { __typename name default { index ascending } values }
                     ... on GroupFilter {
                         __typename name
@@ -3420,7 +3420,7 @@ bool SuwayomiClient::fetchSourceFiltersGraphQL(int64_t sourceId, std::vector<Sou
                             ... on TextFilter { __typename name default }
                             ... on CheckBoxFilter { __typename name default }
                             ... on TriStateFilter { __typename name default }
-                            ... on SelectFilter { __typename name default values displayValues }
+                            ... on SelectFilter { __typename name default values }
                             ... on SortFilter { __typename name default { index ascending } values }
                         }
                     }
