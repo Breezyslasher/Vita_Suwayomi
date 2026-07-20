@@ -1995,135 +1995,400 @@ void SettingsTab::updateServerLabel() {
     }
 }
 
-void SettingsTab::runNetworkTest() {
-    brls::Application::notify("Running network test...");
+namespace {
 
-    platform::launchThread([this]() {
-        std::string results;
+// Fixed dark palette for the Network Test dialog (per the design spec).
+namespace ntcol {
+    inline NVGcolor scrim()      { return nvgRGBA(10, 9, 14, 140); }
+    inline NVGcolor panel()      { return nvgRGB(28, 28, 31); }
+    inline NVGcolor border()     { return nvgRGBA(255, 255, 255, 20); }
+    inline NVGcolor success()    { return nvgRGB(78, 204, 163); }
+    inline NVGcolor danger()     { return nvgRGB(217, 107, 107); }
+    inline NVGcolor accent()     { return nvgRGB(100, 180, 255); }
+    inline NVGcolor accentInk()  { return nvgRGB(13, 34, 54); }
+    inline NVGcolor muted()      { return nvgRGB(139, 139, 147); }
+    inline NVGcolor body()       { return nvgRGB(197, 198, 208); }
+    inline NVGcolor heading()    { return nvgRGB(231, 231, 234); }
+    inline NVGcolor chipBg()     { return nvgRGB(35, 35, 38); }
+    inline NVGcolor chipBorder() { return nvgRGBA(255, 255, 255, 15); }
+    inline NVGcolor rowLine()    { return nvgRGBA(255, 255, 255, 13); }
+    inline NVGcolor okSub()      { return nvgRGB(159, 217, 197); }
+    inline NVGcolor checkInk()   { return nvgRGB(8, 19, 13); }
+    inline NVGcolor bannerOk()   { return nvgRGBA(78, 204, 163, 28); }
+    inline NVGcolor bannerBad()  { return nvgRGBA(217, 107, 107, 28); }
+}
 
-        // --- WiFi Check ---
-        bool wifiConnected = false;
-        std::string ipAddress = "-";
-        std::string dnsServer = "-";
-        int wifiLevel = 0;
+// Check / X glyph drawn with nanovg (the bundled font has no vector check mark).
+enum class NtGlyph { Check, Cross };
+class NtGlyphIcon : public brls::Box {
+public:
+    NtGlyphIcon(NtGlyph g, NVGcolor color) : m_glyph(g), m_color(color) {}
+    void draw(NVGcontext* vg, float x, float y, float w, float h,
+              brls::Style style, brls::FrameContext* ctx) override {
+        brls::Box::draw(vg, x, y, w, h, style, ctx);
+        const float s  = (w < h) ? w : h;
+        const float cx = x + w * 0.5f, cy = y + h * 0.5f;
+        nvgBeginPath(vg);
+        nvgStrokeColor(vg, m_color);
+        nvgStrokeWidth(vg, s * 0.12f);
+        nvgLineCap(vg, NVG_ROUND);
+        nvgLineJoin(vg, NVG_ROUND);
+        if (m_glyph == NtGlyph::Check) {
+            nvgMoveTo(vg, cx - s * 0.24f, cy + s * 0.02f);
+            nvgLineTo(vg, cx - s * 0.06f, cy + s * 0.20f);
+            nvgLineTo(vg, cx + s * 0.26f, cy - s * 0.18f);
+        } else {
+            nvgMoveTo(vg, cx - s * 0.20f, cy - s * 0.20f);
+            nvgLineTo(vg, cx + s * 0.20f, cy + s * 0.20f);
+            nvgMoveTo(vg, cx + s * 0.20f, cy - s * 0.20f);
+            nvgLineTo(vg, cx - s * 0.20f, cy + s * 0.20f);
+        }
+        nvgStroke(vg);
+    }
+private:
+    NtGlyph  m_glyph;
+    NVGcolor m_color;
+};
+
+// Translucent host that keeps its render/run closures alive for the dialog's
+// lifetime and flags the alive guard false on teardown.
+class NtActivity : public brls::Activity {
+public:
+    NtActivity(brls::Box* content, std::shared_ptr<bool> alive,
+               std::vector<std::shared_ptr<void>> keep)
+        : brls::Activity(content), m_alive(std::move(alive)), m_keep(std::move(keep)) {}
+    bool isTranslucent() override { return true; }
+    ~NtActivity() override { if (m_alive) *m_alive = false; }
+private:
+    std::shared_ptr<bool> m_alive;
+    std::vector<std::shared_ptr<void>> m_keep;
+};
+
+struct NetTestResult {
+    bool wifiConnected = false;
+    std::string ip = "-", dns = "-";
+    int  wifiLevel = 0;
+    bool internetSkipped = false, internetOk = false;
+    long internetMs = 0;
+    bool serverConfigured = false, serverOk = false;
+    long serverMs = 0;
+    std::string serverUrl, serverName, serverVersion;
+    std::string testedAt;
+};
+
+// Runs the WiFi / Internet / Server checks (blocking; call off the UI thread).
+NetTestResult gatherNetTest() {
+    using namespace std::chrono;
+    NetTestResult r;
 
 #ifdef __vita__
-        SceNetCtlInfo netInfo;
-        if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_IP_ADDRESS, &netInfo) >= 0) {
-            wifiConnected = true;
-            ipAddress = std::string(netInfo.ip_address);
-        }
-        if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_RSSI_PERCENTAGE, &netInfo) >= 0) {
-            wifiLevel = netInfo.rssi_percentage;
-        }
-        SceNetCtlInfo dnsInfo {};
-        if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_PRIMARY_DNS, &dnsInfo) >= 0) {
-            dnsServer = std::string(dnsInfo.primary_dns);
-        }
+    SceNetCtlInfo netInfo;
+    if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_IP_ADDRESS, &netInfo) >= 0) {
+        r.wifiConnected = true;
+        r.ip = std::string(netInfo.ip_address);
+    }
+    if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_RSSI_PERCENTAGE, &netInfo) >= 0) {
+        r.wifiLevel = netInfo.rssi_percentage;
+    }
+    SceNetCtlInfo dnsInfo {};
+    if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_PRIMARY_DNS, &dnsInfo) >= 0) {
+        r.dns = std::string(dnsInfo.primary_dns);
+    }
 #else
-        // Desktop stub: assume connected
-        wifiConnected = true;
-        ipAddress = "127.0.0.1";
-        dnsServer = "8.8.8.8";
-        wifiLevel = 100;
+    r.wifiConnected = true;
+    r.ip = "127.0.0.1";
+    r.dns = "8.8.8.8";
+    r.wifiLevel = 100;
 #endif
 
-        results += "-- WiFi --\n";
-        if (wifiConnected) {
-            results += "Status: Connected\n";
-            results += "IP: " + ipAddress + "\n";
-            results += "DNS: " + dnsServer + "\n";
-            results += "Signal: " + std::to_string(wifiLevel) + "%\n";
-        } else {
-            results += "Status: Not Connected\n";
-        }
+    if (r.wifiConnected) {
+        HttpClient http;
+        http.setTimeout(10);
+        auto s = steady_clock::now();
+        HttpResponse resp = http.get("http://connectivitycheck.gstatic.com/generate_204");
+        auto e = steady_clock::now();
+        r.internetMs = static_cast<long>(duration_cast<milliseconds>(e - s).count());
+        r.internetOk = resp.success && (resp.statusCode == 204 || resp.statusCode == 200);
+    } else {
+        r.internetSkipped = true;
+    }
 
-        // --- Internet Check (DNS resolve + HTTP) ---
-        results += "\n-- Internet --\n";
-        if (wifiConnected) {
-            HttpClient http;
-            http.setTimeout(10);
-            auto start = std::chrono::steady_clock::now();
-            HttpResponse resp = http.get("http://connectivitycheck.gstatic.com/generate_204");
-            auto end = std::chrono::steady_clock::now();
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    Application& app = Application::getInstance();
+    std::string url = app.getServerUrl();
+    if (url.empty()) url = app.getActiveServerUrl();
+    if (!url.empty()) {
+        r.serverConfigured = true;
+        r.serverUrl = url;
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+        ServerInfo info;
+        auto s = steady_clock::now();
+        bool ok = client.fetchServerInfo(info);
+        auto e = steady_clock::now();
+        r.serverMs = static_cast<long>(duration_cast<milliseconds>(e - s).count());
+        r.serverOk = ok;
+        if (ok) { r.serverName = info.name; r.serverVersion = info.version; }
+    }
 
-            if (resp.success && (resp.statusCode == 204 || resp.statusCode == 200)) {
-                results += "Status: Reachable (" + std::to_string(ms) + "ms)\n";
-            } else {
-                results += "Status: Unreachable\n";
-                if (!resp.error.empty())
-                    results += "Error: " + resp.error + "\n";
-            }
-        } else {
-            results += "Skipped (no WiFi)\n";
-        }
+    std::time_t t = std::time(nullptr);
+    std::tm tmv {};
+#ifdef _WIN32
+    localtime_s(&tmv, &t);
+#else
+    localtime_r(&t, &tmv);
+#endif
+    char buf[16];
+    std::strftime(buf, sizeof(buf), "%H:%M:%S", &tmv);
+    r.testedAt = buf;
+    return r;
+}
 
-        // --- Server Check ---
-        results += "\n-- Server --\n";
-        Application& app = Application::getInstance();
-        std::string serverUrl = app.getServerUrl();
-        if (serverUrl.empty()) serverUrl = app.getActiveServerUrl();
+// Renders the verdict banner + chips + detail grid + footer into `panel`
+// (clearing it first, so "Run again" repopulates in place).
+void buildNetTestPanel(brls::Box* panel, const NetTestResult& r,
+                       std::function<void()> onRunAgain, std::function<void()> onClose) {
+    namespace c = ntcol;
+    panel->clearViews();
 
-        if (serverUrl.empty()) {
-            results += "No server URL configured.\n";
-        } else {
-            results += "URL: " + serverUrl + "\n";
+    const bool ok = r.serverOk;
+    const NVGcolor mark = ok ? c::success() : c::danger();
 
-            SuwayomiClient& client = SuwayomiClient::getInstance();
-            ServerInfo info;
+    // ---- Verdict banner ----
+    auto* banner = new brls::Box();
+    banner->setAxis(brls::Axis::ROW);
+    banner->setAlignItems(brls::AlignItems::CENTER);
+    banner->setPaddingTop(26); banner->setPaddingBottom(26);
+    banner->setPaddingLeft(28); banner->setPaddingRight(28);
+    banner->setCornerRadius(16);
+    banner->setBackgroundColor(ok ? c::bannerOk() : c::bannerBad());
 
-            auto start = std::chrono::steady_clock::now();
-            bool ok = client.fetchServerInfo(info);
-            auto end = std::chrono::steady_clock::now();
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    auto* circle = new brls::Box();
+    circle->setWidth(48); circle->setHeight(48);
+    circle->setCornerRadius(24);
+    circle->setJustifyContent(brls::JustifyContent::CENTER);
+    circle->setAlignItems(brls::AlignItems::CENTER);
+    circle->setBackgroundColor(mark);
+    circle->setMarginRight(16);
+    auto* glyph = new NtGlyphIcon(ok ? NtGlyph::Check : NtGlyph::Cross,
+                                  ok ? c::checkInk() : nvgRGB(255, 255, 255));
+    glyph->setWidth(28); glyph->setHeight(28);
+    circle->addView(glyph);
+    banner->addView(circle);
 
-            if (ok) {
-                results += "Status: Connected (" + std::to_string(ms) + "ms)\n";
-                results += "Server: " + info.name + " v" + info.version + "\n";
-                results += "Build: " + info.buildType + "\n";
-            } else {
-                results += "Status: Failed (" + std::to_string(ms) + "ms)\n";
-                results += "Could not reach server.\n";
-            }
-        }
+    auto* bcol = new brls::Box();
+    bcol->setAxis(brls::Axis::COLUMN);
+    bcol->setGrow(1.0f);
+    auto* btitle = new brls::Label();
+    btitle->setText(ok ? "Connected & healthy" : "Can't reach server");
+    btitle->setFontSize(19);
+    btitle->setTextColor(c::heading());
+    bcol->addView(btitle);
+    auto* bsub = new brls::Label();
+    std::string sub;
+    if (ok)                                   sub = "Server responded in " + std::to_string(r.serverMs) + "ms over Wi-Fi";
+    else if (!r.wifiConnected)                sub = "Wi-Fi not connected";
+    else if (!r.serverConfigured)             sub = "No server configured";
+    else if (!r.internetOk && !r.internetSkipped) sub = "No internet connection";
+    else                                      sub = "Server unreachable";
+    bsub->setText(sub);
+    bsub->setFontSize(13);
+    bsub->setTextColor(ok ? c::okSub() : c::danger());
+    bsub->setMarginTop(3);
+    bcol->addView(bsub);
+    banner->addView(bcol);
+    panel->addView(banner);
 
-        // Show results in a brls::Dialog (proper overlay, no page transition)
-        brls::sync([results]() {
-            brls::Dialog* dialog = new brls::Dialog("Network Test Results");
-            dialog->setCancelable(true);
+    // ---- Three chips ----
+    auto* chips = new brls::Box();
+    chips->setAxis(brls::Axis::ROW);
+    chips->setPaddingTop(18); chips->setPaddingBottom(18);
+    chips->setPaddingLeft(22); chips->setPaddingRight(22);
+    auto addChip = [&](const std::string& label, bool dotOk,
+                       const std::string& value, const std::string& caption, bool last) {
+        auto* chip = new brls::Box();
+        chip->setAxis(brls::Axis::COLUMN);
+        chip->setGrow(1.0f);
+        chip->setBackgroundColor(c::chipBg());
+        chip->setBorderColor(c::chipBorder());
+        chip->setBorderThickness(1.0f);
+        chip->setCornerRadius(12);
+        chip->setPaddingTop(13); chip->setPaddingBottom(13);
+        chip->setPaddingLeft(14); chip->setPaddingRight(14);
+        if (!last) chip->setMarginRight(10);
 
-            auto* contentBox = new brls::Box();
-            contentBox->setAxis(brls::Axis::COLUMN);
-            contentBox->setPadding(16);
+        auto* top = new brls::Box();
+        top->setAxis(brls::Axis::ROW);
+        top->setAlignItems(brls::AlignItems::CENTER);
+        auto* dot = new brls::Box();
+        dot->setWidth(8); dot->setHeight(8); dot->setCornerRadius(4);
+        dot->setBackgroundColor(dotOk ? c::success() : c::danger());
+        dot->setMarginRight(7);
+        top->addView(dot);
+        auto* lbl = new brls::Label();
+        lbl->setText(label); lbl->setFontSize(12); lbl->setTextColor(c::muted());
+        top->addView(lbl);
+        chip->addView(top);
 
-            // Split results by newline and add each as a separate label
-            std::istringstream stream(results);
-            std::string line;
-            while (std::getline(stream, line)) {
-                auto* label = new brls::Label();
-                if (line.empty()) {
-                    label->setText(" ");
-                    label->setFontSize(8);
-                } else if (line.find("--") == 0) {
-                    label->setText(line);
-                    label->setFontSize(16);
-                    label->setTextColor(Application::getInstance().getHeaderTextColor());
-                    label->setMarginTop(5);
-                } else {
-                    label->setText(line);
-                    label->setFontSize(15);
-                    label->setTextColor(nvgRGB(200, 200, 200));
-                }
-                label->setMarginBottom(2);
-                contentBox->addView(label);
-            }
+        auto* val = new brls::Label();
+        val->setText(value); val->setFontSize(19); val->setTextColor(c::heading());
+        val->setMarginTop(6);
+        chip->addView(val);
+        auto* cap = new brls::Label();
+        cap->setText(caption); cap->setFontSize(12); cap->setTextColor(c::muted());
+        cap->setMarginTop(2);
+        chip->addView(cap);
+        chips->addView(chip);
+    };
+    addChip("WIFI", r.wifiConnected, std::to_string(r.wifiLevel) + "%", "Signal strength", false);
+    addChip("INTERNET", r.internetOk,
+            r.internetSkipped ? "—" : std::to_string(r.internetMs) + "ms",
+            r.internetSkipped ? "Skipped" : "Reachable", false);
+    addChip("SERVER", r.serverOk,
+            r.serverConfigured ? std::to_string(r.serverMs) + "ms" : "—",
+            "Handshake", true);
+    panel->addView(chips);
 
-            dialog->addView(contentBox);
-            dialog->addButton("Close", []() {});
-            dialog->open();
+    // ---- Detail grid ----
+    auto* grid = new brls::Box();
+    grid->setAxis(brls::Axis::COLUMN);
+    grid->setPaddingTop(14); grid->setPaddingBottom(14);
+    grid->setPaddingLeft(26); grid->setPaddingRight(26);
+    auto addRow = [&](const std::string& key, const std::string& value) {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setPaddingTop(9); row->setPaddingBottom(9);
+        auto* k = new brls::Label();
+        k->setText(key); k->setFontSize(13); k->setTextColor(c::muted()); k->setWidth(150);
+        row->addView(k);
+        auto* v = new brls::Label();
+        v->setText(value); v->setFontSize(13); v->setTextColor(c::body()); v->setGrow(1.0f);
+        row->addView(v);
+        grid->addView(row);
+        auto* line = new brls::Box();
+        line->setHeight(1);
+        line->setAlignSelf(brls::AlignSelf::STRETCH);
+        line->setBackgroundColor(c::rowLine());
+        grid->addView(line);
+    };
+    addRow("WiFi IP", r.ip);
+    addRow("DNS", r.dns);
+    addRow("Server URL", r.serverConfigured ? r.serverUrl : "Not configured");
+    addRow("Server", (r.serverOk && !r.serverName.empty())
+                         ? (r.serverName + " v" + r.serverVersion) : "-");
+    addRow("Tested", r.testedAt);
+    panel->addView(grid);
+
+    // ---- Footer ----
+    auto* footer = new brls::Box();
+    footer->setAxis(brls::Axis::ROW);
+    footer->setAlignItems(brls::AlignItems::CENTER);
+    footer->setPaddingTop(14); footer->setPaddingBottom(14);
+    footer->setPaddingLeft(22); footer->setPaddingRight(22);
+
+    auto* again = new brls::Box();
+    again->setWidth(52); again->setHeight(44);
+    again->setCornerRadius(11);
+    again->setJustifyContent(brls::JustifyContent::CENTER);
+    again->setAlignItems(brls::AlignItems::CENTER);
+    again->setBackgroundColor(c::chipBg());
+    again->setBorderColor(c::chipBorder());
+    again->setBorderThickness(1.0f);
+    again->setHighlightCornerRadius(11);
+    again->setFocusable(true);
+    again->setMarginRight(10);
+    auto* refreshImg = new brls::Image();
+    refreshImg->setWidth(22); refreshImg->setHeight(22);
+    refreshImg->setScalingType(brls::ImageScalingType::FIT);
+    refreshImg->setImageFromRes("icons/refresh.png");
+    again->addView(refreshImg);
+    again->registerClickAction([onRunAgain](brls::View*) { if (onRunAgain) onRunAgain(); return true; });
+    again->addGestureRecognizer(new brls::TapGestureRecognizer(again));
+    footer->addView(again);
+
+    auto* close = new brls::Box();
+    close->setHeight(44);
+    close->setGrow(1.0f);
+    close->setCornerRadius(11);
+    close->setJustifyContent(brls::JustifyContent::CENTER);
+    close->setAlignItems(brls::AlignItems::CENTER);
+    close->setBackgroundColor(c::accent());
+    close->setHighlightCornerRadius(11);
+    close->setFocusable(true);
+    auto* closeLbl = new brls::Label();
+    closeLbl->setText("Close");
+    closeLbl->setFontSize(14);
+    closeLbl->setTextColor(c::accentInk());
+    close->addView(closeLbl);
+    close->registerClickAction([onClose](brls::View*) { if (onClose) onClose(); return true; });
+    close->addGestureRecognizer(new brls::TapGestureRecognizer(close));
+    footer->addView(close);
+    panel->addView(footer);
+
+    brls::Application::giveFocus(close);
+}
+
+} // namespace
+
+void SettingsTab::runNetworkTest() {
+    // Dialog shell (scrim + panel); "Run again" repopulates the panel in place.
+    auto* scrim = new brls::Box();
+    scrim->setAxis(brls::Axis::COLUMN);
+    scrim->setWidthPercentage(100.0f);
+    scrim->setHeightPercentage(100.0f);
+    scrim->setJustifyContent(brls::JustifyContent::CENTER);
+    scrim->setAlignItems(brls::AlignItems::CENTER);
+    scrim->setBackgroundColor(ntcol::scrim());
+
+    auto* panel = new brls::Box();
+    panel->setAxis(brls::Axis::COLUMN);
+    float panelW = 520.0f;
+    const float sw = brls::Application::contentWidth;
+    if (panelW + 80.0f > sw) panelW = sw - 80.0f;
+    panel->setWidth(panelW);
+    panel->setBackgroundColor(ntcol::panel());
+    panel->setBorderColor(ntcol::border());
+    panel->setBorderThickness(1.0f);
+    panel->setCornerRadius(16);
+    panel->setShadowType(brls::ShadowType::GENERIC);
+    scrim->addView(panel);
+
+    auto dialogAlive = std::make_shared<bool>(true);
+    scrim->addGestureRecognizer(new brls::TapGestureRecognizer(scrim,
+        []() { brls::Application::popActivity(); }));
+    scrim->registerAction("Back", brls::ControllerButton::BUTTON_B,
+        [](brls::View*) { brls::Application::popActivity(); return true; });
+
+    auto render  = std::make_shared<std::function<void(const NetTestResult&)>>();
+    auto runTest = std::make_shared<std::function<void()>>();
+    std::weak_ptr<std::function<void()>> runTestWeak = runTest;
+
+    *render = [panel, runTestWeak](const NetTestResult& r) {
+        buildNetTestPanel(panel, r,
+            [runTestWeak]() { if (auto rt = runTestWeak.lock()) (*rt)(); },
+            []() { brls::Application::popActivity(); });
+    };
+
+    *runTest = [panel, render, dialogAlive]() {
+        panel->clearViews();
+        auto* loading = new brls::Label();
+        loading->setText("Running network test…");
+        loading->setFontSize(15);
+        loading->setTextColor(ntcol::body());
+        loading->setMarginTop(30); loading->setMarginBottom(30);
+        loading->setMarginLeft(28); loading->setMarginRight(28);
+        panel->addView(loading);
+
+        platform::launchThread([render, dialogAlive]() {
+            NetTestResult r = gatherNetTest();
+            brls::sync([render, dialogAlive, r]() {
+                if (!*dialogAlive) return;
+                (*render)(r);
+            });
         });
-    });
+    };
+
+    brls::Application::pushActivity(new NtActivity(scrim, dialogAlive, {render, runTest}));
+    (*runTest)();
 }
 
 void SettingsTab::showCategoryManagementDialog() {
