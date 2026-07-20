@@ -24,14 +24,17 @@
 #include <psp2/net/netctl.h>
 #endif
 
-// Local-IP discovery on POSIX desktop/Android (Switch/Windows/Vita don't have
-// getifaddrs; they fall back to honest "unknown" rather than fabricated data).
-#if defined(__linux__) || defined(__ANDROID__)
+// Local-IP discovery on desktop Linux via getifaddrs. Android's NDK only
+// declares getifaddrs at API >= 24 (this build targets 21), and Switch/Windows/
+// Vita don't have it either — those fall back to honest "unknown" rather than
+// fabricated data.
+#if defined(__linux__) && !defined(__ANDROID__)
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#define VS_HAVE_GETIFADDRS 1
 #endif
 
 namespace vitasuwayomi {
@@ -2107,9 +2110,9 @@ NetTestResult gatherNetTest() {
     if (sceNetCtlInetGetInfo(SCE_NETCTL_INFO_GET_PRIMARY_DNS, &dnsInfo) >= 0) {
         r.dns = std::string(dnsInfo.primary_dns);
     }
-#elif defined(__linux__) || defined(__ANDROID__)
-    // Desktop Linux / Android: first non-loopback IPv4 via getifaddrs. Signal
-    // and DNS aren't portably available here, so they stay "unknown".
+#elif defined(VS_HAVE_GETIFADDRS)
+    // Desktop Linux: first non-loopback IPv4 via getifaddrs. Signal and DNS
+    // aren't portably available here, so they stay "unknown".
     struct ifaddrs* ifap = nullptr;
     if (getifaddrs(&ifap) == 0) {
         for (struct ifaddrs* ifa = ifap; ifa != nullptr; ifa = ifa->ifa_next) {
@@ -2405,7 +2408,12 @@ void SettingsTab::runNetworkTest() {
 
     *render = [panel, runTestWeak](const NetTestResult& r) {
         buildNetTestPanel(panel, r,
-            [runTestWeak]() { if (auto rt = runTestWeak.lock()) (*rt)(); },
+            // Defer the re-run: Run-again's click handler lives on the button
+            // that clearViews() would destroy, so run it on the next frame
+            // instead of tearing the panel down mid-click (was a use-after-free).
+            [runTestWeak]() {
+                brls::sync([runTestWeak]() { if (auto rt = runTestWeak.lock()) (*rt)(); });
+            },
             []() { brls::Application::popActivity(); });
     };
 
@@ -3280,7 +3288,11 @@ void SettingsTab::showStatisticsView() {
 
     *render = [content, runSyncWeak](const StatsData& d) {
         buildStatsDashboard(content, d,
-            [runSyncWeak]() { if (auto r = runSyncWeak.lock()) (*r)(); },
+            // Defer: Sync's click handler lives on the pill that clearViews()
+            // destroys, so run it next frame rather than mid-click.
+            [runSyncWeak]() {
+                brls::sync([runSyncWeak]() { if (auto r = runSyncWeak.lock()) (*r)(); });
+            },
             []() {
                 std::vector<OptionRow> rows;
                 rows.push_back({ "cross.png", "Reset", "", true, true, []() {
