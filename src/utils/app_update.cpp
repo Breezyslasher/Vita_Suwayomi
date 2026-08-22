@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -95,6 +96,74 @@ std::atomic<bool> s_busy{false};    // one check/install at a time
 std::atomic<bool> s_cancel{false};  // the progress dialog's Cancel
 std::string       s_selfPath;       // argv[0], captured in main()
 
+// ── SHA-256 (FIPS 180-4) ────────────────────────────────────────────────────
+// Self-contained on purpose: the updater must be able to verify the artifact on
+// every platform, including the Windows build, which links no TLS library.
+struct Sha256 {
+    uint32_t s[8]; uint64_t len; uint8_t buf[64]; size_t n;
+    static uint32_t ror(uint32_t x, int c) { return (x >> c) | (x << (32 - c)); }
+    void init() {
+        static const uint32_t iv[8] = {0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
+                                       0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19};
+        for (int i = 0; i < 8; i++) s[i] = iv[i];
+        len = 0; n = 0;
+    }
+    void block(const uint8_t* p) {
+        static const uint32_t k[64] = {
+            0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+            0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+            0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+            0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+            0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+            0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+            0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+            0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2};
+        uint32_t w[64];
+        for (int i = 0; i < 16; i++)
+            w[i] = (uint32_t)p[i*4] << 24 | (uint32_t)p[i*4+1] << 16 |
+                   (uint32_t)p[i*4+2] << 8 | p[i*4+3];
+        for (int i = 16; i < 64; i++) {
+            uint32_t s0 = ror(w[i-15],7) ^ ror(w[i-15],18) ^ (w[i-15] >> 3);
+            uint32_t s1 = ror(w[i-2],17) ^ ror(w[i-2],19) ^ (w[i-2] >> 10);
+            w[i] = w[i-16] + s0 + w[i-7] + s1;
+        }
+        uint32_t a=s[0],b=s[1],c=s[2],d=s[3],e=s[4],f=s[5],g=s[6],h=s[7];
+        for (int i = 0; i < 64; i++) {
+            uint32_t S1 = ror(e,6) ^ ror(e,11) ^ ror(e,25);
+            uint32_t ch = (e & f) ^ ((~e) & g);
+            uint32_t t1 = h + S1 + ch + k[i] + w[i];
+            uint32_t S0 = ror(a,2) ^ ror(a,13) ^ ror(a,22);
+            uint32_t mj = (a & b) ^ (a & c) ^ (b & c);
+            uint32_t t2 = S0 + mj;
+            h=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
+        }
+        s[0]+=a; s[1]+=b; s[2]+=c; s[3]+=d; s[4]+=e; s[5]+=f; s[6]+=g; s[7]+=h;
+    }
+    void update(const uint8_t* p, size_t l) {
+        len += l;
+        while (l) {
+            size_t take = 64 - n; if (take > l) take = l;
+            memcpy(buf + n, p, take); n += take; p += take; l -= take;
+            if (n == 64) { block(buf); n = 0; }
+        }
+    }
+    std::string hex() {
+        uint64_t bits = len * 8;
+        uint8_t pad = 0x80; update(&pad, 1);
+        uint8_t z = 0; while (n != 56) update(&z, 1);
+        uint8_t b8[8]; for (int i = 0; i < 8; i++) b8[i] = (uint8_t)(bits >> (56 - i*8));
+        update(b8, 8);
+        static const char* hx = "0123456789abcdef";
+        std::string out; out.reserve(64);
+        for (int i = 0; i < 8; i++)
+            for (int j = 3; j >= 0; j--) {
+                uint8_t byte = (uint8_t)(s[i] >> (j*8));
+                out += hx[byte >> 4]; out += hx[byte & 15];
+            }
+        return out;
+    }
+};
+
 // A parsed GitHub release.
 struct ReleaseInfo {
     std::string tag;        // tag_name (e.g. "Beta-2.2.1" / "v2.2.1")
@@ -102,6 +171,7 @@ struct ReleaseInfo {
     std::string assetUrl;   // browser_download_url of the matched asset ("" ⇒ none)
     std::string assetName;  // matched asset filename
     int64_t     assetSize = 0;
+    std::string digest;     // "sha256:<hex>" published by GitHub for the asset
     std::string notes;      // raw markdown body
     bool        prerelease = false;
 };
@@ -340,6 +410,37 @@ std::string assetSuffix() {
 #endif
 }
 
+#if VS_MACOS_DESKTOP || defined(_WIN32)
+// Quote a path for embedding in a generated helper script. These paths are our
+// own install/data locations, not attacker-controlled, but a user directory can
+// legitimately contain a quote (e.g. /Users/O'Brien) which would otherwise
+// break — or silently truncate — the single-quoted assignment.
+#if VS_MACOS_DESKTOP
+// POSIX sh: close the quote, emit an escaped quote, reopen.  ' -> '\''
+std::string shQuote(const std::string& in) {
+    std::string out = "'";
+    for (char c : in) {
+        if (c == '\'') out += "'\\''";
+        else           out += c;
+    }
+    out += "'";
+    return out;
+}
+#endif
+#if defined(_WIN32)
+// PowerShell single-quoted string: a literal quote is written by doubling it.
+std::string psQuote(const std::string& in) {
+    std::string out = "'";
+    for (char c : in) {
+        if (c == '\'') out += "''";
+        else           out += c;
+    }
+    out += "'";
+    return out;
+}
+#endif
+#endif
+
 // ── Browser fallback ────────────────────────────────────────────────────────
 void openUrl(const std::string& url) {
 #if defined(_WIN32)
@@ -427,23 +528,32 @@ void showMessage(const std::string& msg) {
 }
 
 // ── Download the asset with progress + one retry ────────────────────────────
+// Hashes the bytes as they stream past, so the integrity check costs no extra
+// pass over a file that can be hundreds of MB on a memory-tight console.
 bool downloadAsset(const ReleaseInfo& rel, const std::string& destPath,
-                   const std::shared_ptr<ProgressUI>& ui, std::string& err) {
+                   const std::shared_ptr<ProgressUI>& ui, std::string& err,
+                   std::string& gotDigest) {
     const int64_t total = rel.assetSize;
 
     auto attempt = [&]() -> bool {
         std::atomic<int64_t> got{0};
         std::atomic<int64_t> lastShown{-1};
-        return platform::writeFileStreamed(destPath, [&](platform::WriteCallback write) -> bool {
+        Sha256 hash;
+        hash.init();
+        bool ok = platform::writeFileStreamed(destPath, [&](platform::WriteCallback write) -> bool {
             HttpClient client;
             client.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
             client.setTimeout(300);
             client.setFollowRedirects(true);
+            // Downloading executable code from the public internet: the
+            // certificate must be verified (see setVerifyTls).
+            client.setVerifyTls(true);
             int64_t liveTotal = total;
             return client.downloadFile(rel.assetUrl,
                 [&](const char* data, size_t size) -> bool {
                     if (s_cancel.load()) { err = "Cancelled"; return false; }
                     if (!write(data, size)) { err = "Write failed"; return false; }
+                    hash.update(reinterpret_cast<const uint8_t*>(data), size);
                     int64_t g = (got += (int64_t)size);
                     int pct = (liveTotal > 0) ? (int)((g * 100) / liveTotal) : -1;
                     if (pct != lastShown.load()) {
@@ -457,6 +567,8 @@ bool downloadAsset(const ReleaseInfo& rel, const std::string& destPath,
                 },
                 [&](int64_t sz) { if (sz > 0) liveTotal = sz; });
         });
+        if (ok) gotDigest = hash.hex();
+        return ok;
     };
 
     if (s_cancel.load()) { err = "Cancelled"; return false; }
@@ -649,7 +761,8 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
     script += "where tar >nul 2>&1\r\n";
     script += "if not errorlevel 1 ( tar -xf \"" + zip + "\" -C \"" + dir + "\" ) ^\r\n";
     script += "else ( powershell -NoProfile -NonInteractive -Command ^\r\n";
-    script += "  \"Expand-Archive -LiteralPath '" + zip + "' -DestinationPath '" + dir + "' -Force\" )\r\n";
+    script += "  \"Expand-Archive -LiteralPath " + psQuote(zip) +
+              " -DestinationPath " + psQuote(dir) + " -Force\" )\r\n";
     script += "start \"\" /D \"" + dir + "\" \"" + dir + "\\VitaSuwayomi.exe\"\r\n";
     script += "del \"" + zip + "\" >nul 2>&1\r\n";
     script += "del \"%~f0\" >nul 2>&1\r\n";
@@ -737,7 +850,8 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
         std::string sh = platform::path("update.sh");
         std::string script =
             "#!/bin/sh\n"
-            "PID=" + std::to_string(getpid()) + "; DMG='" + path + "'; APP='" + bundle + "'\n"
+            "PID=" + std::to_string(getpid()) +
+            "; DMG=" + shQuote(path) + "; APP=" + shQuote(bundle) + "\n"
             "while kill -0 \"$PID\" 2>/dev/null; do sleep 1; done\n"
             "MNT=\"$(mktemp -d /tmp/vswy_dmg.XXXXXX)\"\n"
             "if hdiutil attach \"$DMG\" -nobrowse -readonly -mountpoint \"$MNT\" >/dev/null 2>&1; then\n"
@@ -803,7 +917,8 @@ void startInstall(const ReleaseInfo& rel) {
 #endif
 
         std::string err;
-        bool ok = downloadAsset(rel, dest, ui, err);
+        std::string gotDigest;
+        bool ok = downloadAsset(rel, dest, ui, err, gotDigest);
         if (!ok) {
             finishProgress(ui, [err]() {
                 if (err != "Cancelled")
@@ -812,8 +927,41 @@ void startInstall(const ReleaseInfo& rel) {
             s_busy.store(false);
             return;
         }
-        // Bytes are on disk — from here Cancel is disabled (a half-written
-        // target is dangerous).
+
+        // Integrity gate — never install bytes we haven't checked. GitHub
+        // publishes a per-asset SHA-256 ("sha256:<hex>") in the same feed; we
+        // hashed the stream as it downloaded. A mismatch means the file was
+        // corrupted or substituted, so delete it and stop rather than hand it
+        // to an installer that will execute it.
+        {
+            std::string want = rel.digest;
+            const std::string kPrefix = "sha256:";
+            if (want.rfind(kPrefix, 0) == 0) want = want.substr(kPrefix.size());
+            for (auto& c : want) c = (char)tolower((unsigned char)c);
+
+            if (want.empty()) {
+                // Older releases carry no digest. The feed itself came over a
+                // verified connection, so continue, but say so in the log.
+                brls::Logger::warning("app_update: release {} publishes no asset digest; "
+                                      "installing without a checksum check", rel.tag);
+            } else if (want != gotDigest) {
+                brls::Logger::error("app_update: digest mismatch for {} (want {}, got {})",
+                                    rel.assetName, want, gotDigest);
+                platform::deleteFile(dest);
+                finishProgress(ui, []() {
+                    showMessage("Update aborted: the downloaded file failed its integrity "
+                                "check.\n\nIt was deleted. Try again, and if this keeps "
+                                "happening download the release from GitHub instead.");
+                });
+                s_busy.store(false);
+                return;
+            } else {
+                brls::Logger::info("app_update: verified SHA-256 of {}", rel.assetName);
+            }
+        }
+
+        // Bytes are on disk and verified — from here Cancel is disabled (a
+        // half-written target is dangerous).
         installDownloaded(rel, dest, ui);
         s_busy.store(false);
     });
@@ -882,6 +1030,7 @@ bool parseFeed(const std::string& body, ReleaseInfo& rel) {
                             r.assetUrl  = jsonString(a, "browser_download_url");
                             r.assetName = name;
                             r.assetSize = jsonInt(a, "size");
+                            r.digest    = jsonString(a, "digest");
                         }
                     });
                 }
@@ -930,6 +1079,9 @@ void checkForUpdates(bool manual) {
         client.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
         client.setTimeout(20);
         client.setFollowRedirects(true);
+        // The release feed decides what we download and install, so it must
+        // come over a verified connection (see setVerifyTls).
+        client.setVerifyTls(true);
 
         HttpRequest req;
         req.url = std::string("https://api.github.com/repos/") + kRepo + "/releases?per_page=10";

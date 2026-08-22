@@ -71,6 +71,19 @@ public:
     void setFollowRedirects(bool follow) { m_followRedirects = follow; }
     void setUserAgent(const std::string& ua) { m_userAgent = ua; }
 
+    /// Enforce TLS certificate verification (peer + hostname) for this client.
+    ///
+    /// Off by default: a Suwayomi server is typically the user's own machine on
+    /// the LAN, often over plain HTTP or with a self-signed certificate, so
+    /// forcing verification there would break ordinary setups.
+    ///
+    /// It MUST be on for anything fetched from the public internet — above all
+    /// the in-app updater, which downloads code that is then installed and run.
+    /// Without verification a network attacker can substitute the release feed
+    /// and the artifact. Uses the bundled CA bundle when present, else the
+    /// platform's own store; if neither can verify, the request fails closed.
+    void setVerifyTls(bool verify) { m_verifyTls = verify; }
+
     // Simple get that returns body directly
     bool get(const std::string& url, std::string& response);
 
@@ -92,6 +105,7 @@ private:
     void* m_curl = nullptr;
     int m_timeout = 30;
     bool m_followRedirects = true;
+    bool m_verifyTls = false;
     std::string m_userAgent;
     std::map<std::string, std::string> m_defaultHeaders;
 
