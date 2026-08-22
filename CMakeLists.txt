@@ -73,10 +73,29 @@ endif()
 # Project (after toolchain so cross-compilers are in effect)
 # Pass -DAPP_VERSION=X.Y.Z from CI to override the default.
 # ---------------------------------------------------------------------------
-if(NOT DEFINED APP_VERSION)
-    set(APP_VERSION "1.0.0")
+# Two version outputs from one source (the VERSION file), resolved by CI:
+#   APP_DISPLAY_VERSION — human string shown in-app (e.g. "Beta 2.2.1").
+#   APP_VERSION         — numeric X.Y.Z[.build] for project()/param.sfo.
+# CI passes both explicitly; builds that reach cmake indirectly (Flatpak) or
+# local dev fall back to the VERSION file so the Settings page still matches the
+# release. Reading the file is a fallback only — never the primary path in CI.
+if(NOT DEFINED APP_DISPLAY_VERSION OR APP_DISPLAY_VERSION STREQUAL "")
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" APP_DISPLAY_VERSION)
+        string(STRIP "${APP_DISPLAY_VERSION}" APP_DISPLAY_VERSION)
+    endif()
+endif()
+if(NOT DEFINED APP_VERSION OR APP_VERSION STREQUAL "")
+    # Derive the numeric version from the display string (drop any label/prefix).
+    string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" APP_VERSION "${APP_DISPLAY_VERSION}")
+    if(APP_VERSION STREQUAL "")
+        set(APP_VERSION "1.0.0")
+    endif()
 endif()
 string(REGEX REPLACE "^v" "" APP_VERSION "${APP_VERSION}")
+if(NOT DEFINED APP_DISPLAY_VERSION OR APP_DISPLAY_VERSION STREQUAL "")
+    set(APP_DISPLAY_VERSION "${APP_VERSION}")
+endif()
 project(VitaSuwayomi VERSION ${APP_VERSION} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -276,6 +295,7 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     VITA_SUWAYOMI_VERSION=\"${APP_VERSION}\"
+    VITA_SUWAYOMI_DISPLAY_VERSION=\"${APP_DISPLAY_VERSION}\"
 )
 
 # ---------------------------------------------------------------------------

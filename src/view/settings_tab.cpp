@@ -14,6 +14,13 @@
 #include "utils/http_client.hpp"
 #include "utils/app_update.hpp"
 #include "utils/perf_overlay.hpp"
+
+// The Settings page shows the human display version (e.g. "Beta 2.2.1") so it
+// matches the release/package version. Falls back to the numeric version for
+// builds that didn't define the display macro.
+#ifndef VITA_SUWAYOMI_DISPLAY_VERSION
+#define VITA_SUWAYOMI_DISPLAY_VERSION VITA_SUWAYOMI_VERSION
+#endif
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -206,7 +213,7 @@ SettingsTab::SettingsTab() {
     // Version readout at the bottom of the rail (non-focusable), in place of a
     // dedicated About section.
     m_railBox->addView(makeRailInfoRow("options.png",
-                                       std::string("VitaSuwayomi ") + VITA_SUWAYOMI_VERSION));
+                                       std::string("VitaSuwayomi ") + VITA_SUWAYOMI_DISPLAY_VERSION));
 
     showSection(0);
 }
@@ -1900,7 +1907,7 @@ void SettingsTab::createAboutSection() {
     // Version info
     auto* versionCell = new brls::DetailCell();
     versionCell->setText("Version");
-    versionCell->setDetailText(VITA_SUWAYOMI_VERSION);
+    versionCell->setDetailText(VITA_SUWAYOMI_DISPLAY_VERSION);
     m_contentBox->addView(versionCell);
 
     // Check for Updates button

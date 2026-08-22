@@ -338,7 +338,8 @@ jobs:
       - name: Build
         run: |
           cmake -B build -G Ninja -DPLATFORM_PSV=ON \
-            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }} \
+            -DAPP_DISPLAY_VERSION="${{ needs.resolve-version.outputs.version }}"
           cmake --build build
 
       - name: Upload VPK
@@ -425,7 +426,9 @@ jobs:
       # Resources are loaded via APK assets (see build.gradle syncBorealisResources).
       run: |
         ${{ github.workspace }}/lib/borealis/build_libromfs_generator.sh
-        cd app/platform/android && ./gradlew assembleRelease
+        cd app/platform/android && ./gradlew assembleRelease \
+          -PappVersion="${{ needs.resolve-version.outputs.version_number }}" \
+          -PappDisplayVersion="${{ needs.resolve-version.outputs.version }}"
     - name: Upload dist
       uses: actions/upload-artifact@v4
       with:
@@ -447,6 +450,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      # The manifest can't see CI vars and builds the app module from the
+      # checkout (source type: dir), so stamp the resolved version into VERSION
+      # first — the module's cmake reads it via the VERSION-file fallback, so the
+      # in-app Settings version matches the release instead of defaulting.
+      - name: Stamp the CI-resolved version into VERSION
+        run: echo "${{ needs.resolve-version.outputs.version }}" > VERSION
       - name: Build Flatpak bundle
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
@@ -492,7 +501,8 @@ jobs:
       - name: Build and package AppImage
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON \
-            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }} \
+            -DAPP_DISPLAY_VERSION="${{ needs.resolve-version.outputs.version }}"
           cmake --build build
 
           # Bundle non-system shared deps next to the binary so the AppImage
@@ -616,6 +626,7 @@ jobs:
           cmake -B build -G Ninja \
             -DPLATFORM_SWITCH=ON \
             -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }} \
+            -DAPP_DISPLAY_VERSION="${{ needs.resolve-version.outputs.version }}" \
             ${{ matrix.cmake_extra }}
           cmake --build build
       - name: Upload NRO
@@ -650,7 +661,8 @@ jobs:
           OPENORBIS: /opt/pacbrew/ps4/openorbis
         run: |
           cmake -B build -DPLATFORM_PS4=ON \
-            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }} \
+            -DAPP_DISPLAY_VERSION="${{ needs.resolve-version.outputs.version }}"
           cmake --build build
       - name: Upload PS4 artifacts
         uses: actions/upload-artifact@v4
@@ -686,7 +698,8 @@ jobs:
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON \
             -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=${{ matrix.target }} \
-            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }} \
+            -DAPP_DISPLAY_VERSION="${{ needs.resolve-version.outputs.version }}"
           cmake --build build
       - name: Bundle macOS dylibs
         run: |
@@ -850,7 +863,8 @@ jobs:
       - name: Build
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_SYSTEM_GLFW=ON -DUSE_D3D11=ON \
-            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }} \
+            -DAPP_DISPLAY_VERSION="${{ needs.resolve-version.outputs.version }}"
           cmake --build build
       - name: Bundle runtime DLLs
         run: |
@@ -926,7 +940,8 @@ jobs:
       - name: Build
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON \
-            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }} \
+            -DAPP_DISPLAY_VERSION="${{ needs.resolve-version.outputs.version }}"
           cmake --build build
           PKGROOT="pkgroot"
           rm -rf "$PKGROOT"
@@ -992,7 +1007,8 @@ jobs:
       - name: Build
         run: |
           cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON \
-            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }} \
+            -DAPP_DISPLAY_VERSION="${{ needs.resolve-version.outputs.version }}"
           cmake --build build
           tar --zstd -cf VitaSuwayomi-${{ github.run_number }}.pkg.tar.zst -C build VitaSuwayomi resources
       - name: Upload aur artifact
