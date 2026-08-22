@@ -474,10 +474,14 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
     std::filesystem::rename(path, target, ec);
     if (ec) { std::filesystem::copy_file(path, target,
               std::filesystem::copy_options::overwrite_existing, ec); }
-    finishProgress(ui, []() {
-        showMessage("Update installed — relaunch from hbmenu to use it.");
+    // Auto-close, and chain-load the fresh NRO where hbloader supports it (a
+    // real auto-relaunch; a clean quit to hbmenu otherwise). No dialog.
+    finishProgress(ui, [target]() {
+        if (envHasNextLoad())
+            envSetNextLoad(target.c_str(), target.c_str());
+        brls::Application::quit();
     });
-    return false;
+    return true;
 
 #elif defined(__vita__) || defined(__PSV__)
     // A title cannot promote over itself (the installer returns 0x80101114
@@ -503,18 +507,14 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
         });
         return false;
     }
-    // Stub installed. Launch it and quit — it takes over from here.
+    // Stub installed. Launch it and quit immediately — no dialog of ours; the
+    // stub promotes the update while we're closed and relaunches us. (The Vita
+    // shell shows its own "application will close" prompt for the cross-title
+    // launch; that's the platform floor, not ours.)
     setProgress(ui, "Installing update…");
     finishProgress(ui, []() {
-        auto* d = new brls::Dialog(
-            "Installing the update.\n\nVitaSuwayomi will close and reopen on its own "
-            "in a few seconds. If it doesn't, relaunch it from the LiveArea.");
-        d->setCancelable(false);
-        d->addButton("OK", []() {
-            vita::launchTitle("VSWYUPD01");
-            brls::Application::quit();
-        });
-        d->open();
+        vita::launchTitle("VSWYUPD01");
+        brls::Application::quit();
     });
     return true;
 
@@ -609,24 +609,22 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
             });
             return true;
         }
-        case LinuxPkg::Deb: {
+        case LinuxPkg::Deb:
+        case LinuxPkg::Aur: {
+            // Hand the package to the system installer, then quit immediately —
+            // dpkg/pacman can't swap the binary under a live process, and a
+            // lingering window would leave the old build running. No dialog; the
+            // detached xdg-open survives the quit. The user reopens after the
+            // system install completes.
             setProgress(ui, "Opening installer…");
             std::string p = path;
             finishProgress(ui, [p]() {
-                if (fork() == 0) { setsid();
+                pid_t pid = fork();
+                if (pid == 0) { setsid();
                     execlp("xdg-open", "xdg-open", p.c_str(), (char*)nullptr); _exit(127); }
-                showMessage("Your package installer should open to finish the update.");
+                brls::Application::quit();
             });
-            return false;
-        }
-        case LinuxPkg::Aur: {
-            std::string p = path;
-            finishProgress(ui, [p]() {
-                showMessage("Downloaded to:\n" + p +
-                            "\n\nInstall with:  sudo pacman -U \"" + p + "\"\n"
-                            "(or update via your AUR helper, e.g. yay -Syu)");
-            });
-            return false;
+            return true;
         }
         default: {
             std::string p = path;
@@ -825,6 +823,13 @@ void checkForUpdates(bool manual) {
         return;
     }
     s_cancel.store(false);
+
+#if defined(__vita__) || defined(__PSV__)
+    // Garbage-collect the updater stub left installed by a previous update —
+    // always from the main app, never the stub itself (a title can't uninstall
+    // its own running self). No-op on a normal boot when the stub isn't present.
+    vita::removeUpdaterStub();
+#endif
 
     if (manual) brls::Application::notify("Checking for updates…");
 
