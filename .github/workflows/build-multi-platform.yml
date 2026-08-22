@@ -250,25 +250,89 @@ jobs:
     name: PS Vita
     runs-on: ubuntu-latest
     container:
-      image: vitasdk/vitasdk:latest
+      # Pinned, not :latest. A rolling rebuild of :latest moved the base distro
+      # (breaking "apk add") and swapped vdpm onto pacman in the same week. The
+      # 2026.08 series is what switchfin builds its vita-packages against, so it
+      # matches the *-vita.pkg.tar.xz assets fetched below.
+      image: vitasdk/vitasdk:2026.08
 
     steps:
       - name: Install build requirements
-        run: apk update && apk add cmake ninja git zstd tar pkgconf
+        run: |
+          set -eu
+          pkgs_apk="cmake ninja git zstd tar pkgconf"
+          pkgs_apt="cmake ninja-build git zstd tar pkg-config"
+          if   command -v apk     >/dev/null 2>&1; then apk update && apk add $pkgs_apk
+          elif command -v apt-get >/dev/null 2>&1; then apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $pkgs_apt
+          elif command -v dnf     >/dev/null 2>&1; then dnf install -y cmake ninja-build git zstd tar pkgconf-pkg-config
+          elif command -v pacman  >/dev/null 2>&1; then pacman -Sy --noconfirm cmake ninja git zstd tar pkgconf
+          else echo "No supported package manager found; relying on the image's toolchain"
+          fi
+          # wget is used by the dependency step and isn't in every base.
+          if ! command -v wget >/dev/null 2>&1; then
+            if   command -v apk     >/dev/null 2>&1; then apk add wget
+            elif command -v apt-get >/dev/null 2>&1; then apt-get install -y --no-install-recommends wget
+            fi
+          fi
+          for tool in cmake ninja git wget; do
+            command -v "$tool" >/dev/null 2>&1 || { echo "::error::$tool missing after dependency install"; exit 1; }
+          done
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
+      - name: Cache Vita portlibs
+        id: cache-vita-portlibs
+        uses: actions/cache@v4
+        with:
+          path: portlib-cache
+          # The key IS the pin list, so bumping a version misses and refetches.
+          key: vita-portlibs-mbedtls-3.6.7-1_curl-8.16.0-3_ffmpeg-n6.0-3_mpv-0.36.0-3
+
       - name: Install Vita dependencies
         env:
           BASE_URL: https://github.com/dragonflylee/switchfin/releases/download/vita-packages
         run: |
+          set -eu
+          # vita-packages is ROLLING — version bumps REPLACE assets, so stale pins
+          # 404. Use *-vita.pkg.tar.xz (real pacman packages), NOT the legacy
+          # *-arm.tar.xz bare sysroots (no .PKGINFO → "invalid or corrupted package").
+          fetch() {
+            if command -v curl >/dev/null 2>&1; then
+              curl -fL --retry 4 --retry-all-errors --speed-limit 102400 --speed-time 30 -o "$2" "$1"
+            else
+              wget --tries=4 --read-timeout=30 -O "$2" "$1"
+            fi
+          }
+          mkdir -p portlib-cache
           for pkg in mbedtls-3.6.7-1 curl-8.16.0-3 ffmpeg-n6.0-3 mpv-0.36.0-3; do
-            wget "$BASE_URL/${pkg}-arm.tar.xz"
+            f="portlib-cache/${pkg}-vita.pkg.tar.xz"
+            [ -s "$f" ] || fetch "$BASE_URL/${pkg}-vita.pkg.tar.xz" "$f"
           done
-          vdpm libass harfbuzz fribidi freetype libpng libwebp $PWD/*-arm.tar.xz
+          cp portlib-cache/*-vita.pkg.tar.xz .
+
+          # Repo-name packages still go in by name with vdpm.
+          VDPM_NONINTERACTIVE=1 vdpm libass harfbuzz fribidi freetype libpng libwebp
+
+          # Local package files: vdpm-on-pacman rejects file paths from --sync, so
+          # install them with pacman --upgrade using vdpm's own root/db/cache args
+          # (keep a legacy `vdpm <files>` fallback for pre-pacman images).
+          PACMAN="${VDPM_PACMAN:-$VITASDK/bin/pacman}"
+          if [ -x "$PACMAN" ]; then
+            "$PACMAN" \
+              --config   "${VDPM_PACMAN_CONF:-$VITASDK/etc/pacman.conf}" \
+              --root     "$VITASDK" \
+              --dbpath   "$VITASDK/var/lib/pacman" \
+              --cachedir "$VITASDK/var/cache/pacman/pkg" \
+              --logfile  "$VITASDK/var/log/pacman.log" \
+              --noscriptlet --noconfirm --noprogressbar \
+              --upgrade $PWD/*-vita.pkg.tar.xz
+          else
+            vdpm $PWD/*-vita.pkg.tar.xz
+          fi
+
           git config --system --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Build
