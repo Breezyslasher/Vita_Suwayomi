@@ -65,7 +65,8 @@
 #endif
 
 #if defined(__vita__) || defined(__PSV__)
-#include "platform/vita_update.hpp"        // vita_update::stageAndLaunch (stub)
+#include "utils/vita_install.hpp"          // vita::installVpk / vita::launchTitle
+#include <psp2/io/fcntl.h>
 #endif
 
 #ifndef VITA_SUWAYOMI_VERSION
@@ -464,29 +465,43 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
     return false;
 
 #elif defined(__vita__) || defined(__PSV__)
-  #if defined(VS_HAVE_VITA_UPDATER)
-    // Hand off to the bundled AutoPlugin2 updater stub (a different title id, so
-    // not "in use"): it promotes update.vpk while MyApp is closed, then relaunches.
+    // A title cannot promote over itself (the installer returns 0x80101114
+    // "in use"), so hand the install to the bundled AutoPlugin2 stub (title
+    // VSWYUPD01, a different title, so promoting IT is fine). We install and
+    // launch the stub, then quit; with VitaSuwayomi closed the stub promotes
+    // the downloaded update.vpk and relaunches us. Paths are fixed by
+    // convention (see src/updater_stub/main.cpp): the stub reads update.vpk and
+    // update_version.txt from the data dir.
     setProgress(ui, "Preparing installer…");
-    std::string err;
-    if (vita_update::stageAndLaunch(path, rel.tag, err)) {
-        // stageAndLaunch launched the stub; MyApp must quit now.
-        finishProgress(ui, []() { brls::Application::quit(); });
-        return true;
+    {
+        std::string vpath = platform::path("update_version.txt");
+        SceUID vf = sceIoOpen(vpath.c_str(), SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+        if (vf >= 0) { sceIoWrite(vf, rel.tag.c_str(), rel.tag.size()); sceIoClose(vf); }
     }
-    finishProgress(ui, [path, err]() {
-        showMessage("Couldn't start the updater" + (err.empty() ? "" : (": " + err)) +
-                    "\n\nThe update was saved to:\n" + path +
-                    "\n\nInstall it with VitaShell.");
+    std::string err;
+    int rc = vita::installVpk("app0:updater.vpk", platform::path("updater_stage"), err);
+    if (rc != 0) {
+        // Couldn't stage the stub — keep the download and fall back to VitaShell.
+        finishProgress(ui, [path]() {
+            showMessage("Update downloaded.\n\nThe in-app installer couldn't start, "
+                        "so open VitaShell and install this file to finish:\n\n" + path);
+        });
+        return false;
+    }
+    // Stub installed. Launch it and quit — it takes over from here.
+    setProgress(ui, "Installing update…");
+    finishProgress(ui, []() {
+        auto* d = new brls::Dialog(
+            "Installing the update.\n\nVitaSuwayomi will close and reopen on its own "
+            "in a few seconds. If it doesn't, relaunch it from the LiveArea.");
+        d->setCancelable(false);
+        d->addButton("OK", []() {
+            vita::launchTitle("VSWYUPD01");
+            brls::Application::quit();
+        });
+        d->open();
     });
-    return false;
-  #else
-    finishProgress(ui, [path]() {
-        showMessage("Update downloaded to:\n" + path +
-                    "\n\nInstall it with VitaShell, then relaunch.");
-    });
-    return false;
-  #endif
+    return true;
 
 #elif defined(ANDROID) || defined(__ANDROID__)
     // Hand the APK to the system package installer via JNI (content:// uri).
@@ -630,18 +645,25 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
 #endif
 }
 
+#if !defined(__vita__) && !defined(__PSV__)
 std::string downloadExtension() {
     std::string sfx = assetSuffix();
     size_t dot = sfx.find_last_of('.');
     return (dot == std::string::npos) ? std::string(".bin") : sfx.substr(dot);
 }
+#endif
 
 void startInstall(const ReleaseInfo& rel) {
     auto ui = makeProgress("Updating to " + rel.tag);
 
     asyncRunLargeStack([rel, ui]() {
+#if defined(__vita__) || defined(__PSV__)
+        // The updater stub reads a fixed path in the data dir by convention.
+        std::string dest = platform::path("update.vpk");
+#else
         platform::createDirRecursive(platform::path("updates"));
         std::string dest = platform::path(std::string("updates/update") + downloadExtension());
+#endif
 
         std::string err;
         bool ok = downloadAsset(rel, dest, ui, err);

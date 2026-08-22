@@ -204,6 +204,13 @@ set(APP_SOURCES
 # vita_stubs.c only needed on Vita (no-op stdio locks, SDL_OpenURL stub)
 if(PLATFORM_PSV)
     list(APPEND APP_SOURCES src/utils/vita_stubs.c)
+    # In-app self-update: unzip the downloaded VPK (miniz, sceIo-backed) and
+    # promote it in place via ScePromoterUtility (used to stage the updater stub).
+    list(APPEND APP_SOURCES src/utils/vita_install.cpp lib/miniz/miniz.c)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib/miniz)
+    # miniz without stdio/time: newlib's fopen64/stat64/utime are absent on
+    # Vita, so vita_install.cpp drives it through sceIo callbacks instead.
+    add_definitions(-DMINIZ_NO_STDIO -DMINIZ_NO_TIME)
 endif()
 
 # Switch: userAppInit/userAppExit (romfs, sockets, system services init)
@@ -392,6 +399,10 @@ if(PLATFORM_PSV)
         SceCodecEngine_stub
         SceAudio_stub
         SceVshBridge_stub
+        # In-app self-update promoter (utils/vita_install): promote the updater
+        # stub's VPK and load the promoter module on demand.
+        ScePromoterUtil_stub
+        SceSysmodule_stub
     )
 elseif(PLATFORM_SWITCH)
     target_link_libraries(${PROJECT_NAME} nx dav1d)
@@ -411,12 +422,55 @@ endif()
 # Platform packaging / post-build
 # ---------------------------------------------------------------------------
 if(PLATFORM_PSV)
+    # ── Updater stub (self-update helper) ───────────────────────────────
+    # A second, tiny Vita app with its own title id (VSWYUPD01). VitaSuwayomi
+    # cannot promote over itself — the installer returns 0x80101114 "in use"
+    # for the running title — so at update time it installs and launches this
+    # stub; with VitaSuwayomi now closed, the stub promotes the downloaded VPK
+    # and relaunches VitaSuwayomi (the AutoPlugin2 technique). It shares the
+    # extract/promote code (utils/vita_install), which is free of borealis/fmt
+    # so the stub links without the UI stack. The stub's own .vpk is bundled
+    # inside VitaSuwayomi.vpk (as updater.vpk) so it can be installed on demand.
+    add_executable(vitasuwayomi_updater
+        src/updater_stub/main.cpp
+        src/utils/vita_install.cpp
+        lib/miniz/miniz.c)
+    target_include_directories(vitasuwayomi_updater PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib/miniz)
+    target_compile_definitions(vitasuwayomi_updater PRIVATE MINIZ_NO_STDIO MINIZ_NO_TIME)
+    target_link_libraries(vitasuwayomi_updater
+        mbedcrypto            # mbedtls_sha1 for the fpkg hmac
+        vita2d                # tiny progress screen (system PGF font)
+        freetype
+        png
+        z
+        SceGxm_stub
+        SceDisplay_stub
+        SceCommonDialog_stub
+        ScePgf_stub
+        SceCtrl_stub
+        # self-update + relaunch
+        ScePromoterUtil_stub
+        SceSysmodule_stub
+        SceAppMgr_stub
+        SceIofilemgr_stub
+        SceLibKernel_stub)
+    vita_create_self(vitasuwayomi_updater.self vitasuwayomi_updater UNSAFE NOASLR)
+    # No FILE args here: vita_create_vpk accumulates FILE entries in a variable
+    # it does not clear between calls, so anything listed would leak into the
+    # main VitaSuwayomi.vpk below. The stub is headless (no LiveArea icon).
+    vita_create_vpk(vitasuwayomi_updater.vpk VSWYUPD01 vitasuwayomi_updater.self
+        VERSION 01.00
+        NAME "VitaSuwayomi Updater")
+
     vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME} UNSAFE NOASLR)
 
     vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
         VERSION ${VITA_VERSION}
         NAME    ${VITA_APP_NAME}
 
+        FILE ${CMAKE_BINARY_DIR}/vitasuwayomi_updater.vpk            updater.vpk
         FILE app/platform/psv/sce_sys/icon0.png                      sce_sys/icon0.png
         FILE app/platform/psv/sce_sys/pic0.png                       sce_sys/pic0.png
         FILE app/platform/psv/sce_sys/livearea/contents/bg.png       sce_sys/livearea/contents/bg.png
