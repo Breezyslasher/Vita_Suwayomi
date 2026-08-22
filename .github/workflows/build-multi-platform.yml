@@ -639,7 +639,11 @@ jobs:
                      ${{ matrix.mpv_pkg }}; do
             f="portlib-cache/$pkg"
             if [ ! -f "$f" ] || [ "$(stat -c%s "$f" 2>/dev/null || echo 0)" -lt 4096 ]; then
-              fetch "$BASE_URL/$pkg" "$f"
+              if ! fetch "$BASE_URL/$pkg" "$f"; then
+                rm -f "$f"
+                echo "::error::failed to download portlib $pkg"
+                exit 1
+              fi
             fi
           done
           dkp-pacman --noconfirm -Rdd switch-libmpv || true
@@ -648,7 +652,16 @@ jobs:
           # dependencies (freetype/fribidi/harfbuzz/…) of the local switchfin
           # files from the devkitPro repo. Our local files still win for the
           # ABI-critical mpv/ffmpeg/tls libs.
-          dkp-pacman --noconfirm -Sy
+          #
+          # Best-effort: the devkitPro package server is occasionally flaky, and
+          # a failed refresh must NOT fail the build — the local file set is
+          # complete (it now includes uchardet), so -U can still resolve against
+          # the DB already in the image. Retry a few times, then continue.
+          for i in 1 2 3; do
+            dkp-pacman --noconfirm -Sy && break
+            echo "pacman -Sy failed (attempt $i); retrying…"
+            sleep 5
+          done
           set +e
           out=$(dkp-pacman --noconfirm -U portlib-cache/*.pkg.tar.zst 2>&1)
           rc=$?
