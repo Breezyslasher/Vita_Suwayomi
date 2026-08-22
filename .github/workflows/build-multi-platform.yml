@@ -620,7 +620,19 @@ jobs:
           done
           dkp-pacman --noconfirm -Rdd switch-libmpv || true
           dkp-pacman --noconfirm -Rdd switch-libmpv-deko3d || true
-          dkp-pacman --noconfirm -U portlib-cache/*.pkg.tar.zst
+          # Refresh the package databases so pacman -U can pull any remaining
+          # dependencies (freetype/fribidi/harfbuzz/…) of the local switchfin
+          # files from the devkitPro repo. Our local files still win for the
+          # ABI-critical mpv/ffmpeg/tls libs.
+          dkp-pacman --noconfirm -Sy
+          set +e
+          out=$(dkp-pacman --noconfirm -U portlib-cache/*.pkg.tar.zst 2>&1)
+          rc=$?
+          printf '%s\n' "$out"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::pacman -U rc=$rc :: $(printf '%s' "$out" | tail -8 | tr '\n' '~')"
+            exit "$rc"
+          fi
       - name: Build
         run: |
           cmake -B build -G Ninja \
