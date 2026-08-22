@@ -520,25 +520,39 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
 
 #elif defined(ANDROID) || defined(__ANDROID__)
     // Hand the APK to the system package installer via JNI (content:// uri).
+    // installApk returns false when the user must still act — on API 26+ it
+    // routes them to the "install unknown apps" screen, because without that
+    // per-app grant newer Android (Android TV especially) never prompts and the
+    // install silently aborts after "Staging app…".
     setProgress(ui, "Opening installer…");
     JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
-    bool handed = false;
+    bool called = false, launched = false;
     if (env) {
         jclass u = env->FindClass("org/libsdl/app/PlatformUtils");
         if (u) {
-            jmethodID m = env->GetStaticMethodID(u, "installApk", "(Ljava/lang/String;)V");
+            jmethodID m = env->GetStaticMethodID(u, "installApk", "(Ljava/lang/String;)Z");
             if (m) {
                 jstring js = env->NewStringUTF(path.c_str());
-                env->CallStaticVoidMethod(u, m, js);
+                launched = env->CallStaticBooleanMethod(u, m, js) == JNI_TRUE;
                 env->DeleteLocalRef(js);
-                handed = true;
+                called = true;
             }
             env->DeleteLocalRef(u);
         }
-        if (env->ExceptionCheck()) { env->ExceptionClear(); handed = false; }
+        if (env->ExceptionCheck()) { env->ExceptionClear(); called = false; launched = false; }
     }
-    if (handed) {
-        finishProgress(ui, []() {});   // system takes over
+    if (launched) {
+        // The system installer takes over; do NOT quit — it streams the APK from
+        // our in-process provider while staging, and Android force-stops this
+        // package itself once the update commits.
+        finishProgress(ui, []() {});
+    } else if (called) {
+        // We were sent to the permission screen (or the hand-off failed).
+        finishProgress(ui, []() {
+            showMessage("Allow VitaSuwayomi to install apps, then choose Update again.\n\n"
+                        "Android needs a one-time \"install unknown apps\" permission "
+                        "before it can install the update.");
+        });
     } else {
         finishProgress(ui, [rel]() { openUrl(rel.pageUrl); });
     }
