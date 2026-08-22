@@ -577,16 +577,45 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      # Same caching + slow-edge-abort treatment as the Vita job; the mpv
+      # package differs per matrix leg, so it is part of the key. Matches the
+      # VitaPlex NX job, which builds green on this exact image.
+      - name: Cache Switch portlibs
+        uses: actions/cache@v4
+        with:
+          path: portlib-cache
+          key: switch-portlibs-hacBrewPack-3.05-1_libuam-master-1_dav1d-1.5.3-1_mbedtls-3.6.7-1_libssh2-1.11.1-1_ffmpeg-7.1.5-5_${{ matrix.mpv_pkg }}
       - name: Install switchfin portlibs
         run: |
           BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs"
+          set -eu
+          fetch() {
+            curl -fL --retry 4 --retry-all-errors \
+                 --speed-limit 102400 --speed-time 30 -o "$2" "$1"
+          }
+          mkdir -p portlib-cache
+          # Re-fetch anything missing or suspiciously small (guards a partial
+          # download left by a flaky CDN edge, which would poison pacman -U).
+          for pkg in hacBrewPack-3.05-1-x86_64.pkg.tar.zst \
+                     libuam-master-1-any.pkg.tar.zst \
+                     switch-dav1d-1.5.3-1-any.pkg.tar.zst \
+                     switch-mbedtls-3.6.7-1-any.pkg.tar.zst \
+                     switch-libssh2-1.11.1-1-any.pkg.tar.zst \
+                     switch-ffmpeg-7.1.5-5-any.pkg.tar.zst \
+                     ${{ matrix.mpv_pkg }}; do
+            f="portlib-cache/$pkg"
+            if [ ! -f "$f" ] || [ "$(stat -c%s "$f" 2>/dev/null || echo 0)" -lt 1024 ]; then
+              fetch "$BASE_URL/$pkg" "$f"
+            fi
+          done
           dkp-pacman --noconfirm -Rdd switch-libmpv || true
           dkp-pacman --noconfirm -Rdd switch-libmpv-deko3d || true
-          dkp-pacman --noconfirm -U \
-            $BASE_URL/hacBrewPack-3.05-1-x86_64.pkg.tar.zst \
-            $BASE_URL/libuam-master-1-any.pkg.tar.zst \
-            $BASE_URL/switch-dav1d-1.5.3-1-any.pkg.tar.zst \
-            $BASE_URL/${{ matrix.mpv_pkg }}
+          # switch-libmpv-0.36.0-5 was built against switch-ffmpeg-7.1.5-5 (and
+          # its mbedtls+libssh2 protocols), whose avcodec ABI differs from
+          # devkitPro's FFmpeg — link against the mismatch and playback null-derefs.
+          # Install the whole switchfin mpv->ffmpeg->tls stack together so it is
+          # ABI-consistent. (This is the VitaPlex NX recipe.)
+          dkp-pacman --noconfirm -U portlib-cache/*.pkg.tar.zst
       - name: Build
         run: |
           cmake -B build -G Ninja \
