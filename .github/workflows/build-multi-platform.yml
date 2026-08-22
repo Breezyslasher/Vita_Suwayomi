@@ -584,7 +584,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: portlib-cache
-          key: switch-portlibs-hacBrewPack-3.05-1_libuam-master-1_dav1d-1.5.3-1_mbedtls-3.6.7-1_libssh2-1.11.1-1_ffmpeg-7.1.5-5_${{ matrix.mpv_pkg }}
+          # -v2: bust an earlier cache poisoned by a partial download (a CDN
+          # hiccup left a truncated .pkg.tar.zst that pacman -U then rejected).
+          key: switch-portlibs-v2-hacBrewPack-3.05-1_libuam-master-1_dav1d-1.5.3-1_mbedtls-3.6.7-1_libssh2-1.11.1-1_ffmpeg-7.1.5-5_${{ matrix.mpv_pkg }}
       - name: Install switchfin portlibs
         run: |
           BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs"
@@ -594,8 +596,9 @@ jobs:
                  --speed-limit 102400 --speed-time 30 -o "$2" "$1"
           }
           mkdir -p portlib-cache
-          # Re-fetch anything missing or suspiciously small (guards a partial
-          # download left by a flaky CDN edge, which would poison pacman -U).
+          # Fetch any file that is missing OR not a valid zstd archive — a
+          # partial/truncated download (flaky CDN edge, or a poisoned cache from
+          # a prior failed run) would otherwise fail pacman -U as "corrupted".
           for pkg in hacBrewPack-3.05-1-x86_64.pkg.tar.zst \
                      libuam-master-1-any.pkg.tar.zst \
                      switch-dav1d-1.5.3-1-any.pkg.tar.zst \
@@ -604,8 +607,10 @@ jobs:
                      switch-ffmpeg-7.1.5-5-any.pkg.tar.zst \
                      ${{ matrix.mpv_pkg }}; do
             f="portlib-cache/$pkg"
-            if [ ! -f "$f" ] || [ "$(stat -c%s "$f" 2>/dev/null || echo 0)" -lt 1024 ]; then
+            if [ ! -f "$f" ] || ! zstd -t -q "$f" 2>/dev/null; then
+              rm -f "$f"
               fetch "$BASE_URL/$pkg" "$f"
+              zstd -t -q "$f"   # hard-fail the step if the fresh download is still bad
             fi
           done
           dkp-pacman --noconfirm -Rdd switch-libmpv || true
