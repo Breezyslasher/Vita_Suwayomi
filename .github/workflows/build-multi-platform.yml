@@ -577,6 +577,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Cache Switch portlibs
+        uses: actions/cache@v4
+        with:
+          path: portlib-cache
+          key: switch-portlibs-v3-hacBrewPack-3.05-1_libuam-master-1_dav1d-1.5.3-1_mbedtls-3.6.7-1_libssh2-1.11.1-1_ffmpeg-7.1.5-5_uchardet-0.0.8-1_${{ matrix.mpv_pkg }}
       - name: Install switchfin portlibs
         run: |
           BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs"
@@ -586,14 +591,17 @@ jobs:
                  --speed-limit 102400 --speed-time 30 -o "$2" "$1"
           }
           mkdir -p portlib-cache
-          # Fresh download each run (no cache) while we diagnose; size guard
-          # catches a truncated transfer without needing the zstd CLI.
+          # The whole switchfin mpv -> ffmpeg -> tls stack must be installed
+          # together so it's ABI-consistent, INCLUDING switch-uchardet, which
+          # switch-libmpv depends on (pacman -U on local files can't pull deps
+          # from the repo, so a missing one fails "could not satisfy dependencies").
           for pkg in hacBrewPack-3.05-1-x86_64.pkg.tar.zst \
                      libuam-master-1-any.pkg.tar.zst \
                      switch-dav1d-1.5.3-1-any.pkg.tar.zst \
                      switch-mbedtls-3.6.7-1-any.pkg.tar.zst \
                      switch-libssh2-1.11.1-1-any.pkg.tar.zst \
                      switch-ffmpeg-7.1.5-5-any.pkg.tar.zst \
+                     switch-uchardet-0.0.8-1-any.pkg.tar.zst \
                      ${{ matrix.mpv_pkg }}; do
             f="portlib-cache/$pkg"
             if [ ! -f "$f" ] || [ "$(stat -c%s "$f" 2>/dev/null || echo 0)" -lt 4096 ]; then
@@ -602,16 +610,7 @@ jobs:
           done
           dkp-pacman --noconfirm -Rdd switch-libmpv || true
           dkp-pacman --noconfirm -Rdd switch-libmpv-deko3d || true
-          # Capture the pacman error and surface it as a GitHub annotation (the
-          # raw job log is on a host we can't read from the sandbox).
-          set +e
-          out=$(dkp-pacman --noconfirm -U portlib-cache/*.pkg.tar.zst 2>&1)
-          rc=$?
-          printf '%s\n' "$out"
-          if [ "$rc" -ne 0 ]; then
-            echo "::error::pacman -U rc=$rc :: $(printf '%s' "$out" | tail -6 | tr '\n' '~')"
-            exit "$rc"
-          fi
+          dkp-pacman --noconfirm -U portlib-cache/*.pkg.tar.zst
       - name: Build
         run: |
           cmake -B build -G Ninja \
