@@ -12,6 +12,7 @@
 #include "utils/library_cache.hpp"
 #include "utils/async.hpp"
 #include "utils/http_client.hpp"
+#include "utils/app_update.hpp"
 #include "utils/perf_overlay.hpp"
 #include <algorithm>
 #include <chrono>
@@ -732,7 +733,7 @@ void SettingsTab::createAccountSection() {
     updateCell->setText("Check for Updates");
     updateCell->setDetailText("Check GitHub for new releases");
     updateCell->registerClickAction([this](brls::View*) {
-        checkForUpdates();
+        app_update::checkForUpdates(true);
         return true;
     });
     m_contentBox->addView(updateCell);
@@ -1907,7 +1908,7 @@ void SettingsTab::createAboutSection() {
     updateCell->setText("Check for Updates");
     updateCell->setDetailText("Check GitHub for new releases");
     updateCell->registerClickAction([this](brls::View* view) {
-        checkForUpdates();
+        app_update::checkForUpdates(true);
         return true;
     });
     m_contentBox->addView(updateCell);
@@ -3445,175 +3446,4 @@ void SettingsTab::refreshDefaultCategorySelector() {
     }
     m_defaultCategorySelector->setDetailText(currentName);
 }
-
-void SettingsTab::checkForUpdates() {
-    brls::Application::notify("Checking for updates...");
-
-    // GitHub API URL for latest release
-    // TODO: Replace with actual repository when published
-    const std::string apiUrl = "https://api.github.com/repos/Breezyslasher/Vita_Suwayomi/releases/latest";
-
-    HttpClient client;
-    client.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
-    client.setTimeout(15);
-
-    std::string response;
-    if (!client.get(apiUrl, response)) {
-        brls::Application::notify("Failed to check for updates");
-        return;
-    }
-
-    // Simple JSON parsing for tag_name, body, and assets
-    auto extractJsonString = [&response](const std::string& key) -> std::string {
-        std::string search = "\"" + key + "\":";
-        size_t pos = response.find(search);
-        if (pos == std::string::npos) return "";
-
-        pos += search.length();
-        // Skip whitespace
-        while (pos < response.length() && (response[pos] == ' ' || response[pos] == '\t' || response[pos] == '\n')) pos++;
-
-        if (pos >= response.length()) return "";
-
-        if (response[pos] == '"') {
-            // String value
-            pos++;
-            std::string result;
-            while (pos < response.length() && response[pos] != '"') {
-                if (response[pos] == '\\' && pos + 1 < response.length()) {
-                    pos++;
-                    if (response[pos] == 'n') result += '\n';
-                    else if (response[pos] == 'r') result += '\r';
-                    else if (response[pos] == 't') result += '\t';
-                    else result += response[pos];
-                } else {
-                    result += response[pos];
-                }
-                pos++;
-            }
-            return result;
-        }
-        return "";
-    };
-
-    std::string tagName = extractJsonString("tag_name");
-    std::string releaseNotes = extractJsonString("body");
-
-    if (tagName.empty()) {
-        brls::Application::notify("Failed to parse update info");
-        return;
-    }
-
-    // Remove 'v' prefix if present
-    std::string newVersion = tagName;
-    if (!newVersion.empty() && (newVersion[0] == 'v' || newVersion[0] == 'V')) {
-        newVersion = newVersion.substr(1);
-    }
-
-    // Compare versions (simple string comparison for now)
-    std::string currentVersion = VITA_SUWAYOMI_VERSION;
-
-    // Parse version numbers for proper comparison
-    auto parseVersion = [](const std::string& ver) -> int {
-        int major = 0, minor = 0, patch = 0;
-        std::sscanf(ver.c_str(), "%d.%d.%d", &major, &minor, &patch);
-        return major * 10000 + minor * 100 + patch;
-    };
-
-    int currentNum = parseVersion(currentVersion);
-    int newNum = parseVersion(newVersion);
-
-    if (newNum <= currentNum) {
-        brls::Application::notify("You're running the latest version!");
-        return;
-    }
-
-    // Find VPK download URL in assets
-    std::string downloadUrl;
-    size_t assetsPos = response.find("\"assets\"");
-    if (assetsPos != std::string::npos) {
-        // Look for browser_download_url with .vpk extension
-        size_t searchPos = assetsPos;
-        while (searchPos < response.length()) {
-            size_t urlPos = response.find("\"browser_download_url\"", searchPos);
-            if (urlPos == std::string::npos) break;
-
-            urlPos += 23; // Skip past "browser_download_url":
-            while (urlPos < response.length() && response[urlPos] != '"') urlPos++;
-            if (urlPos >= response.length()) break;
-            urlPos++; // Skip opening quote
-
-            size_t urlEnd = response.find("\"", urlPos);
-            if (urlEnd == std::string::npos) break;
-
-            std::string url = response.substr(urlPos, urlEnd - urlPos);
-            if (url.find(".vpk") != std::string::npos) {
-                downloadUrl = url;
-                break;
-            }
-            searchPos = urlEnd + 1;
-        }
-    }
-
-    if (downloadUrl.empty()) {
-        brls::Application::notify("No VPK found in release");
-        return;
-    }
-
-    // Show update dialog
-    showUpdateDialog(newVersion, releaseNotes, downloadUrl);
-}
-
-void SettingsTab::showUpdateDialog(const std::string& newVersion, const std::string& releaseNotes,
-                                    const std::string& downloadUrl) {
-    std::string message = "New version " + newVersion + " available!\n\n";
-    if (!releaseNotes.empty()) {
-        // Truncate release notes if too long
-        std::string notes = releaseNotes;
-        if (notes.length() > 300) {
-            notes = notes.substr(0, 297) + "...";
-        }
-        message += notes;
-    }
-
-    brls::Dialog* dialog = new brls::Dialog(message);
-    dialog->setCancelable(true);  // Allow back button to close dialog
-
-    dialog->addButton("Later", []() {});
-
-    dialog->addButton("Download & Install", [downloadUrl, newVersion, this]() {
-        downloadAndInstallUpdate(downloadUrl, newVersion);
-    });
-
-    dialog->open();
-}
-
-void SettingsTab::downloadAndInstallUpdate(const std::string& downloadUrl, const std::string& version) {
-    brls::Application::notify("Downloading update...");
-
-    // Create update directory
-    std::string updateDir = platform::path("updates");
-    platform::createDir(updateDir);
-
-    std::string pkgPath = updateDir + "/VitaSuwayomi_" + version + ".vpk";
-
-    HttpClient client;
-    client.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
-    client.setTimeout(300);  // 5 minute timeout for large downloads
-    client.setFollowRedirects(true);
-
-    if (client.downloadToFile(downloadUrl, pkgPath)) {
-        std::string msg = "Update downloaded successfully!\n\n"
-                          "Saved to:\n" + pkgPath + "\n\n"
-                          "Please install the update package and restart.";
-
-        brls::Dialog* successDialog = new brls::Dialog(msg);
-        successDialog->setCancelable(true);
-        successDialog->addButton("OK", []() {});
-        successDialog->open();
-    } else {
-        brls::Application::notify("Failed to download update");
-    }
-}
-
 } // namespace vitasuwayomi

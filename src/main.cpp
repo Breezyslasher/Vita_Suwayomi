@@ -15,6 +15,7 @@
 #include "view/rotatable_image.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/http_client.hpp"
+#include "utils/app_update.hpp"
 #include <clocale>
 
 #if defined(__ANDROID__)
@@ -174,6 +175,10 @@ static void registerCustomViews() {
  * Main entry point implementation
  */
 static int appMain(int argc, char* argv[]) {
+    // Remember argv[0] for the updater (Switch needs it to know which NRO to
+    // overwrite; a no-op elsewhere). Safe to call before borealis init.
+    app_update::setSelfPath(argc > 0 ? argv[0] : nullptr);
+
     // Parse --deeplink argument (passed from Android intent)
     std::string pendingDeeplink;
     for (int i = 1; i < argc; i++) {
@@ -333,6 +338,11 @@ static int appMain(int argc, char* argv[]) {
     if (!pendingDeeplink.empty()) {
         app.setDeeplink(pendingDeeplink);
     }
+
+    // Silent startup update check. Spawns a worker and marshals any offer to the
+    // UI via brls::sync, which the main loop below processes; stays quiet when
+    // up to date, offline, or on a release the user chose to skip.
+    app_update::checkForUpdates(false);
 
     // Run application (blocking)
     app.run();

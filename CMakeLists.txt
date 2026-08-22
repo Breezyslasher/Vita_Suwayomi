@@ -195,6 +195,7 @@ set(APP_SOURCES
     src/view/long_press_gesture.cpp
     src/view/pinch_gesture.cpp
     src/utils/http_client.cpp
+    src/utils/app_update.cpp
     src/utils/image_loader.cpp
     src/utils/library_cache.cpp
     src/utils/perf_overlay.cpp

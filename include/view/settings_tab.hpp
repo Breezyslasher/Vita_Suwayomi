@@ -66,11 +66,7 @@ private:
                             std::function<void(const std::string&)> callback);
     void updateServerLabel();
     void refreshDefaultCategorySelector();
-    void checkForUpdates();
     void runNetworkTest();
-    void showUpdateDialog(const std::string& newVersion, const std::string& releaseNotes,
-                          const std::string& downloadUrl);
-    void downloadAndInstallUpdate(const std::string& downloadUrl, const std::string& version);
 
     brls::ScrollingFrame* m_scrollView = nullptr;
     brls::Box* m_contentBox = nullptr;   // redirected per-section while pre-building
