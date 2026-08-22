@@ -40,6 +40,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <shellapi.h>     // ShellExecuteA (excluded by WIN32_LEAN_AND_MEAN)
 #endif
 
 #if defined(__linux__) && !defined(ANDROID)
@@ -285,7 +286,15 @@ bool isArm64Linux() {
 #endif  // linux desktop
 
 #if defined(ANDROID) || defined(__ANDROID__)
-bool deviceIsArm64();  // fwd (defined in the Android section)
+// Our Android APKs are per-ABI, so match the ABI this build is running as —
+// updating a device to the same ABI it already installed always works.
+bool deviceIsArm64() {
+#if defined(__aarch64__)
+    return true;
+#else
+    return false;
+#endif
+}
 #endif
 
 std::string assetSuffix() {
