@@ -1,0 +1,102 @@
+# Flatpak manifest for VitaSuwayomi (borealis Suwayomi manga-reader client).
+#
+# Unlike the VitaPlex client this was adapted from, the desktop/Linux build is
+# a manga reader — it links no mpv/ffmpeg (CMake defines VITASUWAYOMI_NO_FFMPEG
+# and leaves APP_FFMPEG_LIBS empty on Linux) — so the whole libmpv module stack
+# is dropped. Only mbedTLS (the HTTP client) and libmp3lame (a stray desktop
+# link) aren't in the runtime, so they're built here.
+#
+# STATUS: first cut, iterated via CI. Known follow-ups before this is
+# Flathub-ready:
+#   * The app module builds with --share=network because VitaSuwayomi's CMake
+#     FetchContents GLFW/deps at configure time. Flathub forbids build-time
+#     network, so those sources must be vendored as flatpak modules/sources.
+#   * The app source is `type: dir` (build the local checkout, for the CI
+#     bundle). For Flathub, switch it to `type: git` pinned to a release commit.
+app-id: io.github.breezyslasher.VitaSuwayomi
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: VitaSuwayomi
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  # Designed for a controller.
+  - --device=all
+  # Talks to a Suwayomi server over the network.
+  - --share=network
+
+cleanup:
+  - '*.a'
+  - '*.la'
+  - /include
+  - /lib/cmake
+  - /lib/pkgconfig
+  - /man
+  - /share/man
+  - /share/gtk-doc
+
+modules:
+  # mbedTLS — VitaSuwayomi's HTTP client links it, and it isn't in the runtime.
+  - name: mbedtls
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DUSE_SHARED_MBEDTLS_LIBRARY=ON
+      - -DUSE_STATIC_MBEDTLS_LIBRARY=OFF
+      - -DENABLE_TESTING=OFF
+      - -DENABLE_PROGRAMS=OFF
+    sources:
+      - type: archive
+        url: https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.2/mbedtls-3.6.2.tar.bz2
+        sha256: 8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca
+
+  # libmp3lame — the desktop build links it unconditionally; not in the runtime.
+  - name: lame
+    buildsystem: autotools
+    config-opts:
+      - --disable-static
+      - --enable-shared
+      - --disable-frontend
+    sources:
+      - type: archive
+        url: https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
+        sha256: ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+
+  - name: vitasuwayomi
+    buildsystem: cmake-ninja
+    builddir: true
+    # No install() rules in VitaSuwayomi's CMake — install by hand below,
+    # mirroring the .deb layout (binary in /app/lib, resources in /app/share, a
+    # launcher in /app/bin that cd's to the resources dir since RESOURCE_PREFIX
+    # is the relative "resources/").
+    no-make-install: true
+    build-options:
+      # CMake FetchContents GLFW/deps at configure time. Not Flathub-legal (see
+      # header); fine for the CI bundle build.
+      build-args:
+        - --share=network
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DPLATFORM_DESKTOP=ON
+    build-commands:
+      - install -Dm755 VitaSuwayomi ${FLATPAK_DEST}/lib/VitaSuwayomi/VitaSuwayomi
+      # cp won't create intermediate dirs; make the parent first.
+      - install -d ${FLATPAK_DEST}/share/VitaSuwayomi
+      - cp -r resources ${FLATPAK_DEST}/share/VitaSuwayomi/resources
+      - |
+        install -d ${FLATPAK_DEST}/bin
+        printf '%s\n' '#!/bin/sh' \
+          'cd /app/share/VitaSuwayomi || exit 1' \
+          'exec /app/lib/VitaSuwayomi/VitaSuwayomi "$@"' > ${FLATPAK_DEST}/bin/VitaSuwayomi
+        chmod 755 ${FLATPAK_DEST}/bin/VitaSuwayomi
+      - install -Dm644 ../flatpak/io.github.breezyslasher.VitaSuwayomi.desktop
+          ${FLATPAK_DEST}/share/applications/io.github.breezyslasher.VitaSuwayomi.desktop
+      - install -Dm644 ../flatpak/io.github.breezyslasher.VitaSuwayomi.metainfo.xml
+          ${FLATPAK_DEST}/share/metainfo/io.github.breezyslasher.VitaSuwayomi.metainfo.xml
+      - install -Dm644 ../app/platform/icon_desktop.png
+          ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/io.github.breezyslasher.VitaSuwayomi.png
+    sources:
+      - type: dir
+        path: ..

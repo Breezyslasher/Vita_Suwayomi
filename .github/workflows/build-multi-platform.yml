@@ -145,7 +145,7 @@ jobs:
             VitaSuwayomi-nx-*/*.nro
             VitaSuwayomi-ps4-*/*
             VitaSuwayomi-vita-*/*.vpk
-            VitaSuwayomi-Flatpak-*/*
+            VitaSuwayomi-flatpak-*/*.flatpak
             VitaSuwayomi-appimage-*/*.AppImage
             VitaSuwayomi-aur-*/*.pkg.tar.*
             VitaSuwayomi-android-*/*
@@ -186,11 +186,9 @@ jobs:
             (cd "$dir" && zip -r "../release/VitaSuwayomi.${FVER}-windows-${arch}.zip" .)
           done
 
-          # Flatpak tarballs
-          for tgz in $(find . -name "VitaSuwayomi-Linux-*.tar.gz"); do
-            base=$(basename "$tgz")
-            info=$(echo "$base" | sed -E 's/VitaSuwayomi-Linux-(.+)-[0-9]+\.tar\.gz/\1/')
-            cp "$tgz" "release/VitaSuwayomi.${FVER}-Flatpak-${info}.tar.gz"
+          # Flatpak bundle (single-file .flatpak)
+          for fp in $(find . -name "*.flatpak"); do
+            cp "$fp" "release/VitaSuwayomi.${FVER}.flatpak"
           done
 
           # AppImages (self-updating Linux build)
@@ -371,70 +369,31 @@ jobs:
         path: app/platform/android/app/build/outputs/apk/release/*.apk
 
   # ───────────────────────────────────────────────
-  # Flatpak — Linux Matrix (x86_64 + aarch64, OpenGL)
+  # Flatpak — org.freedesktop.Platform 24.08 (Flathub target)
   # ───────────────────────────────────────────────
   build-flatpak:
     needs: [resolve-version]
     if: ${{ inputs.platform == 'flatpak' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
-    name: Flatpak (${{ matrix.arch }}-${{ matrix.driver }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-        - { arch: x86_64, runner: ubuntu-24.04, driver: gl, gles2: "OFF" }
-        - { arch: aarch64, runner: ubuntu-24.04-arm, driver: gl, gles2: "OFF" }
-        - { arch: aarch64, runner: ubuntu-24.04-arm, driver: gles2, gles2: "ON" }
-    runs-on: ${{ matrix.runner }}
+    name: Flatpak
+    runs-on: ubuntu-24.04
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:freedesktop-24.08
+      options: --privileged
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Set workspace permissions
-        run: git config --global --add safe.directory $GITHUB_WORKSPACE
-      - name: Install dependencies
-        run: |
-          if command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends \
-              cmake ninja-build pkg-config \
-              libcurl4-openssl-dev libmbedtls-dev libmpv-dev \
-              libavcodec-dev libavformat-dev libavfilter-dev libswresample-dev libswscale-dev libavutil-dev \
-              libmp3lame-dev libass-dev libfreetype-dev libharfbuzz-dev libfribidi-dev \
-              libpng-dev libwebp-dev libzstd-dev libdbus-1-dev \
-              libwayland-dev libxkbcommon-dev xorg-dev
-          elif command -v dnf >/dev/null 2>&1; then
-            dnf install -y \
-              cmake ninja-build pkgconf-pkg-config \
-              libcurl-devel mbedtls-devel mpv-devel \
-              ffmpeg-devel lame-devel libass-devel freetype-devel harfbuzz-devel fribidi-devel \
-              libpng-devel libwebp-devel libzstd-devel dbus-devel \
-              wayland-devel libxkbcommon-devel libX11-devel libXrandr-devel libXi-devel libXinerama-devel libXcursor-devel
-          elif command -v microdnf >/dev/null 2>&1; then
-            microdnf install -y \
-              cmake ninja-build pkgconf-pkg-config \
-              libcurl-devel mbedtls-devel mpv-devel \
-              ffmpeg-devel lame-devel libass-devel freetype-devel harfbuzz-devel fribidi-devel \
-              libpng-devel libwebp-devel libzstd-devel dbus-devel \
-              wayland-devel libxkbcommon-devel libX11-devel libXrandr-devel libXi-devel libXinerama-devel libXcursor-devel
-          elif command -v apk >/dev/null 2>&1; then
-            apk add --no-cache \
-              cmake ninja pkgconf \
-              curl-dev mbedtls-dev mpv-dev ffmpeg-dev lame-dev libass-dev freetype-dev harfbuzz-dev fribidi-dev \
-              libpng-dev libwebp-dev zstd-dev dbus-dev wayland-dev libxkbcommon-dev libx11-dev libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev
-          else
-            echo "No supported package manager found; assuming container image already has required build dependencies"
-          fi
-      - name: Build desktop target in flatpak container
-        run: |
-          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON -DUSE_GLES2=${{ matrix.gles2 }} \
-            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
-          cmake --build build
-          tar -czf VitaSuwayomi-Linux-${{ matrix.arch }}-${{ matrix.driver }}-${{ github.run_number }}.tar.gz -C build VitaSuwayomi resources
+      - name: Build Flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: VitaSuwayomi.flatpak
+          manifest-path: flatpak/io.github.breezyslasher.VitaSuwayomi.yaml
+          cache-key: flatpak-builder-${{ hashFiles('flatpak/io.github.breezyslasher.VitaSuwayomi.yaml') }}
       - name: Upload Flatpak artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VitaSuwayomi-Flatpak-${{ matrix.arch }}-${{ matrix.driver }}-${{ github.run_number }}
-          path: VitaSuwayomi-Linux-${{ matrix.arch }}-${{ matrix.driver }}-${{ github.run_number }}.tar.gz
+          name: VitaSuwayomi-flatpak-${{ github.run_number }}
+          path: VitaSuwayomi.flatpak
 
   # ───────────────────────────────────────────────
   # AppImage — portable, self-updating Linux (x86_64 + aarch64)
