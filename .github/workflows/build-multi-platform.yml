@@ -577,35 +577,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Cache Switch portlibs
-        uses: actions/cache@v4
-        with:
-          path: portlib-cache
-          # Full pin list, incl. the per-leg mpv package, IS the key.
-          key: switch-portlibs-hacBrewPack-3.05-1_libuam-master-1_dav1d-1.5.3-1_mbedtls-3.6.7-1_libssh2-1.11.1-1_ffmpeg-7.1.5-5_${{ matrix.mpv_pkg }}
       - name: Install switchfin portlibs
         run: |
-          set -eu
           BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs"
-          fetch() { curl -fL --retry 4 --retry-all-errors --speed-limit 102400 --speed-time 30 -o "$2" "$1"; }
-          mkdir -p portlib-cache
-          # switch-libmpv depends on switchfin's OWN ffmpeg/mbedtls/libssh2 (its
-          # avcodec ABI differs from devkitPro's), so the whole mpv -> ffmpeg ->
-          # tls stack must come from switchfin or the install/link is inconsistent.
-          for pkg in hacBrewPack-3.05-1-x86_64.pkg.tar.zst \
-                     libuam-master-1-any.pkg.tar.zst \
-                     switch-dav1d-1.5.3-1-any.pkg.tar.zst \
-                     switch-mbedtls-3.6.7-1-any.pkg.tar.zst \
-                     switch-libssh2-1.11.1-1-any.pkg.tar.zst \
-                     switch-ffmpeg-7.1.5-5-any.pkg.tar.zst \
-                     ${{ matrix.mpv_pkg }}; do
-            [ -s "portlib-cache/$pkg" ] || fetch "$BASE_URL/$pkg" "portlib-cache/$pkg"
-          done
-          # Remove any pre-installed mpv so our pinned one wins, then install all
-          # the local files together (dependency-consistent).
           dkp-pacman --noconfirm -Rdd switch-libmpv || true
           dkp-pacman --noconfirm -Rdd switch-libmpv-deko3d || true
-          dkp-pacman --noconfirm -U portlib-cache/*.pkg.tar.zst
+          dkp-pacman --noconfirm -U \
+            $BASE_URL/hacBrewPack-3.05-1-x86_64.pkg.tar.zst \
+            $BASE_URL/libuam-master-1-any.pkg.tar.zst \
+            $BASE_URL/switch-dav1d-1.5.3-1-any.pkg.tar.zst \
+            $BASE_URL/${{ matrix.mpv_pkg }}
       - name: Build
         run: |
           cmake -B build -G Ninja \
