@@ -352,6 +352,14 @@ if(NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
     )
 endif()
 
+# libass only renders subtitles for the FFmpeg/mpv video path. Desktop Linux
+# disables FFmpeg (VITASUWAYOMI_NO_FFMPEG) and never references it, so linking
+# it just forces a dependency that isn't in e.g. the Flatpak runtime. Drop it
+# there (macOS/Switch/Vita/PS4 keep mpv, so they keep libass).
+if(NOT APP_FFMPEG_LIBS AND NOT PLATFORM_ANDROID AND NOT WIN32)
+    list(REMOVE_ITEM APP_RENDER_LIBS ass)
+endif()
+
 set(APP_NETWORK_LIBS
     curl
 )

@@ -334,11 +334,6 @@ std::string assetSuffix() {
 #endif
 }
 
-// Whether this platform installs an asset in place (vs. browser-only). True
-// exactly when a non-empty suffix could match; keep in lockstep with the
-// dialog primary buttons.
-bool inPlaceSupported() { return !assetSuffix().empty(); }
-
 // ── Browser fallback ────────────────────────────────────────────────────────
 void openUrl(const std::string& url) {
 #if defined(_WIN32)
