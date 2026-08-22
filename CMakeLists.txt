@@ -249,6 +249,9 @@ elseif(PLATFORM_SWITCH)
     list(APPEND APP_SOURCES src/platform/platform_switch.cpp)
 elseif(PLATFORM_PS4)
     list(APPEND APP_SOURCES src/platform/platform_ps4.cpp)
+    # In-app self-update: register the downloaded PKG with the system installer
+    # (BGFT) and hand off to the bundled updater helper title.
+    list(APPEND APP_SOURCES src/utils/ps4_install.cpp)
 elseif(PLATFORM_ANDROID)
     list(APPEND APP_SOURCES src/platform/platform_android.cpp)
 else()
@@ -450,6 +453,15 @@ elseif(PLATFORM_SWITCH)
 elseif(PLATFORM_PS4)
     target_link_libraries(${PROJECT_NAME}
         SceNet
+        # In-app self-update (utils/ps4_install): BGFT registers the PKG
+        # install; AppInstUtil is initialised alongside it, and the foreground
+        # user id (which the register call needs) comes from SceUserService.
+        SceBgft
+        SceAppInstUtil
+        SceUserService
+        # sceSystemServiceLaunchApp: hand off to the updater helper (VSWY00003)
+        # at update time, since a title can't replace its own running self.
+        SceSystemService
     )
 elseif(PLATFORM_DESKTOP)
     find_package(Threads REQUIRED)
@@ -633,6 +645,69 @@ elseif(PLATFORM_PS4)
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/img ${CMAKE_BINARY_DIR}/ps4/resources/img
     )
     add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}.data)
+
+    # ── PS4 updater helper (self-update) ────────────────────────────────
+    # A second, tiny PS4 app with its own title id (VSWY00003). A running title
+    # can't be replaced in place — BGFT installs into the locked
+    # /user/app/VSWY00002 — so at update time VitaSuwayomi launches this helper
+    # and exits; with the main title closed the helper uninstalls VSWY00002 and
+    # hands the downloaded pkg to the system installer (same idea as the Vita
+    # updater stub VSWYUPD01). It has no UI beyond a minimal progress screen.
+    if(PS4)
+        add_executable(vitasuwayomi_updater_ps4 src/updater_ps4/main.cpp)
+        target_compile_definitions(vitasuwayomi_updater_ps4 PRIVATE __PS4__)
+        # stb_image (vendored with borealis's nanovg) decodes the app icon for
+        # the helper's progress screen — it links no other image/font code.
+        target_include_directories(vitasuwayomi_updater_ps4 PRIVATE
+            ${BOREALIS_LIBRARY}/include/borealis/extern/nanovg)
+        # SDL2 is required at RUNTIME, not just to link: the helper calls
+        # SDL_Init(SDL_INIT_VIDEO) before touching any system service, exactly
+        # as borealis's Ps4Platform does. Without that call every privileged
+        # call faults. Plus the libs whose functions the helper calls: BGFT +
+        # AppInstUtil (+ SceUserService for AppInstUtil's user context).
+        if(NOT TARGET SDL2::SDL2-static)
+            find_package(SDL2 REQUIRED)
+        endif()
+        target_link_libraries(vitasuwayomi_updater_ps4
+            SceBgft SceAppInstUtil SceUserService SDL2::SDL2-static)
+        add_custom_target(vitasuwayomi_updater_ps4.data
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                ${BOREALIS_DIR}/ps4 ${CMAKE_BINARY_DIR}/ps4_updater
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                ${CMAKE_SOURCE_DIR}/app/platform/ps4 ${CMAKE_BINARY_DIR}/ps4_updater
+            # The progress screen's artwork must be a PLAIN file: sce_sys is the
+            # package metadata dir, so sce_sys/icon0.png is consumed by the pkg
+            # tool and cannot be opened at runtime.
+            COMMAND "${CMAKE_COMMAND}" -E copy
+                ${CMAKE_SOURCE_DIR}/app/platform/ps4/sce_sys/icon0.png
+                ${CMAKE_BINARY_DIR}/ps4_updater/updater_icon.png
+        )
+        add_dependencies(vitasuwayomi_updater_ps4 vitasuwayomi_updater_ps4.data)
+        add_self(vitasuwayomi_updater_ps4)
+        add_pkg(vitasuwayomi_updater_ps4
+            ${CMAKE_BINARY_DIR}/ps4_updater
+            "VSWY00003"
+            "VitaSuwayomi Updater"
+            "01.00"
+            # Match the main app's SFO attribute (Support PS4 Pro).
+            8388608
+        )
+
+        # Bundle the helper's pkg INSIDE VitaSuwayomi's pkg (as
+        # /app0/updater.pkg) so the user only ever installs one app — the same
+        # approach the Vita build uses for its updater stub. When an update
+        # needs the helper and it isn't installed, the app copies this out and
+        # installs it (ps4::installUpdaterApp). The pkg tool names its output
+        # from the CONTENT_ID, not the target, so it's located by glob.
+        add_custom_target(vitasuwayomi_updater_ps4.bundle
+            COMMAND "${CMAKE_COMMAND}"
+                -DSRC_DIR=${CMAKE_BINARY_DIR}
+                -DDST=${CMAKE_BINARY_DIR}/ps4/updater.pkg
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundle_updater_pkg.cmake
+            DEPENDS vitasuwayomi_updater_ps4_pkg
+        )
+        add_dependencies(${PROJECT_NAME}_pkg vitasuwayomi_updater_ps4.bundle)
+    endif()
 
 elseif(PLATFORM_SWITCH)
     # Build NRO with embedded romfs resources (matches switchfin approach).

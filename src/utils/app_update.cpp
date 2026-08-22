@@ -72,6 +72,12 @@
 #include <psp2/io/fcntl.h>
 #endif
 
+#if defined(__PS4__)
+#include "utils/ps4_install.hpp"           // ps4::launchUpdater / installUpdaterApp
+#include <thread>
+#include <chrono>
+#endif
+
 #ifndef VITA_SUWAYOMI_VERSION
 #define VITA_SUWAYOMI_VERSION "0.0.0"
 #endif
@@ -518,6 +524,70 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
     });
     return true;
 
+#elif defined(__PS4__)
+    // A running PS4 title can't be replaced in place (BGFT installs into the
+    // locked /user/app/<titleid>, and uninstalling the running title kills this
+    // process), so hand off to the separate updater helper (VSWY00003): with
+    // VitaSuwayomi closed it uninstalls the old title and installs the
+    // downloaded pkg via BGFT, which shows its own system progress.
+    {
+        std::string err;
+        // Check it's installed BEFORE launching: launching a title that isn't
+        // there pops a system "Cannot start the application" (CE-40841-7)
+        // dialog on every attempt.
+        if (ps4::isUpdaterInstalled() && ps4::launchUpdater(err) == 0) {
+            setProgress(ui, "Handed to updater…");
+            // Terminate IMMEDIATELY: the helper waits a few seconds and then
+            // uninstalls VSWY00002, so this process must be fully gone by then.
+            // An orderly quit() leaves HTTP threads running, and uninstalling a
+            // title whose process is still alive is reported as a crash
+            // (CE-36329-3).
+            finishProgress(ui, []() { std::_Exit(0); });
+            return true;
+        }
+        // The helper isn't installed (it removes itself after each run, so this
+        // is the normal path). Its pkg ships inside our own pkg, so install it
+        // now, wait for it to become launchable, and go. It's a different
+        // title, so this isn't blocked by "already installed".
+        std::string setupErr;
+        if (ps4::installUpdaterApp(setupErr) == 0) {
+            setProgress(ui, "Preparing updater…");
+            // BGFT installs in the background. Wait by asking whether the title
+            // is installed yet — NOT by trying to launch it.
+            bool ready = false;
+            for (int i = 0; i < 60 && !ready; ++i) {
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                ready = ps4::isUpdaterInstalled();
+            }
+            bool launched = false;
+            if (ready) {
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+                std::string tryErr;
+                launched = ps4::launchUpdater(tryErr) == 0;
+            }
+            if (launched) {
+                setProgress(ui, "Handed to updater…");
+                finishProgress(ui, []() { std::_Exit(0); });
+                return true;
+            }
+            finishProgress(ui, [path]() {
+                showMessage("Update downloaded to\n" + path +
+                            "\n\nThe updater is still installing. Try Update again in "
+                            "a moment, or close VitaSuwayomi and install that .pkg with "
+                            "Itemzflow (or Debug Settings > Install Package).");
+            });
+            return false;
+        }
+        finishProgress(ui, [path, setupErr]() {
+            showMessage("Update downloaded to\n" + path +
+                        "\n\nThe in-app installer couldn't start" +
+                        (setupErr.empty() ? "" : (" (" + setupErr + ")")) +
+                        ".\nInstall that .pkg with Itemzflow (or Debug Settings > "
+                        "Install Package).");
+        });
+        return false;
+    }
+
 #elif defined(ANDROID) || defined(__ANDROID__)
     // Hand the APK to the system package installer via JNI (content:// uri).
     // installApk returns false when the user must still act — on API 26+ it
@@ -713,6 +783,9 @@ void startInstall(const ReleaseInfo& rel) {
 #if defined(__vita__) || defined(__PSV__)
         // The updater stub reads a fixed path in the data dir by convention.
         std::string dest = platform::path("update.vpk");
+#elif defined(__PS4__)
+        // Likewise the PS4 helper: /data/VitaSuwayomi/update.pkg by convention.
+        std::string dest = platform::path("update.pkg");
 #else
         std::string dest;
 #if defined(__linux__) && !defined(ANDROID)
@@ -843,6 +916,11 @@ void checkForUpdates(bool manual) {
     // always from the main app, never the stub itself (a title can't uninstall
     // its own running self). No-op on a normal boot when the stub isn't present.
     vita::removeUpdaterStub();
+#elif defined(__PS4__)
+    // Same idea on PS4: remove the helper title left over from a completed
+    // update. A title that uninstalls its own running self is killed mid-call
+    // and reported as a crash (CE-36329-3), so this must run from the main app.
+    ps4::removeUpdaterApp();
 #endif
 
     if (manual) brls::Application::notify("Checking for updates…");
