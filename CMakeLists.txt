@@ -328,6 +328,15 @@ else()
     )
     if(APPLE OR PLATFORM_PS4)
         set(APP_FFMPEG_LINK_BLOCK ${APP_FFMPEG_LIBS})
+    elseif(PLATFORM_SWITCH)
+        # switchfin's ffmpeg (switch-ffmpeg 7.1.5-5) is built with the RTMP
+        # (mbedTLS-DH), libssh2 and mbedTLS-TLS protocols, so libavformat needs
+        # those symbols at link time. Put mbedTLS + libssh2 INSIDE the same
+        # --start-group as the av libs so the static linker resolves the circular
+        # deps regardless of order (they're undefined otherwise, since mbedTLS is
+        # otherwise listed before libavformat).
+        set(APP_FFMPEG_LINK_BLOCK -Wl,--start-group ${APP_FFMPEG_LIBS}
+            mbedtls mbedx509 mbedcrypto ssh2 -Wl,--end-group)
     else()
         set(APP_FFMPEG_LINK_BLOCK -Wl,--start-group ${APP_FFMPEG_LIBS} -Wl,--end-group)
     endif()
