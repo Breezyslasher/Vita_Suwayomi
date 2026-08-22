@@ -46,7 +46,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>     // chmod (make the replacement AppImage executable)
 #include <fcntl.h>
+#include <filesystem>     // AppImage self-replace rename/copy
 #endif
 
 #if VS_MACOS_DESKTOP
@@ -250,13 +252,21 @@ bool isNewer(const std::string& tag, const std::string& current) {
 // (VitaSuwayomi.<tag>-<suffix>). Empty ⇒ no in-place asset ⇒ browser/defer.
 
 #if defined(__linux__) && !defined(ANDROID)
-enum class LinuxPkg { None, Flatpak, Deb, Aur };
-LinuxPkg linuxPkg() {
-    if (std::getenv("FLATPAK_ID") || access("/.flatpak-info", F_OK) == 0)
-        return LinuxPkg::Flatpak;
+// AppImage, .deb and the AUR package are the SAME desktop binary — nothing at
+// build time says which — so detect the install kind at runtime. AppImage is a
+// single user-owned file we can replace in place; Flatpak is sandboxed and
+// updates through Flathub, so it (and anything unrecognized) stays browser-only.
+enum class LinuxPkg { None, AppImage, Deb, Aur };
+std::string selfExePath() {
     char buf[4096];
     ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    std::string exe = (n > 0) ? std::string(buf, n) : std::string();
+    return (n > 0) ? std::string(buf, n) : std::string();
+}
+LinuxPkg linuxPkg() {
+    if (std::getenv("APPIMAGE")) return LinuxPkg::AppImage;   // runtime sets it
+    if (std::getenv("FLATPAK_ID") || access("/.flatpak-info", F_OK) == 0)
+        return LinuxPkg::None;                                // Flathub-managed
+    std::string exe = selfExePath();
     if (!exe.empty()) {
         if (exe.rfind("/usr/lib/VitaSuwayomi/", 0) == 0 && access("/var/lib/dpkg/status", F_OK) == 0)
             return LinuxPkg::Deb;
@@ -293,9 +303,10 @@ std::string assetSuffix() {
     return "-ps4.pkg";
 #elif defined(__linux__) && !defined(ANDROID)
     switch (linuxPkg()) {
-        case LinuxPkg::Deb: return isArm64Linux() ? "-Linux_arm64.deb" : "-Linux_amd64.deb";
-        case LinuxPkg::Aur: return "-Linux.pkg.tar.zst";
-        default:            return {};   // Flatpak / unknown → Flathub / browser
+        case LinuxPkg::AppImage: return isArm64Linux() ? "-aarch64.AppImage" : "-x86_64.AppImage";
+        case LinuxPkg::Deb:      return isArm64Linux() ? "-Linux_arm64.deb"  : "-Linux_amd64.deb";
+        case LinuxPkg::Aur:      return "-Linux.pkg.tar.zst";
+        default:                 return {};   // Flatpak / unknown → Flathub / browser
     }
 #elif defined(_WIN32)
   #if defined(__i386__) || defined(_M_IX86)
@@ -568,6 +579,32 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
 
 #elif defined(__linux__) && !defined(ANDROID)
     switch (linuxPkg()) {
+        case LinuxPkg::AppImage: {
+            // `path` was downloaded to "<target>.new" on the same filesystem, so
+            // rename() atomically swaps it over the running image — the running
+            // process keeps the old inode; the new file launches on exec.
+            setProgress(ui, "Installing…");
+            const char* ai = std::getenv("APPIMAGE");
+            std::string target = ai ? std::string(ai) : selfExePath();
+            std::string src = path;
+            finishProgress(ui, [src, target]() {
+                std::error_code ec;
+                std::filesystem::rename(src, target, ec);
+                if (ec)
+                    std::filesystem::copy_file(src, target,
+                        std::filesystem::copy_options::overwrite_existing, ec);
+                ::chmod(target.c_str(), 0755);
+                pid_t pid = fork();   // relaunch the new image, detached
+                if (pid == 0) {
+                    setsid();
+                    sleep(1);         // let this instance quit and free the window
+                    execl(target.c_str(), target.c_str(), (char*)nullptr);
+                    _exit(127);
+                }
+                brls::Application::quit();
+            });
+            return true;
+        }
         case LinuxPkg::Deb: {
             setProgress(ui, "Opening installer…");
             std::string p = path;
@@ -661,8 +698,19 @@ void startInstall(const ReleaseInfo& rel) {
         // The updater stub reads a fixed path in the data dir by convention.
         std::string dest = platform::path("update.vpk");
 #else
-        platform::createDirRecursive(platform::path("updates"));
-        std::string dest = platform::path(std::string("updates/update") + downloadExtension());
+        std::string dest;
+#if defined(__linux__) && !defined(ANDROID)
+        // AppImage: download next to the running file so the final rename is an
+        // atomic same-filesystem swap (and sidesteps ETXTBSY on the running exe).
+        if (linuxPkg() == LinuxPkg::AppImage) {
+            const char* ai = std::getenv("APPIMAGE");
+            dest = ai ? (std::string(ai) + ".new") : platform::path("update.AppImage");
+        }
+#endif
+        if (dest.empty()) {
+            platform::createDirRecursive(platform::path("updates"));
+            dest = platform::path(std::string("updates/update") + downloadExtension());
+        }
 #endif
 
         std::string err;

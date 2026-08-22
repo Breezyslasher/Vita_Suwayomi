@@ -37,6 +37,7 @@ release the user dismissed with "Skip"; the manual check always shows it.
 | PS Vita | `.vpk` | AutoPlugin2 stub (`VSWYUPD01`, bundled as `app0:updater.vpk`) promotes it — see below |
 | Switch | `-nx-{opengl,deko3d}.nro` | unmount romfs, `rename` over the running NRO |
 | Windows | `-windows-{x64,x86}.zip` | detached CRLF `.bat` unpacks over the install dir, relaunches |
+| Linux AppImage | `-{x86_64,aarch64}.AppImage` | self-replace over `$APPIMAGE` + relaunch (the one Linux format that self-updates) |
 | Linux deb | `-Linux_{amd64,arm64}.deb` | hand to `xdg-open` |
 | Linux AUR | `-Linux.pkg.tar.zst` | `pacman -U` note / AUR helper |
 | Linux Flatpak / other | — | browser / Flathub (no self-update asset) |

@@ -29,6 +29,7 @@ on:
         - psvita
         - ps4
         - flatpak
+        - appimage
         - android
         - aur
         - deb
@@ -118,7 +119,7 @@ jobs:
           git push
 
   upload-release:
-    needs: [ resolve-version, build-mingw, build-nx, build-macos, build-flatpak, build-aur, build-ps4, build-vita, build-android ]
+    needs: [ resolve-version, build-mingw, build-nx, build-macos, build-flatpak, build-appimage, build-aur, build-ps4, build-vita, build-android ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -145,6 +146,7 @@ jobs:
             VitaSuwayomi-ps4-*/*
             VitaSuwayomi-vita-*/*.vpk
             VitaSuwayomi-Flatpak-*/*
+            VitaSuwayomi-appimage-*/*.AppImage
             VitaSuwayomi-aur-*/*.pkg.tar.*
             VitaSuwayomi-android-*/*
 
@@ -152,7 +154,7 @@ jobs:
   # Pre-release — manually triggered
   # ───────────────────────────────────────────────
   upload-prerelease:
-    needs: [resolve-version, build-mingw, build-nx, build-macos, build-flatpak, build-aur, build-ps4, build-vita, build-android, build-deb]
+    needs: [resolve-version, build-mingw, build-nx, build-macos, build-flatpak, build-appimage, build-aur, build-ps4, build-vita, build-android, build-deb]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -189,6 +191,13 @@ jobs:
             base=$(basename "$tgz")
             info=$(echo "$base" | sed -E 's/VitaSuwayomi-Linux-(.+)-[0-9]+\.tar\.gz/\1/')
             cp "$tgz" "release/VitaSuwayomi.${FVER}-Flatpak-${info}.tar.gz"
+          done
+
+          # AppImages (self-updating Linux build)
+          for ai in $(find . -name "VitaSuwayomi-*.AppImage"); do
+            base=$(basename "$ai")
+            arch=$(echo "$base" | sed -E 's/VitaSuwayomi-(.+)-[0-9]+\.AppImage/\1/')
+            cp "$ai" "release/VitaSuwayomi.${FVER}-${arch}.AppImage"
           done
 
           # Switch NRO
@@ -426,6 +435,103 @@ jobs:
         with:
           name: VitaSuwayomi-Flatpak-${{ matrix.arch }}-${{ matrix.driver }}-${{ github.run_number }}
           path: VitaSuwayomi-Linux-${{ matrix.arch }}-${{ matrix.driver }}-${{ github.run_number }}.tar.gz
+
+  # ───────────────────────────────────────────────
+  # AppImage — portable, self-updating Linux (x86_64 + aarch64)
+  # ───────────────────────────────────────────────
+  build-appimage:
+    needs: [resolve-version]
+    if: ${{ inputs.platform == 'appimage' || inputs.platform == 'all' || github.event_name != 'workflow_dispatch' }}
+    name: AppImage (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - { arch: x86_64, runner: ubuntu-24.04 }
+        - { arch: aarch64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set workspace permissions
+        run: git config --global --add safe.directory $GITHUB_WORKSPACE
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build pkg-config patchelf \
+            libcurl4-openssl-dev libmbedtls-dev \
+            libmp3lame-dev libfreetype-dev libharfbuzz-dev libfribidi-dev \
+            libpng-dev libwebp-dev libzstd-dev libdbus-1-dev \
+            libwayland-dev libxkbcommon-dev xorg-dev
+      - name: Build and package AppImage
+        run: |
+          cmake -B build -G Ninja -DPLATFORM_DESKTOP=ON \
+            -DAPP_VERSION=${{ needs.resolve-version.outputs.version_number }}
+          cmake --build build
+
+          # Bundle non-system shared deps next to the binary so the AppImage
+          # runs on distros that don't ship them; skip libs that are part of
+          # the base system (glibc, libstdc++, the GL/Wayland/X11 stack, …).
+          BUNDLE_DIR=build/lib
+          mkdir -p "$BUNDLE_DIR"
+          EXCLUDE='^(/lib(64)?/ld-|.*/(libc|libm|libpthread|libdl|librt|libresolv|libutil|libnsl|libstdc\+\+|libgcc_s|libGL|libGLX|libEGL|libGLdispatch|libGLESv|libOpenGL|libvulkan|libX11|libxcb|libXext|libXrandr|libXi|libXinerama|libXcursor|libXrender|libXfixes|libwayland|libxkbcommon|libdbus|libsystemd|libudev|libdrm|libgbm)[-.]|linux-vdso\.so)'
+          declare -A bundled
+          UNRESOLVED=""
+          walk_deps() {
+            local target="$1"
+            while IFS= read -r raw; do
+              local needed path
+              needed=$(echo "$raw" | awk '{print $1}')
+              path=$(echo "$raw" | awk '{print $3}')
+              if [ "$path" = "not" ]; then
+                UNRESOLVED+="${needed} (needed by $(basename "$target"))"$'\n'; continue
+              fi
+              [[ -z "$path" || ! -f "$path" ]] && continue
+              [[ "$path" =~ $EXCLUDE ]] && continue
+              local name; name=$(basename "$path")
+              if [ -z "${bundled[$name]+x}" ]; then
+                cp -L "$path" "$BUNDLE_DIR/"; bundled[$name]=1
+                walk_deps "$BUNDLE_DIR/$name"
+              fi
+            done < <(ldd "$target" 2>/dev/null | awk '/=>/')
+          }
+          walk_deps build/VitaSuwayomi
+          echo "Bundled libraries:"; ls -la "$BUNDLE_DIR" || true
+          if [ -n "$UNRESOLVED" ]; then
+            echo "::error::ldd reported unresolved dependencies"; printf '%s' "$UNRESOLVED"; exit 1
+          fi
+          patchelf --set-rpath '$ORIGIN/lib' build/VitaSuwayomi
+          for so in "$BUNDLE_DIR"/*.so*; do [ -f "$so" ] || continue; patchelf --set-rpath '$ORIGIN' "$so" 2>/dev/null || true; done
+
+          # ── Assemble the AppDir ─────────────────────────────────────────
+          APPDIR=AppDir
+          rm -rf "$APPDIR"
+          mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib" "$APPDIR/usr/share/VitaSuwayomi"
+          cp build/VitaSuwayomi "$APPDIR/usr/bin/VitaSuwayomi"
+          cp -a build/lib/. "$APPDIR/usr/lib/" 2>/dev/null || true
+          cp -r build/resources "$APPDIR/usr/share/VitaSuwayomi/resources"
+          patchelf --set-rpath '$ORIGIN/../lib' "$APPDIR/usr/bin/VitaSuwayomi"
+          printf '%s\n' '#!/bin/sh' \
+            'HERE="$(dirname "$(readlink -f "$0")")"' \
+            'cd "$HERE/usr/share/VitaSuwayomi" || exit 1' \
+            'exec "$HERE/usr/bin/VitaSuwayomi" "$@"' > "$APPDIR/AppRun"
+          chmod +x "$APPDIR/AppRun"
+          printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=VitaSuwayomi' \
+            'Comment=Suwayomi manga reader' 'Exec=VitaSuwayomi' 'Icon=VitaSuwayomi' \
+            'Terminal=false' 'Categories=Graphics;Viewer;Network;' > "$APPDIR/VitaSuwayomi.desktop"
+          cp app/platform/icon_desktop.png "$APPDIR/VitaSuwayomi.png"
+
+          curl -fsSL "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.arch }}.AppImage" -o appimagetool
+          chmod +x appimagetool
+          ARCH=${{ matrix.arch }} ./appimagetool --appimage-extract-and-run "$APPDIR" \
+            "VitaSuwayomi-${{ matrix.arch }}-${{ github.run_number }}.AppImage"
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitaSuwayomi-appimage-${{ matrix.arch }}-${{ github.run_number }}
+          path: VitaSuwayomi-${{ matrix.arch }}-${{ github.run_number }}.AppImage
 
   # ───────────────────────────────────────────────
   # Nintendo Switch — Matrix (opengl + deko3d)
