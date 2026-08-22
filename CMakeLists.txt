@@ -372,7 +372,11 @@ target_link_libraries(${PROJECT_NAME}
     ${APP_RENDER_LIBS}
 )
 
-if(NOT PLATFORM_SWITCH AND NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
+# mp3lame is only pulled in by the FFmpeg/mpv audio path, so only link it when
+# that stack is present (macOS/Windows-full builds). Desktop Linux disables
+# FFmpeg (VITASUWAYOMI_NO_FFMPEG) and never references lame — linking it there
+# just forces an extra dependency (e.g. a Flatpak module) for no reason.
+if(APP_FFMPEG_LIBS AND NOT PLATFORM_SWITCH AND NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
     target_link_libraries(${PROJECT_NAME} mp3lame)
 endif()
 

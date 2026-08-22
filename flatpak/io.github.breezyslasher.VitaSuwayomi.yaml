@@ -2,9 +2,9 @@
 #
 # Unlike the VitaPlex client this was adapted from, the desktop/Linux build is
 # a manga reader — it links no mpv/ffmpeg (CMake defines VITASUWAYOMI_NO_FFMPEG
-# and leaves APP_FFMPEG_LIBS empty on Linux) — so the whole libmpv module stack
-# is dropped. Only mbedTLS (the HTTP client) and libmp3lame (a stray desktop
-# link) aren't in the runtime, so they're built here.
+# and leaves APP_FFMPEG_LIBS empty on Linux, which also drops the mp3lame link)
+# — so the whole libmpv module stack is dropped. Only mbedTLS (the HTTP client)
+# isn't in the runtime, so it's the one module built here.
 #
 # STATUS: first cut, iterated via CI. Known follow-ups before this is
 # Flathub-ready:
@@ -51,18 +51,6 @@ modules:
       - type: archive
         url: https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.2/mbedtls-3.6.2.tar.bz2
         sha256: 8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca
-
-  # libmp3lame — the desktop build links it unconditionally; not in the runtime.
-  - name: lame
-    buildsystem: autotools
-    config-opts:
-      - --disable-static
-      - --enable-shared
-      - --disable-frontend
-    sources:
-      - type: archive
-        url: https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz
-        sha256: ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
 
   - name: vitasuwayomi
     buildsystem: cmake-ninja
