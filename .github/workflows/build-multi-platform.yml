@@ -158,6 +158,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      # Hoisted to the job so the signing step's `if:` can test it — the
+      # `secrets` context is not available in a step-level `if`.
+      UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
     if: ${{ !cancelled() && !failure() && github.event_name == 'workflow_dispatch' && inputs.pre_release == true }}
     steps:
       - name: Download all artifacts
@@ -245,9 +249,7 @@ jobs:
       # inert too, so the whole feature is a no-op until both are in place.
       # See docs/update-signing.md.
       - name: Sign release artifacts
-        if: ${{ secrets.UPDATE_SIGNING_KEY != '' }}
-        env:
-          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        if: ${{ env.UPDATE_SIGNING_KEY != '' }}
         run: |
           set -eu
           printf '%s' "$UPDATE_SIGNING_KEY" > /tmp/update-signing.key
