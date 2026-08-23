@@ -30,6 +30,7 @@
 #include <chrono>
 #elif defined(__SWITCH__)
 #include <sys/stat.h>
+#include <switch.h>
 #endif
 
 #ifdef __vita__
@@ -175,6 +176,35 @@ static void registerCustomViews() {
  * Main entry point implementation
  */
 static int appMain(int argc, char* argv[]) {
+#ifdef __SWITCH__
+    // Refuse applet-mode launches (opening the homebrew menu from the album
+    // instead of over a title). Applets get a fraction of the RAM — decoding
+    // manga pages dies — and only 2 BSD socket sessions, so any concurrent
+    // network use fails with "couldn't connect" (the in-app updater's download
+    // is the reproducible victim).
+    {
+        AppletType at = appletGetAppletType();
+        if (at != AppletType_Application && at != AppletType_SystemApplication) {
+            consoleInit(NULL);
+            printf("\n  VitaSuwayomi needs full memory to run.\n");
+            printf("\n  Launch it with title override: hold R while\n");
+            printf("  opening any game, then start VitaSuwayomi from\n");
+            printf("  the homebrew menu.\n");
+            printf("\n  Press + to exit.\n");
+            padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+            PadState pad;
+            padInitializeDefault(&pad);
+            while (appletMainLoop()) {
+                padUpdate(&pad);
+                if (padGetButtonsDown(&pad) & HidNpadButton_Plus) break;
+                consoleUpdate(NULL);
+            }
+            consoleExit(NULL);
+            return 0;
+        }
+    }
+#endif
+
     // Remember argv[0] for the updater (Switch needs it to know which NRO to
     // overwrite; a no-op elsewhere). Safe to call before borealis init.
     app_update::setSelfPath(argc > 0 ? argv[0] : nullptr);

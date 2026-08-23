@@ -10,6 +10,7 @@
 
 #include <borealis.hpp>
 #include "utils/http_client.hpp"
+#include "utils/update_verify.hpp"
 #include "utils/async.hpp"
 #include "platform/platform.hpp"
 #include "app/application.hpp"
@@ -958,6 +959,43 @@ void startInstall(const ReleaseInfo& rel) {
             } else {
                 brls::Logger::info("app_update: verified SHA-256 of {}", rel.assetName);
             }
+        }
+
+        // Authenticity gate. When this build has an update-signing key compiled
+        // in (updateSignatureEnforced()), the artifact must also carry a
+        // matching detached signature, published beside it as "<asset>.sig".
+        // The digest above proves the bytes match what the feed advertised;
+        // this proves the release itself came from the project, so it also
+        // survives a compromised release host or a future TLS weakness.
+        // Inert until a key is added — see docs/update-signing.md.
+        if (updateSignatureEnforced()) {
+            setProgress(ui, "Verifying signature…");
+            HttpClient sigClient;
+            sigClient.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
+            sigClient.setVerifyTls(true);
+            HttpRequest sigReq;
+            sigReq.url             = rel.assetUrl + ".sig";
+            sigReq.timeout         = 20;
+            sigReq.followRedirects = true;
+            HttpResponse sigResp = sigClient.request(sigReq);
+
+            std::string vErr;
+            const bool okSig = sigResp.statusCode == 200 && !sigResp.body.empty() &&
+                               verifyUpdateFile(dest, sigResp.body, vErr);
+            if (!okSig) {
+                if (vErr.empty())
+                    vErr = "could not fetch signature (HTTP " +
+                           std::to_string(sigResp.statusCode) + ")";
+                brls::Logger::error("app_update: signature check failed: {}", vErr);
+                platform::deleteFile(dest);
+                finishProgress(ui, [vErr]() {
+                    showMessage("Update aborted: signature check failed.\n\n" + vErr +
+                                "\n\nThe download was deleted.");
+                });
+                s_busy.store(false);
+                return;
+            }
+            brls::Logger::info("app_update: signature verified for {}", rel.assetName);
         }
 
         // Bytes are on disk and verified — from here Cancel is disabled (a

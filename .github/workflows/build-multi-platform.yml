@@ -240,6 +240,25 @@ jobs:
           ls -lh release/
           echo "Checksums:"
           cat release/SHA256SUMS
+      # Detached signatures for the in-app updater's authenticity check.
+      # Skipped until the UPDATE_SIGNING_KEY secret exists — the client ships
+      # inert too, so the whole feature is a no-op until both are in place.
+      # See docs/update-signing.md.
+      - name: Sign release artifacts
+        if: ${{ secrets.UPDATE_SIGNING_KEY != '' }}
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -eu
+          printf '%s' "$UPDATE_SIGNING_KEY" > /tmp/update-signing.key
+          for f in release/*; do
+            case "$f" in *.sig|*SHA256SUMS) continue;; esac
+            # Raw DER ECDSA-P256 over the file's SHA-256 — what
+            # mbedtls_pk_verify() in update_verify.cpp expects.
+            openssl dgst -sha256 -sign /tmp/update-signing.key -out "$f.sig" "$f"
+          done
+          rm -f /tmp/update-signing.key
+          echo "Signed:"; ls -l release/*.sig
       - name: Create pre-release
         uses: softprops/action-gh-release@v2
         with:

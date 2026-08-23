@@ -215,6 +215,7 @@ set(APP_SOURCES
     src/view/pinch_gesture.cpp
     src/utils/http_client.cpp
     src/utils/app_update.cpp
+    src/utils/update_verify.cpp
     src/utils/image_loader.cpp
     src/utils/library_cache.cpp
     src/utils/perf_overlay.cpp
@@ -411,6 +412,37 @@ target_link_libraries(${PROJECT_NAME}
     ${APP_FFMPEG_LINK_BLOCK}
     ${APP_RENDER_LIBS}
 )
+
+# Update-signature verification (src/utils/update_verify.cpp) uses mbedcrypto,
+# which is linked on every target that installs updates in place: the consoles
+# (Switch gets it via the ffmpeg --start-group above), Android and desktop
+# Linux/macOS. Windows (Schannel, no mbedcrypto) compiles the stub instead and
+# leans on TLS-verified transport plus the SHA-256 digest check.
+if(NOT WIN32)
+    set(_vs_have_mbedcrypto TRUE)
+    if(APPLE)
+        # update_verify.cpp is the only desktop source including mbedtls
+        # headers, and Homebrew keeps mbedtls keg-only, outside the prefix the
+        # other libs use. Locate it; if absent fall back to the stub rather than
+        # fail the build (the download is still TLS- and digest-verified).
+        find_path(MBEDTLS_INCLUDE_DIR mbedtls/sha256.h
+            HINTS /opt/homebrew/include /usr/local/include
+                  /opt/homebrew/opt/mbedtls/include /usr/local/opt/mbedtls/include)
+        if(MBEDTLS_INCLUDE_DIR)
+            target_include_directories(${PROJECT_NAME} PRIVATE "${MBEDTLS_INCLUDE_DIR}")
+            target_link_directories(${PROJECT_NAME} PRIVATE
+                /opt/homebrew/opt/mbedtls/lib /usr/local/opt/mbedtls/lib)
+        else()
+            set(_vs_have_mbedcrypto FALSE)
+            message(WARNING "mbedtls headers not found - update signature "
+                            "verification disabled on this macOS build "
+                            "(the download is still TLS- and digest-verified)")
+        endif()
+    endif()
+    if(_vs_have_mbedcrypto)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE VITASUWAYOMI_HAVE_MBEDCRYPTO=1)
+    endif()
+endif()
 
 # mp3lame is only pulled in by the FFmpeg/mpv audio path, so only link it when
 # that stack is present (macOS/Windows-full builds). Desktop Linux disables
