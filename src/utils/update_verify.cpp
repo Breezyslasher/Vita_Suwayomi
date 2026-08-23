@@ -33,11 +33,19 @@ namespace {
 //   3. Paste the PUBLIC key (the whole PEM block, newline-terminated) here.
 // From then on every in-app update is verified fail-closed on the platforms
 // above.
-// EMPTY = enforcement OFF. This project holds no update-signing key yet, so the
-// module ships inert and the updater behaves exactly as before (it still
-// verifies TLS and the SHA-256 digest GitHub publishes). Pasting a key here is
-// the single switch that turns signature enforcement on.
-const char kUpdatePublicKeyPem[] = "";
+// The project's update-signing PUBLIC key (EC P-256, SPKI PEM). Non-empty, so
+// signature enforcement is ACTIVE: every in-app update must carry a matching
+// "<asset>.sig" or it is refused. The PRIVATE half lives only in the CI secret
+// UPDATE_SIGNING_KEY and is never committed.
+//
+// Consequence to keep in mind when releasing: builds carrying this key require
+// a signature on EVERY release they are offered, so CI must keep signing (see
+// docs/update-signing.md).
+const char kUpdatePublicKeyPem[] =
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEAE/L3njlHnCL++FnE0etx0MLZnSM\n"
+    "BNktL9/HAHvHgWcpYSzBtOpOSwdswoaRm6g+LnTI9XLK8C/a00kC9+o30g==\n"
+    "-----END PUBLIC KEY-----\n";
 
 // SHA-256 the file at `path` into `out`. Vita's newlib fopen is unreliable for
 // the ux0: data paths the download writes to, so read via sceIo there (the
