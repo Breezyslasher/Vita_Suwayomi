@@ -129,8 +129,14 @@ jobs:
         uses: actions/download-artifact@v4
       - name: Package Windows assets
         run: |
-          for p in VitaSuwayomi-windows-*; do
-            [[ -d $p ]] && 7z a -mx=9 $p.7z ./$p/* && rm -rf $p
+          # The Windows build uploads its artifact as VitaSuwayomi-mingw-<arch>-<run>;
+          # this loop matched VitaSuwayomi-windows-* and so never fired, leaving
+          # tag releases with no Windows archive at all. Pack each mingw dir into
+          # the VitaSuwayomi-windows-<arch>.7z name the upload/signing globs expect.
+          for p in VitaSuwayomi-mingw-*; do
+            [[ -d $p ]] || continue
+            arch=$(echo "$p" | sed -E 's/VitaSuwayomi-mingw-([^-]+)-.*/\1/')
+            7z a -mx=9 "VitaSuwayomi-windows-${arch}.7z" ./$p/* && rm -rf "$p"
           done
       # Sign every asset so the in-app updater can verify authenticity before
       # installing (see src/utils/update_verify.cpp): detached ECDSA-P256 /
@@ -758,7 +764,10 @@ jobs:
       - name: Upload NRO
         uses: actions/upload-artifact@v4
         with:
-          name: VitaSuwayomi-Switch-${{ matrix.driver }}-${{ github.run_number }}
+          # Must stay "nx-": the release rename, the signing step and the
+          # upload globs all match VitaSuwayomi-nx-*. It was "Switch-", so no
+          # .nro ever reached a release (Beta-2.2.1 shipped without one).
+          name: VitaSuwayomi-nx-${{ matrix.driver }}-${{ github.run_number }}
           path: build/VitaSuwayomi.nro
 
   # ───────────────────────────────────────────────
