@@ -310,7 +310,7 @@ void uiFrame(float t, float fraction = -1.0f) {
     fillRect(panelX, panelY + panelH - 1, panelW, 1, 0x3E, 0x3E, 0x46, 0xFF);
     fillRect(panelX, panelY, 1, panelH, 0x3E, 0x3E, 0x46, 0xFF);
     fillRect(panelX + panelW - 1, panelY, 1, panelH, 0x3E, 0x3E, 0x46, 0xFF);
-    fillRect(panelX, panelY, panelW, 8, 0xE5, 0xA0, 0x0D, 0xFF);
+    fillRect(panelX, panelY, panelW, 8, 0x64, 0xB4, 0xFF, 0xFF);
 
     // A play mark drawn from rectangles rather than the app icon texture.
     // RenderCopy reports success on this GLES2/Piglet renderer but samples to a
@@ -327,7 +327,7 @@ void uiFrame(float t, float fraction = -1.0f) {
             // vertical centre, then mirrored for the bottom half.
             int fromCentre = (i < rows / 2) ? (rows / 2 - i) : (i - rows / 2);
             int w = markW - (markW * fromCentre) / (rows / 2);
-            if (w > 0) fillRect(markX, markY + i * 2, w, 2, 0xE5, 0xA0, 0x0D, 0xFF);
+            if (w > 0) fillRect(markX, markY + i * 2, w, 2, 0x64, 0xB4, 0xFF, 0xFF);
         }
     }
 
@@ -342,7 +342,7 @@ void uiFrame(float t, float fraction = -1.0f) {
         int w = (int)(fraction * (float)barW);
         if (w < 2) w = 2;
         if (w > barW) w = barW;
-        fillRect(barX, barY, w, barH, 0xE5, 0xA0, 0x0D, 0xFF);
+        fillRect(barX, barY, w, barH, 0x64, 0xB4, 0xFF, 0xFF);
     } else {
         // No length reported yet: a gold segment sweeping back and forth, so
         // the wait reads as busy rather than as a fake percentage.
@@ -351,7 +351,7 @@ void uiFrame(float t, float fraction = -1.0f) {
         p = p - (float)((int)p);
         float pos = p < 0.5f ? p * 2.0f : (1.0f - p) * 2.0f;
         int segX = barX + (int)(pos * (float)(barW - segW));
-        fillRect(segX, barY, segW, barH, 0xE5, 0xA0, 0x0D, 0xFF);
+        fillRect(segX, barY, segW, barH, 0x64, 0xB4, 0xFF, 0xFF);
     }
 
     SDL_RenderPresent(g_ren);

@@ -1,5 +1,6 @@
 /*
-    VitaPlex — PS Vita in-app self-update (ported from pleNx, thcolin/gamepad-media-center-aggregator)
+    VitaSuwayomi — PS Vita in-app self-update
+    (ported from VitaPlex; originally from pleNx, thcolin/gamepad-media-center-aggregator)
 */
 
 #pragma once
@@ -42,11 +43,11 @@ int installVpk(const std::string& vpkPath, const std::string& workDir, std::stri
                std::function<void(int phase, int done, int total)> onProgress = {});
 
 /// Launch an installed app by its title id (via a psgm:play URI). Used to hand
-/// off to the updater stub, and by the stub to relaunch VitaPlex afterwards.
+/// off to the updater stub, and by the stub to relaunch VitaSuwayomi afterwards.
 void launchTitle(const std::string& titleId);
 
 /// Uninstall the updater stub (title VSWYUPD01) if it's installed, via
-/// ScePromoterUtility. Call from VitaPlex on startup after an update: the stub
+/// ScePromoterUtility. Call from VitaSuwayomi on startup after an update: the stub
 /// is installed fresh from the bundled updater.vpk each update and left on the
 /// LiveArea, so this clears the leftover bubble — the PS4 removeUpdaterApp()
 /// counterpart. Safe because it's a different title (a title can't uninstall

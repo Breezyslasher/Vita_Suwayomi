@@ -1,5 +1,6 @@
 /*
-    VitaPlex — PS Vita in-app self-update (ported from pleNx, thcolin/gamepad-media-center-aggregator)
+    VitaSuwayomi — PS Vita in-app self-update
+    (ported from VitaPlex; originally from pleNx, thcolin/gamepad-media-center-aggregator)
 
     Installs a homebrew VPK from within the running app: extract the ZIP, forge
     a fake-package `sce_sys/package/head.bin`, then promote the directory with
@@ -13,7 +14,7 @@
     `makeHeadBin`/`promoteApp`. The `head.bin` bytes embedded in
     `vita_head_bin.h` come from VitaShell's `resources/head.bin`; the code below
     is an independent reimplementation. The Vita build already links a GPL
-    libmpv, so the distributed VitaPlex.vpk is likewise a GPL combined work (Vita build links GPL libmpv) and this reuse
+    libmpv, so the distributed VitaSuwayomi.vpk is likewise a GPL combined work (Vita build links GPL libmpv) and this reuse
     is licence-compatible. See NOTICE and issue #14.
 */
 
@@ -50,7 +51,7 @@
 namespace {
 
 // Self-contained logging + string formatting — this file is linked into BOTH
-// VitaPlex (which has borealis) and the tiny updater-stub app (which does not),
+// VitaSuwayomi (which has borealis) and the tiny updater-stub app (which does not),
 // so it cannot depend on brls::Logger or fmt. Logs append to a file both
 // processes can share, which doubles as the on-device diagnostic trail.
 void vlog(const char* fmt, ...) {
@@ -410,7 +411,7 @@ int promoteApp(const std::string& path, std::string& err,
 
     res = scePromoterUtilityInit();
     if (res >= 0) {
-        // VitaPlex ships with an empty CONTENT_ID (free homebrew, no
+        // VitaSuwayomi ships with an empty CONTENT_ID (free homebrew, no
         // license): scePromoterUtilityPromotePkgWithRif wants a rif keyed
         // to a real content-id and rejects it up front with 0x80101114, so
         // use the no-license scePromoterUtilityPromotePkg. Drive it
