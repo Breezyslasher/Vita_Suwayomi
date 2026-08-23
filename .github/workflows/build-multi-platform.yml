@@ -132,6 +132,42 @@ jobs:
           for p in VitaSuwayomi-windows-*; do
             [[ -d $p ]] && 7z a -mx=9 $p.7z ./$p/* && rm -rf $p
           done
+      # Sign every asset so the in-app updater can verify authenticity before
+      # installing (see src/utils/update_verify.cpp): detached ECDSA-P256 /
+      # SHA-256 signatures published beside each asset as "<asset>.sig". No-op
+      # unless the UPDATE_SIGNING_KEY secret (EC private key, PEM) is set, so
+      # forks release normally and client verification stays inert until the
+      # matching public key is compiled in. Signs the same set uploaded below.
+      - name: Sign release assets
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${UPDATE_SIGNING_KEY:-}" ]; then
+            echo "UPDATE_SIGNING_KEY not set — skipping asset signing (verification ships inert)."
+            exit 0
+          fi
+          keyfile="$(mktemp)"
+          trap 'rm -f "$keyfile"' EXIT
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > "$keyfile"
+          shopt -s nullglob
+          signed=0
+          for f in \
+              VitaSuwayomi-windows-*.7z \
+              VitaSuwayomi-macos-*/* \
+              VitaSuwayomi-nx-*/*.nro \
+              VitaSuwayomi-ps4-*/* \
+              VitaSuwayomi-vita-*/*.vpk \
+              VitaSuwayomi-flatpak-*/*.flatpak \
+              VitaSuwayomi-appimage-*/*.AppImage \
+              VitaSuwayomi-android-*/*; do
+            [ -f "$f" ] || continue
+            case "$f" in *.sig) continue ;; esac
+            openssl dgst -sha256 -sign "$keyfile" -out "$f.sig" "$f"
+            echo "signed $f"
+            signed=$((signed + 1))
+          done
+          echo "Signed $signed asset(s)."
       - name: Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
@@ -141,12 +177,17 @@ jobs:
           draft: true
           files: |
             VitaSuwayomi-windows-*.7z
+            VitaSuwayomi-windows-*.7z.sig
             VitaSuwayomi-macos-*/*
             VitaSuwayomi-nx-*/*.nro
+            VitaSuwayomi-nx-*/*.nro.sig
             VitaSuwayomi-ps4-*/*
             VitaSuwayomi-vita-*/*.vpk
+            VitaSuwayomi-vita-*/*.vpk.sig
             VitaSuwayomi-flatpak-*/*.flatpak
+            VitaSuwayomi-flatpak-*/*.flatpak.sig
             VitaSuwayomi-appimage-*/*.AppImage
+            VitaSuwayomi-appimage-*/*.AppImage.sig
             VitaSuwayomi-aur-*/*.pkg.tar.*
             VitaSuwayomi-android-*/*
 
@@ -158,10 +199,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      # Hoisted to the job so the signing step's `if:` can test it — the
-      # `secrets` context is not available in a step-level `if`.
-      UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
     if: ${{ !cancelled() && !failure() && github.event_name == 'workflow_dispatch' && inputs.pre_release == true }}
     steps:
       - name: Download all artifacts
@@ -244,23 +281,34 @@ jobs:
           ls -lh release/
           echo "Checksums:"
           cat release/SHA256SUMS
-      # Detached signatures for the in-app updater's authenticity check.
-      # Skipped until the UPDATE_SIGNING_KEY secret exists — the client ships
-      # inert too, so the whole feature is a no-op until both are in place.
-      # See docs/update-signing.md.
-      - name: Sign release artifacts
-        if: ${{ env.UPDATE_SIGNING_KEY != '' }}
+      # Sign every asset so the in-app updater can verify authenticity before
+      # installing (see src/utils/update_verify.cpp): detached ECDSA-P256 /
+      # SHA-256 signatures published beside each asset as "<asset>.sig". No-op
+      # unless the UPDATE_SIGNING_KEY secret (EC private key, PEM) is set, so
+      # forks release normally and client verification stays inert until the
+      # matching public key is compiled in.
+      - name: Sign release assets
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
-          set -eu
-          printf '%s' "$UPDATE_SIGNING_KEY" > /tmp/update-signing.key
+          set -euo pipefail
+          if [ -z "${UPDATE_SIGNING_KEY:-}" ]; then
+            echo "UPDATE_SIGNING_KEY not set — skipping asset signing (verification ships inert)."
+            exit 0
+          fi
+          keyfile="$(mktemp)"
+          trap 'rm -f "$keyfile"' EXIT
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > "$keyfile"
+          shopt -s nullglob
+          signed=0
           for f in release/*; do
-            case "$f" in *.sig|*SHA256SUMS) continue;; esac
-            # Raw DER ECDSA-P256 over the file's SHA-256 — what
-            # mbedtls_pk_verify() in update_verify.cpp expects.
-            openssl dgst -sha256 -sign /tmp/update-signing.key -out "$f.sig" "$f"
+            [ -f "$f" ] || continue
+            case "$f" in *.sig|*SHA256SUMS) continue ;; esac
+            openssl dgst -sha256 -sign "$keyfile" -out "$f.sig" "$f"
+            echo "signed $f"
+            signed=$((signed + 1))
           done
-          rm -f /tmp/update-signing.key
-          echo "Signed:"; ls -l release/*.sig
+          echo "Signed $signed asset(s)."
       - name: Create pre-release
         uses: softprops/action-gh-release@v2
         with:
