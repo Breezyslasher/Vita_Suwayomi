@@ -9,6 +9,8 @@
 #include "utils/app_update.hpp"
 
 #include <borealis.hpp>
+#include <borealis/views/progress_spinner.hpp>
+#include <borealis/views/rectangle.hpp>
 #include "utils/http_client.hpp"
 #include "utils/update_verify.hpp"
 #include "utils/async.hpp"
@@ -466,57 +468,316 @@ void setSkippedVersion(const std::string& tag) {
     Application::getInstance().saveSettings();
 }
 
-// ── Progress dialog (built on the UI thread, updated via brls::sync) ─────────
-struct ProgressUI {
-    brls::Dialog* dialog = nullptr;
-    brls::Label*  status = nullptr;
-    std::atomic<bool> dismissed{false};
+// ── Updater UI ──────────────────────────────────────────────────────────────
+// Ported from the VitaPlex updater (scrim + panel + step checklist), repainted
+// in this app's palette: its Plex gold is replaced by the accent #64B4FF used
+// by the History/Browse redesign and the Vita/PS4 updater screens.
+namespace tok {
+    inline NVGcolor panel()        { return nvgRGB(0x26, 0x26, 0x2a); }
+    inline NVGcolor panelLine()    { return nvgRGB(0x45, 0x45, 0x4d); }
+    inline NVGcolor hairline()     { return nvgRGB(0x47, 0x47, 0x47); }
+    inline NVGcolor accent()       { return nvgRGB(0x64, 0xB4, 0xFF); }
+    inline NVGcolor accentBright() { return nvgRGB(0x9A, 0xD2, 0xFF); }
+    inline NVGcolor accentInk()    { return nvgRGB(0x0d, 0x22, 0x36); }
+    inline NVGcolor tileBg()       { return nvgRGBA(0x64, 0xB4, 0xFF, 33); }
+    inline NVGcolor tileBrd()      { return nvgRGBA(0x64, 0xB4, 0xFF, 89); }
+    inline NVGcolor cardBg()       { return nvgRGBA(0x64, 0xB4, 0xFF, 23); }
+    inline NVGcolor cardBrd()      { return nvgRGBA(0x64, 0xB4, 0xFF, 102); }
+    inline NVGcolor green()        { return nvgRGB(0x4E, 0xCC, 0xA3); }
+    inline NVGcolor greenBg()      { return nvgRGBA(0x4E, 0xCC, 0xA3, 36); }
+    inline NVGcolor greenBrd()     { return nvgRGBA(0x4E, 0xCC, 0xA3, 89); }
+    inline NVGcolor text()         { return nvgRGB(0xE7, 0xE7, 0xEA); }
+    inline NVGcolor muted()        { return nvgRGB(0xC5, 0xC6, 0xD0); }
+    inline NVGcolor muted2()       { return nvgRGB(0x8b, 0x8b, 0x93); }
+    inline NVGcolor disabled()     { return nvgRGB(0x6a, 0x6a, 0x70); }
+    inline NVGcolor track()        { return nvgRGBA(255, 255, 255, 36); }
+    inline NVGcolor btnGray()      { return nvgRGB(0x3e, 0x3e, 0x46); }
+    inline NVGcolor scrim()        { return nvgRGBA(10, 9, 14, 150); }
+}
+
+// Translucent host so the screen behind shows through the scrim.
+class OverlayActivity : public brls::Activity {
+public:
+    explicit OverlayActivity(brls::Box* content) : brls::Activity(content) {}
+    bool isTranslucent() override { return true; }
 };
+
+brls::Label* makeLabel(const std::string& text, float size, NVGcolor color,
+                       bool singleLine = true) {
+    auto* l = new brls::Label();
+    l->setText(text);
+    l->setFontSize(size);
+    l->setTextColor(color);
+    l->setSingleLine(singleLine);
+    return l;
+}
+
+enum class BtnStyle { Accent, Gray, Ghost };
+
+brls::Box* makeButton(const std::string& text, BtnStyle style,
+                      std::function<void()> onClick) {
+    auto* b = new brls::Box();
+    b->setAxis(brls::Axis::ROW);
+    b->setJustifyContent(brls::JustifyContent::CENTER);
+    b->setAlignItems(brls::AlignItems::CENTER);
+    b->setHeight(42.0f);
+    b->setCornerRadius(10.0f);
+    b->setFocusable(true);
+    b->setHighlightCornerRadius(10.0f);
+    // Focus = the halo ring only; borealis's highlight fill would wash out an
+    // accent-filled button.
+    b->setHideHighlightBackground(true);
+
+    NVGcolor fg = tok::text();
+    if (style == BtnStyle::Accent) {
+        b->setBackgroundColor(tok::accent());
+        fg = tok::accentInk();
+    } else if (style == BtnStyle::Gray) {
+        b->setBackgroundColor(tok::btnGray());
+        b->setBorderColor(tok::hairline());
+        b->setBorderThickness(1.0f);
+    } else {
+        fg = tok::muted();
+    }
+    b->addView(makeLabel(text, 13.5f, fg));
+
+    b->registerClickAction([onClick](brls::View*) {
+        if (onClick) onClick();
+        return true;
+    });
+    b->addGestureRecognizer(new brls::TapGestureRecognizer(b));
+    return b;
+}
+
+std::string mbLabel(int64_t bytes) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.1f", (double)bytes / (1024.0 * 1024.0));
+    return buf;
+}
+
+float panelWidthFor(float want) {
+    float screenW = brls::Application::contentWidth;
+    if (screenW <= 0.0f) screenW = 1280.0f;
+    if (want + 80.0f > screenW) want = screenW - 80.0f;
+    return want;
+}
+
+// One row of the progress checklist: a 26px state circle (hairline when
+// pending, spinner while active, green check when done), a text line, and an
+// optional 5px accent bar underneath.
+struct StepRow {
+    brls::Box*             icon    = nullptr;
+    brls::Label*           glyph   = nullptr;
+    brls::ProgressSpinner* spinner = nullptr;
+    brls::Label*           text    = nullptr;
+    brls::Box*             track   = nullptr;
+    brls::Rectangle*       fill    = nullptr;
+    float                  barW    = 0.0f;
+};
+
+struct ProgressUI {
+    StepRow download, install, relaunch;
+    brls::Box* cancel = nullptr;
+    std::atomic<bool> dismissed{false};
+    std::atomic<int>  phase{0};   // 0 = downloading (cancelable), 1 = installing
+};
+
+StepRow makeStep(brls::Box* parent, const std::string& label, float barW) {
+    StepRow r;
+    r.barW = barW;
+
+    auto* row = new brls::Box();
+    row->setAxis(brls::Axis::ROW);
+    row->setAlignItems(brls::AlignItems::CENTER);
+    row->setMarginBottom(6.0f);
+
+    r.icon = new brls::Box();
+    r.icon->setWidth(26.0f);
+    r.icon->setHeight(26.0f);
+    r.icon->setCornerRadius(13.0f);
+    r.icon->setJustifyContent(brls::JustifyContent::CENTER);
+    r.icon->setAlignItems(brls::AlignItems::CENTER);
+    r.icon->setMarginRight(12.0f);
+    r.glyph = makeLabel("\xE2\x9C\x93", 13.0f, tok::green());
+    r.icon->addView(r.glyph);
+    r.spinner = new brls::ProgressSpinner();
+    r.spinner->setWidth(16.0f);
+    r.spinner->setHeight(16.0f);
+    r.icon->addView(r.spinner);
+    row->addView(r.icon);
+
+    r.text = makeLabel(label, 12.5f, tok::muted2());
+    row->addView(r.text);
+    parent->addView(row);
+
+    // The bar sits under the text, aligned past the icon column.
+    r.track = new brls::Box();
+    r.track->setWidth(barW);
+    r.track->setHeight(5.0f);
+    r.track->setCornerRadius(2.5f);
+    r.track->setBackgroundColor(tok::track());
+    r.track->setMarginLeft(38.0f);
+    r.track->setMarginBottom(8.0f);
+    r.fill = new brls::Rectangle();
+    r.fill->setWidth(2.0f);
+    r.fill->setHeight(5.0f);
+    r.fill->setCornerRadius(2.5f);
+    r.fill->setColor(tok::accent());
+    r.track->addView(r.fill);
+    parent->addView(r.track);
+
+    return r;
+}
+
+// Row state changes — UI thread only.
+void stepPending(StepRow& r, const std::string& text) {
+    r.icon->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
+    r.icon->setBorderColor(tok::track());
+    r.icon->setBorderThickness(1.5f);
+    r.glyph->setVisibility(brls::Visibility::GONE);
+    r.spinner->setVisibility(brls::Visibility::GONE);
+    r.spinner->animate(false);
+    r.text->setText(text);
+    r.text->setTextColor(tok::muted2());
+    r.track->setVisibility(brls::Visibility::GONE);
+}
+
+void stepActive(StepRow& r, const std::string& text, float fraction) {
+    r.icon->setBackgroundColor(nvgRGBA(0, 0, 0, 0));
+    r.icon->setBorderColor(tok::tileBrd());
+    r.icon->setBorderThickness(1.5f);
+    r.glyph->setVisibility(brls::Visibility::GONE);
+    r.spinner->setVisibility(brls::Visibility::VISIBLE);
+    r.spinner->animate(true);
+    r.text->setText(text);
+    r.text->setTextColor(tok::accentBright());
+    if (fraction >= 0.0f) {
+        float w = r.barW * fraction;
+        if (w < 2.0f) w = 2.0f;
+        if (w > r.barW) w = r.barW;
+        r.fill->setWidth(w);
+        r.track->setVisibility(brls::Visibility::VISIBLE);
+    } else {
+        r.track->setVisibility(brls::Visibility::GONE);
+    }
+}
+
+void stepDone(StepRow& r, const std::string& text) {
+    r.icon->setBackgroundColor(tok::greenBg());
+    r.icon->setBorderColor(tok::greenBrd());
+    r.icon->setBorderThickness(1.5f);
+    r.glyph->setVisibility(brls::Visibility::VISIBLE);
+    r.spinner->setVisibility(brls::Visibility::GONE);
+    r.spinner->animate(false);
+    r.text->setText(text);
+    r.text->setTextColor(tok::green());
+    r.track->setVisibility(brls::Visibility::GONE);
+}
 
 std::shared_ptr<ProgressUI> makeProgress(const std::string& title) {
     auto ui = std::make_shared<ProgressUI>();
 
-    auto* content = new brls::Box();
-    content->setAxis(brls::Axis::COLUMN);
-    content->setPadding(24, 28, 24, 28);
-    content->setAlignItems(brls::AlignItems::CENTER);
+    const float panelW = panelWidthFor(428.0f);
+    const float barW   = panelW - 36.0f - 38.0f;
 
-    auto* t = new brls::Label();
-    t->setText(title);
-    t->setFontSize(20);
-    t->setMarginBottom(12);
-    content->addView(t);
+    auto* scrim = new brls::Box();
+    scrim->setAxis(brls::Axis::COLUMN);
+    scrim->setWidthPercentage(100.0f);
+    scrim->setHeightPercentage(100.0f);
+    scrim->setJustifyContent(brls::JustifyContent::CENTER);
+    scrim->setAlignItems(brls::AlignItems::CENTER);
+    scrim->setBackgroundColor(tok::scrim());
 
-    ui->status = new brls::Label();
-    ui->status->setText("Starting…");
-    ui->status->setFontSize(16);
-    ui->status->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-    content->addView(ui->status);
+    auto* panel = new brls::Box();
+    panel->setAxis(brls::Axis::COLUMN);
+    panel->setWidth(panelW);
+    panel->setBackgroundColor(tok::panel());
+    panel->setBorderColor(tok::panelLine());
+    panel->setBorderThickness(1.0f);
+    panel->setCornerRadius(16.0f);
+    panel->setShadowType(brls::ShadowType::GENERIC);
+    panel->setPadding(16.0f, 18.0f, 12.0f, 18.0f);
 
-    ui->dialog = new brls::Dialog(content);
-    ui->dialog->setCancelable(false);
-    ui->dialog->addButton("Cancel", [ui]() {
+    panel->addView(makeLabel(title, 15.0f, tok::text()));
+    auto* keepOpen = makeLabel("Keep VitaSuwayomi open until this finishes",
+                               11.0f, tok::disabled());
+    keepOpen->setMarginTop(3.0f);
+    keepOpen->setMarginBottom(14.0f);
+    panel->addView(keepOpen);
+
+#if defined(__vita__) || defined(__PSV__)
+    const char* relaunchLabel = "Reopens automatically";
+#elif defined(__SWITCH__)
+    const char* relaunchLabel = "Relaunch to apply";
+#elif defined(__PS4__)
+    const char* relaunchLabel = "Exit while the system installs";
+#elif defined(_WIN32) || VS_MACOS_DESKTOP
+    const char* relaunchLabel = "Reopens automatically";
+#else
+    const char* relaunchLabel = "System installer opens";
+#endif
+
+    ui->download = makeStep(panel, "", barW);
+    ui->install  = makeStep(panel, "Install", barW);
+    ui->relaunch = makeStep(panel, relaunchLabel, barW);
+    stepActive(ui->download, "Downloading\xE2\x80\xA6 0%", 0.0f);
+    stepPending(ui->install, "Install");
+    stepPending(ui->relaunch, relaunchLabel);
+
+    // Cancel is download-only: once the installer is touching the bubble or
+    // executable, aborting could leave it half-written.
+    auto cancelFn = [ui]() {
+        if (ui->phase.load() != 0) return;
+        if (ui->dismissed.exchange(true)) return;
         s_cancel.store(true);
-        ui->dismissed.store(true);
-    });
-    ui->dialog->open();
+        brls::Application::popActivity();
+    };
+    auto* footer = new brls::Box();
+    footer->setAxis(brls::Axis::ROW);
+    footer->setJustifyContent(brls::JustifyContent::FLEX_END);
+    footer->setMarginTop(4.0f);
+    ui->cancel = makeButton("Cancel", BtnStyle::Ghost, cancelFn);
+    ui->cancel->setWidth(96.0f);
+    footer->addView(ui->cancel);
+    panel->addView(footer);
+
+    scrim->addView(panel);
+    scrim->registerAction("Cancel", brls::ControllerButton::BUTTON_B,
+        [cancelFn](brls::View*) { cancelFn(); return true; });
+
+    brls::Application::pushActivity(new OverlayActivity(scrim));
+    brls::Application::giveFocus(ui->cancel);
     return ui;
 }
 
+// Drive the download row (phase 0). `fraction` < 0 draws no bar.
+void setDownloadProgress(const std::shared_ptr<ProgressUI>& ui,
+                         const std::string& text, float fraction) {
+    brls::sync([ui, text, fraction]() {
+        if (ui->dismissed.load()) return;
+        stepActive(ui->download, text, fraction);
+    });
+}
+
+// Everything after the download drives the install row; the download row is
+// marked done the first time we get here.
 void setProgress(const std::shared_ptr<ProgressUI>& ui, const std::string& text) {
     brls::sync([ui, text]() {
-        if (ui->dismissed.load() || !ui->status) return;
-        ui->status->setText(text);
+        if (ui->dismissed.load()) return;
+        if (ui->phase.exchange(1) == 0) {
+            stepDone(ui->download, "Downloaded");
+            // Disabled, not hidden: it keeps focus, and the phase guard makes
+            // it inert.
+            if (ui->cancel) ui->cancel->setAlpha(0.45f);
+        }
+        stepActive(ui->install, text, -1.0f);
     });
 }
 
 void finishProgress(const std::shared_ptr<ProgressUI>& ui, std::function<void()> then) {
     brls::sync([ui, then]() {
-        if (!ui->dismissed.exchange(true) && ui->dialog) {
-            ui->dialog->close([then]() { if (then) then(); });
-        } else if (then) {
-            then();
-        }
+        if (ui->dismissed.exchange(true)) { if (then) then(); }
+        else brls::Application::popActivity(brls::TransitionAnimation::FADE, then);
     });
 }
 
@@ -560,9 +821,11 @@ bool downloadAsset(const ReleaseInfo& rel, const std::string& destPath,
                     if (pct != lastShown.load()) {
                         lastShown.store(pct);
                         if (pct >= 0)
-                            setProgress(ui, "Downloading… " + std::to_string(pct) + "%");
+                            setDownloadProgress(ui, "Downloading\xE2\x80\xA6 " + std::to_string(pct) + "%",
+                                                (float)pct / 100.0f);
                         else
-                            setProgress(ui, "Downloading… " + std::to_string(g / 1024) + " KB");
+                            setDownloadProgress(ui, "Downloading\xE2\x80\xA6 " +
+                                                std::to_string(g / 1024) + " KB", -1.0f);
                     }
                     return true;
                 },
@@ -575,7 +838,7 @@ bool downloadAsset(const ReleaseInfo& rel, const std::string& destPath,
     if (s_cancel.load()) { err = "Cancelled"; return false; }
     if (attempt()) return true;
     if (s_cancel.load()) return false;         // user cancel: no retry
-    setProgress(ui, "Retrying download…");
+    setDownloadProgress(ui, "Retrying download\xE2\x80\xA6", -1.0f);
     err.clear();
     return attempt();                          // one automatic retry (truncates)
 }
@@ -1006,32 +1269,206 @@ void startInstall(const ReleaseInfo& rel) {
 }
 
 // ── The offer dialog ────────────────────────────────────────────────────────
+// The offer sheet: scrim + panel, accent strip, icon tile, current→new version
+// cards, scrollable release notes, footer actions. Ported from the VitaPlex
+// updater sheet and repainted in this app's accent.
 void offerUpdate(const ReleaseInfo& rel, bool manual) {
-    std::string msg = "Version " + rel.tag + " is available.\n";
-    msg += "You have " + std::string(kCurrent) + ".\n\n";
+    const float panelW = panelWidthFor(428.0f);
+
+    auto* scrim = new brls::Box();
+    scrim->setAxis(brls::Axis::COLUMN);
+    scrim->setWidthPercentage(100.0f);
+    scrim->setHeightPercentage(100.0f);
+    scrim->setJustifyContent(brls::JustifyContent::CENTER);
+    scrim->setAlignItems(brls::AlignItems::CENTER);
+    scrim->setBackgroundColor(tok::scrim());
+
+    auto* panel = new brls::Box();
+    panel->setAxis(brls::Axis::COLUMN);
+    panel->setWidth(panelW);
+    panel->setBackgroundColor(tok::panel());
+    panel->setBorderColor(tok::panelLine());
+    panel->setBorderThickness(1.0f);
+    panel->setCornerRadius(16.0f);
+    panel->setShadowType(brls::ShadowType::GENERIC);
+    // The accent strip runs flush along the top edge; the rounded corners clip it.
+    panel->setClipsToBounds(true);
+
+    auto* strip = new brls::Box();
+    strip->setHeight(5.0f);
+    strip->setAlignSelf(brls::AlignSelf::STRETCH);
+    strip->setBackgroundColor(tok::accent());
+    panel->addView(strip);
+
+    // ── Header: icon tile + titles ──────────────────────────────────────
+    auto* header = new brls::Box();
+    header->setAxis(brls::Axis::ROW);
+    header->setAlignItems(brls::AlignItems::CENTER);
+    header->setPadding(16.0f, 18.0f, 12.0f, 18.0f);
+
+    auto* tile = new brls::Box();
+    tile->setWidth(52.0f);
+    tile->setHeight(52.0f);
+    tile->setCornerRadius(14.0f);
+    tile->setBackgroundColor(tok::tileBg());
+    tile->setBorderColor(tok::tileBrd());
+    tile->setBorderThickness(1.0f);
+    tile->setJustifyContent(brls::JustifyContent::CENTER);
+    tile->setAlignItems(brls::AlignItems::CENTER);
+    tile->addView(makeLabel("\xE2\x86\x93", 22.0f, tok::accent()));
+    tile->setMarginRight(14.0f);
+    header->addView(tile);
+
+    auto* titles = new brls::Box();
+    titles->setAxis(brls::Axis::COLUMN);
+    titles->setShrink(1.0f);
+    titles->addView(makeLabel("Update available", 16.0f, tok::text()));
+    auto* sub = makeLabel("A new version of VitaSuwayomi is ready to install.",
+                          11.5f, tok::muted());
+    sub->setMarginTop(3.0f);
+    titles->addView(sub);
+    header->addView(titles);
+    panel->addView(header);
+
+    // ── Version cards: current → new ────────────────────────────────────
+    const float cardW = (panelW - 36.0f - 34.0f) / 2.0f;
+    auto makeCard = [cardW](const char* tag, NVGcolor tagColor, const std::string& value,
+                            NVGcolor valueColor, NVGcolor bg, NVGcolor border) {
+        auto* card = new brls::Box();
+        card->setAxis(brls::Axis::COLUMN);
+        card->setWidth(cardW);
+        card->setCornerRadius(10.0f);
+        card->setBackgroundColor(bg);
+        card->setBorderColor(border);
+        card->setBorderThickness(1.0f);
+        card->setPadding(9.0f, 12.0f, 9.0f, 12.0f);
+        card->addView(makeLabel(tag, 9.5f, tagColor));
+        auto* v = makeLabel(value, 13.0f, valueColor);
+        v->setMarginTop(2.0f);
+        card->addView(v);
+        return card;
+    };
+
+    auto* cards = new brls::Box();
+    cards->setAxis(brls::Axis::ROW);
+    cards->setAlignItems(brls::AlignItems::CENTER);
+    cards->setPadding(0.0f, 18.0f, 0.0f, 18.0f);
+    cards->addView(makeCard("INSTALLED", tok::muted2(), kCurrent, tok::muted(),
+                            nvgRGBA(255, 255, 255, 12), tok::hairline()));
+    auto* arrow = makeLabel("\xE2\x86\x92", 15.0f, tok::muted2());
+    arrow->setMarginLeft(9.0f);
+    arrow->setMarginRight(9.0f);
+    cards->addView(arrow);
+    cards->addView(makeCard("NEW", tok::accent(), rel.tag, tok::accentBright(),
+                            tok::cardBg(), tok::cardBrd()));
+    panel->addView(cards);
+
+    // ── Release notes (scrollable) ──────────────────────────────────────
     if (!rel.notes.empty()) {
-        std::string notes = rel.notes;
-        if (notes.size() > 400) notes = notes.substr(0, 397) + "...";
-        msg += notes;
+        auto* scroller = new brls::ScrollingFrame();
+        scroller->setHeight(120.0f);
+        scroller->setMarginTop(12.0f);
+        scroller->setMarginLeft(18.0f);
+        scroller->setMarginRight(18.0f);
+        auto* notes = makeLabel(rel.notes, 11.5f, tok::muted(), /*singleLine=*/false);
+        scroller->setContentView(notes);
+        panel->addView(scroller);
+
+        // Up/down scroll the notes; focus stays on the footer buttons.
+        auto scrollBy = [scroller, notes](float delta) {
+            float maxY = notes->getHeight() - scroller->getHeight();
+            if (maxY < 0.0f) maxY = 0.0f;
+            float y = scroller->getContentOffsetY() + delta;
+            if (y < 0.0f) y = 0.0f;
+            if (y > maxY) y = maxY;
+            scroller->setContentOffsetY(y, true);
+        };
+        scrim->registerAction("Scroll up", brls::ControllerButton::BUTTON_UP,
+            [scrollBy](brls::View*) { scrollBy(-72.0f); return true; }, true);
+        scrim->registerAction("Scroll down", brls::ControllerButton::BUTTON_DOWN,
+            [scrollBy](brls::View*) { scrollBy(72.0f); return true; }, true);
     }
 
-    auto* d = new brls::Dialog(msg);
-    d->setCancelable(true);
+    // ── Size / platform caption ─────────────────────────────────────────
+    std::string caption;
+    if (rel.assetSize > 0) caption = mbLabel(rel.assetSize) + " MB download";
+#if defined(__vita__) || defined(__PSV__)
+    caption += (caption.empty() ? "" : " \xC2\xB7 ") + std::string("installs in place \xC2\xB7 reopens automatically");
+#elif defined(__SWITCH__)
+    caption += (caption.empty() ? "" : " \xC2\xB7 ") + std::string("installs in place \xC2\xB7 relaunch to apply");
+#elif defined(ANDROID) || defined(__ANDROID__)
+    caption += (caption.empty() ? "" : " \xC2\xB7 ") + std::string("system installer opens when ready");
+#elif defined(__PS4__)
+    caption += (caption.empty() ? "" : " \xC2\xB7 ") + std::string("installs via the PS4 installer \xC2\xB7 exit to finish");
+#elif defined(_WIN32) || VS_MACOS_DESKTOP
+    caption += (caption.empty() ? "" : " \xC2\xB7 ") + std::string("installs in place \xC2\xB7 reopens automatically");
+#else
+    if (rel.assetUrl.empty())
+        caption += (caption.empty() ? "" : " \xC2\xB7 ") + std::string("opens the release page in your browser");
+#endif
+    if (!caption.empty()) {
+        auto* cap = makeLabel(caption, 10.5f, tok::disabled(), false);
+        cap->setMarginTop(10.0f);
+        cap->setMarginLeft(18.0f);
+        cap->setMarginRight(18.0f);
+        panel->addView(cap);
+    }
 
-    const bool canInstall = !rel.assetUrl.empty();
-    if (canInstall) {
-        d->addButton("Update now", [rel]() { startInstall(rel); });
+    // ── Actions ─────────────────────────────────────────────────────────
+    // Closing with B means "not right now" and never marks the release skipped;
+    // only Skip does that.
+    auto dismiss = []() { s_busy.store(false); brls::Application::popActivity(); };
+
+    auto* footer = new brls::Box();
+    footer->setAxis(brls::Axis::ROW);
+    footer->setAlignItems(brls::AlignItems::CENTER);
+    footer->setJustifyContent(brls::JustifyContent::FLEX_END);
+    footer->setPadding(14.0f, 18.0f, 16.0f, 18.0f);
+
+    brls::Box* primary = nullptr;
+    if (!rel.assetUrl.empty()) {
+        ReleaseInfo r = rel;
+        primary = makeButton("Update now", BtnStyle::Accent, [r]() {
+            brls::Application::popActivity(brls::TransitionAnimation::NONE,
+                                           [r]() { startInstall(r); });
+        });
     } else {
-        d->addButton("Open release page", [rel]() { openUrl(rel.pageUrl); s_busy.store(false); });
+        std::string url = rel.pageUrl;
+        primary = makeButton("Download", BtnStyle::Accent, [url]() {
+            openUrl(url);
+            s_busy.store(false);
+            brls::Application::popActivity();
+        });
     }
+    primary->setWidth(170.0f);
+    footer->addView(primary);
 
-    // "Skip this version" only makes sense from the silent path.
+    // "Skip this version" only makes sense on the silent startup check.
     if (!manual) {
         ReleaseInfo r = rel;
-        d->addButton("Skip", [r]() { setSkippedVersion(r.tag); s_busy.store(false); });
+        auto* skip = makeButton("Skip", BtnStyle::Gray, [r]() {
+            setSkippedVersion(r.tag);
+            s_busy.store(false);
+            brls::Application::popActivity();
+        });
+        skip->setWidth(84.0f);
+        skip->setMarginLeft(8.0f);
+        footer->addView(skip);
     }
-    d->addButton("Later", []() { s_busy.store(false); });
-    d->open();
+
+    auto* later = makeButton("Later", BtnStyle::Ghost, dismiss);
+    later->setWidth(84.0f);
+    later->setMarginLeft(8.0f);
+    footer->addView(later);
+    panel->addView(footer);
+
+    scrim->addView(panel);
+    scrim->registerAction("Back", brls::ControllerButton::BUTTON_B,
+        [dismiss](brls::View*) { dismiss(); return true; });
+    scrim->addGestureRecognizer(new brls::TapGestureRecognizer(scrim, dismiss));
+
+    brls::Application::pushActivity(new OverlayActivity(scrim));
+    brls::Application::giveFocus(primary);
 }
 
 // ── Feed parse ──────────────────────────────────────────────────────────────
