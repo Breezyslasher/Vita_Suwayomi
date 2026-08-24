@@ -366,33 +366,39 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Cache Vita portlibs
-        id: cache-vita-portlibs
-        uses: actions/cache@v4
-        with:
-          path: portlib-cache
-          # The key IS the pin list, so bumping a version misses and refetches.
-          key: vita-portlibs-mbedtls-3.6.7-1_curl-8.16.0-3_ffmpeg-n6.0-3_mpv-0.36.0-3
-
       - name: Install Vita dependencies
         env:
-          BASE_URL: https://github.com/dragonflylee/switchfin/releases/download/vita-packages
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          # vita-packages is ROLLING — version bumps REPLACE assets, so stale pins
-          # 404. Use *-vita.pkg.tar.xz (real pacman packages), NOT the legacy
-          # *-arm.tar.xz bare sysroots (no .PKGINFO → "invalid or corrupted package").
-          fetch() {
-            if command -v curl >/dev/null 2>&1; then
-              curl -fL --retry 4 --retry-all-errors --speed-limit 102400 --speed-time 30 -o "$2" "$1"
-            else
-              wget --tries=4 --read-timeout=30 -O "$2" "$1"
-            fi
-          }
+          # vita-packages is ROLLING: a version bump REPLACES the asset, so any
+          # pinned URL 404s eventually. Resolve what is published right now from
+          # the release API and match by package name, not by version. Use the
+          # *-vita.pkg.tar.xz files (real pacman packages) — the legacy
+          # *-arm.tar.xz are bare sysroots with no .PKGINFO ("invalid or
+          # corrupted package").
+          API="https://api.github.com/repos/dragonflylee/switchfin/releases/tags/vita-packages"
+          curl -fsSL --retry 4 --retry-all-errors \
+               -H "Accept: application/vnd.github+json" \
+               -H "Authorization: Bearer $GH_TOKEN" "$API" -o /tmp/vitapkgs.json
+          urls=$(grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]+"' /tmp/vitapkgs.json \
+                 | sed -E 's/.*"(https[^"]+)"$/\1/')
+          [ -n "$urls" ] || { echo "::error::could not read the vita-packages asset list"; exit 1; }
+
+          pick() { printf '%s\n' "$urls" | awk -v re="$1" -F/ \
+                     '$NF ~ re && $NF ~ /-vita\.pkg\.tar\.xz$/ {print; exit}'; }
+
           mkdir -p portlib-cache
-          for pkg in mbedtls-3.6.7-1 curl-8.16.0-3 ffmpeg-n6.0-3 mpv-0.36.0-3; do
-            f="portlib-cache/${pkg}-vita.pkg.tar.xz"
-            [ -s "$f" ] || fetch "$BASE_URL/${pkg}-vita.pkg.tar.xz" "$f"
+          for re in '^mbedtls-' '^curl-' '^ffmpeg-' '^mpv-'; do
+            u=$(pick "$re")
+            if [ -z "$u" ]; then
+              echo "::warning::no published vita package matches ${re} - leaving it to vdpm"
+              continue
+            fi
+            f="portlib-cache/$(basename "$u")"
+            echo "resolved ${re} -> $(basename "$u")"
+            curl -fL --retry 4 --retry-all-errors \
+                 --speed-limit 102400 --speed-time 30 -o "$f" "$u"
           done
           cp portlib-cache/*-vita.pkg.tar.xz .
 
@@ -686,59 +692,64 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - { driver: opengl, mpv_pkg: switch-libmpv-0.36.0-5-any.pkg.tar.zst, cmake_extra: "" }
-        - { driver: deko3d, mpv_pkg: switch-libmpv-deko3d-0.36.0-5-any.pkg.tar.zst, cmake_extra: "-DUSE_DEKO3D=ON" }
+        # mpv_re selects the leg's package from the release by name, not by a
+        # pinned version. "[0-9]" is what keeps the opengl pattern from also
+        # matching switch-libmpv-deko3d-*.
+        - { driver: opengl, mpv_re: "^switch-libmpv-[0-9]",     cmake_extra: "" }
+        - { driver: deko3d, mpv_re: "^switch-libmpv-deko3d-",   cmake_extra: "-DUSE_DEKO3D=ON" }
     container:
       image: devkitpro/devkita64:20260219
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Cache Switch portlibs
-        uses: actions/cache@v4
-        with:
-          path: portlib-cache
-          key: switch-portlibs-v4-hacBrewPack-3.05-1_libuam-master-1_dav1d-1.5.4-1_mbedtls-3.6.7-1_libssh2-1.11.1-1_ffmpeg-7.1.5-5_${{ matrix.mpv_pkg }}
       - name: Install switchfin portlibs
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs"
-          set -eu
-          fetch() {
-            curl -fL --retry 4 --retry-all-errors \
-                 --speed-limit 102400 --speed-time 30 -o "$2" "$1"
-          }
+          set -euo pipefail
+          # switchfin's portlibs are a ROLLING release: every bump REPLACES the
+          # asset, so any pinned URL 404s eventually (it has broken this build
+          # three times — dav1d 1.5.3->1.5.4, and switch-uchardet was withdrawn
+          # outright). Resolve whatever is published RIGHT NOW from the release
+          # API and match packages by name instead of by version.
+          API="https://api.github.com/repos/dragonflylee/switchfin/releases/tags/switch-portlibs"
+          curl -fsSL --retry 4 --retry-all-errors \
+               -H "Accept: application/vnd.github+json" \
+               -H "Authorization: Bearer $GH_TOKEN" "$API" -o /tmp/portlibs.json
+          urls=$(grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]+"' /tmp/portlibs.json \
+                 | sed -E 's/.*"(https[^"]+)"$/\1/')
+          [ -n "$urls" ] || { echo "::error::could not read the switchfin portlibs asset list"; exit 1; }
+          echo "$urls" | wc -l | xargs echo "assets published:"
+
+          # First asset whose FILE NAME matches the regex and is a pacman package.
+          pick() { printf '%s\n' "$urls" | awk -v re="$1" -F/ \
+                     '$NF ~ re && $NF ~ /\.pkg\.tar\.zst$/ {print; exit}'; }
+
           mkdir -p portlib-cache
-          # The switchfin mpv -> ffmpeg -> tls stack must be installed together so
-          # it stays ABI-consistent (mpv is built against switchfin's ffmpeg,
-          # which is built against its mbedtls/libssh2).
-          #
-          # These assets are ROLLING: switchfin replaces them on every bump, so a
-          # pinned URL 404s without warning (dav1d 1.5.3-1 -> 1.5.4-1, and
-          # switch-uchardet was withdrawn entirely). A missing package is
-          # therefore a warning, not a hard failure: `dkp-pacman -Sy` below
-          # refreshes the databases, so anything we couldn't fetch can still be
-          # resolved from the devkitPro repo. If it genuinely can't be, the
-          # `pacman -U` step reports the unmet dependency, which is the error we
-          # actually want to see.
-          missing=0
-          for pkg in hacBrewPack-3.05-1-x86_64.pkg.tar.zst \
-                     libuam-master-1-any.pkg.tar.zst \
-                     switch-dav1d-1.5.4-1-any.pkg.tar.zst \
-                     switch-mbedtls-3.6.7-1-any.pkg.tar.zst \
-                     switch-libssh2-1.11.1-1-any.pkg.tar.zst \
-                     switch-ffmpeg-7.1.5-5-any.pkg.tar.zst \
-                     ${{ matrix.mpv_pkg }}; do
-            f="portlib-cache/$pkg"
-            if [ ! -f "$f" ] || [ "$(stat -c%s "$f" 2>/dev/null || echo 0)" -lt 4096 ]; then
-              if ! fetch "$BASE_URL/$pkg" "$f"; then
-                rm -f "$f"
-                echo "::warning::portlib $pkg is no longer published (rolling release);"\
-                     " continuing and letting pacman resolve it from the repo."
-                missing=$((missing + 1))
-              fi
+          # The mpv -> ffmpeg -> tls stack must come from switchfin as a set so it
+          # stays ABI-consistent (its mpv is built against its ffmpeg, which is
+          # built against its mbedtls/libssh2). Anything absent is a warning: the
+          # `dkp-pacman -Sy` below lets pacman resolve it from the devkitPro repo
+          # instead, and a genuinely unmet dependency still surfaces in the
+          # `pacman -U` error we capture.
+          for re in '^hacBrewPack-.*x86_64' \
+                    '^libuam-' \
+                    '^switch-dav1d-' \
+                    '^switch-mbedtls-' \
+                    '^switch-libssh2-' \
+                    '^switch-ffmpeg-' \
+                    '${{ matrix.mpv_re }}'; do
+            u=$(pick "$re")
+            if [ -z "$u" ]; then
+              echo "::warning::no published portlib matches ${re} - leaving it to pacman"
+              continue
             fi
+            f="portlib-cache/$(basename "$u")"
+            echo "resolved ${re} -> $(basename "$u")"
+            curl -fL --retry 4 --retry-all-errors \
+                 --speed-limit 102400 --speed-time 30 -o "$f" "$u"
           done
-          [ "$missing" -eq 0 ] || echo "$missing pinned portlib(s) unavailable; see warnings above."
           dkp-pacman --noconfirm -Rdd switch-libmpv || true
           dkp-pacman --noconfirm -Rdd switch-libmpv-deko3d || true
           # Refresh the package databases so pacman -U can pull any remaining
@@ -796,11 +807,41 @@ jobs:
           submodules: recursive
       - name: Install PS4 portlibs
         env:
-          BASE_URL: https://github.com/dragonflylee/switchfin/releases/download/pacbrew
+          GH_TOKEN: ${{ github.token }}
         run: |
-          for pkg in musl-1.5-3 mbedtls-2.28.10-2 sdl2-2.0.18-19 libcurl-7.80.0-5; do
-            pacman --noconfirm -U "$BASE_URL/ps4-openorbis-${pkg}-any.pkg.tar.gz"
+          set -eu
+          # pacbrew is ROLLING too: resolve the current assets rather than pinning
+          # versions that 404 on the next bump. Note these are .tar.gz (gzip), and
+          # the ps4-openorbis- prefix matters. The old, deliberate pins live here:
+          # PS4's stack is mbedtls 2.28.x and sdl2 2.0.18 because that is what the
+          # toolchain provides — matching by name keeps that property.
+          API="https://api.github.com/repos/dragonflylee/switchfin/releases/tags/pacbrew"
+          curl -fsSL --retry 4 --retry-all-errors \
+               -H "Accept: application/vnd.github+json" \
+               -H "Authorization: Bearer $GH_TOKEN" "$API" -o /tmp/pacbrew.json
+          urls=$(grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]+"' /tmp/pacbrew.json \
+                 | sed -E 's/.*"(https[^"]+)"$/\1/')
+          [ -n "$urls" ] || { echo "::error::could not read the pacbrew asset list"; exit 1; }
+
+          pick() { printf '%s\n' "$urls" | awk -v re="$1" -F/ \
+                     '$NF ~ re && $NF ~ /\.pkg\.tar\.gz$/ {print; exit}'; }
+
+          mkdir -p portlib-cache
+          for re in '^ps4-openorbis-musl-' \
+                    '^ps4-openorbis-mbedtls-' \
+                    '^ps4-openorbis-sdl2-' \
+                    '^ps4-openorbis-libcurl-'; do
+            u=$(pick "$re")
+            if [ -z "$u" ]; then
+              echo "::error::no published pacbrew package matches ${re}"
+              exit 1
+            fi
+            f="portlib-cache/$(basename "$u")"
+            echo "resolved ${re} -> $(basename "$u")"
+            curl -fL --retry 4 --retry-all-errors \
+                 --speed-limit 102400 --speed-time 30 -o "$f" "$u"
           done
+          pacman --noconfirm -U portlib-cache/*.pkg.tar.gz
       - name: Build
         env:
           OPENORBIS: /opt/pacbrew/ps4/openorbis
