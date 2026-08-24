@@ -302,7 +302,10 @@ void forEachObject(const std::string& arr, Fn fn) {
 
 // Parse the first three numeric runs of a version-ish string, ignoring any
 // leading non-digits ("Beta-1.2.6", "v1.2.6", "1.2.6.1448" → {1,2,6}).
-void parseVersion(const std::string& v, int out[3]) {
+// Returns false when the string held no number at all. That matters: a version
+// we cannot read must never compare as "older than everything", or a build with
+// a broken version stamp offers an update on every check, forever.
+bool parseVersion(const std::string& v, int out[3]) {
     out[0] = out[1] = out[2] = 0;
     int idx = 0;
     size_t i = 0;
@@ -315,12 +318,12 @@ void parseVersion(const std::string& v, int out[3]) {
             ++i;
         }
     }
+    return idx > 0;
 }
 
 bool isNewer(const std::string& tag, const std::string& current) {
     int a[3], b[3];
-    parseVersion(tag, a);
-    parseVersion(current, b);
+    if (!parseVersion(tag, a) || !parseVersion(current, b)) return false;
     for (int i = 0; i < 3; ++i) {
         if (a[i] != b[i]) return a[i] > b[i];
     }
@@ -970,38 +973,48 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
     // routes them to the "install unknown apps" screen, because without that
     // per-app grant newer Android (Android TV especially) never prompts and the
     // install silently aborts after "Staging app…".
-    setProgress(ui, "Opening installer…");
-    JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
-    bool called = false, launched = false;
-    if (env) {
-        jclass u = env->FindClass("org/libsdl/app/PlatformUtils");
-        if (u) {
-            jmethodID m = env->GetStaticMethodID(u, "installApk", "(Ljava/lang/String;)Z");
-            if (m) {
-                jstring js = env->NewStringUTF(path.c_str());
-                launched = env->CallStaticBooleanMethod(u, m, js) == JNI_TRUE;
-                env->DeleteLocalRef(js);
-                called = true;
+    setProgress(ui, "Handing to system installer…");
+    // The JNI hand-off MUST run on the main thread, which is why it lives in
+    // the finish callback rather than here: everything above runs on a worker,
+    // and FindClass on a thread the VM merely attached resolves against the
+    // *system* class loader, which cannot see org/libsdl/app/* at all. From the
+    // worker it therefore returned null every time, and we fell through to the
+    // browser fallback — the app appeared to just close into a web page and the
+    // install-permission prompt was never reached.
+    finishProgress(ui, [rel, path]() {
+        JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
+        bool called = false, launched = false;
+        if (env) {
+            jclass u = env->FindClass("org/libsdl/app/PlatformUtils");
+            if (u) {
+                jmethodID m = env->GetStaticMethodID(u, "installApk", "(Ljava/lang/String;)Z");
+                if (m) {
+                    jstring js = env->NewStringUTF(path.c_str());
+                    launched = env->CallStaticBooleanMethod(u, m, js) == JNI_TRUE;
+                    env->DeleteLocalRef(js);
+                    called = true;
+                }
+                env->DeleteLocalRef(u);
             }
-            env->DeleteLocalRef(u);
+            if (env->ExceptionCheck()) { env->ExceptionClear(); called = false; launched = false; }
         }
-        if (env->ExceptionCheck()) { env->ExceptionClear(); called = false; launched = false; }
-    }
-    if (launched) {
-        // The system installer takes over; do NOT quit — it streams the APK from
-        // our in-process provider while staging, and Android force-stops this
-        // package itself once the update commits.
-        finishProgress(ui, []() {});
-    } else if (called) {
-        // We were sent to the permission screen (or the hand-off failed).
-        finishProgress(ui, []() {
+        if (launched) {
+            // The system installer took over; do NOT quit — it streams the APK
+            // from our in-process provider while staging, and Android
+            // force-stops this package itself once the update commits.
+            return;
+        }
+        if (called) {
+            // installApk sent us to the "install unknown apps" screen. Without
+            // that per-app grant newer Android (Android TV especially) never
+            // prompts and the install silently aborts after "Staging app…".
             showMessage("Allow VitaSuwayomi to install apps, then choose Update again.\n\n"
                         "Android needs a one-time \"install unknown apps\" permission "
                         "before it can install the update.");
-        });
-    } else {
-        finishProgress(ui, [rel]() { openUrl(rel.pageUrl); });
-    }
+            return;
+        }
+        openUrl(rel.pageUrl);
+    });
     return false;
 
 #elif defined(_WIN32)
