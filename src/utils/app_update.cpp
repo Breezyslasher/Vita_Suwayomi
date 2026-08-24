@@ -58,6 +58,7 @@
 
 #if VS_MACOS_DESKTOP
 #include <unistd.h>
+#include <sys/stat.h>     // chmod (the detached bundle-swap script)
 #include <mach-o/dyld.h>
 #endif
 
@@ -82,8 +83,16 @@
 #include <chrono>
 #endif
 
+// Common: the download retry backs off before its second attempt.
+#include <thread>
+#include <chrono>
+
 #ifndef VITA_SUWAYOMI_VERSION
 #define VITA_SUWAYOMI_VERSION "0.0.0"
+#endif
+
+#ifndef VITA_SUWAYOMI_DISPLAY_VERSION
+#define VITA_SUWAYOMI_DISPLAY_VERSION VITA_SUWAYOMI_VERSION
 #endif
 
 using namespace vitasuwayomi;
@@ -93,7 +102,11 @@ namespace {
 
 // ── Configuration ───────────────────────────────────────────────────────────
 constexpr const char* kRepo    = "Breezyslasher/Vita_Suwayomi";
-constexpr const char* kCurrent = VITA_SUWAYOMI_VERSION;
+// Compare against the DISPLAY version, as the reference does — it is the one
+// that corresponds to the release tag ("Beta 2.2.3" vs tag "Beta-2.2.3"). The
+// numeric version is a build artifact (it carries a build number, and CI has
+// stamped it wrong before), so it is the wrong side of this comparison.
+constexpr const char* kCurrent = VITA_SUWAYOMI_DISPLAY_VERSION;
 
 std::atomic<bool> s_busy{false};    // one check/install at a time
 std::atomic<bool> s_cancel{false};  // the progress dialog's Cancel
@@ -801,6 +814,7 @@ bool downloadAsset(const ReleaseInfo& rel, const std::string& destPath,
     const int64_t total = rel.assetSize;
 
     auto attempt = [&]() -> bool {
+        int64_t finalGot = 0;
         std::atomic<int64_t> got{0};
         std::atomic<int64_t> lastShown{-1};
         Sha256 hash;
@@ -834,16 +848,34 @@ bool downloadAsset(const ReleaseInfo& rel, const std::string& destPath,
                 },
                 [&](int64_t sz) { if (sz > 0) liveTotal = sz; });
         });
+        finalGot = got.load();
+        // A transfer can end "successfully" short — a truncated response, a
+        // proxy cutting the body. The digest check downstream catches that, but
+        // only for releases that publish one, so hold the line here too.
+        if (ok && total > 0 && finalGot != total) {
+            err = "incomplete download (" + std::to_string(finalGot) + "/" +
+                  std::to_string(total) + " bytes)";
+            ok = false;
+        }
         if (ok) gotDigest = hash.hex();
         return ok;
     };
 
+    // Never leave a partial artifact behind: on Windows it sits in the install
+    // folder, and everywhere else the next run would find a stale update file.
+    auto discard = [&]() { platform::deleteFile(destPath); };
+
     if (s_cancel.load()) { err = "Cancelled"; return false; }
     if (attempt()) return true;
-    if (s_cancel.load()) return false;         // user cancel: no retry
+    if (s_cancel.load()) { discard(); return false; }   // user cancel: no retry
     setDownloadProgress(ui, "Retrying download\xE2\x80\xA6", -1.0f);
     err.clear();
-    return attempt();                          // one automatic retry (truncates)
+    // A fresh connection clears the transient failures (dropped socket, stale
+    // keep-alive); give the far end a moment first, as the reference does.
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    if (attempt()) return true;                         // one retry (truncates)
+    discard();
+    return false;
 }
 
 // ── The per-platform install branch ─────────────────────────────────────────
@@ -854,11 +886,32 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
     // Unmount the romfs (mapped from the running NRO), then rename over it.
     setProgress(ui, "Installing…");
     romfsExit();
-    std::string target = !s_selfPath.empty() ? s_selfPath : platform::path("VitaSuwayomi.nro");
+    // argv[0] is only usable if it really is the NRO path — some loaders hand
+    // over something else entirely, and writing the update there would drop it
+    // in the wrong place (or clobber an unrelated file).
+    std::string target = s_selfPath;
+    if (target.size() < 4 || target.compare(target.size() - 4, 4, ".nro") != 0)
+        target = platform::path("VitaSuwayomi.nro");
     std::error_code ec;
+    // Unlink first: the devoptab rename does not implicitly replace an existing
+    // file, so renaming straight over the running NRO fails.
+    std::filesystem::remove(target, ec);
+    ec.clear();
     std::filesystem::rename(path, target, ec);
-    if (ec) { std::filesystem::copy_file(path, target,
-              std::filesystem::copy_options::overwrite_existing, ec); }
+    if (ec) {
+        ec.clear();
+        std::filesystem::copy_file(path, target,
+            std::filesystem::copy_options::overwrite_existing, ec);
+    }
+    if (ec) {
+        // Say so instead of quitting as though it worked — the user would
+        // otherwise reopen the old build with no idea anything went wrong.
+        const std::string why = ec.message();
+        finishProgress(ui, [target, why]() {
+            showMessage("Update failed: could not replace\n" + target + "\n\n" + why);
+        });
+        return false;
+    }
     // Auto-close, and chain-load the fresh NRO where hbloader supports it (a
     // real auto-relaunch; a clean quit to hbmenu otherwise). No dialog.
     finishProgress(ui, [target]() {
@@ -1070,8 +1123,16 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
     PROCESS_INFORMATION pi{};
     std::string cmd = "cmd.exe /c \"" + bat + "\"";
     std::vector<char> mut(cmd.begin(), cmd.end()); mut.push_back(0);
-    CreateProcessA(nullptr, mut.data(), nullptr, nullptr, FALSE,
-                   CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    // Windowless; the child has no job object tying it to us, so it survives to
+    // do the swap once we are gone.
+    if (!CreateProcessA(nullptr, mut.data(), nullptr, nullptr, FALSE,
+                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        // Quitting now would just close the app and leave the update unapplied.
+        finishProgress(ui, []() {
+            showMessage("Update failed: could not start the updater script.");
+        });
+        return false;
+    }
     CloseHandle(pi.hThread); CloseHandle(pi.hProcess);
     finishProgress(ui, []() { brls::Application::quit(); });
     return true;
@@ -1163,7 +1224,15 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
             "  hdiutil detach \"$MNT\" >/dev/null 2>&1 || hdiutil detach \"$MNT\" -force >/dev/null 2>&1\n"
             "fi\n"
             "rmdir \"$MNT\" 2>/dev/null; rm -f \"$DMG\"; open \"$APP\"; rm -f \"$0\"\n";
-        platform::writeFile(sh, script);
+        if (!platform::writeFile(sh, script)) {
+            // Without the script the fork below would exec nothing and we would
+            // quit for no reason, so stop here and keep the app running.
+            finishProgress(ui, []() {
+                showMessage("Update failed: could not write the updater script.");
+            });
+            return false;
+        }
+        ::chmod(sh.c_str(), 0755);
         std::string shp = sh;
         finishProgress(ui, [shp]() {
             if (fork() == 0) { setsid();
