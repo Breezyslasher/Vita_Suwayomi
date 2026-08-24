@@ -134,6 +134,7 @@ struct AppSettings {
     bool showClock = true;
     bool debugLogging = false;
     bool showPerfOverlay = false;  // Show FPS/frame time/GPU debug overlay
+    std::string skippedUpdateVersion;  // Release tag the user chose to skip (updater)
 
     // Reader Settings
     ReadingMode readingMode = ReadingMode::RIGHT_TO_LEFT;

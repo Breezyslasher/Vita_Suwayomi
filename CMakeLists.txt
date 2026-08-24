@@ -73,10 +73,29 @@ endif()
 # Project (after toolchain so cross-compilers are in effect)
 # Pass -DAPP_VERSION=X.Y.Z from CI to override the default.
 # ---------------------------------------------------------------------------
-if(NOT DEFINED APP_VERSION)
-    set(APP_VERSION "1.0.0")
+# Two version outputs from one source (the VERSION file), resolved by CI:
+#   APP_DISPLAY_VERSION — human string shown in-app (e.g. "Beta 2.2.1").
+#   APP_VERSION         — numeric X.Y.Z[.build] for project()/param.sfo.
+# CI passes both explicitly; builds that reach cmake indirectly (Flatpak) or
+# local dev fall back to the VERSION file so the Settings page still matches the
+# release. Reading the file is a fallback only — never the primary path in CI.
+if(NOT DEFINED APP_DISPLAY_VERSION OR APP_DISPLAY_VERSION STREQUAL "")
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" APP_DISPLAY_VERSION)
+        string(STRIP "${APP_DISPLAY_VERSION}" APP_DISPLAY_VERSION)
+    endif()
+endif()
+if(NOT DEFINED APP_VERSION OR APP_VERSION STREQUAL "")
+    # Derive the numeric version from the display string (drop any label/prefix).
+    string(REGEX MATCH "[0-9]+\\.[0-9]+(\\.[0-9]+)?" APP_VERSION "${APP_DISPLAY_VERSION}")
+    if(APP_VERSION STREQUAL "")
+        set(APP_VERSION "1.0.0")
+    endif()
 endif()
 string(REGEX REPLACE "^v" "" APP_VERSION "${APP_VERSION}")
+if(NOT DEFINED APP_DISPLAY_VERSION OR APP_DISPLAY_VERSION STREQUAL "")
+    set(APP_DISPLAY_VERSION "${APP_VERSION}")
+endif()
 project(VitaSuwayomi VERSION ${APP_VERSION} LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -195,6 +214,8 @@ set(APP_SOURCES
     src/view/long_press_gesture.cpp
     src/view/pinch_gesture.cpp
     src/utils/http_client.cpp
+    src/utils/app_update.cpp
+    src/utils/update_verify.cpp
     src/utils/image_loader.cpp
     src/utils/library_cache.cpp
     src/utils/perf_overlay.cpp
@@ -203,6 +224,13 @@ set(APP_SOURCES
 # vita_stubs.c only needed on Vita (no-op stdio locks, SDL_OpenURL stub)
 if(PLATFORM_PSV)
     list(APPEND APP_SOURCES src/utils/vita_stubs.c)
+    # In-app self-update: unzip the downloaded VPK (miniz, sceIo-backed) and
+    # promote it in place via ScePromoterUtility (used to stage the updater stub).
+    list(APPEND APP_SOURCES src/utils/vita_install.cpp lib/miniz/miniz.c)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib/miniz)
+    # miniz without stdio/time: newlib's fopen64/stat64/utime are absent on
+    # Vita, so vita_install.cpp drives it through sceIo callbacks instead.
+    add_definitions(-DMINIZ_NO_STDIO -DMINIZ_NO_TIME)
 endif()
 
 # Switch: userAppInit/userAppExit (romfs, sockets, system services init)
@@ -222,6 +250,9 @@ elseif(PLATFORM_SWITCH)
     list(APPEND APP_SOURCES src/platform/platform_switch.cpp)
 elseif(PLATFORM_PS4)
     list(APPEND APP_SOURCES src/platform/platform_ps4.cpp)
+    # In-app self-update: register the downloaded PKG with the system installer
+    # (BGFT) and hand off to the bundled updater helper title.
+    list(APPEND APP_SOURCES src/utils/ps4_install.cpp)
 elseif(PLATFORM_ANDROID)
     list(APPEND APP_SOURCES src/platform/platform_android.cpp)
 else()
@@ -268,6 +299,7 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     VITA_SUWAYOMI_VERSION=\"${APP_VERSION}\"
+    VITA_SUWAYOMI_DISPLAY_VERSION=\"${APP_DISPLAY_VERSION}\"
 )
 
 # ---------------------------------------------------------------------------
@@ -300,6 +332,15 @@ else()
     )
     if(APPLE OR PLATFORM_PS4)
         set(APP_FFMPEG_LINK_BLOCK ${APP_FFMPEG_LIBS})
+    elseif(PLATFORM_SWITCH)
+        # switchfin's ffmpeg (switch-ffmpeg 7.1.5-5) is built with the RTMP
+        # (mbedTLS-DH), libssh2 and mbedTLS-TLS protocols, so libavformat needs
+        # those symbols at link time. Put mbedTLS + libssh2 INSIDE the same
+        # --start-group as the av libs so the static linker resolves the circular
+        # deps regardless of order (they're undefined otherwise, since mbedTLS is
+        # otherwise listed before libavformat).
+        set(APP_FFMPEG_LINK_BLOCK -Wl,--start-group ${APP_FFMPEG_LIBS}
+            mbedtls mbedx509 mbedcrypto ssh2 -Wl,--end-group)
     else()
         set(APP_FFMPEG_LINK_BLOCK -Wl,--start-group ${APP_FFMPEG_LIBS} -Wl,--end-group)
     endif()
@@ -344,6 +385,14 @@ if(NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
     )
 endif()
 
+# libass only renders subtitles for the FFmpeg/mpv video path. Desktop Linux
+# disables FFmpeg (VITASUWAYOMI_NO_FFMPEG) and never references it, so linking
+# it just forces a dependency that isn't in e.g. the Flatpak runtime. Drop it
+# there (macOS/Switch/Vita/PS4 keep mpv, so they keep libass).
+if(NOT APP_FFMPEG_LIBS AND NOT PLATFORM_ANDROID AND NOT WIN32)
+    list(REMOVE_ITEM APP_RENDER_LIBS ass)
+endif()
+
 set(APP_NETWORK_LIBS
     curl
 )
@@ -364,7 +413,42 @@ target_link_libraries(${PROJECT_NAME}
     ${APP_RENDER_LIBS}
 )
 
-if(NOT PLATFORM_SWITCH AND NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
+# Update-signature verification (src/utils/update_verify.cpp) uses mbedcrypto,
+# which is linked on every target that installs updates in place: the consoles
+# (Switch gets it via the ffmpeg --start-group above), Android and desktop
+# Linux/macOS. Windows (Schannel, no mbedcrypto) compiles the stub instead and
+# leans on TLS-verified transport plus the SHA-256 digest check.
+if(NOT WIN32)
+    set(_vs_have_mbedcrypto TRUE)
+    if(APPLE)
+        # update_verify.cpp is the only desktop source including mbedtls
+        # headers, and Homebrew keeps mbedtls keg-only, outside the prefix the
+        # other libs use. Locate it; if absent fall back to the stub rather than
+        # fail the build (the download is still TLS- and digest-verified).
+        find_path(MBEDTLS_INCLUDE_DIR mbedtls/sha256.h
+            HINTS /opt/homebrew/include /usr/local/include
+                  /opt/homebrew/opt/mbedtls/include /usr/local/opt/mbedtls/include)
+        if(MBEDTLS_INCLUDE_DIR)
+            target_include_directories(${PROJECT_NAME} PRIVATE "${MBEDTLS_INCLUDE_DIR}")
+            target_link_directories(${PROJECT_NAME} PRIVATE
+                /opt/homebrew/opt/mbedtls/lib /usr/local/opt/mbedtls/lib)
+        else()
+            set(_vs_have_mbedcrypto FALSE)
+            message(WARNING "mbedtls headers not found - update signature "
+                            "verification disabled on this macOS build "
+                            "(the download is still TLS- and digest-verified)")
+        endif()
+    endif()
+    if(_vs_have_mbedcrypto)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE VITASUWAYOMI_HAVE_MBEDCRYPTO=1)
+    endif()
+endif()
+
+# mp3lame is only pulled in by the FFmpeg/mpv audio path, so only link it when
+# that stack is present (macOS/Windows-full builds). Desktop Linux disables
+# FFmpeg (VITASUWAYOMI_NO_FFMPEG) and never references lame — linking it there
+# just forces an extra dependency (e.g. a Flatpak module) for no reason.
+if(APP_FFMPEG_LIBS AND NOT PLATFORM_SWITCH AND NOT PLATFORM_PS4 AND NOT WIN32 AND NOT PLATFORM_ANDROID)
     target_link_libraries(${PROJECT_NAME} mp3lame)
 endif()
 
@@ -391,12 +475,25 @@ if(PLATFORM_PSV)
         SceCodecEngine_stub
         SceAudio_stub
         SceVshBridge_stub
+        # In-app self-update promoter (utils/vita_install): promote the updater
+        # stub's VPK and load the promoter module on demand.
+        ScePromoterUtil_stub
+        SceSysmodule_stub
     )
 elseif(PLATFORM_SWITCH)
     target_link_libraries(${PROJECT_NAME} nx dav1d)
 elseif(PLATFORM_PS4)
     target_link_libraries(${PROJECT_NAME}
         SceNet
+        # In-app self-update (utils/ps4_install): BGFT registers the PKG
+        # install; AppInstUtil is initialised alongside it, and the foreground
+        # user id (which the register call needs) comes from SceUserService.
+        SceBgft
+        SceAppInstUtil
+        SceUserService
+        # sceSystemServiceLaunchApp: hand off to the updater helper (VSWY00003)
+        # at update time, since a title can't replace its own running self.
+        SceSystemService
     )
 elseif(PLATFORM_DESKTOP)
     find_package(Threads REQUIRED)
@@ -410,12 +507,55 @@ endif()
 # Platform packaging / post-build
 # ---------------------------------------------------------------------------
 if(PLATFORM_PSV)
+    # ── Updater stub (self-update helper) ───────────────────────────────
+    # A second, tiny Vita app with its own title id (VSWYUPD01). VitaSuwayomi
+    # cannot promote over itself — the installer returns 0x80101114 "in use"
+    # for the running title — so at update time it installs and launches this
+    # stub; with VitaSuwayomi now closed, the stub promotes the downloaded VPK
+    # and relaunches VitaSuwayomi (the AutoPlugin2 technique). It shares the
+    # extract/promote code (utils/vita_install), which is free of borealis/fmt
+    # so the stub links without the UI stack. The stub's own .vpk is bundled
+    # inside VitaSuwayomi.vpk (as updater.vpk) so it can be installed on demand.
+    add_executable(vitasuwayomi_updater
+        src/updater_stub/main.cpp
+        src/utils/vita_install.cpp
+        lib/miniz/miniz.c)
+    target_include_directories(vitasuwayomi_updater PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib/miniz)
+    target_compile_definitions(vitasuwayomi_updater PRIVATE MINIZ_NO_STDIO MINIZ_NO_TIME)
+    target_link_libraries(vitasuwayomi_updater
+        mbedcrypto            # mbedtls_sha1 for the fpkg hmac
+        vita2d                # tiny progress screen (system PGF font)
+        freetype
+        png
+        z
+        SceGxm_stub
+        SceDisplay_stub
+        SceCommonDialog_stub
+        ScePgf_stub
+        SceCtrl_stub
+        # self-update + relaunch
+        ScePromoterUtil_stub
+        SceSysmodule_stub
+        SceAppMgr_stub
+        SceIofilemgr_stub
+        SceLibKernel_stub)
+    vita_create_self(vitasuwayomi_updater.self vitasuwayomi_updater UNSAFE NOASLR)
+    # No FILE args here: vita_create_vpk accumulates FILE entries in a variable
+    # it does not clear between calls, so anything listed would leak into the
+    # main VitaSuwayomi.vpk below. The stub is headless (no LiveArea icon).
+    vita_create_vpk(vitasuwayomi_updater.vpk VSWYUPD01 vitasuwayomi_updater.self
+        VERSION 01.00
+        NAME "VitaSuwayomi Updater")
+
     vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME} UNSAFE NOASLR)
 
     vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
         VERSION ${VITA_VERSION}
         NAME    ${VITA_APP_NAME}
 
+        FILE ${CMAKE_BINARY_DIR}/vitasuwayomi_updater.vpk            updater.vpk
         FILE app/platform/psv/sce_sys/icon0.png                      sce_sys/icon0.png
         FILE app/platform/psv/sce_sys/pic0.png                       sce_sys/pic0.png
         FILE app/platform/psv/sce_sys/livearea/contents/bg.png       sce_sys/livearea/contents/bg.png
@@ -537,6 +677,69 @@ elseif(PLATFORM_PS4)
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/img ${CMAKE_BINARY_DIR}/ps4/resources/img
     )
     add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}.data)
+
+    # ── PS4 updater helper (self-update) ────────────────────────────────
+    # A second, tiny PS4 app with its own title id (VSWY00003). A running title
+    # can't be replaced in place — BGFT installs into the locked
+    # /user/app/VSWY00002 — so at update time VitaSuwayomi launches this helper
+    # and exits; with the main title closed the helper uninstalls VSWY00002 and
+    # hands the downloaded pkg to the system installer (same idea as the Vita
+    # updater stub VSWYUPD01). It has no UI beyond a minimal progress screen.
+    if(PS4)
+        add_executable(vitasuwayomi_updater_ps4 src/updater_ps4/main.cpp)
+        target_compile_definitions(vitasuwayomi_updater_ps4 PRIVATE __PS4__)
+        # stb_image (vendored with borealis's nanovg) decodes the app icon for
+        # the helper's progress screen — it links no other image/font code.
+        target_include_directories(vitasuwayomi_updater_ps4 PRIVATE
+            ${BOREALIS_LIBRARY}/include/borealis/extern/nanovg)
+        # SDL2 is required at RUNTIME, not just to link: the helper calls
+        # SDL_Init(SDL_INIT_VIDEO) before touching any system service, exactly
+        # as borealis's Ps4Platform does. Without that call every privileged
+        # call faults. Plus the libs whose functions the helper calls: BGFT +
+        # AppInstUtil (+ SceUserService for AppInstUtil's user context).
+        if(NOT TARGET SDL2::SDL2-static)
+            find_package(SDL2 REQUIRED)
+        endif()
+        target_link_libraries(vitasuwayomi_updater_ps4
+            SceBgft SceAppInstUtil SceUserService SDL2::SDL2-static)
+        add_custom_target(vitasuwayomi_updater_ps4.data
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                ${BOREALIS_DIR}/ps4 ${CMAKE_BINARY_DIR}/ps4_updater
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                ${CMAKE_SOURCE_DIR}/app/platform/ps4 ${CMAKE_BINARY_DIR}/ps4_updater
+            # The progress screen's artwork must be a PLAIN file: sce_sys is the
+            # package metadata dir, so sce_sys/icon0.png is consumed by the pkg
+            # tool and cannot be opened at runtime.
+            COMMAND "${CMAKE_COMMAND}" -E copy
+                ${CMAKE_SOURCE_DIR}/app/platform/ps4/sce_sys/icon0.png
+                ${CMAKE_BINARY_DIR}/ps4_updater/updater_icon.png
+        )
+        add_dependencies(vitasuwayomi_updater_ps4 vitasuwayomi_updater_ps4.data)
+        add_self(vitasuwayomi_updater_ps4)
+        add_pkg(vitasuwayomi_updater_ps4
+            ${CMAKE_BINARY_DIR}/ps4_updater
+            "VSWY00003"
+            "VitaSuwayomi Updater"
+            "01.00"
+            # Match the main app's SFO attribute (Support PS4 Pro).
+            8388608
+        )
+
+        # Bundle the helper's pkg INSIDE VitaSuwayomi's pkg (as
+        # /app0/updater.pkg) so the user only ever installs one app — the same
+        # approach the Vita build uses for its updater stub. When an update
+        # needs the helper and it isn't installed, the app copies this out and
+        # installs it (ps4::installUpdaterApp). The pkg tool names its output
+        # from the CONTENT_ID, not the target, so it's located by glob.
+        add_custom_target(vitasuwayomi_updater_ps4.bundle
+            COMMAND "${CMAKE_COMMAND}"
+                -DSRC_DIR=${CMAKE_BINARY_DIR}
+                -DDST=${CMAKE_BINARY_DIR}/ps4/updater.pkg
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/bundle_updater_pkg.cmake
+            DEPENDS vitasuwayomi_updater_ps4_pkg
+        )
+        add_dependencies(${PROJECT_NAME}_pkg vitasuwayomi_updater_ps4.bundle)
+    endif()
 
 elseif(PLATFORM_SWITCH)
     # Build NRO with embedded romfs resources (matches switchfin approach).

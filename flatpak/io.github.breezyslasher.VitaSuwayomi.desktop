@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VitaSuwayomi
+Comment=Suwayomi manga reader
+Exec=VitaSuwayomi
+Icon=io.github.breezyslasher.VitaSuwayomi
+Terminal=false
+Categories=Graphics;Viewer;Network;
+Keywords=Manga;Suwayomi;Tachiyomi;Reader;Comics;

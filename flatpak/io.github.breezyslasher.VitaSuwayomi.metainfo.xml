@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.breezyslasher.VitaSuwayomi</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>VitaSuwayomi</name>
+  <summary>Suwayomi manga reader for desktop and consoles</summary>
+  <description>
+    <p>
+      VitaSuwayomi is a native Suwayomi/Tachiyomi client built on borealis. It
+      browses your library and sources, reads chapters, and manages downloads
+      with a controller-friendly interface.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Library, sources and extension management</li>
+      <li>Paged and webtoon reading modes</li>
+      <li>Downloads for offline reading</li>
+      <li>Reading history and statistics</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.breezyslasher.VitaSuwayomi.desktop</launchable>
+  <categories>
+    <category>Graphics</category>
+    <category>Viewer</category>
+    <category>Network</category>
+  </categories>
+  <url type="homepage">https://github.com/Breezyslasher/Vita_Suwayomi</url>
+  <url type="bugtracker">https://github.com/Breezyslasher/Vita_Suwayomi/issues</url>
+  <developer id="io.github.breezyslasher">
+    <name>Breezyslasher</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="2.2.1" date="2026-08-22"/>
+  </releases>
+</component>

@@ -1172,6 +1172,7 @@ bool Application::loadSettings() {
     m_settings.showClock = extractBool("showClock", true);
     m_settings.debugLogging = extractBool("debugLogging", false);
     m_settings.showPerfOverlay = extractBool("showPerfOverlay", false);
+    m_settings.skippedUpdateVersion = extractString("skippedUpdateVersion");
 
     // Load reader settings
     m_settings.readingMode = static_cast<ReadingMode>(extractInt("readingMode"));
@@ -1682,6 +1683,7 @@ bool Application::saveSettings() {
     json += "  \"showClock\": " + std::string(m_settings.showClock ? "true" : "false") + ",\n";
     json += "  \"debugLogging\": " + std::string(m_settings.debugLogging ? "true" : "false") + ",\n";
     json += "  \"showPerfOverlay\": " + std::string(m_settings.showPerfOverlay ? "true" : "false") + ",\n";
+    json += "  \"skippedUpdateVersion\": \"" + m_settings.skippedUpdateVersion + "\",\n";
 
     // Reader settings
     json += "  \"readingMode\": " + std::to_string(static_cast<int>(m_settings.readingMode)) + ",\n";

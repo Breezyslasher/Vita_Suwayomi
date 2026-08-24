@@ -14,6 +14,56 @@
 
 namespace vitasuwayomi {
 
+namespace {
+
+// Transport hardening shared by request() and downloadFile().
+//
+// `verify` is opt-in (see HttpClient::setVerifyTls): Suwayomi servers are
+// usually the user's own box on the LAN — plain HTTP or a self-signed cert — so
+// verification stays off there by default, but it must be ON for anything
+// fetched from the public internet, above all the updater (which downloads code
+// that then gets installed and run).
+void applySecurityOptions(CURL* curl, bool verify) {
+    // Only ever speak HTTP(S), including across redirects: without this a
+    // redirect to file:// or scp:// can make curl read or write local paths.
+    // CURLOPT_*_STR are enumerators, not macros, so gate on the library version:
+    // the string form landed in 7.85.0 and the console portlibs are older.
+#if LIBCURL_VERSION_NUM >= 0x075500
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+#else
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, (long)(CURLPROTO_HTTP | CURLPROTO_HTTPS));
+#endif
+
+    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+
+    if (!verify) {
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        return;
+    }
+
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+
+    // Consoles ship no system CA store, and some desktop builds don't either,
+    // so prefer the CA bundle we package. When it is absent curl falls back to
+    // the platform store; if neither can verify, the request fails closed —
+    // correct for an update channel (it degrades to "cannot update", not to
+    // "installs whatever an attacker served").
+    static const std::string caPath = std::string(RESOURCE_PREFIX) + "cacert.pem";
+    if (platform::fileExists(caPath)) {
+        curl_easy_setopt(curl, CURLOPT_CAINFO, caPath.c_str());
+    }
+#if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)
+    // Let the Windows build use the OS certificate store as well.
+    curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, (long)CURLSSLOPT_NATIVE_CA);
+#endif
+}
+
+} // namespace
+
 static const char* USER_AGENT = "VitaSuwayomi/" VITA_SUWAYOMI_VERSION;
 
 // Curl write callback data
@@ -172,10 +222,7 @@ HttpResponse HttpClient::request(const HttpRequest& req) {
     // Follow redirects
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, req.followRedirects ? 1L : 0L);
 
-    // SSL options (Vita specific)
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+    applySecurityOptions(curl, m_verifyTls);
 
     // User agent
     curl_easy_setopt(curl, CURLOPT_USERAGENT, m_userAgent.c_str());
@@ -402,10 +449,7 @@ bool HttpClient::downloadFile(const std::string& url, WriteCallback writeCallbac
     // Follow redirects
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 
-    // SSL options (Vita specific)
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
-    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+    applySecurityOptions(curl, m_verifyTls);
 
     // User agent
     curl_easy_setopt(curl, CURLOPT_USERAGENT, m_userAgent.c_str());

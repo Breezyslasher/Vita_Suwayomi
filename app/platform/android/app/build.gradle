@@ -14,6 +14,14 @@ android {
         externalNativeBuild {
             cmake {
                 arguments "-DANDROID_PLATFORM=android-21", "-DANDROID_STL=c++_shared", "-DCMAKE_WARN_DEPRECATED=FALSE"
+                // Forward the CI-resolved version so the in-app Settings version
+                // matches the APK versionName (each is its own argv element, so
+                // the space in "Beta 2.2.1" is preserved). Omitted locally, where
+                // the CMake VERSION-file fallback applies.
+                if (project.hasProperty('appVersion'))
+                    arguments "-DAPP_VERSION=${project.appVersion}"
+                if (project.hasProperty('appDisplayVersion'))
+                    arguments "-DAPP_DISPLAY_VERSION=${project.appDisplayVersion}"
                 abiFilters 'armeabi-v7a', 'arm64-v8a'
                 version = '3.16.0+'
             }

@@ -126,6 +126,14 @@ private:
     bool m_filtersActive = false;  // True when user has applied filters
     std::set<int> m_collapsedGroups;  // Indices of collapsed groups in filter dialog
 
+    // Browse chrome: a rail of the currently-selected genre chips (2b).
+    brls::Box* m_genreRail = nullptr;        // horizontal chip rail (HScrollingFrame host)
+    brls::Box* m_genreChipsBox = nullptr;    // ROW box of genre chips
+    void buildGenreChipRail();
+    void updateBrowseChrome();               // show/hide + rebuild the rail
+    // Locate the genre-like GROUP filter (Genre/Tags/…); -1 if none.
+    int findGenreGroupIndex() const;
+
     // State
     BrowseMode m_browseMode = BrowseMode::SOURCES;
     int64_t m_currentSourceId = 0;

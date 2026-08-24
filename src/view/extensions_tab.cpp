@@ -1283,13 +1283,8 @@ void ExtensionsTab::updateExtension(const Extension& ext) {
 void ExtensionsTab::uninstallExtension(const Extension& ext) {
     brls::Logger::info("Requesting uninstall for extension: {}", ext.name);
 
-    // Show confirmation dialog
-    auto* dialog = new brls::Dialog("Uninstall " + ext.name + "?\n\nAre you sure you want to uninstall this extension?\nAll sources from this extension will be removed.");
-    dialog->setCancelable(false);  // Prevent exit dialog from appearing
-
-    dialog->addButton("Cancel", []() {});
-
-    dialog->addButton("Uninstall", [this, ext]() {
+    // The actual uninstall work, run only if the user confirms.
+    auto doUninstall = [this, ext]() {
         brls::Logger::info("Uninstalling extension: {}", ext.name);
         brls::Application::notify("Uninstalling " + ext.name + "...");
 
@@ -1329,9 +1324,13 @@ void ExtensionsTab::uninstallExtension(const Extension& ext) {
                 });
             }
         });
-    });
+    };
 
-    dialog->open();
+    // Confirm via the shared OptionsPopover, like the rest of the app.
+    std::vector<OptionRow> rows;
+    rows.push_back({ "cross.png", "Uninstall", "Removes all its sources", false, true, doUninstall });
+    rows.push_back({ "back.png", "Cancel", "", false, false, []() {}});
+    OptionsPopover::show("UNINSTALL", ext.name, std::move(rows), nullptr, 5);
 }
 
 void ExtensionsTab::showSourceSettings(const Extension& ext) {

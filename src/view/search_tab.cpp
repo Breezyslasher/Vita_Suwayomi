@@ -420,6 +420,18 @@ SearchTab::SearchTab() {
             break;
     }
 
+    // Genre chip rail (horizontal, above the grid; hidden until a source with
+    // genre filters is open).
+    m_genreRail = new brls::HScrollingFrame();
+    m_genreRail->setHeight(46);
+    m_genreRail->setMarginBottom(6);
+    m_genreRail->setVisibility(brls::Visibility::GONE);
+    m_genreChipsBox = new brls::Box();
+    m_genreChipsBox->setAxis(brls::Axis::ROW);
+    m_genreChipsBox->setAlignItems(brls::AlignItems::CENTER);
+    static_cast<brls::HScrollingFrame*>(m_genreRail)->setContentView(m_genreChipsBox);
+    m_mainContent->addView(m_genreRail);
+
     m_contentGrid->setOnItemSelected([this](const Manga& manga) {
         onMangaSelected(manga);
     });
@@ -783,6 +795,9 @@ void SearchTab::showSources() {
     m_titleLabel->setText("Browse");
     m_searchLabel->setVisibility(brls::Visibility::GONE);
 
+    // Hide the source-browser chrome (genre rail + active-filter bar).
+    updateBrowseChrome();
+
     // Filter sources by language and tags
     filterSourcesByLanguage();
     m_resultsLabel->setText(std::to_string(m_filteredSources.size()) + " sources");
@@ -1071,6 +1086,7 @@ void SearchTab::loadSourceFilters() {
                 m_sourceFilters = filters;
                 m_filtersLoaded = true;
                 brls::Logger::info("Loaded {} filters for source", filters.size());
+                updateBrowseChrome();  // populate the genre chip rail now filters exist
             });
         } else {
             brls::Logger::warning("Failed to load source filters");
@@ -1157,6 +1173,7 @@ void SearchTab::applyFilters() {
                 if (!manga.empty()) {
                     m_contentGrid->focusIndex(0);
                 }
+                updateBrowseChrome();
             });
         } else {
             brls::sync([this, gen, aliveWeak]() {
@@ -1169,6 +1186,188 @@ void SearchTab::applyFilters() {
             });
         }
     });
+}
+
+// ============================================================================
+// Browse chrome: genre chip rail + active-filter bar (source-browser 2b)
+// ============================================================================
+
+namespace {
+// Handoff palette.
+inline NVGcolor cAccent()    { return nvgRGB(0x64, 0xB4, 0xFF); }
+inline NVGcolor cAccentInk() { return nvgRGB(0x0d, 0x22, 0x36); }
+inline NVGcolor cDanger()    { return nvgRGB(0xd9, 0x6b, 0x6b); }
+inline NVGcolor cMuted()     { return nvgRGB(0x8b, 0x8b, 0x93); }
+inline NVGcolor cBody()      { return nvgRGB(0xC5, 0xC6, 0xD0); }
+inline NVGcolor cChip()      { return nvgRGB(0x23, 0x23, 0x26); }
+
+std::string toLower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+    return s;
+}
+
+// True when a filter differs from its default (i.e. it's an applied selection).
+bool filterActive(const SourceFilter& f) {
+    switch (f.type) {
+        case FilterType::TEXT:     return !f.textState.empty() && f.textState != f.textDefault;
+        case FilterType::CHECKBOX: return f.checkBoxState != f.checkBoxDefault;
+        case FilterType::TRISTATE: return f.triState != TriState::IGNORE;
+        case FilterType::SELECT:   return f.selectState != f.selectDefault;
+        case FilterType::SORT:     return f.sortState.index != f.sortDefault.index ||
+                                          f.sortState.ascending != f.sortDefault.ascending;
+        default:                   return false;
+    }
+}
+
+// "Name: Value" summary for a chip label (top-level, non-genre filters).
+std::string filterValueLabel(const SourceFilter& f) {
+    switch (f.type) {
+        case FilterType::TEXT:
+            return f.name + ": " + f.textState;
+        case FilterType::CHECKBOX:
+            return f.name;
+        case FilterType::TRISTATE:
+            return f.name + (f.triState == TriState::EXCLUDE ? " (excl)" : "");
+        case FilterType::SELECT:
+            if (f.selectState >= 0 && f.selectState < static_cast<int>(f.selectOptions.size()))
+                return f.name + ": " + f.selectOptions[f.selectState];
+            return f.name;
+        case FilterType::SORT:
+            if (f.sortState.index >= 0 && f.sortState.index < static_cast<int>(f.sortOptions.size()))
+                return f.name + ": " + f.sortOptions[f.sortState.index] +
+                       (f.sortState.ascending ? " ↑" : " ↓");
+            return f.name;
+        default:
+            return f.name;
+    }
+}
+
+// Reset one filter back to its default (used when a chip is removed).
+void resetFilter(SourceFilter& f) {
+    switch (f.type) {
+        case FilterType::TEXT:     f.textState = f.textDefault; break;
+        case FilterType::CHECKBOX: f.checkBoxState = f.checkBoxDefault; break;
+        case FilterType::TRISTATE: f.triState = TriState::IGNORE; break;
+        case FilterType::SELECT:   f.selectState = f.selectDefault; break;
+        case FilterType::SORT:     f.sortState = f.sortDefault; break;
+        default: break;
+    }
+}
+} // namespace
+
+int SearchTab::findGenreGroupIndex() const {
+    for (size_t i = 0; i < m_sourceFilters.size(); i++) {
+        const auto& f = m_sourceFilters[i];
+        if (f.type != FilterType::GROUP) continue;
+        std::string n = toLower(f.name);
+        if (n.find("genre") == std::string::npos && n.find("tag") == std::string::npos &&
+            n.find("categor") == std::string::npos)
+            continue;
+        for (const auto& c : f.filters)
+            if (c.type == FilterType::TRISTATE || c.type == FilterType::CHECKBOX)
+                return static_cast<int>(i);
+    }
+    return -1;
+}
+
+void SearchTab::buildGenreChipRail() {
+    if (!m_genreRail || !m_genreChipsBox) return;
+
+    // If focus is currently on a chip, move it to the grid before we rebuild.
+    brls::View* focused = brls::Application::getCurrentFocus();
+    for (brls::View* v = focused; v; v = v->getParent()) {
+        if (v == m_genreRail) { if (m_contentGrid) brls::Application::giveFocus(m_contentGrid); break; }
+    }
+    m_genreChipsBox->clearViews();
+
+    // Collect a chip for every *applied* filter (tap one to remove it); the
+    // full filter list lives in the Filters dialog. Genre-group children show
+    // just the genre name; other filters show a "Name: Value" summary.
+    struct Chip { int fi; int ci; std::string label; };
+    std::vector<Chip> chips;
+
+    int gi = findGenreGroupIndex();
+    for (size_t i = 0; i < m_sourceFilters.size(); i++) {
+        const auto& f = m_sourceFilters[i];
+        if (f.type == FilterType::GROUP) {
+            bool isGenre = (static_cast<int>(i) == gi);
+            for (size_t c = 0; c < f.filters.size(); c++) {
+                const auto& child = f.filters[c];
+                if (!filterActive(child)) continue;
+                std::string label = isGenre ? child.name : (f.name + ": " + child.name);
+                if (child.type == FilterType::TRISTATE && child.triState == TriState::EXCLUDE)
+                    label += " (excl)";
+                chips.push_back({static_cast<int>(i), static_cast<int>(c), label});
+            }
+        } else if (filterActive(f)) {
+            chips.push_back({static_cast<int>(i), -1, filterValueLabel(f)});
+        }
+    }
+
+    if (chips.empty()) {
+        m_genreRail->setVisibility(brls::Visibility::GONE);
+        return;
+    }
+
+    for (const auto& ch : chips) {
+        auto* chip = new brls::Box();
+        chip->setAxis(brls::Axis::ROW);
+        chip->setAlignItems(brls::AlignItems::CENTER);
+        chip->setJustifyContent(brls::JustifyContent::CENTER);
+        chip->setHeight(34);
+        chip->setPaddingLeft(14);
+        chip->setPaddingRight(12);
+        chip->setCornerRadius(17);
+        chip->setMarginRight(8);
+        chip->setFocusable(true);
+        chip->setBackgroundColor(cAccent());
+
+        auto* lbl = new brls::Label();
+        lbl->setText(ch.label);
+        lbl->setFontSize(14);
+        lbl->setSingleLine(true);
+        lbl->setTextColor(cAccentInk());
+        lbl->setMarginRight(6);
+        chip->addView(lbl);
+
+        // Trailing × to signal "tap to remove".
+        auto* x = new brls::Label();
+        x->setText("×");
+        x->setFontSize(16);
+        x->setTextColor(cAccentInk());
+        chip->addView(x);
+
+        int fi = ch.fi, ci = ch.ci;
+        chip->registerClickAction([this, fi, ci](brls::View*) {
+            // Removing a chip resets that filter to its default.
+            if (fi >= 0 && fi < static_cast<int>(m_sourceFilters.size())) {
+                SourceFilter& top = m_sourceFilters[fi];
+                if (ci >= 0 && top.type == FilterType::GROUP &&
+                    ci < static_cast<int>(top.filters.size()))
+                    resetFilter(top.filters[ci]);
+                else
+                    resetFilter(top);
+            }
+            applyFilters();  // reloads page 1 + refreshes chips on completion
+            return true;
+        });
+        chip->addGestureRecognizer(new brls::TapGestureRecognizer(chip));
+        m_genreChipsBox->addView(chip);
+    }
+
+    m_genreRail->setVisibility(brls::Visibility::VISIBLE);
+}
+
+void SearchTab::updateBrowseChrome() {
+    bool inSourceBrowse = (m_currentSourceId != 0) &&
+                          (m_browseMode == BrowseMode::POPULAR || m_browseMode == BrowseMode::LATEST);
+    if (!inSourceBrowse) {
+        if (m_genreRail) m_genreRail->setVisibility(brls::Visibility::GONE);
+        return;
+    }
+    // The selected-genre chip rail is the only browse chrome now; it shows or
+    // hides itself based on how many genres are currently selected.
+    buildGenreChipRail();
 }
 
 void SearchTab::hideFilterPanel() {
@@ -2331,6 +2530,7 @@ void SearchTab::loadPopularManga(int64_t sourceId) {
                 if (!manga.empty()) {
                     m_contentGrid->focusIndex(0);
                 }
+                updateBrowseChrome();
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch popular manga");
@@ -2377,6 +2577,7 @@ void SearchTab::loadLatestManga(int64_t sourceId) {
                 if (!manga.empty()) {
                     m_contentGrid->focusIndex(0);
                 }
+                updateBrowseChrome();
             });
         } else {
             brls::Logger::error("SearchTab: Failed to fetch latest manga");

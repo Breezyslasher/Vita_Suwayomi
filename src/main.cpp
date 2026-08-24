@@ -15,6 +15,7 @@
 #include "view/rotatable_image.hpp"
 #include "app/downloads_manager.hpp"
 #include "utils/http_client.hpp"
+#include "utils/app_update.hpp"
 #include <clocale>
 
 #if defined(__ANDROID__)
@@ -29,6 +30,7 @@
 #include <chrono>
 #elif defined(__SWITCH__)
 #include <sys/stat.h>
+#include <switch.h>
 #endif
 
 #ifdef __vita__
@@ -174,6 +176,39 @@ static void registerCustomViews() {
  * Main entry point implementation
  */
 static int appMain(int argc, char* argv[]) {
+#ifdef __SWITCH__
+    // Refuse applet-mode launches (opening the homebrew menu from the album
+    // instead of over a title). Applets get a fraction of the RAM — decoding
+    // manga pages dies — and only 2 BSD socket sessions, so any concurrent
+    // network use fails with "couldn't connect" (the in-app updater's download
+    // is the reproducible victim).
+    {
+        AppletType at = appletGetAppletType();
+        if (at != AppletType_Application && at != AppletType_SystemApplication) {
+            consoleInit(NULL);
+            printf("\n  VitaSuwayomi needs full memory to run.\n");
+            printf("\n  Launch it with title override: hold R while\n");
+            printf("  opening any game, then start VitaSuwayomi from\n");
+            printf("  the homebrew menu.\n");
+            printf("\n  Press + to exit.\n");
+            padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+            PadState pad;
+            padInitializeDefault(&pad);
+            while (appletMainLoop()) {
+                padUpdate(&pad);
+                if (padGetButtonsDown(&pad) & HidNpadButton_Plus) break;
+                consoleUpdate(NULL);
+            }
+            consoleExit(NULL);
+            return 0;
+        }
+    }
+#endif
+
+    // Remember argv[0] for the updater (Switch needs it to know which NRO to
+    // overwrite; a no-op elsewhere). Safe to call before borealis init.
+    app_update::setSelfPath(argc > 0 ? argv[0] : nullptr);
+
     // Parse --deeplink argument (passed from Android intent)
     std::string pendingDeeplink;
     for (int i = 1; i < argc; i++) {
@@ -333,6 +368,11 @@ static int appMain(int argc, char* argv[]) {
     if (!pendingDeeplink.empty()) {
         app.setDeeplink(pendingDeeplink);
     }
+
+    // Silent startup update check. Spawns a worker and marshals any offer to the
+    // UI via brls::sync, which the main loop below processes; stays quiet when
+    // up to date, offline, or on a release the user chose to skip.
+    app_update::checkForUpdates(false);
 
     // Run application (blocking)
     app.run();
