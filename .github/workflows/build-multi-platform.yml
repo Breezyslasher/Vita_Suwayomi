@@ -234,7 +234,10 @@ jobs:
           done
 
           # Flatpak bundle (single-file .flatpak)
-          for fp in $(find . -name "*.flatpak"); do
+          # -type f matters: download-artifact creates a DIRECTORY named after
+          # the artifact (VitaSuwayomi-x86_64.flatpak), and cp without -r fails
+          # on it. The real bundle is the regular file inside.
+          for fp in $(find . -type f -name "*.flatpak"); do
             cp "$fp" "release/VitaSuwayomi.${FVER}.flatpak"
           done
 
@@ -385,11 +388,20 @@ jobs:
                  | sed -E 's/.*"(https[^"]+)"$/\1/')
           [ -n "$urls" ] || { echo "::error::could not read the vita-packages asset list"; exit 1; }
 
-          pick() { printf '%s\n' "$urls" | awk -v re="$1" -F/ \
-                     '$NF ~ re && $NF ~ /-vita\.pkg\.tar\.xz$/ {print; exit}'; }
+          pick() {
+            printf '%s\n' "$urls" | {
+              while IFS= read -r u; do
+                n=${u##*/}
+                case "$n" in
+                  $1) case "$n" in *-vita.pkg.tar.xz) printf '%s\n' "$u"; return 0;; esac;;
+                esac
+              done
+              return 0
+            }
+          }
 
           mkdir -p portlib-cache
-          for re in '^mbedtls-' '^curl-' '^ffmpeg-' '^mpv-'; do
+          for re in 'mbedtls-*' 'curl-*' 'ffmpeg-*' 'mpv-*'; do
             u=$(pick "$re")
             if [ -z "$u" ]; then
               echo "::warning::no published vita package matches ${re} - leaving it to vdpm"
@@ -692,11 +704,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        # mpv_re selects the leg's package from the release by name, not by a
-        # pinned version. "[0-9]" is what keeps the opengl pattern from also
-        # matching switch-libmpv-deko3d-*.
-        - { driver: opengl, mpv_re: "^switch-libmpv-[0-9]",     cmake_extra: "" }
-        - { driver: deko3d, mpv_re: "^switch-libmpv-deko3d-",   cmake_extra: "-DUSE_DEKO3D=ON" }
+        # mpv_re is a filename GLOB selecting the leg's package from the release
+        # by name, not by a pinned version. "[0-9]" is what keeps the opengl
+        # pattern from also matching switch-libmpv-deko3d-*.
+        - { driver: opengl, mpv_re: "switch-libmpv-[0-9]*",     cmake_extra: "" }
+        - { driver: deko3d, mpv_re: "switch-libmpv-deko3d-*",   cmake_extra: "-DUSE_DEKO3D=ON" }
     container:
       image: devkitpro/devkita64:20260219
     steps:
@@ -707,7 +719,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
+          set -eu
           # switchfin's portlibs are a ROLLING release: every bump REPLACES the
           # asset, so any pinned URL 404s eventually (it has broken this build
           # three times — dav1d 1.5.3->1.5.4, and switch-uchardet was withdrawn
@@ -723,8 +735,18 @@ jobs:
           echo "$urls" | wc -l | xargs echo "assets published:"
 
           # First asset whose FILE NAME matches the regex and is a pacman package.
-          pick() { printf '%s\n' "$urls" | awk -v re="$1" -F/ \
-                     '$NF ~ re && $NF ~ /\.pkg\.tar\.zst$/ {print; exit}'; }
+          # POSIX glob match on the file name; no awk (the container runs dash).
+          pick() {
+            printf '%s\n' "$urls" | {
+              while IFS= read -r u; do
+                n=${u##*/}
+                case "$n" in
+                  $1) case "$n" in *.pkg.tar.zst) printf '%s\n' "$u"; return 0;; esac;;
+                esac
+              done
+              return 0
+            }
+          }
 
           mkdir -p portlib-cache
           # The mpv -> ffmpeg -> tls stack must come from switchfin as a set so it
@@ -733,12 +755,12 @@ jobs:
           # `dkp-pacman -Sy` below lets pacman resolve it from the devkitPro repo
           # instead, and a genuinely unmet dependency still surfaces in the
           # `pacman -U` error we capture.
-          for re in '^hacBrewPack-.*x86_64' \
-                    '^libuam-' \
-                    '^switch-dav1d-' \
-                    '^switch-mbedtls-' \
-                    '^switch-libssh2-' \
-                    '^switch-ffmpeg-' \
+          for re in 'hacBrewPack-*x86_64*' \
+                    'libuam-*' \
+                    'switch-dav1d-*' \
+                    'switch-mbedtls-*' \
+                    'switch-libssh2-*' \
+                    'switch-ffmpeg-*' \
                     '${{ matrix.mpv_re }}'; do
             u=$(pick "$re")
             if [ -z "$u" ]; then
@@ -823,14 +845,23 @@ jobs:
                  | sed -E 's/.*"(https[^"]+)"$/\1/')
           [ -n "$urls" ] || { echo "::error::could not read the pacbrew asset list"; exit 1; }
 
-          pick() { printf '%s\n' "$urls" | awk -v re="$1" -F/ \
-                     '$NF ~ re && $NF ~ /\.pkg\.tar\.gz$/ {print; exit}'; }
+          pick() {
+            printf '%s\n' "$urls" | {
+              while IFS= read -r u; do
+                n=${u##*/}
+                case "$n" in
+                  $1) case "$n" in *.pkg.tar.gz) printf '%s\n' "$u"; return 0;; esac;;
+                esac
+              done
+              return 0
+            }
+          }
 
           mkdir -p portlib-cache
-          for re in '^ps4-openorbis-musl-' \
-                    '^ps4-openorbis-mbedtls-' \
-                    '^ps4-openorbis-sdl2-' \
-                    '^ps4-openorbis-libcurl-'; do
+          for re in 'ps4-openorbis-musl-*' \
+                    'ps4-openorbis-mbedtls-*' \
+                    'ps4-openorbis-sdl2-[0-9]*' \
+                    'ps4-openorbis-libcurl-*'; do
             u=$(pick "$re")
             if [ -z "$u" ]; then
               echo "::error::no published pacbrew package matches ${re}"
