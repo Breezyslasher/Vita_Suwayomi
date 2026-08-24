@@ -698,7 +698,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: portlib-cache
-          key: switch-portlibs-v3-hacBrewPack-3.05-1_libuam-master-1_dav1d-1.5.3-1_mbedtls-3.6.7-1_libssh2-1.11.1-1_ffmpeg-7.1.5-5_uchardet-0.0.8-1_${{ matrix.mpv_pkg }}
+          key: switch-portlibs-v4-hacBrewPack-3.05-1_libuam-master-1_dav1d-1.5.4-1_mbedtls-3.6.7-1_libssh2-1.11.1-1_ffmpeg-7.1.5-5_${{ matrix.mpv_pkg }}
       - name: Install switchfin portlibs
         run: |
           BASE_URL="https://github.com/dragonflylee/switchfin/releases/download/switch-portlibs"
@@ -708,27 +708,37 @@ jobs:
                  --speed-limit 102400 --speed-time 30 -o "$2" "$1"
           }
           mkdir -p portlib-cache
-          # The whole switchfin mpv -> ffmpeg -> tls stack must be installed
-          # together so it's ABI-consistent, INCLUDING switch-uchardet, which
-          # switch-libmpv depends on (pacman -U on local files can't pull deps
-          # from the repo, so a missing one fails "could not satisfy dependencies").
+          # The switchfin mpv -> ffmpeg -> tls stack must be installed together so
+          # it stays ABI-consistent (mpv is built against switchfin's ffmpeg,
+          # which is built against its mbedtls/libssh2).
+          #
+          # These assets are ROLLING: switchfin replaces them on every bump, so a
+          # pinned URL 404s without warning (dav1d 1.5.3-1 -> 1.5.4-1, and
+          # switch-uchardet was withdrawn entirely). A missing package is
+          # therefore a warning, not a hard failure: `dkp-pacman -Sy` below
+          # refreshes the databases, so anything we couldn't fetch can still be
+          # resolved from the devkitPro repo. If it genuinely can't be, the
+          # `pacman -U` step reports the unmet dependency, which is the error we
+          # actually want to see.
+          missing=0
           for pkg in hacBrewPack-3.05-1-x86_64.pkg.tar.zst \
                      libuam-master-1-any.pkg.tar.zst \
-                     switch-dav1d-1.5.3-1-any.pkg.tar.zst \
+                     switch-dav1d-1.5.4-1-any.pkg.tar.zst \
                      switch-mbedtls-3.6.7-1-any.pkg.tar.zst \
                      switch-libssh2-1.11.1-1-any.pkg.tar.zst \
                      switch-ffmpeg-7.1.5-5-any.pkg.tar.zst \
-                     switch-uchardet-0.0.8-1-any.pkg.tar.zst \
                      ${{ matrix.mpv_pkg }}; do
             f="portlib-cache/$pkg"
             if [ ! -f "$f" ] || [ "$(stat -c%s "$f" 2>/dev/null || echo 0)" -lt 4096 ]; then
               if ! fetch "$BASE_URL/$pkg" "$f"; then
                 rm -f "$f"
-                echo "::error::failed to download portlib $pkg"
-                exit 1
+                echo "::warning::portlib $pkg is no longer published (rolling release);"\
+                     " continuing and letting pacman resolve it from the repo."
+                missing=$((missing + 1))
               fi
             fi
           done
+          [ "$missing" -eq 0 ] || echo "$missing pinned portlib(s) unavailable; see warnings above."
           dkp-pacman --noconfirm -Rdd switch-libmpv || true
           dkp-pacman --noconfirm -Rdd switch-libmpv-deko3d || true
           # Refresh the package databases so pacman -U can pull any remaining
