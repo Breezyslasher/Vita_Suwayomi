@@ -562,6 +562,7 @@ if(PLATFORM_PSV)
         FILE app/platform/psv/sce_sys/livearea/contents/startup.png  sce_sys/livearea/contents/startup.png
         FILE app/platform/psv/sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
 
+        FILE resources/cacert.pem                        resources/cacert.pem
         FILE ${BOREALIS_DIR}/resources/i18n/en-US/hints.json resources/i18n/en-US/hints.json
         FILE resources/i18n/en-US/main.json                  resources/i18n/en-US/main.json
 
@@ -673,6 +674,7 @@ elseif(PLATFORM_PS4)
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/material ${CMAKE_BINARY_DIR}/ps4/resources/material
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources/xml ${CMAKE_BINARY_DIR}/ps4/resources/xml
         # Copy borealis system resources
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/resources/cacert.pem ${CMAKE_BINARY_DIR}/ps4/resources/cacert.pem
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/i18n ${CMAKE_BINARY_DIR}/ps4/resources/i18n
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${BOREALIS_DIR}/resources/img ${CMAKE_BINARY_DIR}/ps4/resources/img
     )
@@ -763,6 +765,8 @@ elseif(PLATFORM_SWITCH)
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/material ${CMAKE_BINARY_DIR}/resources/material
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/xml ${CMAKE_BINARY_DIR}/resources/xml
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/cacert.pem ${CMAKE_BINARY_DIR}/resources/cacert.pem
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${BOREALIS_DIR}/resources/i18n ${CMAKE_BINARY_DIR}/resources/i18n
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -794,6 +798,9 @@ elseif(PLATFORM_DESKTOP)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/xml
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/xml
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/cacert.pem
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/cacert.pem
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${BOREALIS_DIR}/resources/i18n
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources/i18n

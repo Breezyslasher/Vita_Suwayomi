@@ -12,9 +12,68 @@
 #include <cstdio>
 #include <cctype>
 
+// For locating the packaged CA bundle next to the executable on desktop.
+#if defined(_WIN32)
+  #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+  #endif
+  #include <windows.h>
+#elif defined(__APPLE__)
+  #include <mach-o/dyld.h>
+  #include <cstdint>
+#elif !defined(__PSV__) && !defined(__PS4__) && !defined(__SWITCH__)
+  #include <unistd.h>
+#endif
+
 namespace vitasuwayomi {
 
 namespace {
+
+// Where the packaged Mozilla CA bundle actually is at runtime.
+//
+// RESOURCE_PREFIX is absolute on the consoles ("app0:resources/", "romfs:/"),
+// and on Android it is "resources/" against a cwd the asset extractor chdir'd
+// into — so on all four the prefix alone resolves and we hand it to curl
+// unconditionally, exactly like the reference client. Those are precisely the
+// targets with no system trust store, so failing closed there is correct.
+//
+// On desktop the prefix is relative to a cwd we do not control (Start menu,
+// Finder, a .desktop launcher), so look next to the executable too, and if the
+// bundle still isn't found return empty and leave CAINFO unset — desktop has a
+// system store, and pointing curl at a missing file would break *every* HTTPS
+// request with CURLE_SSL_CACERT_BADFILE.
+const std::string& caBundlePath() {
+    static const std::string path = [] () -> std::string {
+        std::string rel = std::string(RESOURCE_PREFIX) + "cacert.pem";
+#if defined(__PSV__) || defined(__PS4__) || defined(__SWITCH__) || defined(ANDROID)
+        return rel;
+#else
+        if (platform::fileExists(rel)) return rel;
+
+        std::string exeDir;
+#if defined(_WIN32)
+        char buf[MAX_PATH] = {0};
+        if (GetModuleFileNameA(nullptr, buf, MAX_PATH) > 0) exeDir = buf;
+#elif defined(__APPLE__)
+        char buf[4096];
+        uint32_t sz = sizeof(buf);
+        if (_NSGetExecutablePath(buf, &sz) == 0) exeDir = buf;
+#else
+        char buf[4096];
+        ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+        if (n > 0) { buf[n] = '\0'; exeDir = buf; }
+#endif
+        size_t slash = exeDir.find_last_of("/\\");
+        if (slash == std::string::npos) return {};
+        exeDir.resize(slash + 1);
+
+        std::string abs = exeDir + rel;
+        if (platform::fileExists(abs)) return abs;
+        return {};
+#endif
+    }();
+    return path;
+}
 
 // Transport hardening shared by request() and downloadFile().
 //
@@ -38,6 +97,11 @@ void applySecurityOptions(CURL* curl, bool verify) {
 
     curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
 
+    // Never let curl implement its timeouts with SIGALRM. Every request in
+    // this app runs on a worker thread, and the signal path is not
+    // thread-safe — it can fire on, and unwind, the wrong thread.
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+
     if (!verify) {
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
@@ -47,13 +111,13 @@ void applySecurityOptions(CURL* curl, bool verify) {
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 
-    // Consoles ship no system CA store, and some desktop builds don't either,
-    // so prefer the CA bundle we package. When it is absent curl falls back to
-    // the platform store; if neither can verify, the request fails closed —
-    // correct for an update channel (it degrades to "cannot update", not to
-    // "installs whatever an attacker served").
-    static const std::string caPath = std::string(RESOURCE_PREFIX) + "cacert.pem";
-    if (platform::fileExists(caPath)) {
+    // Verification needs a trust anchor, and several targets have none
+    // configured — Android ships NDK libcurl with no CA store at all (the
+    // symptom was "could not reach update server"), and the consoles link
+    // mbedTLS as curl's backend with no store either. mbedTLS honours CAINFO,
+    // so the packaged Mozilla bundle is all any of them needs.
+    const std::string& caPath = caBundlePath();
+    if (!caPath.empty()) {
         curl_easy_setopt(curl, CURLOPT_CAINFO, caPath.c_str());
     }
 #if defined(_WIN32) && defined(CURLSSLOPT_NATIVE_CA)
