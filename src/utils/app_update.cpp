@@ -1013,24 +1013,45 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
     size_t slash = installDir.find_last_of("\\/");
     installDir = (slash == std::string::npos) ? "." : installDir.substr(0, slash);
 
-    std::string bat = platform::path("update.bat");
-    std::string zip = path;
-    for (auto& c : zip)        if (c == '/') c = '\\';
-    std::string dir = installDir;
+    auto toWin = [](std::string s) {
+        for (char& c : s) if (c == '/') c = '\\';
+        return s;
+    };
+    const std::string zip = toWin(path);
+    const std::string dir = toWin(installDir);
+    // Keep the script beside the install so the detached cmd can always reach
+    // it, exactly like the reference implementation.
+    const std::string bat = installDir + "\\vitasuwayomi_update.bat";
+
+    // Block form, not one-liners: `if (...) ^ / else (...)` and
+    // `( ... & goto label )` are the two shapes cmd mishandles, and they are
+    // why the generated script did nothing. CRLF endings matter too — cmd
+    // mis-parses a bare-LF .bat (platform::writeFile writes binary, so the
+    // \r\n survive).
     std::string script;
     script += "@echo off\r\n";
     script += ":waitloop\r\n";
     script += "tasklist /FI \"IMAGENAME eq VitaSuwayomi.exe\" 2>nul | find /I \"VitaSuwayomi.exe\" >nul\r\n";
-    script += "if not errorlevel 1 ( ping -n 2 127.0.0.1 >nul & goto waitloop )\r\n";
+    script += "if not errorlevel 1 (\r\n";
+    script += "  ping -n 2 127.0.0.1 >nul\r\n";
+    script += "  goto waitloop\r\n";
+    script += ")\r\n";
     script += "where tar >nul 2>&1\r\n";
-    script += "if not errorlevel 1 ( tar -xf \"" + zip + "\" -C \"" + dir + "\" ) ^\r\n";
-    script += "else ( powershell -NoProfile -NonInteractive -Command ^\r\n";
-    script += "  \"Expand-Archive -LiteralPath " + psQuote(zip) +
-              " -DestinationPath " + psQuote(dir) + " -Force\" )\r\n";
+    script += "if not errorlevel 1 (\r\n";
+    script += "  tar -xf \"" + zip + "\" -C \"" + dir + "\"\r\n";
+    script += ") else (\r\n";
+    script += "  powershell -NoProfile -NonInteractive -Command \"Expand-Archive -LiteralPath "
+              + psQuote(zip) + " -DestinationPath " + psQuote(dir) + " -Force\"\r\n";
+    script += ")\r\n";
     script += "start \"\" /D \"" + dir + "\" \"" + dir + "\\VitaSuwayomi.exe\"\r\n";
     script += "del \"" + zip + "\" >nul 2>&1\r\n";
     script += "del \"%~f0\" >nul 2>&1\r\n";
-    platform::writeFile(bat, script);
+    if (!platform::writeFile(bat, script)) {
+        finishProgress(ui, []() {
+            showMessage("Update failed: could not write the updater script next to the app.");
+        });
+        return false;
+    }
 
     STARTUPINFOA si{}; si.cb = sizeof si;
     PROCESS_INFORMATION pi{};
@@ -1172,6 +1193,17 @@ void startInstall(const ReleaseInfo& rel) {
         if (linuxPkg() == LinuxPkg::AppImage) {
             const char* ai = std::getenv("APPIMAGE");
             dest = ai ? (std::string(ai) + ".new") : platform::path("update.AppImage");
+        }
+#endif
+#if defined(_WIN32)
+        // Straight into the install folder (absolute), so the detached cmd
+        // resolves it no matter what working directory it ends up with.
+        {
+            char exeBuf[MAX_PATH] = {0};
+            GetModuleFileNameA(nullptr, exeBuf, MAX_PATH);
+            std::string d = exeBuf;
+            size_t sl = d.find_last_of("\\/");
+            if (sl != std::string::npos) dest = d.substr(0, sl) + "\\update.zip";
         }
 #endif
         if (dest.empty()) {
