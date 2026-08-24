@@ -24,6 +24,7 @@
 #include <cctype>
 #include <cstring>
 #include <algorithm>   // std::count (table-row detection in the notes parser)
+#include <cmath>       // std::ceil (notes height estimate)
 #include <string>
 #include <vector>
 
@@ -1543,6 +1544,62 @@ ParsedNotes parseNotes(const std::string& md) {
     return out;
 }
 
+// ── Notes height estimate ───────────────────────────────────────────────────
+// The sheet sizes itself to its notes. Its ScrollingFrame detaches the content
+// view from the layout tree so the content can grow freely, which also means
+// the frame has no intrinsic height to lay out against — it has to be told one
+// before anything is measured. So walk the parsed lines and add up what they
+// will occupy, mirroring the margins and font sizes the sheet actually sets.
+// It is an estimate: being a little over just leaves some slack at the bottom,
+// and being a little under means the last line scrolls.
+float estimateNotesHeight(const ParsedNotes& notes, float panelW) {
+    // content padding is (top 16, right 26, bottom 18, left 22)
+    const float textW   = panelW - 22.0f - 26.0f;
+    const float bulletW = textW - 15.0f;             // dot + its margin
+
+    // Rough average advance for the UI font; the body copy is 12.5px.
+    auto wrapped = [](const std::string& s, float width, float fontSize) -> float {
+        if (s.empty()) return 0.0f;
+        float cols = width / (fontSize * 0.52f);
+        if (cols < 8.0f) cols = 8.0f;
+        float lines = std::ceil((float)s.size() / cols);
+        return lines < 1.0f ? 1.0f : lines;
+    };
+
+    float h = 16.0f + 18.0f;                          // content padding
+    if (notes.lines.empty()) return h + 40.0f + 22.0f;   // the "no notes" label
+
+    bool first = true;
+    for (const NoteLine& n : notes.lines) {
+        if (n.kind == NoteLine::Section) {
+            h += (first ? 2.0f : 20.0f) + 20.0f + 3.0f;      // margins + row
+        } else if (n.kind == NoteLine::Bullet) {
+            h += 10.0f;                                       // marginTop
+            if (!n.lead.empty()) h += 19.0f;
+            if (!n.text.empty()) {
+                if (!n.lead.empty()) h += 2.0f;
+                h += wrapped(n.text, bulletW, 12.5f) * 17.0f; // 12.5 * 1.35
+            }
+        } else {
+            h += 8.0f + wrapped(n.text, textW, 12.5f) * 17.0f;
+        }
+        first = false;
+    }
+    return h;
+}
+
+// Clamp the notes area so the sheet is never a sliver and never taller than the
+// screen. The chrome is the header (14+38+14), the two hairlines and the footer
+// (12+42+13) — subtract it so the PANEL, not the notes, is what fits.
+float clampNotesHeight(float wanted, float screenH) {
+    const float chrome = 66.0f + 1.0f + 67.0f + 1.0f;
+    float maxH = screenH - 76.0f - chrome;
+    if (maxH < 120.0f) maxH = 120.0f;
+    if (wanted > maxH)  return maxH;
+    if (wanted < 96.0f) return 96.0f;
+    return wanted;
+}
+
 // ── The What's New sheet ────────────────────────────────────────────────────
 // Pushed on top of the offer sheet; B returns to it. The header carries the
 // tag, date, size and PR range plus a Pre-release chip; the notes scroll with
@@ -1558,7 +1615,15 @@ void showNotesSheet(const ReleaseInfo rel) {
     if (screenH <= 0.0f) screenH = 720.0f;
     float panelW = 620.0f;
     if (panelW + 80.0f > screenW) panelW = screenW - 80.0f;
-    const float panelH = screenH - 76.0f;
+
+    // The sheet is as tall as its notes, capped so long ones scroll instead of
+    // running off the screen. A ScrollingFrame detaches its content view from
+    // the tree, so it has no height of its own to measure — the alternative to
+    // estimating is what this used to do, which was pin the panel to the full
+    // screen and leave a two-line release floating in a wall of empty panel.
+    const float wantH  = estimateNotesHeight(notes, panelW);
+    const float notesH = clampNotesHeight(wantH, screenH);
+    const bool  scrolls = wantH > notesH + 1.0f;
 
     auto* scrim = new brls::Box();
     scrim->setAxis(brls::Axis::COLUMN);
@@ -1571,7 +1636,8 @@ void showNotesSheet(const ReleaseInfo rel) {
     auto* panel = new brls::Box();
     panel->setAxis(brls::Axis::COLUMN);
     panel->setWidth(panelW);
-    panel->setHeight(panelH);
+    // No explicit height: the column sizes to the header, the notes area (which
+    // IS given a height, below) and the footer.
     panel->setBackgroundColor(tok::panel());
     panel->setBorderColor(tok::panelLine());
     panel->setBorderThickness(1.0f);
@@ -1644,11 +1710,11 @@ void showNotesSheet(const ReleaseInfo rel) {
 
     // ── Notes area ──────────────────────────────────────────────────────
     auto* scroller = new brls::ScrollingFrame();
-    scroller->setGrow(1.0f);
+    scroller->setHeight(notesH);
 
     auto* content = new brls::Box();
     content->setAxis(brls::Axis::COLUMN);
-    content->setPadding(16.0f, 26.0f, 18.0f, 22.0f);
+    content->setPadding(16.0f, 26.0f, 18.0f, 22.0f);   // width comes from the frame
 
     if (notes.lines.empty()) {
         auto* empty = makeLabel("No notes for this release.", 13.5f, tok::muted2());
@@ -1725,11 +1791,12 @@ void showNotesSheet(const ReleaseInfo rel) {
     footer->setAlignItems(brls::AlignItems::CENTER);
     footer->setPadding(12.0f, 20.0f, 13.0f, 20.0f);
 
+    // Only claim there's more to scroll to when there actually is.
     if (notes.sections > 0) {
-        footer->addView(makeLabel(
-            "Scroll for more \xC2\xB7 " + std::to_string(notes.sections) +
-            (notes.sections == 1 ? " section" : " sections"),
-            11.5f, tok::disabled()));
+        std::string hint = std::to_string(notes.sections) +
+                           (notes.sections == 1 ? " section" : " sections");
+        if (scrolls) hint = "Scroll for more \xC2\xB7 " + hint;
+        footer->addView(makeLabel(hint, 11.5f, tok::disabled()));
     }
     auto* fspacer = new brls::Box();
     fspacer->setGrow(1.0f);
@@ -1793,7 +1860,15 @@ void showNotesSheet(const ReleaseInfo rel) {
 // sheet above. Ported from the VitaPlex updater sheet and repainted in this
 // app's accent.
 void offerUpdate(const ReleaseInfo& rel, bool manual) {
-    const float panelW = panelWidthFor(428.0f);
+    // The footer can carry four buttons (Update now / What's New / Skip /
+    // Later). At the old 428 they did not fit, and since the row is
+    // right-aligned the overflow ran off the LEFT edge — the primary was the
+    // one getting clipped. Size the panel to the row it actually has to hold.
+    float want = 300.0f;                                  // primary + padding
+    if (!rel.notes.empty()) want += 136.0f;               // What's New
+    if (!manual)            want += 92.0f;                // Skip
+    want += 92.0f;                                        // Later
+    const float panelW = panelWidthFor(want);
 
     auto* scrim = new brls::Box();
     scrim->setAxis(brls::Axis::COLUMN);
@@ -1938,7 +2013,10 @@ void offerUpdate(const ReleaseInfo& rel, bool manual) {
             brls::Application::popActivity();
         });
     }
-    primary->setWidth(170.0f);
+    // The primary takes whatever the fixed-width buttons leave, so the row can
+    // never overflow the panel no matter which of them are present.
+    primary->setGrow(1.0f);
+    primary->setShrink(1.0f);
     footer->addView(primary);
 
     // What's New opens the parsed notes sheet on top of this one; B there
@@ -1948,6 +2026,7 @@ void offerUpdate(const ReleaseInfo& rel, bool manual) {
         auto* whatsNew = makeButton("What's New", BtnStyle::Gray,
                                     [r]() { showNotesSheet(r); });
         whatsNew->setWidth(128.0f);
+        whatsNew->setShrink(1.0f);
         whatsNew->setMarginLeft(8.0f);
         footer->addView(whatsNew);
     }
@@ -1961,12 +2040,14 @@ void offerUpdate(const ReleaseInfo& rel, bool manual) {
             brls::Application::popActivity();
         });
         skip->setWidth(84.0f);
+        skip->setShrink(1.0f);
         skip->setMarginLeft(8.0f);
         footer->addView(skip);
     }
 
     auto* later = makeButton("Later", BtnStyle::Ghost, dismiss);
     later->setWidth(84.0f);
+    later->setShrink(1.0f);
     later->setMarginLeft(8.0f);
     footer->addView(later);
     panel->addView(footer);
