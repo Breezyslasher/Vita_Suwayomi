@@ -1388,14 +1388,11 @@ void startInstall(const ReleaseInfo& rel) {
 // an H1 title, **Date:**/**Status:**/**PRs:** meta lines, a blockquote note,
 // then `---`-separated `## Section`s of `- **Lead** — description` bullets.
 //
-// Our releases come in two more flavours the reference never had to read, and
-// both used to land in the offer sheet as raw source:
-//   * GitHub's auto-generated body — "## What's Changed" over
-//     "* <title> by @user in <pull url>" lines and a "**Full Changelog**" link.
-//   * A body pasted as HTML rather than markdown (Beta-2.2.2 is one), which
-//     rendered as literal "<html><head>…" tags on screen.
-// So the tag stripper below runs first, and link handling collapses a pull URL
-// to "#331" and drops bare URLs, which are dead weight on a console anyway.
+// Release bodies are markdown, and only markdown. The one extra flavour the
+// reference never had to read is GitHub's auto-generated body — "## What's
+// Changed" over "* <title> by @user in <pull url>" lines and a
+// "**Full Changelog**" link — so link handling collapses a pull URL to "#331"
+// and drops bare URLs, which are dead weight on a console with no browser.
 
 struct NoteLine {
     enum Kind { Section, Bullet, Para } kind;
@@ -1465,75 +1462,8 @@ std::string cleanInline(const std::string& in) {
     return trimSpace(out);
 }
 
-// A body pasted as HTML → the markdown shape parseNotes already understands.
-// Only the handful of tags GitHub's editor emits; everything else is dropped.
-std::string htmlToMarkdown(const std::string& html) {
-    std::string out;
-    out.reserve(html.size());
-    for (size_t i = 0; i < html.size();) {
-        if (html[i] == '<') {
-            size_t end = html.find('>', i);
-            if (end == std::string::npos) break;
-            std::string tag = html.substr(i + 1, end - i - 1);
-            for (auto& c : tag) c = (char)tolower((unsigned char)c);
-            if (tag.rfind("h1", 0) == 0)      out += "\n# ";
-            else if (tag.rfind("h2", 0) == 0) out += "\n## ";
-            else if (tag.rfind("h3", 0) == 0) out += "\n## ";
-            else if (tag.rfind("li", 0) == 0) out += "\n- ";
-            else if (tag.rfind("p", 0) == 0 || tag.rfind("br", 0) == 0 ||
-                     tag.rfind("/p", 0) == 0 || tag.rfind("tr", 0) == 0 ||
-                     tag.rfind("/h", 0) == 0 || tag.rfind("/li", 0) == 0 ||
-                     tag.rfind("blockquote", 0) == 0)
-                out += "\n";
-            else if (tag.rfind("hr", 0) == 0) out += "\n---\n";
-            i = end + 1;
-            continue;
-        }
-        if (html[i] == '&') {
-            size_t end = html.find(';', i);
-            if (end != std::string::npos && end - i <= 8) {
-                std::string e = html.substr(i + 1, end - i - 1);
-                if      (e == "amp")  out += '&';
-                else if (e == "lt")   out += '<';
-                else if (e == "gt")   out += '>';
-                else if (e == "quot") out += '"';
-                else if (e == "#39" || e == "apos") out += '\'';
-                else if (e == "nbsp") out += ' ';
-                i = end + 1;
-                continue;
-            }
-        }
-        out += html[i++];
-    }
-    return out;
-}
-
-bool looksLikeHtml(const std::string& body) {
-    const std::string head = body.substr(0, 200);
-    for (const char* t : {"<html", "<p>", "<h1>", "<h2>", "<div", "<ul>", "<body"})
-        if (head.find(t) != std::string::npos) return true;
-    return false;
-}
-
-// Pick the half of the body worth rendering. Some of our releases carry the
-// notes TWICE — an HTML render, then the markdown source after </html> (paste
-// the editor's output and this is what you get). Prefer the markdown: it keeps
-// the **Date:**/**PRs:** meta lines and the section structure that the HTML
-// render flattens.
-std::string notesSource(const std::string& body) {
-    size_t endHtml = body.rfind("</html>");
-    if (endHtml != std::string::npos) {
-        std::string tail = trimSpace(body.substr(endHtml + 7));
-        if (tail.size() > 40) return tail;
-        return htmlToMarkdown(body.substr(0, endHtml));
-    }
-    return looksLikeHtml(body) ? htmlToMarkdown(body) : body;
-}
-
-ParsedNotes parseNotes(const std::string& body) {
+ParsedNotes parseNotes(const std::string& md) {
     ParsedNotes out;
-    const std::string md = notesSource(body);
-
     size_t pos = 0;
     while (pos <= md.size()) {
         size_t eol = md.find('\n', pos);
@@ -1545,14 +1475,10 @@ ParsedNotes parseNotes(const std::string& body) {
         if (line.empty()) continue;
 
         // Meta lines fold into the sheet's header caption; Status is skipped —
-        // the Pre-release chip comes from the release JSON instead. Accept the
-        // unbolded forms too: the HTML path has already dropped the <strong>.
+        // the Pre-release chip comes from the release JSON instead.
         if (line.rfind("**Date:**", 0) == 0)   { out.date = cleanInline(line.substr(9)); continue; }
         if (line.rfind("**PRs:**", 0) == 0)    { out.prs  = cleanInline(line.substr(8)); continue; }
         if (line.rfind("**Status:**", 0) == 0) continue;
-        if (line.rfind("Date:", 0) == 0)   { out.date = cleanInline(line.substr(5)); continue; }
-        if (line.rfind("PRs:", 0) == 0)    { out.prs  = cleanInline(line.substr(4)); continue; }
-        if (line.rfind("Status:", 0) == 0) continue;
 
         if (line.rfind("## ", 0) == 0) {
             out.lines.push_back({NoteLine::Section, "", cleanInline(line.substr(3))});
