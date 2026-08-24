@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <cctype>
 #include <cstring>
+#include <algorithm>   // std::count (table-row detection in the notes parser)
 #include <string>
 #include <vector>
 
@@ -1382,10 +1383,489 @@ void startInstall(const ReleaseInfo& rel) {
     });
 }
 
+// ── Release notes → sheet lines ─────────────────────────────────────────────
+// Ported from the reference's parseNotes. Its shape is hand-written markdown:
+// an H1 title, **Date:**/**Status:**/**PRs:** meta lines, a blockquote note,
+// then `---`-separated `## Section`s of `- **Lead** — description` bullets.
+//
+// Our releases come in two more flavours the reference never had to read, and
+// both used to land in the offer sheet as raw source:
+//   * GitHub's auto-generated body — "## What's Changed" over
+//     "* <title> by @user in <pull url>" lines and a "**Full Changelog**" link.
+//   * A body pasted as HTML rather than markdown (Beta-2.2.2 is one), which
+//     rendered as literal "<html><head>…" tags on screen.
+// So the tag stripper below runs first, and link handling collapses a pull URL
+// to "#331" and drops bare URLs, which are dead weight on a console anyway.
+
+struct NoteLine {
+    enum Kind { Section, Bullet, Para } kind;
+    std::string lead;   // bullets only: the bold lead, may be empty
+    std::string text;
+};
+
+struct ParsedNotes {
+    std::string date;   // "August 24, 2026" from the meta lines
+    std::string prs;    // "#327, #328"
+    std::vector<NoteLine> lines;
+    int sections = 0;
+};
+
+std::string trimSpace(const std::string& in) {
+    size_t a = in.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    size_t b = in.find_last_not_of(" \t\r\n");
+    return in.substr(a, b - a + 1);
+}
+
+// Collapse [text](url) → text, turn a pull/issue URL into "#N", drop any other
+// bare URL, and strip stray **/` pairs.
+std::string cleanInline(const std::string& in) {
+    std::string s = in;
+
+    // [text](url) → text
+    for (size_t i = 0; (i = s.find('[', i)) != std::string::npos;) {
+        size_t close = s.find(']', i);
+        if (close == std::string::npos) break;
+        if (close + 1 < s.size() && s[close + 1] == '(') {
+            size_t end = s.find(')', close);
+            if (end != std::string::npos) {
+                s = s.substr(0, i) + s.substr(i + 1, close - i - 1) + s.substr(end + 1);
+                continue;
+            }
+        }
+        i = close + 1;
+    }
+
+    // Bare URLs: "…/pull/331" becomes "#331"; anything else goes.
+    for (size_t i = 0; (i = s.find("http", i)) != std::string::npos;) {
+        size_t end = s.find_first_of(" \t\r\n)", i);
+        if (end == std::string::npos) end = s.size();
+        std::string url = s.substr(i, end - i);
+        std::string repl;
+        for (const char* seg : {"/pull/", "/issues/"}) {
+            size_t p = url.find(seg);
+            if (p == std::string::npos) continue;
+            std::string num = url.substr(p + std::strlen(seg));
+            size_t k = 0;
+            while (k < num.size() && num[k] >= '0' && num[k] <= '9') ++k;
+            if (k > 0) repl = "#" + num.substr(0, k);
+            break;
+        }
+        s = s.substr(0, i) + repl + s.substr(end);
+        i += repl.size();
+    }
+
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); i++) {
+        if (s[i] == '`') continue;
+        if (s[i] == '*' && i + 1 < s.size() && s[i + 1] == '*') { i++; continue; }
+        out += s[i];
+    }
+    return trimSpace(out);
+}
+
+// A body pasted as HTML → the markdown shape parseNotes already understands.
+// Only the handful of tags GitHub's editor emits; everything else is dropped.
+std::string htmlToMarkdown(const std::string& html) {
+    std::string out;
+    out.reserve(html.size());
+    for (size_t i = 0; i < html.size();) {
+        if (html[i] == '<') {
+            size_t end = html.find('>', i);
+            if (end == std::string::npos) break;
+            std::string tag = html.substr(i + 1, end - i - 1);
+            for (auto& c : tag) c = (char)tolower((unsigned char)c);
+            if (tag.rfind("h1", 0) == 0)      out += "\n# ";
+            else if (tag.rfind("h2", 0) == 0) out += "\n## ";
+            else if (tag.rfind("h3", 0) == 0) out += "\n## ";
+            else if (tag.rfind("li", 0) == 0) out += "\n- ";
+            else if (tag.rfind("p", 0) == 0 || tag.rfind("br", 0) == 0 ||
+                     tag.rfind("/p", 0) == 0 || tag.rfind("tr", 0) == 0 ||
+                     tag.rfind("/h", 0) == 0 || tag.rfind("/li", 0) == 0 ||
+                     tag.rfind("blockquote", 0) == 0)
+                out += "\n";
+            else if (tag.rfind("hr", 0) == 0) out += "\n---\n";
+            i = end + 1;
+            continue;
+        }
+        if (html[i] == '&') {
+            size_t end = html.find(';', i);
+            if (end != std::string::npos && end - i <= 8) {
+                std::string e = html.substr(i + 1, end - i - 1);
+                if      (e == "amp")  out += '&';
+                else if (e == "lt")   out += '<';
+                else if (e == "gt")   out += '>';
+                else if (e == "quot") out += '"';
+                else if (e == "#39" || e == "apos") out += '\'';
+                else if (e == "nbsp") out += ' ';
+                i = end + 1;
+                continue;
+            }
+        }
+        out += html[i++];
+    }
+    return out;
+}
+
+bool looksLikeHtml(const std::string& body) {
+    const std::string head = body.substr(0, 200);
+    for (const char* t : {"<html", "<p>", "<h1>", "<h2>", "<div", "<ul>", "<body"})
+        if (head.find(t) != std::string::npos) return true;
+    return false;
+}
+
+// Pick the half of the body worth rendering. Some of our releases carry the
+// notes TWICE — an HTML render, then the markdown source after </html> (paste
+// the editor's output and this is what you get). Prefer the markdown: it keeps
+// the **Date:**/**PRs:** meta lines and the section structure that the HTML
+// render flattens.
+std::string notesSource(const std::string& body) {
+    size_t endHtml = body.rfind("</html>");
+    if (endHtml != std::string::npos) {
+        std::string tail = trimSpace(body.substr(endHtml + 7));
+        if (tail.size() > 40) return tail;
+        return htmlToMarkdown(body.substr(0, endHtml));
+    }
+    return looksLikeHtml(body) ? htmlToMarkdown(body) : body;
+}
+
+ParsedNotes parseNotes(const std::string& body) {
+    ParsedNotes out;
+    const std::string md = notesSource(body);
+
+    size_t pos = 0;
+    while (pos <= md.size()) {
+        size_t eol = md.find('\n', pos);
+        std::string line = md.substr(pos, eol == std::string::npos ? std::string::npos
+                                                                   : eol - pos);
+        pos = (eol == std::string::npos) ? md.size() + 1 : eol + 1;
+
+        line = trimSpace(line);
+        if (line.empty()) continue;
+
+        // Meta lines fold into the sheet's header caption; Status is skipped —
+        // the Pre-release chip comes from the release JSON instead. Accept the
+        // unbolded forms too: the HTML path has already dropped the <strong>.
+        if (line.rfind("**Date:**", 0) == 0)   { out.date = cleanInline(line.substr(9)); continue; }
+        if (line.rfind("**PRs:**", 0) == 0)    { out.prs  = cleanInline(line.substr(8)); continue; }
+        if (line.rfind("**Status:**", 0) == 0) continue;
+        if (line.rfind("Date:", 0) == 0)   { out.date = cleanInline(line.substr(5)); continue; }
+        if (line.rfind("PRs:", 0) == 0)    { out.prs  = cleanInline(line.substr(4)); continue; }
+        if (line.rfind("Status:", 0) == 0) continue;
+
+        if (line.rfind("## ", 0) == 0) {
+            out.lines.push_back({NoteLine::Section, "", cleanInline(line.substr(3))});
+            out.sections++;
+            continue;
+        }
+        // The H1 repeats the tag; blockquotes and rules are separators; a table
+        // row survives as a Para, which reads badly, so drop the pipe rules.
+        if (line[0] == '#' || line[0] == '>' || line.rfind("---", 0) == 0) continue;
+        if (line.find_first_not_of("|-: ") == std::string::npos) continue;  // table rule
+
+        // A markdown table row. Three columns can't line up inside one wrapped
+        // label, so join the cells with a separator and let it read as prose.
+        if (std::count(line.begin(), line.end(), '|') >= 2) {
+            std::string joined;
+            size_t c = 0;
+            while (c < line.size()) {
+                size_t bar = line.find('|', c);
+                std::string cell = trimSpace(line.substr(c, bar == std::string::npos
+                                                            ? std::string::npos : bar - c));
+                if (!cell.empty())
+                    joined += (joined.empty() ? "" : " \xC2\xB7 ") + cleanInline(cell);
+                if (bar == std::string::npos) break;
+                c = bar + 1;
+            }
+            if (!joined.empty()) out.lines.push_back({NoteLine::Para, "", joined});
+            continue;
+        }
+
+        if (line.rfind("- ", 0) == 0 || line.rfind("* ", 0) == 0) {
+            std::string bodyText = line.substr(2);
+            NoteLine n{NoteLine::Bullet, "", ""};
+            if (bodyText.rfind("**", 0) == 0) {
+                size_t close = bodyText.find("**", 2);
+                if (close != std::string::npos) {
+                    n.lead = cleanInline(bodyText.substr(2, close - 2));
+                    std::string rest = bodyText.substr(close + 2);
+                    // The lead stands on its own line, so a leading " — "
+                    // joiner would dangle at the start of the description.
+                    size_t r = 0;
+                    while (r < rest.size() &&
+                           (rest[r] == ' ' || rest[r] == '-' ||
+                            rest.compare(r, 3, "\xE2\x80\x94") == 0)) {
+                        r += (rest[r] == ' ' || rest[r] == '-') ? 1 : 3;
+                    }
+                    n.text = cleanInline(rest.substr(r));
+                }
+            }
+            if (n.lead.empty()) n.text = cleanInline(bodyText);
+            if (n.lead.empty() && n.text.empty()) continue;
+            out.lines.push_back(std::move(n));
+            continue;
+        }
+
+        std::string para = cleanInline(line);
+        if (para.empty()) continue;      // a line that was only a bare URL
+        // "Full Changelog: <url>" loses its URL above and leaves a dangling
+        // label. A real paragraph ending in a colon didn't have a link in it.
+        if (para.back() == ':' && line.find("http") != std::string::npos) continue;
+        out.lines.push_back({NoteLine::Para, "", para});
+    }
+    return out;
+}
+
+// ── The What's New sheet ────────────────────────────────────────────────────
+// Pushed on top of the offer sheet; B returns to it. The header carries the
+// tag, date, size and PR range plus a Pre-release chip; the notes scroll with
+// up/down while focus stays on the footer, and the primary mirrors the offer's
+// action so the user can update from here without going back.
+void showNotesSheet(const ReleaseInfo rel) {
+    const ParsedNotes notes = parseNotes(rel.notes);
+
+    // A reading surface — wider than the offer, and on a TV across the room.
+    float screenW = brls::Application::contentWidth;
+    float screenH = brls::Application::contentHeight;
+    if (screenW <= 0.0f) screenW = 1280.0f;
+    if (screenH <= 0.0f) screenH = 720.0f;
+    float panelW = 620.0f;
+    if (panelW + 80.0f > screenW) panelW = screenW - 80.0f;
+    const float panelH = screenH - 76.0f;
+
+    auto* scrim = new brls::Box();
+    scrim->setAxis(brls::Axis::COLUMN);
+    scrim->setWidthPercentage(100.0f);
+    scrim->setHeightPercentage(100.0f);
+    scrim->setJustifyContent(brls::JustifyContent::CENTER);
+    scrim->setAlignItems(brls::AlignItems::CENTER);
+    scrim->setBackgroundColor(tok::scrim());
+
+    auto* panel = new brls::Box();
+    panel->setAxis(brls::Axis::COLUMN);
+    panel->setWidth(panelW);
+    panel->setHeight(panelH);
+    panel->setBackgroundColor(tok::panel());
+    panel->setBorderColor(tok::panelLine());
+    panel->setBorderThickness(1.0f);
+    panel->setCornerRadius(16.0f);
+    panel->setShadowType(brls::ShadowType::GENERIC);
+    panel->setClipsToBounds(true);
+
+    // ── Header ──────────────────────────────────────────────────────────
+    auto* header = new brls::Box();
+    header->setAxis(brls::Axis::ROW);
+    header->setAlignItems(brls::AlignItems::CENTER);
+    header->setPadding(14.0f, 20.0f, 14.0f, 20.0f);
+
+    auto* tile = new brls::Box();
+    tile->setWidth(38.0f);
+    tile->setHeight(38.0f);
+    tile->setCornerRadius(10.0f);
+    tile->setBackgroundColor(tok::tileBg());
+    tile->setBorderColor(tok::tileBrd());
+    tile->setBorderThickness(1.0f);
+    tile->setJustifyContent(brls::JustifyContent::CENTER);
+    tile->setAlignItems(brls::AlignItems::CENTER);
+    tile->addView(makeLabel("\xE2\x89\xA1", 18.0f, tok::accent()));
+    tile->setMarginRight(12.0f);
+    header->addView(tile);
+
+    auto* titles = new brls::Box();
+    titles->setAxis(brls::Axis::COLUMN);
+    titles->setShrink(1.0f);
+    titles->addView(makeLabel(rel.tag, 16.5f, tok::text()));
+    {
+        std::string caption = notes.date;
+        if (rel.assetSize > 0)
+            caption += (caption.empty() ? "" : " \xC2\xB7 ") + mbLabel(rel.assetSize) + " MB";
+        if (!notes.prs.empty())
+            caption += (caption.empty() ? "" : " \xC2\xB7 ") + std::string("PRs ") + notes.prs;
+        if (!caption.empty()) {
+            auto* cap = makeLabel(caption, 12.0f, tok::disabled());
+            cap->setMarginTop(2.0f);
+            titles->addView(cap);
+        }
+    }
+    header->addView(titles);
+
+    auto* hspacer = new brls::Box();
+    hspacer->setGrow(1.0f);
+    header->addView(hspacer);
+
+    if (rel.prerelease) {
+        auto* chip = new brls::Box();
+        chip->setAxis(brls::Axis::ROW);
+        chip->setAlignItems(brls::AlignItems::CENTER);
+        chip->setHeight(24.0f);
+        chip->setPadding(0.0f, 11.0f, 0.0f, 11.0f);
+        chip->setCornerRadius(12.0f);
+        chip->setBackgroundColor(tok::tileBg());
+        chip->setBorderColor(tok::tileBrd());
+        chip->setBorderThickness(1.0f);
+        chip->addView(makeLabel("Pre-release", 10.5f, tok::accentBright()));
+        chip->setMarginLeft(10.0f);
+        header->addView(chip);
+    }
+    panel->addView(header);
+
+    auto* headerRule = new brls::Box();
+    headerRule->setHeight(1.0f);
+    headerRule->setAlignSelf(brls::AlignSelf::STRETCH);
+    headerRule->setBackgroundColor(tok::hairline());
+    panel->addView(headerRule);
+
+    // ── Notes area ──────────────────────────────────────────────────────
+    auto* scroller = new brls::ScrollingFrame();
+    scroller->setGrow(1.0f);
+
+    auto* content = new brls::Box();
+    content->setAxis(brls::Axis::COLUMN);
+    content->setPadding(16.0f, 26.0f, 18.0f, 22.0f);
+
+    if (notes.lines.empty()) {
+        auto* empty = makeLabel("No notes for this release.", 13.5f, tok::muted2());
+        empty->setMarginTop(40.0f);
+        empty->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        content->addView(empty);
+    }
+
+    bool first = true;
+    for (const NoteLine& n : notes.lines) {
+        if (n.kind == NoteLine::Section) {
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setAlignItems(brls::AlignItems::CENTER);
+            row->setMarginTop(first ? 2.0f : 20.0f);
+            row->setMarginBottom(3.0f);
+            auto* tick = new brls::Rectangle();
+            tick->setWidth(4.0f);
+            tick->setHeight(16.0f);
+            tick->setCornerRadius(2.0f);
+            tick->setColor(tok::accent());
+            tick->setMarginRight(9.0f);
+            row->addView(tick);
+            row->addView(makeLabel(n.text, 15.0f, tok::text()));
+            content->addView(row);
+        } else if (n.kind == NoteLine::Bullet) {
+            auto* row = new brls::Box();
+            row->setAxis(brls::Axis::ROW);
+            row->setAlignItems(brls::AlignItems::FLEX_START);
+            row->setMarginTop(10.0f);
+            auto* dot = new brls::Rectangle();
+            dot->setWidth(5.0f);
+            dot->setHeight(5.0f);
+            dot->setCornerRadius(2.5f);
+            dot->setColor(tok::muted2());
+            dot->setMarginTop(7.0f);
+            dot->setMarginRight(10.0f);
+            row->addView(dot);
+            auto* col = new brls::Box();
+            col->setAxis(brls::Axis::COLUMN);
+            col->setShrink(1.0f);
+            // A borealis label is one colour throughout, so the bold lead takes
+            // its own line and the description wraps below it.
+            if (!n.lead.empty())
+                col->addView(makeLabel(n.lead, 13.5f, tok::text()));
+            if (!n.text.empty()) {
+                auto* t = makeLabel(n.text, 12.5f, tok::muted(), false);
+                t->setLineHeight(1.35f);
+                if (!n.lead.empty()) t->setMarginTop(2.0f);
+                col->addView(t);
+            }
+            row->addView(col);
+            content->addView(row);
+        } else {
+            auto* p = makeLabel(n.text, 12.5f, tok::muted(), false);
+            p->setLineHeight(1.35f);
+            p->setMarginTop(8.0f);
+            content->addView(p);
+        }
+        first = false;
+    }
+    scroller->setContentView(content);
+    panel->addView(scroller);
+
+    auto* footerRule = new brls::Box();
+    footerRule->setHeight(1.0f);
+    footerRule->setAlignSelf(brls::AlignSelf::STRETCH);
+    footerRule->setBackgroundColor(tok::hairline());
+    panel->addView(footerRule);
+
+    // ── Footer ──────────────────────────────────────────────────────────
+    auto* footer = new brls::Box();
+    footer->setAxis(brls::Axis::ROW);
+    footer->setAlignItems(brls::AlignItems::CENTER);
+    footer->setPadding(12.0f, 20.0f, 13.0f, 20.0f);
+
+    if (notes.sections > 0) {
+        footer->addView(makeLabel(
+            "Scroll for more \xC2\xB7 " + std::to_string(notes.sections) +
+            (notes.sections == 1 ? " section" : " sections"),
+            11.5f, tok::disabled()));
+    }
+    auto* fspacer = new brls::Box();
+    fspacer->setGrow(1.0f);
+    footer->addView(fspacer);
+
+    brls::Box* primary = nullptr;
+    if (!rel.assetUrl.empty()) {
+        primary = makeButton("Update now", BtnStyle::Accent, [rel]() {
+            // Pop the sheet, then the offer beneath it, then install.
+            brls::Application::popActivity(brls::TransitionAnimation::NONE, [rel]() {
+                brls::Application::popActivity(brls::TransitionAnimation::NONE,
+                                               [rel]() { startInstall(rel); });
+            });
+        });
+    } else {
+        primary = makeButton("Open release page", BtnStyle::Accent, [rel]() {
+            openUrl(rel.pageUrl);
+            s_busy.store(false);
+            brls::Application::popActivity(brls::TransitionAnimation::NONE,
+                []() { brls::Application::popActivity(); });
+        });
+    }
+    primary->setWidth(170.0f);
+    footer->addView(primary);
+
+    auto* back = makeButton("Back", BtnStyle::Ghost, []() {
+        brls::Application::popActivity();
+    });
+    back->setWidth(84.0f);
+    back->setMarginLeft(8.0f);
+    footer->addView(back);
+    panel->addView(footer);
+
+    scrim->addView(panel);
+
+    // Up/down scrolls the notes directly — focus stays on the footer buttons.
+    auto scrollBy = [scroller, content](float delta) {
+        float maxY = content->getHeight() - scroller->getHeight();
+        if (maxY < 0.0f) maxY = 0.0f;
+        float y = scroller->getContentOffsetY() + delta;
+        if (y < 0.0f) y = 0.0f;
+        if (y > maxY) y = maxY;
+        scroller->setContentOffsetY(y, true);
+    };
+    scrim->registerAction("Scroll up", brls::ControllerButton::BUTTON_UP,
+        [scrollBy](brls::View*) { scrollBy(-72.0f); return true; }, true);
+    scrim->registerAction("Scroll down", brls::ControllerButton::BUTTON_DOWN,
+        [scrollBy](brls::View*) { scrollBy(72.0f); return true; }, true);
+    scrim->registerAction("Back", brls::ControllerButton::BUTTON_B,
+        [](brls::View*) { brls::Application::popActivity(); return true; });
+    scrim->addGestureRecognizer(new brls::TapGestureRecognizer(scrim,
+        []() { brls::Application::popActivity(); }));
+
+    brls::Application::pushActivity(new OverlayActivity(scrim));
+    brls::Application::giveFocus(primary);
+}
+
 // ── The offer dialog ────────────────────────────────────────────────────────
 // The offer sheet: scrim + panel, accent strip, icon tile, current→new version
-// cards, scrollable release notes, footer actions. Ported from the VitaPlex
-// updater sheet and repainted in this app's accent.
+// cards, footer actions. The notes live behind the What's New button, in the
+// sheet above. Ported from the VitaPlex updater sheet and repainted in this
+// app's accent.
 void offerUpdate(const ReleaseInfo& rel, bool manual) {
     const float panelW = panelWidthFor(428.0f);
 
@@ -1477,31 +1957,9 @@ void offerUpdate(const ReleaseInfo& rel, bool manual) {
                             tok::cardBg(), tok::cardBrd()));
     panel->addView(cards);
 
-    // ── Release notes (scrollable) ──────────────────────────────────────
-    if (!rel.notes.empty()) {
-        auto* scroller = new brls::ScrollingFrame();
-        scroller->setHeight(120.0f);
-        scroller->setMarginTop(12.0f);
-        scroller->setMarginLeft(18.0f);
-        scroller->setMarginRight(18.0f);
-        auto* notes = makeLabel(rel.notes, 11.5f, tok::muted(), /*singleLine=*/false);
-        scroller->setContentView(notes);
-        panel->addView(scroller);
-
-        // Up/down scroll the notes; focus stays on the footer buttons.
-        auto scrollBy = [scroller, notes](float delta) {
-            float maxY = notes->getHeight() - scroller->getHeight();
-            if (maxY < 0.0f) maxY = 0.0f;
-            float y = scroller->getContentOffsetY() + delta;
-            if (y < 0.0f) y = 0.0f;
-            if (y > maxY) y = maxY;
-            scroller->setContentOffsetY(y, true);
-        };
-        scrim->registerAction("Scroll up", brls::ControllerButton::BUTTON_UP,
-            [scrollBy](brls::View*) { scrollBy(-72.0f); return true; }, true);
-        scrim->registerAction("Scroll down", brls::ControllerButton::BUTTON_DOWN,
-            [scrollBy](brls::View*) { scrollBy(72.0f); return true; }, true);
-    }
+    // Release notes are NOT inlined here — a raw markdown (or, for some
+    // releases, raw HTML) dump in a 120px window was unreadable. They get the
+    // What's New button in the footer and the parsed sheet above.
 
     // ── Size / platform caption ─────────────────────────────────────────
     std::string caption;
@@ -1556,6 +2014,17 @@ void offerUpdate(const ReleaseInfo& rel, bool manual) {
     }
     primary->setWidth(170.0f);
     footer->addView(primary);
+
+    // What's New opens the parsed notes sheet on top of this one; B there
+    // comes straight back here.
+    if (!rel.notes.empty()) {
+        ReleaseInfo r = rel;
+        auto* whatsNew = makeButton("What's New", BtnStyle::Gray,
+                                    [r]() { showNotesSheet(r); });
+        whatsNew->setWidth(128.0f);
+        whatsNew->setMarginLeft(8.0f);
+        footer->addView(whatsNew);
+    }
 
     // "Skip this version" only makes sense on the silent startup check.
     if (!manual) {
