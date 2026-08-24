@@ -74,13 +74,24 @@ jobs:
             V="${BASE}.${{ github.run_number }}"
           fi
           V="${V#v}"
-          # Extract numeric version for CMake / Vita / PS4 / deb (no labels)
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          # Numeric version for CMake / Vita / PS4 / deb (no labels).
+          #
+          # Derive it from the version we actually resolved above, NOT from the
+          # VERSION file. A release cut by workflow_dispatch carries its new
+          # version in inputs.version and only writes it back to VERSION in the
+          # parallel save-version job, so reading the checked-out file here
+          # produced the PREVIOUS version: Beta-2.2.3 shipped binaries stamped
+          # 2.2.2.<run>, which then saw their own release as an update forever.
+          V_NUM=$(echo "$V" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+          if [[ -z "$V_NUM" ]]; then
+            V_NUM="${BASE_NUM}"
+          fi
+          if [[ -n "${{ inputs.version }}" || "$GITHUB_REF" == refs/tags/* ]]; then
             # Release: X.Y.Z only
-            NUM="${BASE_NUM}"
+            NUM="${V_NUM}"
           else
             # Non-release: X.Y.Z.build
-            NUM="${BASE_NUM}.${{ github.run_number }}"
+            NUM="${V_NUM}.${{ github.run_number }}"
           fi
           # Filename/tag-safe version (spaces → hyphens)
           TAG="${V// /-}"
