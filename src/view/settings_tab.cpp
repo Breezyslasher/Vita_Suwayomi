@@ -537,6 +537,10 @@ void SettingsTab::createAccountSection() {
 
         brls::Application::notify("Reconnecting to " + url + "...");
 
+        // An explicit reconnect leaves offline mode, or every call below would
+        // be refused before it was sent.
+        app.setOfflineMode(false);
+
         asyncRun([url, connectionStatusLabel]() {
             Application& app = Application::getInstance();
             SuwayomiClient& client = SuwayomiClient::getInstance();

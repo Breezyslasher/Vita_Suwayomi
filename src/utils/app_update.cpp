@@ -824,6 +824,9 @@ bool downloadAsset(const ReleaseInfo& rel, const std::string& destPath,
         bool ok = platform::writeFileStreamed(destPath, [&](platform::WriteCallback write) -> bool {
             HttpClient client;
             client.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
+            // Talks to GitHub, not the user's server, so offline mode ("don't
+            // use my server") must not gag it.
+            client.setInternetClient(true);
             client.setTimeout(300);
             client.setFollowRedirects(true);
             // Downloading executable code from the public internet: the
@@ -1351,6 +1354,7 @@ void startInstall(const ReleaseInfo& rel) {
             setProgress(ui, "Verifying signature…");
             HttpClient sigClient;
             sigClient.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
+            sigClient.setInternetClient(true);
             sigClient.setVerifyTls(true);
             HttpRequest sigReq;
             sigReq.url             = rel.assetUrl + ".sig";
@@ -2142,6 +2146,7 @@ void checkForUpdates(bool manual) {
     asyncRun([manual]() {
         HttpClient client;
         client.setUserAgent("VitaSuwayomi/" VITA_SUWAYOMI_VERSION);
+        client.setInternetClient(true);
         client.setTimeout(20);
         client.setFollowRedirects(true);
         // The release feed decides what we download and install, so it must

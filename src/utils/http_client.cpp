@@ -11,6 +11,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cctype>
+#include <atomic>
 
 // For locating the packaged CA bundle next to the executable on desktop.
 #if defined(_WIN32)
@@ -130,6 +131,21 @@ void applySecurityOptions(CURL* curl, bool verify) {
 
 static const char* USER_AGENT = "VitaSuwayomi/" VITA_SUWAYOMI_VERSION;
 
+// Offline mode. Written from the UI thread, read from every worker.
+static std::atomic<bool> s_globalOffline{false};
+
+void HttpClient::setGlobalOffline(bool offline) {
+    s_globalOffline.store(offline);
+    brls::Logger::info("HttpClient: offline mode {}", offline ? "ON" : "OFF");
+}
+
+bool HttpClient::isGlobalOffline() { return s_globalOffline.load(); }
+
+bool HttpClient::isOffline() const {
+    if (m_offline) return true;
+    return s_globalOffline.load() && !m_internetClient;
+}
+
 // Curl write callback data
 struct WriteCallbackData {
     std::string* buffer;
@@ -161,10 +177,18 @@ HttpClient::~HttpClient() {
     }
 }
 
+// NB: every member has to be carried across, flags included. These used to
+// move the handle, timeout, redirect flag, agent and headers only, silently
+// dropping m_verifyTls — and createHttpClient() returns by value, so a build
+// that did not elide the copy would have handed out a client with certificate
+// verification turned back off.
 HttpClient::HttpClient(HttpClient&& other) noexcept
     : m_curl(other.m_curl)
     , m_timeout(other.m_timeout)
     , m_followRedirects(other.m_followRedirects)
+    , m_verifyTls(other.m_verifyTls)
+    , m_offline(other.m_offline)
+    , m_internetClient(other.m_internetClient)
     , m_userAgent(std::move(other.m_userAgent))
     , m_defaultHeaders(std::move(other.m_defaultHeaders))
 {
@@ -181,6 +205,9 @@ HttpClient& HttpClient::operator=(HttpClient&& other) noexcept {
         m_curl = other.m_curl;
         m_timeout = other.m_timeout;
         m_followRedirects = other.m_followRedirects;
+        m_verifyTls = other.m_verifyTls;
+        m_offline = other.m_offline;
+        m_internetClient = other.m_internetClient;
         m_userAgent = std::move(other.m_userAgent);
         m_defaultHeaders = std::move(other.m_defaultHeaders);
         other.m_curl = nullptr;  // Prevent double-free
@@ -260,6 +287,13 @@ HttpResponse HttpClient::del(const std::string& url) {
 
 HttpResponse HttpClient::request(const HttpRequest& req) {
     HttpResponse response;
+
+    // Offline mode: fail now rather than waiting out the connection timeout
+    // against a server the user has told us not to talk to.
+    if (isOffline()) {
+        response.error = "Offline";
+        return response;
+    }
 
     if (!m_curl) {
         response.error = "CURL not initialized";
@@ -493,6 +527,7 @@ static size_t downloadHeaderCallback(void* contents, size_t size, size_t nmemb, 
 }
 
 bool HttpClient::downloadFile(const std::string& url, WriteCallback writeCallback, SizeCallback sizeCallback) {
+    if (isOffline()) return false;   // see setGlobalOffline
     if (!m_curl) {
         brls::Logger::error("CURL not initialized for download");
         return false;

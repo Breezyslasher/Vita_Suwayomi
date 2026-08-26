@@ -13,6 +13,7 @@
 #include "activity/reader_activity.hpp"
 #include "view/media_detail_view.hpp"
 #include "utils/perf_overlay.hpp"
+#include "utils/http_client.hpp"
 
 #include <borealis.hpp>
 #include <sstream>
@@ -172,6 +173,16 @@ void Application::run() {
             SuwayomiClient& client = SuwayomiClient::getInstance();
             client.setServerUrl(serverUrl);
 
+            // The user can hit Offline on the login screen at any point while
+            // this runs. Bail out when they do — the HTTP client refuses to
+            // dial from then on anyway, but there is no reason to keep walking
+            // the auth-mode fallbacks, and nothing below may push a second
+            // MainActivity on top of the one they are already looking at.
+            if (isOfflineMode()) {
+                brls::Logger::info("Restore abandoned: entered offline mode");
+                return;
+            }
+
             // Try to restore auth session
             AuthMode authMode = client.getAuthMode();
             if (authMode == AuthMode::SIMPLE_LOGIN) {
@@ -201,6 +212,11 @@ void Application::run() {
                     m_settings.accessToken = "";
                     m_settings.refreshToken = "";
                 }
+            }
+
+            if (isOfflineMode()) {
+                brls::Logger::info("Restore abandoned: entered offline mode");
+                return;
             }
 
             bool authValid = false;
@@ -331,6 +347,11 @@ void Application::run() {
                 }
             }
 
+            if (isOfflineMode()) {
+                brls::Logger::info("Restore abandoned: entered offline mode");
+                return;
+            }
+
             if (authValid) {
                 brls::Logger::info("Connection restored successfully");
                 m_isConnected = true;
@@ -369,6 +390,7 @@ void Application::run() {
             } else {
                 // Auth failed - check if we have downloads for offline mode
                 brls::sync([this]() {
+                    if (isOfflineMode()) return;   // already in MainActivity
                     auto downloads = DownloadsManager::getInstance().getDownloads();
                     if (!downloads.empty()) {
                         brls::Logger::info("Offline with {} downloads, going to main activity", downloads.size());
@@ -397,6 +419,16 @@ void Application::run() {
     while (brls::Application::mainLoop()) {
         // Application keeps running
     }
+}
+
+// Offline mode is a global gate on the HTTP layer, not just a flag on this
+// object: server traffic does not all run through SuwayomiClient (the image
+// loader's worker pool and the download manager build their own clients), so
+// anything short of gating them all leaves threads waiting out a 15s timeout
+// each against a server the user has told us not to use.
+void Application::setOfflineMode(bool offline) {
+    m_offlineMode.store(offline);
+    HttpClient::setGlobalOffline(offline);
 }
 
 void Application::shutdown() {
