@@ -12,6 +12,7 @@
 #include <map>
 #include <vector>
 #include <cstdint>
+#include <atomic>
 #include <nanovg.h>
 
 // Application version — set by CMake via -DAPP_VERSION, fallback for IDE indexers
@@ -262,6 +263,15 @@ public:
     void setServerUrl(const std::string& url) { m_serverUrl = url; }
     void setConnected(bool connected) { m_isConnected = connected; }
 
+    // Offline mode — the user explicitly chose not to use the server, which is
+    // NOT the same as m_isConnected going false because a call happened to
+    // fail (views set that on any error and recover from it on the next try).
+    // While this is on, every client SuwayomiClient hands out refuses to dial,
+    // so nothing in flight keeps waiting out its timeout after the app has
+    // already moved on to the cached library. Cleared by an explicit connect.
+    bool isOfflineMode() const { return m_offlineMode.load(); }
+    void setOfflineMode(bool offline);
+
     // Local/Remote URL switching
     std::string getActiveServerUrl() const;  // Returns local or remote URL based on setting
     std::string getAlternateServerUrl() const;  // Returns the URL not currently in use
@@ -392,6 +402,8 @@ private:
 
     bool m_initialized = false;
     bool m_isConnected = false;
+    // Read from worker threads while the UI thread flips it.
+    std::atomic<bool> m_offlineMode{false};
     std::string m_serverUrl;
     std::string m_authUsername;
     std::string m_authPassword;

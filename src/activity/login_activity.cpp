@@ -239,6 +239,10 @@ void LoginActivity::onConnectPressed() {
     if (m_connecting) return;
     m_connecting = true;
 
+    // An explicit connect leaves offline mode, or the requests below would be
+    // refused before they were sent.
+    Application::getInstance().setOfflineMode(false);
+
     if (statusLabel) statusLabel->setText("Connecting...");
 
     // Capture values for background thread
@@ -426,7 +430,11 @@ void LoginActivity::onOfflinePressed() {
         }
     }
 
-    // Mark as disconnected (offline)
+    // Mark as disconnected (offline). setOfflineMode also gags the HTTP client,
+    // so the connection restore Application::run() started in the background —
+    // and anything a tab kicks off from here on — stops dialling instead of
+    // grinding through auth-mode fallbacks at one timeout per attempt.
+    Application::getInstance().setOfflineMode(true);
     Application::getInstance().setConnected(false);
 
     if (statusLabel) statusLabel->setText("Entering offline mode...");

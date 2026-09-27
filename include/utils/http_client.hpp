@@ -84,6 +84,26 @@ public:
     /// platform's own store; if neither can verify, the request fails closed.
     void setVerifyTls(bool verify) { m_verifyTls = verify; }
 
+    /// Offline mode: refuse to dial out at all, failing every request at once.
+    ///
+    /// This is global rather than per-client on purpose. Server traffic does
+    /// not all go through SuwayomiClient — the image loader's worker pool and
+    /// the download manager build their own clients — so gating one funnel
+    /// leaves the rest waiting out the full connection timeout, per thread,
+    /// against a server the user has told us not to talk to. Set from
+    /// Application::setOfflineMode.
+    static void setGlobalOffline(bool offline);
+    static bool isGlobalOffline();
+
+    /// Opt this client out of the global gate: it targets the public internet
+    /// rather than the user's Suwayomi server, so "offline" (meaning: don't use
+    /// my server) does not apply to it. The updater is the only such client.
+    void setInternetClient(bool internet) { m_internetClient = internet; }
+
+    /// Gag this one client regardless of the global flag.
+    void setOffline(bool offline) { m_offline = offline; }
+    bool isOffline() const;
+
     // Simple get that returns body directly
     bool get(const std::string& url, std::string& response);
 
@@ -106,6 +126,8 @@ private:
     int m_timeout = 30;
     bool m_followRedirects = true;
     bool m_verifyTls = false;
+    bool m_offline = false;
+    bool m_internetClient = false;
     std::string m_userAgent;
     std::map<std::string, std::string> m_defaultHeaders;
 
