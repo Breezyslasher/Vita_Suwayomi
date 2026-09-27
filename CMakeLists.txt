@@ -244,7 +244,9 @@ if(PLATFORM_ANDROID)
     list(APPEND APP_SOURCES src/platform/android_assets.cpp)
 endif()
 
-# Platform abstraction layer — one .cpp per platform, selected at build time
+# Platform abstraction layer — one .cpp per platform, selected at build time,
+# plus the shared phone-scaling helpers every platform links.
+list(APPEND APP_SOURCES src/platform/platform_common.cpp)
 if(PLATFORM_PSV)
     list(APPEND APP_SOURCES src/platform/platform_vita.cpp)
 elseif(PLATFORM_SWITCH)
