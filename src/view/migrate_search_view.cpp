@@ -5,6 +5,7 @@
 
 #include "view/migrate_search_view.hpp"
 #include "view/manga_item_cell.hpp"
+#include "view/media_detail_view.hpp"
 #include "view/horizontal_scroll_row.hpp"
 #include "app/application.hpp"
 #include "app/suwayomi_client.hpp"
@@ -12,6 +13,20 @@
 #include "utils/image_loader.hpp"
 
 namespace vitasuwayomi {
+
+// Find mode: the title comes from outside any source (a MangaBrain
+// recommendation), so there is nothing to migrate FROM — every source is
+// searched and picking a result opens its detail view.
+MigrateSearchView::MigrateSearchView(const std::string& searchTitle)
+    : MigrateSearchView([&searchTitle]() {
+          Manga stub;
+          stub.title = searchTitle;
+          return stub;
+      }())
+{
+    m_findOnly = true;
+    m_titleLabel->setText("Find: " + searchTitle);
+}
 
 MigrateSearchView::MigrateSearchView(const Manga& sourceManga)
     : m_sourceManga(sourceManga)
@@ -96,7 +111,9 @@ void MigrateSearchView::filterSources(const std::vector<Source>& allSources) {
     m_filteredSources.clear();
 
     for (const auto& src : allSources) {
-        if (src.id == m_sourceManga.sourceId) continue;
+        // Migrating: skip the manga's current source. Find mode has no current
+        // source — and the stub's sourceId 0 is the Local source's real id.
+        if (!m_findOnly && src.id == m_sourceManga.sourceId) continue;
         if (src.isNsfw && !settings.showNsfwSources) continue;
 
         if (!settings.enabledSourceLanguages.empty()) {
@@ -206,6 +223,13 @@ void MigrateSearchView::createSourceRow(const std::string& sourceName, const std
 }
 
 void MigrateSearchView::onMangaSelected(const Manga& newManga) {
+    if (m_findOnly) {
+        // Nothing to migrate — just open the picked result.
+        auto* detailView = new MangaDetailView(newManga);
+        brls::Application::pushActivity(new brls::Activity(detailView));
+        return;
+    }
+
     // Confirm migration with a dropdown
     std::vector<std::string> options = {"Migrate to: " + newManga.title, "Cancel"};
 

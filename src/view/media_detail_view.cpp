@@ -13,6 +13,10 @@
 #include "utils/library_cache.hpp"
 #include "utils/async.hpp"
 #include "utils/button_icons.hpp"
+#include "utils/mangabrain.hpp"
+#include "view/migrate_search_view.hpp"
+#include "view/horizontal_scroll_row.hpp"
+#include "view/manga_item_cell.hpp"
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -839,6 +843,13 @@ MangaDetailView::MangaDetailView(const Manga& manga)
     }
     rightPanel->addView(m_descriptionLabel);
 
+    // MangaBrain recommendations rail. Built empty and filled only when the
+    // feature is configured AND the fetch succeeds, so with MangaBrain off
+    // (or down) the layout is exactly what it was before.
+    m_recsBox = new brls::Box();
+    m_recsBox->setAxis(brls::Axis::COLUMN);
+    rightPanel->addView(m_recsBox);
+
     // Register L trigger for description toggle
     this->registerAction("Summary", brls::ControllerButton::BUTTON_LB, [this](brls::View* view) {
         toggleDescription();
@@ -1033,10 +1044,85 @@ MangaDetailView::MangaDetailView(const Manga& manga)
 
     // Load full details
     loadDetails();
+
+    // Similar titles from the user's MangaBrain instance (no-op when the
+    // feature is off in Settings, or in offline mode).
+    loadRecommendations();
 }
 
 brls::View* MangaDetailView::create() {
     return nullptr;
+}
+
+// ── MangaBrain recommendations ──────────────────────────────────────────────
+// Fetch similar titles for THIS manga from the configured MangaBrain server
+// and show them as a horizontal rail between the description and the chapter
+// list. Tapping one searches every Suwayomi source for that title (the
+// recommendation comes from the AniList catalog, so it exists in no source
+// until the user picks where to read it).
+void MangaDetailView::loadRecommendations() {
+    if (!mangabrain::configured()) return;
+    if (Application::getInstance().isOfflineMode()) return;
+    if (m_manga.title.empty()) return;
+
+    std::weak_ptr<bool> aliveWeak = m_alive;
+    std::string title = m_manga.title;
+
+    asyncRun([this, aliveWeak, title]() {
+        std::vector<mangabrain::Recommendation> recs;
+        std::string err;
+        if (!mangabrain::fetchRecommendations(title, recs, err)) {
+            // Quietly absent rather than an error banner: recommendations are
+            // an extra, and "no catalog match" is a normal outcome for
+            // doujins/webcomics AniList does not know.
+            brls::Logger::info("MangaBrain: no rail for '{}' ({})", title, err);
+            return;
+        }
+
+        brls::sync([this, aliveWeak, recs]() {
+            auto alive = aliveWeak.lock();
+            if (!alive || !*alive) return;
+            if (!m_recsBox) return;
+
+            m_recsBox->clearViews();
+
+            auto* header = new brls::Label();
+            header->setText("Similar Titles (MangaBrain)");
+            header->setFontSize(16);
+            header->setTextColor(nvgRGB(255, 255, 255));
+            header->setMarginBottom(8);
+            m_recsBox->addView(header);
+
+            auto* row = new HorizontalScrollRow();
+            row->setHeight(195);
+            row->setMarginBottom(12);
+
+            for (const auto& rec : recs) {
+                Manga m;
+                m.title = rec.title;
+                m.thumbnailUrl = rec.cover;   // absolute AniList CDN URL
+
+                auto* cell = new MangaItemCell();
+                cell->setManga(m);
+                cell->loadThumbnailIfNeeded();
+                cell->setWidth(150);
+                cell->setHeight(185);
+                cell->setMarginRight(10);
+
+                std::string recTitle = rec.title;
+                cell->registerClickAction([recTitle](brls::View*) {
+                    auto* find = new MigrateSearchView(recTitle);
+                    brls::Application::pushActivity(new brls::Activity(find));
+                    return true;
+                });
+                cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));
+
+                row->addView(cell);
+            }
+
+            m_recsBox->addView(row);
+        });
+    });
 }
 
 void MangaDetailView::refresh() {

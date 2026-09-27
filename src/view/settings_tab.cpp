@@ -13,6 +13,7 @@
 #include "utils/async.hpp"
 #include "utils/http_client.hpp"
 #include "utils/app_update.hpp"
+#include "utils/mangabrain.hpp"
 #include "utils/perf_overlay.hpp"
 
 // The Settings page shows the human display version (e.g. "Beta 2.2.1") so it
@@ -182,6 +183,7 @@ SettingsTab::SettingsTab() {
         {"Reader",     "Reading mode & defaults",      "book-open-page-variant.png", &SettingsTab::createReaderSection},
         {"Downloads",  "Storage & quality",            "download.png",               &SettingsTab::createDownloadsSection},
         {"Browse",     "Sources & languages",          "search.png",                 &SettingsTab::createBrowseSection},
+        {"MangaBrain", "Recommendations",              "hot.png",                    &SettingsTab::createMangaBrainSection},
         {"Sync",       "SyncYomi",                     "refresh.png",                &SettingsTab::createSyncYomiSection},
         {"Backup",     "Export & restore",             "import.png",                 &SettingsTab::createBackupSection},
         {"Statistics", "Reading statistics",           "history.png",                &SettingsTab::createStatisticsSection},
@@ -1533,6 +1535,171 @@ void SettingsTab::createBrowseSection() {
         return true;
     });
     m_contentBox->addView(searchHistoryCell);
+}
+
+// ── MangaBrain ──────────────────────────────────────────────────────────────
+// A self-hosted, content-based recommendation engine
+// (github.com/Breezyslasher/MangaBrain). When enabled, the manga detail view
+// shows a rail of similar titles for the manga being viewed.
+void SettingsTab::createMangaBrainSection() {
+    AppSettings& settings = Application::getInstance().getSettings();
+
+    auto* header = new brls::Header();
+    header->setTitle("MangaBrain Recommendations");
+    m_contentBox->addView(header);
+
+    auto* enabledToggle = new brls::BooleanCell();
+    enabledToggle->init("Show Recommendations", settings.mangaBrainEnabled, [](bool value) {
+        Application::getInstance().getSettings().mangaBrainEnabled = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(enabledToggle);
+
+    // Server URL
+    auto* urlCell = new brls::DetailCell();
+    urlCell->setText("Server URL");
+    urlCell->setDetailText(settings.mangaBrainUrl.empty() ? "Not set" : settings.mangaBrainUrl);
+    urlCell->registerClickAction([this, urlCell](brls::View*) {
+        showUrlInputDialog("MangaBrain Server URL",
+            "Enter the MangaBrain URL (e.g., http://192.168.1.100:8009)",
+            Application::getInstance().getSettings().mangaBrainUrl,
+            [urlCell](const std::string& url) {
+                Application::getInstance().getSettings().mangaBrainUrl = url;
+                urlCell->setDetailText(url.empty() ? "Not set" : url);
+                Application::getInstance().saveSettings();
+            });
+        return true;
+    });
+    m_contentBox->addView(urlCell);
+
+    // Access token (MANGABRAIN_AUTH_TOKEN on the server; empty for LAN
+    // instances without one). Never shown back in full.
+    auto tokenSummary = [](const std::string& t) -> std::string {
+        return t.empty() ? "Not set" : "Set (" + std::to_string(t.size()) + " chars)";
+    };
+    auto* tokenCell = new brls::DetailCell();
+    tokenCell->setText("Access Token");
+    tokenCell->setDetailText(tokenSummary(settings.mangaBrainToken));
+    tokenCell->registerClickAction([tokenCell, tokenSummary](brls::View*) {
+        std::vector<OptionRow> rows;
+        rows.push_back({ "web.png", "Edit", "", true, false, [tokenCell, tokenSummary]() {
+            brls::Application::getImeManager()->openForText([tokenCell, tokenSummary](std::string text) {
+                Application::getInstance().getSettings().mangaBrainToken = text;
+                Application::getInstance().saveSettings();
+                tokenCell->setDetailText(tokenSummary(text));
+            }, "Enter Access Token", "", 256, "", 0);
+        } });
+        rows.push_back({ "cross.png", "Clear", "", false, true, [tokenCell, tokenSummary]() {
+            Application::getInstance().getSettings().mangaBrainToken.clear();
+            Application::getInstance().saveSettings();
+            tokenCell->setDetailText(tokenSummary(""));
+        } });
+        rows.push_back({ "back.png", "Cancel", "", false, true, []() {} });
+        OptionsPopover::show("", "MangaBrain Access Token", std::move(rows));
+        return true;
+    });
+    m_contentBox->addView(tokenCell);
+
+    // Rail length
+    static const std::vector<std::string> kCountOptions = {"6", "12", "18", "24"};
+    static const int kCountValues[] = {6, 12, 18, 24};
+    auto countIndexOf = [](int v) {
+        for (int i = 0; i < static_cast<int>(kCountOptions.size()); i++)
+            if (kCountValues[i] == v) return i;
+        return 1;  // default 12
+    };
+    auto* countCell = new brls::DetailCell();
+    countCell->setText("Recommendations Per Manga");
+    countCell->setDetailText(kCountOptions[countIndexOf(settings.mangaBrainMaxResults)]);
+    countCell->registerClickAction([this, countIndexOf, countCell](brls::View*) {
+        const int cur = countIndexOf(Application::getInstance().getSettings().mangaBrainMaxResults);
+        showChoicePopover("Recommendations Per Manga", kCountOptions, cur, [countCell](int index) {
+            Application::getInstance().getSettings().mangaBrainMaxResults = kCountValues[index];
+            Application::getInstance().saveSettings();
+            countCell->setDetailText(kCountOptions[index]);
+        });
+        return true;
+    });
+    m_contentBox->addView(countCell);
+
+    // ── Personalisation — the same choices as the MangaBrain web UI ────────
+    // The accounts themselves (AniList / MAL / Kitsu / Yamtrack) are set up
+    // once in MangaBrain's own Accounts panel; these decide how they apply.
+    auto* personalHeader = new brls::Header();
+    personalHeader->setTitle("Personalisation");
+    m_contentBox->addView(personalHeader);
+
+    auto* excludeToggle = new brls::BooleanCell();
+    excludeToggle->init("Hide Titles On My Lists", settings.mangaBrainExcludeMyLists, [](bool value) {
+        Application::getInstance().getSettings().mangaBrainExcludeMyLists = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(excludeToggle);
+
+    auto* plannedToggle = new brls::BooleanCell();
+    plannedToggle->init("Still Show Plan-To-Read", settings.mangaBrainKeepPlanned, [](bool value) {
+        Application::getInstance().getSettings().mangaBrainKeepPlanned = value;
+        Application::getInstance().saveSettings();
+    });
+    m_contentBox->addView(plannedToggle);
+
+    static const std::vector<std::string> kTasteOptions = {"Off", "Light", "Medium", "Strong"};
+    static const int kTasteValues[] = {0, 15, 30, 50};
+    auto tasteIndexOf = [](int v) {
+        for (int i = 0; i < static_cast<int>(kTasteOptions.size()); i++)
+            if (kTasteValues[i] == v) return i;
+        return 0;
+    };
+    auto* tasteCell = new brls::DetailCell();
+    tasteCell->setText("Boost Toward My Ratings");
+    tasteCell->setDetailText(kTasteOptions[tasteIndexOf(settings.mangaBrainTasteWeight)]);
+    tasteCell->registerClickAction([this, tasteIndexOf, tasteCell](brls::View*) {
+        const int cur = tasteIndexOf(Application::getInstance().getSettings().mangaBrainTasteWeight);
+        showChoicePopover("Boost Toward My Ratings", kTasteOptions, cur, [tasteCell](int index) {
+            Application::getInstance().getSettings().mangaBrainTasteWeight = kTasteValues[index];
+            Application::getInstance().saveSettings();
+            tasteCell->setDetailText(kTasteOptions[index]);
+        });
+        return true;
+    });
+    m_contentBox->addView(tasteCell);
+
+    // Test connection: /healthz for reachability, then an API route for the
+    // token (healthz itself is deliberately unauthenticated on the server).
+    auto* testCell = new brls::DetailCell();
+    testCell->setText("Test Connection");
+    testCell->registerClickAction([this](brls::View*) {
+        if (Application::getInstance().getSettings().mangaBrainUrl.empty()) {
+            brls::Application::notify("Set the MangaBrain server URL first");
+            return true;
+        }
+        brls::Application::notify("Testing MangaBrain connection…");
+        std::weak_ptr<bool> aliveWeak = m_alive;
+        asyncRun([aliveWeak]() {
+            std::string err;
+            const bool ok = mangabrain::testConnection(err);
+            brls::sync([aliveWeak, ok, err]() {
+                auto alive = aliveWeak.lock();
+                if (!alive || !*alive) return;
+                brls::Application::notify(ok ? "MangaBrain reachable"
+                                             : "MangaBrain: " + err);
+            });
+        });
+        return true;
+    });
+    m_contentBox->addView(testCell);
+
+    // Adult results follow the existing Browse toggle rather than adding a
+    // second NSFW switch that could disagree with it.
+    auto* note = new brls::Label();
+    note->setText("Accounts are read from MangaBrain's own Accounts panel; Test Connection "
+                  "re-reads them. The ratings boost needs \"Hide Titles On My Lists\" on. "
+                  "Adult titles follow \"Show NSFW Sources\" under Browse.");
+    note->setFontSize(12);
+    note->setMarginLeft(16);
+    note->setMarginTop(6);
+    note->setTextColor(Application::getInstance().getDescriptionColor());
+    m_contentBox->addView(note);
 }
 
 void SettingsTab::createSyncYomiSection() {

@@ -1368,6 +1368,19 @@ bool Application::loadSettings() {
         }
     }
 
+    // Load MangaBrain settings
+    m_settings.mangaBrainEnabled = extractBool("mangaBrainEnabled", false);
+    m_settings.mangaBrainUrl = extractString("mangaBrainUrl");
+    m_settings.mangaBrainToken = extractString("mangaBrainToken");
+    m_settings.mangaBrainMaxResults = extractInt("mangaBrainMaxResults");
+    if (m_settings.mangaBrainMaxResults < 1 || m_settings.mangaBrainMaxResults > 50)
+        m_settings.mangaBrainMaxResults = 12;
+    m_settings.mangaBrainExcludeMyLists = extractBool("mangaBrainExcludeMyLists", true);
+    m_settings.mangaBrainKeepPlanned = extractBool("mangaBrainKeepPlanned", false);
+    m_settings.mangaBrainTasteWeight = extractInt("mangaBrainTasteWeight");
+    if (m_settings.mangaBrainTasteWeight < 0 || m_settings.mangaBrainTasteWeight > 100)
+        m_settings.mangaBrainTasteWeight = 0;
+
     // Load network settings
     m_settings.localServerUrl = extractString("localServerUrl");
     m_settings.remoteServerUrl = extractString("remoteServerUrl");
@@ -1805,6 +1818,15 @@ bool Application::saveSettings() {
         }
     }
     json += "],\n";
+
+    // MangaBrain settings
+    json += "  \"mangaBrainEnabled\": " + std::string(m_settings.mangaBrainEnabled ? "true" : "false") + ",\n";
+    json += "  \"mangaBrainUrl\": \"" + m_settings.mangaBrainUrl + "\",\n";
+    json += "  \"mangaBrainToken\": \"" + m_settings.mangaBrainToken + "\",\n";
+    json += "  \"mangaBrainMaxResults\": " + std::to_string(m_settings.mangaBrainMaxResults) + ",\n";
+    json += "  \"mangaBrainExcludeMyLists\": " + std::string(m_settings.mangaBrainExcludeMyLists ? "true" : "false") + ",\n";
+    json += "  \"mangaBrainKeepPlanned\": " + std::string(m_settings.mangaBrainKeepPlanned ? "true" : "false") + ",\n";
+    json += "  \"mangaBrainTasteWeight\": " + std::to_string(m_settings.mangaBrainTasteWeight) + ",\n";
 
     // Network settings
     json += "  \"localServerUrl\": \"" + m_settings.localServerUrl + "\",\n";

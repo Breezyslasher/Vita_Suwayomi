@@ -215,6 +215,7 @@ set(APP_SOURCES
     src/view/pinch_gesture.cpp
     src/utils/http_client.cpp
     src/utils/app_update.cpp
+    src/utils/mangabrain.cpp
     src/utils/update_verify.cpp
     src/utils/image_loader.cpp
     src/utils/library_cache.cpp

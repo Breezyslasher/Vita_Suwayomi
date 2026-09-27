@@ -99,6 +99,7 @@ public:
 private:
     void loadDetails();
     void loadChapters();
+    void loadRecommendations();
     void loadCover();
     void onRead(int chapterIndex = -1);  // -1 means continue from last read
     void onAddToLibrary();
@@ -170,6 +171,10 @@ private:
 
     // Genre tags
     brls::Box* m_genreBox = nullptr;
+
+    // MangaBrain recommendations rail (empty and invisible until results
+    // arrive; stays that way when the feature is off or the fetch fails)
+    brls::Box* m_recsBox = nullptr;
 
     // Action buttons
     brls::Button* m_readButton = nullptr;

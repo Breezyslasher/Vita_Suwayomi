@@ -30,6 +30,7 @@ private:
     void createReaderSection();
     void createDownloadsSection();
     void createBrowseSection();
+    void createMangaBrainSection();
     void createSyncYomiSection();
     void createBackupSection();
     void createStatisticsSection();

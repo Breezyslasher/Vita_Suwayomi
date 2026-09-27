@@ -198,6 +198,19 @@ struct AppSettings {
     std::set<std::string> enabledSourceLanguages;  // Empty = all languages, otherwise filter by these (e.g. "en", "multi")
     bool showNsfwSources = true;
 
+    // MangaBrain recommendations (self-hosted content-based recommender,
+    // github.com/Breezyslasher/MangaBrain). When enabled, the manga detail
+    // view shows a rail of similar titles fetched from this instance.
+    bool mangaBrainEnabled = false;
+    std::string mangaBrainUrl;          // e.g. http://192.168.1.28:8009
+    std::string mangaBrainToken;        // optional MANGABRAIN_AUTH_TOKEN
+    int mangaBrainMaxResults = 12;      // rail length (server cap is 50 here)
+    // Per-request choices, mirroring the MangaBrain web UI's toggles. The
+    // account usernames they apply to come from the server's own /settings.
+    bool mangaBrainExcludeMyLists = true;  // hide titles already on my lists
+    bool mangaBrainKeepPlanned = false;    // ...except plan-to-read ones
+    int mangaBrainTasteWeight = 0;         // 0-100: boost toward my ratings
+
     // Source Tags (user-assigned labels for filtering)
     std::map<std::string, std::set<std::string>> sourceTags;  // sourceId -> set of tag names
     std::set<std::string> selectedSourceTagFilters;            // Currently active tag filters (empty = show all)

@@ -17,6 +17,11 @@ class MigrateSearchView : public brls::Box {
 public:
     MigrateSearchView(const Manga& sourceManga);
 
+    // Find mode: search every source for a bare title (a MangaBrain
+    // recommendation, which exists in no source yet) and open the picked
+    // result's detail view instead of migrating anything.
+    explicit MigrateSearchView(const std::string& searchTitle);
+
 private:
     void loadSourcesAndSearch();
     void filterSources(const std::vector<Source>& allSources);
@@ -27,6 +32,7 @@ private:
     void performMigration(const Manga& newManga);
 
     Manga m_sourceManga;
+    bool m_findOnly = false;   // see the title-only constructor
 
     // UI
     brls::Label* m_titleLabel = nullptr;
