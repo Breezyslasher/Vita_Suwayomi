@@ -1987,11 +1987,39 @@ static void applyAuthHeaders(HttpClient& client) {
     }
 }
 
+// scheme://host[:port] of a URL, lower-cased; empty if it has no scheme.
+static std::string urlOrigin(const std::string& url) {
+    size_t scheme = url.find("://");
+    if (scheme == std::string::npos) return {};
+    size_t end = url.find_first_of("/?#", scheme + 3);
+    std::string origin = url.substr(0, end);
+    for (auto& c : origin) c = (char)std::tolower((unsigned char)c);
+    return origin;
+}
+
+// Only the user's own Suwayomi server may see their credentials. Covers are
+// not always served by it — MangaBrain recommendations point straight at the
+// AniList CDN, and some sources hand back absolute third-party URLs — and
+// applyAuthHeaders() attaches the Basic-auth password, JWT and session cookie
+// unconditionally, which would send them to whoever hosts the image.
+static bool isSuwayomiUrl(const std::string& url) {
+    const std::string origin = urlOrigin(url);
+    if (origin.empty()) return true;   // relative: resolved against the server
+    return origin == urlOrigin(SuwayomiClient::getInstance().getServerUrl());
+}
+
 // Authenticated HTTP GET with automatic JWT token refresh on 401/403.
 // If the request fails due to an expired token, refreshes via SuwayomiClient
 // and retries once with the new token.
 static HttpResponse authenticatedGet(const std::string& url, int maxRetries = 2,
                                      HttpClient* existingClient = nullptr) {
+    // Foreign host: a clean client with no credentials, and no token-refresh
+    // dance (a 401/403 from a CDN says nothing about our session).
+    if (!isSuwayomiUrl(url)) {
+        HttpClient plain;
+        return plain.get(url);
+    }
+
     HttpClient tempClient;
     HttpClient& client = existingClient ? *existingClient : tempClient;
     if (!existingClient) {
