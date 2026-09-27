@@ -11,27 +11,52 @@
 #include "app/suwayomi_client.hpp"
 #include "utils/async.hpp"
 #include "utils/image_loader.hpp"
+#include "utils/library_cache.hpp"
+
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <chrono>
+#include <set>
 
 namespace vitasuwayomi {
-
-// Find mode: the title comes from outside any source (a MangaBrain
-// recommendation), so there is nothing to migrate FROM — every source is
-// searched and picking a result opens its detail view.
-MigrateSearchView::MigrateSearchView(const std::string& searchTitle)
-    : MigrateSearchView([&searchTitle]() {
-          Manga stub;
-          stub.title = searchTitle;
-          return stub;
-      }())
-{
-    m_findOnly = true;
-    m_titleLabel->setText("Find: " + searchTitle);
-}
 
 MigrateSearchView::MigrateSearchView(const Manga& sourceManga)
     : m_sourceManga(sourceManga)
     , m_alive(std::make_shared<bool>(true))
 {
+    buildUi("Migrate: " + sourceManga.title);
+    loadSourcesAndSearch();
+}
+
+// Find mode: the title comes from outside any source (a MangaBrain
+// recommendation), so there is nothing to migrate FROM — every source is
+// searched and picking a result opens its detail view.
+MigrateSearchView::MigrateSearchView(const std::string& searchTitle)
+    : m_findOnly(true)
+    , m_alive(std::make_shared<bool>(true))
+{
+    m_sourceManga.title = searchTitle;   // performSearch() queries this
+    buildUi("Find: " + searchTitle);
+    loadSourcesAndSearch();
+}
+
+MigrateSearchView::MigrateSearchView(const std::string& searchTitle,
+                                     const std::map<std::string, std::vector<Manga>>& prefetched)
+    : m_findOnly(true)
+    , m_alive(std::make_shared<bool>(true))
+{
+    m_sourceManga.title = searchTitle;
+    buildUi("Find: " + searchTitle);
+    m_resultsBySource = prefetched;
+    size_t total = 0;
+    for (const auto& kv : prefetched) total += kv.second.size();
+    m_statusLabel->setText("No exact match - pick one of " + std::to_string(total) +
+                           " results from " + std::to_string(prefetched.size()) + " sources");
+    populateResults();
+}
+
+void MigrateSearchView::buildUi(const std::string& heading) {
     this->setAxis(brls::Axis::COLUMN);
     this->setJustifyContent(brls::JustifyContent::FLEX_START);
     this->setAlignItems(brls::AlignItems::STRETCH);
@@ -40,7 +65,7 @@ MigrateSearchView::MigrateSearchView(const Manga& sourceManga)
 
     // Title
     m_titleLabel = new brls::Label();
-    m_titleLabel->setText("Migrate: " + sourceManga.title);
+    m_titleLabel->setText(heading);
     m_titleLabel->setFontSize(24);
     m_titleLabel->setMarginBottom(10);
     this->addView(m_titleLabel);
@@ -71,9 +96,6 @@ MigrateSearchView::MigrateSearchView(const Manga& sourceManga)
         brls::Application::popActivity();
         return true;
     });
-
-    // Start loading
-    loadSourcesAndSearch();
 }
 
 void MigrateSearchView::loadSourcesAndSearch() {
@@ -106,29 +128,34 @@ void MigrateSearchView::loadSourcesAndSearch() {
     });
 }
 
-void MigrateSearchView::filterSources(const std::vector<Source>& allSources) {
+// The user's Browse settings: NSFW sources and the source-language filter.
+bool MigrateSearchView::sourceAllowed(const Source& src) {
     const AppSettings& settings = Application::getInstance().getSettings();
+    if (src.isNsfw && !settings.showNsfwSources) return false;
+
+    if (!settings.enabledSourceLanguages.empty()) {
+        bool langMatch = settings.enabledSourceLanguages.count(src.lang) > 0;
+        if (!langMatch) {
+            std::string baseLang = src.lang;
+            size_t dashPos = baseLang.find('-');
+            if (dashPos != std::string::npos) {
+                baseLang = baseLang.substr(0, dashPos);
+                langMatch = settings.enabledSourceLanguages.count(baseLang) > 0;
+            }
+        }
+        if (!langMatch && src.lang != "multi" && src.lang != "all") return false;
+    }
+    return true;
+}
+
+void MigrateSearchView::filterSources(const std::vector<Source>& allSources) {
     m_filteredSources.clear();
 
     for (const auto& src : allSources) {
         // Migrating: skip the manga's current source. Find mode has no current
         // source — and the stub's sourceId 0 is the Local source's real id.
         if (!m_findOnly && src.id == m_sourceManga.sourceId) continue;
-        if (src.isNsfw && !settings.showNsfwSources) continue;
-
-        if (!settings.enabledSourceLanguages.empty()) {
-            bool langMatch = settings.enabledSourceLanguages.count(src.lang) > 0;
-            if (!langMatch) {
-                std::string baseLang = src.lang;
-                size_t dashPos = baseLang.find('-');
-                if (dashPos != std::string::npos) {
-                    baseLang = baseLang.substr(0, dashPos);
-                    langMatch = settings.enabledSourceLanguages.count(baseLang) > 0;
-                }
-            }
-            if (!langMatch && src.lang != "multi" && src.lang != "all") continue;
-        }
-
+        if (!sourceAllowed(src)) continue;
         m_filteredSources.push_back(src);
     }
 }
@@ -267,6 +294,130 @@ void MigrateSearchView::performMigration(const Manga& newManga) {
             if (!alive || !*alive) return;
             brls::Application::notify("Migration complete");
             brls::Application::popActivity();
+        });
+    });
+}
+
+// ── Direct open for titles from outside the sources ─────────────────────────
+
+namespace {
+
+// Titles differ in punctuation and case between AniList and the sources
+// ("Kaguya-sama: Love is War" vs "Kaguya-sama - Love Is War"), so compare
+// on letters and digits only. Non-ASCII bytes are kept as-is, so Japanese,
+// Korean and Chinese titles still compare exactly.
+std::string normTitle(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (unsigned char c : in) {
+        if (c >= 0x80) out += (char)c;
+        else if (std::isalnum(c)) out += (char)std::tolower(c);
+    }
+    return out;
+}
+
+// One lookup at a time: a second tap while the first is still searching
+// would otherwise open two detail views.
+std::atomic<bool> s_resolving{false};
+
+// Enough to cover the sources a user actually reads from without the tap
+// turning into a minute-long wait; the picker covers everything else.
+constexpr size_t kMaxSources = 8;
+constexpr int    kBudgetSeconds = 20;
+
+} // namespace
+
+void MigrateSearchView::openTitle(std::vector<std::string> titles, int64_t preferredSourceId) {
+    titles.erase(std::remove_if(titles.begin(), titles.end(),
+                                [](const std::string& t) { return normTitle(t).empty(); }),
+                 titles.end());
+    if (titles.empty()) return;
+
+    if (s_resolving.exchange(true)) {
+        brls::Application::notify("Still opening the previous title...");
+        return;
+    }
+    brls::Application::notify("Opening " + titles[0] + "...");
+
+    asyncRun([titles, preferredSourceId]() {
+        std::set<std::string> wanted;
+        for (const auto& t : titles) wanted.insert(normTitle(t));
+        auto isMatch = [&wanted](const Manga& m) { return wanted.count(normTitle(m.title)) > 0; };
+
+        auto openManga = [](const Manga& m) {
+            brls::sync([m]() {
+                s_resolving.store(false);
+                auto* detailView = new MangaDetailView(m);
+                brls::Application::pushActivity(new brls::Activity(detailView));
+            });
+        };
+
+        SuwayomiClient& client = SuwayomiClient::getInstance();
+
+        // 1. Already in the library: open it, no search at all.
+        std::vector<Manga> library;
+        if (!LibraryCache::getInstance().loadAllLibraryManga(library) || library.empty())
+            client.fetchLibraryManga(library);
+        for (const auto& m : library) {
+            if (isMatch(m)) { openManga(m); return; }
+        }
+
+        // 2. Silent search, stopping at the first exact title match.
+        std::vector<Source> all;
+        if (!client.fetchSourceList(all) || all.empty()) {
+            brls::sync([]() {
+                s_resolving.store(false);
+                brls::Application::notify("Couldn't load your sources");
+            });
+            return;
+        }
+        std::vector<Source> sources;
+        for (const auto& src : all) if (sourceAllowed(src)) sources.push_back(src);
+        // The source the user is reading from is the likeliest to carry a
+        // similar title, so it goes first.
+        std::stable_partition(sources.begin(), sources.end(),
+            [preferredSourceId](const Source& src) { return src.id == preferredSourceId; });
+        if (sources.size() > kMaxSources) sources.resize(kMaxSources);
+
+        const auto deadline = std::chrono::steady_clock::now() +
+                              std::chrono::seconds(kBudgetSeconds);
+        std::map<std::string, std::vector<Manga>> found;
+
+        for (size_t i = 0; i < sources.size(); ++i) {
+            const Source& src = sources[i];
+            // Romaji is the query everywhere; in the preferred source also try
+            // the English title, since many sources index by English name.
+            std::vector<std::string> queries{titles[0]};
+            if (i == 0 && src.id == preferredSourceId && titles.size() > 1 &&
+                normTitle(titles[1]) != normTitle(titles[0]))
+                queries.push_back(titles[1]);
+
+            for (const auto& q : queries) {
+                std::vector<Manga> results;
+                bool hasNext = false;
+                if (!client.searchManga(src.id, q, 1, results, hasNext)) continue;
+                for (auto& m : results) {
+                    m.sourceName = src.name;
+                    if (isMatch(m)) { openManga(m); return; }
+                }
+                auto& bucket = found[src.name];
+                bucket.insert(bucket.end(), results.begin(), results.end());
+                if (bucket.empty()) found.erase(src.name);
+            }
+            if (std::chrono::steady_clock::now() > deadline) break;
+        }
+
+        // 3. No exact match: let the user pick from what was found, without
+        //    searching again.
+        const std::string heading = titles[0];
+        brls::sync([heading, found]() {
+            s_resolving.store(false);
+            if (found.empty()) {
+                brls::Application::notify("None of your sources has " + heading);
+                return;
+            }
+            auto* view = new MigrateSearchView(heading, found);
+            brls::Application::pushActivity(new brls::Activity(view));
         });
     });
 }

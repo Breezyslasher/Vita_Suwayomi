@@ -22,7 +22,22 @@ public:
     // result's detail view instead of migrating anything.
     explicit MigrateSearchView(const std::string& searchTitle);
 
+    // Find mode with the search already done — the picker openTitle() falls
+    // back to, so the user doesn't wait through the same search twice.
+    MigrateSearchView(const std::string& searchTitle,
+                      const std::map<std::string, std::vector<Manga>>& prefetched);
+
+    /// Open a title that lives outside the user's sources (a MangaBrain
+    /// recommendation) as directly as possible: the library first, then a
+    /// silent search — `preferredSourceId` first — that opens the first EXACT
+    /// title match straight away. Only when nothing matches exactly does the
+    /// picker appear, pre-filled with what the search found. Any of `titles`
+    /// (romaji / English / native) may match; the first is the search query.
+    static void openTitle(std::vector<std::string> titles, int64_t preferredSourceId);
+
 private:
+    void buildUi(const std::string& heading);
+    static bool sourceAllowed(const Source& src);
     void loadSourcesAndSearch();
     void filterSources(const std::vector<Source>& allSources);
     void performSearch();

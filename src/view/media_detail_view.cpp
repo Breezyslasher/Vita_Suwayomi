@@ -1057,9 +1057,9 @@ brls::View* MangaDetailView::create() {
 // ── MangaBrain recommendations ──────────────────────────────────────────────
 // Fetch similar titles for THIS manga from the configured MangaBrain server
 // and show them as a horizontal rail between the description and the chapter
-// list. Tapping one searches every Suwayomi source for that title (the
-// recommendation comes from the AniList catalog, so it exists in no source
-// until the user picks where to read it).
+// list. Tapping one opens it directly when it's in the library or a source
+// has it under exactly that name; recommendations come from the AniList
+// catalog, so otherwise the user picks where to read it.
 void MangaDetailView::loadRecommendations() {
     if (!mangabrain::configured()) return;
     if (Application::getInstance().isOfflineMode()) return;
@@ -1109,10 +1109,13 @@ void MangaDetailView::loadRecommendations() {
                 cell->setHeight(185);
                 cell->setMarginRight(10);
 
-                std::string recTitle = rec.title;
-                cell->registerClickAction([recTitle](brls::View*) {
-                    auto* find = new MigrateSearchView(recTitle);
-                    brls::Application::pushActivity(new brls::Activity(find));
+                // Opens the title directly when it's in the library or a
+                // source has it under exactly this name; the picker appears
+                // only when nothing matches exactly (see openTitle).
+                std::vector<std::string> titles{rec.title, rec.titleEnglish, rec.titleNative};
+                int64_t preferredSource = m_manga.sourceId;
+                cell->registerClickAction([titles, preferredSource](brls::View*) {
+                    MigrateSearchView::openTitle(titles, preferredSource);
                     return true;
                 });
                 cell->addGestureRecognizer(new brls::TapGestureRecognizer(cell));

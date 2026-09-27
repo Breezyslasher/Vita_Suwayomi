@@ -18,7 +18,9 @@ namespace mangabrain {
 
 struct Recommendation {
     int         id = 0;          // MangaBrain (= AniList) media id
-    std::string title;           // best display title
+    std::string title;           // best display title (romaji first)
+    std::string titleEnglish;    // alternates, for matching against sources
+    std::string titleNative;
     std::string cover;           // AniList CDN cover URL
     std::string medium;          // manga | manhwa | manhua | light_novel | one_shot
     float       similarity = 0;  // calibrated percentage, 0-100

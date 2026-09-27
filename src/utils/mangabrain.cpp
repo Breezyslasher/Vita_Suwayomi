@@ -338,7 +338,9 @@ bool fetchRecommendations(const std::string& title,
         if (media.empty()) return;
         Recommendation r;
         r.id         = (int)jsonNumber(media, "id");
-        r.title      = pickTitle(media);
+        r.title        = pickTitle(media);
+        r.titleEnglish = jsonString(media, "title_english");
+        r.titleNative  = jsonString(media, "title_native");
         r.medium     = jsonString(media, "medium");
         r.similarity = (float)jsonNumber(item, "similarity");
         r.cover      = jsonString(media, "cover_image_large");
