@@ -428,11 +428,21 @@ jobs:
           # Repo-name packages still go in by name with vdpm.
           VDPM_NONINTERACTIVE=1 vdpm libass harfbuzz fribidi freetype libpng libwebp
 
-          # Local package files: vdpm-on-pacman rejects file paths from --sync, so
-          # install them with pacman --upgrade using vdpm's own root/db/cache args
-          # (keep a legacy `vdpm <files>` fallback for pre-pacman images).
-          PACMAN="${VDPM_PACMAN:-$VITASDK/bin/pacman}"
-          if [ -x "$PACMAN" ]; then
+          # Local package files: vdpm-on-pacman rejects file paths from --sync
+          # ("target not found … did you mean -U/--upgrade"), so install them
+          # with pacman --upgrade using vdpm's own root/db/cache args.
+          #
+          # Where that pacman lives depends on the vdpm generation: the C vdpm
+          # shipped with VitaSDK 2026.08 keeps it at libexec/vdpm/pacman (off
+          # PATH on purpose, see vdpm's src/vdpm.c PACKAGE_CLIENT); the earlier
+          # shell vdpm used bin/pacman. Probe both instead of assuming one —
+          # assuming bin/ is what silently sent 2026.08 down the legacy branch.
+          PACMAN=""
+          for cand in "${VDPM_PACMAN:-}" "$VITASDK/libexec/vdpm/pacman" "$VITASDK/bin/pacman"; do
+            if [ -n "$cand" ] && [ -x "$cand" ]; then PACMAN="$cand"; break; fi
+          done
+          if [ -n "$PACMAN" ]; then
+            echo "installing local packages with $PACMAN"
             "$PACMAN" \
               --config   "${VDPM_PACMAN_CONF:-$VITASDK/etc/pacman.conf}" \
               --root     "$VITASDK" \
@@ -442,6 +452,8 @@ jobs:
               --noscriptlet --noconfirm --noprogressbar \
               --upgrade $PWD/*-vita.pkg.tar.xz
           else
+            # Pre-pacman images only: the old tarball vdpm took file paths.
+            echo "::warning::no pacman under \$VITASDK - assuming a pre-pacman vdpm"
             vdpm $PWD/*-vita.pkg.tar.xz
           fi
 
@@ -1083,9 +1095,40 @@ jobs:
         with:
           submodules: recursive
       - name: Install dependency
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          for pkg in glfw-3.5.0-1 curl-8.16.0-1 mpv-0.41.0-1 libwebp-1.6.0-1; do
-            curl -sLO https://github.com/dragonflylee/switchfin/releases/download/mingw-packages/${MINGW_PACKAGE_PREFIX}-${pkg}-any.pkg.tar.zst
+          set -eu
+          # mingw-packages is ROLLING like the console portlibs: a version bump
+          # REPLACES the asset, so a pinned URL 404s (curl 8.16.0-1 did). And
+          # without -f, curl saved that 404 page AS the .pkg.tar.zst, which
+          # pacman then reported as "Unrecognized archive format". Resolve what
+          # is published right now and match by name, never by version.
+          API="https://api.github.com/repos/dragonflylee/switchfin/releases/tags/mingw-packages"
+          curl -fsSL --retry 4 --retry-all-errors \
+               -H "Accept: application/vnd.github+json" \
+               -H "Authorization: Bearer $GH_TOKEN" "$API" -o /tmp/mingwpkgs.json
+          urls=$(grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]+"' /tmp/mingwpkgs.json \
+                 | sed -E 's/.*"(https[^"]+)"$/\1/')
+          [ -n "$urls" ] || { echo "::error::could not read the mingw-packages asset list"; exit 1; }
+
+          # "<name>-[0-9]*" so e.g. curl never matches a curl-<variant> package;
+          # "-any.pkg.tar.zst" exactly, so a detached .sig is never picked.
+          # Highest version wins if a bump ever leaves two published.
+          pick() {
+            printf '%s\n' "$urls" | while IFS= read -r u; do
+              n=${u##*/}
+              case "$n" in
+                ${MINGW_PACKAGE_PREFIX}-$1-[0-9]*-any.pkg.tar.zst) printf '%s\n' "$u";;
+              esac
+            done | sort -V | tail -n 1
+          }
+
+          for name in glfw curl mpv libwebp; do
+            u=$(pick "$name")
+            [ -n "$u" ] || { echo "::error::no published ${MINGW_PACKAGE_PREFIX}-${name} package"; exit 1; }
+            echo "resolved ${name} -> ${u##*/}"
+            curl -fL --retry 4 --retry-all-errors -o "${u##*/}" "$u"
           done
           pacman -U --noconfirm *.pkg.tar.zst
       - name: Build
