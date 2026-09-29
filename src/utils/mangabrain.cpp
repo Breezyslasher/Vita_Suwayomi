@@ -16,12 +16,21 @@
 #include "utils/mangabrain.hpp"
 #include "utils/http_client.hpp"
 #include "app/application.hpp"
+#include "app/suwayomi_client.hpp"
+#include "platform/platform.hpp"
+#include "utils/async.hpp"
 
 #include <borealis.hpp>
 #include <cctype>
 #include <cstdio>
+#include <algorithm>
+#include <atomic>
 #include <cstdlib>
+#include <ctime>
+#include <map>
 #include <mutex>
+#include <set>
+#include <sstream>
 
 namespace vitasuwayomi {
 namespace mangabrain {
@@ -167,6 +176,21 @@ HttpResponse get(const std::string& pathAndQuery, int timeout) {
     return client.request(req);
 }
 
+HttpResponse postJson(const std::string& path, const std::string& body, int timeout) {
+    HttpClient client;
+    client.setTimeout(timeout);
+    client.setFollowRedirects(true);
+    HttpRequest req;
+    req.url = baseUrl() + path;
+    req.method = "POST";
+    req.body = body;
+    req.headers["Accept"] = "application/json";
+    req.headers["Content-Type"] = "application/json";
+    const std::string& token = Application::getInstance().getSettings().mangaBrainToken;
+    if (!token.empty()) req.headers["Authorization"] = "Bearer " + token;
+    return client.request(req);
+}
+
 std::string describeFailure(const HttpResponse& resp) {
     if (!resp.error.empty() && resp.statusCode == 0) return resp.error;
     if (resp.statusCode == 401) return "access token rejected (HTTP 401)";
@@ -236,6 +260,9 @@ std::string userParams() {
         if (!a.mal.empty())     q += "&mal_user=" + HttpClient::urlEncode(a.mal);
         if (!a.kitsu.empty())   q += "&exclude_list=kitsu";
         if (a.yamtrack)         q += "&exclude_list=yamtrack";
+        // The Suwayomi library, pushed by syncLibrary(). A list that was never
+        // pushed excludes nothing, so this is safe before the first sync.
+        q += "&exclude_list=suwayomi";
         if (st.mangaBrainKeepPlanned) q += "&keep_planned=true";
     }
     if (wantTaste) {
@@ -252,6 +279,241 @@ std::string pickTitle(const std::string& media) {
     if (t.empty()) t = jsonString(media, "title_english");
     if (t.empty()) t = jsonString(media, "title_native");
     return t;
+}
+
+// ── Identity: which catalog entry is this manga? ────────────────────────────
+// MangaBrain's catalog is AniList, so an AniList tracker link IS the catalog
+// id. A MAL link is matched to the search result carrying the same id_mal.
+// Everything else only counts on an EXACT title match: a wrong id would hide
+// an unrelated title from recommendations and skew the taste profile.
+
+constexpr int kTrackerMal = 1;       // Suwayomi TrackerManager.MYANIMELIST
+constexpr int kTrackerAniList = 2;   // Suwayomi TrackerManager.ANILIST
+
+// Letters and digits only, lowercased; non-ASCII bytes kept as-is, so
+// "Kaguya-sama: Love is War" == "Kaguya-sama - Love Is War" and Japanese /
+// Korean titles still compare exactly.
+std::string normTitle(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (unsigned char c : in) {
+        if (c >= 0x80) out += (char)c;
+        else if (std::isalnum(c)) out += (char)std::tolower(c);
+    }
+    return out;
+}
+
+struct SearchHit {
+    int id = 0;
+    int idMal = 0;
+    std::set<std::string> titles;   // normalized romaji / English / native
+};
+
+// Non-anime catalog hits for a title (an anime seed would recommend anime).
+bool searchCatalog(const std::string& title, std::vector<SearchHit>& hits, std::string& err) {
+    const bool adult = Application::getInstance().getSettings().showNsfwSources;
+    HttpResponse r = get("/search?q=" + HttpClient::urlEncode(title) +
+                         "&limit=10" + (adult ? "&adult=true" : ""), 15);
+    if (!r.success || r.statusCode != 200) { err = describeFailure(r); return false; }
+    forEachObject(jsonBlock(r.body, "results"), [&](const std::string& m) {
+        if (jsonString(m, "medium") == "anime") return;
+        SearchHit h;
+        h.id = (int)jsonNumber(m, "id");
+        h.idMal = (int)jsonNumber(m, "id_mal");   // null reads as 0
+        for (const char* key : {"title", "title_english", "title_native"}) {
+            std::string n = normTitle(jsonString(m, key));
+            if (!n.empty()) h.titles.insert(n);
+        }
+        if (h.id > 0) hits.push_back(std::move(h));
+    });
+    return true;
+}
+
+// The one catalog id whose title matches exactly, or 0 when none does — or
+// when two different entries do, since then it is still a guess.
+int exactTitleMatch(const std::vector<SearchHit>& hits, const std::string& title) {
+    const std::string want = normTitle(title);
+    if (want.empty()) return 0;
+    int found = 0;
+    for (const auto& h : hits) {
+        if (!h.titles.count(want)) continue;
+        if (found && found != h.id) return 0;
+        found = h.id;
+    }
+    return found;
+}
+
+int malMatch(const std::vector<SearchHit>& hits, int64_t malId) {
+    if (malId <= 0) return 0;
+    for (const auto& h : hits) if (h.idMal == malId) return h.id;
+    return 0;
+}
+
+// ── Title-match cache ───────────────────────────────────────────────────────
+// Title lookups are the expensive part of a library sync (one search per
+// untracked manga), so results persist across launches: a match is kept
+// until the manga's title changes; "no match" is retried after a week, in
+// case the catalog gained the title since.
+
+struct TitleCacheEntry {
+    std::string titleKey;   // normTitle() of the title it was resolved for
+    int catalogId = 0;      // 0 = no exact match
+    int64_t checkedAt = 0;  // unix seconds
+};
+
+std::mutex s_cacheMutex;
+std::map<int, TitleCacheEntry> s_titleCache;
+bool s_cacheLoaded = false;
+constexpr int64_t kNoMatchRetrySecs = 7 * 24 * 3600;
+
+std::string cachePath() { return platform::path("mangabrain_titles.tsv"); }
+
+void loadCacheLocked() {
+    if (s_cacheLoaded) return;
+    s_cacheLoaded = true;
+    std::vector<uint8_t> raw = platform::readFile(cachePath());
+    std::istringstream in(std::string(raw.begin(), raw.end()));
+    std::string line;
+    while (std::getline(in, line)) {
+        std::istringstream row(line);
+        std::string id, key, cat, when;
+        if (!std::getline(row, id, '\t') || !std::getline(row, key, '\t') ||
+            !std::getline(row, cat, '\t') || !std::getline(row, when, '\t')) continue;
+        TitleCacheEntry e;
+        e.titleKey = key;
+        e.catalogId = std::atoi(cat.c_str());
+        e.checkedAt = std::atoll(when.c_str());
+        s_titleCache[std::atoi(id.c_str())] = e;
+    }
+}
+
+void saveCacheLocked() {
+    std::string out;
+    for (const auto& kv : s_titleCache) {
+        out += std::to_string(kv.first) + "\t" + kv.second.titleKey + "\t" +
+               std::to_string(kv.second.catalogId) + "\t" +
+               std::to_string(kv.second.checkedAt) + "\n";
+    }
+    platform::writeFile(cachePath(), out);
+}
+
+// True with the cached answer (possibly 0 = known no-match) when it is fresh.
+bool cachedTitleMatch(int mangaId, const std::string& title, int& catalogId) {
+    std::lock_guard<std::mutex> lk(s_cacheMutex);
+    loadCacheLocked();
+    auto it = s_titleCache.find(mangaId);
+    if (it == s_titleCache.end() || it->second.titleKey != normTitle(title)) return false;
+    if (it->second.catalogId == 0 &&
+        (int64_t)std::time(nullptr) - it->second.checkedAt > kNoMatchRetrySecs) return false;
+    catalogId = it->second.catalogId;
+    return true;
+}
+
+void rememberTitleMatch(int mangaId, const std::string& title, int catalogId) {
+    std::lock_guard<std::mutex> lk(s_cacheMutex);
+    loadCacheLocked();
+    s_titleCache[mangaId] = {normTitle(title), catalogId, (int64_t)std::time(nullptr)};
+}
+
+void flushTitleCache() {
+    std::lock_guard<std::mutex> lk(s_cacheMutex);
+    if (s_cacheLoaded) saveCacheLocked();
+}
+
+// ── Library sync ────────────────────────────────────────────────────────────
+// Pushes the Suwayomi library to MangaBrain as the generic exclusion list
+// "suwayomi" (POST /exclusions/suwayomi), which MangaBrain uses to exclude
+// those titles, to seed For-You, and for the taste boost. Ids only: today's
+// endpoint stores every posted id as unrated and not-planned.
+
+std::atomic<bool> s_syncing{false};
+std::mutex s_syncMutex;
+std::string s_lastPushedBody;   // skip the POST when nothing changed
+std::string s_syncSummary = "Not synced yet";
+
+// Bounds a first sync of a large, mostly untracked library; the rest are
+// looked up on the next syncs.
+constexpr int kMaxTitleLookupsPerSync = 150;
+
+bool syncLibraryNow(std::string& message) {
+    SuwayomiClient& client = SuwayomiClient::getInstance();
+
+    std::vector<Manga> library;
+    if (!client.fetchLibraryManga(library)) {
+        message = "couldn't load the Suwayomi library";
+        return false;
+    }
+    std::vector<TrackRecord> records;
+    if (!client.fetchAllTrackRecords(records)) {
+        message = "couldn't load tracker links from Suwayomi";
+        return false;
+    }
+    std::map<int, std::vector<const TrackRecord*>> byManga;
+    for (const auto& r : records) byManga[r.mangaId].push_back(&r);
+
+    std::set<int64_t> anilistIds, malIds;
+    int viaAniList = 0, viaMal = 0, viaTitle = 0, unmatched = 0, pending = 0, lookups = 0;
+
+    for (const Manga& m : library) {
+        int64_t anilist = 0, mal = 0;
+        for (const TrackRecord* r : byManga[m.id]) {
+            if (r->remoteId <= 0) continue;
+            if (r->trackerId == kTrackerAniList) anilist = r->remoteId;
+            else if (r->trackerId == kTrackerMal) mal = r->remoteId;
+        }
+        // Tracker links are exact: AniList ids are catalog ids, and the list
+        // accepts MAL manga ids as-is (MangaBrain joins them on id_mal).
+        if (anilist > 0) { anilistIds.insert(anilist); ++viaAniList; continue; }
+        if (mal > 0)     { malIds.insert(mal);         ++viaMal;     continue; }
+
+        int id = 0;
+        if (!cachedTitleMatch(m.id, m.title, id)) {
+            if (lookups >= kMaxTitleLookupsPerSync) { ++pending; continue; }
+            ++lookups;
+            std::vector<SearchHit> hits;
+            std::string err;
+            if (!searchCatalog(m.title, hits, err)) { ++pending; continue; }  // retry next sync
+            id = exactTitleMatch(hits, m.title);
+            rememberTitleMatch(m.id, m.title, id);
+        }
+        if (id > 0) { anilistIds.insert(id); ++viaTitle; }
+        else        ++unmatched;
+    }
+    flushTitleCache();
+
+    std::string body = "{\"anilist_ids\":[";
+    bool first = true;
+    for (int64_t id : anilistIds) { body += (first ? "" : ",") + std::to_string(id); first = false; }
+    body += "],\"mal_manga_ids\":[";
+    first = true;
+    for (int64_t id : malIds) { body += (first ? "" : ",") + std::to_string(id); first = false; }
+    body += "]}";
+
+    char summary[256];
+    snprintf(summary, sizeof(summary),
+             "%zu titles: %d via AniList, %d via MAL, %d by exact title, %d unmatched%s",
+             library.size(), viaAniList, viaMal, viaTitle, unmatched,
+             pending ? (", " + std::to_string(pending) + " still to check").c_str() : "");
+
+    {
+        std::lock_guard<std::mutex> lk(s_syncMutex);
+        if (body == s_lastPushedBody) {
+            s_syncSummary = summary;
+            message = std::string("Library unchanged - ") + summary;
+            return true;
+        }
+    }
+
+    HttpResponse resp = postJson("/exclusions/suwayomi", body, 30);
+    if (!resp.success || resp.statusCode != 200) {
+        message = "MangaBrain rejected the library list (" + describeFailure(resp) + ")";
+        return false;
+    }
+    std::lock_guard<std::mutex> lk(s_syncMutex);
+    s_lastPushedBody = body;
+    s_syncSummary = summary;
+    message = std::string("Library synced - ") + summary;
+    return true;
 }
 
 } // namespace
@@ -281,7 +543,7 @@ bool testConnection(std::string& err) {
     return true;
 }
 
-bool fetchRecommendations(const std::string& title,
+bool fetchRecommendations(int mangaId, const std::string& title,
                           std::vector<Recommendation>& out,
                           std::string& err) {
     out.clear();
@@ -293,26 +555,44 @@ bool fetchRecommendations(const std::string& title,
     if (limit < 1) limit = 12;
     if (limit > 50) limit = 50;
 
-    // 1. Title → catalog id. Search every medium and take the first
-    //    non-anime hit: the manga groups alone would miss light novels and
-    //    one-shots, while anime seeds would recommend anime.
-    HttpResponse search = get("/search?q=" + HttpClient::urlEncode(title) +
-                              "&limit=10" + (adult ? "&adult=true" : ""), 15);
-    if (!search.success || search.statusCode != 200) {
-        err = describeFailure(search);
-        return false;
+    // 1. Which catalog entry is this manga? Exact answers first, in order:
+    //    AniList tracker link, MAL tracker link (matched on id_mal), an
+    //    exact title match (cached from library syncs); then, only as a
+    //    fallback for the seed, the search's first hits.
+    std::vector<int> candidates;
+    auto add = [&candidates](int id) {
+        if (id > 0 && std::find(candidates.begin(), candidates.end(), id) == candidates.end())
+            candidates.push_back(id);
+    };
+
+    int64_t malId = 0;
+    std::vector<TrackRecord> records;
+    if (mangaId > 0 && SuwayomiClient::getInstance().fetchMangaTracking(mangaId, records)) {
+        for (const auto& r : records) {
+            if (r.remoteId <= 0) continue;
+            if (r.trackerId == kTrackerAniList) add((int)r.remoteId);
+            else if (r.trackerId == kTrackerMal) malId = r.remoteId;
+        }
     }
 
-    // Candidate seeds in search-rank order, anime excluded (an anime seed
-    // would recommend anime).
-    std::vector<int> candidates;
-    forEachObject(jsonBlock(search.body, "results"), [&](const std::string& media) {
-        if (jsonString(media, "medium") == "anime") return;
-        const int id = (int)jsonNumber(media, "id");
-        if (id > 0 && candidates.size() < 3) candidates.push_back(id);
-    });
+    std::vector<SearchHit> hits;
+    std::string searchErr;
+    const bool searched = searchCatalog(title, hits, searchErr);
+    add(malMatch(hits, malId));
+
+    int cached = 0;
+    if (mangaId > 0 && cachedTitleMatch(mangaId, title, cached)) {
+        add(cached);
+    } else if (searched) {
+        const int exact = exactTitleMatch(hits, title);
+        if (mangaId > 0) rememberTitleMatch(mangaId, title, exact);
+        add(exact);
+    }
+
+    for (size_t i = 0; i < hits.size() && i < 3; ++i) add(hits[i].id);   // guesses
+
     if (candidates.empty()) {
-        err = "no catalog match for this title";
+        err = searched ? "no catalog match for this title" : searchErr;
         return false;
     }
 
@@ -350,6 +630,29 @@ bool fetchRecommendations(const std::string& title,
 
     if (out.empty()) err = "no recommendations returned";
     return !out.empty();
+}
+
+void syncLibraryAsync(std::function<void(bool ok, const std::string& message)> done) {
+    auto finish = [done](bool ok, const std::string& msg) {
+        if (done) brls::sync([done, ok, msg]() { done(ok, msg); });
+    };
+    if (!configured())                             { finish(false, "MangaBrain is off"); return; }
+    if (Application::getInstance().isOfflineMode()) { finish(false, "offline"); return; }
+    if (s_syncing.exchange(true))                  { finish(false, "a sync is already running"); return; }
+
+    asyncRun([finish]() {
+        std::string message;
+        const bool ok = syncLibraryNow(message);
+        flushTitleCache();
+        brls::Logger::info("MangaBrain: {}", message);
+        s_syncing.store(false);
+        finish(ok, message);
+    });
+}
+
+std::string librarySyncSummary() {
+    std::lock_guard<std::mutex> lk(s_syncMutex);
+    return s_syncSummary;
 }
 
 } // namespace mangabrain

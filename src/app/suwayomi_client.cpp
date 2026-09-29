@@ -5290,6 +5290,55 @@ bool SuwayomiClient::fetchMangaTrackingGraphQL(int mangaId, std::vector<TrackRec
     return true;
 }
 
+bool SuwayomiClient::fetchAllTrackRecords(std::vector<TrackRecord>& records) {
+    // Only the fields the MangaBrain library sync needs; no tracker object.
+    const char* query = R"(
+        query GetAllTrackRecords($first: Int!, $offset: Int!) {
+            trackRecords(first: $first, offset: $offset) {
+                nodes {
+                    id
+                    mangaId
+                    trackerId
+                    remoteId
+                    score
+                    status
+                }
+                pageInfo {
+                    hasNextPage
+                }
+            }
+        }
+    )";
+
+    records.clear();
+    const int pageSize = 500;
+    for (int offset = 0; offset < 200000; offset += pageSize) {
+        std::string variables = "{\"first\":" + std::to_string(pageSize) +
+                                ",\"offset\":" + std::to_string(offset) + "}";
+        std::string response = executeGraphQL(query, variables);
+        if (response.empty()) {
+            brls::Logger::error("GraphQL: fetchAllTrackRecords - empty response");
+            return false;
+        }
+        std::string data = extractJsonObject(response, "data");
+        std::string list = extractJsonObject(data, "trackRecords");
+        if (list.empty()) break;
+
+        std::string nodesJson = extractJsonArray(list, "nodes");
+        size_t before = records.size();
+        if (!nodesJson.empty()) {
+            for (const auto& item : splitJsonArray(nodesJson))
+                records.push_back(parseTrackRecordFromGraphQL(item));
+        }
+        std::string pageInfo = extractJsonObject(list, "pageInfo");
+        bool hasNext = !pageInfo.empty() && extractJsonBool(pageInfo, "hasNextPage");
+        if (!hasNext || records.size() == before) break;
+    }
+
+    brls::Logger::info("GraphQL: Fetched {} track records in total", records.size());
+    return true;
+}
+
 bool SuwayomiClient::fetchMangaTracking(int mangaId, std::vector<TrackRecord>& records) {
     return fetchMangaTrackingGraphQL(mangaId, records);
 }

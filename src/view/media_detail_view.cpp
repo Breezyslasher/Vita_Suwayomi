@@ -1067,11 +1067,12 @@ void MangaDetailView::loadRecommendations() {
 
     std::weak_ptr<bool> aliveWeak = m_alive;
     std::string title = m_manga.title;
+    int mangaId = m_manga.id;   // its tracker links identify it exactly
 
-    asyncRun([this, aliveWeak, title]() {
+    asyncRun([this, aliveWeak, mangaId, title]() {
         std::vector<mangabrain::Recommendation> recs;
         std::string err;
-        if (!mangabrain::fetchRecommendations(title, recs, err)) {
+        if (!mangabrain::fetchRecommendations(mangaId, title, recs, err)) {
             // Quietly absent rather than an error banner: recommendations are
             // an extra, and "no catalog match" is a normal outcome for
             // doujins/webcomics AniList does not know.

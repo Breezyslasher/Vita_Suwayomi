@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -29,12 +30,23 @@ struct Recommendation {
 /// True when the feature is enabled in settings and a server URL is set.
 bool configured();
 
-/// Map `title` onto the MangaBrain catalog and fetch its ranked similar
-/// titles. Blocking — call from a worker thread only. Returns false with
-/// `err` set when the server is unreachable or the title has no match.
-bool fetchRecommendations(const std::string& title,
+/// Ranked similar titles for a manga. The catalog entry comes from the
+/// manga's AniList tracker link, else its MAL link, else an exact title
+/// match; the search's first hit is only a last-resort guess. Blocking —
+/// call from a worker thread only. Returns false with `err` set when the
+/// server is unreachable or the title has no match.
+bool fetchRecommendations(int mangaId, const std::string& title,
                           std::vector<Recommendation>& out,
                           std::string& err);
+
+/// Push the Suwayomi library to MangaBrain as the exclusion list "suwayomi"
+/// (tracker links first, exact title matches for the rest), so library titles
+/// are never recommended back and For-You / the taste boost can use them.
+/// Runs on a worker; `done`, if given, is called on the UI thread.
+void syncLibraryAsync(std::function<void(bool ok, const std::string& message)> done = nullptr);
+
+/// One-line result of the last sync this session, for Settings.
+std::string librarySyncSummary();
 
 /// GET /healthz with the configured auth, for the settings Test button.
 /// Blocking — call from a worker thread only.

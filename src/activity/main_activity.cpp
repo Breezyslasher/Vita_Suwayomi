@@ -4,6 +4,7 @@
  */
 
 #include "activity/main_activity.hpp"
+#include "utils/mangabrain.hpp"
 #include "view/library_section_tab.hpp"
 #include "view/history_tab.hpp"
 #include "view/extensions_tab.hpp"
@@ -79,6 +80,14 @@ void MainActivity::onContentAvailable() {
 
         // If online, try to load categories for additional library tabs
         if (isOnline) {
+            // Tell MangaBrain what's in the library (no-op when it's off), so
+            // library titles are never recommended back. Once per launch.
+            static bool s_mangaBrainSynced = false;
+            if (!s_mangaBrainSynced && mangabrain::configured()) {
+                s_mangaBrainSynced = true;
+                mangabrain::syncLibraryAsync();
+            }
+
             asyncTask<bool>([&client]() {
                 std::vector<Category> categories;
                 return client.fetchCategories(categories);

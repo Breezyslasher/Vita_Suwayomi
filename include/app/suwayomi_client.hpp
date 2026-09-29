@@ -558,6 +558,9 @@ public:
     bool updateTrackRecord(int recordId, int status = -1, double lastChapterRead = -1,
                           const std::string& scoreString = "", int64_t startDate = -1, int64_t finishDate = -1);
     bool fetchMangaTracking(int mangaId, std::vector<TrackRecord>& records);
+    // Every track record on the server, paged — one pass over the whole
+    // library's tracker links instead of a request per manga.
+    bool fetchAllTrackRecords(std::vector<TrackRecord>& records);
 
     // Legacy compatibility
     bool loginTracker(int trackerId, const std::string& username, const std::string& password);

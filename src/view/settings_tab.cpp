@@ -1689,6 +1689,27 @@ void SettingsTab::createMangaBrainSection() {
     });
     m_contentBox->addView(testCell);
 
+    // Library sync: pushes the Suwayomi library to MangaBrain so its titles
+    // are never recommended back. Also runs once per launch automatically.
+    auto* syncCell = new brls::DetailCell();
+    syncCell->setText("Sync Library Now");
+    syncCell->setDetailText(mangabrain::librarySyncSummary());
+    syncCell->registerClickAction([this, syncCell](brls::View*) {
+        if (!mangabrain::configured()) {
+            brls::Application::notify("Turn on MangaBrain and set its URL first");
+            return true;
+        }
+        brls::Application::notify("Syncing library to MangaBrain...");
+        std::weak_ptr<bool> aliveWeak = m_alive;
+        mangabrain::syncLibraryAsync([aliveWeak, syncCell](bool ok, const std::string& msg) {
+            brls::Application::notify(ok ? msg : "MangaBrain sync failed: " + msg);
+            auto alive = aliveWeak.lock();
+            if (alive && *alive) syncCell->setDetailText(mangabrain::librarySyncSummary());
+        });
+        return true;
+    });
+    m_contentBox->addView(syncCell);
+
     // Adult results follow the existing Browse toggle rather than adding a
     // second NSFW switch that could disagree with it.
     auto* note = new brls::Label();
