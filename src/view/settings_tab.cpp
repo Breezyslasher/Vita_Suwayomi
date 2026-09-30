@@ -516,6 +516,38 @@ void SettingsTab::createAccountSection() {
     });
     m_contentBox->addView(networkTestCell);
 
+    // Suwayomi v2.4+: clear the server's WebView/HTTP cookies and cache — the
+    // fix for a source stuck behind a stale Cloudflare session. Also signs
+    // the server out of any source logged in through its WebView, so confirm.
+    auto* clearServerCacheCell = new brls::DetailCell();
+    clearServerCacheCell->setText("Clear Server Cookies & Cache");
+    clearServerCacheCell->setDetailText("Fixes sources stuck on Cloudflare");
+    clearServerCacheCell->registerClickAction([this](brls::View*) {
+        if (!Application::getInstance().isConnected()) {
+            brls::Application::notify("Connect to the server first");
+            return true;
+        }
+        if (!SuwayomiClient::getInstance().serverAtLeast(2, 4)) {
+            brls::Application::notify("Needs Suwayomi-Server v2.4 or newer");
+            return true;
+        }
+        std::vector<OptionRow> rows;
+        rows.push_back({ "delete.png", "Clear (signs out WebView logins)", "", true, false, [this]() {
+            std::weak_ptr<bool> aliveWeak = m_alive;
+            asyncRun([aliveWeak]() {
+                const bool ok = SuwayomiClient::getInstance().clearServerCookiesAndCache();
+                brls::sync([ok]() {
+                    brls::Application::notify(ok ? "Server cookies and cache cleared"
+                                                 : "Couldn't clear the server's cookies and cache");
+                });
+            });
+        } });
+        rows.push_back({ "back.png", "Cancel", "", false, true, []() {} });
+        OptionsPopover::show("SERVER", "Clear server cookies & cache?", std::move(rows));
+        return true;
+    });
+    m_contentBox->addView(clearServerCacheCell);
+
     // Connection status indicator
     bool isOnline = Application::getInstance().isConnected();
     auto* connectionStatusLabel = new brls::Label();
@@ -2288,6 +2320,7 @@ struct NetTestResult {
     bool serverConfigured = false, serverOk = false;
     long serverMs = 0;
     std::string serverUrl, serverName, serverVersion;
+    std::string serverPlatform;   // "Linux 6.8 · amd64 · Java 21" (v2.4+ servers)
     std::string testedAt;
 };
 
@@ -2362,7 +2395,19 @@ NetTestResult gatherNetTest() {
         auto e = steady_clock::now();
         r.serverMs = static_cast<long>(duration_cast<milliseconds>(e - s).count());
         r.serverOk = ok;
-        if (ok) { r.serverName = info.name; r.serverVersion = info.version; }
+        if (ok) {
+            r.serverName = info.name;
+            r.serverVersion = info.version;
+            // The server's version already reads "v2.4.2366"; the row adds its
+            // own "v", so drop this one rather than print "vv2.4.2366".
+            if (!r.serverVersion.empty() && (r.serverVersion[0] == 'v' || r.serverVersion[0] == 'V'))
+                r.serverVersion.erase(0, 1);
+            std::string host = info.osName;
+            if (!info.osVersion.empty()) host += (host.empty() ? "" : " ") + info.osVersion;
+            if (!info.arch.empty())       host += (host.empty() ? "" : " \xC2\xB7 ") + info.arch;
+            if (!info.javaVersion.empty()) host += (host.empty() ? "" : " \xC2\xB7 ") + std::string("Java ") + info.javaVersion;
+            r.serverPlatform = host;
+        }
     }
 
     std::time_t t = std::time(nullptr);
@@ -2518,6 +2563,8 @@ void buildNetTestPanel(brls::Box* panel, const NetTestResult& r,
     addRow("Server URL", r.serverConfigured ? r.serverUrl : "Not configured");
     addRow("Server", (r.serverOk && !r.serverName.empty())
                          ? (r.serverName + " v" + r.serverVersion) : "-");
+    if (r.serverOk && !r.serverPlatform.empty())
+        addRow("Server host", r.serverPlatform);
     addRow("Tested", r.testedAt);
     panel->addView(grid);
 
@@ -2733,8 +2780,8 @@ void SettingsTab::showCategoryManagementDialog() {
     for (size_t i = 0; i < categories.size(); i++) {
         const auto& cat = categories[i];
 
-        // Skip the default category (id 0) - it can't be modified
-        if (cat.id == 0) continue;
+        // Skip the built-in default category - it can't be modified
+        if (cat.isSystemDefault) continue;
 
         auto* catRow = new brls::Box();
         catRow->setAxis(brls::Axis::ROW);

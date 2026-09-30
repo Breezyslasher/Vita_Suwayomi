@@ -13,6 +13,7 @@
 #include <map>
 #include <set>
 #include <mutex>
+#include <atomic>
 #include <ctime>
 #include "utils/http_client.hpp"
 
@@ -91,7 +92,11 @@ struct Category {
     int id = 0;
     std::string name;
     int order = 0;
-    bool isDefault = false;
+    bool isDefault = false;          // "default" flag: where new manga go
+    // The built-in default category (uncategorized manga). v2.4+ reports it
+    // as isDefaultCategory ahead of a change that stops it always being id 0;
+    // older servers don't, and there it IS id 0.
+    bool isSystemDefault = false;
     int mangaCount = 0;
 };
 
@@ -254,6 +259,11 @@ struct ServerInfo {
     int64_t buildTime = 0;
     std::string github;
     std::string discord;
+    // Host platform (aboutServer.platformInfo, v2.4+ only; empty before).
+    std::string osName;
+    std::string osVersion;
+    std::string arch;
+    std::string javaVersion;
 };
 
 // Source filter types
@@ -423,6 +433,22 @@ public:
     // Connection & Server Info
     bool connectToServer(const std::string& url);
     bool fetchServerInfo(ServerInfo& info);
+
+    // True when the connected server is at least major.minor (from
+    // aboutServer.version). False while the version is unknown, so a field
+    // only newer servers have is never requested from an older one — GraphQL
+    // rejects a whole query that names a field it doesn't know.
+    bool serverAtLeast(int major, int minor) const;
+
+    // Whether categoryId is the built-in default category. Uses the
+    // server's isDefaultCategory (v2.4+) once categories have been fetched,
+    // and id 0 otherwise — callers must not hardcode id 0.
+    bool isDefaultCategoryId(int categoryId) const;
+    int defaultCategoryId() const { return m_defaultCategoryId.load(); }
+
+    // Clear the server's WebView/HTTP cookies and cache (v2.4+) — the fix for
+    // a source stuck behind a stale Cloudflare session.
+    bool clearServerCookiesAndCache();
     bool testConnection();
 
     // Check if server requires authentication (returns true if 401 received)
@@ -774,6 +800,13 @@ private:
     std::string m_authPassword;
     bool m_isConnected = false;
     ServerInfo m_serverInfo;
+    void setServerInfo(const ServerInfo& info);
+    static bool parseServerVersion(const std::string& version, int& major, int& minor);
+    // Field list for category list queries (adds isDefaultCategory on v2.4+).
+    std::string categoryListFields() const;
+    std::atomic<int> m_serverMajor{0};
+    std::atomic<int> m_serverMinor{0};
+    std::atomic<int> m_defaultCategoryId{0};
 
     // Authentication state
     AuthMode m_authMode = AuthMode::NONE;

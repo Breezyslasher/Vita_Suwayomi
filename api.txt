@@ -6,6 +6,36 @@
 # GraphiQL IDE: /api/graphql (in browser)
 # REST API (legacy): /api/v1/*
 # Swagger UI: /api/swagger-ui
+#
+# Documented against Suwayomi-Server v2.4.2366 (2026-09-29).
+
+# ============================================================================
+# SERVER VERSION NOTES
+# ============================================================================
+
+# Version gating: GraphQL rejects a WHOLE query that names a field the server
+# doesn't have, so fields marked "v2.4+" below must only be requested once
+# aboutServer.version says the server is new enough (the client's
+# SuwayomiClient::serverAtLeast(2, 4)). aboutServer.version reads "v2.4.2366"
+# (leading "v"; the revision is the patch number).
+#
+# v2.4.2366 (2026-09-29) — API-visible changes:
+#  - aboutServer.platformInfo: host OS, arch, headless, JVM (SERVER INFO).
+#  - Category.isDefaultCategory: marks the built-in default category. Today it
+#    is always the category with id 0, but it was added "in preparation of
+#    incompatible changes of future versions": don't hardcode id 0 (CATEGORIES).
+#  - reorderChapterDownloads: batch download-queue reorder (DOWNLOADS).
+#  - clearCookiesAndCache: clears the server's WebView/HTTP cookies and cache
+#    (WEBVIEW / CACHE).
+#  - SyncYomi protocol v2: server-side only, no API change (SYNCYOMI).
+# Fixes clients will notice (no client change needed):
+#  - Download queue: `position` of unmoved items is correct after a reorder;
+#    dequeued downloads now send updates; the download subscription no longer
+#    returns stale chapter data.
+#  - fetchSourceManga: filters with nested group changes now apply.
+#  - Chapters without an upload date got a fallback stored in SECONDS (sorted
+#    as 1970); fixed, and existing rows are repaired by a migration.
+#  - Library/category manga counts no longer include duplicate rows.
 
 # ============================================================================
 # AUTHENTICATION
@@ -54,6 +84,21 @@ query GetServerInfo {
         buildTime
         github
         discord
+        platformInfo {    # v2.4+ (see SERVER VERSION NOTES)
+            os {
+                name      # e.g. "Ubuntu", "Windows 11", "macOS"
+                version
+                build     # nullable
+            }
+            arch          # the JVM's os.arch as-is, e.g. "amd64", "aarch64"
+            headless
+            jvm {
+                javaVersion
+                vmName
+                vmVersion
+                vmVendor
+            }
+        }
     }
 }
 
@@ -948,7 +993,9 @@ query GetCategories {
             id
             name
             order
-            default
+            default              # where new manga are added (user setting)
+            isDefaultCategory    # v2.4+: the built-in default category; today
+                                 # always id 0 — use this, not id == 0
             includeInUpdate      # NEW: IncludeOrExclude enum
             includeInDownload    # NEW: IncludeOrExclude enum
             mangas {
@@ -1172,6 +1219,17 @@ mutation ReorderDownload($chapterId: Int!, $position: Int!) {
         }
     }
 }
+
+# Reorder Several Chapters in the Download Queue at once (v2.4+)
+# One request instead of one reorderChapterDownload per move.
+mutation ReorderDownloads($reorders: [ChapterDownloadReorderInput!]!) {
+    reorderChapterDownloads(input: { reorders: $reorders }) {
+        downloadStatus {
+            state
+        }
+    }
+}
+# $reorders = [{ "chapterId": 12, "to": 0 }, { "chapterId": 15, "to": 1 }]
 
 # Start Downloads
 mutation StartDownloader {
@@ -1692,8 +1750,28 @@ mutation DeleteGlobalMetas($keys: [String!], $keyStartsWith: [String!]) {
 }
 
 # ============================================================================
+# WEBVIEW / CACHE
+# ============================================================================
+
+# Clear the server's cookies and cache (v2.4+)
+# Clears the WebView/HTTP cookie jar and cache — the fix for a source stuck
+# behind a stale Cloudflare session. Also signs the server out of any source
+# logged in through its WebView.
+mutation ClearCookiesAndCache {
+    clearCookiesAndCache(input: {}) {
+        clientMutationId
+    }
+}
+
+# ============================================================================
 # SYNCYOMI
 # ============================================================================
+
+# v2.4: SyncYomi sync protocol v2 (the server merges; only changes since the
+# last upload are sent; category deletions are reported explicitly). This is
+# server <-> SyncYomi only: the settings and the sync API below are unchanged.
+# Category order on the sync wire is 0-based (Mihon/SY convention) and stored
+# as 1-based ranks, so positions converge between Suwayomi and Tachiyomi forks.
 
 # SyncYomi Settings (part of server settings)
 # These are configured via the setSettings mutation and queried via settings query.

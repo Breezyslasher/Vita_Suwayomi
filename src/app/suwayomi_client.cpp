@@ -558,6 +558,7 @@ Category SuwayomiClient::parseCategory(const std::string& json) {
     cat.name = extractJsonValue(json, "name");
     cat.order = extractJsonInt(json, "order");
     cat.isDefault = extractJsonBool(json, "default");
+    cat.isSystemDefault = cat.id == 0;   // REST has no isDefaultCategory
 
     return cat;
 }
@@ -738,6 +739,9 @@ Category SuwayomiClient::parseCategoryFromGraphQL(const std::string& json) {
     cat.id = extractJsonInt(json, "id");
     cat.name = extractJsonValue(json, "name");
     cat.order = extractJsonInt(json, "order");
+    cat.isSystemDefault = json.find("\"isDefaultCategory\"") != std::string::npos
+                              ? extractJsonBool(json, "isDefaultCategory")
+                              : cat.id == 0;
 
     // Parse manga count from nested mangas object
     std::string mangasJson = extractJsonObject(json, "mangas");
@@ -777,7 +781,91 @@ bool SuwayomiClient::fetchServerInfoGraphQL(ServerInfo& info) {
     info.revision = extractJsonValue(aboutServer, "revision");
     if (info.name.empty()) info.name = "Suwayomi";
 
+    // Host platform: v2.4+ only, so asked separately once the version is
+    // known — naming platformInfo to an older server would fail the query
+    // above and lose the version with it. Best-effort.
+    int major = 0, minor = 0;
+    if (parseServerVersion(info.version, major, minor) && (major > 2 || (major == 2 && minor >= 4))) {
+        const char* platformQuery = R"(
+            query {
+                aboutServer {
+                    platformInfo {
+                        os { name version }
+                        arch
+                        jvm { javaVersion }
+                    }
+                }
+            }
+        )";
+        std::string pr = executeGraphQL(platformQuery);
+        std::string platform = extractJsonObject(
+            extractJsonObject(extractJsonObject(pr, "data"), "aboutServer"), "platformInfo");
+        if (!platform.empty()) {
+            std::string os = extractJsonObject(platform, "os");
+            info.osName = extractJsonValue(os, "name");
+            info.osVersion = extractJsonValue(os, "version");
+            info.arch = extractJsonValue(platform, "arch");
+            info.javaVersion = extractJsonValue(extractJsonObject(platform, "jvm"), "javaVersion");
+        }
+    }
+
     return true;
+}
+
+// ── Server version gate ─────────────────────────────────────────────────────
+
+bool SuwayomiClient::parseServerVersion(const std::string& version, int& major, int& minor) {
+    // "v2.4.2366" / "2.4.2366" / "v2.3.2243-rc" -> 2, 4
+    size_t i = 0;
+    while (i < version.size() && !std::isdigit((unsigned char)version[i])) ++i;
+    if (i >= version.size()) return false;
+    major = std::atoi(version.c_str() + i);
+    size_t dot = version.find('.', i);
+    if (dot == std::string::npos) { minor = 0; return true; }
+    minor = std::atoi(version.c_str() + dot + 1);
+    return true;
+}
+
+void SuwayomiClient::setServerInfo(const ServerInfo& info) {
+    m_serverInfo = info;
+    int major = 0, minor = 0;
+    if (parseServerVersion(info.version, major, minor)) {
+        m_serverMajor.store(major);
+        m_serverMinor.store(minor);
+    } else {
+        m_serverMajor.store(0);
+        m_serverMinor.store(0);
+    }
+}
+
+bool SuwayomiClient::serverAtLeast(int major, int minor) const {
+    const int ma = m_serverMajor.load(), mi = m_serverMinor.load();
+    return ma > major || (ma == major && mi >= minor);
+}
+
+bool SuwayomiClient::isDefaultCategoryId(int categoryId) const {
+    return categoryId == m_defaultCategoryId.load();
+}
+
+std::string SuwayomiClient::categoryListFields() const {
+    // isDefaultCategory is new in v2.4 (see isDefaultCategoryId).
+    return std::string("id name order ") +
+           (serverAtLeast(2, 4) ? "isDefaultCategory " : "") +
+           "mangas { totalCount }";
+}
+
+bool SuwayomiClient::clearServerCookiesAndCache() {
+    if (!serverAtLeast(2, 4)) return false;   // mutation is new in v2.4
+    const char* query = R"(
+        mutation {
+            clearCookiesAndCache(input: {}) {
+                clientMutationId
+            }
+        }
+    )";
+    std::string response = executeGraphQL(query);
+    if (response.empty()) return false;
+    return !extractJsonObject(extractJsonObject(response, "data"), "clearCookiesAndCache").empty();
 }
 
 bool SuwayomiClient::fetchSourceListGraphQL(std::vector<Source>& sources) {
@@ -1025,20 +1113,8 @@ bool SuwayomiClient::fetchLibraryMangaGraphQL(std::vector<Manga>& manga) {
 }
 
 bool SuwayomiClient::fetchCategoriesGraphQL(std::vector<Category>& categories) {
-    const char* query = R"(
-        query {
-            categories {
-                nodes {
-                    id
-                    name
-                    order
-                    mangas {
-                        totalCount
-                    }
-                }
-            }
-        }
-    )";
+    const std::string query =
+        "query { categories { nodes { " + categoryListFields() + " } } }";
 
     std::string response = executeGraphQL(query);
     if (response.empty()) return false;
@@ -1054,6 +1130,7 @@ bool SuwayomiClient::fetchCategoriesGraphQL(std::vector<Category>& categories) {
     std::vector<std::string> items = splitJsonArray(nodesJson);
     for (const auto& item : items) {
         categories.push_back(parseCategoryFromGraphQL(item));
+        if (categories.back().isSystemDefault) m_defaultCategoryId.store(categories.back().id);
     }
 
     brls::Logger::debug("GraphQL: Fetched {} categories", categories.size());
@@ -1742,10 +1819,10 @@ bool SuwayomiClient::fetchCategoryMangaGraphQL(int categoryId, std::vector<Manga
         manga.push_back(parseMangaFromGraphQL(item));
     }
 
-    // If filter returned 0 results for the default category (id=0),
-    // the server may not support categoryId filter for the default category.
-    // Fall back to category(id) query which works for the default category.
-    if (manga.empty() && categoryId == 0) {
+    // If filter returned 0 results for the default category, the server may
+    // not support the categoryId filter for it. Fall back to the category(id)
+    // query, which works for the default category.
+    if (manga.empty() && isDefaultCategoryId(categoryId)) {
         brls::Logger::info("GraphQL: Filter returned 0 for default category, trying fallback...");
         return fetchCategoryMangaGraphQLFallback(categoryId, manga);
     }
@@ -1829,16 +1906,11 @@ bool SuwayomiClient::fetchCategoryMangaGraphQLFallback(int categoryId, std::vect
 // ============================================================================
 
 bool SuwayomiClient::fetchCategoriesWithMangaGraphQL(std::vector<Category>& categories, int categoryId, std::vector<Manga>& manga) {
-    const char* query = R"(
+    const std::string query = R"(
         query GetCategoriesAndManga($categoryId: Int!) {
             categories {
                 nodes {
-                    id
-                    name
-                    order
-                    mangas {
-                        totalCount
-                    }
+                    )" + categoryListFields() + R"(
                 }
             }
             mangas(
@@ -1899,6 +1971,7 @@ bool SuwayomiClient::fetchCategoriesWithMangaGraphQL(std::vector<Category>& cate
         std::vector<std::string> items = splitJsonArray(nodesJson);
         for (const auto& item : items) {
             categories.push_back(parseCategoryFromGraphQL(item));
+            if (categories.back().isSystemDefault) m_defaultCategoryId.store(categories.back().id);
         }
         brls::Logger::debug("GraphQL combined: Fetched {} categories", categories.size());
     }
@@ -2083,7 +2156,7 @@ bool SuwayomiClient::connectToServer(const std::string& url) {
     ServerInfo info;
     if (fetchServerInfo(info)) {
         m_isConnected = true;
-        m_serverInfo = info;
+        setServerInfo(info);
         brls::Logger::info("Connected to Suwayomi {} ({})", info.version, info.buildType);
         return true;
     }
@@ -2098,7 +2171,7 @@ bool SuwayomiClient::connectToServer(const std::string& url) {
         // Try connection with new URL
         if (fetchServerInfo(info)) {
             m_isConnected = true;
-            m_serverInfo = info;
+            setServerInfo(info);
             brls::Logger::info("Connected to Suwayomi {} ({}) via auto-switch", info.version, info.buildType);
             brls::Application::notify("Auto-switched to " + std::string(app.getSettings().useRemoteUrl ? "remote" : "local") + " URL");
             return true;
@@ -2356,7 +2429,7 @@ bool SuwayomiClient::testConnection() {
     ServerInfo info;
     if (fetchServerInfo(info)) {
         m_isConnected = true;
-        m_serverInfo = info;
+        setServerInfo(info);
         return true;
     }
     return false;
