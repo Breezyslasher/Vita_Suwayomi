@@ -1596,7 +1596,7 @@ void ExtensionsTab::showAddRepoDialog() {
         });
     }, "Add Extension Repository",
        "", 256,
-       "https://raw.githubusercontent.com/yuzono/manga-repo/repo/index.min.json", 0);
+       "https://github.com/keiyoushi/extensions/raw/repo/index.pb", 0);
 }
 
 } // namespace vitasuwayomi
