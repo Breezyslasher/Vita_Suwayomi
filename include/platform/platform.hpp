@@ -103,4 +103,20 @@ struct ImageConstraints {
 /// Get platform-appropriate image sizing constraints.
 const ImageConstraints& imageConstraints();
 
+// ── Phone scaling (platform_common.cpp) ────────────────────────────────
+// Ported from VitaPlex's platform layer. borealis always lays out on a
+// canvas 1280 units wide and only stretches the height (Application::
+// setWindowSize), so on a portrait phone those 1280 units land in ~412dp
+// of real width and console-sized UI comes out a third of its size.
+
+/// Android (or iOS) in portrait, or narrower than 600 units. Always false
+/// on PS Vita, PS4, Switch and desktop.
+bool isPhoneScreen();
+
+/// VitaPlex's music-player factors: ui() multiplies text, icons and
+/// controls by 1280/412; uiRow() uses a gentler 2.15 for repeated cards so
+/// a useful number still fit. Both return v unchanged off phones.
+float ui(float v);
+float uiRow(float v);
+
 } // namespace platform

@@ -4,6 +4,7 @@
  */
 
 #include "view/search_tab.hpp"
+#include "platform/platform.hpp"
 #include "view/manga_item_cell.hpp"
 #include "view/manga_detail_view.hpp"
 #include "view/horizontal_scroll_row.hpp"
@@ -896,9 +897,10 @@ void SearchTab::showSources() {
         }
 
         langHeader->setText(langName + " (" + std::to_string(sources.size()) + ")");
-        langHeader->setFontSize(18);
-        langHeader->setMarginTop(10);
-        langHeader->setMarginBottom(5);
+        // Scaled on phones (platform.hpp); unchanged everywhere else.
+        langHeader->setFontSize(platform::ui(18.0f));
+        langHeader->setMarginTop(platform::ui(10.0f));
+        langHeader->setMarginBottom(platform::ui(5.0f));
         langHeader->setTextColor(Application::getInstance().getHeaderTextColor());
         m_sourceListBox->addView(langHeader);
 
@@ -907,9 +909,9 @@ void SearchTab::showSources() {
             auto* sourceRow = new brls::Box();
             sourceRow->setAxis(brls::Axis::ROW);
             sourceRow->setAlignItems(brls::AlignItems::CENTER);
-            sourceRow->setMarginBottom(8);
-            sourceRow->setPadding(8);
-            sourceRow->setCornerRadius(8);
+            sourceRow->setMarginBottom(platform::ui(8.0f));
+            sourceRow->setPadding(platform::ui(8.0f));
+            sourceRow->setCornerRadius(platform::ui(8.0f));
             sourceRow->setBackgroundColor(Application::getInstance().getInactiveRowBackground());
             sourceRow->setFocusable(true);
 
@@ -920,9 +922,9 @@ void SearchTab::showSources() {
 
             // Source icon
             auto* sourceIcon = new brls::Image();
-            sourceIcon->setWidth(32);
-            sourceIcon->setHeight(32);
-            sourceIcon->setMarginRight(12);
+            sourceIcon->setWidth(platform::ui(32.0f));
+            sourceIcon->setHeight(platform::ui(32.0f));
+            sourceIcon->setMarginRight(platform::ui(12.0f));
             sourceIcon->setScalingType(brls::ImageScalingType::FIT);
             if (!source.iconUrl.empty()) {
                 // Load icon asynchronously from server
@@ -934,7 +936,7 @@ void SearchTab::showSources() {
             // Source name
             auto* nameLabel = new brls::Label();
             nameLabel->setText(source.name);
-            nameLabel->setFontSize(16);
+            nameLabel->setFontSize(platform::ui(16.0f));
             nameLabel->setGrow(1.0f);
             sourceRow->addView(nameLabel);
 
@@ -2893,9 +2895,9 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     // Source header label
     auto* sourceLabel = new brls::Label();
     sourceLabel->setText(sourceName + " (" + std::to_string(manga.size()) + ")");
-    sourceLabel->setFontSize(18);
-    sourceLabel->setMarginTop(10);
-    sourceLabel->setMarginBottom(8);
+    sourceLabel->setFontSize(platform::ui(18.0f));
+    sourceLabel->setMarginTop(platform::ui(10.0f));
+    sourceLabel->setMarginBottom(platform::ui(8.0f));
     sourceLabel->setTextColor(Application::getInstance().getHeaderTextColor());
     m_searchResultsBox->addView(sourceLabel);
 
@@ -2909,6 +2911,13 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     }
     int cellMargin = 12;
     int availableWidth = 920;
+    if (platform::isPhoneScreen()) {
+        // Portrait phone: fewer, bigger cards — Large/Medium/Small (4/6/8)
+        // become 2/3/4 across what's left beside the tab sidebar.
+        columns = (columns <= 4) ? 2 : (columns >= 8) ? 4 : 3;
+        cellMargin = static_cast<int>(platform::uiRow(12.0f));
+        availableWidth = static_cast<int>(brls::Application::contentWidth) - 200 - 80;
+    }
     int cellWidth = (availableWidth - (columns - 1) * cellMargin) / columns;
     int cellHeight = static_cast<int>(cellWidth * 1.4);
     bool compactMode = (settings.libraryDisplayMode == LibraryDisplayMode::GRID_COMPACT);
@@ -2922,7 +2931,7 @@ brls::View* SearchTab::createSourceRow(const std::string& sourceName, const std:
     // Create horizontal scrolling row for cells
     auto* rowBox = new HorizontalScrollRow();
     rowBox->setHeight(cellHeight + 10);
-    rowBox->setMarginBottom(10);
+    rowBox->setMarginBottom(platform::ui(10.0f));
 
     brls::View* firstCell = nullptr;
 

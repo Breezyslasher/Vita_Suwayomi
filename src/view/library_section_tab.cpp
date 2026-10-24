@@ -1771,7 +1771,7 @@ void LibrarySectionTab::triggerLibraryUpdate() {
             std::set<int> uniqueCatIds;
             for (const auto& manga : it->second) {
                 if (manga.categoryIds.empty()) {
-                    uniqueCatIds.insert(0);  // Default category
+                    uniqueCatIds.insert(SuwayomiClient::getInstance().defaultCategoryId());
                 } else {
                     for (int catId : manga.categoryIds) {
                         uniqueCatIds.insert(catId);
@@ -1791,7 +1791,9 @@ void LibrarySectionTab::triggerLibraryUpdate() {
         if (!sourceCategoryIds.empty()) {
             // BY_SOURCE mode: update only the categories containing this source's manga
             success = client.triggerLibraryUpdate(sourceCategoryIds);
-        } else if (categoryId == 0) {
+        } else if (categoryId == 0 || client.isDefaultCategoryId(categoryId)) {
+            // The default category, or the "Library" tab shown when there are
+            // no categories (its id is 0): update the whole library.
             success = client.triggerLibraryUpdate();
         } else {
             success = client.triggerLibraryUpdate(categoryId);
