@@ -40,6 +40,7 @@
 #include <psp2/power.h>
 #include <psp2/apputil.h>
 #include <psp2/sysmodule.h>
+#include "platform/shell_companion.hpp"
 #include <psp2/net/net.h>
 #include <psp2/net/netctl.h>
 #include <psp2/net/http.h>
@@ -348,6 +349,13 @@ static int appMain(int argc, char* argv[]) {
     // Register custom views
     registerCustomViews();
 
+#ifdef __vita__
+    // vita-shell-companion: reclaim any downloads the SceShell plugin carried
+    // on after the last run, then find or load the plugin. Before the
+    // downloads manager reads its state, so it never races the plugin.
+    vitasuwayomi::shellcomp::startup();
+#endif
+
     // Initialize downloads manager
     vitasuwayomi::DownloadsManager::getInstance().init();
 
@@ -368,6 +376,27 @@ static int appMain(int argc, char* argv[]) {
     if (!pendingDeeplink.empty()) {
         app.setDeeplink(pendingDeeplink);
     }
+
+#ifdef __vita__
+    // How an update the shell_companion plugin installed while we were closed
+    // went (it relaunched us either way). Queued, so it shows on the first
+    // screen; a failure gets a dialog, success a notification.
+    {
+        bool failed = false;
+        std::string msg = vitasuwayomi::shellcomp::takeUpdateResult(failed);
+        if (!msg.empty()) {
+            brls::sync([msg, failed]() {
+                if (failed) {
+                    auto* d = new brls::Dialog(msg + "\n\nYour current version is still installed.");
+                    d->addButton("OK", []() {});
+                    d->open();
+                } else {
+                    brls::Application::notify(msg);
+                }
+            });
+        }
+    }
+#endif
 
     // Silent startup update check. Spawns a worker and marshals any offer to the
     // UI via brls::sync, which the main loop below processes; stays quiet when

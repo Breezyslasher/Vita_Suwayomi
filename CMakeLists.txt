@@ -231,6 +231,19 @@ if(PLATFORM_PSV)
     # miniz without stdio/time: newlib's fopen64/stat64/utime are absent on
     # Vita, so vita_install.cpp drives it through sceIo callbacks instead.
     add_definitions(-DMINIZ_NO_STDIO -DMINIZ_NO_TIME)
+
+    # vita-shell-companion's client (lib/vita-shell-companion, Apache-2.0):
+    # talks to the SceShell plugin that carries downloads on after the app
+    # closes and installs updates. sc_cover.c is left out (covers are for the
+    # music row, which this app doesn't use). The stub file is assembly.
+    enable_language(ASM)
+    set(SC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/vita-shell-companion)
+    list(APPEND APP_SOURCES
+        src/platform/shell_companion_vita.cpp
+        ${SC_DIR}/client/shell_companion.c
+        ${SC_DIR}/client/sc_files.c
+        ${SC_DIR}/client/sc_link_stub.S)
+    include_directories(${SC_DIR}/include ${SC_DIR}/client)
 endif()
 
 # Switch: userAppInit/userAppExit (romfs, sockets, system services init)
@@ -553,11 +566,31 @@ if(PLATFORM_PSV)
 
     vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME} UNSAFE NOASLR)
 
+    # The plugin itself (shell_companion.suprx) is built separately — it needs
+    # PAF headers fetched from GitHub (lib/vita-shell-companion/scripts/
+    # fetch_paf_headers.sh) — and passed in with -DSC_PLUGIN_SUPRX=<path>. The
+    # CI does both. Without it the VPK still builds, but the app can only use
+    # a plugin some other app already loaded this boot.
+    set(SC_PLUGIN_SUPRX "" CACHE FILEPATH "Built shell_companion.suprx to ship in the VPK")
+    set(SC_VPK_FILES "")
+    if(SC_PLUGIN_SUPRX AND EXISTS "${SC_PLUGIN_SUPRX}")
+        # The plugin is GPL-3.0 (the client compiled into the app is
+        # Apache-2.0): its licence and notice travel with the binary.
+        set(SC_VPK_FILES
+            FILE ${SC_PLUGIN_SUPRX}       module/shell_companion.suprx
+            FILE ${SC_DIR}/LICENSE        module/shell_companion-LICENSE.txt
+            FILE ${SC_DIR}/NOTICE.txt     module/shell_companion-NOTICE.txt)
+        message(STATUS "Shipping shell_companion.suprx from ${SC_PLUGIN_SUPRX}")
+    else()
+        message(WARNING "SC_PLUGIN_SUPRX not set: the VPK won't carry shell_companion.suprx")
+    endif()
+
     vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
         VERSION ${VITA_VERSION}
         NAME    ${VITA_APP_NAME}
 
         FILE ${CMAKE_BINARY_DIR}/vitasuwayomi_updater.vpk            updater.vpk
+        ${SC_VPK_FILES}
         FILE app/platform/psv/sce_sys/icon0.png                      sce_sys/icon0.png
         FILE app/platform/psv/sce_sys/pic0.png                       sce_sys/pic0.png
         FILE app/platform/psv/sce_sys/livearea/contents/bg.png       sce_sys/livearea/contents/bg.png

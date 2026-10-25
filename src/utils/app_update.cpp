@@ -76,6 +76,7 @@
 
 #if defined(__vita__) || defined(__PSV__)
 #include "utils/vita_install.hpp"          // vita::installVpk / vita::launchTitle
+#include "platform/shell_companion.hpp"     // shellcomp::installUpdate
 #include <psp2/io/fcntl.h>
 #endif
 
@@ -934,6 +935,23 @@ bool installDownloaded(const ReleaseInfo& rel, const std::string& path,
     // the downloaded update.vpk and relaunches us. Paths are fixed by
     // convention (see src/updater_stub/main.cpp): the stub reads update.vpk and
     // update_version.txt from the data dir.
+    //
+    // Preferred now: the shell_companion plugin in SceShell does the same job
+    // without a second title — the update is unpacked here, the plugin
+    // installs it once we've quit and relaunches us (lib/vita-shell-companion,
+    // docs/PROTOCOL.md §6). The stub below stays as the fallback for when the
+    // plugin can't be loaded (no taiHEN) or the hand-off fails.
+    if (shellcomp::isOpen()) {
+        setProgress(ui, "Preparing update…");
+        std::string scErr;
+        if (shellcomp::installUpdate(path, scErr)) {
+            setProgress(ui, "Installing update…");
+            finishProgress(ui, []() { brls::Application::quit(); });
+            return true;
+        }
+        brls::Logger::warning("app_update: shell companion update failed ({}), using the updater stub",
+                              scErr);
+    }
     setProgress(ui, "Preparing installer…");
     {
         std::string vpath = platform::path("update_version.txt");

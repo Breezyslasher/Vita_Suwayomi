@@ -42,6 +42,17 @@ enum InstallPhase {
 int installVpk(const std::string& vpkPath, const std::string& workDir, std::string& err,
                std::function<void(int phase, int done, int total)> onProgress = {});
 
+/// The first two stages of installVpk without the promote: `vpkPath` unpacked
+/// into `workDir` (wiped first) and its `sce_sys/package/head.bin` forged, so
+/// that someone else can promote the directory — the shell_companion plugin,
+/// which installs it once this app has quit. 0 on success; on failure the
+/// directory is removed and `err` says why.
+int prepareVpk(const std::string& vpkPath, const std::string& workDir, std::string& err,
+               std::function<void(int phase, int done, int total)> onProgress = {});
+
+/// Remove a file or a whole directory tree (sceIo).
+void removeTree(const std::string& path);
+
 /// Launch an installed app by its title id (via a psgm:play URI). Used to hand
 /// off to the updater stub, and by the stub to relaunch VitaSuwayomi afterwards.
 void launchTitle(const std::string& titleId);

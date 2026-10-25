@@ -512,9 +512,9 @@ int deleteTitle(const std::string& titleId, std::string& err) {
 
 namespace vita {
 
-int installVpk(const std::string& vpkPath, const std::string& workDir, std::string& err,
+int prepareVpk(const std::string& vpkPath, const std::string& workDir, std::string& err,
                std::function<void(int phase, int done, int total)> onProgress) {
-    vlog("vita: installing %s via %s", vpkPath.c_str(), workDir.c_str());
+    vlog("vita: preparing %s in %s", vpkPath.c_str(), workDir.c_str());
 
     removePath(workDir);
     mkdirs(workDir);
@@ -545,6 +545,18 @@ int installVpk(const std::string& vpkPath, const std::string& workDir, std::stri
         return -1;
     }
     if (onProgress) onProgress(PHASE_VERIFY, 1, 1);
+    return 0;
+}
+
+void removeTree(const std::string& path) {
+    removePath(path);
+}
+
+int installVpk(const std::string& vpkPath, const std::string& workDir, std::string& err,
+               std::function<void(int phase, int done, int total)> onProgress) {
+    vlog("vita: installing %s via %s", vpkPath.c_str(), workDir.c_str());
+
+    if (prepareVpk(vpkPath, workDir, err, onProgress) != 0) return -1;
 
     // Install → phase 2, the promoter (poll ticks drive the spinner).
     auto pollCb = [&onProgress](int tick) {
