@@ -567,12 +567,12 @@ if(PLATFORM_PSV)
 
     vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME} UNSAFE NOASLR)
 
-    # The plugin itself (shell_companion.suprx) is built separately — it needs
-    # PAF headers fetched from GitHub (lib/vita-shell-companion/scripts/
-    # fetch_paf_headers.sh) — and passed in with -DSC_PLUGIN_SUPRX=<path>. The
-    # CI does both. Without it the VPK still builds, but the app can only use
-    # a plugin some other app already loaded this boot.
-    set(SC_PLUGIN_SUPRX "" CACHE FILEPATH "Built shell_companion.suprx to ship in the VPK")
+    # The plugin itself (shell_companion.suprx) comes from the
+    # vita-shell-companion release matching the submodule, passed in with
+    # -DSC_PLUGIN_SUPRX=<path>; the CI downloads it. Without it the VPK still
+    # builds, but the app can only use a plugin some other app already loaded
+    # this boot.
+    set(SC_PLUGIN_SUPRX "" CACHE FILEPATH "shell_companion.suprx to ship in the VPK")
     set(SC_VPK_FILES "")
     if(SC_PLUGIN_SUPRX AND EXISTS "${SC_PLUGIN_SUPRX}")
         # The plugin is GPL-3.0 (the client compiled into the app is

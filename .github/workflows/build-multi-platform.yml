@@ -357,13 +357,12 @@ jobs:
       - name: Install build requirements
         run: |
           set -eu
-          # patch: the shell_companion plugin's PAF header fetch needs it.
-          pkgs_apk="cmake ninja git zstd tar pkgconf patch"
-          pkgs_apt="cmake ninja-build git zstd tar pkg-config patch"
+          pkgs_apk="cmake ninja git zstd tar pkgconf"
+          pkgs_apt="cmake ninja-build git zstd tar pkg-config"
           if   command -v apk     >/dev/null 2>&1; then apk update && apk add $pkgs_apk
           elif command -v apt-get >/dev/null 2>&1; then apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $pkgs_apt
-          elif command -v dnf     >/dev/null 2>&1; then dnf install -y cmake ninja-build git zstd tar pkgconf-pkg-config patch
-          elif command -v pacman  >/dev/null 2>&1; then pacman -Sy --noconfirm cmake ninja git zstd tar pkgconf patch
+          elif command -v dnf     >/dev/null 2>&1; then dnf install -y cmake ninja-build git zstd tar pkgconf-pkg-config
+          elif command -v pacman  >/dev/null 2>&1; then pacman -Sy --noconfirm cmake ninja git zstd tar pkgconf
           else echo "No supported package manager found; relying on the image's toolchain"
           fi
           # wget is used by the dependency step and isn't in every base.
@@ -372,7 +371,7 @@ jobs:
             elif command -v apt-get >/dev/null 2>&1; then apt-get install -y --no-install-recommends wget
             fi
           fi
-          for tool in cmake ninja git wget patch; do
+          for tool in cmake ninja git wget; do
             command -v "$tool" >/dev/null 2>&1 || { echo "::error::$tool missing after dependency install"; exit 1; }
           done
 
@@ -461,21 +460,18 @@ jobs:
           git config --system --add safe.directory "$GITHUB_WORKSPACE"
 
       # vita-shell-companion's SceShell plugin, shipped in the VPK as
-      # module/shell_companion.suprx. It has no releases, so it's built here
-      # from the pinned submodule, exactly as its own CI does: fetch the PAF
-      # headers (two GitHub repos at pinned commits; retried, as a clone that
-      # fails once is usually the network), then build.
-      - name: Build shell_companion plugin
+      # module/shell_companion.suprx, taken from the plugin's release rather
+      # than built. Keep SC_TAG on the release whose commit
+      # lib/vita-shell-companion is pinned to, so the client library built
+      # into the app and the plugin speak the same protocol.
+      - name: Download shell_companion plugin
+        env:
+          SC_TAG: Alpha-0.0.1
         run: |
           set -eu
-          SC=lib/vita-shell-companion
-          for try in 1 2 3; do
-            sh "$SC/scripts/fetch_paf_headers.sh" "$GITHUB_WORKSPACE/build-paf" && break
-            [ "$try" = 3 ] && { echo "::error::could not fetch the PAF headers"; exit 1; }
-            echo "PAF header fetch failed (try $try)"; sleep $((try * 10))
-          done
-          cmake -S "$SC" -B build-sc -G Ninja -DSC_PAF_INCLUDE_DIR="$GITHUB_WORKSPACE/build-paf/include"
-          cmake --build build-sc
+          mkdir -p build-sc
+          curl -fsSL --retry 4 --retry-all-errors -o build-sc/shell_companion.suprx \
+            "https://github.com/Breezyslasher/vita-shell-companion/releases/download/$SC_TAG/shell_companion.suprx"
           ls -l build-sc/shell_companion.suprx
 
       - name: Build
