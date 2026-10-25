@@ -2220,7 +2220,10 @@ static std::string pageUrlTemplate(const std::vector<std::string>& urls) {
 
 void DownloadsManager::handOverToShell() {
 #if defined(__vita__) || defined(__PSV__)
-    if (!m_downloading.load() || !shellcomp::isOpen()) return;
+    // Once: from the quit watcher when the system closes the app, and from
+    // main's way out.
+    static std::atomic<bool> handedOver{false};
+    if (!m_downloading.load() || !shellcomp::isOpen() || handedOver.exchange(true)) return;
 
     // Stop our own thread first: the plugin and the app must never write the
     // same page.

@@ -8,6 +8,8 @@
 
 #if defined(__vita__) || defined(__PSV__)
 
+#include <functional>
+
 namespace vitasuwayomi {
 namespace lifecycle {
 
@@ -19,6 +21,12 @@ namespace lifecycle {
 // or the shutdown it began hasn't finished in 10 s, the watcher ends the
 // process itself.
 void startQuitWatcher();
+
+// Run on the watcher's thread as soon as the system asks the app to quit,
+// before the UI thread is told: the system gives little time when it closes
+// the app to start a game, and the UI thread may be slow to get to it while
+// the app is in the background. Set before startQuitWatcher.
+void setOnQuitRequested(std::function<void()> fn);
 
 // Whether the system asked the app to quit (rather than the user choosing to).
 bool quitRequested();

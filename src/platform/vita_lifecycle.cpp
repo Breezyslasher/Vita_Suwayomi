@@ -33,6 +33,8 @@ struct AppEvent {
 };
 static_assert(sizeof(AppEvent) == 0x40, "SceAppMgrEvent is 0x40 bytes");
 
+constexpr int kEventActivate    = 0x10000001;  // back in front
+constexpr int kEventDeactivate  = 0x10000002;  // left with PS: a non-game app runs on
 constexpr int kEventRequestQuit = 0x20000001;
 
 constexpr SceUInt kTickUs = 250 * 1000;
@@ -46,6 +48,7 @@ constexpr SceInt64 kQuitShutdownUs = 10 * 1000000;
 
 std::atomic<SceInt64> g_quitAskedAt{0};
 std::atomic<bool> g_quitUnderway{false};
+std::function<void()> g_onQuitRequested;
 
 void drainAppEvents(SceInt64 now) {
     int n = 0;
@@ -54,9 +57,18 @@ void drainAppEvents(SceInt64 now) {
         AppEvent ev;
         std::memset(&ev, 0, sizeof(ev));
         if (sceAppMgrReceiveEvent(&ev) < 0) break;
+        if (ev.event == kEventDeactivate) {
+            brls::Logger::info("lifecycle: left with PS; running on in the background");
+            continue;
+        }
+        if (ev.event == kEventActivate) {
+            brls::Logger::info("lifecycle: back in front");
+            continue;
+        }
         if (ev.event != kEventRequestQuit || g_quitAskedAt.load() != 0) continue;
         brls::Logger::info("lifecycle: the system asked the app to quit; quitting");
         g_quitAskedAt.store(now);
+        if (g_onQuitRequested) g_onQuitRequested();
         brls::sync([]() {
             g_quitUnderway.store(true);
             brls::Application::quit();
@@ -83,6 +95,8 @@ int watcherMain(SceSize, void*) {
 }
 
 } // namespace
+
+void setOnQuitRequested(std::function<void()> fn) { g_onQuitRequested = std::move(fn); }
 
 void startQuitWatcher() {
     static bool started = false;

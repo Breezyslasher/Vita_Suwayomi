@@ -355,7 +355,11 @@ static int appMain(int argc, char* argv[]) {
     // on after the last run, then find or load the plugin. Before the
     // downloads manager reads its state, so it never races the plugin.
     vitasuwayomi::shellcomp::startup();
-    // Answer the system's request to quit, so main's way out below runs.
+    // Answer the system's request to quit, so main's way out below runs; the
+    // downloads go to the plugin first, while there is time.
+    vitasuwayomi::lifecycle::setOnQuitRequested([]() {
+        vitasuwayomi::DownloadsManager::getInstance().handOverToShell();
+    });
     vitasuwayomi::lifecycle::startQuitWatcher();
 #endif
 

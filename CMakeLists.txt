@@ -586,6 +586,13 @@ if(PLATFORM_PSV)
         message(WARNING "SC_PLUGIN_SUPRX not set: the VPK won't carry shell_companion.suprx")
     endif()
 
+    # A non-game application (gdc) with ElevenMPV-A's attributes, so the system
+    # lets the app download on once it is left with PS, where a game is frozen
+    # (measured in VitaPlex's BG tests; its docs/DESIGN_NOTES.md). The plugin
+    # then takes the downloads over only when the app is closed. Set here, for
+    # the app's own VPK only: the updater above stays a game.
+    set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -s CATEGORY=gdc -d ATTRIBUTE=0x01089088 -d ATTRIBUTE_MINOR=16")
+
     vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self
         VERSION ${VITA_VERSION}
         NAME    ${VITA_APP_NAME}
