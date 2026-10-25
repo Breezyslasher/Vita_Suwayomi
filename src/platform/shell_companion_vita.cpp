@@ -26,6 +26,7 @@ constexpr const char* kBundledPlugin = "app0:module/shell_companion.suprx";
 bool s_open = false;
 std::string s_openInfo = "not started";
 bool s_takeBackReached = false;
+bool s_pages = false;
 std::chrono::steady_clock::time_point s_lastProgress;
 bool s_progressShown = false;
 
@@ -53,6 +54,17 @@ void startup() {
     s_openInfo = what[0] ? what : (s_open ? "open" : "not open");
     if (s_open) {
         brls::Logger::info("ShellCompanion: open ({})", s_openInfo);
+        // The plugin in SceShell is the first one loaded this boot, maybe an
+        // older one some other app shipped. "pages" downloads came in 0.2.0;
+        // a plugin before that never answers.
+        ScPluginInfo info;
+        if (scPluginInfo(&info) == 0) {
+            s_pages = info.versionCode >= 200;
+            brls::Logger::info("ShellCompanion: plugin {} (protocol {}, features 0x{:X} of which ours 0x{:X}, caps {})",
+                               info.version, info.protocol, info.features, info.granted, info.caps);
+        } else {
+            brls::Logger::info("ShellCompanion: plugin older than 0.2.0: downloads go a page an item");
+        }
     } else {
         brls::Logger::warning("ShellCompanion: scOpen -> 0x{:08X} ({})", (unsigned)rc, s_openInfo);
     }
@@ -110,6 +122,8 @@ const std::string& openInfo() { return s_openInfo; }
 
 bool takeBackReached() { return s_takeBackReached; }
 
+bool pagesDownloads() { return s_open && s_pages; }
+
 void downloadProgress(const std::string& line1, const std::string& line2, uint32_t permille) {
     if (!s_open) return;
     const auto now = std::chrono::steady_clock::now();
@@ -139,9 +153,9 @@ bool handOverDownloads(const std::string& headers, const std::vector<HandOverIte
         d.file = items[i].file.c_str();
         d.size = 0;                       // a page's size isn't known up front
         d.title = items[i].title.c_str();
-        d.kind = "url";
+        d.kind = items[i].pages.empty() ? "url" : "pages";
         d.args[0] = items[i].url.c_str();
-        d.args[1] = nullptr;
+        d.args[1] = items[i].pages.empty() ? nullptr : items[i].pages.c_str();
         d.args[2] = nullptr;
     }
     if (scWriteDownloads(1, headers.c_str(), list.data(), (uint32_t)n) != 0) {
@@ -172,6 +186,8 @@ bool readDownloadsStatus(bool& running, std::vector<DownloadStatusItem>& items) 
         it.id = raw[i].id;
         it.state = raw[i].state;
         it.bytes = raw[i].bytes;
+        it.pagesDone = raw[i].pagesDone;
+        it.pageCount = raw[i].pageCount;
         items.push_back(std::move(it));
     }
     return true;

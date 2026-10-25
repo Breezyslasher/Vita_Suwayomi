@@ -2191,8 +2191,32 @@ std::string DownloadsManager::createChapterDir(const std::string& mangaDir, int 
 // download would; on the next start the app takes the done pages back and its
 // download thread converts them and fetches whatever is left.
 //
-// An item's id is "mangaId.chapterId.chapterIndex.page.pageCount", so the
-// take-back needs nothing but the id to put a page back in its chapter.
+// With a plugin from 0.2.0 on, a chapter goes over as one "pages" item, id
+// "c.mangaId.chapterId.chapterIndex.first.pageCount": its pages from the
+// first one missing. An older plugin gets a "url" item a page, id
+// "mangaId.chapterId.chapterIndex.page.pageCount". Either way the take-back
+// needs nothing but the id to put the pages back in their chapter.
+
+#if defined(__vita__) || defined(__PSV__)
+// The chapter's page URLs as one template, {page} for the page number, or
+// empty when they don't follow one (each must be the template with its own
+// index in it).
+static std::string pageUrlTemplate(const std::vector<std::string>& urls) {
+    if (urls.empty()) return {};
+    const std::string& u0 = urls[0];
+    const std::string marker = "/page/0";
+    const size_t at = u0.rfind(marker);
+    if (at == std::string::npos) return {};
+    const size_t num = at + marker.size() - 1;
+    const std::string prefix = u0.substr(0, num);
+    const std::string suffix = u0.substr(num + 1);
+    if (!suffix.empty() && suffix[0] >= '0' && suffix[0] <= '9') return {};
+    for (size_t i = 0; i < urls.size(); i++) {
+        if (urls[i] != prefix + std::to_string(i) + suffix) return {};
+    }
+    return prefix + "{page}" + suffix;
+}
+#endif
 
 void DownloadsManager::handOverToShell() {
 #if defined(__vita__) || defined(__PSV__)
@@ -2257,15 +2281,41 @@ void DownloadsManager::handOverToShell() {
             }
         }
 
-        std::vector<shellcomp::HandOverItem> chapterItems;
+        const std::string chapterDir = m_downloadsPath + "/manga_" + std::to_string(w.mangaId) +
+                                       "/chapter_" + std::to_string(w.chapterIndex);
         const std::string pageCount = std::to_string(urls.size());
+        std::vector<shellcomp::HandOverItem> chapterItems;
+
+        // A chapter an item: its pages from the first missing one on (any
+        // already there after that are fetched again, as the app keeps them
+        // converted, under another name).
+        const std::string urlTemplate = shellcomp::pagesDownloads() ? pageUrlTemplate(urls) : std::string();
+        if (!urlTemplate.empty()) {
+            size_t first = 0;
+            while (first < urls.size() && have[first]) first++;
+            const size_t count = urls.size() - first;
+            if (count == 0) continue;
+            if (count <= shellcomp::kMaxItemPages) {
+                if (items.size() >= shellcomp::kMaxHandOverItems) break;
+                shellcomp::HandOverItem item;
+                item.id = "c." + std::to_string(w.mangaId) + "." + std::to_string(w.chapterId) + "." +
+                          std::to_string(w.chapterIndex) + "." + std::to_string(first) + "." + pageCount;
+                item.file = chapterDir + "/page_{page}.jpg";
+                item.title = w.title;
+                item.url = urlTemplate;
+                item.pages = std::to_string(count) + "," + std::to_string(first);
+                createChapterDir(createMangaDir(w.mangaId, w.title), w.chapterIndex, w.title);
+                items.push_back(std::move(item));
+                continue;
+            }
+        }
+
         for (size_t i = 0; i < urls.size(); i++) {
             if (have[i] || urls[i].empty()) continue;
             shellcomp::HandOverItem item;
             item.id = std::to_string(w.mangaId) + "." + std::to_string(w.chapterId) + "." +
                       std::to_string(w.chapterIndex) + "." + std::to_string(i) + "." + pageCount;
-            item.file = m_downloadsPath + "/manga_" + std::to_string(w.mangaId) + "/chapter_" +
-                        std::to_string(w.chapterIndex) + "/page_" + std::to_string(i) + ".jpg";
+            item.file = chapterDir + "/page_" + std::to_string(i) + ".jpg";
             item.title = w.title;
             item.url = urls[i];
             chapterItems.push_back(std::move(item));
@@ -2295,7 +2345,8 @@ void DownloadsManager::handOverToShell() {
     const std::string headers = authorization.empty() ? std::string() : "Authorization: " + authorization + "\r\n";
     std::string err;
     if (shellcomp::handOverDownloads(headers, items, err)) {
-        brls::Logger::info("DownloadsManager: {} pages handed to the shell plugin", items.size());
+        brls::Logger::info("DownloadsManager: {} items handed to the shell plugin ({})", items.size(),
+                           items[0].pages.empty() ? "a page an item" : "a chapter an item");
     } else {
         brls::Logger::error("DownloadsManager: shell hand-over failed: {}", err);
         shellcomp::clearDownloadFiles();
@@ -2310,16 +2361,30 @@ static int reconcileShellPages(std::deque<DownloadItem>& downloads, const std::s
                                const std::vector<shellcomp::DownloadStatusItem>& status) {
     int taken = 0;
     for (const auto& st : status) {
-        if (st.state != "done") continue;
-        int mangaId = 0, chapterId = 0, chapterIndex = 0, page = 0, pageCount = 0;
-        if (std::sscanf(st.id.c_str(), "%d.%d.%d.%d.%d", &mangaId, &chapterId, &chapterIndex, &page,
-                        &pageCount) != 5 || page < 0 || pageCount <= page) {
+        // The pages of a chapter item whose files are there: all of them once
+        // it is done, those before the one that stopped it otherwise.
+        int mangaId = 0, chapterId = 0, chapterIndex = 0, first = 0, pageCount = 0;
+        int from = 0, to = 0;
+        if (std::sscanf(st.id.c_str(), "c.%d.%d.%d.%d.%d", &mangaId, &chapterId, &chapterIndex, &first,
+                        &pageCount) == 5) {
+            from = first;
+            to = first + static_cast<int>(st.state == "done" ? st.pageCount : st.pagesDone);
+        } else if (st.state == "done" &&
+                   std::sscanf(st.id.c_str(), "%d.%d.%d.%d.%d", &mangaId, &chapterId, &chapterIndex, &first,
+                               &pageCount) == 5) {
+            from = first;
+            to = first + 1;
+        } else {
             continue;
         }
-        const std::string file = downloadsPath + "/manga_" + std::to_string(mangaId) + "/chapter_" +
-                                 std::to_string(chapterIndex) + "/page_" + std::to_string(page) + ".jpg";
-        const int64_t size = getFileSize(file);
-        if (size <= 0) continue;
+        if (from < 0 || to > pageCount) to = pageCount;
+        if (from < 0 || from >= to) continue;
+
+        const std::string dir = downloadsPath + "/manga_" + std::to_string(mangaId) + "/chapter_" +
+                                std::to_string(chapterIndex);
+        // The page a chapter item stopped on, partly written; the app
+        // fetches it whole itself.
+        if (st.id[0] == 'c' && to < pageCount) deleteFile(dir + "/page_" + std::to_string(to) + ".jpg.part");
         for (auto& manga : downloads) {
             if (manga.mangaId != mangaId) continue;
             for (auto& ch : manga.chapters) {
@@ -2327,19 +2392,26 @@ static int reconcileShellPages(std::deque<DownloadItem>& downloads, const std::s
                 if (ch.state == LocalDownloadState::COMPLETED) break;
                 if ((int)ch.pages.size() < pageCount) ch.pages.resize(pageCount);
                 if (ch.pageCount < pageCount) ch.pageCount = pageCount;
-                DownloadedPage& pg = ch.pages[page];
-                pg.index = page;
-                pg.localPath = file;
-                pg.size = size;
-                pg.downloaded = true;
+                int got = 0;
+                for (int page = from; page < to; page++) {
+                    const std::string file = dir + "/page_" + std::to_string(page) + ".jpg";
+                    const int64_t size = getFileSize(file);
+                    if (size <= 0) continue;
+                    DownloadedPage& pg = ch.pages[page];
+                    pg.index = page;
+                    pg.localPath = file;
+                    pg.size = size;
+                    pg.downloaded = true;
+                    got++;
+                }
+                if (got == 0) break;
                 ch.downloadedPages = 0;
                 for (const auto& p : ch.pages) if (p.downloaded) ch.downloadedPages++;
-                ch.localPath = downloadsPath + "/manga_" + std::to_string(mangaId) + "/chapter_" +
-                               std::to_string(chapterIndex);
+                ch.localPath = dir;
                 // The download thread converts the raw pages and fetches the
                 // rest.
                 ch.state = LocalDownloadState::QUEUED;
-                taken++;
+                taken += got;
                 break;
             }
         }
@@ -2379,7 +2451,7 @@ void DownloadsManager::takeBackFromShell() {
     const int taken = reconcileShellPages(m_downloads, m_downloadsPath, status);
     int failed = 0;
     for (const auto& st : status) if (st.state == "failed" || st.state == "gone") failed++;
-    brls::Logger::info("DownloadsManager: took back {} of {} pages from the shell plugin ({} failed)",
+    brls::Logger::info("DownloadsManager: took back {} pages from {} shell plugin items ({} failed or gone)",
                        taken, status.size(), failed);
     shellcomp::clearDownloadFiles();
     m_shellBusy.store(false);

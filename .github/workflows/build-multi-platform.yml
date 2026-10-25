@@ -466,7 +466,7 @@ jobs:
       # into the app and the plugin speak the same protocol.
       - name: Download shell_companion plugin
         env:
-          SC_TAG: Alpha-0.0.1
+          SC_TAG: Alpha-0.0.2
         run: |
           set -eu
           mkdir -p build-sc

@@ -65,7 +65,10 @@ struct HandOverItem {
     std::string id;     // the app's own id, read back from the status
     std::string file;   // where the plugin writes it
     std::string title;  // for the notification
-    std::string url;
+    std::string url;    // for "pages", with {page} where the page number goes
+    // A "pages" item (a chapter): "count" or "count,first"; file and url are
+    // then templates. Empty for a "url" item.
+    std::string pages;
 };
 // The list written (sc-downloads.txt) and handed to the plugin to carry on
 // once the app has gone (scDownloadsStart). `headers` are "Name: value"
@@ -77,6 +80,8 @@ struct DownloadStatusItem {
     std::string id;
     std::string state;  // going, waiting, done, gone or failed
     uint64_t bytes = 0;
+    uint32_t pagesDone = 0;  // "pages": those whole, from the first
+    uint32_t pageCount = 0;
 };
 // The plugin's sc-downloads-status.txt: false when there is none.
 bool readDownloadsStatus(bool& running, std::vector<DownloadStatusItem>& items);
@@ -84,6 +89,11 @@ bool readDownloadsStatus(bool& running, std::vector<DownloadStatusItem>& items);
 bool hasDownloadList();
 // The hand-over's files removed, once the app has taken the work back.
 void clearDownloadFiles();
+
+// Whether the plugin takes "pages" items (0.2.0 on): a chapter an item.
+bool pagesDownloads();
+// The most pages one "pages" item can carry (the plugin's SC_MAX_PAGES).
+constexpr size_t kMaxItemPages = 1000;
 
 // The most items one hand-over list can carry (the plugin's SC_MAX_DOWNLOADS).
 constexpr size_t kMaxHandOverItems = 200;
