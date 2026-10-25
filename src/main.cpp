@@ -41,6 +41,7 @@
 #include <psp2/apputil.h>
 #include <psp2/sysmodule.h>
 #include "platform/shell_companion.hpp"
+#include "platform/vita_lifecycle.hpp"
 #include <psp2/net/net.h>
 #include <psp2/net/netctl.h>
 #include <psp2/net/http.h>
@@ -354,6 +355,8 @@ static int appMain(int argc, char* argv[]) {
     // on after the last run, then find or load the plugin. Before the
     // downloads manager reads its state, so it never races the plugin.
     vitasuwayomi::shellcomp::startup();
+    // Answer the system's request to quit, so main's way out below runs.
+    vitasuwayomi::lifecycle::startQuitWatcher();
 #endif
 
     // Initialize downloads manager
@@ -405,6 +408,11 @@ static int appMain(int argc, char* argv[]) {
 
     // Run application (blocking)
     app.run();
+
+#ifdef __vita__
+    // Downloads still running go on in the SceShell plugin once we've gone.
+    vitasuwayomi::DownloadsManager::getInstance().handOverToShell();
+#endif
 
     // Shutdown
     app.shutdown();

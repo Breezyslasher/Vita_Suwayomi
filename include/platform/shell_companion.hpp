@@ -11,7 +11,10 @@
 
 #if defined(__vita__) || defined(__PSV__)
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace vitasuwayomi {
 namespace shellcomp {
@@ -42,6 +45,48 @@ bool installUpdate(const std::string& vpkPath, std::string& err);
 // no update. Read once: the file and any leftover sc-update folder are
 // removed.
 std::string takeUpdateResult(bool& failed);
+
+// ── Background downloads (SC_FEAT_DOWNLOADS) ─────────────────────────────────
+
+// Whether startup's scDownloadsTakeBack reached a plugin (one in SceShell
+// from earlier this boot). Only then can it still be writing our files.
+bool takeBackReached();
+
+// The plugin's progress notification while the app downloads itself, so the
+// same notification carries on once it closes. At most once a second; the
+// lines are UTF-8. permille 0-1000.
+void downloadProgress(const std::string& line1, const std::string& line2, uint32_t permille);
+// The notification ended, with these last two lines.
+void downloadProgressEnd(const std::string& line1, const std::string& line2);
+// Whether "Pause downloads?" was answered Yes while the app downloads.
+bool downloadPauseAsked();
+
+struct HandOverItem {
+    std::string id;     // the app's own id, read back from the status
+    std::string file;   // where the plugin writes it
+    std::string title;  // for the notification
+    std::string url;
+};
+// The list written (sc-downloads.txt) and handed to the plugin to carry on
+// once the app has gone (scDownloadsStart). `headers` are "Name: value"
+// lines, \r\n between, sent with every request. At most kMaxHandOverItems.
+bool handOverDownloads(const std::string& headers, const std::vector<HandOverItem>& items,
+                       std::string& err);
+
+struct DownloadStatusItem {
+    std::string id;
+    std::string state;  // going, waiting, done, gone or failed
+    uint64_t bytes = 0;
+};
+// The plugin's sc-downloads-status.txt: false when there is none.
+bool readDownloadsStatus(bool& running, std::vector<DownloadStatusItem>& items);
+// Whether a hand-over list (sc-downloads.txt) is there.
+bool hasDownloadList();
+// The hand-over's files removed, once the app has taken the work back.
+void clearDownloadFiles();
+
+// The most items one hand-over list can carry (the plugin's SC_MAX_DOWNLOADS).
+constexpr size_t kMaxHandOverItems = 200;
 
 } // namespace shellcomp
 } // namespace vitasuwayomi

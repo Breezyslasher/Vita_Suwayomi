@@ -212,6 +212,18 @@ public:
     // Wait for the download thread to fully exit (call after pauseDownloads)
     void waitForDownloadThread(int timeoutMs = 2000);
 
+    // ── vita-shell-companion (PS Vita; no-ops elsewhere) ─────────────────────
+    // As the app quits: if downloads were running, the pages still missing
+    // are listed for the SceShell plugin to carry on after the app has gone
+    // (up to 200 pages — whole chapters, in queue order), then handed over.
+    // Called from main once the main loop has ended.
+    void handOverToShell();
+    // At start-up, once the state is loaded: pages the plugin finished are
+    // recorded as downloaded (and post-processed when their chapter resumes),
+    // the rest left for the app. Called from init(). If the plugin is still
+    // stopping, this is retried before downloads next start.
+    void takeBackFromShell();
+
 private:
     DownloadsManager() = default;
     ~DownloadsManager() = default;
@@ -260,6 +272,18 @@ private:
     DownloadProgressCallback m_progressCallback;
     ChapterCompletionCallback m_chapterCompletionCallback;
     std::string m_downloadsPath;
+
+    // Page URLs from the server's fetchChapterPages, by chapter id, kept for
+    // the shell hand-over: a page URL only works once the server has fetched
+    // the chapter's page list. Guarded by m_mutex.
+    std::unordered_map<int, std::vector<std::string>> m_pageUrls;
+    // The SceShell plugin was still writing our files at start-up: nothing
+    // may download until it has stopped (ensureTakenBack).
+    std::atomic<bool> m_shellBusy{false};
+    bool ensureTakenBack();
+    // A page the plugin wrote is the server's raw image; the app's own pages
+    // are converted (WebP→JPEG, quality, TGA). Raw ones are named page_N.jpg.
+    void postProcessPage(int mangaId, int chapterIndex, int pageIndex, std::string& localPath);
 
     // Debouncing for saveStateUnlocked
     std::chrono::steady_clock::time_point m_lastSaveTime;

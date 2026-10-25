@@ -10,6 +10,7 @@
 #include "platform/platform.hpp"
 #include "utils/vita_install.hpp"
 
+#include <chrono>
 #include <cstdio>
 
 namespace vitasuwayomi {
@@ -24,6 +25,9 @@ constexpr const char* kBundledPlugin = "app0:module/shell_companion.suprx";
 
 bool s_open = false;
 std::string s_openInfo = "not started";
+bool s_takeBackReached = false;
+std::chrono::steady_clock::time_point s_lastProgress;
+bool s_progressShown = false;
 
 } // namespace
 
@@ -39,7 +43,9 @@ void startup() {
     // writing. Non-zero just means no plugin is in SceShell yet, so nothing
     // was carried on.
     const int tb = scDownloadsTakeBack();
-    brls::Logger::info("ShellCompanion: scDownloadsTakeBack -> {}", tb);
+    s_takeBackReached = (tb == 0);
+    brls::Logger::info("ShellCompanion: scDownloadsTakeBack -> 0x{:08X} ({})", (unsigned)tb,
+                       s_takeBackReached ? "a plugin was there" : "no plugin in SceShell yet");
 
     char what[256] = {0};
     const int rc = scOpen(what, sizeof(what));
@@ -101,6 +107,86 @@ std::string takeUpdateResult(bool& failed) {
 }
 
 const std::string& openInfo() { return s_openInfo; }
+
+bool takeBackReached() { return s_takeBackReached; }
+
+void downloadProgress(const std::string& line1, const std::string& line2, uint32_t permille) {
+    if (!s_open) return;
+    const auto now = std::chrono::steady_clock::now();
+    if (s_progressShown && now - s_lastProgress < std::chrono::seconds(1)) return;
+    s_lastProgress = now;
+    s_progressShown = true;
+    scDownloadProgress(line1.c_str(), line2.c_str(), permille > 1000 ? 1000 : permille);
+}
+
+void downloadProgressEnd(const std::string& line1, const std::string& line2) {
+    if (!s_open || !s_progressShown) return;
+    s_progressShown = false;
+    scDownloadProgressEnd(line1.c_str(), line2.c_str());
+}
+
+bool downloadPauseAsked() { return s_open && scDownloadPauseAsked() == 1; }
+
+bool handOverDownloads(const std::string& headers, const std::vector<HandOverItem>& items,
+                       std::string& err) {
+    if (!s_open) { err = "the shell companion plugin isn't loaded"; return false; }
+    if (items.empty()) { err = "nothing to hand over"; return false; }
+    const size_t n = items.size() < kMaxHandOverItems ? items.size() : kMaxHandOverItems;
+    std::vector<ScDownload> list(n);
+    for (size_t i = 0; i < n; i++) {
+        ScDownload& d = list[i];
+        d.id = items[i].id.c_str();
+        d.file = items[i].file.c_str();
+        d.size = 0;                       // a page's size isn't known up front
+        d.title = items[i].title.c_str();
+        d.kind = "url";
+        d.args[0] = items[i].url.c_str();
+        d.args[1] = nullptr;
+        d.args[2] = nullptr;
+    }
+    if (scWriteDownloads(1, headers.c_str(), list.data(), (uint32_t)n) != 0) {
+        err = "could not write " SC_DOWNLOADS;
+        return false;
+    }
+    const int rc = scDownloadsStart();
+    if (rc != 0) {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "scDownloadsStart failed (0x%08X)", (unsigned)rc);
+        err = buf;
+        return false;
+    }
+    brls::Logger::info("ShellCompanion: {} downloads handed over", n);
+    return true;
+}
+
+bool readDownloadsStatus(bool& running, std::vector<DownloadStatusItem>& items) {
+    items.clear();
+    running = false;
+    std::vector<ScDownloadStatus> raw(kMaxHandOverItems);
+    int run = 0, paused = 0;
+    uint32_t count = 0;
+    if (scReadDownloadsStatus(&run, &paused, raw.data(), (uint32_t)raw.size(), &count) != 0) return false;
+    running = run != 0;
+    for (uint32_t i = 0; i < count && i < raw.size(); i++) {
+        DownloadStatusItem it;
+        it.id = raw[i].id;
+        it.state = raw[i].state;
+        it.bytes = raw[i].bytes;
+        items.push_back(std::move(it));
+    }
+    return true;
+}
+
+bool hasDownloadList() {
+    char p[256];
+    return scPath(SC_DOWNLOADS, p, sizeof(p)) == 0 && platform::fileExists(p);
+}
+
+void clearDownloadFiles() {
+    char p[256];
+    if (scPath(SC_DOWNLOADS, p, sizeof(p)) == 0) platform::deleteFile(p);
+    if (scPath(SC_DOWNLOADS_STATUS, p, sizeof(p)) == 0) platform::deleteFile(p);
+}
 
 } // namespace shellcomp
 } // namespace vitasuwayomi

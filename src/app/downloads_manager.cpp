@@ -13,6 +13,7 @@
 #include <sstream>
 #include <algorithm>
 #include <thread>
+#include <cstdio>
 
 // stb_image for decoding downloaded images (quality processing)
 #include "stb_image.h"
@@ -27,6 +28,9 @@
 
 #include "platform/platform.hpp"
 #include "platform/paths.hpp"
+#if defined(__vita__) || defined(__PSV__)
+#include "platform/shell_companion.hpp"
+#endif
 
 namespace vitasuwayomi {
 
@@ -97,6 +101,9 @@ bool DownloadsManager::init() {
 
     // Load saved state
     loadState();
+
+    // Pages the SceShell plugin downloaded after the app last closed.
+    takeBackFromShell();
 
     m_initialized = true;
     brls::Logger::info("DownloadsManager: Initialized with {} downloads", m_downloads.size());
@@ -288,6 +295,12 @@ bool DownloadsManager::queueChaptersDownload(int mangaId,
 }
 
 void DownloadsManager::startDownloads() {
+    // The SceShell plugin may still be writing pages it carried on for us.
+    if (!ensureTakenBack()) {
+        brls::Logger::warning("DownloadsManager: not starting, the shell plugin hasn't stopped yet");
+        return;
+    }
+
     // Use compare_exchange to atomically check and set m_downloading
     // This prevents race conditions when multiple callers try to start downloads
     bool expected = false;
@@ -344,6 +357,9 @@ void DownloadsManager::startDownloads() {
                     // Truly no more chapters, safe to exit
                     m_downloading.store(false);
                     brls::Logger::info("DownloadsManager: All downloads complete");
+#if defined(__vita__) || defined(__PSV__)
+                    shellcomp::downloadProgressEnd("Downloads complete", "VitaSuwayomi");
+#endif
                     break;
                 }
                 // Found a queued chapter in re-check, continue the loop
@@ -1602,10 +1618,22 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
         brls::Logger::info("DownloadsManager: Got {} pages for chapter {}", pages.size(), chapterId);
 
         chapter.pageCount = static_cast<int>(pages.size());
+        {
+            // Kept for the shell hand-over (handOverToShell): these URLs only
+            // work now that the server has fetched the chapter's page list.
+            std::vector<std::string> urls;
+            urls.reserve(pages.size());
+            for (const auto& pg : pages) urls.push_back(pg.imageUrl);
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_pageUrls[chapterId] = std::move(urls);
+        }
 
         // Check for existing partially downloaded pages (resume support)
         // Build a map of already downloaded page indices
         std::vector<bool> existingPages(pages.size(), false);
+        // The recorded file of each existing page: .tga once converted, or the
+        // raw page_N.jpg a page handed back by the shell plugin still is.
+        std::vector<std::string> existingPaths(pages.size());
         int existingCount = 0;
 
         if (!chapter.pages.empty()) {
@@ -1613,8 +1641,10 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
             for (const auto& existingPage : chapter.pages) {
                 if (existingPage.downloaded && !existingPage.localPath.empty()) {
                     int64_t size = getFileSize(existingPage.localPath);
-                    if (size > 0 && existingPage.index < static_cast<int>(pages.size())) {
+                    if (size > 0 && existingPage.index >= 0 &&
+                        existingPage.index < static_cast<int>(pages.size())) {
                         existingPages[existingPage.index] = true;
+                        existingPaths[existingPage.index] = existingPage.localPath;
                         existingCount++;
                         brls::Logger::debug("DownloadsManager: Page {} already downloaded ({})",
                                            existingPage.index, existingPage.localPath);
@@ -1636,11 +1666,13 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
 
         // Find manga to get the local path
         std::string mangaDir;
+        std::string mangaTitle;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             for (auto& manga : m_downloads) {
                 if (manga.mangaId == mangaId) {
                     mangaDir = manga.localPath;
+                    mangaTitle = manga.title;
                     break;
                 }
             }
@@ -1680,13 +1712,19 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
 
             // Check if this page is already downloaded (resume support)
             if (existingPages[i]) {
-                // Page already exists - construct the expected path and mark as downloaded
-                std::string expectedPath = m_downloadsPath + "/manga_" + std::to_string(mangaId) +
-                                          "/chapter_" + std::to_string(chapterIndex) +
-                                          "/page_" + std::to_string(page.index) + ".jpg";
-                chapter.pages[i].localPath = expectedPath;
+                // Page already exists. Use the recorded file: rebuilding the
+                // name as page_N.jpg pointed every converted page (.tga) at a
+                // file that no longer exists.
+                std::string existingPath = existingPaths[i];
+                // A raw page the shell plugin downloaded gets the conversion
+                // the app's own pages get (WebP→JPEG, quality, TGA).
+                const size_t dot = existingPath.rfind('.');
+                if (dot != std::string::npos && existingPath.compare(dot, std::string::npos, ".tga") != 0) {
+                    postProcessPage(mangaId, chapterIndex, page.index, existingPath);
+                }
+                chapter.pages[i].localPath = existingPath;
                 chapter.pages[i].downloaded = true;
-                chapter.pages[i].size = getFileSize(expectedPath);
+                chapter.pages[i].size = getFileSize(existingPath);
                 brls::Logger::debug("DownloadsManager: Skipping page {} - already downloaded", page.index);
 
                 // Update progress callback
@@ -1695,6 +1733,24 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
                 }
                 continue;
             }
+
+#if defined(__vita__) || defined(__PSV__)
+            // "Pause downloads?" answered Yes on the shell's notification.
+            if (shellcomp::downloadPauseAsked()) {
+                brls::Logger::info("DownloadsManager: paused from the shell notification");
+                pauseDownloads();
+                shellcomp::downloadProgressEnd("Downloads paused", mangaTitle);
+                return;
+            }
+            {
+                const int total = chapter.pageCount > 0 ? chapter.pageCount : 1;
+                shellcomp::downloadProgress(
+                    mangaTitle.empty() ? std::string("Downloading") : mangaTitle,
+                    (chapterName.empty() ? "Chapter" : chapterName) + "  " +
+                        std::to_string(chapter.downloadedPages + 1) + "/" + std::to_string(total),
+                    static_cast<uint32_t>(chapter.downloadedPages * 1000 / total));
+            }
+#endif
 
             // Use the page's imageUrl that was already fetched
             std::string imageUrl = page.imageUrl;
@@ -1812,6 +1868,49 @@ void DownloadsManager::downloadChapter(int mangaId, DownloadedChapter& chapter) 
     }
 }
 
+// The Authorization header for page requests: the Bearer token if there is
+// one, else Basic auth, else none. Shared with the shell hand-over, so the
+// plugin sends exactly what the app's own downloads send.
+static std::string pageAuthorization() {
+    const std::string& accessToken = ImageLoader::getAccessToken();
+    if (!accessToken.empty()) return "Bearer " + accessToken;
+
+    const std::string& authUser = ImageLoader::getAuthUsername();
+    const std::string& authPass = ImageLoader::getAuthPassword();
+    if (authUser.empty() || authPass.empty()) return {};
+    std::string credentials = authUser + ":" + authPass;
+    static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    int val = 0, valb = -6;
+    for (unsigned char c : credentials) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            encoded.push_back(b64chars[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+    if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
+    while (encoded.size() % 4) encoded.push_back('=');
+    return "Basic " + encoded;
+}
+
+void DownloadsManager::postProcessPage(int mangaId, int chapterIndex, int pageIndex,
+                                       std::string& localPath) {
+    // Convert WebP to JPEG so the reader can use stb_image (fast) instead
+    // of libwebp (slow) at load time.  This also makes processImageQuality
+    // work on WebP sources since stbi_load cannot decode WebP.
+    convertWebPToJpeg(localPath);
+
+    // Process image quality if needed (resize/recompress)
+    processImageQuality(localPath);
+
+    // Pre-convert to TGA in the downloads folder so the reader loads
+    // downloaded pages instantly without any decode step at read time.
+    // Replaces the JPEG with a GPU-ready TGA file and updates localPath.
+    preConvertToPageCache(mangaId, chapterIndex, pageIndex, localPath);
+}
+
 bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex,
                                      const std::string& imageUrl, std::string& localPath) {
     if (imageUrl.empty()) {
@@ -1828,47 +1927,12 @@ bool DownloadsManager::downloadPage(int mangaId, int chapterIndex, int pageIndex
 
     // Create HTTP client with authentication (same approach as ImageLoader)
     HttpClient http;
-
-    // Add authentication - prefer Bearer token if available, fall back to Basic auth
-    const std::string& accessToken = ImageLoader::getAccessToken();
-    if (!accessToken.empty()) {
-        http.setDefaultHeader("Authorization", "Bearer " + accessToken);
-    } else {
-        const std::string& authUser = ImageLoader::getAuthUsername();
-        const std::string& authPass = ImageLoader::getAuthPassword();
-        if (!authUser.empty() && !authPass.empty()) {
-            std::string credentials = authUser + ":" + authPass;
-            static const char* b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-            std::string encoded;
-            int val = 0, valb = -6;
-            for (unsigned char c : credentials) {
-                val = (val << 8) + c;
-                valb += 8;
-                while (valb >= 0) {
-                    encoded.push_back(b64chars[(val >> valb) & 0x3F]);
-                    valb -= 6;
-                }
-            }
-            if (valb > -6) encoded.push_back(b64chars[((val << 8) >> (valb + 8)) & 0x3F]);
-            while (encoded.size() % 4) encoded.push_back('=');
-            http.setDefaultHeader("Authorization", "Basic " + encoded);
-        }
-    }
+    const std::string authorization = pageAuthorization();
+    if (!authorization.empty()) http.setDefaultHeader("Authorization", authorization);
 
     // Stream directly to file - no memory buffering (like NOBORU does)
     if (http.downloadToFile(imageUrl, localPath)) {
-        // Convert WebP to JPEG so the reader can use stb_image (fast) instead
-        // of libwebp (slow) at load time.  This also makes processImageQuality
-        // work on WebP sources since stbi_load cannot decode WebP.
-        convertWebPToJpeg(localPath);
-
-        // Process image quality if needed (resize/recompress)
-        processImageQuality(localPath);
-
-        // Pre-convert to TGA in the downloads folder so the reader loads
-        // downloaded pages instantly without any decode step at read time.
-        // Replaces the JPEG with a GPU-ready TGA file and updates localPath.
-        preConvertToPageCache(mangaId, chapterIndex, pageIndex, localPath);
+        postProcessPage(mangaId, chapterIndex, pageIndex, localPath);
 
         brls::Logger::debug("DownloadsManager: Page {} downloaded successfully", pageIndex);
         return true;
@@ -2115,6 +2179,222 @@ std::string DownloadsManager::createChapterDir(const std::string& mangaDir, int 
     std::string path = mangaDir + "/chapter_" + std::to_string(chapterIndex);
     createDirectory(path);
     return path;
+}
+
+// ============================================================================
+// Shell companion hand-over (PS Vita)
+// ============================================================================
+//
+// When the app closes with downloads running, the pages still missing are
+// handed to the SceShell plugin, which goes on fetching them while the app is
+// closed. The plugin writes each page as the raw page_N.jpg the app's own
+// download would; on the next start the app takes the done pages back and its
+// download thread converts them and fetches whatever is left.
+//
+// An item's id is "mangaId.chapterId.chapterIndex.page.pageCount", so the
+// take-back needs nothing but the id to put a page back in its chapter.
+
+void DownloadsManager::handOverToShell() {
+#if defined(__vita__) || defined(__PSV__)
+    if (!m_downloading.load() || !shellcomp::isOpen()) return;
+
+    // Stop our own thread first: the plugin and the app must never write the
+    // same page.
+    pauseDownloads();
+    waitForDownloadThread(1500);
+
+    struct Wanted { int mangaId; int chapterId; int chapterIndex; std::string title; };
+    std::vector<Wanted> wanted;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        for (const auto& manga : m_downloads) {
+            for (const auto& ch : manga.chapters) {
+                if (ch.state == LocalDownloadState::QUEUED || ch.state == LocalDownloadState::DOWNLOADING ||
+                    ch.state == LocalDownloadState::PAUSED) {
+                    std::string t = manga.title.empty() ? std::string("Manga") : manga.title;
+                    t += " - " + (ch.name.empty() ? "Chapter " + std::to_string(ch.chapterIndex) : ch.name);
+                    wanted.push_back({manga.mangaId, ch.chapterId, ch.chapterIndex, t});
+                }
+            }
+        }
+    }
+    if (wanted.empty()) return;
+
+    // A page URL only works once the server has fetched the chapter's page
+    // list, so chapters this run never reached are fetched now — within a
+    // budget, as the system may be waiting on the app to quit.
+    const auto budgetEnd = std::chrono::steady_clock::now() + std::chrono::seconds(4);
+    std::vector<shellcomp::HandOverItem> items;
+    for (const auto& w : wanted) {
+        std::vector<std::string> urls;
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            auto it = m_pageUrls.find(w.chapterId);
+            if (it != m_pageUrls.end()) urls = it->second;
+        }
+        if (urls.empty()) {
+            if (std::chrono::steady_clock::now() >= budgetEnd) break;
+            std::vector<Page> pages;
+            if (!SuwayomiClient::getInstance().fetchChapterPages(w.mangaId, w.chapterId, pages)) break;
+            for (const auto& pg : pages) urls.push_back(pg.imageUrl);
+        }
+        if (urls.empty()) continue;
+
+        std::vector<bool> have(urls.size(), false);
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            for (const auto& manga : m_downloads) {
+                if (manga.mangaId != w.mangaId) continue;
+                for (const auto& ch : manga.chapters) {
+                    if (ch.chapterIndex != w.chapterIndex) continue;
+                    for (const auto& pg : ch.pages) {
+                        if (pg.downloaded && pg.index >= 0 && pg.index < (int)have.size() &&
+                            getFileSize(pg.localPath) > 0) {
+                            have[pg.index] = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        std::vector<shellcomp::HandOverItem> chapterItems;
+        const std::string pageCount = std::to_string(urls.size());
+        for (size_t i = 0; i < urls.size(); i++) {
+            if (have[i] || urls[i].empty()) continue;
+            shellcomp::HandOverItem item;
+            item.id = std::to_string(w.mangaId) + "." + std::to_string(w.chapterId) + "." +
+                      std::to_string(w.chapterIndex) + "." + std::to_string(i) + "." + pageCount;
+            item.file = m_downloadsPath + "/manga_" + std::to_string(w.mangaId) + "/chapter_" +
+                        std::to_string(w.chapterIndex) + "/page_" + std::to_string(i) + ".jpg";
+            item.title = w.title;
+            item.url = urls[i];
+            chapterItems.push_back(std::move(item));
+        }
+        if (chapterItems.empty()) continue;
+
+        // Whole chapters while they fit; a first chapter longer than the
+        // plugin's list goes over in part.
+        if (items.size() + chapterItems.size() > shellcomp::kMaxHandOverItems) {
+            if (items.empty()) {
+                chapterItems.resize(shellcomp::kMaxHandOverItems);
+            } else {
+                break;
+            }
+        }
+        // The plugin doesn't create folders.
+        createChapterDir(createMangaDir(w.mangaId, w.title), w.chapterIndex, w.title);
+        for (auto& it : chapterItems) items.push_back(std::move(it));
+        if (items.size() >= shellcomp::kMaxHandOverItems) break;
+    }
+    if (items.empty()) {
+        brls::Logger::info("DownloadsManager: nothing to hand to the shell plugin");
+        return;
+    }
+
+    const std::string authorization = pageAuthorization();
+    const std::string headers = authorization.empty() ? std::string() : "Authorization: " + authorization + "\r\n";
+    std::string err;
+    if (shellcomp::handOverDownloads(headers, items, err)) {
+        brls::Logger::info("DownloadsManager: {} pages handed to the shell plugin", items.size());
+    } else {
+        brls::Logger::error("DownloadsManager: shell hand-over failed: {}", err);
+        shellcomp::clearDownloadFiles();
+    }
+#endif
+}
+
+#if defined(__vita__) || defined(__PSV__)
+// Puts the pages the plugin finished back in their chapters. Called with
+// m_mutex held.
+static int reconcileShellPages(std::deque<DownloadItem>& downloads, const std::string& downloadsPath,
+                               const std::vector<shellcomp::DownloadStatusItem>& status) {
+    int taken = 0;
+    for (const auto& st : status) {
+        if (st.state != "done") continue;
+        int mangaId = 0, chapterId = 0, chapterIndex = 0, page = 0, pageCount = 0;
+        if (std::sscanf(st.id.c_str(), "%d.%d.%d.%d.%d", &mangaId, &chapterId, &chapterIndex, &page,
+                        &pageCount) != 5 || page < 0 || pageCount <= page) {
+            continue;
+        }
+        const std::string file = downloadsPath + "/manga_" + std::to_string(mangaId) + "/chapter_" +
+                                 std::to_string(chapterIndex) + "/page_" + std::to_string(page) + ".jpg";
+        const int64_t size = getFileSize(file);
+        if (size <= 0) continue;
+        for (auto& manga : downloads) {
+            if (manga.mangaId != mangaId) continue;
+            for (auto& ch : manga.chapters) {
+                if (ch.chapterIndex != chapterIndex || ch.chapterId != chapterId) continue;
+                if (ch.state == LocalDownloadState::COMPLETED) break;
+                if ((int)ch.pages.size() < pageCount) ch.pages.resize(pageCount);
+                if (ch.pageCount < pageCount) ch.pageCount = pageCount;
+                DownloadedPage& pg = ch.pages[page];
+                pg.index = page;
+                pg.localPath = file;
+                pg.size = size;
+                pg.downloaded = true;
+                ch.downloadedPages = 0;
+                for (const auto& p : ch.pages) if (p.downloaded) ch.downloadedPages++;
+                ch.localPath = downloadsPath + "/manga_" + std::to_string(mangaId) + "/chapter_" +
+                               std::to_string(chapterIndex);
+                // The download thread converts the raw pages and fetches the
+                // rest.
+                ch.state = LocalDownloadState::QUEUED;
+                taken++;
+                break;
+            }
+        }
+    }
+    return taken;
+}
+#endif
+
+void DownloadsManager::takeBackFromShell() {
+#if defined(__vita__) || defined(__PSV__)
+    bool running = false;
+    std::vector<shellcomp::DownloadStatusItem> status;
+    if (!shellcomp::readDownloadsStatus(running, status)) {
+        // A list the plugin never began (the app didn't exit in time, say).
+        if (shellcomp::hasDownloadList()) {
+            brls::Logger::info("DownloadsManager: shell download list was never begun; clearing it");
+            shellcomp::clearDownloadFiles();
+        }
+        return;
+    }
+
+    // scDownloadsTakeBack asked the plugin to stop after the piece it is
+    // writing; give it a moment to say it has.
+    if (running && shellcomp::takeBackReached()) {
+        for (int i = 0; i < 30 && running; i++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            shellcomp::readDownloadsStatus(running, status);
+        }
+    }
+    if (running) {
+        brls::Logger::warning("DownloadsManager: shell plugin still downloading; downloads wait for it");
+        m_shellBusy.store(true);
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    const int taken = reconcileShellPages(m_downloads, m_downloadsPath, status);
+    int failed = 0;
+    for (const auto& st : status) if (st.state == "failed" || st.state == "gone") failed++;
+    brls::Logger::info("DownloadsManager: took back {} of {} pages from the shell plugin ({} failed)",
+                       taken, status.size(), failed);
+    shellcomp::clearDownloadFiles();
+    m_shellBusy.store(false);
+    saveStateUnlocked();
+#endif
+}
+
+bool DownloadsManager::ensureTakenBack() {
+#if defined(__vita__) || defined(__PSV__)
+    if (!m_shellBusy.load()) return true;
+    takeBackFromShell();
+    return !m_shellBusy.load();
+#else
+    return true;
+#endif
 }
 
 } // namespace vitasuwayomi

@@ -240,6 +240,7 @@ if(PLATFORM_PSV)
     set(SC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/vita-shell-companion)
     list(APPEND APP_SOURCES
         src/platform/shell_companion_vita.cpp
+        src/platform/vita_lifecycle.cpp
         ${SC_DIR}/client/shell_companion.c
         ${SC_DIR}/client/sc_files.c
         ${SC_DIR}/client/sc_link_stub.S)
