@@ -461,12 +461,12 @@ jobs:
 
       # vita-shell-companion's SceShell plugin, shipped in the VPK as
       # module/shell_companion.suprx, taken from the plugin's release rather
-      # than built. Keep SC_TAG on the release whose commit
+      # than built. Keep SC_TAG on the release built from the commit
       # lib/vita-shell-companion is pinned to, so the client library built
       # into the app and the plugin speak the same protocol.
       - name: Download shell_companion plugin
         env:
-          SC_TAG: Alpha-0.0.2
+          SC_TAG: Alpha-0.0.3
         run: |
           set -eu
           mkdir -p build-sc

@@ -75,14 +75,28 @@ bool isOpen() { return s_open; }
 bool installUpdate(const std::string& vpkPath, std::string& err) {
     if (!s_open) { err = "the shell companion plugin isn't loaded"; return false; }
 
-    const std::string dir = platform::path(SC_UPDATE_DIR);
-    if (vita::prepareVpk(vpkPath, dir, err) != 0) return false;
-
     // A result left by an earlier update would be read as this one's.
     char resultPath[256];
     if (scPath(SC_UPDATE_RESULT, resultPath, sizeof(resultPath)) == 0) platform::deleteFile(resultPath);
 
-    const int rc = scUpdateInstall();
+    // From 0.3.0 the plugin unpacks the VPK itself, once we have gone (-2: an
+    // older plugin, nothing sent).
+    int rc = scUpdateInstallVpk(vpkPath.c_str());
+    if (rc == 0) {
+        brls::Logger::info("ShellCompanion: update VPK handed to the plugin ({})", vpkPath);
+        return true;
+    }
+    if (rc != -2) {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "scUpdateInstallVpk failed (0x%08X)", (unsigned)rc);
+        err = buf;
+        return false;
+    }
+
+    // An older plugin: unpack it here and hand over the folder.
+    const std::string dir = platform::path(SC_UPDATE_DIR);
+    if (vita::prepareVpk(vpkPath, dir, err) != 0) return false;
+    rc = scUpdateInstall();
     if (rc != 0) {
         char buf[64];
         std::snprintf(buf, sizeof(buf), "scUpdateInstall failed (0x%08X)", (unsigned)rc);
@@ -90,7 +104,7 @@ bool installUpdate(const std::string& vpkPath, std::string& err) {
         vita::removeTree(dir);
         return false;
     }
-    brls::Logger::info("ShellCompanion: update handed to the plugin ({})", dir);
+    brls::Logger::info("ShellCompanion: unpacked update handed to the plugin ({})", dir);
     return true;
 }
 
@@ -105,6 +119,8 @@ std::string takeUpdateResult(bool& failed) {
     // The installer consumes the folder when it succeeds; after a failure it
     // is left behind, and it is as big as the app.
     vita::removeTree(platform::path(SC_UPDATE_DIR));
+    // The plugin leaves the downloaded VPK where it was.
+    platform::deleteFile(platform::path("update.vpk"));
 
     if (result == 0) {
         brls::Logger::info("ShellCompanion: update installed");

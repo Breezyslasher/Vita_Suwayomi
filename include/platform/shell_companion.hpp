@@ -34,9 +34,11 @@ const std::string& openInfo();
 
 // ── Self-update (SC_FEAT_UPDATE) ─────────────────────────────────────────────
 
-// The downloaded update VPK unpacked to <data>/sc-update with its head.bin
-// forged, and the plugin asked to install it once the app has quit
-// (scUpdateInstall). The caller must quit at once on true. On false nothing
+// The plugin asked to install the downloaded update VPK once the app has
+// quit: the VPK as it is for a plugin from 0.3.0 on (scUpdateInstallVpk),
+// which unpacks it itself; for an older one, unpacked to <data>/sc-update with
+// its head.bin forged here first (scUpdateInstall). The caller must quit at
+// once on true. On false nothing
 // was sent, `err` says why, and the caller can fall back to the updater stub.
 bool installUpdate(const std::string& vpkPath, std::string& err);
 
