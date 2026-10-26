@@ -34,6 +34,12 @@ const std::string& openInfo();
 
 // ── Self-update (SC_FEAT_UPDATE) ─────────────────────────────────────────────
 
+// When the plugin is installing our update right now (the app was opened
+// during it), a line for the user saying so; else empty. Checked before
+// startup(): the installer waits for the app to close, so the app then says
+// so and quits. Reads a file only.
+std::string updateUnderway();
+
 // The plugin asked to install the downloaded update VPK once the app has
 // quit: the VPK as it is for a plugin from 0.3.0 on (scUpdateInstallVpk),
 // which unpacks it itself; for an older one, unpacked to <data>/sc-update with

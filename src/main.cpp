@@ -354,6 +354,22 @@ static int appMain(int argc, char* argv[]) {
     // vita-shell-companion: reclaim any downloads the SceShell plugin carried
     // on after the last run, then find or load the plugin. Before the
     // downloads manager reads its state, so it never races the plugin.
+    {
+        // Opened while the plugin installs our update: the installer waits
+        // for the app to close, so say so and go.
+        const std::string updating = vitasuwayomi::shellcomp::updateUnderway();
+        if (!updating.empty()) {
+            brls::Application::pushActivity(new brls::Activity(new brls::Box()));
+            auto* d = new brls::Dialog(updating);
+            d->addButton("OK", []() { brls::Application::quit(); });
+            d->open();
+            const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+            while (brls::Application::mainLoop() && std::chrono::steady_clock::now() < until) {}
+            cleanupVitaNetwork();
+            sceKernelExitProcess(0);
+            return 0;
+        }
+    }
     vitasuwayomi::shellcomp::startup();
     // Answer the system's request to quit, so main's way out below runs; the
     // downloads go to the plugin first, while there is time.

@@ -30,10 +30,16 @@ bool s_pages = false;
 std::chrono::steady_clock::time_point s_lastProgress;
 bool s_progressShown = false;
 
+// scInit, once: it only records who we are, and the file reads need it.
+bool initOnce() {
+    static int rc = scInit(kTitleId, kDataDir, kName, SC_FEAT_DOWNLOADS | SC_FEAT_UPDATE, kBundledPlugin);
+    return rc == 0;
+}
+
 } // namespace
 
 void startup() {
-    if (scInit(kTitleId, kDataDir, kName, SC_FEAT_DOWNLOADS | SC_FEAT_UPDATE, kBundledPlugin) != 0) {
+    if (!initOnce()) {
         s_openInfo = "scInit failed";
         brls::Logger::error("ShellCompanion: scInit failed");
         return;
@@ -71,6 +77,16 @@ void startup() {
 }
 
 bool isOpen() { return s_open; }
+
+std::string updateUnderway() {
+    char state[16] = {0};
+    int percent = -1;
+    if (!initOnce() || !scUpdateInProgress(state, sizeof(state), &percent)) return {};
+    std::string step = state;
+    if (step == "unpacking" && percent >= 0) step += " " + std::to_string(percent) + "%";
+    brls::Logger::info("ShellCompanion: our update is under way ({}); quitting", step);
+    return "Suwayomi is being updated (" + step + ").\n\nIt opens again by itself once the update is installed.";
+}
 
 bool installUpdate(const std::string& vpkPath, std::string& err) {
     if (!s_open) { err = "the shell companion plugin isn't loaded"; return false; }
